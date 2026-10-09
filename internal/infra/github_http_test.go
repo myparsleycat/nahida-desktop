@@ -1068,6 +1068,18 @@ func TestGitHubMetadataCacheSeparatesAcceptVersionAndQuery(t *testing.T) {
 		{"version", githubTestReleases, "application/vnd.github+json", "2026-03-10"},
 		{"query", githubTestReleases + "?per_page=100", "application/vnd.github+json", "2022-11-28"},
 		{"page", githubTestReleases + "?per_page=100&page=2", "application/vnd.github+json", "2022-11-28"},
+		{
+			"tags",
+			"https://api.github.com/repos/owner/repo/tags?per_page=100",
+			"application/vnd.github+json",
+			"2022-11-28",
+		},
+		{
+			"tags page",
+			"https://api.github.com/repos/owner/repo/tags?per_page=100&page=2",
+			"application/vnd.github+json",
+			"2022-11-28",
+		},
 	}
 	want := make(map[string]string, len(variants))
 	for restart := range 2 {

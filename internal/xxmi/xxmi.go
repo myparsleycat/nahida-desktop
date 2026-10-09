@@ -15,6 +15,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -36,6 +37,13 @@ type Options struct {
 	// GitHub serves release lists and files; nil builds one from HTTP and Download.
 	GitHub   *github.Client
 	Elevated elevatedLauncher
+	// ReShade prepares the module a launch injects for importers that turn ReShade on.
+	ReShade reshadeProvider
+}
+
+type reshadeProvider interface {
+	PrepareLaunch(ctx context.Context, importer string) (string, error)
+	LaunchPresetEffects(ctx context.Context, importer string) (reshade.PresetEffects, error)
 }
 
 type elevatedLauncher interface {
@@ -130,6 +138,7 @@ type XXMI struct {
 	github      *github.Client
 	archive     *infra.Archive
 	elevated    elevatedLauncher
+	reshade     reshadeProvider
 	eventEmit   func(string, ...any)
 	searchRoots func() ([]string, error)
 	busy        map[string]bool
@@ -178,7 +187,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	x := &XXMI{
 		log: opts.Log, github: githubClient, archive: opts.Archive,
-		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated,
+		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated, reshade: opts.ReShade,
 		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
 	}
 	x.installImporter = x.installBuiltinImporterPackage

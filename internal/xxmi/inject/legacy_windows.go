@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -71,7 +72,7 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
-	if len(spec.ExtraDLLs) > 0 {
+	if additional := slices.Concat(spec.PreloadDLLs, spec.ExtraDLLs); len(additional) > 0 {
 		library, err := windows.LoadDLL(spec.LoaderDLL.Path)
 		if err != nil {
 			_ = loader.Process.Kill()
@@ -83,7 +84,7 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			_ = loader.Process.Kill()
 			return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
 		}
-		err = injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds)
+		err = injectExtraDLLs(injectProc, pid, additional, spec.TimeoutSeconds)
 		_ = library.Release()
 		if err != nil {
 			_ = loader.Process.Kill()

@@ -78,6 +78,7 @@ const config = {
   customLaunch: { command: "" },
   runPostLoad: { enabled: false, command: "", wait: false },
   extraLibraries: { enabled: false, paths: [] },
+  reshade: { enabled: false },
   iniOptimizer: { enabled: false, resetCache: false },
 };
 
@@ -124,6 +125,7 @@ vi.mock("@tanstack/react-router", () => ({
   }),
   lazyRouteComponent: (component: unknown) => component,
   useBlocker: () => ({ status: "idle" }),
+  useNavigate: () => vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));

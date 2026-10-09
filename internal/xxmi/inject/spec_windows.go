@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,9 +49,11 @@ type LaunchSpec struct {
 	UseHook         bool         `json:"useHook"`
 	LoaderDLL       VerifiedFile `json:"loaderDLL"`
 	ModuleDLL       string       `json:"moduleDLL"`
-	ExtraDLLs       []string     `json:"extraDLLs"`
-	LegacyLoader    VerifiedFile `json:"legacyLoader"`
-	TimeoutSeconds  int          `json:"timeoutSeconds"`
+	// PreloadDLLs are injected before the module DLL, for libraries that must hook the graphics API first.
+	PreloadDLLs    []string     `json:"preloadDLLs"`
+	ExtraDLLs      []string     `json:"extraDLLs"`
+	LegacyLoader   VerifiedFile `json:"legacyLoader"`
+	TimeoutSeconds int          `json:"timeoutSeconds"`
 }
 
 type LaunchResult struct {
@@ -111,8 +114,9 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 			return fmt.Errorf("module DLL: %w", err)
 		}
 	}
+	additional := slices.Concat(spec.PreloadDLLs, spec.ExtraDLLs)
 	if spec.InjectionMethod != "Native" && spec.Mode == ModeXXMI &&
-		(spec.InjectMode != "Bypass" || len(spec.ExtraDLLs) > 0) {
+		(spec.InjectMode != "Bypass" || len(additional) > 0) {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI loader DLL: %w", err)
 		}
@@ -121,12 +125,12 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 			return fmt.Errorf("legacy loader: %w", err)
 		}
 	}
-	if spec.InjectionMethod != "Native" && spec.Mode == ModeLegacy && len(spec.ExtraDLLs) > 0 {
+	if spec.InjectionMethod != "Native" && spec.Mode == ModeLegacy && len(additional) > 0 {
 		if err := verifyFile(spec.LoaderDLL); err != nil {
 			return fmt.Errorf("XXMI extra DLL injector: %w", err)
 		}
 	}
-	for _, dll := range spec.ExtraDLLs {
+	for _, dll := range additional {
 		if err := validateRegularLocalFile(dll); err != nil {
 			return fmt.Errorf("extra DLL: %w", err)
 		}

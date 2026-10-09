@@ -1,9 +1,71 @@
 package transfer
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
+
+func TestLateRunnerUpdatePreservesInterruption(t *testing.T) {
+	t.Parallel()
+	for _, status := range []Status{StatusPaused, StatusCanceled} {
+		service := New()
+		service.emitStopped = true
+		createTestTransfer(t, service, "late", StatusProgress, true)
+		if err := service.Update("late", Updates{Status: &status}); err != nil {
+			t.Fatal(err)
+		}
+		completed := StatusCompleted
+		if err := service.UpdateRunning("late", Updates{Status: &completed}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("late update = %v; want cancellation", err)
+		}
+		if record, _ := service.Get("late"); record.Status != status {
+			t.Fatalf("late update replaced %s with %s", status, record.Status)
+		}
+	}
+}
+
+func TestResumeBeforeCanceledRunnerReturns(t *testing.T) {
+	t.Parallel()
+	service := New()
+	service.emitStopped = true
+	if _, err := service.Create(CreateParams{
+		PID: "resume", Type: "download", InitialStatus: StatusPending, RestartData: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	attempts := 0
+	if err := service.RegisterRunner("resume", func(ctx context.Context, queue *Transfer, pid string) error {
+		attempts++
+		if attempts == 1 {
+			close(started)
+			<-release
+			return ctx.Err()
+		}
+		completed := StatusCompleted
+		return queue.UpdateRunning(pid, Updates{Status: &completed})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- service.ProcessQueue(t.Context()) }()
+	<-started
+	if err := service.Pause("resume"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Resume("resume"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if record, _ := service.Get("resume"); record.Status != StatusCompleted || attempts != 2 {
+		t.Fatalf("resumed record = %+v, attempts = %d", record, attempts)
+	}
+}
 
 func TestProgressSamplesStayBoundedDuringFastTransfer(t *testing.T) {
 	t.Parallel()

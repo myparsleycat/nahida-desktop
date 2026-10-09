@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/reshade"
 )
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
@@ -44,6 +47,37 @@ func (x *XXMI) startGame(ctx context.Context, importer string, keepLogging bool)
 		return err
 	}
 	return x.launchBuiltinGameLocked(ctx, importer, cfg)
+}
+
+// The legacy loader injects on its own schedule, so ReShade cannot be ordered ahead of it.
+func (cfg ImporterConfig) usesReShade() bool {
+	return cfg.ReShade.Enabled && (cfg.Mode != RuntimeLegacy || cfg.InjectionMethod == "Native")
+}
+
+// LaunchPresetEffects returns the effect packages the importer's ReShade preset needs and lacks. It
+// is empty for a launch that does not inject ReShade.
+func (x *XXMI) LaunchPresetEffects(ctx context.Context, importer string) (reshade.PresetEffects, error) {
+	importer = strings.ToUpper(strings.TrimSpace(importer))
+	none := reshade.PresetEffects{Packages: []reshade.EffectPackage{}, Unknown: []string{}}
+	if x.reshade == nil {
+		return none, nil
+	}
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil || external {
+		return none, err
+	}
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil || !cfg.usesReShade() {
+		return none, err
+	}
+
+	effects, err := x.reshade.LaunchPresetEffects(ctx, importer)
+	if err != nil {
+		return none, infra.ReportError(x.log, err, "XXMI.LaunchPresetEffects", infra.Diagnostic{
+			Operation: "launch-preset-effects", Fields: map[string]any{"importer": importer},
+		})
+	}
+	return effects, nil
 }
 
 func configuredGameExecutable(folder string, configured []string) string {

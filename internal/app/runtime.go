@@ -19,6 +19,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
 	"nahida.live/desktop/internal/transfer"
@@ -49,6 +50,7 @@ type runtime struct {
 	gamebanana        *gamebanana.GameBanana
 	mod               *mod.Mod
 	xxmi              *xxmi.XXMI
+	reshade           *reshade.ReShade
 	tools             *tools.Tools
 	dialog            *platform.Dialog
 	shell             *platform.Shell
@@ -145,9 +147,29 @@ func newRuntime() *runtime {
 	githubRate.UseHTTP(httpClient)
 	githubRate.UseLog(log)
 	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
-	xxmiService := xxmi.NewWithOptions(xxmi.Options{
+	var xxmiService *xxmi.XXMI
+	reshadeService := reshade.New(reshade.Options{
+		GitHub:    githubClient,
+		Download:  download,
+		Archive:   archive,
+		Transfer:  transferService,
+		Log:       log,
+		EventEmit: eventEmit,
+		Root: func(ctx context.Context) (string, error) {
+			root, err := xxmiService.GetXXMIPath(ctx)
+			if err != nil {
+				return "", err
+			}
+			if root == nil {
+				return "", errors.New("XXMI folder is not configured")
+			}
+			return *root, nil
+		},
+	})
+	xxmiService = xxmi.NewWithOptions(xxmi.Options{
 		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit, GitHub: githubClient,
 		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
+		ReShade:  reshadeService,
 	})
 	dialog := platform.NewDialog()
 	login := newGameBananaLogin()
@@ -207,6 +229,7 @@ func newRuntime() *runtime {
 		gamebanana: gameBananaService,
 		mod:        modService,
 		xxmi:       xxmiService,
+		reshade:    reshadeService,
 		tools: tools.NewWithOptions(tools.Options{
 			FindModelViewerPreview: modService.FindModelViewerPreview,
 			Log:                    log,
@@ -317,6 +340,7 @@ func (rt *runtime) services() []application.Service {
 		newGuardedService(rt, "Mod", rt.mod, waitForAllMethods),
 		application.NewService(rt.notifications),
 		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
+		newGuardedService(rt, "ReShade", rt.reshade, waitForAllMethods),
 		newLoggedService(rt, "Screen", rt.screen),
 		newGuardedService(rt, "Setting", rt.setting, isSettingWrite),
 		newGuardedService(rt, "Shell", rt.shell, waitForShellTrash),

@@ -82,6 +82,7 @@ func launchNative(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		})
 		dlls = append([]string{spec.ModuleDLL}, dlls...)
 	}
+	dlls = slices.Concat(spec.PreloadDLLs, dlls)
 	for _, dll := range dlls {
 		if _, err := injectNativeDLL(ctx, pid, dll, spec.timeout()); err != nil {
 			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: native injection PID %d DLL %q: %w", pid, dll, err)

@@ -361,7 +361,8 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 		return
 	}
 	item.cancel = nil
-	interrupted := item.record.Status == StatusPaused || item.record.Status == StatusCanceled
+	interrupted := item.record.Status == StatusPaused || item.record.Status == StatusCanceled ||
+		item.record.Status == StatusPending && errors.Is(runErr, context.Canceled)
 	if !interrupted && runErr != nil && !isTerminal(item.record.Status) {
 		item.record.Status = StatusError
 		item.record.Error = runErr.Error()

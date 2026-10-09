@@ -50,7 +50,7 @@ import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { isEqual } from "es-toolkit";
 import {
   CheckIcon,
@@ -98,6 +98,7 @@ async function resolveImporterGameFolder(importer: string, next: ImporterConfig)
 export function XXMIImporterSettings({ importer }: { importer: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { startImporter, launchGuardDialog } = useLaunchGuard();
   const { data: saved } = useQuery({
     queryKey: ["xxmi:config", importer],
@@ -285,6 +286,8 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
   const xxmiRuntime = config.mode === RuntimeMode.RuntimeXXMI;
+  // The 3DMigoto loader injects on its own schedule, so ReShade cannot be loaded ahead of it.
+  const reshadeUnsupported = !xxmiRuntime && config.injectionMethod !== "Native";
   const followsSharedLibs = config.xxmiVersion.follow === "shared";
   const libsPin = followsSharedLibs ? sharedLibsVersion : config.xxmiVersion.pinned;
   const selectedCustomDll = selectedDll(config);
@@ -576,6 +579,31 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                           setConfig({ ...config, launchOptions: event.target.value })
                         }
                       />
+                    </ToggleRow>
+                    <ToggleRow
+                      label={t("page.setting.xxmi.builtin.reshade.title")}
+                      description={
+                        reshadeUnsupported
+                          ? t("page.setting.xxmi.builtin.reshade.legacyUnsupported")
+                          : t("page.setting.xxmi.builtin.reshade.toggleDescription")
+                      }
+                      checked={config.reshade.enabled}
+                      disabled={reshadeUnsupported && !config.reshade.enabled}
+                      onCheckedChange={(enabled) => setConfig({ ...config, reshade: { enabled } })}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-xs text-muted-foreground">
+                          {t("page.setting.xxmi.builtin.reshade.managePageDescription")}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => void navigate({ to: "/xxmi/reshade" })}
+                        >
+                          {t("page.setting.xxmi.builtin.reshade.managePage")}
+                        </Button>
+                      </div>
                     </ToggleRow>
                     <SelectRow
                       label={t("page.setting.xxmi.builtin.startMethod")}

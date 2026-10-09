@@ -15,10 +15,13 @@ const xxmi = vi.hoisted(() => ({
   RepairRuntime: vi.fn(),
   LaunchUpdates: vi.fn(),
   InstallUpdates: vi.fn(),
+  LaunchPresetEffects: vi.fn(),
 }));
+const reshade = vi.hoisted(() => ({ InstallEffectPackages: vi.fn() }));
 const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
+vi.mock("@bindings/reshade", () => ({ ReShade: reshade }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -36,12 +39,15 @@ const toastWarning = vi.mocked(toast.warning);
 
 beforeEach(() => {
   xxmi.LaunchUpdates.mockResolvedValue([]);
+  xxmi.LaunchPresetEffects.mockResolvedValue({ packages: [], unknown: [] });
 });
 
 afterEach(() => {
   cleanup();
   xxmi.LaunchUpdates.mockReset();
   xxmi.InstallUpdates.mockReset();
+  xxmi.LaunchPresetEffects.mockReset();
+  reshade.InstallEffectPackages.mockReset();
   toastWarning.mockClear();
   xxmi.StartGame.mockReset();
   xxmi.StartGameWithLogging.mockReset();
@@ -109,6 +115,7 @@ it.each([
   "HIMI_FPS_UNLOCK_FAILED",
   "ZZMI_GAME_CONFIG_FAILED",
   "WWMI_GAME_CONFIG_FAILED",
+  "RESHADE_NOT_INSTALLED",
 ])("shows guidance for %s and keeps the backend detail", async (code) => {
   const detail = `${code}: native code 200`;
   xxmi.StartGame.mockRejectedValueOnce(new Error(detail));
@@ -432,4 +439,32 @@ it("does not launch after the dialog closes while blockers are being cleared", a
     await clearing.promise;
   });
   expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
+});
+
+it("offers the effect packages a preset lacks once, and launches either way", async () => {
+  const effects = { packages: [{ id: "pack", name: "Pack", description: "" }], unknown: [] };
+  xxmi.LaunchPresetEffects.mockResolvedValue(effects);
+  xxmi.StartGame.mockResolvedValue(undefined);
+  reshade.InstallEffectPackages.mockRejectedValue(new Error("download failed"));
+  const install = "page.setting.xxmi.builtin.reshade.presetEffectsInstallAndLaunch";
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  expect(await screen.findByText("Pack")).toBeTruthy();
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: install }));
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(1));
+  expect(reshade.InstallEffectPackages).toHaveBeenCalledWith(["pack"]);
+
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "page.setting.xxmi.builtin.reshade.presetEffectsSkipLaunch",
+    }),
+  );
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(3));
+  expect(screen.queryByRole("button", { name: install })).toBeNull();
 });

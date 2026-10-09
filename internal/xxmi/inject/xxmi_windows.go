@@ -67,7 +67,7 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
-	if len(spec.ExtraDLLs) > 0 {
+	if additional := slices.Concat(spec.PreloadDLLs, spec.ExtraDLLs); len(additional) > 0 {
 		library, err := windows.LoadDLL(spec.LoaderDLL.Path)
 		if err != nil {
 			return LaunchResult{}, fmt.Errorf("load XXMI extra DLL injector: %w", err)
@@ -77,7 +77,7 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			_ = library.Release()
 			return LaunchResult{}, errors.New("XXMI_LOADER_TOO_OLD")
 		}
-		err = injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds)
+		err = injectExtraDLLs(injectProc, pid, additional, spec.TimeoutSeconds)
 		_ = library.Release()
 		if err != nil {
 			return LaunchResult{}, err
@@ -145,6 +145,9 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	var warnings []string
 	if err := setProcessPriority(pid, spec.Priority); err != nil {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
+	}
+	if err := injectExtraDLLs(injectProc, pid, spec.PreloadDLLs, spec.TimeoutSeconds); err != nil {
+		return LaunchResult{}, err
 	}
 	if !useHook {
 		// Match the reference injector: the XXMI DLL goes in first, and an extra library entry for the

@@ -1,3 +1,4 @@
+import type { PresetEffects } from "@bindings/reshade";
 import { XXMI } from "@bindings/xxmi";
 import {
   AlertDialog,
@@ -12,6 +13,7 @@ import {
 import { Button } from "@renderer/components/ui/button";
 import { ButtonGroup } from "@renderer/components/ui/button-group";
 import { Input } from "@renderer/components/ui/input";
+import { ReShadePresetEffectsDialog } from "@renderer/components/xxmi/reshade-preset-effects-dialog";
 import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -54,7 +56,11 @@ const launchErrorCodes = [
   "HIMI_FPS_UNLOCK_FAILED",
   "ZZMI_GAME_CONFIG_FAILED",
   "WWMI_GAME_CONFIG_FAILED",
+  "RESHADE_NOT_INSTALLED",
 ] as const;
+// Package IDs and effect file names the user declined at launch, which are not brought up again
+// until the app restarts.
+const declinedEffects = new Set<string>();
 
 type LaunchDialog =
   | "gimi-dcr"
@@ -69,7 +75,10 @@ type LaunchDialog =
 
 export type LaunchGuardResult =
   | { status: "started" }
-  | { status: "blocked"; kind: LaunchDialog | "importer-setup" | "launch-error" | "update" };
+  | {
+      status: "blocked";
+      kind: LaunchDialog | "importer-setup" | "launch-error" | "update" | "preset-effects";
+    };
 
 export function launchErrorCode(message: string): (typeof launchErrorCodes)[number] | null {
   return launchErrorCodes.find((code) => message.includes(code)) ?? null;
@@ -129,6 +138,10 @@ export function useLaunchGuard() {
     importer: string;
     updates: UpdateStatus[];
   } | null>(null);
+  const [pendingEffects, setPendingEffects] = useState<{
+    importer: string;
+    effects: PresetEffects;
+  } | null>(null);
 
   const launch = useCallback(
     async (importer: string, withLogging = false): Promise<LaunchGuardResult> => {
@@ -166,6 +179,22 @@ export function useLaunchGuard() {
     [navigate, t],
   );
 
+  const launchWithEffects = useCallback(
+    async (importer: string): Promise<LaunchGuardResult> => {
+      // A failed check must not keep the game from launching.
+      const effects = await XXMI.LaunchPresetEffects(importer).catch(() => null);
+      if (
+        effects?.packages?.some((pkg) => !declinedEffects.has(pkg.id)) ||
+        effects?.unknown?.some((file) => !declinedEffects.has(file))
+      ) {
+        setPendingEffects({ importer, effects });
+        return { status: "blocked", kind: "preset-effects" };
+      }
+      return launch(importer);
+    },
+    [launch],
+  );
+
   const startImporter = useCallback(
     async (importer: string): Promise<LaunchGuardResult> => {
       // A failed update check must not keep the game from launching.
@@ -174,9 +203,26 @@ export function useLaunchGuard() {
         setPendingUpdate({ importer, updates });
         return { status: "blocked", kind: "update" };
       }
-      return launch(importer);
+      return launchWithEffects(importer);
     },
-    [launch],
+    [launchWithEffects],
+  );
+
+  const launchPendingEffects = useCallback(
+    async (declined: boolean) => {
+      if (!pendingEffects) return;
+      if (declined) {
+        pendingEffects.effects.packages?.forEach((pkg) => declinedEffects.add(pkg.id));
+        pendingEffects.effects.unknown?.forEach((file) => declinedEffects.add(file));
+      }
+      setPendingEffects(null);
+      try {
+        await launch(pendingEffects.importer);
+      } catch (error) {
+        toast.error(toErrorMessage(error));
+      }
+    },
+    [launch, pendingEffects],
   );
 
   const handleUpdateConfirm = useCallback(async () => {
@@ -201,11 +247,11 @@ export function useLaunchGuard() {
     });
 
     try {
-      await launch(importer);
+      await launchWithEffects(importer);
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
-  }, [launch, pendingUpdate, queryClient, t]);
+  }, [launchWithEffects, pendingUpdate, queryClient, t]);
 
   // Bumping the generation cancels any in-flight confirmation, so dismissing the dialog
   // while ClearLaunchBlockers is still running does not launch the game afterwards.
@@ -495,6 +541,18 @@ export function useLaunchGuard() {
           confirmLabel={t("page.setting.xxmi.builtin.launchUpdateConfirm")}
           onConfirm={handleUpdateConfirm}
           onClose={() => setPendingUpdate(null)}
+        />
+        <ReShadePresetEffectsDialog
+          effects={pendingEffects?.effects ?? null}
+          confirmLabel={t("page.setting.xxmi.builtin.reshade.presetEffectsInstallAndLaunch")}
+          skipLabel={t(
+            pendingEffects?.effects.packages?.length
+              ? "page.setting.xxmi.builtin.reshade.presetEffectsSkipLaunch"
+              : "page.setting.xxmi.builtin.reshade.presetEffectsIgnoreLaunch",
+          )}
+          onInstalled={() => launchPendingEffects(false)}
+          onSkip={() => launchPendingEffects(true)}
+          onClose={() => setPendingEffects(null)}
         />
       </>
     ),

@@ -62,6 +62,9 @@ func bootRuntime(
 	if rt.tools != nil {
 		rt.tools.UseAppData(data)
 	}
+	if rt.reshade != nil {
+		rt.reshade.UseAppData(data)
+	}
 	if rt.agent != nil {
 		if err := rt.agent.UseAppData(data); err != nil {
 			return runtimePaths{Root: data.Root()}, err
@@ -141,6 +144,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	}
 	if rt.xxmi != nil {
 		rt.xxmi.UseClient(store.DB)
+	}
+	if rt.reshade != nil {
+		rt.reshade.UseClient(store.DB)
 	}
 	if rt.gamebanana != nil {
 		rt.gamebanana.UseClient(store.DB)

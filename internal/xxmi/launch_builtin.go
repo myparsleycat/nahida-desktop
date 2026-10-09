@@ -58,6 +58,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 					"gameLaunch":      cfg.GameLaunch,
 					"injectionMethod": cfg.InjectionMethod,
 					"packageVersion":  cfg.PackageVersion.Pinned,
+					"reshade":         cfg.ReShade.Enabled,
 				},
 			})
 		}
@@ -109,6 +110,34 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			return err
 		}
 		warn(fmt.Sprintf("Pre-launch command exited with code %d", exit.ExitCode()))
+	}
+
+	reshadeUsed := cfg.usesReShade()
+	if cfg.ReShade.Enabled && !reshadeUsed {
+		warn("ReShade needs native injection with the 3DMigoto runtime and was left out of this launch")
+	}
+	if reshadeUsed && cfg.ExtraLibraries.Enabled {
+		// Libraries left from a manual ReShade setup would load a second copy of it.
+		kept := make([]string, 0, len(cfg.ExtraLibraries.Paths))
+		wrapperSkipped := false
+		for _, library := range cfg.ExtraLibraries.Paths {
+			name := filepath.Base(library)
+			wrapper := strings.EqualFold(name, "RabbitWrapper.dll")
+			if !wrapper && !strings.EqualFold(name, "ReShade64.dll") {
+				kept = append(kept, library)
+				continue
+			}
+			wrapperSkipped = wrapperSkipped || wrapper
+			warn("Skipped an extra library that the built-in ReShade replaces: " + library)
+		}
+		cfg.ExtraLibraries.Paths = kept
+
+		// That setup bypasses XXMI DLL injection because the wrapper loads the DLL itself. Without the
+		// wrapper nothing would, so this launch injects it.
+		if wrapperSkipped && cfg.XXMIDLLInjectMode == "Bypass" {
+			cfg.XXMIDLLInjectMode = "Inject"
+			warn("XXMI DLL injection was switched from Bypass to Inject for this launch so mods still load")
+		}
 	}
 
 	// Like the reference launcher, a launch that leaves the XXMI DLL out prepares none of the
@@ -328,6 +357,17 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
+	reshadeModule := ""
+	if reshadeUsed {
+		progress("reshade")
+		if x.reshade == nil {
+			return errors.New("RESHADE_NOT_INSTALLED: ReShade is not configured")
+		}
+		reshadeModule, err = x.reshade.PrepareLaunch(ctx, key)
+		if err != nil {
+			return err
+		}
+	}
 	if cfg.GameLaunch == "Steam" {
 		progress("platform-options")
 		options := platformCommandLine(key, cfg, gameExe)
@@ -342,6 +382,18 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, migotoDLLUsed)
 	if err != nil {
 		return err
+	}
+	if reshadeModule != "" {
+		launchSpec.PreloadDLLs = []string{reshadeModule}
+
+		// A window hook loads the XXMI DLL whenever the game first handles a message, which cannot be
+		// ordered after ReShade.
+		if launchSpec.InjectMode == "Hook" {
+			launchSpec.InjectMode, launchSpec.UseHook = "Inject", false
+		}
+		if err := x.useExtraDLLInjector(ctx, cfg, &launchSpec); err != nil {
+			return err
+		}
 	}
 	if usesPlatform {
 		platform.apply(&launchSpec, cfg)
@@ -636,34 +688,44 @@ func (x *XXMI) builtinLaunchSpec(
 		}
 	}
 
-	// Without a deployed XXMI runtime, extra DLLs go in through the cached XXMI injector.
-	if len(spec.ExtraDLLs) > 0 {
-		pin, _, err := x.libsPin(ctx, cfg)
-		if err != nil {
-			return inject.LaunchSpec{}, err
-		}
-		version := selectedLegacyInjectorVersion(pin)
-		if version == "" {
-			return inject.LaunchSpec{}, errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
-		}
-		cacheRoot, err := xxmiCacheRoot()
-		if err != nil {
-			return inject.LaunchSpec{}, err
-		}
-		if err := verifyXXMILibsCache(
-			filepath.Join(cacheRoot, "packages", "xxmi-libs", version),
-			version,
-		); err != nil {
-			return inject.LaunchSpec{}, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
-		}
-		spec.LoaderDLL, err = verifiedLaunchFile(
-			filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
-		)
-		if err != nil {
-			return inject.LaunchSpec{}, err
-		}
+	if err := x.useExtraDLLInjector(ctx, cfg, &spec); err != nil {
+		return inject.LaunchSpec{}, err
 	}
 	return spec, nil
+}
+
+// useExtraDLLInjector names the XXMI injector for a launch that injects extra or preloaded DLLs
+// without a deployed XXMI runtime to take it from, caching its libraries first when they are missing.
+func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec *inject.LaunchSpec) error {
+	if spec.InjectionMethod == "Native" || spec.LoaderDLL.Path != "" ||
+		len(spec.ExtraDLLs)+len(spec.PreloadDLLs) == 0 {
+		return nil
+	}
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	version := selectedLegacyInjectorVersion(pin)
+	if version == "" {
+		// Nothing is cached until a launch deploys the XXMI runtime, which this one does not.
+		version, err = x.resolveLibsVersion(ctx, cfg)
+		if err != nil {
+			return err
+		}
+	}
+	cacheRoot, err := xxmiCacheRoot()
+	if err != nil {
+		return err
+	}
+	cacheFolder := filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
+	if err := x.EnsureLibsVersion(ctx, version); err != nil {
+		if info, statErr := os.Stat(cacheFolder); statErr == nil && info.IsDir() {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+		return err
+	}
+	spec.LoaderDLL, err = verifiedLaunchFile(filepath.Join(cacheFolder, "3dmloader.dll"))
+	return err
 }
 
 // errWWMIResourceTierUndecided stops the first direct WWMI launch until the user picks the resource
