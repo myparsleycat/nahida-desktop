@@ -23,7 +23,7 @@ import { FOLLOW_LATEST, SelectRow } from "@renderer/components/xxmi/xxmi-fields"
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, FolderOpenIcon, Loader2Icon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -38,6 +38,7 @@ export function ReShadeSettings() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [effectsOpen, setEffectsOpen] = useState(false);
+  const versionChange = useRef(Promise.resolve());
   const { data: status } = useQuery({ queryKey: ["reshade:status"], queryFn: ReShade.Status });
   const { data: versions } = useQuery({
     queryKey: ["reshade:versions"],
@@ -106,10 +107,12 @@ export function ReShadeSettings() {
             ...(versions ?? (status?.pinned ? [status.pinned] : [])),
           ]}
           onValueChange={(value) => {
-            void ReShade.SetVersion(value === FOLLOW_LATEST ? "" : value).then(
-              refresh,
-              (error: unknown) => toast.error(toErrorMessage(error)),
-            );
+            // A version is downloaded before it is stored, so an earlier choice could finish last.
+            versionChange.current = versionChange.current
+              .then(() => ReShade.SetVersion(value === FOLLOW_LATEST ? "" : value))
+              .then(refresh, (error: unknown) => {
+                toast.error(toErrorMessage(error));
+              });
           }}
         />
         <SectionRow
