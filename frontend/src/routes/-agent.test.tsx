@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import type { ComponentType, ReactNode } from "react";
 import { Suspense } from "react";
 import { toast } from "sonner";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
   ApproveAction: vi.fn(),
@@ -161,6 +161,13 @@ async function renderAgent(entries: unknown[] = [], getSession?: (id: string) =>
     timeout: ROUTE_LOAD_TIMEOUT_MS,
   });
 }
+
+// The route plugin code-splits route components; loading the chunk on a cold CI runner
+// can use up the whole route load timeout of the first test.
+beforeAll(async () => {
+  const Component = Route.options.component as unknown as { preload?: () => Promise<unknown> };
+  await Component?.preload?.();
+}, 30_000);
 
 function reasoningPanel() {
   return screen.getByText("page.agent.reasoning").closest("details");

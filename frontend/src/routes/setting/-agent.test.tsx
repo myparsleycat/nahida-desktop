@@ -197,7 +197,7 @@ beforeAll(async () => {
   // The route plugin code-splits route components, so warm the lazy import before the first render.
   const Component = Route.options.component as unknown as { preload?: () => Promise<unknown> };
   await Component?.preload?.();
-});
+}, 30_000);
 
 async function renderSettings() {
   const Component = Route.options.component;

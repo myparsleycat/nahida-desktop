@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Suspense, type ComponentType, type ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
   EnsureSession: vi.fn<() => Promise<void>>(),
@@ -51,6 +51,13 @@ import { toast } from "sonner";
 import { Route } from "./index";
 
 const ROUTE_LOAD_TIMEOUT_MS = 5_000;
+
+// The route plugin code-splits route components; loading the chunk on a cold CI runner
+// outlasts the per-test timeout of the first test.
+beforeAll(async () => {
+  const Component = Route.options.component as unknown as { preload?: () => Promise<unknown> };
+  await Component?.preload?.();
+}, 30_000);
 
 async function renderRoute() {
   const Component = Route.options.component;

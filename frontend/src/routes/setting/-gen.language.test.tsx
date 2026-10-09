@@ -3,7 +3,7 @@
 import { Setting } from "@bindings/setting";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentType, Suspense } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Route } from "./gen";
 
@@ -81,10 +81,16 @@ vi.mock("react-i18next", () => ({
 
 const RUN_ON_STARTUP = "page.setting.gen.application.runOnStartup";
 
-async function renderGeneralSettings() {
-  // The router plugin code-splits route components, so the route exposes a lazy one.
-  const Component = Route.options.component as ComponentType & { preload?: () => Promise<void> };
+// The router plugin code-splits route components, so the route exposes a lazy one.
+const Component = Route.options.component as ComponentType & { preload?: () => Promise<void> };
+
+// Loading the split chunk evaluates the whole settings page graph, which outlasts the
+// per-test timeout on a cold CI runner.
+beforeAll(async () => {
   await Component.preload?.();
+}, 30_000);
+
+async function renderGeneralSettings() {
   render(
     <Suspense>
       <Component />

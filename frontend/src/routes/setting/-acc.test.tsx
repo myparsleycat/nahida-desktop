@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, Suspense, type ComponentType } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({
   session: null as null,
@@ -27,6 +27,13 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { Route } from "./acc";
+
+// The route plugin code-splits route components; loading the chunk on a cold CI runner
+// outlasts the query timeout of the first test.
+beforeAll(async () => {
+  const Component = Route.options.component as unknown as { preload?: () => Promise<unknown> };
+  await Component?.preload?.();
+}, 30_000);
 
 async function renderAccount() {
   const Component = Route.options.component;
