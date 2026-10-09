@@ -15,6 +15,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
@@ -42,6 +43,7 @@ type Options struct {
 
 type reshadeProvider interface {
 	PrepareLaunch(ctx context.Context, importer string) (string, error)
+	LaunchPresetEffects(ctx context.Context, importer string) (reshade.PresetEffects, error)
 }
 
 type elevatedLauncher interface {

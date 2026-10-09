@@ -49,6 +49,7 @@ type EffectPackage struct {
 	installPath        string
 	textureInstallPath string
 	denied             []string
+	effectFiles        []string
 }
 
 type effectRecord struct {
@@ -249,6 +250,13 @@ func parseEffectPackages(data []byte, layout layout) []EffectPackage {
 		for _, name := range strings.Split(fields["DenyEffectFiles"], ",") {
 			if name = strings.TrimSpace(name); name != "" {
 				pkg.denied = append(pkg.denied, name)
+			}
+		}
+		for _, entry := range strings.Split(fields["EffectFiles"], ",") {
+			// Older lists append `=0` or `=1` to say whether the setup preselects the file.
+			name, _, _ := strings.Cut(entry, "=")
+			if name = strings.TrimSpace(name); name != "" {
+				pkg.effectFiles = append(pkg.effectFiles, name)
 			}
 		}
 		var shadersOK, texturesOK bool

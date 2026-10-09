@@ -112,8 +112,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		warn(fmt.Sprintf("Pre-launch command exited with code %d", exit.ExitCode()))
 	}
 
-	// The legacy loader injects on its own schedule, so ReShade cannot be ordered ahead of it.
-	reshadeUsed := cfg.ReShade.Enabled && (cfg.Mode != RuntimeLegacy || cfg.InjectionMethod == "Native")
+	reshadeUsed := cfg.usesReShade()
 	if cfg.ReShade.Enabled && !reshadeUsed {
 		warn("ReShade needs native injection with the 3DMigoto runtime and was left out of this launch")
 	}

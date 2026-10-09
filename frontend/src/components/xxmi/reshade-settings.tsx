@@ -1,5 +1,5 @@
-import { Shell } from "@bindings/platform";
-import { ReShade, type EffectPackage, type Paths } from "@bindings/reshade";
+import { Dialog, Shell } from "@bindings/platform";
+import { ReShade, type EffectPackage, type Paths, type PresetEffects } from "@bindings/reshade";
 import { XXMI } from "@bindings/xxmi";
 import { LauncherMode, RuntimeMode } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
@@ -17,11 +17,19 @@ import {
 } from "@renderer/components/ui/section";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { ReShadePresetEffectsDialog } from "@renderer/components/xxmi/reshade-preset-effects-dialog";
 import { FOLLOW_LATEST, SelectRow } from "@renderer/components/xxmi/xxmi-fields";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
-import { DownloadIcon, FolderOpenIcon, Loader2Icon, SearchIcon, Trash2Icon } from "lucide-react";
+import {
+  DownloadIcon,
+  FolderOpenIcon,
+  Loader2Icon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -37,6 +45,7 @@ export function ReShadeSettings() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const versionChange = useRef(Promise.resolve());
+  const [presetEffects, setPresetEffects] = useState<PresetEffects | null>(null);
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
   const { data: status } = useQuery({ queryKey: ["reshade:status"], queryFn: ReShade.Status });
   const { data: versions } = useQuery({
@@ -154,6 +163,45 @@ export function ReShadeSettings() {
           </SectionHeader>
           <SectionContent>
             <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClickPromise={async () => {
+                  try {
+                    const selected = await Dialog.ShowOpenDialog({
+                      title: t("page.setting.xxmi.builtin.reshade.addPreset"),
+                      defaultPath: "",
+                      filters: [
+                        {
+                          name: t("page.setting.xxmi.builtin.reshade.folderNames.presets"),
+                          extensions: ["ini", "txt"],
+                        },
+                      ],
+                      properties: ["openFile", "multiSelections"],
+                    });
+                    if (selected.canceled || !selected.filePaths?.length) return;
+
+                    const effects = await ReShade.AddPresets(selected.filePaths);
+                    toast.success(
+                      t("page.setting.xxmi.builtin.reshade.presetAdded", {
+                        count: selected.filePaths.length,
+                      }),
+                    );
+                    if (effects.packages?.length || effects.unknown?.length) {
+                      setPresetEffects(effects);
+                    }
+                  } catch (error) {
+                    const message = toErrorMessage(error);
+                    toast.error(
+                      message.includes("RESHADE_PRESET_UNSUPPORTED")
+                        ? t("page.setting.xxmi.builtin.reshade.presetUnsupported")
+                        : message,
+                    );
+                  }
+                }}
+              >
+                <PlusIcon />
+                {t("page.setting.xxmi.builtin.reshade.addPreset")}
+              </Button>
               {sharedFolders.map((folder) => (
                 <Button
                   key={folder}
@@ -176,6 +224,12 @@ export function ReShadeSettings() {
           </SectionContent>
         </Section>
       </div>
+      <ReShadePresetEffectsDialog
+        effects={presetEffects}
+        confirmLabel={t("page.setting.xxmi.builtin.reshade.presetEffectsInstall")}
+        onInstalled={() => setPresetEffects(null)}
+        onClose={() => setPresetEffects(null)}
+      />
     </main>
   );
 }
