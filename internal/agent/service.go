@@ -578,6 +578,7 @@ func (s *Service) DeleteSession(ctx context.Context, id string) error {
 	if s.appData != nil {
 		for _, relative := range []string{
 			filepath.Join("agent", "artifacts", id),
+			filepath.Join("agent", "scripts", id),
 			filepath.Join(imageDirectory, id),
 		} {
 			target, resolveErr := s.appData.Resolve(relative)
@@ -1262,6 +1263,8 @@ func (s *Service) executeRun(ctx context.Context, sessionID string, run queuedRu
 	executor := &toolExecutor{
 		sandbox: sandbox, skills: s.skills, desktop: s.actions,
 		scope: rowScope(*row), mcp: mcpRuntime, sessionID: sessionID, supportsImages: settings.SupportsImages,
+		appData: s.appData, log: s.log,
+		scriptsPreapproved: settings.AutoRunScripts || scriptsAllowedFromEvents(events),
 	}
 	patchText := patchTextModel(settings.Model)
 	toolDefinitions := append(builtInToolDefinitions(patchText), mcpDefinitions...)
@@ -1552,6 +1555,16 @@ func (s *Service) failRunPersistence(sessionID, runID, stage string, cause error
 }
 
 func (s *Service) ApproveAction(ctx context.Context, approvalID string) error {
+	return s.approveAction(ctx, approvalID, false)
+}
+
+// ApproveActionForSession approves a pending script run and lets later scripts in the same
+// conversation start without asking again.
+func (s *Service) ApproveActionForSession(ctx context.Context, approvalID string) error {
+	return s.approveAction(ctx, approvalID, true)
+}
+
+func (s *Service) approveAction(ctx context.Context, approvalID string, allowScripts bool) error {
 	client, err := s.dbClient()
 	if err != nil {
 		return err
@@ -1563,10 +1576,22 @@ func (s *Service) ApproveAction(ctx context.Context, approvalID string) error {
 	if err := s.validateApprovalContext(ctx, client, pending); err != nil {
 		return err
 	}
+	if allowScripts && pending.ActionID != scriptActionID {
+		return errors.New("only a script run can be allowed for the whole conversation")
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	row, err := client.AgentApprovals.Transition(ctx, approvalID, "pending", "executing", now)
 	if err != nil {
 		return err
+	}
+	if allowScripts {
+		if _, err := s.appendEvent(
+			ctx,
+			db.AgentEventRow{SessionID: row.SessionID, TurnID: row.TurnID, EventType: scriptSessionAllowedEvent},
+			map[string]any{"approvalId": row.ID},
+		); err != nil {
+			return s.failApprovalDetached(*row, err)
+		}
 	}
 	approval := agentApproval(*row)
 	s.emit(row.SessionID, row.TurnID, 0, "approval-updated", approval)
@@ -1642,10 +1667,13 @@ func (s *Service) executeApprovedAction(ctx context.Context, approvalID string) 
 
 	executor := &toolExecutor{sandbox: sandbox, skills: s.skills, desktop: s.actions,
 		scope: rowScope(*session), sessionID: row.SessionID, supportsImages: settings.SupportsImages,
-		toolCallID: row.ToolCallID}
+		toolCallID: row.ToolCallID, appData: s.appData, log: s.log}
 	kind := "desktop"
-	if strings.HasPrefix(row.ActionID, "sandbox.") {
+	switch {
+	case strings.HasPrefix(row.ActionID, "sandbox."):
 		kind = "sandbox"
+	case row.ActionID == scriptActionID:
+		kind = "script"
 	}
 	result, actionErr := executor.ExecuteApproved(ctx, row.ActionID, kind, json.RawMessage(row.Arguments))
 	if actionErr != nil {
@@ -1935,6 +1963,8 @@ func approvalToolName(actionID string) string {
 		return "apply_patch"
 	case "sandbox.move_path":
 		return "move_path"
+	case scriptActionID:
+		return "run_script"
 	default:
 		return "run_desktop_action"
 	}

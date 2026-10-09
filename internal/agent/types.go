@@ -133,16 +133,18 @@ type AgentHeaderView struct {
 }
 
 type AgentSettingsView struct {
-	Provider          string              `json:"provider"`
-	Protocol          string              `json:"protocol"`
-	Endpoint          string              `json:"endpoint"`
-	Model             string              `json:"model"`
-	ContextWindowSize int                 `json:"contextWindowSize"`
-	MaxOutputTokens   int                 `json:"maxOutputTokens"`
-	Reasoning         string              `json:"reasoning"`
-	SupportsImages    bool                `json:"supportsImages"`
-	Headers           []AgentHeaderView   `json:"headers,omitempty"`
-	Credential        AgentCredentialView `json:"credential"`
+	Provider          string `json:"provider"`
+	Protocol          string `json:"protocol"`
+	Endpoint          string `json:"endpoint"`
+	Model             string `json:"model"`
+	ContextWindowSize int    `json:"contextWindowSize"`
+	MaxOutputTokens   int    `json:"maxOutputTokens"`
+	Reasoning         string `json:"reasoning"`
+	SupportsImages    bool   `json:"supportsImages"`
+	// AutoRunScripts lets run_script start without a per-run approval.
+	AutoRunScripts bool                `json:"autoRunScripts"`
+	Headers        []AgentHeaderView   `json:"headers,omitempty"`
+	Credential     AgentCredentialView `json:"credential"`
 }
 
 // AgentCredentialView summarizes the stored credential of one provider without exposing it.
@@ -202,6 +204,7 @@ type UpdateAgentSettingsInput struct {
 	MaxOutputTokens   int                `json:"maxOutputTokens"`
 	Reasoning         string             `json:"reasoning"`
 	SupportsImages    bool               `json:"supportsImages"`
+	AutoRunScripts    bool               `json:"autoRunScripts"`
 	Headers           []AgentHeaderInput `json:"headers,omitempty"`
 	// APIKey is the key typed into the settings form; TestProvider tries it without saving it.
 	APIKey string `json:"apiKey,omitempty"`

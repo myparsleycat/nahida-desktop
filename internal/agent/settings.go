@@ -300,6 +300,7 @@ func settingsFromInput(input UpdateAgentSettingsInput) (AgentSettingsView, error
 		MaxOutputTokens:   input.MaxOutputTokens,
 		Reasoning:         input.Reasoning,
 		SupportsImages:    input.SupportsImages,
+		AutoRunScripts:    input.AutoRunScripts,
 		Headers:           headerViews(input.Headers),
 	}
 	return normalizeSettings(view), nil

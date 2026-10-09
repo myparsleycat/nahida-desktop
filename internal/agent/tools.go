@@ -13,6 +13,8 @@ import (
 	"time"
 
 	agentactions "nahida.live/desktop/internal/agent/actions"
+	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/infra"
 )
 
 type toolExecutor struct {
@@ -24,6 +26,12 @@ type toolExecutor struct {
 	sessionID      string
 	supportsImages bool
 	toolCallID     string
+	appData        *appdata.Store
+	log            *infra.Log
+	// scriptsPreapproved lets run_script start without pausing: the user turned on automatic script
+	// runs or allowed scripts for this conversation.
+	scriptsPreapproved bool
+	lookupInterpreter  func(ctx context.Context, language string) (scriptInterpreter, error)
 }
 
 type toolExecution struct {
@@ -80,6 +88,30 @@ func builtInToolDefinitions(patchText bool) []ToolDefinition {
 				"from": map[string]any{"type": "string"},
 				"to":   map[string]any{"type": "string"},
 			}, "rootId", "from", "to"),
+		},
+		{
+			Name: "run_script",
+			Description: "Write and run one Python or Windows PowerShell 5.1 script for work the other tools cannot do " +
+				"in a few calls, such as parsing binary files, batch processing many files, or computation. The " +
+				"script starts in workingDirectory inside a writable root, runs non-interactively with no stdin, " +
+				"and is stopped after timeoutSeconds (default 120, at most 600). The result carries exitCode, " +
+				"stdout, and stderr; long output keeps only its beginning and end, so print a concise summary and " +
+				"write bulky results to a file. For PowerShell, exitCode is the script's exit value or the exit " +
+				"code of the last native command. Every process the script starts is ended when the script " +
+				"finishes, so it cannot leave a program running. The run pauses for user approval unless the user allowed " +
+				"scripts.",
+			InputSchema: objectSchema(map[string]any{
+				"language": map[string]any{
+					"type": "string", "enum": []string{scriptLanguagePython, scriptLanguagePowerShell},
+				},
+				"script": map[string]any{"type": "string", "description": "The complete script source."},
+				"rootId": map[string]any{"type": "string"},
+				"workingDirectory": map[string]any{
+					"type":        "string",
+					"description": "Folder relative to the root. Defaults to the root itself.",
+				},
+				"timeoutSeconds": map[string]any{"type": "integer"},
+			}, "language", "script", "rootId"),
 		},
 		{
 			Name:        "load_skill",
@@ -196,8 +228,12 @@ func objectSchema(properties map[string]any, required ...string) map[string]any 
 
 func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecution, error) {
 	timeout := 2 * time.Minute
-	if call.Name == "run_desktop_action" {
+	switch call.Name {
+	case "run_desktop_action":
 		timeout = 4 * time.Minute
+	case "run_script":
+		// The script enforces its own limit; this only has to outlast the longest one.
+		timeout = (maxScriptTimeoutSeconds + 30) * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -327,6 +363,32 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 			Output:       map[string]any{"moved": true},
 			ChangedFiles: []string{input.From, input.To},
 		}, nil
+	case "run_script":
+		var input scriptInput
+		if err := decodeToolArguments(call.Arguments, &input); err != nil {
+			return toolExecution{}, err
+		}
+		input, directory, err := e.prepareScript(input)
+		if err != nil {
+			return toolExecution{}, err
+		}
+		if !e.scriptsPreapproved {
+			canonical, _ := json.Marshal(input)
+			return toolExecution{Approval: &agentactions.Proposal{
+				ActionID:  scriptActionID,
+				Arguments: canonical,
+				Summary:   scriptSummary(input.Language),
+				Target:    directory,
+				Impact: "The script runs with your Windows account's permissions and is not limited to " +
+					"the sandbox folders.",
+				Kind: "script",
+			}}, nil
+		}
+		result, err := e.runScript(ctx, input, directory)
+		if err != nil {
+			return toolExecution{}, err
+		}
+		return toolExecution{Output: result}, nil
 	case "load_skill":
 		var input struct{ Name, Reference string }
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
@@ -423,6 +485,23 @@ func (e *toolExecutor) ExecuteApproved(
 		)
 		persisted, images := splitActionImage(output)
 		return toolExecution{Output: persisted, Images: images}, err
+	case "script":
+		if actionID != scriptActionID {
+			break
+		}
+		var input scriptInput
+		if err := json.Unmarshal(arguments, &input); err != nil {
+			return toolExecution{}, err
+		}
+		input, directory, err := e.prepareScript(input)
+		if err != nil {
+			return toolExecution{}, err
+		}
+		result, err := e.runScript(ctx, input, directory)
+		if err != nil {
+			return toolExecution{}, err
+		}
+		return toolExecution{Output: result}, nil
 	case "sandbox":
 		switch actionID {
 		case "sandbox.apply_patch":
