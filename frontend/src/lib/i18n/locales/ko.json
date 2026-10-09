@@ -1988,9 +1988,6 @@
           "title": "레이아웃",
           "gridModelPreview": "프리뷰가 없는 모드에 모델 프리뷰 표시",
           "gridModelPreviewDescription": "모드 그리드에서 이미지나 동영상이 없는 모드의 현재 토글 상태를 정적 모델 이미지로 표시합니다.",
-          "gridModelPreviewClearCache": "모델 프리뷰 캐시 초기화",
-          "gridModelPreviewClearCacheSuccess": "모델 프리뷰 캐시를 초기화했습니다.",
-          "gridModelPreviewClearCacheError": "모델 프리뷰 캐시를 초기화하지 못했습니다.",
           "sidebar": {
             "mode": "사이드바 레이아웃",
             "modeDescription": "캐릭터 사이드바를 행 목록 또는 정사각형 프리뷰 그리드로 표시합니다.",

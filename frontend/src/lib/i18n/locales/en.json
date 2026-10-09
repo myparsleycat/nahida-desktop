@@ -1988,9 +1988,6 @@
           "title": "Layout",
           "gridModelPreview": "Show model previews for mods without previews",
           "gridModelPreviewDescription": "In the mod grid, show the current toggle state as a static model image when no image or video is available.",
-          "gridModelPreviewClearCache": "Clear model preview cache",
-          "gridModelPreviewClearCacheSuccess": "Model preview cache cleared.",
-          "gridModelPreviewClearCacheError": "Failed to clear the model preview cache.",
           "sidebar": {
             "mode": "Sidebar layout",
             "modeDescription": "Display the character sidebar as either a row list or a square preview grid.",

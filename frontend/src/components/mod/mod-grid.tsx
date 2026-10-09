@@ -29,7 +29,12 @@ export function ModGrid(_props: ModGridProps) {
   // const [parent] = useAutoAnimate({ duration: 150 });
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
-  const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
+  const {
+    data: activeGroup,
+    dataUpdatedAt,
+    isPlaceholderData,
+    isPending,
+  } = useModGroup(selectedGroupPath);
   const actions = useModActions(selectedGroupPath);
 
   const isMergeMode = useModStore((s) => s.isMergeMode);
@@ -142,7 +147,11 @@ export function ModGrid(_props: ModGridProps) {
   }
 
   return (
-    <GridModelPreviewProvider key={selectedGroupPath} viewport={viewport}>
+    <GridModelPreviewProvider
+      key={selectedGroupPath}
+      sourceRevision={dataUpdatedAt}
+      viewport={viewport}
+    >
       <div className="min-h-0 flex-1">
         <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
           <div className="relative w-full p-3">

@@ -3,7 +3,6 @@ package modelviewer
 import (
 	"sync"
 
-	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -14,19 +13,12 @@ type Options struct {
 }
 
 type Service struct {
-	data                     *appdata.Store
-	gridPreviewMu            sync.Mutex
-	gridPreviewLegacyCleanup sync.Once
 	log                      *infra.Log
 	protocol                 *infra.Protocol
 	findModelViewerPreview   func(string) *string
 	modelViewerMu            sync.Mutex
 	modelViewerSessions      map[string]*modelViewerSession
 	modelViewerClosedWindows map[uint]bool
-}
-
-func (t *Service) UseAppData(data *appdata.Store) {
-	t.data = data
 }
 
 func New() *Service { return NewWithOptions(Options{}) }

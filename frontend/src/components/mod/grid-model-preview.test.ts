@@ -1,31 +1,37 @@
 // @vitest-environment jsdom
 import { Tools } from "@bindings/tools";
 import type { ModInfo } from "@renderer/types/mod";
-import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerVariable } from "@shared/mod-viewer/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     createGridModelPreviewRequestKey,
     GridModelPreviewCache,
     GridModelPreviewController,
+    GridModelPreviewProvider,
+    GridModelPreviewRenderer,
     type PreviewRenderTask,
     resolveGridModelPreviewState,
+    useGridModelPreview,
 } from "./grid-model-preview";
 
 vi.mock("@bindings/tools", () => ({
     Tools: {
         LoadModGridPreview: vi.fn(),
-        GetModGridPreviewCache: vi.fn(),
-        PrepareModGridPreviewCacheUpload: vi.fn(),
-        SaveModGridPreviewCache: vi.fn(),
         CleanupModelViewer: vi.fn(),
     },
 }));
 
 vi.mock("@renderer/lib/logger", () => ({ Logger: { capture: vi.fn() } }));
 
-vi.mock("@renderer/wails/binary-memory", () => ({ uploadTypedArray: vi.fn() }));
+vi.mock("@renderer/hooks/use-settings", () => ({
+    useSettings: () => ({
+        isLoading: false,
+        settings: { enabled: true, ...renderSettings },
+    }),
+}));
 
 const renderSettings = {
     toneMapping: "neutral" as const,
@@ -36,13 +42,7 @@ const renderSettings = {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(Tools.GetModGridPreviewCache).mockResolvedValue({
-        fingerprint: "files-v1",
-        url: "",
-    });
-    vi.mocked(Tools.PrepareModGridPreviewCacheUpload).mockResolvedValue("/upload");
-    vi.mocked(uploadTypedArray).mockResolvedValue(undefined);
-    vi.mocked(Tools.SaveModGridPreviewCache).mockResolvedValue(undefined);
+    vi.mocked(Tools.LoadModGridPreview).mockReset();
     vi.mocked(Tools.CleanupModelViewer).mockResolvedValue(true);
     let nextUrl = 0;
     Object.defineProperty(URL, "createObjectURL", {
@@ -53,6 +53,11 @@ beforeEach(() => {
         configurable: true,
         value: vi.fn(),
     });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
 });
 
 describe("resolveGridModelPreviewState", () => {
@@ -128,43 +133,34 @@ describe("GridModelPreviewCache", () => {
 });
 
 describe("GridModelPreviewController", () => {
-    it("reuses a saved image after navigation without loading a model", async () => {
-        const saved = new Map<string, string>();
-        vi.mocked(Tools.GetModGridPreviewCache).mockImplementation(async (_path, variant) => ({
-            fingerprint: "files-v1",
-            url: saved.get(variant) ?? "",
-        }));
-        vi.mocked(Tools.SaveModGridPreviewCache).mockImplementation(async (_path, variant) => {
-            saved.set(variant, "/protocol/local?path=saved.png");
-        });
+    it("reuses a rendered image without loading a model again", async () => {
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("first"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const first = new GridModelPreviewController(renderSettings, renderTask);
+        const controller = new GridModelPreviewController(renderSettings, renderTask);
         const mod = makeMod([]);
-        first.subscribe(mod, vi.fn());
+        const firstListener = vi.fn();
+        controller.subscribe(mod, firstListener);
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
-        await first.complete(
+        await controller.complete(
             renderTask.mock.calls[0][0]!,
             new Blob(["png"], { type: "image/png" }),
         );
-        first.dispose();
+        expect(firstListener).toHaveBeenLastCalledWith({
+            status: "ready",
+            url: "blob:test-0",
+        });
 
-        const nextRender = vi.fn();
-        const next = new GridModelPreviewController(renderSettings, nextRender);
-        const listener = vi.fn();
-        next.subscribe({ ...mod, mtime: 999 }, listener);
-        await vi.waitFor(() =>
-            expect(listener).toHaveBeenLastCalledWith({
-                status: "ready",
-                url: "/protocol/local?path=saved.png",
-            }),
-        );
+        const nextListener = vi.fn();
+        controller.subscribe(mod, nextListener);
+        expect(nextListener).toHaveBeenCalledWith({
+            status: "ready",
+            url: "blob:test-0",
+        });
         expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
-        expect(nextRender).not.toHaveBeenCalled();
-        next.dispose();
+        controller.dispose();
     });
 
-    it("revalidates files and rerenders when the source fingerprint changes", async () => {
+    it("rerenders when the mod mtime changes", async () => {
         vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("model"));
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
         const controller = new GridModelPreviewController(renderSettings, renderTask);
@@ -172,32 +168,9 @@ describe("GridModelPreviewController", () => {
         controller.subscribe(mod, vi.fn());
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
         await controller.complete(renderTask.mock.calls[0][0]!, new Blob(["png"]));
-        vi.mocked(Tools.GetModGridPreviewCache).mockResolvedValue({
-            fingerprint: "files-v2",
-            url: "",
-        });
-        controller.subscribe(mod, vi.fn());
-        await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
-        controller.dispose();
-    });
 
-    it("renders when cache reading fails and shows the image when saving fails", async () => {
-        vi.mocked(Tools.GetModGridPreviewCache).mockRejectedValueOnce(new Error("read failed"));
-        vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("model"));
-        vi.mocked(Tools.SaveModGridPreviewCache).mockRejectedValue(new Error("disk full"));
-        const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
-        const controller = new GridModelPreviewController(renderSettings, renderTask);
-        const listener = vi.fn();
-        controller.subscribe(makeMod([]), listener);
-        await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
-        await controller.complete(renderTask.mock.calls[0][0]!, new Blob(["png"]));
-        expect(listener).toHaveBeenLastCalledWith({ status: "ready", url: "blob:test-0" });
-        controller.subscribe(makeMod([]), listener);
+        controller.subscribe({ ...mod, mtime: 2 }, vi.fn());
         await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
-        await vi.waitFor(() => expect(renderTask.mock.calls.at(-1)?.[0]).not.toBeNull());
-        await controller.complete(renderTask.mock.calls.at(-1)![0]!, new Blob(["png"]));
-        expect(Tools.SaveModGridPreviewCache).toHaveBeenCalledTimes(1);
-        expect(listener).toHaveBeenLastCalledWith({ status: "ready", url: "blob:test-1" });
         controller.dispose();
     });
 
@@ -231,27 +204,33 @@ describe("GridModelPreviewController", () => {
         controller.dispose();
     });
 
-    it("shows a saved image while another preview is still rendering", async () => {
-        vi.mocked(Tools.GetModGridPreviewCache).mockImplementation(async (path) => ({
-            fingerprint: "files-v1",
-            url: path === "C:/Mods/Saved" ? "/protocol/local?path=saved.png" : "",
-        }));
-        vi.mocked(Tools.LoadModGridPreview).mockResolvedValue(rawTransport("rendering"));
+    it("returns an in-memory cached image immediately while another preview is still rendering", async () => {
+        const slow = deferred<ReturnType<typeof rawTransport>>();
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockResolvedValueOnce(rawTransport("cached-model"))
+            .mockImplementationOnce(
+                () => slow.promise as ReturnType<typeof Tools.LoadModGridPreview>,
+            );
+
         const renderTask = vi.fn<(task: PreviewRenderTask | null) => void>();
         const controller = new GridModelPreviewController(renderSettings, renderTask);
-        const savedListener = vi.fn();
-
-        controller.subscribe(makeMod([]), vi.fn());
+        const cachedMod = { ...makeMod([]), path: "C:/Mods/Cached", id: "cached" };
+        controller.subscribe(cachedMod, vi.fn());
         await vi.waitFor(() => expect(renderTask).toHaveBeenCalledTimes(1));
-        controller.subscribe({ ...makeMod([]), path: "C:/Mods/Saved", id: "saved" }, savedListener);
+        await controller.complete(renderTask.mock.calls[0][0]!, new Blob(["png"]));
 
-        await vi.waitFor(() =>
-            expect(savedListener).toHaveBeenLastCalledWith({
-                status: "ready",
-                url: "/protocol/local?path=saved.png",
-            }),
-        );
-        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
+        const slowMod = { ...makeMod([]), path: "C:/Mods/Slow", id: "slow" };
+        controller.subscribe(slowMod, vi.fn());
+        await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2));
+
+        const cachedListener = vi.fn();
+        controller.subscribe(cachedMod, cachedListener);
+        expect(cachedListener).toHaveBeenCalledWith({
+            status: "ready",
+            url: "blob:test-0",
+        });
+
+        slow.resolve(rawTransport("slow-model"));
         controller.dispose();
     });
 
@@ -337,6 +316,107 @@ describe("GridModelPreviewController", () => {
         }
     });
 });
+
+describe("GridModelPreviewProvider", () => {
+    it("rerenders unchanged metadata after a source refresh", async () => {
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockResolvedValueOnce(rawTransport("before-refresh"))
+            .mockResolvedValueOnce(rawTransport("after-refresh"));
+        vi.spyOn(GridModelPreviewRenderer.prototype, "render").mockResolvedValue(new Blob(["png"]));
+        const mod = makeMod([]);
+        const props = {
+            viewport: null,
+            sourceRevision: 1,
+            children: createElement(PreviewState, { mod }),
+        };
+        const view = render(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-0"),
+        );
+
+        view.rerender(createElement(GridModelPreviewProvider, { ...props }));
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1);
+
+        props.sourceRevision = 2;
+        view.rerender(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-1"),
+        );
+        expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(2);
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-0");
+    });
+
+    it("discards a model load that finishes after a source refresh", async () => {
+        const oldLoad = deferred<ReturnType<typeof rawTransport>>();
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockImplementationOnce(
+                () => oldLoad.promise as ReturnType<typeof Tools.LoadModGridPreview>,
+            )
+            .mockResolvedValueOnce(rawTransport("after-refresh"));
+        const renderPreview = vi
+            .spyOn(GridModelPreviewRenderer.prototype, "render")
+            .mockResolvedValue(new Blob(["png"]));
+        const props = {
+            viewport: null,
+            sourceRevision: 1,
+            children: createElement(PreviewState, { mod: makeMod([]) }),
+        };
+        const view = render(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() => expect(Tools.LoadModGridPreview).toHaveBeenCalledTimes(1));
+
+        props.sourceRevision = 2;
+        view.rerender(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-0"),
+        );
+        oldLoad.resolve(rawTransport("before-refresh"));
+        await vi.waitFor(() =>
+            expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("before-refresh"),
+        );
+        expect(renderPreview).toHaveBeenCalledTimes(1);
+        expect(renderPreview).toHaveBeenCalledWith(
+            expect.objectContaining({ sessionId: "after-refresh" }),
+        );
+        expect(screen.getByTestId("preview").textContent).toBe("blob:test-0");
+    });
+
+    it("discards a render that finishes after a source refresh", async () => {
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockResolvedValueOnce(rawTransport("before-refresh"))
+            .mockResolvedValueOnce(rawTransport("after-refresh"));
+        const oldRender = deferred<Blob>();
+        const renderPreview = vi
+            .spyOn(GridModelPreviewRenderer.prototype, "render")
+            .mockImplementationOnce(() => oldRender.promise)
+            .mockResolvedValueOnce(new Blob(["new"]));
+        const props = {
+            viewport: null,
+            sourceRevision: 1,
+            children: createElement(PreviewState, { mod: makeMod([]) }),
+        };
+        const view = render(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() => expect(renderPreview).toHaveBeenCalledTimes(1));
+
+        props.sourceRevision = 2;
+        view.rerender(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-0"),
+        );
+        await act(async () => oldRender.resolve(new Blob(["old"])));
+        expect(screen.getByTestId("preview").textContent).toBe("blob:test-0");
+        expect(Tools.CleanupModelViewer).toHaveBeenCalledWith("before-refresh");
+        expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    });
+});
+
+function PreviewState({ mod }: { mod: ModInfo }) {
+    const [ref, , state] = useGridModelPreview(mod, true);
+    return createElement(
+        "div",
+        { ref, "data-testid": "preview" },
+        state.status === "ready" ? state.url : state.status,
+    );
+}
 
 function makeVariable(id: string, effects: ViewerVariable["effects"] = []): ViewerVariable {
     return {

@@ -3,7 +3,6 @@ import { normalizeModelViewerTransport } from "@renderer/components/tools/model-
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import type { ModInfo } from "@renderer/types/mod";
-import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import type {
   EvaluatedViewerState,
@@ -29,7 +28,6 @@ const MODEL_PREVIEW_SIZE = 512;
 const MODEL_PREVIEW_CACHE_ENTRIES = 64;
 const MODEL_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
 const MODEL_PREVIEW_RENDER_TIMEOUT_MS = 30_000;
-const MODEL_PREVIEW_LOOKUP_CONCURRENCY = 4;
 
 const modelPreviewSettingsConfig = {
   enabled: "mod.gridModelPreview",
@@ -57,10 +55,7 @@ type PreviewEntry = {
   requestKey: string;
   mod: ModInfo;
   listeners: Set<PreviewListener>;
-  state: "checking" | "queued" | "loading" | "rendering";
-  variant: string;
-  fingerprint: string;
-  finalKey: string;
+  state: "queued" | "loading" | "rendering";
 };
 
 export type PreviewRenderTask = {
@@ -136,9 +131,7 @@ export class GridModelPreviewController {
   private readonly failedKeys = new Set<string>();
   private readonly cache = new GridModelPreviewCache();
   private readonly entries = new Map<string, PreviewEntry>();
-  private readonly lookupQueue: PreviewEntry[] = [];
   private readonly queue: PreviewEntry[] = [];
-  private activeLookups = 0;
   private activeEntry: PreviewEntry | null = null;
   private activeTask: PreviewRenderTask | null = null;
   private disposed = false;
@@ -155,37 +148,41 @@ export class GridModelPreviewController {
     }
 
     const requestKey = createGridModelPreviewRequestKey(mod, this.settings);
+    const cached = this.cache.get(requestKey);
+    if (cached) {
+      listener({ status: "ready", url: cached });
+      return () => {};
+    }
+    if (this.failedKeys.has(requestKey)) {
+      listener({ status: "unavailable" });
+      return () => {};
+    }
+
     const existing = this.entries.get(requestKey);
     const entry = existing ?? {
       requestKey,
       mod,
       listeners: new Set<PreviewListener>(),
-      state: "checking" as const,
-      variant: createGridModelPreviewRequestKey({ ...mod, mtime: 0 }, this.settings),
-      fingerprint: "",
-      finalKey: "",
+      state: "queued" as const,
     };
     entry.listeners.add(listener);
     listener({ status: "loading" });
 
     if (!existing) {
       this.entries.set(requestKey, entry);
-      this.lookupQueue.push(entry);
-      this.pumpLookups();
+      this.queue.push(entry);
+      void this.pump();
     }
 
     return () => {
       entry.listeners.delete(listener);
-      if (entry.listeners.size > 0 || (entry.state !== "checking" && entry.state !== "queued")) {
+      if (entry.listeners.size > 0 || entry.state !== "queued") {
         return;
       }
 
-      // A lookup already in flight notices the entry is gone when it returns.
-      for (const pending of [this.lookupQueue, this.queue]) {
-        const index = pending.indexOf(entry);
-        if (index >= 0) {
-          pending.splice(index, 1);
-        }
+      const index = this.queue.indexOf(entry);
+      if (index >= 0) {
+        this.queue.splice(index, 1);
       }
       this.entries.delete(entry.requestKey);
     };
@@ -214,14 +211,11 @@ export class GridModelPreviewController {
     }
 
     const { entry } = task;
-    const persist = !this.disposed && blob !== null && entry.fingerprint !== "";
     if (!this.disposed) {
       if (blob) {
-        this.settle(entry, { status: "ready", url: this.cache.set(entry.finalKey, blob) });
+        this.settle(entry, { status: "ready", url: this.cache.set(entry.requestKey, blob) });
       } else {
-        if (entry.fingerprint) {
-          this.failedKeys.add(entry.finalKey);
-        }
+        this.failedKeys.add(entry.requestKey);
         this.settle(entry, { status: "unavailable" });
       }
 
@@ -233,21 +227,7 @@ export class GridModelPreviewController {
       void this.pump();
     }
 
-    // The upload goes through the model session, so it outlives the render
-    // slot released above and is cleaned up only after the save settles.
-    try {
-      if (persist && blob) {
-        await saveModelPreview(task, blob).catch((cacheError: unknown) =>
-          Logger.capture(
-            "mod-grid:model-preview-cache-save",
-            { modPath: entry.mod.path },
-            cacheError,
-          ),
-        );
-      }
-    } finally {
-      await cleanupModelPreviewSession(task.sessionId);
-    }
+    await cleanupModelPreviewSession(task.sessionId);
   }
 
   dispose() {
@@ -261,7 +241,6 @@ export class GridModelPreviewController {
         listener({ status: "unavailable" });
       }
     }
-    this.lookupQueue.splice(0);
     this.queue.splice(0);
     this.entries.clear();
     this.failedKeys.clear();
@@ -286,46 +265,6 @@ export class GridModelPreviewController {
       listener(state);
     }
     this.entries.delete(entry.requestKey);
-  }
-
-  // Cache lookups run apart from the render queue so a saved image never
-  // waits behind another mod's model load and render.
-  private pumpLookups() {
-    while (this.activeLookups < MODEL_PREVIEW_LOOKUP_CONCURRENCY) {
-      const entry = this.lookupQueue.shift();
-      if (!entry) {
-        return;
-      }
-      this.activeLookups++;
-      void this.lookup(entry).finally(() => {
-        this.activeLookups--;
-        this.pumpLookups();
-      });
-    }
-  }
-
-  private async lookup(entry: PreviewEntry) {
-    const saved = await Tools.GetModGridPreviewCache(entry.mod.path, entry.variant).catch(
-      (error: unknown) => {
-        Logger.capture("mod-grid:model-preview-cache-read", { modPath: entry.mod.path }, error);
-        return { fingerprint: "", url: "" };
-      },
-    );
-    if (this.disposed || this.entries.get(entry.requestKey) !== entry) {
-      return;
-    }
-
-    entry.fingerprint = saved.fingerprint;
-    entry.finalKey = JSON.stringify([entry.variant, saved.fingerprint]);
-    const cached = saved.url || (saved.fingerprint ? this.cache.get(entry.finalKey) : undefined);
-    if (cached || this.failedKeys.has(entry.finalKey)) {
-      this.settle(entry, cached ? { status: "ready", url: cached } : { status: "unavailable" });
-      return;
-    }
-
-    entry.state = "queued";
-    this.queue.push(entry);
-    void this.pump();
   }
 
   private async pump() {
@@ -379,9 +318,7 @@ export class GridModelPreviewController {
           { modName: entry.mod.name, modPath: entry.mod.path, sessionId },
           error,
         );
-        if (entry.fingerprint) {
-          this.failedKeys.add(entry.finalKey);
-        }
+        this.failedKeys.add(entry.requestKey);
         this.settle(entry, { status: "unavailable" });
       }
       this.entries.delete(entry.requestKey);
@@ -485,9 +422,11 @@ export class GridModelPreviewRenderer {
 
 export function GridModelPreviewProvider({
   children,
+  sourceRevision,
   viewport,
 }: {
   children: ReactNode;
+  sourceRevision: number;
   viewport: HTMLDivElement | null;
 }) {
   const { settings, isLoading } = useSettings(modelPreviewSettingsConfig);
@@ -504,6 +443,8 @@ export function GridModelPreviewProvider({
         : null,
     [enabled, settings.environment, settings.exposure, settings.toneMapping, settings.toonShadows],
   );
+
+  // File renames and timestamp-preserving edits can leave the mod metadata unchanged.
   const preview = useMemo(() => {
     if (!renderSettings) {
       return null;
@@ -524,7 +465,7 @@ export function GridModelPreviewProvider({
       },
     );
     return { controller, renderer };
-  }, [renderSettings]);
+  }, [renderSettings, sourceRevision]);
 
   useEffect(
     () => () => {
@@ -651,13 +592,6 @@ export function createGridModelPreviewRequestKey(
     ]),
   );
   return JSON.stringify([mod.path.toLowerCase(), mod.mtime, toggles, settings, "512@1-v1"]);
-}
-
-async function saveModelPreview(task: PreviewRenderTask, blob: Blob) {
-  const { entry, sessionId } = task;
-  const uploadUrl = await Tools.PrepareModGridPreviewCacheUpload(sessionId, blob.size);
-  await uploadTypedArray(uploadUrl, new Uint8Array(await blob.arrayBuffer()));
-  await Tools.SaveModGridPreviewCache(entry.mod.path, entry.variant, entry.fingerprint, sessionId);
 }
 
 async function cleanupModelPreviewSession(sessionId: string) {
