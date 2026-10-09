@@ -223,6 +223,7 @@ function RootComponent() {
       )}
 
       <AppTitlebar
+        divider={isNoSidebar}
         trailing={
           updaterDownloading ? (
             <UpdateDownloadIndicator />
@@ -275,11 +276,17 @@ function RootComponent() {
         <TitlebarActivityBadges />
       </AppTitlebar>
 
-      <main className="flex min-h-0 flex-1 overflow-hidden">
+      <main className={cn("flex min-h-0 flex-1 overflow-hidden", DEFAULT_BG)}>
         <div className="flex w-full flex-row">
           {!isNoSidebar && <Sidebar />}
 
-          <div className={cn("relative min-w-0 flex-1 overflow-hidden", DEFAULT_BG, "border-l")}>
+          <div
+            className={cn(
+              "relative min-w-0 flex-1 overflow-hidden border-l",
+              DEFAULT_BG,
+              !isNoSidebar && "rounded-tl-xl border-t",
+            )}
+          >
             <Outlet />
           </div>
         </div>
@@ -318,7 +325,15 @@ function PendingComponent() {
   return <div>Loading...</div>;
 }
 
-function AppTitlebar({ children, trailing }: { children?: ReactNode; trailing?: ReactNode }) {
+function AppTitlebar({
+  children,
+  trailing,
+  divider = true,
+}: {
+  children?: ReactNode;
+  trailing?: ReactNode;
+  divider?: boolean;
+}) {
   return (
     <>
       <div
@@ -330,7 +345,7 @@ function AppTitlebar({ children, trailing }: { children?: ReactNode; trailing?: 
           <TitlebarWindowControls />
         </div>
       </div>
-      <div className="shrink-0 border-b" />
+      {divider && <div className="shrink-0 border-b" />}
     </>
   );
 }
