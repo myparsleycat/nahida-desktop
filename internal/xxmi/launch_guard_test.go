@@ -398,15 +398,30 @@ func TestExternalLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 			if err := writeXXMIConfig(filepath.Join(root, xxmiConfigName), config); err != nil {
 				t.Fatal(err)
 			}
+			client := newXXMITestClient(t)
 			service := New()
-			service.UseClient(newXXMITestClient(t))
+			service.UseClient(client)
 			useExternalLauncher(t, service, root)
+			service.launchSettings = &fakeLaunch{}
 
 			if err := service.rejectLogging(ctx, "SRMI", true); err != nil {
 				t.Fatalf("importer without logging = %v", err)
 			}
 			if err := service.StartGame(ctx, "GIMI"); !errors.Is(err, errLoggingEnabled) {
 				t.Fatalf("start error = %v, want the logging question", err)
+			}
+			// With its guard off the launch goes on to the launcher, which this fixture does not have.
+			for _, tc := range []struct {
+				guard string
+				asked bool
+			}{{"false", false}, {"true", true}} {
+				if err := client.Settings.Upsert(ctx, launchGuardLoggingKey, &tc.guard); err != nil {
+					t.Fatal(err)
+				}
+				err := service.StartGame(ctx, "GIMI")
+				if err == nil || errors.Is(err, errLoggingEnabled) != tc.asked {
+					t.Fatalf("logging guard %s: start error = %v", tc.guard, err)
+				}
 			}
 			if err := service.DisableLogging(ctx, "gimi"); err != nil {
 				t.Fatal(err)
@@ -422,6 +437,48 @@ func TestExternalLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 				t.Fatalf("after disabling = %v", err)
 			}
 		})
+	}
+}
+
+func TestDisabledLaunchGuardsLeaveSettingsAlone(t *testing.T) {
+	ctx := t.Context()
+	client := newXXMITestClient(t)
+	service := New()
+	service.UseClient(client)
+	store := func(key, value string) {
+		t.Helper()
+		if err := client.Settings.Upsert(ctx, key, &value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	guards, err := service.launchGuards(ctx)
+	if err != nil || guards != (launchGuards{dcr: true, smoothMotion: true, logging: true}) {
+		t.Fatalf("default guards = %+v, %v", guards, err)
+	}
+
+	store(launchGuardDCRKey, "false")
+	guards, err = service.launchGuards(ctx)
+	if err != nil || guards != (launchGuards{smoothMotion: true, logging: true}) {
+		t.Fatalf("guards without DCR = %+v, %v", guards, err)
+	}
+	fake := &fakeLaunch{dcr: true, smooth: true}
+	if err := applyLaunchFixes(ctx, "GIMI", "GenshinImpact.exe", guards.settings(fake)); err != nil {
+		t.Fatal(err)
+	}
+	if fake.dcrReads != 0 || fake.dcrDisabled != 0 || fake.smoothDisabled != 1 {
+		t.Fatalf("settings touched without the DCR guard: %+v", fake)
+	}
+
+	store(launchGuardKey, "false")
+	guards, err = service.launchGuards(ctx)
+	if err != nil || guards != (launchGuards{}) {
+		t.Fatalf("guards with the launch guard off = %+v, %v", guards, err)
+	}
+	fake = &fakeLaunch{dcr: true, smooth: true}
+	err = service.rejectLaunchBlockersFrom(ctx, "GIMI", "GenshinImpact.exe", true, guards.settings(fake))
+	if err != nil || fake.dcrReads != 0 || fake.smoothReads != 0 {
+		t.Fatalf("launch with the launch guard off = %v, settings %+v", err, fake)
 	}
 }
 

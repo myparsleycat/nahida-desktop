@@ -2079,6 +2079,17 @@
           "external": "XXMI Launcher",
           "builtin": "Built-in"
         },
+        "launchGuard": {
+          "title": "Launch guard",
+          "enabled": "Use the launch guard",
+          "enabledDescription": "Checks for settings that keep mods from applying or slow the game down before starting it. When off, the game starts without any of the checks below.",
+          "dcr": "Dynamic Character Resolution",
+          "dcrDescription": "Turns Genshin Impact's Dynamic Character Resolution off before starting, asking first when the game starts through XXMI Launcher. Mods do not apply correctly while it is on.",
+          "smoothMotion": "NVIDIA Smooth Motion",
+          "smoothMotionDescription": "Asks to turn Smooth Motion off for the game before starting. Mods may not apply correctly while it is on.",
+          "logging": "3DMigoto logging",
+          "loggingDescription": "Asks to turn 3DMigoto logging off before starting. Logging can slow the game down severely."
+        },
         "builtin": {
           "checkUpdates": "Check updates",
           "installUpdates": "Install updates",

@@ -2027,6 +2027,17 @@
           "external": "XXMI Launcher",
           "builtin": "内蔵"
         },
+        "launchGuard": {
+          "title": "起動ガード",
+          "enabled": "起動ガードを使用",
+          "enabledDescription": "ゲームを起動する前に、MODの適用を妨げたりパフォーマンスを低下させたりする設定を確認します。オフにすると、以下の項目を確認せずにそのまま起動します。",
+          "dcr": "キャラクター動的解像度",
+          "dcrDescription": "原神のキャラクター動的解像度がオンの場合、起動前にオフにします。XXMI Launcher で起動する場合は、オフにする前に確認します。オンのままではMODが正常に適用されません。",
+          "smoothMotion": "NVIDIA スムーズモーション",
+          "smoothMotionDescription": "ゲームでスムーズモーションがオンの場合、起動前にオフにするか確認します。オンのままではMODが正常に適用されない場合があります。",
+          "logging": "3DMigoto のログ",
+          "loggingDescription": "3DMigoto のログが有効な場合、起動前に無効にするか確認します。ログを記録するとゲームのパフォーマンスが大幅に低下する場合があります。"
+        },
         "builtin": {
           "detectGame": "ゲームフォルダーを検出",
           "noGameFolders": "ゲームフォルダーが見つかりませんでした。手動で入力してください。",

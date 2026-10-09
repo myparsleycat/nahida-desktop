@@ -81,6 +81,11 @@ export interface AppSettings {
     "xxmi.root": string;
     "xxmi.autoUpdate": AutoUpdateMode;
     "xxmi.includePrereleases": boolean;
+
+    "xxmi.launchGuard": boolean;
+    "xxmi.launchGuardDcr": boolean;
+    "xxmi.launchGuardSmoothMotion": boolean;
+    "xxmi.launchGuardLogging": boolean;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -410,5 +415,26 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.includePrereleases",
         scope: "xxmi",
         storageKey: "xxmi_include_prereleases",
+    },
+
+    "xxmi.launchGuard": {
+        publicKey: "xxmi.launchGuard",
+        scope: "xxmi",
+        storageKey: "xxmi_launch_guard",
+    },
+    "xxmi.launchGuardDcr": {
+        publicKey: "xxmi.launchGuardDcr",
+        scope: "xxmi",
+        storageKey: "xxmi_launch_guard_dcr",
+    },
+    "xxmi.launchGuardSmoothMotion": {
+        publicKey: "xxmi.launchGuardSmoothMotion",
+        scope: "xxmi",
+        storageKey: "xxmi_launch_guard_smooth_motion",
+    },
+    "xxmi.launchGuardLogging": {
+        publicKey: "xxmi.launchGuardLogging",
+        scope: "xxmi",
+        storageKey: "xxmi_launch_guard_logging",
     },
 } as const satisfies Record<SettingKey, SettingDefinition>;

@@ -2027,6 +2027,17 @@
           "external": "XXMI Launcher",
           "builtin": "内置"
         },
+        "launchGuard": {
+          "title": "启动防护",
+          "enabled": "使用启动防护",
+          "enabledDescription": "启动游戏前检查会妨碍模组生效或降低性能的设置。关闭后将不检查以下项目，直接启动游戏。",
+          "dcr": "动态角色分辨率",
+          "dcrDescription": "原神的动态角色分辨率开启时，在启动前将其关闭。通过 XXMI Launcher 启动时会先询问。开启时模组无法正常应用。",
+          "smoothMotion": "NVIDIA 平滑运动",
+          "smoothMotionDescription": "游戏开启了平滑运动时，在启动前询问是否关闭。开启时模组可能无法正常应用。",
+          "logging": "3DMigoto 日志",
+          "loggingDescription": "3DMigoto 日志开启时，在启动前询问是否关闭。记录日志可能导致游戏性能严重下降。"
+        },
         "builtin": {
           "detectGame": "检测游戏文件夹",
           "noGameFolders": "未找到游戏文件夹。请手动输入路径。",

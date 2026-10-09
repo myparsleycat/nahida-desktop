@@ -36,6 +36,7 @@ import {
 } from "@renderer/components/xxmi/xxmi-fields";
 import { XXMIImportDialog } from "@renderer/components/xxmi/xxmi-import-dialog";
 import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
+import { XXMILaunchGuardSettings } from "@renderer/components/xxmi/xxmi-launch-guard-settings";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -236,6 +237,7 @@ export function XXMIDashboard() {
         {external ? (
           <div className="space-y-6 text-sm">
             <XXMIExternalLauncher />
+            <XXMILaunchGuardSettings />
           </div>
         ) : (
           <div className="flex flex-col gap-6">
@@ -445,6 +447,8 @@ export function XXMIDashboard() {
                 )}
               </SectionContent>
             </Section>
+
+            <XXMILaunchGuardSettings />
 
             <Section>
               <SectionHeader>

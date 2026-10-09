@@ -17,6 +17,12 @@ const (
 	// The renderer localizes a launch warning by this code. Keep it in sync with the launchWarnings keys in
 	// frontend/src/lib/i18n/locales.
 	launchWarningGimiDCRUnreadable = "GIMI_DCR_UNREADABLE"
+
+	// Storage keys of the xxmi.launchGuard* settings. Keep them in sync with internal/setting/keys.go.
+	launchGuardKey             = "xxmi_launch_guard"
+	launchGuardDCRKey          = "xxmi_launch_guard_dcr"
+	launchGuardSmoothMotionKey = "xxmi_launch_guard_smooth_motion"
+	launchGuardLoggingKey      = "xxmi_launch_guard_logging"
 )
 
 var (
@@ -58,6 +64,58 @@ type smoothMotionAllowed struct{ launchFixer }
 
 func (smoothMotionAllowed) smoothMotionEnabled(context.Context, string) (bool, error) {
 	return false, nil
+}
+
+// dcrAllowed is the launch settings of a launch that leaves Genshin's DCR setting alone.
+type dcrAllowed struct{ launchFixer }
+
+func (dcrAllowed) gimiDCREnabled(context.Context) (bool, error) {
+	return false, nil
+}
+
+// launchGuards is the launch guards the user left on. A guard that is off neither stops the launch nor
+// changes the setting it watches.
+type launchGuards struct {
+	dcr, smoothMotion, logging bool
+}
+
+// launchGuards reads the guard settings, which are all on until the user turns them off. Turning the
+// guard itself off turns every guard off.
+func (x *XXMI) launchGuards(ctx context.Context) (launchGuards, error) {
+	client, err := x.settingsClient()
+	if err != nil {
+		return launchGuards{}, err
+	}
+	enabled := func(key string) (bool, error) {
+		value, err := client.Settings.GetValue(ctx, key)
+		return value == nil || *value == "true", err
+	}
+
+	if on, err := enabled(launchGuardKey); err != nil || !on {
+		return launchGuards{}, err
+	}
+	var guards launchGuards
+	for key, guard := range map[string]*bool{
+		launchGuardDCRKey:          &guards.dcr,
+		launchGuardSmoothMotionKey: &guards.smoothMotion,
+		launchGuardLoggingKey:      &guards.logging,
+	} {
+		if *guard, err = enabled(key); err != nil {
+			return launchGuards{}, err
+		}
+	}
+	return guards, nil
+}
+
+// settings narrows src to the settings the enabled guards watch.
+func (g launchGuards) settings(src launchFixer) launchFixer {
+	if !g.dcr {
+		src = dcrAllowed{src}
+	}
+	if !g.smoothMotion {
+		src = smoothMotionAllowed{src}
+	}
+	return src
 }
 
 // builtinLaunchSettings returns the settings a built-in launch of cfg is held to.
@@ -148,12 +206,8 @@ func (x *XXMI) notifyLaunchWarning(importer string, warning launchWarning) {
 	}
 }
 
-// rejectLaunchBlockers fails the launch while a blocker is active. checkDCR is false when the launch
+// rejectLaunchBlockersFrom fails the launch while a blocker is active. checkDCR is false when the launch
 // does not load the XXMI DLL, so Genshin's DCR setting is irrelevant.
-func (x *XXMI) rejectLaunchBlockers(ctx context.Context, importer, exe string, checkDCR bool) error {
-	return x.rejectLaunchBlockersFrom(ctx, importer, exe, checkDCR, x.launchSettings)
-}
-
 func (x *XXMI) rejectLaunchBlockersFrom(
 	ctx context.Context,
 	importer, exe string,
@@ -195,12 +249,16 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 	if err != nil {
 		return err
 	}
+	guards, err := x.launchGuards(ctx)
+	if err != nil {
+		return err
+	}
 	if external {
 		gameExecutable, err := x.externalGameExecutable(ctx, importer)
 		if err != nil {
 			return err
 		}
-		return x.clearLaunchBlockers(ctx, importer, gameExecutable, x.launchSettings)
+		return x.clearLaunchBlockers(ctx, importer, gameExecutable, guards.settings(x.launchSettings))
 	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
@@ -224,7 +282,7 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 		return x.reportLaunchGuard(err, "clear-launch-blockers", importer, gameExecutable)
 	}
 	return x.clearLaunchBlockers(
-		ctx, importer, gameExecutable, x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed),
+		ctx, importer, gameExecutable, guards.settings(x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed)),
 	)
 }
 

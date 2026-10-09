@@ -188,10 +188,14 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	}
 
 	progress("launch-guard")
+	guards, err := x.launchGuards(ctx)
+	if err != nil {
+		return err
+	}
 	// Mods do not render with DCR on, so it is turned off without asking whenever the XXMI DLL is loaded.
 	// Unlike the reference launcher, this does not depend on ConfigureGame: DCR is all that option
 	// would control for GIMI, and leaving it on only breaks mods silently.
-	checkDCR := key == "GIMI" && migotoDLLUsed
+	checkDCR := key == "GIMI" && migotoDLLUsed && guards.dcr
 	if checkDCR {
 		err := x.launchSettings.disableGIMIDCR(ctx)
 		if err != nil && !errors.Is(err, errGimiDCRUnreadable) {
@@ -207,7 +211,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if blockerTarget == "" {
 		blockerTarget = processName
 	}
-	launchSettings := x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed)
+	launchSettings := guards.settings(x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed))
 	if err := x.rejectLaunchBlockersFrom(ctx, key, blockerTarget, checkDCR, launchSettings); err != nil {
 		return err
 	}

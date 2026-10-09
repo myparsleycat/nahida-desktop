@@ -413,6 +413,7 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 	states := []struct {
 		name     string
 		settings fakeLaunch
+		guardOff bool
 		want     string
 		wantErr  error
 	}{
@@ -433,6 +434,10 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 		{
 			name: "smooth motion enabled", settings: fakeLaunch{smooth: true},
 			want: errSmoothMotionEnabled.Error(), wantErr: errSmoothMotionEnabled,
+		},
+		{
+			name: "DCR guard off", settings: fakeLaunch{dcr: true}, guardOff: true,
+			want: "XXMI_ELEVATION_DENIED",
 		},
 	}
 	for _, launch := range []string{"Direct", "Custom", "Manual"} {
@@ -462,8 +467,15 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+				client := newXXMITestClient(t)
+				if state.guardOff {
+					off := "false"
+					if err := client.Settings.Upsert(t.Context(), launchGuardDCRKey, &off); err != nil {
+						t.Fatal(err)
+					}
+				}
 				service := New()
-				service.UseClient(newXXMITestClient(t))
+				service.UseClient(client)
 				service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 				settings := state.settings
 				service.launchSettings = &settings
@@ -483,6 +495,12 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 				}
 				if state.wantErr != nil && !errors.Is(err, state.wantErr) {
 					t.Fatalf("launch error = %v; want original error %v", err, state.wantErr)
+				}
+				if state.guardOff {
+					if settings.dcrDisabled != 0 || settings.dcrReads != 0 || settings.smoothReads != 1 {
+						t.Fatalf("launch settings = %+v; want DCR left alone with its guard off", settings)
+					}
+					return
 				}
 				if settings.dcrDisabled != 1 {
 					t.Fatalf("DCR disable calls = %d; want 1 even without a game folder", settings.dcrDisabled)

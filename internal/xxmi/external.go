@@ -283,7 +283,7 @@ func (x *XXMI) externalGameExecutable(ctx context.Context, importer string) (str
 	return executable, nil
 }
 
-func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
+func (x *XXMI) startExternalGame(ctx context.Context, importer string, guards launchGuards) error {
 	importer = strings.TrimSpace(importer)
 	if importer == "" {
 		return errors.New("importer is required")
@@ -307,7 +307,8 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string) error {
 	if gameExecutable == "" {
 		gameExecutable = processName
 	}
-	if err := x.rejectLaunchBlockers(ctx, importer, gameExecutable, true); err != nil {
+	launchSettings := guards.settings(x.launchSettings)
+	if err := x.rejectLaunchBlockersFrom(ctx, importer, gameExecutable, true, launchSettings); err != nil {
 		return err
 	}
 

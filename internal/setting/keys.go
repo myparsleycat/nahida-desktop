@@ -72,6 +72,11 @@ const (
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
 	KeyXXMIIncludePrereleases = "xxmi.includePrereleases"
 	KeyXXMIPersistToggles     = "xxmi.persistToggles"
+
+	KeyXXMILaunchGuard             = "xxmi.launchGuard"
+	KeyXXMILaunchGuardDcr          = "xxmi.launchGuardDcr"
+	KeyXXMILaunchGuardSmoothMotion = "xxmi.launchGuardSmoothMotion"
+	KeyXXMILaunchGuardLogging      = "xxmi.launchGuardLogging"
 )
 
 const (
@@ -165,6 +170,11 @@ var allDefinitions = []Definition{
 	{KeyXXMIRoot, ScopeXXMI, "xxmi_root"},
 	{KeyXXMIAutoUpdate, ScopeXXMI, "xxmi_auto_update"},
 	{KeyXXMIIncludePrereleases, ScopeXXMI, "xxmi_include_prereleases"},
+
+	{KeyXXMILaunchGuard, ScopeXXMI, "xxmi_launch_guard"},
+	{KeyXXMILaunchGuardDcr, ScopeXXMI, "xxmi_launch_guard_dcr"},
+	{KeyXXMILaunchGuardSmoothMotion, ScopeXXMI, "xxmi_launch_guard_smooth_motion"},
+	{KeyXXMILaunchGuardLogging, ScopeXXMI, "xxmi_launch_guard_logging"},
 }
 
 type storageKeyMigration struct {

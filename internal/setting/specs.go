@@ -559,6 +559,12 @@ func buildSpecs() map[string]spec {
 			},
 		},
 		KeyXXMIIncludePrereleases: boolSpec(definitionsByKey[KeyXXMIIncludePrereleases], false),
+
+		// The launch reads these stored values itself in internal/xxmi/launch_guard.go.
+		KeyXXMILaunchGuard:             boolSpec(definitionsByKey[KeyXXMILaunchGuard], true),
+		KeyXXMILaunchGuardDcr:          boolSpec(definitionsByKey[KeyXXMILaunchGuardDcr], true),
+		KeyXXMILaunchGuardSmoothMotion: boolSpec(definitionsByKey[KeyXXMILaunchGuardSmoothMotion], true),
+		KeyXXMILaunchGuardLogging:      boolSpec(definitionsByKey[KeyXXMILaunchGuardLogging], true),
 	}
 	return specs
 }

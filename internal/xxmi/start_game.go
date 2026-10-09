@@ -34,13 +34,17 @@ func (x *XXMI) startGame(ctx context.Context, importer string, keepLogging bool)
 	if err != nil {
 		return err
 	}
-	if !keepLogging {
+	guards, err := x.launchGuards(ctx)
+	if err != nil {
+		return err
+	}
+	if !keepLogging && guards.logging {
 		if err := x.rejectLogging(ctx, importer, external); err != nil {
 			return err
 		}
 	}
 	if external {
-		return x.startExternalGame(ctx, importer)
+		return x.startExternalGame(ctx, importer, guards)
 	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
