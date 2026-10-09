@@ -12,7 +12,6 @@ import (
 
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/platform"
 )
 
 func commitEffectPackage(
@@ -36,9 +35,9 @@ func commitEffectPackage(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		target := filepath.Join(layout.effects(), file)
-		if platform.SamePathFold(target, layout.effects()) || !platform.SameOrChildPath(layout.effects(), target) {
-			return fmt.Errorf("effect path escapes shared folders: %s", file)
+		target, err := effectFilePath(layout, file)
+		if err != nil {
+			return err
 		}
 		key := strings.ToLower(filepath.Clean(target))
 		if seen[key] {

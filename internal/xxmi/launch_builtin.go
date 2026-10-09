@@ -695,8 +695,8 @@ func (x *XXMI) builtinLaunchSpec(
 	return spec, nil
 }
 
-// useExtraDLLInjector names the cached XXMI injector for a launch that injects extra or preloaded
-// DLLs without a deployed XXMI runtime to take it from.
+// useExtraDLLInjector names the XXMI injector for a launch that injects extra or preloaded DLLs
+// without a deployed XXMI runtime to take it from, caching its libraries first when they are missing.
 func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec *inject.LaunchSpec) error {
 	if spec.InjectionMethod == "Native" || spec.LoaderDLL.Path != "" ||
 		len(spec.ExtraDLLs)+len(spec.PreloadDLLs) == 0 {
@@ -708,21 +708,24 @@ func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec
 	}
 	version := selectedLegacyInjectorVersion(pin)
 	if version == "" {
-		return errors.New("XXMI_LOADER_TOO_OLD: extra DLLs require cached XXMI libraries")
+		// Nothing is cached until a launch deploys the XXMI runtime, which this one does not.
+		version, err = x.resolveLibsVersion(ctx, cfg)
+		if err != nil {
+			return err
+		}
 	}
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		return err
 	}
-	if err := verifyXXMILibsCache(
-		filepath.Join(cacheRoot, "packages", "xxmi-libs", version),
-		version,
-	); err != nil {
-		return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+	cacheFolder := filepath.Join(cacheRoot, "packages", "xxmi-libs", version)
+	if err := x.EnsureLibsVersion(ctx, version); err != nil {
+		if info, statErr := os.Stat(cacheFolder); statErr == nil && info.IsDir() {
+			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+		}
+		return err
 	}
-	spec.LoaderDLL, err = verifiedLaunchFile(
-		filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
-	)
+	spec.LoaderDLL, err = verifiedLaunchFile(filepath.Join(cacheFolder, "3dmloader.dll"))
 	return err
 }
 

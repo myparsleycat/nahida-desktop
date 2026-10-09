@@ -289,6 +289,42 @@ func effectInstallPath(layout layout, listed string) (string, bool) {
 	return target, true
 }
 
+// effectFilePath returns where a package file lives below the shared effect folders. It rejects a
+// file that a junction or link would place elsewhere, which the lexical check cannot see.
+func effectFilePath(layout layout, file string) (string, error) {
+	target := filepath.Join(layout.effects(), file)
+	if platform.SamePathFold(target, layout.effects()) || !platform.SameOrChildPath(layout.effects(), target) {
+		return "", fmt.Errorf("effect path escapes shared folders: %s", file)
+	}
+	root, err := platform.FinalPath(layout.effects())
+	if err != nil {
+		return "", err
+	}
+
+	// A file yet to be created is judged by the deepest folder that exists above it.
+	for current := target; ; {
+		resolved, err := platform.FinalPath(current)
+		if err == nil {
+			if !platform.SameOrChildPath(root, resolved) {
+				return "", fmt.Errorf("effect path leaves shared folders through a link: %s", file)
+			}
+			return target, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		// A link whose target is missing still redirects whatever is created through it.
+		if _, statErr := os.Lstat(current); statErr == nil {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		current = parent
+	}
+}
+
 // findDirectory returns the shallowest directory called name below root, or "".
 func findDirectory(root, name string) string {
 	for level := []string{root}; len(level) > 0; {
@@ -380,6 +416,9 @@ func removeEffectFiles(ctx context.Context, layout layout, files []string, remai
 	if len(files) == 0 {
 		return nil
 	}
+	if _, err := os.Stat(layout.effects()); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	shared := map[string]bool{}
 	for _, record := range remaining {
 		for _, file := range record.Files {
@@ -393,9 +432,12 @@ func removeEffectFiles(ctx context.Context, layout layout, files []string, remai
 	defer release()
 	kept := []string{layout.shaders(), layout.textures(), layout.addons(), layout.presets()}
 	for _, file := range files {
-		target := filepath.Join(layout.effects(), file)
-		if shared[strings.ToLower(file)] || !platform.SameOrChildPath(layout.effects(), target) {
+		if shared[strings.ToLower(file)] {
 			continue
+		}
+		target, err := effectFilePath(layout, file)
+		if err != nil {
+			return err
 		}
 		if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err

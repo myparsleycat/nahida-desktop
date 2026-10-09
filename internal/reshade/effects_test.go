@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sync/atomic"
@@ -267,6 +268,44 @@ func TestEffectReinstallPreservesFilesAndRecordOnFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEffectFilesBelowJunctionAreRefused(t *testing.T) {
+	t.Parallel()
+	layout := layout{root: t.TempDir()}
+	if err := layout.ensureShared(); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "a.fx")
+	if err := os.WriteFile(victim, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(layout.shaders(), "Linked")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, outside).CombinedOutput(); err != nil {
+		t.Skipf("junction creation unavailable: %v (%s)", err, output)
+	}
+	unchanged := func(step string) {
+		t.Helper()
+		if got, err := os.ReadFile(victim); err != nil || string(got) != "outside" {
+			t.Fatalf("file outside the shared folders after %s = %q, %v", step, got, err)
+		}
+	}
+
+	service := effectService(t, effectArchive(t, map[string]string{"Shaders/Linked/a.fx": "shader"}))
+	pkg := EffectPackage{
+		ID: "https://github.com/owner/repo/archive/main.zip", Name: "Example",
+		installPath: layout.shaders(), textureInstallPath: layout.textures(),
+	}
+	if err := service.installEffectPackage(t.Context(), layout, pkg); err == nil {
+		t.Fatal("install through a junction succeeded")
+	}
+	unchanged("install")
+
+	if err := removeEffectFiles(t.Context(), layout, []string{`Shaders\Linked\a.fx`}, nil); err == nil {
+		t.Fatal("removal through a junction succeeded")
+	}
+	unchanged("removal")
 }
 
 func TestBinaryDownloadIsTrackedUntilCacheVerified(t *testing.T) {
