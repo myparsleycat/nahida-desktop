@@ -295,7 +295,7 @@ func captureWindowPixelsWith(
 	target grabTarget, screen, compositor, print captureAttempt,
 ) (*image.RGBA, error) {
 	var screenErr error
-	if !target.handle.IsIconic() && foregroundWindow() == target.handle {
+	if target.handle != 0 && !target.handle.IsIconic() && foregroundWindow() == target.handle {
 		frame, err := screen(target)
 		if err == nil {
 			return frame, nil
