@@ -233,6 +233,35 @@ export function useGlobalEvents(
             );
         });
 
+        const removeReShadeStatusListener = Events.On("reshade:status", () => {
+            void queryClient.invalidateQueries({
+                predicate: (query) =>
+                    typeof query.queryKey[0] === "string" &&
+                    query.queryKey[0].startsWith("reshade:"),
+            });
+        });
+
+        const removeReShadeProgressListener = Events.On("reshade:progress", (event) => {
+            const payload = Array.isArray(event.data) ? event.data[0] : event.data;
+            if (!payload || typeof payload !== "object") return;
+            const { kind, name, stage, downloaded, total } = payload as Record<string, unknown>;
+            if (typeof kind !== "string" || typeof name !== "string") return;
+            const id = `reshade-${kind}-${name}`;
+            if (stage !== "download" || typeof downloaded !== "number") {
+                toast.dismiss(id);
+                return;
+            }
+            const progress =
+                typeof total === "number" && total > 0
+                    ? `${Math.min(100, Math.round((downloaded / total) * 100))}%`
+                    : `${Math.round(downloaded / (1024 * 1024))} MiB`;
+            const label = kind === "binary" ? `ReShade ${name}` : name;
+            toast.loading(
+                `${label} · ${i18n.t("page.setting.xxmi.builtin.downloadingPackage")} ${progress}`,
+                { id },
+            );
+        });
+
         const removeXXMIImportListener = Events.On("xxmi:import-progress", (event) => {
             const payload = Array.isArray(event.data) ? event.data[0] : event.data;
             if (!payload || typeof payload !== "object") return;
@@ -264,6 +293,8 @@ export function useGlobalEvents(
             removeXXMIRunningListener();
             removeXXMILaunchListener();
             removeXXMIPackageListener();
+            removeReShadeStatusListener();
+            removeReShadeProgressListener();
             removeXXMIImportListener();
         };
     }, [onPathSelectorModeSelect, i18n, queryClient]);

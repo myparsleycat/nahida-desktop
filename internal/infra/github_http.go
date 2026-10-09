@@ -244,8 +244,11 @@ func githubMetadataRequest(request *http.Request) bool {
 		return false
 	}
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
-	return (len(parts) == 4 || len(parts) == 5 && parts[4] == "latest") &&
-		parts[0] == "repos" && parts[1] != "" && parts[2] != "" && parts[3] == "releases"
+	if len(parts) < 4 || parts[0] != "repos" || parts[1] == "" || parts[2] == "" {
+		return false
+	}
+	return len(parts) == 4 && (parts[3] == "releases" || parts[3] == "tags") ||
+		len(parts) == 5 && parts[3] == "releases" && parts[4] == "latest"
 }
 
 func (t *githubTransport) cachedMetadata(

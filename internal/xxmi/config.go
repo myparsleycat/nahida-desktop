@@ -62,6 +62,10 @@ type ExtraLibraries struct {
 	Paths   []string `json:"paths"`
 }
 
+type ReShadeOptions struct {
+	Enabled bool `json:"enabled"`
+}
+
 type MigotoOptions struct {
 	// LogLevel is one of "Disabled", "Warning", "Info", or "Debug".
 	LogLevel             string `json:"logLevel"`
@@ -149,6 +153,7 @@ type ImporterConfig struct {
 	CustomLaunch      CustomLaunch        `json:"customLaunch"`
 	RunPostLoad       CommandHook         `json:"runPostLoad"`
 	ExtraLibraries    ExtraLibraries      `json:"extraLibraries"`
+	ReShade           ReShadeOptions      `json:"reshade"`
 	OverwriteINI      bool                `json:"overwriteINI"`
 	ConfigureGame     bool                `json:"configureGame"`
 	Migoto            MigotoOptions       `json:"migoto"`

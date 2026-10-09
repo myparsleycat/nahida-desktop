@@ -2208,7 +2208,8 @@
             "SRMI_FPS_UNLOCK_FAILED": "无法将崩坏：星穹铁道设置为 120 FPS。请先在游戏中更改一次帧率设置，然后重试。",
             "HIMI_FPS_UNLOCK_FAILED": "无法设置崩坏3的目标帧率。请先在游戏中更改一次帧率设置，然后重试。",
             "ZZMI_GAME_CONFIG_FAILED": "无法更改绝区零的画面设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
-            "WWMI_GAME_CONFIG_FAILED": "无法更改鸣潮的设置。请检查游戏文件夹，或关闭自动配置游戏设置。"
+            "WWMI_GAME_CONFIG_FAILED": "无法更改鸣潮的设置。请检查游戏文件夹，或关闭自动配置游戏设置。",
+            "RESHADE_NOT_INSTALLED": "无法准备 ReShade。请检查网络连接，或在 XXMI 设置中下载 ReShade。"
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。"
@@ -2283,6 +2284,41 @@
           "customLaunchDescription": "运行此命令以代替游戏可执行文件，启动参数会被忽略。",
           "injectModeDescription": "Hook 通过窗口钩子加载 DLL。Inject 将 DLL 直接加载到游戏中。Bypass 跳过导入器 DLL，只注入附加 DLL。",
           "extraLibrariesDescription": "一并注入游戏的附加 DLL，例如 ReShade。",
+          "reshade": {
+            "title": "ReShade",
+            "description": "下载 ReShade 插件版并直接注入游戏。无需启动前脚本或附加 DLL 设置，也不会向游戏文件夹写入任何文件。插件版在网络游戏中可能被反作弊检测到，请自行承担风险。",
+            "binary": "ReShade 程序文件",
+            "installed": "已安装：{{version}}",
+            "notInstalled": "尚未安装。首次启动已启用 ReShade 的游戏时会自动下载。",
+            "updateAvailable": "有新版本 {{version}} 可用。",
+            "update": "更新",
+            "download": "下载",
+            "version": "ReShade 版本",
+            "versionDescription": "跟随最新版本，或固定为某个版本。",
+            "effects": "效果包",
+            "effectsDescription": "安装所有游戏共用的着色器和纹理。",
+            "manageEffects": "管理效果包",
+            "effectsDialogDescription": "来自 ReShade 官方列表的效果包。请选择要安装的效果包。",
+            "effectsLoading": "正在加载效果包列表",
+            "effectsLoadFailed": "无法加载效果包列表。",
+            "selectRecommended": "选择推荐项",
+            "installSelected": "安装所选效果包（{{count}}）",
+            "effectInstalled": "已安装",
+            "effectUnsupported": "不支持",
+            "removeEffect": "移除 {{name}}",
+            "folders": "共用文件夹",
+            "foldersDescription": "用于放置自行下载的着色器、插件和预设。",
+            "folderNames": {
+              "shaders": "着色器",
+              "textures": "纹理",
+              "addons": "插件",
+              "presets": "预设"
+            },
+            "toggleDescription": "启动游戏时一并加载 ReShade。钩子注入会在该次启动中改为直接注入，在游戏内按 Home 键打开覆盖层。",
+            "legacyUnsupported": "使用 3DMigoto 运行时时，只有注入方式为原生时才能使用 ReShade。",
+            "gameFolderDescription": "存放此游戏的 ReShade.ini、预设和日志的文件夹。",
+            "gameFolder": "打开设置文件夹"
+          },
           "enforceRenderingDescription": "将 d3dx.ini 中的 [Rendering] 选项保持为此导入器所需的值。",
           "enableHuntingDescription": "可用小键盘 0 开关捕获模式。制作模组时用于查找着色器和缓冲区的哈希。",
           "dumpShadersDescription": "在捕获模式下复制着色器哈希时，同时将该着色器保存到 ShaderFixes。",

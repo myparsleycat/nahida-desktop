@@ -54,6 +54,7 @@ const launchErrorCodes = [
   "HIMI_FPS_UNLOCK_FAILED",
   "ZZMI_GAME_CONFIG_FAILED",
   "WWMI_GAME_CONFIG_FAILED",
+  "RESHADE_NOT_INSTALLED",
 ] as const;
 
 type LaunchDialog =

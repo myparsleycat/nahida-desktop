@@ -78,6 +78,7 @@ const config = {
   customLaunch: { command: "" },
   runPostLoad: { enabled: false, command: "", wait: false },
   extraLibraries: { enabled: false, paths: [] },
+  reshade: { enabled: false },
   iniOptimizer: { enabled: false, resetCache: false },
 };
 

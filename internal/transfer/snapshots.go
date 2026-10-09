@@ -56,6 +56,17 @@ func orderSnapshots(items []orderedSnapshot) []Snapshot {
 
 //wails:ignore
 func (t *Transfer) Update(pid string, updates Updates) error {
+	return t.update(pid, updates, false)
+}
+
+// UpdateRunning prevents a late runner callback from undoing pause or cancel.
+//
+//wails:ignore
+func (t *Transfer) UpdateRunning(pid string, updates Updates) error {
+	return t.update(pid, updates, true)
+}
+
+func (t *Transfer) update(pid string, updates Updates, runningOnly bool) error {
 	now := t.now()
 	reservationChange := updates.Status != nil || updates.DestinationPaths != nil || updates.DestinationTargets != nil
 	if reservationChange {
@@ -69,6 +80,13 @@ func (t *Transfer) Update(pid string, updates Updates) error {
 			t.destinationMu.Unlock()
 		}
 		return fmt.Errorf("transfer %q not found", pid)
+	}
+	if runningOnly && (item.record.Status == StatusPaused || item.record.Status == StatusCanceled) {
+		t.mu.Unlock()
+		if reservationChange {
+			t.destinationMu.Unlock()
+		}
+		return context.Canceled
 	}
 	applyUpdates(&item.record.Snapshot, updates)
 	if updates.TransferredSize != nil && item.record.Status == StatusProgress {

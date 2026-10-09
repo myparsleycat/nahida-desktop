@@ -124,8 +124,8 @@ func TestRuntimeRegistersMenuMakerThroughTools(t *testing.T) {
 	if rt.backup == nil {
 		t.Fatal("Backup service is not initialized")
 	}
-	if len(rt.services()) != 21 {
-		t.Fatalf("services = %d, want 21 including Nahida Agent, Backup, CDN trace, Input, and Screen",
+	if len(rt.services()) != 22 {
+		t.Fatalf("services = %d, want 22 including Nahida Agent, Backup, CDN trace, Input, ReShade, and Screen",
 			len(rt.services()))
 	}
 }

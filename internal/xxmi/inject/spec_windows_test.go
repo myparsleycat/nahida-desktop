@@ -75,6 +75,18 @@ func TestValidateLaunchSpecRejectsUnsafePathsAndHashMismatch(t *testing.T) {
 	if err := ValidateLaunchSpec(bypass); err != nil {
 		t.Fatalf("bypass extra DLL with verified injector was rejected: %v", err)
 	}
+
+	preload := bypass
+	preload.ExtraDLLs, preload.LoaderDLL = nil, VerifiedFile{}
+	preload.PreloadDLLs = []string{filepath.Join(root, "extra.dll")}
+	if err := ValidateLaunchSpec(preload); err == nil {
+		t.Fatal("bypass preload DLL was accepted without a verified injector")
+	}
+	preload.LoaderDLL = spec.LoaderDLL
+	preload.PreloadDLLs = []string{filepath.Join(root, "missing.dll")}
+	if err := ValidateLaunchSpec(preload); err == nil {
+		t.Fatal("missing preload DLL was accepted")
+	}
 }
 
 func TestValidateLaunchSpecLimitsReadyEvent(t *testing.T) {

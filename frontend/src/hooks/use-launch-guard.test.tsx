@@ -109,6 +109,7 @@ it.each([
   "HIMI_FPS_UNLOCK_FAILED",
   "ZZMI_GAME_CONFIG_FAILED",
   "WWMI_GAME_CONFIG_FAILED",
+  "RESHADE_NOT_INSTALLED",
 ])("shows guidance for %s and keeps the backend detail", async (code) => {
   const detail = `${code}: native code 200`;
   xxmi.StartGame.mockRejectedValueOnce(new Error(detail));

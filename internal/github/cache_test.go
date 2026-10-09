@@ -52,6 +52,46 @@ func TestReleaseTagsHonorsHourlyCacheAndRefreshCooldown(t *testing.T) {
 	})
 }
 
+func TestTagsHonorsCacheRefreshAndStaleFallback(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var requests atomic.Int32
+		unavailable := false
+		client := newTestClient(t, func(*http.Request) (int, string) {
+			requests.Add(1)
+			if unavailable {
+				return http.StatusServiceUnavailable, "unavailable"
+			}
+			return http.StatusOK, `[{"name":"v6.8.0"}]`
+		})
+		fetch := func(refresh bool) {
+			t.Helper()
+			ctx := infra.WithGitHubRefresh(infra.WithGitHubStaleFallback(t.Context()), refresh)
+			tags, err := client.Tags(ctx, testRepo)
+			if err != nil || strings.Join(tags, ",") != "v6.8.0" {
+				t.Fatalf("tags = %v, %v", tags, err)
+			}
+		}
+		fetch(false)
+		fetch(false)
+		time.Sleep(2 * time.Minute)
+		fetch(false)
+		if requests.Load() != 1 {
+			t.Fatalf("ordinary requests = %d, want 1", requests.Load())
+		}
+		fetch(true)
+		fetch(true)
+		if requests.Load() != 2 {
+			t.Fatalf("refresh requests = %d, want 2", requests.Load())
+		}
+		time.Sleep(time.Hour)
+		unavailable = true
+		fetch(false)
+		if requests.Load() != 3 {
+			t.Fatalf("stale requests = %d, want 3", requests.Load())
+		}
+	})
+}
+
 func TestNilClientReportsMissingConfiguration(t *testing.T) {
 	var client *Client
 	if client.Configured() {

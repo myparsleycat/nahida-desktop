@@ -138,6 +138,27 @@ func (c *Client) LatestRelease(ctx context.Context, repo Repo) (Release, error) 
 	return release, nil
 }
 
+// Tags lists the names of the repository's newest tags, at most one page of them. It serves repositories
+// that tag versions without publishing releases.
+func (c *Client) Tags(ctx context.Context, repo Repo) ([]string, error) {
+	if err := repo.Validate(); err != nil {
+		return nil, err
+	}
+	var tags []struct {
+		Name string `json:"name"`
+	}
+	if err := c.getJSON(ctx, repo.apiURL("tags?per_page=100"), &tags); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag.Name != "" {
+			names = append(names, tag.Name)
+		}
+	}
+	return names, nil
+}
+
 // ResolveTagCommit resolves a lightweight or annotated tag to its commit SHA.
 func (c *Client) ResolveTagCommit(ctx context.Context, repo Repo, tag string) (string, error) {
 	if err := repo.Validate(); err != nil {

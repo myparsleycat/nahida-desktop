@@ -2208,7 +2208,8 @@
             "SRMI_FPS_UNLOCK_FAILED": "붕괴: 스타레일을 120 FPS로 설정하지 못했습니다. 게임에서 FPS 설정을 한 번 변경한 뒤 다시 시도하세요.",
             "HIMI_FPS_UNLOCK_FAILED": "붕괴3rd의 FPS 목표값을 설정하지 못했습니다. 게임에서 FPS 설정을 한 번 변경한 뒤 다시 시도하세요.",
             "ZZMI_GAME_CONFIG_FAILED": "젠레스 존 제로 그래픽 설정을 변경하지 못했습니다. 게임 폴더를 확인하거나 게임 설정 자동 조정을 끄세요.",
-            "WWMI_GAME_CONFIG_FAILED": "명조 설정을 변경하지 못했습니다. 게임 폴더를 확인하거나 게임 설정 자동 조정을 끄세요."
+            "WWMI_GAME_CONFIG_FAILED": "명조 설정을 변경하지 못했습니다. 게임 폴더를 확인하거나 게임 설정 자동 조정을 끄세요.",
+            "RESHADE_NOT_INSTALLED": "ReShade를 준비하지 못했습니다. 네트워크 연결을 확인하거나 XXMI 설정에서 ReShade를 내려받으세요."
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "캐릭터 동적 해상도 설정을 확인할 수 없습니다. 켜져 있으면 모드가 정상적으로 적용되지 않을 수 있으니 게임 그래픽 설정을 확인하세요."
@@ -2283,6 +2284,41 @@
           "customLaunchDescription": "게임 실행 파일 대신 이 명령을 실행하며, 실행 인자는 무시됩니다.",
           "injectModeDescription": "Hook은 윈도우 훅을 통해 DLL을 로드합니다. Inject는 DLL을 게임에 직접 로드합니다. Bypass는 임포터 DLL을 건너뛰고 추가 DLL만 주입합니다.",
           "extraLibrariesDescription": "ReShade처럼 게임에 함께 주입할 추가 DLL입니다.",
+          "reshade": {
+            "title": "ReShade",
+            "description": "ReShade 애드온 빌드를 내려받아 게임에 직접 주입합니다. 사전 실행 스크립트나 추가 DLL 설정이 필요 없고 게임 폴더에는 파일을 쓰지 않습니다. 애드온 빌드는 온라인 게임에서 안티 치트에 감지될 수 있으니 본인 책임하에 사용하세요.",
+            "binary": "ReShade 바이너리",
+            "installed": "설치됨: {{version}}",
+            "notInstalled": "설치되지 않았습니다. ReShade를 켠 게임을 처음 실행할 때 자동으로 내려받습니다.",
+            "updateAvailable": "새 버전 {{version}}을 사용할 수 있습니다.",
+            "update": "업데이트",
+            "download": "다운로드",
+            "version": "ReShade 버전",
+            "versionDescription": "최신 버전을 따르거나 특정 버전으로 고정합니다.",
+            "effects": "이펙트 팩",
+            "effectsDescription": "모든 게임이 함께 쓰는 셰이더와 텍스처를 설치합니다.",
+            "manageEffects": "이펙트 팩 관리",
+            "effectsDialogDescription": "ReShade 공식 목록의 이펙트 팩입니다. 설치할 팩을 선택하세요.",
+            "effectsLoading": "이펙트 팩 목록을 불러오는 중",
+            "effectsLoadFailed": "이펙트 팩 목록을 불러오지 못했습니다.",
+            "selectRecommended": "추천 팩 선택",
+            "installSelected": "선택한 팩 설치 ({{count}})",
+            "effectInstalled": "설치됨",
+            "effectUnsupported": "지원하지 않음",
+            "removeEffect": "{{name}} 제거",
+            "folders": "공용 폴더",
+            "foldersDescription": "직접 받은 셰이더, 애드온, 프리셋을 넣는 폴더입니다.",
+            "folderNames": {
+              "shaders": "셰이더",
+              "textures": "텍스처",
+              "addons": "애드온",
+              "presets": "프리셋"
+            },
+            "toggleDescription": "게임을 실행할 때 ReShade를 함께 불러옵니다. 훅 주입 모드는 이 실행에서 직접 주입으로 바뀌고, 게임 안에서 Home 키로 오버레이를 엽니다.",
+            "legacyUnsupported": "3DMigoto 런타임에서는 주입 방식이 네이티브일 때만 ReShade를 사용할 수 있습니다.",
+            "gameFolderDescription": "이 게임의 ReShade.ini, 프리셋, 로그가 저장되는 폴더입니다.",
+            "gameFolder": "설정 폴더 열기"
+          },
           "enforceRenderingDescription": "d3dx.ini의 [Rendering] 옵션을 이 임포터에 필요한 값으로 유지합니다.",
           "enableHuntingDescription": "숫자 패드 0으로 헌팅 모드를 켜고 끌 수 있습니다. 모드를 만들 때 셰이더·버퍼 해시를 찾는 데 사용합니다.",
           "dumpShadersDescription": "헌팅 모드에서 셰이더 해시를 복사할 때 해당 셰이더를 ShaderFixes에도 저장합니다.",
