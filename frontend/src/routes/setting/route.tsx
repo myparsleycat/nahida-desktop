@@ -1,4 +1,5 @@
 import { Updater } from "@bindings/infra";
+import { DEFAULT_BG } from "@renderer/const";
 import { cn } from "@renderer/lib/utils";
 import { globalStore, useGlobalStore } from "@renderer/store/global";
 import { toErrorMessage } from "@shared/utils";
@@ -60,10 +61,10 @@ function RouteComponent() {
     navItems[0];
 
   return (
-    <div className={cn("flex h-full min-h-0 overflow-hidden bg-background text-foreground")}>
+    <div className="flex h-full min-h-0 overflow-hidden text-foreground">
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-r border-border bg-sidebar",
+          "glass-pane flex shrink-0 flex-col border-r border-border",
           sidebarOpen ? "w-60" : "w-0 overflow-hidden border-r-0",
           "md:w-60",
         )}
@@ -144,7 +145,7 @@ function RouteComponent() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-w-0 flex-1 flex-col", DEFAULT_BG)}>
         <header className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
           <button
             type="button"

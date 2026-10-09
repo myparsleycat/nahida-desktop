@@ -1,6 +1,7 @@
 import type { Overview, Status } from "@bindings/backup";
 import { backupErrorMessage } from "@renderer/components/backup/errors";
 import { backupOverviewKey } from "@renderer/components/backup/queries";
+import { DEFAULT_BG } from "@renderer/const";
 import { cn } from "@renderer/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
@@ -93,10 +94,10 @@ function RouteComponent() {
     navItems[0];
 
   return (
-    <div className={cn("flex h-full min-h-0 overflow-hidden bg-background text-foreground")}>
+    <div className="flex h-full min-h-0 overflow-hidden text-foreground">
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-r border-border bg-sidebar",
+          "glass-pane flex shrink-0 flex-col border-r border-border",
           sidebarOpen ? "w-60" : "w-0 overflow-hidden border-r-0",
           "md:w-60",
         )}
@@ -152,7 +153,7 @@ function RouteComponent() {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-w-0 flex-1 flex-col", DEFAULT_BG)}>
         <header className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
           <button
             type="button"

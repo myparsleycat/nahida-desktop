@@ -232,7 +232,7 @@ export default function ModSidebar({
 
   return (
     <div
-      className="relative z-20 flex h-full shrink-0 flex-col border-r"
+      className="glass-pane relative z-20 flex h-full shrink-0 flex-col border-r"
       style={{
         width: `${sidebarWidth}px`,
         minWidth: `${sidebarWidth}px`,

@@ -1,5 +1,4 @@
 import { Service as Agent } from "@bindings/agent";
-import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { openGlobalAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
@@ -85,7 +84,7 @@ export function Sidebar({ className }: { className?: string }) {
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
   return (
-    <div className={`flex w-13 flex-col ${DEFAULT_BG} ${className}`}>
+    <div className={cn("flex w-13 flex-col", className)}>
       <div className="flex h-full w-full flex-col select-none">
         <div
           className="dragselect-start-allowed fixed left-2 flex max-h-screen flex-col space-y-2 overflow-x-hidden overflow-y-auto py-2"

@@ -9,15 +9,12 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/w32"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
-
-type TitleBarOverlaySyncOptions struct {
-	SymbolColor string `json:"symbolColor"`
-}
 
 type windowFilesDroppedEvent struct {
 	Paths  []string                       `json:"paths"`
@@ -107,6 +104,11 @@ func (w *Window) Create() application.Window {
 	consoleOpen := w.consoleOpen
 	w.mu.Unlock()
 
+	// The renderer theme is unknown until it loads, and it defaults to following the system.
+	initialTheme := application.Light
+	if w32.IsCurrentlyDarkMode() {
+		initialTheme = application.Dark
+	}
 	opts := application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "Nahida Desktop",
@@ -117,6 +119,7 @@ func (w *Window) Create() application.Window {
 		Hidden:           true,
 		Frameless:        true,
 		InitialPosition:  application.WindowCentered,
+		BackgroundType:   application.BackgroundTypeTranslucent,
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		URL:              "/",
 		EnableFileDrop:   true,
@@ -127,6 +130,9 @@ func (w *Window) Create() application.Window {
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
 		Windows: application.WindowsWindow{
+			BackdropType: application.Acrylic,
+			// A fixed theme keeps Wails from re-applying the system theme; SyncTheme owns it afterwards.
+			Theme:                      initialTheme,
 			DisableMenu:                true,
 			NonClientRegionSupport:     true,
 			WebView2CompositionHosting: true,
@@ -450,9 +456,28 @@ func normalizeWindowRoute(route string) string {
 	return route
 }
 
-// SyncTitleBarOverlay is retained for renderer API compatibility. The main
-// window is frameless, so Electron's title-bar overlay has no equivalent.
-func (w *Window) SyncTitleBarOverlay(_ TitleBarOverlaySyncOptions) {}
+// SyncTheme matches the native window theme to the renderer theme.
+// The Acrylic backdrop takes its tint from the window theme, not from the page.
+func (w *Window) SyncTheme(dark bool) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	window := w.window
+	w.mu.Unlock()
+	if window == nil {
+		return
+	}
+
+	application.InvokeAsync(func() {
+		if w32.IsCurrentlyHighContrastMode() {
+			return
+		}
+		if hwnd := webviewHWND(window); hwnd != 0 {
+			w32.SetTheme(hwnd, dark)
+		}
+	})
+}
 
 //wails:ignore
 func (w *Window) SetProgressBar(value *float64, mode string) {
