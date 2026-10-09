@@ -19,6 +19,7 @@ const updateCheckNotificationID = "updater-check"
 // is already running.
 type trayUpdateCheck struct {
 	mu             sync.Mutex
+	active         bool
 	watching       bool
 	awaitingSettle bool
 	sawDownload    bool
@@ -123,6 +124,11 @@ func (rt *runtime) checkForUpdatesFromTray() {
 	ctx := context.Background()
 	check := &rt.updateCheck
 	check.mu.Lock()
+	if check.active || check.watching {
+		check.mu.Unlock()
+		return
+	}
+	check.active = true
 	check.watching, check.awaitingSettle, check.sawDownload, check.lastNotice = true, false, false, ""
 	check.mu.Unlock()
 
@@ -138,7 +144,10 @@ func (rt *runtime) checkForUpdatesFromTray() {
 	}
 
 	check.mu.Lock()
-	defer check.mu.Unlock()
+	defer func() {
+		check.active = false
+		check.mu.Unlock()
+	}()
 	if err != nil {
 		check.watching = false
 		if infra.IsCancellationError(err) {
@@ -178,6 +187,9 @@ func (rt *runtime) observeUpdaterStatus(status infra.UpdaterStatus) {
 		return
 	default:
 		check.watching = false
+		if check.sawDownload && status.UpdateAvailable && !status.UpdateDownloaded {
+			return
+		}
 	}
 	rt.sendUpdateCheckNotice(status, nil)
 }

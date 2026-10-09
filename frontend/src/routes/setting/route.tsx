@@ -181,8 +181,8 @@ function RouteComponent() {
 }
 
 // In auto mode CheckForUpdates also awaits the download, so the check counts as
-// finished once the backend has gone through its checking phase and a release is
-// known. A candidate known before the click does not count.
+// finished once the backend starts downloading after its checking phase.
+// A settled checking flag alone can still describe a failed candidate refresh.
 async function checkForUpdates() {
   const check = Updater.CheckForUpdates(true);
   let stopWaiting = () => {};
@@ -190,7 +190,12 @@ async function checkForUpdates() {
     let sawChecking = false;
     stopWaiting = globalStore.subscribe((state) => {
       sawChecking ||= state.updaterChecking;
-      if (sawChecking && !state.updaterChecking && state.updateAvailable) {
+      if (
+        sawChecking &&
+        !state.updaterChecking &&
+        state.updateAvailable &&
+        state.updaterDownloading
+      ) {
         resolve();
       }
     });
