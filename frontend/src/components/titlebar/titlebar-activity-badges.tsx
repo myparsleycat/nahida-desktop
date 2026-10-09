@@ -139,7 +139,10 @@ export function TitlebarActivityBadges() {
 
         if (!activity.tooltip) {
           return (
-            <div key={activity.id} className={cn("shrink-0", isInteractive && "no-drag")}>
+            <div
+              key={activity.id}
+              className={cn("flex shrink-0 items-center", isInteractive && "no-drag")}
+            >
               {badge}
             </div>
           );
@@ -148,7 +151,11 @@ export function TitlebarActivityBadges() {
         return (
           <Tooltip key={activity.id}>
             <TooltipTrigger
-              render={<div className={cn("min-w-0 shrink-0", isInteractive && "no-drag")} />}
+              render={
+                <div
+                  className={cn("flex min-w-0 shrink-0 items-center", isInteractive && "no-drag")}
+                />
+              }
             >
               {badge}
             </TooltipTrigger>
