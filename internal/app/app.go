@@ -174,6 +174,11 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		Log:      rt.log,
 		Emit: func(name string, data ...any) {
 			app.Event.Emit(name, data...)
+			if name == "updater:status-changed" && len(data) > 0 {
+				if status, ok := data[0].(infra.UpdaterStatus); ok {
+					rt.observeUpdaterStatus(status)
+				}
+			}
 		},
 		Ready:   rt.window.NotifyUpdateReady,
 		Version: platform.AppVersion,

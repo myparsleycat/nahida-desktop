@@ -59,6 +59,7 @@ type runtime struct {
 	window            *Window
 	gameBananaLogin   *gameBananaLogin
 	notifications     *notifications.NotificationService
+	updateCheck       trayUpdateCheck
 }
 
 func newRuntime() *runtime {
