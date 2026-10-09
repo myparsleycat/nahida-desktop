@@ -21,7 +21,7 @@
     "@semantic-release/release-notes-generator": "14.1.1",
     "semantic-release": "25.0.9",
     "vitepress": "1.6.4",
-    "wrangler": "4.142.0"
+    "wrangler": "4.149.0"
   },
   "packageManager": "pnpm@11.24.0"
 }
