@@ -2656,11 +2656,14 @@
   "updater": {
     "titlebar": {
       "action": "업데이트 확인",
-      "downloadAction": "업데이트 다운로드"
+      "downloadAction": "업데이트 다운로드",
+      "downloading": "업데이트 다운로드 중",
+      "downloadingProgress": "업데이트 다운로드 중 ({{percent}}%)"
     },
     "actions": {
       "download": "업데이트 다운로드",
-      "install": "업데이트 설치"
+      "install": "업데이트 설치",
+      "check": "업데이트 확인"
     },
     "status": {
       "idle": "최신 버전을 사용 중입니다.",

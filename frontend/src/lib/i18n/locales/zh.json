@@ -2656,11 +2656,14 @@
   "updater": {
     "titlebar": {
       "action": "点击以重启并更新",
-      "downloadAction": "下载更新"
+      "downloadAction": "下载更新",
+      "downloading": "正在下载更新",
+      "downloadingProgress": "正在下载更新 ({{percent}}%)"
     },
     "actions": {
       "download": "下载更新",
-      "install": "安装更新"
+      "install": "安装更新",
+      "check": "检查更新"
     },
     "status": {
       "idle": "你当前使用的是最新版本。",

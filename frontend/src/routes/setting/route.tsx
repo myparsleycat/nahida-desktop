@@ -1,5 +1,7 @@
+import { Updater } from "@bindings/infra";
 import { cn } from "@renderer/lib/utils";
-import { useGlobalStore } from "@renderer/store/global";
+import { globalStore, useGlobalStore } from "@renderer/store/global";
+import { toErrorMessage } from "@shared/utils";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDown,
@@ -17,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -27,6 +30,7 @@ function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
+  const updaterChecking = useGlobalStore((state) => state.updaterChecking);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -116,6 +120,27 @@ function RouteComponent() {
 
         <div className="border-t border-sidebar-border px-4 py-3 text-[11px] text-muted-foreground">
           v{appStatus?.version}
+          {" · "}
+          <button
+            type="button"
+            disabled={updaterChecking}
+            className="cursor-pointer underline underline-offset-2 hover:text-foreground disabled:cursor-default disabled:opacity-60"
+            onClick={() => {
+              toast.promise(checkForUpdates(), {
+                loading: t("updater.status.checking"),
+                success: (status) =>
+                  status.updateDownloaded
+                    ? t("updater.status.downloaded")
+                    : status.updateAvailable
+                      ? t("updater.toast.available.title")
+                      : t("updater.toast.notAvailable.title"),
+                error: (error: unknown) =>
+                  t("updater.status.failed", { message: toErrorMessage(error) }),
+              });
+            }}
+          >
+            {t("updater.actions.check")}
+          </button>
         </div>
       </aside>
 
@@ -153,4 +178,35 @@ function RouteComponent() {
       </div>
     </div>
   );
+}
+
+// In auto mode CheckForUpdates also awaits the download, so the check counts as
+// finished once the backend starts downloading after its checking phase.
+// A settled checking flag alone can still describe a failed candidate refresh.
+async function checkForUpdates() {
+  const check = Updater.CheckForUpdates(true);
+  let stopWaiting = () => {};
+  const releaseFound = new Promise<void>((resolve) => {
+    let sawChecking = false;
+    stopWaiting = globalStore.subscribe((state) => {
+      sawChecking ||= state.updaterChecking;
+      if (
+        sawChecking &&
+        !state.updaterChecking &&
+        state.updateAvailable &&
+        state.updaterDownloading
+      ) {
+        resolve();
+      }
+    });
+  });
+
+  try {
+    await Promise.race([check, releaseFound]);
+  } finally {
+    stopWaiting();
+    // A download failure after this point is reported by the updater status.
+    check.catch(() => {});
+  }
+  return Updater.GetStatus();
 }
