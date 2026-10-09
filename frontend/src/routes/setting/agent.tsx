@@ -184,6 +184,7 @@ function AgentSettingsRoute() {
           maxOutputTokens: settings.maxOutputTokens,
           reasoning: settings.reasoning,
           supportsImages: settings.supportsImages,
+          autoRunScripts: settings.autoRunScripts,
           headers: headers
             .filter((header) => header.name.trim() !== "")
             .map((header) => ({
@@ -261,7 +262,12 @@ function AgentSettingsRoute() {
       setCustomDraft(settings);
     }
     if (!provider || provider.custom) {
-      setSettings(customDraft ?? { ...settings, provider: providerID });
+      // The draft only remembers the custom provider's own fields; automatic script runs is global.
+      setSettings(
+        customDraft
+          ? { ...customDraft, autoRunScripts: settings.autoRunScripts }
+          : { ...settings, provider: providerID },
+      );
       setAuthMode("key");
       return;
     }
@@ -599,6 +605,21 @@ function AgentSettingsRoute() {
             </Select>
           </Field>
         )}
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-xs font-medium">
+            <input
+              type="checkbox"
+              checked={settings.autoRunScripts}
+              onChange={(event) =>
+                setSettings({ ...settings, autoRunScripts: event.target.checked })
+              }
+            />
+            {t("page.agent.auto_run_scripts")}
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            {t("page.agent.auto_run_scripts_hint")}
+          </p>
+        </div>
         <div className="space-y-1.5">
           <span className="text-xs font-medium">{t("page.agent.api_key")}</span>
           <div className="space-y-2">

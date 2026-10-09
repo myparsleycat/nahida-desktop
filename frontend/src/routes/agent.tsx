@@ -476,11 +476,13 @@ function AgentRoute() {
     }
   };
 
-  const decideApproval = async (approval: AgentApproval, approved: boolean) => {
+  const decideApproval = async (approval: AgentApproval, approved: boolean, forSession = false) => {
     if (approval.status !== "pending" || decidingApproval) return;
     setDecidingApproval(approval.id);
     try {
-      if (approved) {
+      if (approved && forSession) {
+        await Agent.ApproveActionForSession(approval.id);
+      } else if (approved) {
         await Agent.ApproveAction(approval.id);
       } else {
         await Agent.RejectAction(approval.id);
@@ -1392,10 +1394,12 @@ function ApprovalCard({
 }: {
   approval: AgentApproval;
   busy: boolean;
-  onDecision: (approval: AgentApproval, approved: boolean) => Promise<void>;
+  onDecision: (approval: AgentApproval, approved: boolean, forSession?: boolean) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const pending = approval.status === "pending";
+  const script = approval.actionId === "script.run" ? scriptSource(approval.arguments) : undefined;
+  const powershell = scriptLanguage(approval.arguments) === "powershell";
 
   return (
     <section className="rounded-[14px] border border-[#f59e0b]/42 bg-[color-mix(in_oklab,#f59e0b_6%,var(--background))] p-4 text-[13px] select-text">
@@ -1406,14 +1410,32 @@ function ApprovalCard({
           {t(`page.agent.approval_status_${approval.status}`)}
         </span>
       </div>
-      <p className="mt-3">{approval.summary}</p>
+      <p className="mt-3">
+        {script === undefined
+          ? approval.summary
+          : t(
+              powershell
+                ? "page.agent.approval_script_powershell"
+                : "page.agent.approval_script_python",
+            )}
+      </p>
       {approval.target && (
         <div className="mt-[7px] text-xs wrap-anywhere text-muted-foreground">
           <strong className="text-foreground">{t("page.agent.approval_target")}:</strong>{" "}
           {approval.target}
         </div>
       )}
-      <p className="mt-[7px] text-xs wrap-anywhere text-muted-foreground">{approval.impact}</p>
+      <p className="mt-[7px] text-xs wrap-anywhere text-muted-foreground">
+        {script === undefined ? approval.impact : t("page.agent.approval_script_impact")}
+      </p>
+      {script !== undefined && (
+        <pre
+          aria-label={t("page.agent.approval_script")}
+          className="mt-2.5 max-h-72 overflow-auto rounded-[8px] border bg-background p-2.5 font-mono text-[11px] leading-[1.5] whitespace-pre"
+        >
+          {script}
+        </pre>
+      )}
       {approval.error && <p className="text-destructive">{approval.error}</p>}
       {pending && (
         <div className="mt-3.5 flex justify-end gap-2">
@@ -1426,6 +1448,16 @@ function ApprovalCard({
             <XIcon />
             {t("page.agent.reject")}
           </Button>
+          {script !== undefined && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void onDecision(approval, true, true)}
+            >
+              {t("page.agent.approve_session")}
+            </Button>
+          )}
           <Button size="sm" disabled={busy} onClick={() => void onDecision(approval, true)}>
             {busy ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
             {t("page.agent.approve")}
@@ -1434,6 +1466,17 @@ function ApprovalCard({
       )}
     </section>
   );
+}
+
+// The approval carries the sealed run_script arguments; the user approves the source they read here.
+function scriptSource(value: unknown) {
+  if (typeof value !== "object" || value === null || !("script" in value)) return "";
+  return typeof value.script === "string" ? value.script : "";
+}
+
+function scriptLanguage(value: unknown) {
+  if (typeof value !== "object" || value === null || !("language" in value)) return "";
+  return value.language;
 }
 
 function ReasoningPanel({ text, streaming = false }: { text: string; streaming?: boolean }) {
