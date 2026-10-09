@@ -10,6 +10,7 @@
 
 .markdown-body {
     overflow-wrap: anywhere;
+    user-select: text;
 }
 
 /* Blocks carry margins on both sides for spacing between neighbours; trim the outer edges so

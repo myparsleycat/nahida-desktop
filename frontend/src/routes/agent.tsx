@@ -802,7 +802,7 @@ function AgentRoute() {
             )}
             viewportClassName="min-h-full"
           >
-            <div className="relative mx-auto flex min-h-full w-[min(var(--agent-chat-width),calc(100%_-_64px))] flex-col gap-[18px] overflow-hidden pt-7 pb-[180px] max-[980px]:w-[calc(100%_-_40px)] [&>*]:max-w-full [&>*]:min-w-0">
+            <div className="relative mx-auto flex min-h-full w-[min(var(--agent-chat-width),calc(100%_-_64px))] flex-col gap-[18px] overflow-hidden pt-7 pb-[180px] select-text max-[980px]:w-[calc(100%_-_40px)] [&>*]:max-w-full [&>*]:min-w-0">
               {loading && (
                 <Loader2Icon className="m-auto size-5 animate-spin text-muted-foreground" />
               )}
@@ -812,7 +812,7 @@ function AgentRoute() {
                 </div>
               )}
               {empty && (
-                <div className="absolute inset-x-0 top-[clamp(72px,23%,180px)] flex flex-col items-center gap-2 px-6 text-center">
+                <div className="absolute inset-x-0 top-[clamp(72px,23%,180px)] flex flex-col items-center gap-2 px-6 text-center select-none">
                   <div className="flex items-center justify-center gap-2.5 text-[26px] leading-8 font-medium tracking-[-0.025em]">
                     <span className="inline-grid size-[34px] flex-none place-items-center text-accent">
                       <SparklesIcon className="size-[30px]" />
@@ -846,7 +846,7 @@ function AgentRoute() {
                   </div>
                 ))}
               {runId && liveEntries.length === 0 && (
-                <div className="inline-flex h-[26px] animate-[agent-shimmer_1.8s_linear_infinite] items-center self-start bg-[linear-gradient(90deg,var(--accent)_0%,var(--accent)_38%,color-mix(in_oklab,var(--accent)_35%,white)_50%,var(--accent)_62%,var(--accent)_100%)] [background-size:250%_100%] bg-clip-text [background-position:100%_50%] text-sm font-medium text-transparent motion-reduce:animate-none">
+                <div className="inline-flex h-[26px] animate-[agent-shimmer_1.8s_linear_infinite] items-center self-start bg-[linear-gradient(90deg,var(--accent)_0%,var(--accent)_38%,color-mix(in_oklab,var(--accent)_35%,white)_50%,var(--accent)_62%,var(--accent)_100%)] [background-size:250%_100%] bg-clip-text [background-position:100%_50%] text-sm font-medium text-transparent select-none motion-reduce:animate-none">
                   <span>{t("page.agent.thinking")}</span>
                 </div>
               )}
@@ -1398,7 +1398,7 @@ function ApprovalCard({
   const pending = approval.status === "pending";
 
   return (
-    <section className="rounded-[14px] border border-[#f59e0b]/42 bg-[color-mix(in_oklab,#f59e0b_6%,var(--background))] p-4 text-[13px]">
+    <section className="rounded-[14px] border border-[#f59e0b]/42 bg-[color-mix(in_oklab,#f59e0b_6%,var(--background))] p-4 text-[13px] select-text">
       <div className="flex items-center gap-2 font-semibold">
         <ShieldAlertIcon className="size-4 text-[#d97706]" />
         <span>{t("page.agent.approval_title")}</span>
@@ -1453,7 +1453,7 @@ function ReasoningPanel({ text, streaming = false }: { text: string; streaming?:
         <span>{t("page.agent.reasoning")}</span>
         <ChevronDownIcon className={disclosure} />
       </summary>
-      <div className="mt-1 py-0.5 pl-[21px] wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+      <div className="mt-1 py-0.5 pl-[21px] wrap-anywhere whitespace-pre-wrap text-muted-foreground select-text">
         {text}
       </div>
     </details>
@@ -1504,11 +1504,11 @@ function ChatEntry({
     return (
       <div className="flex justify-end">
         <div className="flex w-fit max-w-[min(70%,640px)] min-w-[176px] flex-col items-end gap-1">
-          <div className="max-w-full min-w-0 rounded-[22px] bg-[color-mix(in_oklab,var(--muted)_88%,var(--background))] px-4 py-2.5 text-sm leading-[22px] wrap-anywhere whitespace-pre-wrap">
+          <div className="max-w-full min-w-0 rounded-[22px] bg-[color-mix(in_oklab,var(--muted)_88%,var(--background))] px-4 py-2.5 text-sm leading-[22px] wrap-anywhere whitespace-pre-wrap select-text">
             <AgentImages images={entry.images} alt="" />
             {entry.text}
           </div>
-          <div className="flex w-full items-center justify-end gap-1 px-1">
+          <div className="flex w-full items-center justify-end gap-1 px-1 select-none">
             <button
               type="button"
               aria-label={t("page.agent.revert_message")}
@@ -1536,7 +1536,7 @@ function ChatEntry({
   }
   if (entry.role === "assistant") {
     return (
-      <div className="agent-assistant-message max-w-full min-w-0 overflow-hidden wrap-anywhere text-foreground">
+      <div className="agent-assistant-message max-w-full min-w-0 overflow-hidden wrap-anywhere text-foreground select-text">
         {entry.reasoning && (
           <ReasoningPanel text={entry.reasoning} streaming={entry.reasoningStreaming} />
         )}
@@ -1559,7 +1559,7 @@ function ChatEntry({
           <span>{entry.toolName}</span>
           <ChevronDownIcon className={disclosure} />
         </summary>
-        <div className="mt-1 max-w-full min-w-0 overflow-hidden py-1 pl-[21px] wrap-anywhere">
+        <div className="mt-1 max-w-full min-w-0 overflow-hidden py-1 pl-[21px] wrap-anywhere select-text">
           {entry.error && <p className="text-destructive">{entry.error}</p>}
           {!!entry.changedFiles?.length && (
             <ul className="my-1 pl-4.5">
@@ -1574,7 +1574,7 @@ function ChatEntry({
             </div>
           )}
           {entry.result !== undefined && (
-            <pre className="mt-1.5 max-h-64 w-full max-w-full min-w-0 overflow-auto rounded-[8px] bg-muted px-3 py-2.5 font-mono text-[11px] leading-[17px] wrap-anywhere whitespace-pre-wrap">
+            <pre className="mt-1.5 max-h-64 w-full max-w-full min-w-0 overflow-auto rounded-[8px] bg-muted px-3 py-2.5 font-mono text-[11px] leading-[17px] wrap-anywhere whitespace-pre-wrap select-text">
               {JSON.stringify(entry.result, null, 2)}
             </pre>
           )}
@@ -1584,7 +1584,7 @@ function ChatEntry({
   }
   if (entry.error) {
     return (
-      <div className="rounded-[10px] border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-[13px] text-destructive">
+      <div className="rounded-[10px] border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-[13px] text-destructive select-text">
         {entry.error}
       </div>
     );
