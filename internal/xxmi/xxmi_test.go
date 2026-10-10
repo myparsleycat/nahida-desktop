@@ -67,6 +67,26 @@ func TestFindXXMIPathScansRootsAndExcludesBackups(t *testing.T) {
 	}
 }
 
+func TestDetectExternalLauncherScansDrivesOnce(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir())
+	scans := 0
+	service := NewWithOptions(Options{SearchRoots: func() ([]string, error) {
+		scans++
+		return nil, nil
+	}})
+	service.UseClient(newXXMITestClient(t))
+
+	for range 2 {
+		detected, err := service.DetectExternalLauncher(context.Background())
+		if err != nil || detected != nil {
+			t.Fatalf("detected=%+v err=%v", detected, err)
+		}
+	}
+	if scans != 1 {
+		t.Fatalf("drive scans = %d, want 1", scans)
+	}
+}
+
 func TestFindFileAcrossRootsHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

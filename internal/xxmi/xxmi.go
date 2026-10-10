@@ -130,6 +130,10 @@ type XXMI struct {
 	customDLLMu sync.Mutex
 	// libsProviderMu keeps shared provider selections in the order they were made.
 	libsProviderMu sync.Mutex
+	// launcherScanMu guards the remembered result of the drive-wide search for an external launcher.
+	launcherScanMu  sync.Mutex
+	launcherScanned bool
+	launcherScan    *string
 	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
 	importedCustomDLLs map[string]bool
 

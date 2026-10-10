@@ -49,7 +49,7 @@ func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, e
 		return nil, err
 	}
 	if path == nil || !isValidConfig(filepath.Join(*path, xxmiConfigName)) {
-		path, err = x.findExternalLauncherPath(ctx)
+		path, err = x.detectedLauncherPath(ctx)
 		if err != nil || path == nil {
 			return nil, err
 		}
@@ -72,13 +72,46 @@ func (x *XXMI) DetectExternalLauncher(ctx context.Context) (*ExternalLauncher, e
 }
 
 func (x *XXMI) findExternalLauncherPath(ctx context.Context) (*string, error) {
-	appData := strings.TrimSpace(os.Getenv("APPDATA"))
-	if appData != "" {
-		candidate := filepath.Join(appData, "XXMI Launcher")
-		if isValidConfig(filepath.Join(candidate, xxmiConfigName)) {
-			return &candidate, nil
-		}
+	if candidate := appDataLauncherPath(); candidate != nil {
+		return candidate, nil
 	}
+	return x.scanDrivesForLauncher(ctx)
+}
+
+// detectedLauncherPath is findExternalLauncherPath for callers that ask repeatedly, such as the overview of a
+// runtime without importers: the drive-wide search runs once per process, and again only after the launcher it
+// found is gone.
+func (x *XXMI) detectedLauncherPath(ctx context.Context) (*string, error) {
+	if candidate := appDataLauncherPath(); candidate != nil {
+		return candidate, nil
+	}
+
+	x.launcherScanMu.Lock()
+	defer x.launcherScanMu.Unlock()
+	if x.launcherScanned && (x.launcherScan == nil || fileExists(filepath.Join(*x.launcherScan, xxmiConfigName))) {
+		return x.launcherScan, nil
+	}
+	path, err := x.scanDrivesForLauncher(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x.launcherScanned, x.launcherScan = true, path
+	return path, nil
+}
+
+func appDataLauncherPath() *string {
+	appData := strings.TrimSpace(os.Getenv("APPDATA"))
+	if appData == "" {
+		return nil
+	}
+	candidate := filepath.Join(appData, "XXMI Launcher")
+	if !isValidConfig(filepath.Join(candidate, xxmiConfigName)) {
+		return nil
+	}
+	return &candidate
+}
+
+func (x *XXMI) scanDrivesForLauncher(ctx context.Context) (*string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
