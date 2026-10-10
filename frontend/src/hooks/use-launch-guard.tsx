@@ -27,6 +27,8 @@ import { toast } from "sonner";
 // Keep in sync with errGimiDCREnabled and errSmoothMotionEnabled in internal/xxmi/launch_guard.go.
 const LAUNCH_BLOCKER_DCR = "GIMI_DCR_ENABLED";
 const LAUNCH_BLOCKER_SMOOTH_MOTION = "NVIDIA_SMOOTH_MOTION_ENABLED";
+// Keep in sync with smoothMotionDLLOutdatedCode in internal/xxmi/launch_guard.go.
+const SMOOTH_MOTION_DLL_OUTDATED = /XXMI_SMOOTH_MOTION_DLL_OUTDATED:([\w.+-]+):([\w.+-]+)/;
 const LAUNCH_BLOCKER_WWMI_WOUNDED = "WWMI_WOUNDED_FX_DECISION_REQUIRED";
 // Keep in sync with errWWMIResourceTierUndecided in internal/xxmi/launch_builtin.go.
 const LAUNCH_BLOCKER_WWMI_RESOURCE_TIER = "WWMI_RESOURCE_TIER_DECISION_REQUIRED";
@@ -129,6 +131,13 @@ export function launchDialog(message: string): LaunchDialog | null {
   return null;
 }
 
+// The 3DMigoto DLL about to be deployed and the first release of its provider that would let Smooth
+// Motion stay on, when the blocker names them.
+export function smoothMotionDLLOutdated(message: string) {
+  const match = SMOOTH_MOTION_DLL_OUTDATED.exec(message);
+  return match ? { version: match[1], since: match[2] } : null;
+}
+
 export function useLaunchGuard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -136,6 +145,7 @@ export function useLaunchGuard() {
   const [dialog, setDialog] = useState<LaunchDialog>("gimi-dcr");
   const [isConfirming, setIsConfirming] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [outdatedDLL, setOutdatedDLL] = useState<ReturnType<typeof smoothMotionDLLOutdated>>(null);
   const [gameFolder, setGameFolder] = useState("");
   // Steam and Epic Games installs ship HD, and it is the official launcher's usual default.
   const [resourceTier, setResourceTier] = useState<string>("HD");
@@ -201,6 +211,7 @@ export function useLaunchGuard() {
         }
         setDialog(kind);
         setRuntimeError(kind === "runtime-repair" ? message : null);
+        setOutdatedDLL(smoothMotionDLLOutdated(message));
         setPendingImporter(importer);
         return { status: "blocked", kind };
       }
@@ -394,6 +405,7 @@ export function useLaunchGuard() {
       if (kind) {
         setDialog(kind);
         setRuntimeError(kind === "runtime-repair" ? message : null);
+        setOutdatedDLL(smoothMotionDLLOutdated(message));
         return;
       }
       toast.error(message);
@@ -492,6 +504,11 @@ export function useLaunchGuard() {
                   { importer: pendingImporter },
                 )}
               </AlertDialogDescription>
+            )}
+            {outdatedDLL && (
+              <p className="text-sm text-muted-foreground">
+                {t("page.mod.dialog.smooth-motion.outdated", outdatedDLL)}
+              </p>
             )}
             {dialog === "runtime-repair" && runtimeError && (
               <p className="max-h-24 overflow-auto text-xs break-all text-muted-foreground">
@@ -603,6 +620,7 @@ export function useLaunchGuard() {
       handleKeepLogging,
       handleKeepWounded,
       isConfirming,
+      outdatedDLL,
       pendingImporter,
       resourceTier,
       runtimeError,

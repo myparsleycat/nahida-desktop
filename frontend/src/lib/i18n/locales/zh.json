@@ -602,7 +602,8 @@
         "smooth-motion": {
           "title": "平滑运动已开启",
           "description": "要正常应用模组，需要关闭平滑运动。要关闭并启动游戏吗？",
-          "confirm": "关闭并启动"
+          "confirm": "关闭并启动",
+          "outdated": "此游戏所选的 3DMigoto DLL（{{version}}）不支持平滑运动。更新到 {{since}} 或更高版本后，即可在开启平滑运动的情况下启动。"
         },
         "launch-blockers": {
           "title": "启动前需要关闭设置",

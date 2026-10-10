@@ -24,6 +24,11 @@ const (
 	launchGuardSmoothMotionKey = "xxmi_launch_guard_smooth_motion"
 	launchGuardLoggingKey      = "xxmi_launch_guard_logging"
 	launchGuardTexturesKey     = "xxmi_launch_guard_textures"
+
+	// Follows errSmoothMotionEnabled as "<code>:<deployed version>:<first supporting version>" when a newer
+	// release of the importer's provider would lift the blocker. Keep it in sync with
+	// frontend/src/hooks/use-launch-guard.tsx.
+	smoothMotionDLLOutdatedCode = "XXMI_SMOOTH_MOTION_DLL_OUTDATED"
 )
 
 var (
@@ -125,12 +130,72 @@ func (g launchGuards) settings(src launchFixer) launchFixer {
 	return src
 }
 
-// builtinLaunchSettings returns the settings a built-in launch of cfg is held to.
-func (x *XXMI) builtinLaunchSettings(ctx context.Context, cfg ImporterConfig, migotoDLLUsed bool) launchFixer {
-	if migotoDLLUsed && x.smoothMotionSupported(ctx, cfg) {
-		return smoothMotionAllowed{x.launchSettings}
+// smoothMotionGate is the launch settings of a built-in launch that loads the XXMI DLL. Smooth Motion blocks
+// the launch only while the d3d11.dll about to be deployed cannot render alongside it, which is looked up once
+// the setting is found on because resolving the release can reach GitHub.
+type smoothMotionGate struct {
+	launchFixer
+	x   *XXMI
+	cfg ImporterConfig
+	// blocker is the Smooth Motion blocker of the last read that found the setting on.
+	blocker error
+}
+
+func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) (bool, error) {
+	enabled, err := g.launchFixer.smoothMotionEnabled(ctx, exe)
+	if err != nil || !enabled {
+		return enabled, err
 	}
-	return x.launchSettings
+	support := g.x.smoothMotionSupport(ctx, g.cfg)
+
+	// A lookup that was cut short says nothing about the DLL, so it must not turn into the blocker.
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if infra.IsCancellationError(support.err) {
+		return false, support.err
+	}
+	if support.supported {
+		return false, nil
+	}
+
+	// The dialog only says that Smooth Motion is on, so the log is what tells a kept DLL, an older release
+	// and a failed lookup apart.
+	if g.x.log != nil {
+		fields := map[string]any{
+			"importer_folder": g.cfg.ImporterFolder, "executable": exe, "reason": support.reason,
+			"provider": support.provider, "pin": support.pin, "version": support.version,
+			"supported_since": support.since,
+		}
+		if support.err != nil {
+			fields["error"] = support.err.Error()
+		}
+		g.x.log.Info(fields, xxmiLaunchGuardWhere)
+	}
+	g.blocker = errSmoothMotionEnabled
+	if support.reason == smoothMotionVersionOutdated {
+		g.blocker = fmt.Errorf(
+			"%w: %s:%s:%s", errSmoothMotionEnabled, smoothMotionDLLOutdatedCode, support.version, support.since,
+		)
+	}
+	return true, nil
+}
+
+// smoothMotionBlocker returns the blocker for Smooth Motion that src found on.
+func smoothMotionBlocker(src launchChecker) error {
+	if gate, ok := src.(*smoothMotionGate); ok && gate.blocker != nil {
+		return gate.blocker
+	}
+	return errSmoothMotionEnabled
+}
+
+// builtinLaunchSettings returns the settings a built-in launch of cfg is held to under guards.
+func (x *XXMI) builtinLaunchSettings(cfg ImporterConfig, migotoDLLUsed bool, guards launchGuards) launchFixer {
+	settings := guards.settings(x.launchSettings)
+	if !migotoDLLUsed || !guards.smoothMotion {
+		return settings
+	}
+	return &smoothMotionGate{launchFixer: settings, x: x, cfg: cfg}
 }
 
 func collectLaunchBlockers(
@@ -159,13 +224,16 @@ func collectLaunchBlockers(
 		return blocked, warnings, nil
 	}
 	enabled, err := src.smoothMotionEnabled(ctx, exe)
+	if err != nil && (ctx.Err() != nil || infra.IsCancellationError(err)) {
+		return nil, nil, err
+	}
 	if err != nil {
 		return blocked, warnings, fmt.Errorf(
 			"read nvidia smooth motion for %s: %w: %w", exe, errSmoothMotionUnreadable, err,
 		)
 	}
 	if enabled {
-		blocked = append(blocked, errSmoothMotionEnabled)
+		blocked = append(blocked, smoothMotionBlocker(src))
 	}
 	return blocked, warnings, nil
 }
@@ -289,7 +357,7 @@ func (x *XXMI) ClearLaunchBlockers(ctx context.Context, importer string) error {
 		return x.reportLaunchGuard(err, "clear-launch-blockers", importer, gameExecutable)
 	}
 	return x.clearLaunchBlockers(
-		ctx, importer, gameExecutable, guards.settings(x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed)),
+		ctx, importer, gameExecutable, x.builtinLaunchSettings(cfg, migotoDLLUsed, guards),
 	)
 }
 
