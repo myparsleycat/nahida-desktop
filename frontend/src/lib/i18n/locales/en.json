@@ -2445,7 +2445,166 @@
           "toggleInput": "Key binding toggle hotkey",
           "toggleInputDescription": "Used only when d3dx.ini does not set one already.",
           "resourceTier": "Resource quality",
-          "resourceTierDescription": "Must match the resources the game downloaded, or it crashes while loading. Steam and Epic Games installs use HD."
+          "resourceTierDescription": "Must match the resources the game downloaded, or it crashes while loading. Steam and Epic Games installs use HD.",
+          "d3dx": {
+            "applyNotice": "Only options this importer's d3dx.ini sets are listed. Changes are written to the file the next time the game is launched from here.",
+            "empty": "There is no d3dx.ini yet. Install the importer package first.",
+            "loadFailed": "Could not read d3dx.ini.",
+            "managedHint": "Set by the other importer settings; every launch overwrites it.",
+            "managedRenderingHint": "Kept at the value this importer needs while \"Enforce rendering\" is on in the Advanced tab.",
+            "overrideHint": "Every launch applies this value to d3dx.ini.",
+            "clearOverride": "Clear",
+            "sections": {
+              "Hunting": "Hunting tools and hotkeys",
+              "System": "DLL loading and saved mod settings",
+              "Input": "Mod hotkey input",
+              "Device": "Display and resolution",
+              "Rendering": "Hashing, caching, and shader handling",
+              "Logging": "Logs and debugging"
+            },
+            "options": {
+              "Hunting": {
+                "hunting": "Hunting mode, the tool mod makers use to find shader and buffer hashes.",
+                "overlay_buffer_hash_lifetime": "How many frames a buffer stays selectable in the hunting overlay after it was last drawn. -1 never drops it.",
+                "marking_mode": "How the shader or buffer selected while hunting is shown in the game.",
+                "next_marking_mode": "Hotkey that switches to the next display mode for the hunting selection.",
+                "marking_actions": "What happens when a selected shader or buffer is marked: copy its hash, save the shader, and so on.",
+                "done_hunting": "Hotkey that clears the hunting selection so everything is drawn again.",
+                "reload_fixes": "Hotkey that reloads the shaders in the ShaderFixes folder. Works only while hunting is on.",
+                "toggle_hunting": "Hotkey that turns hunting mode and its overlay on or off in the game.",
+                "reload_config": "Hotkey that reloads mods and settings without restarting the game.",
+                "wipe_user_config": "Hotkey that deletes d3dx_user.ini, resetting every mod's saved settings, and then reloads.",
+                "show_original": "Hold this hotkey to see the game without mods. Works only while hunting is on.",
+                "monitor_performance": "Hotkey that shows how much game performance each mod costs.",
+                "freeze_performance_monitor": "Hotkey that freezes the performance display and writes it to the log.",
+                "monitor_performance_interval": "How often the performance display updates, in seconds.",
+                "repeat_rate": "How many times per second a held hunting key repeats.",
+                "verbose_overlay": "Shows the hashes of the selected shaders and buffers in the hunting overlay.",
+                "analyse_frame": "Hotkey that dumps one frame for mod making. A dump can take a lot of disk space. Works only while hunting is on.",
+                "analyse_options": "What a frame dump saves, as space-separated flags such as dump_rt, dump_tex, buf, or txt."
+              },
+              "System": {
+                "screen_width": "Monitor width used when the game window size cannot be detected.",
+                "screen_height": "Monitor height used when the game window size cannot be detected.",
+                "dll_initialization_delay": "Time in milliseconds the DLL waits before it starts up inside the game.",
+                "load_library_redirect": "Makes the game load d3d11.dll and nvapi64.dll from its own folder instead of from Windows. Leave it alone unless mods fail to load.",
+                "check_foreground_window": "Mod hotkeys respond only while the game window is in focus.",
+                "allow_check_interface": "Compatibility setting for how the game asks for DirectX features. Turning it off can stop the game from starting.",
+                "allow_create_device": "Compatibility setting for how the game creates its graphics device. Changing it can stop the game from starting.",
+                "allow_platform_update": "Lets the game use the newer DirectX 11.1 interfaces. Turning it off can stop the game from starting.",
+                "skip_early_includes_load": "Loads mods after the game has started instead of while the DLL starts up, which makes startup more reliable with many mods.",
+                "config_initialization_delay": "Seconds to wait after the game starts before mods are loaded. 0 loads them on the first frame and -1 turns the delayed load off.",
+                "settings_auto_save_interval": "How often mod settings are saved to d3dx_user.ini, in seconds. -1 turns automatic saving off.",
+                "clear_unknown_settings": "Removes the saved settings of mods that are no longer installed from d3dx_user.ini.",
+                "persistent_variable_key": "How saved settings are kept for mods that declare a namespace. \"namespace\" shares them between copies of a mod; \"path\" keeps them separate for each copy.",
+                "force_detect_color_space": "Detects the color space of mod textures without relying on Windows. Meant for running the game on Linux."
+              },
+              "Input": {
+                "input": "Whether hotkeys are active when the game starts.",
+                "toggle_input": "Hotkey that turns hotkeys on or off in the game.",
+                "input_disable_mode": "Which hotkeys stop working when hotkeys are turned off: only those of mods, or all of them."
+              },
+              "Device": {
+                "upscaling": "Renders the game at the resolution set below and scales it up to the screen. Needs extra setup in d3dx.ini, so leave it off unless you know you need it.",
+                "width": "Forces the horizontal resolution the game renders at.",
+                "height": "Forces the vertical resolution the game renders at.",
+                "upscale_mode": "How upscaling hands the picture to the game. Mode 1 works with most games.",
+                "refresh_rate": "Overrides the refresh rate the game asks for, in Hz.",
+                "full_screen": "Forces the game into exclusive full screen. Leave it at 0 unless the game will not go full screen on its own.",
+                "allow_windowcommands": "Re-enables window shortcuts such as Alt+Tab and Print Screen that some games turn off.",
+                "get_resolution_from": "Where the game's resolution is read from. Mods use it to recognize textures that are the size of the screen.",
+                "hide_cursor": "Hides the mouse cursor in the game. Restart the game after changing it."
+              },
+              "Rendering": {
+                "shader_hash": "How shaders are identified. Mods are made for one method, so changing it stops them from matching.",
+                "texture_hash": "Uses the newer way of identifying textures. Mods are made for one method, so changing it stops them from matching.",
+                "cache_shaders": "Saves compiled shaders to disk so later launches stutter less while loading.",
+                "share_duplicate_resources": "Loads mod textures and buffers with identical contents only once, saving load time and VRAM.",
+                "prefetch_resource_files": "Reads the mod files used last time into memory when the game starts, so mods are less likely to wait for the disk the first time they appear.",
+                "cache_resource_data": "Keeps copies of the game's buffers in memory so mods can read them quickly. Space-separated: none, vertex_buffer, index_buffer, constant_buffer, or all.",
+                "rasterizer_disable_scissor": "Turns off the game's scissor clipping, which can cut off parts of modded effects. Restart the game after changing it.",
+                "track_texture_updates": "Follows textures the game changes after creating them, so mods keep matching them. Costs some performance.",
+                "track_implicit_index_buffers": "Remembers the last index buffer for draws that do not set one, which mods need in some game engines.",
+                "track_region_hashes": "Identifies a model by the part of a buffer it actually uses, for games that pack many models into one buffer.",
+                "allow_buffer_resize": "Lets mods enlarge the game's buffers, which models with more vertices than the original need.",
+                "ini_params": "The shader register mods use to pass values to shaders. Change it only if the game already uses this register; -1 turns it off.",
+                "assemble_signature_comments": "Treats the signature comments in shader assembly as code so shaders can change them. Mods that edit shaders may depend on it.",
+                "disassemble_undecipherable_custom_data": "Includes raw custom data when shaders are disassembled for pattern matching. Mods that patch shaders may depend on it.",
+                "patch_assembly_cb_offsets": "Writes constant buffer positions in disassembled shaders the way the code uses them. Mods that patch shaders may depend on it.",
+                "recursive_include": "Lets shader files in subfolders include other files relative to themselves. Mods with custom shaders may depend on it.",
+                "export_fixed": "Saves every automatically fixed shader as an HLSL file. For mod makers; slows the game down.",
+                "export_shaders": "Saves every shader the game uses to disk. For mod makers; slows the game down and takes disk space.",
+                "export_hlsl": "Saves every shader the game uses as decompiled HLSL. For mod makers; slows the game down and takes disk space.",
+                "dump_usage": "Writes ShaderUsage.txt whenever a marking key is pressed while hunting. For mod makers.",
+                "fix_sv_position": "An automatic shader fix for stereo 3D. Not needed for mods; leave it off."
+              },
+              "Logging": {
+                "log_level": "How much is written to the log file. Higher levels slow the game down.",
+                "show_warnings": "Shows mod errors on screen, with a beep, when mods are loaded.",
+                "unbuffered": "Writes each log line to disk immediately so nothing is lost in a crash. Slows the game down while logging is on.",
+                "force_cpu_affinity": "Limits the game to a single CPU core, for debugging only. Makes the game much slower.",
+                "debug_locks": "Turns on deadlock detection to help find out why the game freezes. Costs performance.",
+                "crash": "Writes the log and a crash dump file when the game crashes, which helps when reporting a problem."
+              }
+            },
+            "choices": {
+              "Hunting": {
+                "hunting": {
+                  "0": "0 · Off",
+                  "1": "1 · On",
+                  "2": "2 · Off until toggled"
+                },
+                "marking_mode": {
+                  "skip": "skip · Hide it",
+                  "original": "original · Unmodded",
+                  "pink": "pink · Paint it pink",
+                  "mono": "mono · No stereo"
+                }
+              },
+              "System": {
+                "load_library_redirect": {
+                  "0": "0 · Off",
+                  "1": "1 · nvapi64.dll only",
+                  "2": "2 · Both DLLs"
+                },
+                "allow_create_device": {
+                  "0": "0 · DirectX 11 only",
+                  "1": "1 · Allow any",
+                  "2": "2 · Force DirectX 11"
+                }
+              },
+              "Device": {
+                "upscaling": {
+                  "0": "0 · Off",
+                  "1": "1 · On",
+                  "2": "2 · On, always full screen"
+                },
+                "full_screen": {
+                  "0": "0 · Off",
+                  "1": "1 · Force",
+                  "2": "2 · Force, fixed window"
+                }
+              },
+              "Rendering": {
+                "track_texture_updates": {
+                  "0": "0 · Off",
+                  "1": "1 · On",
+                  "2": "2 · Off, faster hunting"
+                },
+                "recursive_include": {
+                  "-1": "-1 · Standard HLSL include handler",
+                  "0": "0 · Off",
+                  "1": "1 · On"
+                },
+                "export_hlsl": {
+                  "0": "0 · Off",
+                  "1": "1 · HLSL",
+                  "2": "2 · HLSL + original ASM",
+                  "3": "3 · HLSL + both ASM"
+                }
+              }
+            }
+          }
         },
         "xxmiPath": "XXMI Path",
         "autoScan": "Auto Scan",

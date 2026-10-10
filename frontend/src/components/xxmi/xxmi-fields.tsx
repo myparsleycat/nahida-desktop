@@ -14,7 +14,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
 import { FolderOpenIcon } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -61,12 +61,14 @@ export function SelectRow({
   description,
   value,
   options,
+  disabled,
   onValueChange,
 }: {
   label: ReactNode;
   description?: ReactNode;
   value: string;
   options: readonly (string | { value: string; label: string })[];
+  disabled?: boolean;
   onValueChange: (value: string) => void;
 }) {
   const labelId = useId();
@@ -79,6 +81,7 @@ export function SelectRow({
       <Select
         value={value}
         items={items}
+        disabled={disabled}
         onValueChange={(next) => {
           if (next !== null) onValueChange(next);
         }}
@@ -107,6 +110,7 @@ export function NumberRow({
   min,
   max,
   step,
+  disabled,
   onValueChange,
 }: {
   label: ReactNode;
@@ -115,9 +119,11 @@ export function NumberRow({
   min?: number;
   max?: number;
   step?: number | "any";
+  disabled?: boolean;
   onValueChange: (value: number) => void;
 }) {
   const labelId = useId();
+  const [draft, setDraft] = useState<string | null>(null);
 
   return (
     <SectionRow title={label} titleId={labelId} description={description}>
@@ -128,8 +134,16 @@ export function NumberRow({
         min={min}
         max={max}
         step={step}
-        value={value}
-        onChange={(event) => onValueChange(Number(event.target.value))}
+        disabled={disabled}
+        value={draft ?? value}
+        onChange={(event) => {
+          // A number input reports "" for an empty or partial entry such as "-", which would otherwise commit as 0
+          // and replace what the user is still typing.
+          const text = event.target.value;
+          setDraft(text);
+          if (text !== "" && Number.isFinite(Number(text))) onValueChange(Number(text));
+        }}
+        onBlur={() => setDraft(null)}
       />
     </SectionRow>
   );

@@ -2393,7 +2393,166 @@
           "toggleInput": "按键绑定切换热键",
           "toggleInputDescription": "仅在 d3dx.ini 未指定时使用。",
           "resourceTier": "资源品质",
-          "resourceTierDescription": "必须与游戏已下载的资源一致，否则会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。"
+          "resourceTierDescription": "必须与游戏已下载的资源一致，否则会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。",
+          "d3dx": {
+            "applyNotice": "仅列出此导入器的 d3dx.ini 中已有的选项。更改会在下次从这里启动游戏时写入文件。",
+            "empty": "尚无 d3dx.ini。请先安装导入器包。",
+            "loadFailed": "无法读取 d3dx.ini。",
+            "managedHint": "由其他导入器设置决定，每次启动都会覆盖。",
+            "managedRenderingHint": "高级选项卡中的“强制渲染设置”开启时，会保持为此导入器所需的值。",
+            "overrideHint": "每次启动都会将此值应用到 d3dx.ini。",
+            "clearOverride": "取消",
+            "sections": {
+              "Hunting": "捕获工具与热键",
+              "System": "DLL 加载与模组设置保存",
+              "Input": "模组热键输入",
+              "Device": "显示与分辨率",
+              "Rendering": "哈希、缓存与着色器处理",
+              "Logging": "日志与调试"
+            },
+            "options": {
+              "Hunting": {
+                "hunting": "捕获模式，模组作者用它查找着色器和缓冲区哈希。",
+                "overlay_buffer_hash_lifetime": "缓冲区最后一次绘制后，在捕获叠加层中保持可选的帧数。-1 表示不移除。",
+                "marking_mode": "捕获时所选着色器或缓冲区在游戏画面中的显示方式。",
+                "next_marking_mode": "将捕获所选项的显示方式切换到下一种的热键。",
+                "marking_actions": "标记所选着色器或缓冲区时执行的操作（复制哈希、保存着色器等）。",
+                "done_hunting": "清除捕获选择、让所有内容恢复绘制的热键。",
+                "reload_fixes": "重新加载 ShaderFixes 文件夹中着色器的热键。仅在启用捕获时有效。",
+                "toggle_hunting": "在游戏中开关捕获模式及其叠加层的热键。",
+                "reload_config": "无需重启游戏即可重新加载模组和设置的热键。",
+                "wipe_user_config": "删除 d3dx_user.ini 以重置所有模组已保存的设置并重新加载的热键。",
+                "show_original": "按住时显示未应用模组的原始画面的热键。仅在启用捕获时有效。",
+                "monitor_performance": "显示各模组对游戏性能影响的热键。",
+                "freeze_performance_monitor": "冻结性能显示并将其写入日志的热键。",
+                "monitor_performance_interval": "性能显示的刷新间隔（秒）。",
+                "repeat_rate": "按住捕获按键时每秒重复的次数。",
+                "verbose_overlay": "在捕获叠加层中显示所选着色器和缓冲区的哈希。",
+                "analyse_frame": "为制作模组转储一帧的热键。可能占用大量磁盘空间。仅在启用捕获时有效。",
+                "analyse_options": "帧转储要保存的内容，用空格分隔 dump_rt、dump_tex、buf、txt 等标志。"
+              },
+              "System": {
+                "screen_width": "无法检测游戏窗口大小时使用的显示器宽度。",
+                "screen_height": "无法检测游戏窗口大小时使用的显示器高度。",
+                "dll_initialization_delay": "DLL 在游戏内开始初始化前等待的时间（毫秒）。",
+                "load_library_redirect": "让游戏从自身文件夹而非 Windows 加载 d3d11.dll 和 nvapi64.dll。除非模组无法加载，否则请保持不变。",
+                "check_foreground_window": "仅当游戏窗口处于前台时，模组热键才会响应。",
+                "allow_check_interface": "关于游戏查询 DirectX 功能方式的兼容性设置。关闭后游戏可能无法启动。",
+                "allow_create_device": "关于游戏创建图形设备方式的兼容性设置。更改后游戏可能无法启动。",
+                "allow_platform_update": "允许游戏使用较新的 DirectX 11.1 接口。关闭后游戏可能无法启动。",
+                "skip_early_includes_load": "在游戏启动后而非 DLL 初始化期间加载模组，模组较多时启动更稳定。",
+                "config_initialization_delay": "游戏启动后到加载模组前等待的秒数。0 表示在第一帧加载，-1 表示关闭延迟加载。",
+                "settings_auto_save_interval": "将模组设置自动保存到 d3dx_user.ini 的间隔（秒）。-1 表示不自动保存。",
+                "clear_unknown_settings": "从 d3dx_user.ini 中移除已不再安装的模组的已保存设置。",
+                "persistent_variable_key": "声明了命名空间的模组如何区分已保存的设置。“namespace”在同一模组的副本间共享设置，“path”为每个副本分别保存。",
+                "force_detect_color_space": "不依赖 Windows 自行检测模组纹理的色彩空间。用于在 Linux 上运行游戏。"
+              },
+              "Input": {
+                "input": "游戏启动时热键是否处于启用状态。",
+                "toggle_input": "在游戏中开关热键的热键。",
+                "input_disable_mode": "关闭热键时失效的范围：仅模组热键，或全部热键。"
+              },
+              "Device": {
+                "upscaling": "以下方指定的分辨率渲染游戏并放大到屏幕。需要在 d3dx.ini 中额外配置，除非确有需要，否则请保持关闭。",
+                "width": "强制指定游戏渲染的水平分辨率。",
+                "height": "强制指定游戏渲染的垂直分辨率。",
+                "upscale_mode": "放大功能向游戏传递画面的方式。模式 1 适用于大多数游戏。",
+                "refresh_rate": "将游戏请求的刷新率（Hz）替换为此值。",
+                "full_screen": "强制游戏进入独占全屏。除非游戏自身无法全屏，否则请保持为 0。",
+                "allow_windowcommands": "重新启用部分游戏禁用的 Alt+Tab、Print Screen 等窗口快捷键。",
+                "get_resolution_from": "指定从何处读取游戏分辨率。模组用它识别与屏幕同尺寸的纹理。",
+                "hide_cursor": "在游戏中隐藏鼠标光标。更改后请重启游戏。"
+              },
+              "Rendering": {
+                "shader_hash": "识别着色器的方式。模组针对某一种方式制作，更改后将无法匹配。",
+                "texture_hash": "使用较新的纹理识别方式。模组针对某一种方式制作，更改后将无法匹配。",
+                "cache_shaders": "将编译后的着色器保存到磁盘，减少之后启动时加载过程中的卡顿。",
+                "share_duplicate_resources": "内容相同的模组纹理和缓冲区只加载一次，节省加载时间和显存。",
+                "prefetch_resource_files": "游戏启动时预先读取上次使用的模组文件，减少模组首次显示时等待磁盘的情况。",
+                "cache_resource_data": "在内存中保留游戏缓冲区的副本，方便模组快速读取。用空格分隔 none、vertex_buffer、index_buffer、constant_buffer、all。",
+                "rasterizer_disable_scissor": "关闭可能裁掉模组效果的游戏裁剪功能。更改后请重启游戏。",
+                "track_texture_updates": "跟踪游戏创建后又修改的纹理，使模组持续匹配。会略微降低性能。",
+                "track_implicit_index_buffers": "为未设置索引缓冲区的绘制记住上一个索引缓冲区，某些游戏引擎中的模组需要它。",
+                "track_region_hashes": "针对把多个模型打包进同一缓冲区的游戏，按缓冲区中实际使用的部分识别模型。",
+                "allow_buffer_resize": "允许模组扩大游戏缓冲区，顶点数多于原版的模型需要它。",
+                "ini_params": "模组向着色器传值所用的寄存器编号。仅当游戏已占用该寄存器时才更改；-1 表示禁用。",
+                "assemble_signature_comments": "将着色器汇编中的签名注释视为代码，使着色器可以修改它们。修改着色器的模组可能依赖此项。",
+                "disassemble_undecipherable_custom_data": "为模式匹配反汇编着色器时包含原始自定义数据。修补着色器的模组可能依赖此项。",
+                "patch_assembly_cb_offsets": "在反汇编的着色器中按代码使用的形式标注常量缓冲区位置。修补着色器的模组可能依赖此项。",
+                "recursive_include": "允许子文件夹中的着色器文件以自身为基准包含其他文件。使用自定义着色器的模组可能依赖此项。",
+                "export_fixed": "将所有自动修复的着色器保存为 HLSL 文件。供模组作者使用，会拖慢游戏。",
+                "export_shaders": "将游戏使用的所有着色器保存到磁盘。供模组作者使用，会拖慢游戏并占用磁盘空间。",
+                "export_hlsl": "将游戏使用的所有着色器保存为反编译的 HLSL。供模组作者使用，会拖慢游戏并占用磁盘空间。",
+                "dump_usage": "捕获时每次按下标记键都会写入 ShaderUsage.txt。供模组作者使用。",
+                "fix_sv_position": "用于立体 3D 的着色器自动修复。模组不需要，请保持关闭。"
+              },
+              "Logging": {
+                "log_level": "写入日志文件的详细程度。级别越高游戏越慢。",
+                "show_warnings": "加载模组时在屏幕上显示模组错误并发出提示音。",
+                "unbuffered": "每行日志立即写入磁盘，崩溃时也不会丢失。启用日志期间会拖慢游戏。",
+                "force_cpu_affinity": "将游戏限制为只使用一个 CPU 核心，仅用于调试。会使游戏明显变慢。",
+                "debug_locks": "开启死锁检测，帮助查找游戏卡死的原因。会降低性能。",
+                "crash": "游戏崩溃时写出日志和崩溃转储文件，便于反馈问题。"
+              }
+            },
+            "choices": {
+              "Hunting": {
+                "hunting": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 开启",
+                  "2": "2 · 用热键开启前保持关闭"
+                },
+                "marking_mode": {
+                  "skip": "skip · 隐藏",
+                  "original": "original · 原版",
+                  "pink": "pink · 显示为粉色",
+                  "mono": "mono · 关闭立体"
+                }
+              },
+              "System": {
+                "load_library_redirect": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 仅 nvapi64.dll",
+                  "2": "2 · 两个 DLL"
+                },
+                "allow_create_device": {
+                  "0": "0 · 仅 DirectX 11",
+                  "1": "1 · 全部允许",
+                  "2": "2 · 强制 DirectX 11"
+                }
+              },
+              "Device": {
+                "upscaling": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 开启",
+                  "2": "2 · 开启，始终全屏"
+                },
+                "full_screen": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 强制",
+                  "2": "2 · 强制，固定窗口"
+                }
+              },
+              "Rendering": {
+                "track_texture_updates": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 开启",
+                  "2": "2 · 关闭，加快捕获"
+                },
+                "recursive_include": {
+                  "-1": "-1 · 标准 HLSL 包含处理程序",
+                  "0": "0 · 关闭",
+                  "1": "1 · 开启"
+                },
+                "export_hlsl": {
+                  "0": "0 · 关闭",
+                  "1": "1 · HLSL",
+                  "2": "2 · HLSL + 原始 ASM",
+                  "3": "3 · HLSL + 两种 ASM"
+                }
+              }
+            }
+          }
         },
         "xxmiPath": "XXMI路径",
         "autoScan": "自动扫描",

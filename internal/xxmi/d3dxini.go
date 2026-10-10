@@ -233,6 +233,16 @@ func (d *iniDocument) RemoveOption(section, key string) {
 	}
 }
 
+// Option returns the value the section sets for key, without the comment that may follow it.
+func (d *iniDocument) Option(section, key string) (string, bool) {
+	indexes := d.optionIndexes(section, key)
+	if len(indexes) == 0 {
+		return "", false
+	}
+	value := iniOptionPattern.FindStringSubmatch(d.lines[indexes[0]])[4]
+	return strings.TrimSpace(strings.TrimSuffix(value, iniCommentSuffix(value))), true
+}
+
 func (d *iniDocument) optionIndexes(section, key string) []int {
 	indexes := []int{}
 	inSection := false

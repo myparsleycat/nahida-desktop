@@ -147,19 +147,22 @@ type ImporterConfig struct {
 	ProcessTimeout     int    `json:"processTimeout"`
 	XXMIDLLInitDelay   int    `json:"xxmiDLLInitDelay"`
 	// XXMIDLLInjectMode is "Hook", "Inject", or "Bypass" and applies to every GameLaunch.
-	XXMIDLLInjectMode string              `json:"xxmiDLLInjectMode"`
-	WindowMode        string              `json:"windowMode"`
-	RunPreLaunch      CommandHook         `json:"runPreLaunch"`
-	CustomLaunch      CustomLaunch        `json:"customLaunch"`
-	RunPostLoad       CommandHook         `json:"runPostLoad"`
-	ExtraLibraries    ExtraLibraries      `json:"extraLibraries"`
-	ReShade           ReShadeOptions      `json:"reshade"`
-	OverwriteINI      bool                `json:"overwriteINI"`
-	ConfigureGame     bool                `json:"configureGame"`
-	Migoto            MigotoOptions       `json:"migoto"`
-	IniOptimizer      IniOptimizerOptions `json:"iniOptimizer"`
-	LaunchCount       int                 `json:"launchCount"`
-	WoundedFXDecided  bool                `json:"woundedFXDecided"`
+	XXMIDLLInjectMode string         `json:"xxmiDLLInjectMode"`
+	WindowMode        string         `json:"windowMode"`
+	RunPreLaunch      CommandHook    `json:"runPreLaunch"`
+	CustomLaunch      CustomLaunch   `json:"customLaunch"`
+	RunPostLoad       CommandHook    `json:"runPostLoad"`
+	ExtraLibraries    ExtraLibraries `json:"extraLibraries"`
+	ReShade           ReShadeOptions `json:"reshade"`
+	OverwriteINI      bool           `json:"overwriteINI"`
+	ConfigureGame     bool           `json:"configureGame"`
+	Migoto            MigotoOptions  `json:"migoto"`
+	// D3DXOverrides holds d3dx.ini values keyed "Section.key". A launch writes them, so they outlive an
+	// importer package update that replaces the file.
+	D3DXOverrides    map[string]string   `json:"d3dxOverrides,omitempty"`
+	IniOptimizer     IniOptimizerOptions `json:"iniOptimizer"`
+	LaunchCount      int                 `json:"launchCount"`
+	WoundedFXDecided bool                `json:"woundedFXDecided"`
 	// D3D11ModeNoticeShown records that the user saw the reminder to turn on DirectX 11 in the
 	// game's own launcher, which an Epic Games launch cannot do for them.
 	D3D11ModeNoticeShown bool         `json:"d3d11ModeNoticeShown"`

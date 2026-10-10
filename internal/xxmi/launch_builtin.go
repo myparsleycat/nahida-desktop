@@ -502,6 +502,9 @@ func (x *XXMI) updateLaunchINI(
 	} else {
 		doc.RemoveOption("Loader", "loader")
 	}
+
+	// The options the launch decides are written after these, so they win over a stale override.
+	applyD3DXOverrides(doc, cfg.D3DXOverrides)
 	systemOptions, logLevel := migotoINISupport(cfg)
 	if systemOptions {
 		doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
@@ -512,11 +515,31 @@ func (x *XXMI) updateLaunchINI(
 		doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
 		doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
 	}
-	applyMigotoINI(doc, key, cfg.Migoto, logLevel)
+
+	// Where the file has no hotkey the launch writes one, so a saved override takes the place of the default.
+	migoto := cfg.Migoto
+	toggleInput, _ := lookupD3DXOption(d3dxOverrideKey("Input", "toggle_input"))
+	if value, ok := cfg.D3DXOverrides[d3dxOverrideKey("Input", "toggle_input")]; ok && toggleInput.accepts(value) {
+		migoto.ToggleInput = value
+	}
+	applyMigotoINI(doc, key, migoto, logLevel)
 
 	// The options above are already in place, so the provider's defaults never replace a launch setting.
 	if len(providerINI) > 0 {
+		// A saved override of an option the provider adds is written with it. A package update that drops
+		// the option would otherwise leave this launch on the provider's default.
+		added := map[string]string{}
+		for id, value := range cfg.D3DXOverrides {
+			spec, ok := lookupD3DXOption(id)
+			if !ok {
+				continue
+			}
+			if _, present := doc.Option(spec.section, spec.key); !present {
+				added[id] = value
+			}
+		}
 		doc.AddMissingOptions(parseINI(providerINI))
+		applyD3DXOverrides(doc, added)
 	}
 	if !doc.Changed() {
 		return nil
@@ -564,19 +587,7 @@ func migotoINISupport(cfg ImporterConfig) (systemOptions, logLevel bool) {
 
 func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions, logLevel bool) {
 	if options.EnforceRendering {
-		values := map[string]string{
-			"texture_hash": "0", "track_texture_updates": "0", "track_region_hashes": "0",
-			"allow_buffer_resize": "1",
-		}
-		switch key {
-		case "WWMI":
-			values["texture_hash"], values["track_texture_updates"] = "1", "1"
-		case "SRMI":
-			values["track_implicit_index_buffers"] = "1"
-		case "EFMI":
-			values["track_region_hashes"], values["track_implicit_index_buffers"] = "1", "1"
-			values["allow_buffer_resize"] = "0"
-		}
+		values := enforcedRenderingOptions(key)
 		for _, option := range []string{"texture_hash", "track_texture_updates", "track_region_hashes",
 			"track_implicit_index_buffers", "allow_buffer_resize"} {
 			if value, ok := values[option]; ok {

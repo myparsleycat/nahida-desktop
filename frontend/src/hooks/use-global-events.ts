@@ -192,6 +192,8 @@ export function useGlobalEvents(
             if (stage === "finish" || stage === "failed") {
                 toast.dismiss(id);
                 void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
+                // A launch rewrites d3dx.ini, and one that fails later has usually done so already.
+                void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
                 return;
             }
             const status =
