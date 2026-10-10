@@ -65,8 +65,8 @@ function RouteComponent() {
       <aside
         className={cn(
           "glass-pane flex shrink-0 flex-col border-r border-border",
-          sidebarOpen ? "w-60" : "w-0 overflow-hidden border-r-0",
-          "md:w-60",
+          sidebarOpen ? "w-64" : "w-0 overflow-hidden border-r-0",
+          "md:w-64",
         )}
       >
         <div className="flex items-center gap-2.5 border-b border-sidebar-border px-4 py-4">

@@ -4,6 +4,7 @@ import ModBisect from "@renderer/components/tools/mod-bisect";
 import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import TouchProfileTool from "@renderer/components/tools/touch-profile/touch-profile";
+import { DEFAULT_BG } from "@renderer/const";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, ExternalLink, Menu, Wrench, X } from "lucide-react";
@@ -84,13 +85,11 @@ export default function ToolsPage() {
     tool.beta ? `${t(tool.nameKey)} (${t("g.beta")})` : t(tool.nameKey);
 
   return (
-    <div
-      className={cn("flex h-full min-h-0 overflow-hidden bg-background font-sans text-foreground")}
-    >
+    <div className="flex h-full min-h-0 overflow-hidden font-sans text-foreground">
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-r border-border bg-sidebar md:w-56",
-          sidebarOpen ? "w-56" : "w-0 overflow-hidden",
+          "glass-pane flex shrink-0 flex-col border-r border-border md:w-64",
+          sidebarOpen ? "w-64" : "w-0 overflow-hidden",
         )}
       >
         <div className="flex items-center gap-2.5 border-b border-sidebar-border px-4 py-4">
@@ -162,8 +161,8 @@ export default function ToolsPage() {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-4">
+      <div className={cn("flex min-w-0 flex-1 flex-col", DEFAULT_BG)}>
+        <header className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="rounded p-1.5 transition-colors hover:bg-secondary md:hidden"
