@@ -197,7 +197,7 @@ body {
 
 /* The main window has a native Acrylic backdrop; the shell tints it and the content panel stays opaque. */
 body:has(.app-shell) {
-    background: color-mix(in oklab, var(--background) 80%, transparent);
+    background: color-mix(in oklab, var(--background) 70%, transparent);
 }
 
 /* Route navigation that sits on the shell backdrop; its presence makes the root content panel transparent. */
