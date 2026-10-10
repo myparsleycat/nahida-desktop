@@ -54,6 +54,7 @@ func newProviderTestService(
 ) (service *XXMI, client *db.Client, downloads *atomic.Int32) {
 	t.Helper()
 	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -119,7 +120,11 @@ func newProviderTestService(
 	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
 	download := infra.NewDownload()
 	download.UseClient(infraClient)
-	service = NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
+	service = NewWithOptions(Options{
+		HTTP: infraClient, Download: download, Archive: infra.NewArchive(),
+		// An unconfigured overview looks for an external launcher, which would walk every drive of the host.
+		SearchRoots: func() ([]string, error) { return nil, nil },
+	})
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	return service, client, downloads
