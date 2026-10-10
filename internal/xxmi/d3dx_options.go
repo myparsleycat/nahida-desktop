@@ -140,7 +140,8 @@ var d3dxOptionSpecs = func() []d3dxOptionSpec {
 		option("Rendering", "assemble_signature_comments", D3DXOptionBool),
 		option("Rendering", "disassemble_undecipherable_custom_data", D3DXOptionBool),
 		option("Rendering", "patch_assembly_cb_offsets", D3DXOptionBool),
-		option("Rendering", "recursive_include", D3DXOptionBool),
+		// -1 is not "off": the DLL then compiles with the standard include handler instead of its own.
+		option("Rendering", "recursive_include", D3DXOptionEnum, "-1", "0", "1"),
 		option("Rendering", "export_fixed", D3DXOptionBool),
 		option("Rendering", "export_shaders", D3DXOptionBool),
 		option("Rendering", "export_hlsl", D3DXOptionEnum, "0", "1", "2", "3"),

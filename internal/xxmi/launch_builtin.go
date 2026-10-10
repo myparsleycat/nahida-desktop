@@ -515,11 +515,31 @@ func (x *XXMI) updateLaunchINI(
 		doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
 		doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
 	}
-	applyMigotoINI(doc, key, cfg.Migoto, logLevel)
+
+	// Where the file has no hotkey the launch writes one, so a saved override takes the place of the default.
+	migoto := cfg.Migoto
+	toggleInput, _ := lookupD3DXOption(d3dxOverrideKey("Input", "toggle_input"))
+	if value, ok := cfg.D3DXOverrides[d3dxOverrideKey("Input", "toggle_input")]; ok && toggleInput.accepts(value) {
+		migoto.ToggleInput = value
+	}
+	applyMigotoINI(doc, key, migoto, logLevel)
 
 	// The options above are already in place, so the provider's defaults never replace a launch setting.
 	if len(providerINI) > 0 {
+		// A saved override of an option the provider adds is written with it. A package update that drops
+		// the option would otherwise leave this launch on the provider's default.
+		added := map[string]string{}
+		for id, value := range cfg.D3DXOverrides {
+			spec, ok := lookupD3DXOption(id)
+			if !ok {
+				continue
+			}
+			if _, present := doc.Option(spec.section, spec.key); !present {
+				added[id] = value
+			}
+		}
 		doc.AddMissingOptions(parseINI(providerINI))
+		applyD3DXOverrides(doc, added)
 	}
 	if !doc.Changed() {
 		return nil

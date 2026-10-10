@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +52,49 @@ func TestUpdateLaunchINIAppliesOverridesOnlyToOptionsTheFileSets(t *testing.T) {
 	}
 }
 
+func TestUpdateLaunchINIAppliesOverridesToOptionsTheProviderAdds(t *testing.T) {
+	t.Parallel()
+	folder := t.TempDir()
+	path := filepath.Join(folder, "d3dx.ini")
+	original := "[Rendering]\n;cache_shaders = 0\ntexture_hash = 1\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The launch writes its own toggle_input default only for libraries that read log_level.
+	manifest := fmt.Sprintf(`{"mode":%q,"source":"xxmi-libs@1.2.0"}`, RuntimeXXMI)
+	if err := os.WriteFile(filepath.Join(folder, runtimeManifestName), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
+		Migoto: MigotoOptions{LogLevel: "Disabled", EnforceRendering: true, ToggleInput: "VK_F8"},
+		D3DXOverrides: map[string]string{
+			"Rendering.prefetch_resource_files": "0", "Rendering.cache_shaders": "1", "Rendering.texture_hash": "1",
+			"Input.toggle_input": "VK_F9",
+		}}
+	provider := []byte("[Rendering]\nprefetch_resource_files = 1\ncache_shaders = 0\ntexture_hash = 1\n" +
+		"[Input]\ntoggle_input = VK_F10\n")
+	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", provider); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+
+	for _, want := range []string{
+		"prefetch_resource_files = 0\n", ";cache_shaders = 0\n", "texture_hash = 0\n", "toggle_input = VK_F9\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("updated INI is missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "cache_shaders = 1") {
+		t.Errorf("override enabled an option the file comments out: %q", got)
+	}
+}
+
 func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("GIMI", filepath.Join(t.TempDir(), "xxmi"))
@@ -61,6 +105,7 @@ func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 		"Rendering.cache_shaders": "1", "Hunting.reload_config": "no_modifiers VK_F5",
 		"Hunting.analyse_options": "dump_rt dump_tex buf txt", "Hunting.monitor_performance_interval": "2.5",
 		"Device.get_resolution_from": "depth_stencil", "System.settings_auto_save_interval": "-1",
+		"Rendering.recursive_include": "-1",
 	}
 	if err := ValidateImporterSettings("GIMI", cfg); err != nil {
 		t.Fatalf("valid overrides rejected: %v", err)

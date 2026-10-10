@@ -2590,6 +2590,11 @@
                   "1": "1 · On",
                   "2": "2 · Off, faster hunting"
                 },
+                "recursive_include": {
+                  "-1": "-1 · Standard HLSL include handler",
+                  "0": "0 · Off",
+                  "1": "1 · On"
+                },
                 "export_hlsl": {
                   "0": "0 · Off",
                   "1": "1 · HLSL",
