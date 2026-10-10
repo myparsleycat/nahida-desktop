@@ -2467,6 +2467,7 @@
                 "shader_hash": "识别着色器的方式。模组针对某一种方式制作，更改后将无法匹配。",
                 "texture_hash": "使用较新的纹理识别方式。模组针对某一种方式制作，更改后将无法匹配。",
                 "cache_shaders": "将编译后的着色器保存到磁盘，减少之后启动时加载过程中的卡顿。",
+                "shader_regex_background": "在后台线程中进行 ShaderRegex 分析和已修补着色器的编译，减少首次绘制时的卡顿。",
                 "share_duplicate_resources": "内容相同的模组纹理和缓冲区只加载一次，节省加载时间和显存。",
                 "prefetch_resource_files": "游戏启动时预先读取上次使用的模组文件，减少模组首次显示时等待磁盘的情况。",
                 "cache_resource_data": "在内存中保留游戏缓冲区的副本，方便模组快速读取。用空格分隔 none、vertex_buffer、index_buffer、constant_buffer、all。",
@@ -2534,6 +2535,11 @@
                 }
               },
               "Rendering": {
+                "shader_regex_background": {
+                  "0": "0 · 关闭",
+                  "1": "1 · 就绪前以未修补状态绘制",
+                  "2": "2 · 等待着色器就绪"
+                },
                 "track_texture_updates": {
                   "0": "0 · 关闭",
                   "1": "1 · 开启",

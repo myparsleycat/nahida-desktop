@@ -95,6 +95,122 @@ func TestUpdateLaunchINIAppliesOverridesToOptionsTheProviderAdds(t *testing.T) {
 	}
 }
 
+func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	folder := t.TempDir()
+	path := filepath.Join(folder, "d3dx.ini")
+	original := "; my note\n[Rendering]\ntexture_hash = 1\nold_only = 4\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := fmt.Sprintf(`{"mode":%q,"source":"xxmi-libs@1.2.0"}`, RuntimeXXMI)
+	if err := os.WriteFile(filepath.Join(folder, runtimeManifestName), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
+		Migoto: MigotoOptions{LogLevel: "Disabled", ToggleInput: "VK_F8"}}
+	provider := []byte("; template\n[Rendering]\n; doc\ntexture_hash = 0\nfresh = 1\n" +
+		"[Input]\ntoggle_input = VK_F10\n")
+	launch := func() string {
+		t.Helper()
+		if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", provider); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	backups := func() []string {
+		t.Helper()
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		found, err := filepath.Glob(filepath.Join(root, "backups", "*", "d3dx.ini"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found
+	}
+
+	got := launch()
+	if !strings.HasPrefix(got, "; template\n") {
+		t.Fatalf("d3dx.ini was not rebuilt from the provider's: %q", got)
+	}
+	for _, want := range []string{"texture_hash = 1\n", "fresh = 1\n", "old_only = 4\n", "toggle_input = VK_F8\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rebuilt INI is missing %q: %q", want, got)
+		}
+	}
+	for _, unwanted := range []string{"VK_F10", "; my note"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("rebuilt INI holds %q: %q", unwanted, got)
+		}
+	}
+	saved := backups()
+	if len(saved) != 1 {
+		t.Fatalf("backups of the replaced d3dx.ini = %v", saved)
+	}
+	if data, err := os.ReadFile(saved[0]); err != nil || string(data) != original {
+		t.Fatalf("backup = %q, err = %v", data, err)
+	}
+
+	// Nothing of the rebuilt file is dropped by rebuilding it, so later launches leave it and its backup alone.
+	if again := launch(); again != got {
+		t.Fatalf("second launch changed the INI\n got %q\nwant %q", again, got)
+	}
+	if saved := backups(); len(saved) != 1 {
+		t.Fatalf("second launch backed the file up again: %v", saved)
+	}
+}
+
+func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
+	ctx := context.Background()
+	image := testCustomDLLImage("0.2.0")
+	ini := []byte("[Rendering]\nshader_regex_background = 0\ncache_shaders = 0\ntexture_hash = 1\n")
+	service, _, _ := newProviderTestService(t, []providerTestRelease{{
+		tag: "v0.2.0", data: image, digest: providerTestDigest(image), ini: ini, iniDigest: providerTestDigest(ini),
+	}})
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Rendering]\n;cache_shaders = 0\n"))
+	listed := func() map[string]string {
+		t.Helper()
+		options, err := service.GetD3DXOptions(ctx, "GIMI")
+		if err != nil {
+			t.Fatal(err)
+		}
+		values := map[string]string{}
+		for _, option := range options {
+			values[option.Key] = option.Value
+		}
+		return values
+	}
+
+	if got := listed(); len(got) != 0 {
+		t.Fatalf("options without a provider d3dx.ini = %v", got)
+	}
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
+		t.Fatal(err)
+	}
+	got := listed()
+	if got["shader_regex_background"] != "0" || got["texture_hash"] != "1" {
+		t.Fatalf("options the next launch adds = %v", got)
+	}
+	if _, ok := got["cache_shaders"]; ok {
+		t.Fatalf("an option the file comments out was listed: %v", got)
+	}
+}
+
 func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("GIMI", filepath.Join(t.TempDir(), "xxmi"))

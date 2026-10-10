@@ -108,37 +108,193 @@ func (d *iniDocument) sectionEnd(section string) int {
 	return end
 }
 
-// AddMissingOptions copies the options of template that d has neither set nor commented out to the end of
-// their sections, each with the comment lines directly above it. A commented-out option was turned off on
-// purpose and stays that way. Sections that hold commands rather than settings are left alone.
-func (d *iniDocument) AddMissingOptions(template *iniDocument) {
-	section, skipped := "", true
-	for index, line := range template.lines {
+type iniBlock struct {
+	// name is "" for the lines above the first section.
+	name   string
+	header string
+	body   []string
+}
+
+// blocks splits the document at its section headers.
+func (d *iniDocument) blocks() []iniBlock {
+	blocks := []iniBlock{{}}
+	for _, line := range d.lines {
 		if name, ok := iniSectionName(line); ok {
-			section, skipped = name, !iniSettingsSection(name)
+			blocks = append(blocks, iniBlock{name: name, header: line})
 			continue
 		}
-		if skipped {
+		last := &blocks[len(blocks)-1]
+		last.body = append(last.body, line)
+	}
+	return blocks
+}
+
+// iniTail returns where the run of blank and comment lines that ends body starts. In a d3dx.ini that run is
+// the banner of the next section.
+func iniTail(body []string) int {
+	tail := len(body)
+	for tail > 0 {
+		line := strings.TrimSpace(body[tail-1])
+		if line != "" && !strings.HasPrefix(line, ";") {
+			break
+		}
+		tail--
+	}
+	return tail
+}
+
+// iniBanner returns where the comment block that ends body starts, along with the blank lines above it.
+func iniBanner(body []string) int {
+	banner := len(body)
+	for banner > 0 && strings.HasPrefix(strings.TrimSpace(body[banner-1]), ";") {
+		banner--
+	}
+	for banner > 0 && strings.TrimSpace(body[banner-1]) == "" {
+		banner--
+	}
+	return banner
+}
+
+// iniVerbatimSection reports whether a rebuild keeps the previous body of the section instead of its values.
+// [Loader] is listed with the command sections because a launch writes it, but its lines are plain options.
+func iniVerbatimSection(name string) bool {
+	return !iniSettingsSection(name) && !strings.EqualFold(name, "loader")
+}
+
+// rebuildINI returns template holding what previous set. An option both set takes the previous value in the
+// template's place, and one previous only has commented out is commented out: it was turned off on purpose.
+// Options the template does not set, and commented-out ones it does not mention, are kept ahead of the banner
+// that ends their section. A section of
+// commands keeps its previous body, where a line means something only in its place, and sections the template
+// lacks follow at the end. Everything else of previous, its comments included, is dropped.
+//
+// The result rebuilds into itself, so a launch that repeats it leaves the file alone. lost reports whether a
+// line of previous is gone, which is when the caller backs the file up.
+func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
+	tpl := parseINI(template)
+	// A file with mixed line endings would otherwise parse into lines that span several options.
+	prev := parseINI(bytes.ReplaceAll(previous, []byte("\r\n"), []byte("\n")))
+	out := &iniDocument{bom: tpl.bom, newline: tpl.newline, terminal: tpl.terminal}
+
+	prevBody, prevHeader, prevOrder := map[string][]string{}, map[string]string{}, []string{}
+	for _, block := range prev.blocks() {
+		if block.name == "" {
 			continue
 		}
-		match := iniOptionPattern.FindStringSubmatch(line)
-		if len(match) == 0 || !iniSettingKeyPattern.MatchString(match[2]) {
+		key := strings.ToLower(block.name)
+		if _, ok := prevHeader[key]; !ok {
+			prevHeader[key] = block.header
+			prevOrder = append(prevOrder, key)
+		}
+		prevBody[key] = append(prevBody[key], block.body...)
+	}
+
+	seen, carried := map[string]bool{}, map[string]bool{}
+	for _, block := range tpl.blocks() {
+		if block.name == "" {
+			out.lines = append(out.lines, block.body...)
 			continue
 		}
-		if d.mentionsOption(section, match[2]) {
+		out.lines = append(out.lines, block.header)
+		key := strings.ToLower(block.name)
+		first := !seen[key]
+		seen[key] = true
+		old, had := prevBody[key]
+
+		if iniVerbatimSection(block.name) {
+			tail := iniTail(block.body)
+			switch {
+			case !first || !had:
+				out.lines = append(out.lines, block.body...)
+			case tail > 0:
+				out.lines = slices.Concat(out.lines, old[:iniTail(old)], block.body[tail:])
+			default:
+				// The template only documents the section, so the previous commands go below that text
+				// instead of bringing a second copy of it along.
+				commands := slices.DeleteFunc(slices.Clone(old), func(line string) bool {
+					line = strings.TrimSpace(line)
+					return line == "" || strings.HasPrefix(line, ";")
+				})
+				banner := iniBanner(block.body)
+				out.lines = slices.Concat(out.lines, block.body[:banner], commands, block.body[banner:])
+			}
 			continue
 		}
 
-		// A commented-out option among those lines would read as one the user turned off on the next merge.
-		first := index
-		for first > 0 && strings.HasPrefix(strings.TrimSpace(template.lines[first-1]), ";") &&
-			iniMentionedKey(template.lines[first-1]) == "" {
-			first--
+		body := make([]string, 0, len(block.body))
+		for _, line := range block.body {
+			match := iniOptionPattern.FindStringSubmatch(line)
+			if len(match) == 0 {
+				body = append(body, line)
+				continue
+			}
+			id := key + "." + strings.ToLower(match[2])
+			if carried[id] {
+				body = append(body, line)
+				continue
+			}
+			if value, ok := prev.Option(block.name, match[2]); ok {
+				carried[id] = true
+				line = match[1] + match[2] + match[3] + value + iniCommentSuffix(match[4])
+			} else if prev.mentionsOption(block.name, match[2]) {
+				line = ";" + line
+			}
+			body = append(body, line)
 		}
-		insert := d.sectionEnd(section)
-		d.lines = slices.Insert(d.lines, insert, template.lines[first:index+1]...)
-		d.changed = true
+		if first && had {
+			var extra []string
+			for _, line := range old {
+				if match := iniOptionPattern.FindStringSubmatch(line); len(match) != 0 {
+					if len(tpl.optionIndexes(block.name, match[2])) == 0 {
+						extra = append(extra, line)
+					}
+					continue
+				}
+
+				// A later template that sets the option would otherwise turn it back on. The key pattern
+				// keeps prose such as "; 0 = off" from passing for one.
+				key := iniMentionedKey(line)
+				if iniSettingKeyPattern.MatchString(key) && !tpl.mentionsOption(block.name, key) {
+					extra = append(extra, line)
+				}
+			}
+			body = slices.Insert(body, iniTail(body), extra...)
+		}
+		out.lines = append(out.lines, body...)
 	}
+
+	for _, key := range prevOrder {
+		if seen[key] {
+			continue
+		}
+		if len(out.lines) > 0 && strings.TrimSpace(out.lines[len(out.lines)-1]) != "" {
+			out.lines = append(out.lines, "")
+		}
+		body := prevBody[key]
+		tail := iniTail(body)
+		out.lines = append(append(out.lines, prevHeader[key]), body[:tail]...)
+		if iniVerbatimSection(key) {
+			continue
+		}
+
+		// The run that ends the section is dropped as the banner of the next one, but an option commented out
+		// in it has to outlive that like one further up.
+		for _, line := range body[tail:] {
+			if iniSettingKeyPattern.MatchString(iniMentionedKey(line)) {
+				out.lines = append(out.lines, line)
+			}
+		}
+	}
+
+	kept := make(map[string]bool, len(out.lines))
+	for _, line := range out.lines {
+		kept[strings.TrimSpace(line)] = true
+	}
+	lost = slices.ContainsFunc(prev.lines, func(line string) bool {
+		line = strings.TrimSpace(line)
+		return line != "" && !kept[line]
+	})
+	return out, lost
 }
 
 var iniSettingKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)

@@ -2519,6 +2519,7 @@
                 "shader_hash": "How shaders are identified. Mods are made for one method, so changing it stops them from matching.",
                 "texture_hash": "Uses the newer way of identifying textures. Mods are made for one method, so changing it stops them from matching.",
                 "cache_shaders": "Saves compiled shaders to disk so later launches stutter less while loading.",
+                "shader_regex_background": "Runs ShaderRegex analysis and patched shader compilation on background threads instead of stalling the first draw.",
                 "share_duplicate_resources": "Loads mod textures and buffers with identical contents only once, saving load time and VRAM.",
                 "prefetch_resource_files": "Reads the mod files used last time into memory when the game starts, so mods are less likely to wait for the disk the first time they appear.",
                 "cache_resource_data": "Keeps copies of the game's buffers in memory so mods can read them quickly. Space-separated: none, vertex_buffer, index_buffer, constant_buffer, or all.",
@@ -2586,6 +2587,11 @@
                 }
               },
               "Rendering": {
+                "shader_regex_background": {
+                  "0": "0 · Off",
+                  "1": "1 · Draw unpatched until ready",
+                  "2": "2 · Wait for the shader"
+                },
                 "track_texture_updates": {
                   "0": "0 · Off",
                   "1": "1 · On",

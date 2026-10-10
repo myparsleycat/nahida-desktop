@@ -2467,6 +2467,7 @@
                 "shader_hash": "셰이더를 식별하는 방식입니다. 모드는 한 가지 방식에 맞춰 만들어지므로, 바꾸면 모드가 적용되지 않습니다.",
                 "texture_hash": "텍스처를 식별하는 새 방식을 사용합니다. 모드는 한 가지 방식에 맞춰 만들어지므로, 바꾸면 모드가 적용되지 않습니다.",
                 "cache_shaders": "컴파일한 셰이더를 파일로 저장해 다음 실행부터 로딩 중 끊김을 줄입니다.",
+                "shader_regex_background": "ShaderRegex 분석과 패치된 셰이더 컴파일을 백그라운드 스레드에서 처리해, 셰이더가 처음 그려질 때의 끊김을 줄입니다.",
                 "share_duplicate_resources": "내용이 같은 모드 텍스처와 버퍼를 한 번만 올려 로딩 시간과 VRAM 사용량을 줄입니다.",
                 "prefetch_resource_files": "지난번에 사용한 모드 파일을 게임 시작 때 미리 읽어 두어, 모드가 처음 표시될 때 디스크를 기다리는 일을 줄입니다.",
                 "cache_resource_data": "게임 버퍼의 사본을 메모리에 두어 모드가 빠르게 읽을 수 있게 합니다. none, vertex_buffer, index_buffer, constant_buffer, all을 공백으로 구분해 적습니다.",
@@ -2534,6 +2535,11 @@
                 }
               },
               "Rendering": {
+                "shader_regex_background": {
+                  "0": "0 · 끔",
+                  "1": "1 · 준비될 때까지 패치 없이 그리기",
+                  "2": "2 · 준비될 때까지 대기"
+                },
                 "track_texture_updates": {
                   "0": "0 · 끔",
                   "1": "1 · 켬",

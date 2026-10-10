@@ -2467,6 +2467,7 @@
                 "shader_hash": "シェーダーを識別する方式です。Mod は特定の方式に合わせて作られているため、変更すると適用されなくなります。",
                 "texture_hash": "テクスチャを識別する新しい方式を使います。Mod は特定の方式に合わせて作られているため、変更すると適用されなくなります。",
                 "cache_shaders": "コンパイルしたシェーダーをファイルに保存し、次回以降の読み込み中のカクつきを減らします。",
+                "shader_regex_background": "ShaderRegex の解析とパッチ済みシェーダーのコンパイルをバックグラウンドスレッドで行い、最初の描画時のカクつきを減らします。",
                 "share_duplicate_resources": "内容が同じ Mod のテクスチャやバッファを 1 回だけ読み込み、読み込み時間と VRAM 使用量を減らします。",
                 "prefetch_resource_files": "前回使った Mod のファイルをゲーム開始時に先読みし、Mod が最初に表示されるときのディスク待ちを減らします。",
                 "cache_resource_data": "ゲームのバッファのコピーをメモリに保持し、Mod が高速に読み取れるようにします。none、vertex_buffer、index_buffer、constant_buffer、all を空白区切りで指定します。",
@@ -2534,6 +2535,11 @@
                 }
               },
               "Rendering": {
+                "shader_regex_background": {
+                  "0": "0 · オフ",
+                  "1": "1 · 準備できるまでパッチなしで描画",
+                  "2": "2 · 準備できるまで待機"
+                },
                 "track_texture_updates": {
                   "0": "0 · オフ",
                   "1": "1 · オン",

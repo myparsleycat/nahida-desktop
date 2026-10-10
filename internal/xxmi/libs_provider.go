@@ -26,7 +26,7 @@ const (
 	providerDLLMetadata   = "source.json"
 
 	// providerININame is the d3dx.ini a provider release may ship beside its d3d11.dll. It lists the options
-	// that DLL reads, and a launch adds the ones the importer's own d3dx.ini lacks.
+	// that DLL reads, and a launch rebuilds the importer's d3dx.ini from it.
 	providerININame      = "d3dx.ini"
 	providerINISizeLimit = 1 << 20
 )

@@ -95,25 +95,44 @@ func TestINIEditorCreatesMissingSection(t *testing.T) {
 	}
 }
 
-func TestINIEditorAddsMissingTemplateOptions(t *testing.T) {
+func TestRebuildINICarriesPreviousFile(t *testing.T) {
 	t.Parallel()
-	template := parseINI([]byte("[Loader]\ntarget = template.exe\n" +
-		"[System]\n;upscaling = 0\n; how long to wait\ndelay = 5\nkept = 0\n;off = 1\ndisabled = 1\n" +
-		"[SmoothMotion]\n\n; fork option\nenabled = 1\nenabled = 2\n" +
-		"[Constants]\nglobal $x = 1\n[KeyToggle]\nkey = VK_F1\n[ShaderOverrideFoo]\nhash = abc\n" +
-		"[ClearRenderTargetView]\nrun = CommandListA\nrun = CommandListB\n"))
-	input := "[System]\r\nKEPT = 7\r\n; disabled = 0\r\n\r\n[Mods]\r\nuser = 1\r\n"
-	doc := parseINI([]byte(input))
-	doc.AddMissingOptions(template)
-	want := "[System]\r\nKEPT = 7\r\n; disabled = 0\r\n; how long to wait\r\ndelay = 5\r\n\r\n" +
-		"[Mods]\r\nuser = 1\r\n\r\n[SmoothMotion]\r\n; fork option\r\nenabled = 1\r\n"
+	template := []byte("; head\n[Loader]\ntarget = Game.exe\n; loader notes\n;launch = x\n\n; includes\n" +
+		"[Include]\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n\n; system\n" +
+		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 0\ndisabled = 1\nfresh = 2\n\n; constants\n" +
+		"[Constants]\n; declare globals\n\n; present\n[Present]\nrun = CommandListNew\n")
+	previous := []byte(
+		"; old head\r\n[System]\r\nKEPT = 7 ; mine\r\n; disabled = 0\r\n;gone = 1\r\nlegacy = 3\r\n\r\n" +
+			"[Include]\r\ninclude = Core\\main.ini\r\nexclude_recursive = DISABLED*\r\n; old tail\r\n\r\n" +
+			"[Constants]\r\n; old doc\r\nglobal $x = 1\r\n; old doc\r\n\r\n" +
+			"[Loader]\r\ntarget = Old.exe\r\nlaunch = old.exe\r\n\r\n[Stereo]\r\nautomatic_mode = 0\r\n;unlock = 1\r\n; next banner\r\n",
+	)
+	want := "; head\n[Loader]\ntarget = Old.exe\nlaunch = old.exe\n; loader notes\n;launch = x\n\n; includes\n" +
+		"[Include]\ninclude = Core\\main.ini\nexclude_recursive = DISABLED*\n\n; system\n" +
+		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 7\n;disabled = 1\nfresh = 2\n;gone = 1\nlegacy = 3\n\n; constants\n" +
+		"[Constants]\n; declare globals\nglobal $x = 1\n\n; present\n[Present]\nrun = CommandListNew\n\n[Stereo]\nautomatic_mode = 0\n;unlock = 1\n"
+
+	doc, lost := rebuildINI(template, previous)
 	if got := string(doc.Bytes()); got != want {
 		t.Fatalf("INI mismatch\n got %q\nwant %q", got, want)
 	}
+	if !lost {
+		t.Fatal("dropped comments of the previous file were not reported")
+	}
 
-	again := parseINI([]byte(want))
-	again.AddMissingOptions(template)
-	if again.Changed() {
-		t.Fatalf("second merge changed the INI: %q", again.Bytes())
+	again, lost := rebuildINI(template, []byte(want))
+	if got := string(again.Bytes()); got != want || lost {
+		t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
+	}
+
+	// An option that was off before the template knew it stays off once a later template sets it.
+	later := bytes.Replace(template, []byte("fresh = 2\n"), []byte("fresh = 2\ngone = 5\n"), 1)
+	later = append(later, "[Stereo]\nunlock = 9\n"...)
+	updated, _ := rebuildINI(later, []byte(want))
+	for _, option := range [][2]string{{"System", "gone"}, {"Stereo", "unlock"}} {
+		value, ok := updated.Option(option[0], option[1])
+		if ok || !updated.mentionsOption(option[0], option[1]) {
+			t.Fatalf("a later template turned %s on (%q): %q", option[1], value, updated.Bytes())
+		}
 	}
 }

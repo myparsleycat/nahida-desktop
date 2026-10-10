@@ -127,6 +127,7 @@ var d3dxOptionSpecs = func() []d3dxOptionSpec {
 		option("Rendering", "shader_hash", D3DXOptionEnum, "3dmigoto", "embedded", "bytecode"),
 		option("Rendering", "texture_hash", D3DXOptionBool),
 		option("Rendering", "cache_shaders", D3DXOptionBool),
+		option("Rendering", "shader_regex_background", D3DXOptionEnum, "0", "1", "2"),
 		option("Rendering", "share_duplicate_resources", D3DXOptionBool),
 		option("Rendering", "prefetch_resource_files", D3DXOptionBool),
 		option("Rendering", "cache_resource_data", D3DXOptionFlags,
@@ -265,6 +266,12 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 		})
 	}
 	doc := parseINI(data)
+
+	// The next launch rebuilds the file from the provider's d3dx.ini, so its options are listed, and can be
+	// overridden, before that launch has run.
+	if providerINI := x.pendingProviderINI(ctx, cfg); len(providerINI) > 0 {
+		doc, _ = rebuildINI(providerINI, data)
+	}
 	enforced := enforcedRenderingOptions(importer)
 
 	options := []D3DXOption{}
@@ -285,6 +292,36 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 		})
 	}
 	return options, nil
+}
+
+// pendingProviderINI returns the cached d3dx.ini of the provider release the importer's next deployment
+// writes, or nil. Nothing is downloaded: a release that is not cached yet lists its options after the launch
+// that fetches it.
+func (x *XXMI) pendingProviderINI(ctx context.Context, cfg ImporterConfig) []byte {
+	spec, err := x.deployedLibsProvider(ctx, cfg)
+	if err != nil || spec.overlayPackage == "" {
+		return nil
+	}
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return nil
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+	if err != nil {
+		return nil
+	}
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		return nil
+	}
+	if _, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version); err != nil {
+		return nil
+	}
+	providerINI, err := x.readVerifiedProviderINI(ctx, root, spec, version)
+	if err != nil {
+		return nil
+	}
+	return providerINI
 }
 
 func readImporterINI(folder string) ([]byte, error) {
