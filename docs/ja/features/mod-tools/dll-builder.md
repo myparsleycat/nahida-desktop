@@ -33,7 +33,7 @@
 ビルド画面では、次のオプションを設定できます。
 
 - **Provider**:
-  ビルドに使用する `XXMI-Libs-Package` リポジトリの提供元を選択します。
+  ビルドに使用する `XXMI-Libs-Package` リポジトリの提供元を選択します。`myparsleycat` を選択すると、`XXMI-Libs-Package-Forked` フォークをビルドします。
 
 - **Version**:
   ビルドする XXMI ライブラリのバージョンを選択します。

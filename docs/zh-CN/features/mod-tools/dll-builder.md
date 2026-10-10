@@ -33,7 +33,7 @@
 在构建页面中，你可以设置以下选项：
 
 - **Provider**：
-  选择要用于构建的 `XXMI-Libs-Package` 仓库提供者。
+  选择要用于构建的 `XXMI-Libs-Package` 仓库提供者。选择 `myparsleycat` 时会构建 `XXMI-Libs-Package-Forked` 分支仓库。
 
 - **Version**：
   选择要构建的 XXMI 库版本。

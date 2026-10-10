@@ -33,7 +33,7 @@ To use this feature, you need to configure the XXMI path first. See [Set Up XXMI
 On the build screen, you can configure the following options:
 
 - **Provider**:
-  Select the provider of the `XXMI-Libs-Package` repository to use for the build.
+  Select the provider of the `XXMI-Libs-Package` repository to use for the build. Selecting `myparsleycat` builds the `XXMI-Libs-Package-Forked` fork.
 
 - **Version**:
   Select the XXMI library version to build.

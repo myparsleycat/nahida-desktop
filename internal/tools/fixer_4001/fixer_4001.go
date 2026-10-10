@@ -130,9 +130,17 @@ func (t *Service) get4001ProviderReleases(ctx context.Context, provider string, 
 	return versions, nil
 }
 
+// libsRepoNames lists the providers whose fork is not named after the upstream package.
+var libsRepoNames = map[string]string{"myparsleycat": "XXMI-Libs-Package-Forked"}
+
 // libsRepo is the XXMI-Libs-Package fork published by provider.
 func libsRepo(provider string) github.Repo {
-	return github.Repo{Owner: strings.TrimSpace(provider), Name: "XXMI-Libs-Package"}
+	owner := strings.TrimSpace(provider)
+	name, ok := libsRepoNames[strings.ToLower(owner)]
+	if !ok {
+		name = "XXMI-Libs-Package"
+	}
+	return github.Repo{Owner: owner, Name: name}
 }
 
 func (t *Service) FourThousandOneFixerUpdateReleases(ctx context.Context) error {
