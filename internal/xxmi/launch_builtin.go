@@ -250,6 +250,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
 			return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 		}
+		var providerINI []byte
 		if cfg.Mode == RuntimeXXMI {
 			version, ok := strings.CutPrefix(runtimeSource, "xxmi-libs@")
 			if !ok || !semver.IsValid("v"+version) {
@@ -275,6 +276,14 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			); err != nil {
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
+			if runtimeProvider != "" {
+				// The provider's d3dx.ini only adds options, so the launch goes on without one that cannot
+				// be read.
+				providerINI, err = x.verifiedProviderINI(ctx, cacheRoot, runtimeProvider)
+				if err != nil {
+					warn("Skipped the d3dx.ini options of " + runtimeProvider + ": " + err.Error())
+				}
+			}
 		} else if !cfg.Migoto.UnsafeMode {
 			id, ok := strings.CutPrefix(runtimeSource, "legacy@")
 			if !ok || len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
@@ -290,7 +299,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 			}
 		}
 		progress("update-ini")
-		if err := x.updateLaunchINI(ctx, key, cfg, processName); err != nil {
+		if err := x.updateLaunchINI(ctx, key, cfg, processName, providerINI); err != nil {
 			return err
 		}
 		if cfg.IniOptimizer.Enabled {
@@ -456,7 +465,15 @@ func (x *XXMI) releaseImporter(key string) {
 	x.mu.Unlock()
 }
 
-func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConfig, processName string) error {
+// updateLaunchINI writes the options this launch decides into the importer's d3dx.ini. providerINI is the
+// d3dx.ini of the deployed libraries provider, or nil; its options are added where the file has none.
+func (x *XXMI) updateLaunchINI(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	processName string,
+	providerINI []byte,
+) error {
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
 		return err
@@ -493,6 +510,11 @@ func (x *XXMI) updateLaunchINI(ctx context.Context, key string, cfg ImporterConf
 	doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
 	doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
 	applyMigotoINI(doc, key, cfg.Migoto, supportsLogLevel(cfg))
+
+	// The options above are already in place, so the provider's defaults never replace a launch setting.
+	if len(providerINI) > 0 {
+		doc.AddMissingOptions(parseINI(providerINI))
+	}
 	if !doc.Changed() {
 		return nil
 	}

@@ -139,7 +139,7 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
 	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
 		Migoto: MigotoOptions{LogLevel: "Info", EnforceRendering: true, EnableHunting: true, MuteWarnings: true}}
-	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe"); err != nil {
+	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", nil); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -194,7 +194,7 @@ func TestUpdateLaunchINIFollowsDeployedLibsVersion(t *testing.T) {
 			cfg.ImporterFolder, cfg.Migoto.LogLevel, cfg.Migoto.Input = folder, "Debug", false
 			cfg.Migoto.InputDisableMode = "All"
 			service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
-			if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe"); err != nil {
+			if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", nil); err != nil {
 				t.Fatal(err)
 			}
 			data, err := os.ReadFile(filepath.Join(folder, "d3dx.ini"))

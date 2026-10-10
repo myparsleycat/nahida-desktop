@@ -3,6 +3,7 @@ package xxmi
 import (
 	"bytes"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -48,14 +49,14 @@ func (d *iniDocument) Changed() bool { return d.changed }
 func (d *iniDocument) sectionBounds(section string) (int, int) {
 	start := -1
 	for index, line := range d.lines {
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) < 3 || trimmed[0] != '[' || trimmed[len(trimmed)-1] != ']' {
+		name, ok := iniSectionName(line)
+		if !ok {
 			continue
 		}
 		if start >= 0 {
 			return start, index
 		}
-		if strings.EqualFold(strings.TrimSpace(trimmed[1:len(trimmed)-1]), section) {
+		if strings.EqualFold(name, section) {
 			start = index
 		}
 	}
@@ -80,6 +81,18 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 		return
 	}
 
+	separator := "="
+	if spaced {
+		separator = " = "
+	}
+	insert := d.sectionEnd(section)
+	d.lines = slices.Insert(d.lines, insert, key+separator+value)
+	d.changed = true
+}
+
+// sectionEnd returns the line index that appends to the section, ahead of the blank lines that close it. A
+// missing section is created at the end of the document.
+func (d *iniDocument) sectionEnd(section string) int {
 	start, end := d.sectionBounds(section)
 	if start < 0 {
 		if len(d.lines) > 0 && strings.TrimSpace(d.lines[len(d.lines)-1]) != "" {
@@ -89,16 +102,96 @@ func (d *iniDocument) SetOption(section, key, value string, spaced bool) {
 		start, end = len(d.lines)-1, len(d.lines)
 		d.changed = true
 	}
-	separator := "="
-	if spaced {
-		separator = " = "
+	for end > start+1 && strings.TrimSpace(d.lines[end-1]) == "" {
+		end--
 	}
-	insert := end
-	for insert > start+1 && strings.TrimSpace(d.lines[insert-1]) == "" {
-		insert--
+	return end
+}
+
+// AddMissingOptions copies the options of template that d has neither set nor commented out to the end of
+// their sections, each with the comment lines directly above it. A commented-out option was turned off on
+// purpose and stays that way. Sections that hold commands rather than settings are left alone.
+func (d *iniDocument) AddMissingOptions(template *iniDocument) {
+	section, skipped := "", true
+	for index, line := range template.lines {
+		if name, ok := iniSectionName(line); ok {
+			section, skipped = name, !iniSettingsSection(name)
+			continue
+		}
+		if skipped {
+			continue
+		}
+		match := iniOptionPattern.FindStringSubmatch(line)
+		if len(match) == 0 || !iniSettingKeyPattern.MatchString(match[2]) {
+			continue
+		}
+		if d.mentionsOption(section, match[2]) {
+			continue
+		}
+
+		// A commented-out option among those lines would read as one the user turned off on the next merge.
+		first := index
+		for first > 0 && strings.HasPrefix(strings.TrimSpace(template.lines[first-1]), ";") &&
+			iniMentionedKey(template.lines[first-1]) == "" {
+			first--
+		}
+		insert := d.sectionEnd(section)
+		d.lines = slices.Insert(d.lines, insert, template.lines[first:index+1]...)
+		d.changed = true
 	}
-	d.lines = append(d.lines[:insert], append([]string{key + separator + value}, d.lines[insert:]...)...)
-	d.changed = true
+}
+
+var iniSettingKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// iniSettingsSection reports whether a d3dx.ini section holds independent options. The others are command
+// lists, overrides, and sections the launch writes itself, where a line means something only in its place.
+func iniSettingsSection(name string) bool {
+	name = strings.ToLower(name)
+	if slices.Contains([]string{
+		"loader", "include", "constants", "present", "profile", "clearrendertargetview", "cleardepthstencilview",
+		"clearunorderedaccessviewuint", "clearunorderedaccessviewfloat",
+	}, name) {
+		return false
+	}
+	return !slices.ContainsFunc([]string{
+		"key", "commandlist", "builtincommandlist", "shaderoverride", "shaderregex", "textureoverride",
+		"resource", "customshader", "builtincustomshader", "preset",
+	}, func(prefix string) bool { return strings.HasPrefix(name, prefix) })
+}
+
+func iniSectionName(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) < 3 || trimmed[0] != '[' || trimmed[len(trimmed)-1] != ']' {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed[1 : len(trimmed)-1]), true
+}
+
+// mentionsOption reports whether the section has the option, set or commented out.
+func (d *iniDocument) mentionsOption(section, key string) bool {
+	inSection := false
+	for _, line := range d.lines {
+		if name, ok := iniSectionName(line); ok {
+			inSection = strings.EqualFold(name, section)
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		if strings.EqualFold(iniMentionedKey(line), key) {
+			return true
+		}
+	}
+	return false
+}
+
+// iniMentionedKey returns the key of an option line, set or commented out, or "" for any other line.
+func iniMentionedKey(line string) string {
+	match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(line, " \t;#"))
+	if len(match) == 0 {
+		return ""
+	}
+	return match[2]
 }
 
 func iniCommentSuffix(value string) string {
@@ -144,9 +237,8 @@ func (d *iniDocument) optionIndexes(section, key string) []int {
 	indexes := []int{}
 	inSection := false
 	for index, line := range d.lines {
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) >= 3 && trimmed[0] == '[' && trimmed[len(trimmed)-1] == ']' {
-			inSection = strings.EqualFold(strings.TrimSpace(trimmed[1:len(trimmed)-1]), section)
+		if name, ok := iniSectionName(line); ok {
+			inSection = strings.EqualFold(name, section)
 			continue
 		}
 		if !inSection {

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -32,6 +33,9 @@ type providerTestRelease struct {
 	size int64
 	// started is closed when the asset download begins, which then waits for proceed to close.
 	started, proceed chan struct{}
+	// ini is the d3dx.ini the release ships beside the DLL; nil ships none.
+	ini       []byte
+	iniDigest string
 }
 
 func providerTestDigest(data []byte) string {
@@ -65,11 +69,20 @@ func newProviderTestService(
 	for _, release := range releases {
 		entry := map[string]any{"tag_name": release.tag, "assets": []map[string]any{}}
 		if !release.noAsset {
-			entry["assets"] = []map[string]any{{
+			listedAssets := []map[string]any{{
 				"name": "d3d11.dll", "browser_download_url": providerTestAssetURL(release.tag),
 				"digest": release.digest, "size": cmp.Or(release.size, int64(len(release.data))),
 			}}
 			assets[providerTestAssetURL(release.tag)] = release
+			if release.ini != nil {
+				iniURL := strings.TrimSuffix(providerTestAssetURL(release.tag), "d3d11.dll") + "d3dx.ini"
+				listedAssets = append(listedAssets, map[string]any{
+					"name": "d3dx.ini", "browser_download_url": iniURL,
+					"digest": release.iniDigest, "size": len(release.ini),
+				})
+				assets[iniURL] = providerTestRelease{data: release.ini}
+			}
+			entry["assets"] = listedAssets
 		}
 		listed = append(listed, entry)
 	}
@@ -1037,4 +1050,167 @@ func TestCheckUpdatesComparesSignedLibrariesOfProviderPin(t *testing.T) {
 	if index < 0 || statuses[index].Installed != "1.2.2" || statuses[index].Available {
 		t.Fatalf("statuses = %+v", statuses)
 	}
+}
+
+func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
+	ctx := context.Background()
+	image, ini := testCustomDLLImage("0.2.0"), []byte("[System]\nfork_option = 1\n")
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	source := providerTestPackage + "@0.2.0"
+	cachedINI := func(t *testing.T, service *XXMI) ([]byte, error) {
+		t.Helper()
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return service.verifiedProviderINI(ctx, root, source)
+	}
+
+	t.Run("verified download", func(t *testing.T) {
+		service, _, _ := newProviderTestService(t, []providerTestRelease{
+			{
+				tag:       "v0.2.0",
+				data:      image,
+				digest:    providerTestDigest(image),
+				ini:       ini,
+				iniDigest: providerTestDigest(ini),
+			},
+		})
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := cachedINI(t, service); err != nil || !bytes.Equal(got, ini) {
+			t.Fatalf("cached d3dx.ini = %q, err = %v", got, err)
+		}
+
+		// A rewritten file could make the DLL load anything, so it is not merged.
+		writeTestFile(
+			t,
+			filepath.Join(providerTestCache(t, "0.2.0"), providerININame),
+			[]byte("[System]\nproxy_d3d11 = evil.dll\n"),
+		)
+		if got, err := cachedINI(t, service); err == nil {
+			t.Fatalf("rewritten d3dx.ini was accepted: %q", got)
+		}
+
+		// The next deployment fetches a rewritten or missing file again instead of leaving its options out.
+		for _, damage := range []func() error{
+			func() error { return nil },
+			func() error { return os.Remove(filepath.Join(providerTestCache(t, "0.2.0"), providerININame)) },
+		} {
+			if err := damage(); err != nil {
+				t.Fatal(err)
+			}
+			if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := cachedINI(t, service); err != nil || !bytes.Equal(got, ini) {
+				t.Fatalf("repaired d3dx.ini = %q, err = %v", got, err)
+			}
+		}
+	})
+
+	t.Run("release without one", func(t *testing.T) {
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{
+			{tag: "v0.2.0", data: image, digest: providerTestDigest(image)},
+		})
+		for range 2 {
+			if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got, err := cachedINI(t, service); err != nil || got != nil || downloads.Load() != 1 {
+			t.Fatalf("d3dx.ini = %q, err = %v, downloads = %d", got, err, downloads.Load())
+		}
+	})
+
+	t.Run("entry cached before the lookup", func(t *testing.T) {
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{
+			{
+				tag:       "v0.2.0",
+				data:      image,
+				digest:    providerTestDigest(image),
+				ini:       ini,
+				iniDigest: providerTestDigest(ini),
+			},
+		})
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+			t.Fatal(err)
+		}
+		folder := providerTestCache(t, "0.2.0")
+		metadata, err := json.Marshal(providerDLLSource{Version: "0.2.0", SHA256: hashBytes(image)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+		if err := os.Remove(filepath.Join(folder, providerININame)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil || downloads.Load() != 3 {
+			t.Fatalf("refresh downloaded %d files, err = %v", downloads.Load(), err)
+		}
+		if got, err := cachedINI(t, service); err != nil || !bytes.Equal(got, ini) {
+			t.Fatalf("refreshed d3dx.ini = %q, err = %v", got, err)
+		}
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil || downloads.Load() != 3 {
+			t.Fatalf("checked entry downloaded %d files, err = %v", downloads.Load(), err)
+		}
+	})
+
+	t.Run("refresh blocked by an open file", func(t *testing.T) {
+		service, _, _ := newProviderTestService(t, []providerTestRelease{
+			{
+				tag:       "v0.2.0",
+				data:      image,
+				digest:    providerTestDigest(image),
+				ini:       ini,
+				iniDigest: providerTestDigest(ini),
+			},
+		})
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+			t.Fatal(err)
+		}
+		folder := providerTestCache(t, "0.2.0")
+		metadata, err := json.Marshal(providerDLLSource{Version: "0.2.0", SHA256: hashBytes(image)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+
+		// Another process reading the entry does not share it for deletion.
+		name, err := syscall.UTF16PtrFromString(filepath.Join(folder, providerDLLMetadata))
+		if err != nil {
+			t.Fatal(err)
+		}
+		handle, err := syscall.CreateFile(
+			name, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, nil, syscall.OPEN_EXISTING,
+			syscall.FILE_ATTRIBUTE_NORMAL, 0,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = syscall.CloseHandle(handle) }()
+
+		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
+			t.Fatal(err)
+		}
+		if !service.verifiedProviderDLL(ctx, spec, "0.2.0") {
+			t.Fatal("failed refresh lost the verified DLL")
+		}
+	})
+
+	t.Run("unverifiable", func(t *testing.T) {
+		for name, digest := range map[string]string{"no digest": "", "digest mismatch": providerTestDigest(image)} {
+			service, _, _ := newProviderTestService(t, []providerTestRelease{
+				{tag: "v0.2.0", data: image, digest: providerTestDigest(image), ini: ini, iniDigest: digest},
+			})
+			if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err == nil {
+				t.Fatalf("%s: release was cached", name)
+			}
+			if _, err := os.Stat(providerTestCache(t, "0.2.0")); !os.IsNotExist(err) {
+				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
+			}
+		}
+	})
 }

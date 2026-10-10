@@ -94,3 +94,26 @@ func TestINIEditorCreatesMissingSection(t *testing.T) {
 		t.Fatalf("INI = %q; want %q", got, want)
 	}
 }
+
+func TestINIEditorAddsMissingTemplateOptions(t *testing.T) {
+	t.Parallel()
+	template := parseINI([]byte("[Loader]\ntarget = template.exe\n" +
+		"[System]\n;upscaling = 0\n; how long to wait\ndelay = 5\nkept = 0\n;off = 1\ndisabled = 1\n" +
+		"[SmoothMotion]\n\n; fork option\nenabled = 1\nenabled = 2\n" +
+		"[Constants]\nglobal $x = 1\n[KeyToggle]\nkey = VK_F1\n[ShaderOverrideFoo]\nhash = abc\n" +
+		"[ClearRenderTargetView]\nrun = CommandListA\nrun = CommandListB\n"))
+	input := "[System]\r\nKEPT = 7\r\n; disabled = 0\r\n\r\n[Mods]\r\nuser = 1\r\n"
+	doc := parseINI([]byte(input))
+	doc.AddMissingOptions(template)
+	want := "[System]\r\nKEPT = 7\r\n; disabled = 0\r\n; how long to wait\r\ndelay = 5\r\n\r\n" +
+		"[Mods]\r\nuser = 1\r\n\r\n[SmoothMotion]\r\n; fork option\r\nenabled = 1\r\n"
+	if got := string(doc.Bytes()); got != want {
+		t.Fatalf("INI mismatch\n got %q\nwant %q", got, want)
+	}
+
+	again := parseINI([]byte(want))
+	again.AddMissingOptions(template)
+	if again.Changed() {
+		t.Fatalf("second merge changed the INI: %q", again.Bytes())
+	}
+}
