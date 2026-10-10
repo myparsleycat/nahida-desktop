@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -367,6 +368,63 @@ func TestSetSharedLibsProviderRejectsUnverifiableReleases(t *testing.T) {
 			t.Fatal("provider without releases was selected")
 		}
 	})
+}
+
+func TestProviderInstallRefetchesReleaseListedBeforeItsAssets(t *testing.T) {
+	ctx := context.Background()
+	image := testCustomDLLImage("fork")
+	service, _, _ := newProviderTestService(t, nil)
+
+	uploaded := false
+	httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+		Status: infra.BackendOnline,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			body := image
+			if request.URL.Host == "api.github.com" {
+				release := map[string]any{"tag_name": "v0.2.0", "assets": []map[string]any{}}
+				if uploaded {
+					release["assets"] = []map[string]any{{
+						"name": "d3d11.dll", "browser_download_url": providerTestAssetURL("v0.2.0"),
+						"digest": providerTestDigest(image), "size": len(image),
+					}}
+				}
+				listed, err := json.Marshal([]map[string]any{release})
+				if err != nil {
+					return nil, err
+				}
+				body = listed
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
+				Body: io.NopCloser(bytes.NewReader(body)),
+			}, nil
+		})},
+	})
+	download := infra.NewDownload()
+	download.UseClient(httpClient)
+	store := &releaseCacheTestStore{values: make(map[string]string)}
+	useGitHub := func() {
+		rate := infra.NewGitHubRateCoordinator()
+		rate.UseAppState(store)
+		service.github = github.New(github.Options{HTTP: httpClient, Download: download, Rate: rate})
+	}
+
+	useGitHub()
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err == nil ||
+		!strings.Contains(err.Error(), "has no d3d11.dll") {
+		t.Fatalf("error = %v, want a release without its DLL", err)
+	}
+
+	// The listing is past the refresh cooldown and well inside its hour, as a retry a few minutes later sees it.
+	uploaded = true
+	store.backdate(t, "v0.2.0", time.Now().Add(-2*time.Minute).UTC())
+	useGitHub()
+	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
+		t.Fatalf("install after the assets were uploaded: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, "0.2.0"), "d3d11.dll")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestLibsProviderFollowsSharedUnlessImporterChooses(t *testing.T) {

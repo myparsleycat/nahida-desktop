@@ -541,9 +541,20 @@ func (x *XXMI) downloadProviderRelease(
 	if err != nil {
 		return err
 	}
-	assetIndex := slices.IndexFunc(release.Assets, func(asset github.Asset) bool {
+	isDLL := func(asset github.Asset) bool {
 		return asset.Name == customDLLName && asset.BrowserDownloadURL != ""
-	})
+	}
+	assetIndex := slices.IndexFunc(release.Assets, isDLL)
+
+	// GitHub lists a release before its assets finish uploading, and a listing fetched in that window stays
+	// cached for an hour.
+	if assetIndex < 0 {
+		release, err = x.findProviderRelease(infra.WithGitHubRefresh(ctx, true), spec, version)
+		if err != nil {
+			return err
+		}
+		assetIndex = slices.IndexFunc(release.Assets, isDLL)
+	}
 	if assetIndex < 0 {
 		return fmt.Errorf("%s release %s has no %s", spec.overlayPackage, version, customDLLName)
 	}
