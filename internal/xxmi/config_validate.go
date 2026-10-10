@@ -73,6 +73,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if strings.ContainsAny(cfg.Migoto.ToggleInput, "\r\n") {
 		return errors.New("invalid Migoto input toggle hotkey")
 	}
+	if err := validateD3DXOverrides(cfg.D3DXOverrides); err != nil {
+		return err
+	}
 	if cfg.WWMI != nil && !slices.Contains([]string{"UHD", "HD", "SD"}, cfg.WWMI.ResourceTier) {
 		return fmt.Errorf("invalid WWMI resource tier %q", cfg.WWMI.ResourceTier)
 	}

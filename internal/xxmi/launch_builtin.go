@@ -502,6 +502,9 @@ func (x *XXMI) updateLaunchINI(
 	} else {
 		doc.RemoveOption("Loader", "loader")
 	}
+
+	// The options the launch decides are written after these, so they win over a stale override.
+	applyD3DXOverrides(doc, cfg.D3DXOverrides)
 	systemOptions, logLevel := migotoINISupport(cfg)
 	if systemOptions {
 		doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
@@ -564,19 +567,7 @@ func migotoINISupport(cfg ImporterConfig) (systemOptions, logLevel bool) {
 
 func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions, logLevel bool) {
 	if options.EnforceRendering {
-		values := map[string]string{
-			"texture_hash": "0", "track_texture_updates": "0", "track_region_hashes": "0",
-			"allow_buffer_resize": "1",
-		}
-		switch key {
-		case "WWMI":
-			values["texture_hash"], values["track_texture_updates"] = "1", "1"
-		case "SRMI":
-			values["track_implicit_index_buffers"] = "1"
-		case "EFMI":
-			values["track_region_hashes"], values["track_implicit_index_buffers"] = "1", "1"
-			values["allow_buffer_resize"] = "0"
-		}
+		values := enforcedRenderingOptions(key)
 		for _, option := range []string{"texture_hash", "track_texture_updates", "track_region_hashes",
 			"track_implicit_index_buffers", "allow_buffer_resize"} {
 			if value, ok := values[option]; ok {

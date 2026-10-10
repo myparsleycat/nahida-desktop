@@ -37,6 +37,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-settings";
 import { CUSTOM_DLL_SOURCE, CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
+import { XXMID3DXSettings } from "@renderer/components/xxmi/xxmi-d3dx-settings";
 import {
   FOLLOW_LATEST,
   NumberRow,
@@ -195,6 +196,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:package-verification", importer] });
+    void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
@@ -366,6 +368,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 <TabsTrigger value="game">{t("page.setting.xxmi.builtin.gameTweaks")}</TabsTrigger>
               )}
               <TabsTrigger value="advanced">{t("page.setting.xxmi.builtin.advanced")}</TabsTrigger>
+              <TabsTrigger value="d3dx">d3dx.ini</TabsTrigger>
               <TabsTrigger value="tools">{t("page.setting.xxmi.builtin.tools")}</TabsTrigger>
             </TabsList>
           </div>
@@ -1277,6 +1280,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     />
                   </SectionContent>
                 </Section>
+              </TabsContent>
+
+              <TabsContent value="d3dx" className="flex flex-col gap-6">
+                <XXMID3DXSettings
+                  importer={importer}
+                  config={config}
+                  savedOverrides={saved?.d3dxOverrides}
+                  onChange={setConfig}
+                />
               </TabsContent>
 
               <TabsContent value="tools" className="flex flex-col gap-6">

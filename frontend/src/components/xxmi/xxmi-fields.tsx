@@ -61,12 +61,14 @@ export function SelectRow({
   description,
   value,
   options,
+  disabled,
   onValueChange,
 }: {
   label: ReactNode;
   description?: ReactNode;
   value: string;
   options: readonly (string | { value: string; label: string })[];
+  disabled?: boolean;
   onValueChange: (value: string) => void;
 }) {
   const labelId = useId();
@@ -79,6 +81,7 @@ export function SelectRow({
       <Select
         value={value}
         items={items}
+        disabled={disabled}
         onValueChange={(next) => {
           if (next !== null) onValueChange(next);
         }}
@@ -107,6 +110,7 @@ export function NumberRow({
   min,
   max,
   step,
+  disabled,
   onValueChange,
 }: {
   label: ReactNode;
@@ -115,6 +119,7 @@ export function NumberRow({
   min?: number;
   max?: number;
   step?: number | "any";
+  disabled?: boolean;
   onValueChange: (value: number) => void;
 }) {
   const labelId = useId();
@@ -128,6 +133,7 @@ export function NumberRow({
         min={min}
         max={max}
         step={step}
+        disabled={disabled}
         value={value}
         onChange={(event) => onValueChange(Number(event.target.value))}
       />
