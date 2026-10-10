@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/mod/semver"
 
@@ -277,8 +278,8 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
 			if runtimeProvider != "" {
-				// The provider's d3dx.ini only adds options, so the launch goes on without one that cannot
-				// be read.
+				// Without the provider's d3dx.ini the file is only edited in place, so the launch goes on
+				// without one that cannot be read.
 				providerINI, err = x.verifiedProviderINI(ctx, cacheRoot, runtimeProvider)
 				if err != nil {
 					warn("Skipped the d3dx.ini options of " + runtimeProvider + ": " + err.Error())
@@ -466,7 +467,7 @@ func (x *XXMI) releaseImporter(key string) {
 }
 
 // updateLaunchINI writes the options this launch decides into the importer's d3dx.ini. providerINI is the
-// d3dx.ini of the deployed libraries provider, or nil; its options are added where the file has none.
+// d3dx.ini of the deployed libraries provider, or nil; the file is rebuilt from it with the values it had.
 func (x *XXMI) updateLaunchINI(
 	ctx context.Context,
 	key string,
@@ -493,6 +494,14 @@ func (x *XXMI) updateLaunchINI(
 		return err
 	}
 	doc := parseINI(data)
+	rebuilt, hadToggleInput := false, true
+	var lost bool
+	if len(providerINI) > 0 {
+		hadToggleInput = len(doc.optionIndexes("Input", "toggle_input")) > 0
+		doc, lost = rebuildINI(providerINI, data)
+		rebuilt = !bytes.Equal(doc.Bytes(), data)
+	}
+
 	doc.SetOption("Loader", "target", processName, true)
 	doc.SetOption("Loader", "module", "d3d11.dll", true)
 	// 3DMigoto warns about an empty `launch =` line, and the helper starts the game itself.
@@ -524,27 +533,48 @@ func (x *XXMI) updateLaunchINI(
 	}
 	applyMigotoINI(doc, key, migoto, logLevel)
 
-	// The options above are already in place, so the provider's defaults never replace a launch setting.
-	if len(providerINI) > 0 {
-		// A saved override of an option the provider adds is written with it. A package update that drops
-		// the option would otherwise leave this launch on the provider's default.
-		added := map[string]string{}
-		for id, value := range cfg.D3DXOverrides {
-			spec, ok := lookupD3DXOption(id)
-			if !ok {
-				continue
-			}
-			if _, present := doc.Option(spec.section, spec.key); !present {
-				added[id] = value
-			}
-		}
-		doc.AddMissingOptions(parseINI(providerINI))
-		applyD3DXOverrides(doc, added)
+	// The provider's d3dx.ini always sets a hotkey, which must not pass for one the file chose.
+	if logLevel && !hadToggleInput && migoto.ToggleInput != "" {
+		doc.SetOption("Input", "toggle_input", migoto.ToggleInput, true)
 	}
-	if !doc.Changed() {
+	if !doc.Changed() && !rebuilt {
 		return nil
 	}
-	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+
+	var backupFolder string
+	if lost {
+		backupFolder, err = backupLaunchINI(key, data)
+		if err != nil {
+			return fmt.Errorf("back up d3dx.ini: %w", err)
+		}
+	}
+	err = iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+	if err != nil && backupFolder != "" {
+		if cleanupErr := os.RemoveAll(backupFolder); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove failed INI write backup %q: %w", backupFolder, cleanupErr))
+		}
+	}
+	return err
+}
+
+// backupLaunchINI keeps the d3dx.ini a rebuild is about to drop lines of.
+func backupLaunchINI(key string, data []byte) (string, error) {
+	root, err := xxmiCacheRoot()
+	if err != nil {
+		return "", err
+	}
+	backupRoot := filepath.Join(root, "backups")
+	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
+		return "", err
+	}
+	folder, err := os.MkdirTemp(backupRoot, key+" "+time.Now().Format("2006-01-02 15-04-05")+"-")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(folder, "d3dx.ini"), data, 0o600); err != nil {
+		return "", errors.Join(err, os.RemoveAll(folder))
+	}
+	return folder, nil
 }
 
 // migotoLogLevelVersion is the first XXMI libraries release that reads log_level, the [Input] switches,
