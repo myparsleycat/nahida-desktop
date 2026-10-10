@@ -160,16 +160,19 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 	}
 
 	// The dialog only says that Smooth Motion is on, so the log is what tells a kept DLL, an older release
-	// and a failed lookup apart.
-	if g.x.log != nil {
-		fields := map[string]any{
-			"importer_folder": g.cfg.ImporterFolder, "executable": exe, "reason": support.reason,
-			"provider": support.provider, "pin": support.pin, "version": support.version,
-			"supported_since": support.since,
-		}
-		if support.err != nil {
-			fields["error"] = support.err.Error()
-		}
+	// and a failed lookup apart. A lookup failure its own layer already reported is not written again.
+	fields := map[string]any{
+		"importer_folder": g.cfg.ImporterFolder, "executable": exe, "reason": support.reason,
+		"provider": support.provider, "pin": support.pin, "version": support.version,
+		"supported_since": support.since,
+	}
+	switch {
+	case support.err != nil && !infra.IsReportedError(support.err):
+		_ = infra.ReportError(g.x.log, support.err, xxmiLaunchGuardWhere, infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "smooth-motion-support", Stage: support.reason,
+			Fields: fields,
+		})
+	case g.x.log != nil:
 		g.x.log.Info(fields, xxmiLaunchGuardWhere)
 	}
 	g.blocker = errSmoothMotionEnabled

@@ -107,7 +107,7 @@ it("picks one launch dialog for the blocker codes", () => {
 
 it("reads the versions off an outdated DLL blocker", () => {
   const message =
-    "GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED:XXMI_SMOOTH_MOTION_DLL_OUTDATED:1.2.2-nhd.2:1.2.2-nhd.3";
+    "GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED: XXMI_SMOOTH_MOTION_DLL_OUTDATED:1.2.2-nhd.2:1.2.2-nhd.3";
   expect(launchDialog(message)).toBe("launch-blockers");
   expect(smoothMotionDLLOutdated(message)).toEqual({
     version: "1.2.2-nhd.2",
