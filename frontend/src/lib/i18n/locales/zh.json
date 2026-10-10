@@ -631,6 +631,14 @@
           "confirm": "关闭并启动",
           "keep": "保持开启并启动"
         },
+        "uncompressed-textures": {
+          "title": "存在未压缩的纹理",
+          "description": "已启用的 {{importer}} 模组中有 {{count}} 个未压缩的 DDS 纹理。未压缩的纹理可能在加载资源时造成卡顿，并占用大量显存。请选择压缩为 BC7 后启动或直接启动。",
+          "ignore": "忽略并启动",
+          "confirm": "压缩并启动",
+          "progress": "正在压缩… {{done}} / {{total}}",
+          "failed": "有 {{count}} 个纹理无法压缩，已保持原样。"
+        },
         "preset-management": {
           "legacy-badge": "旧版",
           "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。"
@@ -2036,7 +2044,9 @@
           "smoothMotion": "NVIDIA 平滑运动",
           "smoothMotionDescription": "游戏开启了平滑运动时，在启动前询问是否关闭。开启时模组可能无法正常应用。",
           "logging": "3DMigoto 日志",
-          "loggingDescription": "3DMigoto 日志开启时，在启动前询问是否关闭。记录日志可能导致游戏性能严重下降。"
+          "loggingDescription": "3DMigoto 日志开启时，在启动前询问是否关闭。记录日志可能导致游戏性能严重下降。",
+          "textures": "未压缩的纹理",
+          "texturesDescription": "已启用的模组中存在未压缩的大型 DDS 纹理时，在启动前询问。这类纹理可能在加载资源时造成卡顿，并占用大量显存。"
         },
         "builtin": {
           "detectGame": "检测游戏文件夹",

@@ -229,7 +229,7 @@ func (t *Service) GetTextureResizeSettings(ctx context.Context) (TextureResizeSe
 		s.CustomHeight = normalizeTextureDimension(value)
 	}
 	if raw := values[textureSettingKeys.backup]; raw != "" {
-		s.Backup = raw == "1" || strings.EqualFold(raw, "true")
+		s.Backup = textureBackupEnabled(raw)
 	}
 	s.UpscaleModel = normalizeUpscaleModel(values[textureSettingKeys.model])
 	requestedScale := s.UpscaleScale

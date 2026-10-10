@@ -16,12 +16,15 @@ const xxmi = vi.hoisted(() => ({
   LaunchUpdates: vi.fn(),
   InstallUpdates: vi.fn(),
   LaunchPresetEffects: vi.fn(),
+  LaunchUncompressedTextures: vi.fn(),
+  CompressLaunchTextures: vi.fn(),
 }));
 const reshade = vi.hoisted(() => ({ InstallEffectPackages: vi.fn() }));
 const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("@bindings/reshade", () => ({ ReShade: reshade }));
+vi.mock("@wailsio/runtime", () => ({ Events: { On: () => () => {} } }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -40,6 +43,7 @@ const toastWarning = vi.mocked(toast.warning);
 beforeEach(() => {
   xxmi.LaunchUpdates.mockResolvedValue([]);
   xxmi.LaunchPresetEffects.mockResolvedValue({ packages: [], unknown: [] });
+  xxmi.LaunchUncompressedTextures.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -47,6 +51,8 @@ afterEach(() => {
   xxmi.LaunchUpdates.mockReset();
   xxmi.InstallUpdates.mockReset();
   xxmi.LaunchPresetEffects.mockReset();
+  xxmi.LaunchUncompressedTextures.mockReset();
+  xxmi.CompressLaunchTextures.mockReset();
   reshade.InstallEffectPackages.mockReset();
   toastWarning.mockClear();
   xxmi.StartGame.mockReset();
@@ -315,6 +321,116 @@ function Harness({ importer = "GIMI" }: { importer?: string }) {
     </div>
   );
 }
+
+it("asks about uncompressed textures once and launches when they are ignored", async () => {
+  xxmi.LaunchUncompressedTextures.mockResolvedValue([
+    { path: "C:/Mods/A/Diffuse.dds", relativePath: "A/Diffuse.dds", width: 2048, height: 2048 },
+  ]);
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  render(<Harness importer="WWMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByText("A/Diffuse.dds");
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "g.cancel" }));
+  await waitFor(() => expect(screen.queryByText("A/Diffuse.dds")).toBeNull());
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "page.mod.dialog.uncompressed-textures.ignore" }),
+  );
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(1));
+
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(2));
+  expect(xxmi.CompressLaunchTextures).not.toHaveBeenCalled();
+
+  // Compressing must leave the ignored texture alone, so only the one on screen is sent.
+  xxmi.LaunchUncompressedTextures.mockResolvedValue([
+    { path: "C:/Mods/A/Diffuse.dds", relativePath: "A/Diffuse.dds", width: 2048, height: 2048 },
+    { path: "C:/Mods/B/Diffuse.dds", relativePath: "B/Diffuse.dds", width: 2048, height: 2048 },
+  ]);
+  xxmi.CompressLaunchTextures.mockResolvedValue({ files: [] });
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByText("B/Diffuse.dds");
+  expect(screen.queryByText("A/Diffuse.dds")).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.mod.dialog.uncompressed-textures.confirm" }),
+  );
+  await waitFor(() => expect(xxmi.StartGame).toHaveBeenCalledTimes(3));
+  expect(xxmi.CompressLaunchTextures).toHaveBeenCalledWith("WWMI", ["C:/Mods/B/Diffuse.dds"]);
+});
+
+it("does not launch when the page unmounts while textures are compressing", async () => {
+  xxmi.LaunchUncompressedTextures.mockResolvedValue([
+    { path: "C:/Mods/C/Diffuse.dds", relativePath: "C/Diffuse.dds", width: 2048, height: 2048 },
+  ]);
+  let finish: (result: { files: never[] }) => void = () => {};
+  const cancel = vi.fn();
+  xxmi.CompressLaunchTextures.mockReturnValue(
+    Object.assign(new Promise((resolve) => (finish = resolve)), { cancel }),
+  );
+
+  const view = render(<Harness importer="WWMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "page.mod.dialog.uncompressed-textures.confirm" }),
+  );
+  await screen.findByRole("status");
+  view.unmount();
+  await act(async () => finish({ files: [] }));
+
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+});
+
+it.each([[[]], [null]])(
+  "does not launch when the page unmounts while textures are scanned (%j)",
+  async (found) => {
+    const scanning = Promise.withResolvers<never[] | null>();
+    const cancel = vi.fn();
+    xxmi.LaunchUncompressedTextures.mockReturnValue(Object.assign(scanning.promise, { cancel }));
+    xxmi.StartGame.mockResolvedValue(undefined);
+
+    const view = render(<Harness importer="WWMI" />);
+    fireEvent.click(screen.getByRole("button", { name: "play" }));
+    await waitFor(() => expect(xxmi.LaunchUncompressedTextures).toHaveBeenCalledWith("WWMI"));
+    view.unmount();
+    await act(async () => {
+      if (found) scanning.resolve(found);
+      else scanning.reject(new Error("cancelled"));
+      await scanning.promise.catch(() => null);
+    });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(xxmi.StartGame).not.toHaveBeenCalled();
+  },
+);
+
+it("cancels every overlapping texture scan when the page unmounts", async () => {
+  const scans = [Promise.withResolvers<never[]>(), Promise.withResolvers<never[]>()];
+  const cancels = [vi.fn(), vi.fn()];
+  scans.forEach((scan, index) =>
+    xxmi.LaunchUncompressedTextures.mockReturnValueOnce(
+      Object.assign(scan.promise, { cancel: cancels[index] }),
+    ),
+  );
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  const view = render(<Harness importer="GIMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await waitFor(() => expect(xxmi.LaunchUncompressedTextures).toHaveBeenCalledTimes(2));
+  view.unmount();
+  await act(async () => {
+    scans.forEach((scan) => scan.resolve([]));
+    await Promise.all(scans.map((scan) => scan.promise));
+  });
+
+  cancels.forEach((cancel) => expect(cancel).toHaveBeenCalledTimes(1));
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+});
 
 const pendingUpdates = [
   { importer: "GIMI", package: "importer:GIMI", installed: "1.2.3", latestVersion: "1.3.0" },

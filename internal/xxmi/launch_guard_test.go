@@ -305,6 +305,8 @@ func TestBuiltinLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 	client := newXXMITestClient(t)
 	service := New()
 	service.UseClient(client)
+	// The stored configs have no mode, so saving one counts as a mode change and looks for the game.
+	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)
 	root := t.TempDir()
 	if err := client.Settings.Upsert(ctx, "xxmi_root", &root); err != nil {
@@ -457,9 +459,10 @@ func TestDisabledLaunchGuardsLeaveSettingsAlone(t *testing.T) {
 		t.Fatalf("default guards = %+v, %v", guards, err)
 	}
 
+	store(launchGuardTexturesKey, "true")
 	store(launchGuardDCRKey, "false")
 	guards, err = service.launchGuards(ctx)
-	if err != nil || guards != (launchGuards{smoothMotion: true, logging: true}) {
+	if err != nil || guards != (launchGuards{smoothMotion: true, logging: true, textures: true}) {
 		t.Fatalf("guards without DCR = %+v, %v", guards, err)
 	}
 	fake := &fakeLaunch{dcr: true, smooth: true}

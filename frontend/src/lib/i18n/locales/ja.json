@@ -631,6 +631,14 @@
           "confirm": "無効にして起動",
           "keep": "有効のまま起動"
         },
+        "uncompressed-textures": {
+          "title": "未圧縮のテクスチャがあります",
+          "description": "有効な {{importer}} の MOD に未圧縮の DDS テクスチャが {{count}} 個あります。未圧縮のテクスチャはリソースの読み込み時にスタッタリングを引き起こすことがあり、VRAM を多く使用します。BC7 に圧縮してから起動するか、そのまま起動してください。",
+          "ignore": "無視して起動",
+          "confirm": "圧縮して起動",
+          "progress": "圧縮中… {{done}} / {{total}}",
+          "failed": "{{count}} 個のテクスチャを圧縮できなかったため、そのままにしました。"
+        },
         "preset-management": {
           "legacy-badge": "旧形式",
           "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"
@@ -2036,7 +2044,9 @@
           "smoothMotion": "NVIDIA スムーズモーション",
           "smoothMotionDescription": "ゲームでスムーズモーションがオンの場合、起動前にオフにするか確認します。オンのままではMODが正常に適用されない場合があります。",
           "logging": "3DMigoto のログ",
-          "loggingDescription": "3DMigoto のログが有効な場合、起動前に無効にするか確認します。ログを記録するとゲームのパフォーマンスが大幅に低下する場合があります。"
+          "loggingDescription": "3DMigoto のログが有効な場合、起動前に無効にするか確認します。ログを記録するとゲームのパフォーマンスが大幅に低下する場合があります。",
+          "textures": "未圧縮のテクスチャ",
+          "texturesDescription": "有効な MOD に未圧縮の大きな DDS テクスチャがある場合、起動前に確認します。リソースの読み込み時にスタッタリングが発生することがあり、VRAM を多く使用します。"
         },
         "builtin": {
           "detectGame": "ゲームフォルダーを検出",

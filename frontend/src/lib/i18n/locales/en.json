@@ -631,6 +631,14 @@
           "confirm": "Turn off and start",
           "keep": "Keep on and start"
         },
+        "uncompressed-textures": {
+          "title": "Uncompressed textures found",
+          "description": "The enabled {{importer}} mods contain {{count}} uncompressed DDS texture(s). Uncompressed textures can cause stuttering while resources load and use a lot of video memory. Compress them to BC7 before starting, or start anyway?",
+          "ignore": "Start anyway",
+          "confirm": "Compress and start",
+          "progress": "Compressing… {{done}} / {{total}}",
+          "failed": "{{count}} texture(s) could not be compressed and were left as they are."
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
@@ -2088,7 +2096,9 @@
           "smoothMotion": "NVIDIA Smooth Motion",
           "smoothMotionDescription": "Asks to turn Smooth Motion off for the game before starting. Mods may not apply correctly while it is on.",
           "logging": "3DMigoto logging",
-          "loggingDescription": "Asks to turn 3DMigoto logging off before starting. Logging can slow the game down severely."
+          "loggingDescription": "Asks to turn 3DMigoto logging off before starting. Logging can slow the game down severely.",
+          "textures": "Uncompressed textures",
+          "texturesDescription": "Asks before starting when the enabled mods contain large uncompressed DDS textures, which can cause stuttering while resources load and use a lot of video memory."
         },
         "builtin": {
           "checkUpdates": "Check updates",
