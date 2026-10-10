@@ -166,20 +166,55 @@ func TestUpdateLaunchINIPreservesUserContentAndSetsHelper(t *testing.T) {
 
 func TestUpdateLaunchINIFollowsDeployedLibsVersion(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
+	// A DLL holds the names of the options it reads as UTF-16.
+	wide := func(options ...string) string {
+		var image []byte
+		for _, option := range options {
+			for _, char := range []byte(option) {
+				image = append(image, char, 0)
+			}
+			image = append(image, 0, 0)
+		}
+		return string(image)
+	}
+	for name, tc := range map[string]struct {
+		mode   RuntimeMode
 		source string
-		modern bool
+		// userDLL is the image of a d3d11.dll the manifest lists as user-managed; "" deploys the signed one.
+		userDLL        string
+		system, modern bool
 	}{
-		{"xxmi-libs@1.1.6", false}, {"xxmi-libs@1.1.7", true}, {"xxmi-libs@1.2.0", true},
-		{"xxmi-libs@1.10.0", true}, {"xxmi-libs@custom", false},
+		"libs 1.1.6":  {RuntimeXXMI, "xxmi-libs@1.1.6", "", true, false},
+		"libs 1.1.7":  {RuntimeXXMI, "xxmi-libs@1.1.7", "", true, true},
+		"libs 1.2.0":  {RuntimeXXMI, "xxmi-libs@1.2.0", "", true, true},
+		"libs 1.10.0": {RuntimeXXMI, "xxmi-libs@1.10.0", "", true, true},
+		"libs custom": {RuntimeXXMI, "xxmi-libs@custom", "", true, false},
+		"user DLL reading log_level": {
+			RuntimeXXMI, "xxmi-libs@1.1.6", wide("dll_initialization_delay", "log_level"), true, true,
+		},
+		"user DLL of an old XXMI build": {
+			RuntimeXXMI, "xxmi-libs@1.2.0", wide("dll_initialization_delay"), true, false,
+		},
+		"user DLL of stock 3DMigoto": {RuntimeXXMI, "xxmi-libs@1.2.0", wide("calls"), false, false},
+		"legacy runtime":             {RuntimeLegacy, "legacy@0123456789ab", wide("calls"), false, false},
 	} {
-		t.Run(tc.source, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			folder := filepath.Join(t.TempDir(), "Importer with spaces")
 			if err := os.MkdirAll(folder, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			manifest := fmt.Sprintf(`{"mode":%q,"source":%q}`, RuntimeXXMI, tc.source)
+			manifest := fmt.Sprintf(`{"mode":%q,"source":%q}`, tc.mode, tc.source)
+			if tc.userDLL != "" {
+				if tc.mode == RuntimeXXMI {
+					manifest = fmt.Sprintf(
+						`{"mode":%q,"source":%q,"userManaged":{"d3d11.dll":"hash"}}`, tc.mode, tc.source,
+					)
+				}
+				if err := os.WriteFile(filepath.Join(folder, "d3d11.dll"), []byte(tc.userDLL), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			for name, content := range map[string]string{
 				"d3dx.ini": "[Logging]\ncalls = 0\n[Input]\ntoggle_input = VK_F9\n", runtimeManifestName: manifest,
 			} {
@@ -192,7 +227,7 @@ func TestUpdateLaunchINIFollowsDeployedLibsVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 			cfg.ImporterFolder, cfg.Migoto.LogLevel, cfg.Migoto.Input = folder, "Debug", false
-			cfg.Migoto.InputDisableMode = "All"
+			cfg.Migoto.InputDisableMode, cfg.Mode = "All", tc.mode
 			service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
 			if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", nil); err != nil {
 				t.Fatal(err)
@@ -209,6 +244,12 @@ func TestUpdateLaunchINIFollowsDeployedLibsVersion(t *testing.T) {
 			want, unwanted := legacy, []string{"log_level", "clear_unknown_settings", "input_disable_mode"}
 			if tc.modern {
 				want, unwanted = modern, []string{"debug = 1", "ctrl alt shift VK_END"}
+			}
+			system := []string{"dll_initialization_delay = ", "screen_width = ", "screen_height = "}
+			if tc.system {
+				want = append(want, system...)
+			} else {
+				unwanted = append(unwanted, system...)
 			}
 			for _, option := range want {
 				if !strings.Contains(string(data), option) {
@@ -589,6 +630,51 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 		if err != nil || spec.ModuleDLL != "" || spec.LoaderDLL.Path != "" || spec.LegacyLoader.Path != "" {
 			t.Fatalf("%s bypass spec without an importer = %+v, %v", mode, spec, err)
 		}
+	}
+}
+
+func TestSRMIDirectLaunchLeavesGameFolderOfEpicInstall(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		mark, content string
+		launch        string
+		epic          bool
+	}{
+		"epic launcher":     {mark: "launcher_epic.exe", launch: "Direct", epic: true},
+		"epic channel":      {mark: `games\game\config.ini`, content: "[General]\ncps=epic_global\n", launch: "Direct", epic: true},
+		"own launcher":      {mark: `games\game\config.ini`, content: "[General]\ncps=hoyoverse\n", launch: "Direct"},
+		"not started by us": {mark: "launcher_epic.exe", launch: "Custom"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			gameFolder := filepath.Join(root, "games", "game")
+			if err := os.MkdirAll(gameFolder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range []string{`games\game\StarRail.exe`, runtimeManifestName, tc.mark} {
+				content := "{}"
+				if file == tc.mark {
+					content = tc.content
+				}
+				if err := os.WriteFile(filepath.Join(root, file), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg := ImporterConfig{
+				ImporterFolder: root, Mode: RuntimeLegacy, GameLaunch: tc.launch, XXMIDLLInjectMode: "Bypass",
+			}
+			spec, err := New().builtinLaunchSpec(
+				context.Background(), "SRMI", cfg, filepath.Join(gameFolder, "StarRail.exe"), "StarRail.exe", true,
+			)
+			want := gameFolder
+			if tc.epic {
+				want = root
+			}
+			if err != nil || spec.WorkDir != want {
+				t.Fatalf("work dir = %q, err = %v; want %q", spec.WorkDir, err, want)
+			}
+		})
 	}
 }
 

@@ -502,14 +502,17 @@ func (x *XXMI) updateLaunchINI(
 	} else {
 		doc.RemoveOption("Loader", "loader")
 	}
-	doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
-	user32 := syscall.NewLazyDLL("user32.dll")
-	metric := user32.NewProc("GetSystemMetrics")
-	width, _, _ := metric.Call(0)
-	height, _, _ := metric.Call(1)
-	doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
-	doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
-	applyMigotoINI(doc, key, cfg.Migoto, supportsLogLevel(cfg))
+	systemOptions, logLevel := migotoINISupport(cfg)
+	if systemOptions {
+		doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
+		user32 := syscall.NewLazyDLL("user32.dll")
+		metric := user32.NewProc("GetSystemMetrics")
+		width, _, _ := metric.Call(0)
+		height, _, _ := metric.Call(1)
+		doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
+		doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
+	}
+	applyMigotoINI(doc, key, cfg.Migoto, logLevel)
 
 	// The options above are already in place, so the provider's defaults never replace a launch setting.
 	if len(providerINI) > 0 {
@@ -525,12 +528,38 @@ func (x *XXMI) updateLaunchINI(
 // and clear_unknown_settings. Earlier releases and the legacy 3DMigoto runtime read only calls and debug.
 const migotoLogLevelVersion = "v1.1.7"
 
-func supportsLogLevel(cfg ImporterConfig) bool {
-	if cfg.Mode != RuntimeXXMI {
-		return false
+// migotoINISupport reports which options the deployed d3d11.dll reads: the [System] options a launch sets,
+// which every XXMI libraries release has, and the ones migotoLogLevelVersion names.
+func migotoINISupport(cfg ImporterConfig) (systemOptions, logLevel bool) {
+	var manifest runtimeManifest
+	if data, err := os.ReadFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName)); err == nil {
+		_ = json.Unmarshal(data, &manifest)
 	}
-	version, ok := deployedLibsVersion(cfg.ImporterFolder)
-	return ok && semver.IsValid("v"+version) && semver.Compare("v"+version, migotoLogLevelVersion) >= 0
+	if cfg.Mode == RuntimeXXMI && manifest.UserManaged[customDLLName] == "" {
+		version, ok := deployedLibsVersion(cfg.ImporterFolder)
+		return true, ok && semver.IsValid("v"+version) && semver.Compare("v"+version, migotoLogLevelVersion) >= 0
+	}
+
+	// Neither the libraries version nor the version resource describes a custom DLL, one unsafe mode kept,
+	// or a legacy runtime: XXMI builds before 1.2.0 carry the description and version of stock 3DMigoto.
+	// The option names a DLL reads are in its image, as UTF-16 in all but a few builds.
+	path := filepath.Join(cfg.ImporterFolder, customDLLName)
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > customDLLSizeLimit {
+		return false, false
+	}
+	image, err := os.ReadFile(path)
+	if err != nil {
+		return false, false
+	}
+	names := func(option string) bool {
+		wide := make([]byte, 0, 2*len(option))
+		for _, char := range []byte(option) {
+			wide = append(wide, char, 0)
+		}
+		return bytes.Contains(image, wide) || bytes.Contains(image, []byte(option))
+	}
+	return names("dll_initialization_delay"), cfg.Mode == RuntimeXXMI && names("log_level")
 }
 
 func applyMigotoINI(doc *iniDocument, key string, options MigotoOptions, logLevel bool) {
@@ -644,6 +673,11 @@ func (x *XXMI) builtinLaunchSpec(
 		// Zenless Zone Zero crashes at the login screen when started from its own folder.
 		workDir = filepath.Dir(gameExe)
 	}
+	if key == "SRMI" && cfg.GameLaunch == "Direct" && gameExe != "" && epicHoYoPlayInstall(gameExe) {
+		// The Epic Games build of Honkai: Star Rail stops at the login screen when started from its own
+		// folder.
+		workDir = filepath.Dir(filepath.Dir(workDir))
+	}
 	spec := inject.LaunchSpec{
 		Mode: inject.RuntimeMode(cfg.Mode), ProcessName: processName, StartExe: gameExe,
 		WorkDir: workDir, StartMethod: cfg.ProcessStartMethod, Priority: cfg.ProcessPriority,
@@ -734,6 +768,33 @@ func (x *XXMI) builtinLaunchSpec(
 		return inject.LaunchSpec{}, err
 	}
 	return spec, nil
+}
+
+// epicHoYoPlayInstall reports whether the game was installed by the HoYoPlay launcher that the Epic Games
+// Store ships, using the two marks the reference launcher looks for: launcher_epic.exe two folders above the
+// game folder, or a config.ini beside the executable with a value naming Epic.
+func epicHoYoPlayInstall(gameExe string) bool {
+	folder := filepath.Dir(gameExe)
+	if fileExists(filepath.Join(filepath.Dir(filepath.Dir(folder)), "launcher_epic.exe")) {
+		return true
+	}
+
+	path := filepath.Join(folder, "config.ini")
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	for line := range strings.Lines(string(data)) {
+		_, value, ok := strings.Cut(line, "=")
+		if ok && !strings.Contains(value, "=") && strings.Contains(strings.ToLower(value), "epic") {
+			return true
+		}
+	}
+	return false
 }
 
 // useExtraDLLInjector names the XXMI injector for a launch that injects extra or preloaded DLLs
