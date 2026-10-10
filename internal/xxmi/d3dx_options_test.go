@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -134,6 +135,24 @@ func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 			t.Fatal(err)
 		}
 		return found
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for range 2 {
+		if err := service.updateLaunchINI(ctx, "GIMI", cfg, "Game.exe", provider); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled INI write = %v; want context.Canceled", err)
+		}
+		if data, err := os.ReadFile(path); err != nil || string(data) != original {
+			t.Fatalf("failed write changed the original INI: %q, err = %v", data, err)
+		}
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if entries, err := os.ReadDir(filepath.Join(root, "backups")); err != nil || len(entries) != 0 {
+			t.Fatalf("failed write left backup folders: %v, err = %v", entries, err)
+		}
 	}
 
 	got := launch()

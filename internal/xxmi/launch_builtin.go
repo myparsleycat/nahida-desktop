@@ -495,16 +495,11 @@ func (x *XXMI) updateLaunchINI(
 	}
 	doc := parseINI(data)
 	rebuilt, hadToggleInput := false, true
+	var lost bool
 	if len(providerINI) > 0 {
 		hadToggleInput = len(doc.optionIndexes("Input", "toggle_input")) > 0
-		var lost bool
 		doc, lost = rebuildINI(providerINI, data)
 		rebuilt = !bytes.Equal(doc.Bytes(), data)
-		if lost {
-			if err := backupLaunchINI(key, data); err != nil {
-				return fmt.Errorf("back up d3dx.ini: %w", err)
-			}
-		}
 	}
 
 	doc.SetOption("Loader", "target", processName, true)
@@ -545,24 +540,41 @@ func (x *XXMI) updateLaunchINI(
 	if !doc.Changed() && !rebuilt {
 		return nil
 	}
-	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+
+	var backupFolder string
+	if lost {
+		backupFolder, err = backupLaunchINI(key, data)
+		if err != nil {
+			return fmt.Errorf("back up d3dx.ini: %w", err)
+		}
+	}
+	err = iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+	if err != nil && backupFolder != "" {
+		if cleanupErr := os.RemoveAll(backupFolder); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove failed INI write backup %q: %w", backupFolder, cleanupErr))
+		}
+	}
+	return err
 }
 
 // backupLaunchINI keeps the d3dx.ini a rebuild is about to drop lines of.
-func backupLaunchINI(key string, data []byte) error {
+func backupLaunchINI(key string, data []byte) (string, error) {
 	root, err := xxmiCacheRoot()
 	if err != nil {
-		return err
+		return "", err
 	}
 	backupRoot := filepath.Join(root, "backups")
 	if err := os.MkdirAll(backupRoot, 0o700); err != nil {
-		return err
+		return "", err
 	}
 	folder, err := os.MkdirTemp(backupRoot, key+" "+time.Now().Format("2006-01-02 15-04-05")+"-")
 	if err != nil {
-		return err
+		return "", err
 	}
-	return os.WriteFile(filepath.Join(folder, "d3dx.ini"), data, 0o600)
+	if err := os.WriteFile(filepath.Join(folder, "d3dx.ini"), data, 0o600); err != nil {
+		return "", errors.Join(err, os.RemoveAll(folder))
+	}
+	return folder, nil
 }
 
 // migotoLogLevelVersion is the first XXMI libraries release that reads log_level, the [Input] switches,

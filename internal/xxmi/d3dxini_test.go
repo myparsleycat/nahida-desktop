@@ -136,3 +136,55 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 		}
 	}
 }
+
+func TestRebuildINIKeepsOnlyFirstVerbatimSection(t *testing.T) {
+	t.Parallel()
+	previous := []byte("[CommandListUser]\nrun = CommandListFirst\n" +
+		"[System]\nfirst = 1\n[commandlistuser]\nrun = CommandListIgnored\n" +
+		"[system]\nsecond = 2\n[Loader]\ntarget = Old.exe\n[loader]\ncustom = keep\n" +
+		"[CommandListOther]\nrun = CommandListOther\n")
+	for _, tc := range []struct {
+		name     string
+		template string
+		previous []byte
+		want     string
+	}{
+		{
+			name:     "section in template",
+			template: "[CommandListUser]\nrun = CommandListDefault\n[System]\nfirst = 0\n[Loader]\ntarget = Game.exe\n",
+			want: "[CommandListUser]\nrun = CommandListFirst\n[System]\nfirst = 1\nsecond = 2\n" +
+				"[Loader]\ntarget = Old.exe\ncustom = keep\n\n[CommandListOther]\nrun = CommandListOther\n",
+		},
+		{
+			name:     "section absent from template",
+			template: "[System]\nfirst = 0\n[Loader]\ntarget = Game.exe\n",
+			want: "[System]\nfirst = 1\nsecond = 2\n[Loader]\ntarget = Old.exe\ncustom = keep\n\n" +
+				"[CommandListUser]\nrun = CommandListFirst\n\n[CommandListOther]\nrun = CommandListOther\n",
+		},
+		{
+			name:     "duplicate lines also in first section",
+			template: "[CommandListUser]\nrun = CommandListDefault\n",
+			previous: []byte("[CommandListUser]\nrun = CommandListFirst\n[CommandListUser]\nrun = CommandListFirst\n"),
+			want:     "[CommandListUser]\nrun = CommandListFirst\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := previous
+			if tc.previous != nil {
+				old = tc.previous
+			}
+			doc, lost := rebuildINI([]byte(tc.template), old)
+			if got := string(doc.Bytes()); got != tc.want {
+				t.Fatalf("INI mismatch\n got %q\nwant %q", got, tc.want)
+			}
+			if !lost {
+				t.Fatal("discarded duplicate commands were not reported")
+			}
+			again, lost := rebuildINI([]byte(tc.template), doc.Bytes())
+			if got := string(again.Bytes()); got != tc.want || lost {
+				t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
+			}
+		})
+	}
+}

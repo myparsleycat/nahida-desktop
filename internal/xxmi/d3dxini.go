@@ -185,6 +185,9 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 		if _, ok := prevHeader[key]; !ok {
 			prevHeader[key] = block.header
 			prevOrder = append(prevOrder, key)
+		} else if iniVerbatimSection(block.name) {
+			lost = true
+			continue
 		}
 		prevBody[key] = append(prevBody[key], block.body...)
 	}
@@ -290,7 +293,7 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 	for _, line := range out.lines {
 		kept[strings.TrimSpace(line)] = true
 	}
-	lost = slices.ContainsFunc(prev.lines, func(line string) bool {
+	lost = lost || slices.ContainsFunc(prev.lines, func(line string) bool {
 		line = strings.TrimSpace(line)
 		return line != "" && !kept[line]
 	})
