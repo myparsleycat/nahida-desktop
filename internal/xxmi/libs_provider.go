@@ -693,15 +693,17 @@ func (x *XXMI) refreshProviderINI(
 		return err
 	}
 
+	// The record goes first: it is the step a cancellation can still fail, and failing it here leaves the
+	// cached file and its old record in agreement.
+	if err := x.recordProviderHashes(ctx, spec, version, source.SHA256, iniHash); err != nil {
+		return err
+	}
 	cached := filepath.Join(destination, providerININame)
 	if iniHash == "" {
 		if err := os.Remove(cached); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	} else if err := platform.ReplaceAtomic(filepath.Join(staging, providerININame), cached); err != nil {
-		return err
-	}
-	if err := x.recordProviderHashes(ctx, spec, version, source.SHA256, iniHash); err != nil {
 		return err
 	}
 	return platform.ReplaceAtomic(
