@@ -321,7 +321,7 @@ export default function FourThousandOneFixer() {
                 {t("page.tools.4001_fixer.provider")}
               </label>
               <div className="flex flex-wrap gap-2">
-                {["SpectrumQT"].map((v) => (
+                {["SpectrumQT", "myparsleycat"].map((v) => (
                   <button
                     key={v}
                     onClick={() => {

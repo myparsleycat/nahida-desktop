@@ -33,7 +33,7 @@
 빌드 화면에서 다음 옵션을 설정할 수 있습니다.
 
 - **제공자**:
-  빌드에 사용할 `XXMI-Libs-Package` 저장소 제공자를 선택합니다.
+  빌드에 사용할 `XXMI-Libs-Package` 저장소 제공자를 선택합니다. `myparsleycat`을 선택하면 `XXMI-Libs-Package-Forked` 포크를 빌드합니다.
 
 - **버전**:
   빌드할 XXMI 라이브러리 버전을 선택합니다.
