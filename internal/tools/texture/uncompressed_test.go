@@ -114,8 +114,23 @@ func TestFindAndCompressUncompressedTextures(t *testing.T) {
 	writeTestDDS(t, small, 256, 256, ddsutil.Rgba8Unorm)
 	writeTestDDS(t, odd, 1026, 1026, ddsutil.Rgba8Unorm)
 	writeTestDDS(t, compressed, 1024, 1024, ddsutil.BC7RgbaUnorm)
+	// ddsutil cannot decode a texture without an alpha channel, so it must not be offered.
+	bgrx := filepath.Join(root, "Mod A", "Opaque.dds")
+	writeLegacyBGRA(t, bgrx, 1024, 1024)
+	header, err := os.ReadFile(bgrx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary.LittleEndian.PutUint32(header[80:84], 0x40)
+	binary.LittleEndian.PutUint32(header[104:108], 0)
+	if err := os.WriteFile(bgrx, header, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if metadata, err := parseDDS(header); err != nil || metadata.format != "DXGI_FORMAT_B8G8R8X8_UNORM" {
+		t.Fatalf("opaque fixture = %+v, %v", metadata, err)
+	}
 	untouched := map[string][]byte{}
-	for _, path := range []string{disabled, small, odd, compressed} {
+	for _, path := range []string{disabled, small, odd, compressed, bgrx} {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

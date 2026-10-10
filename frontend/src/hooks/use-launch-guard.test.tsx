@@ -385,6 +385,53 @@ it("does not launch when the page unmounts while textures are compressing", asyn
   expect(xxmi.StartGame).not.toHaveBeenCalled();
 });
 
+it.each([[[]], [null]])(
+  "does not launch when the page unmounts while textures are scanned (%j)",
+  async (found) => {
+    const scanning = Promise.withResolvers<never[] | null>();
+    const cancel = vi.fn();
+    xxmi.LaunchUncompressedTextures.mockReturnValue(Object.assign(scanning.promise, { cancel }));
+    xxmi.StartGame.mockResolvedValue(undefined);
+
+    const view = render(<Harness importer="WWMI" />);
+    fireEvent.click(screen.getByRole("button", { name: "play" }));
+    await waitFor(() => expect(xxmi.LaunchUncompressedTextures).toHaveBeenCalledWith("WWMI"));
+    view.unmount();
+    await act(async () => {
+      if (found) scanning.resolve(found);
+      else scanning.reject(new Error("cancelled"));
+      await scanning.promise.catch(() => null);
+    });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(xxmi.StartGame).not.toHaveBeenCalled();
+  },
+);
+
+it("cancels every overlapping texture scan when the page unmounts", async () => {
+  const scans = [Promise.withResolvers<never[]>(), Promise.withResolvers<never[]>()];
+  const cancels = [vi.fn(), vi.fn()];
+  scans.forEach((scan, index) =>
+    xxmi.LaunchUncompressedTextures.mockReturnValueOnce(
+      Object.assign(scan.promise, { cancel: cancels[index] }),
+    ),
+  );
+  xxmi.StartGame.mockResolvedValue(undefined);
+
+  const view = render(<Harness importer="GIMI" />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await waitFor(() => expect(xxmi.LaunchUncompressedTextures).toHaveBeenCalledTimes(2));
+  view.unmount();
+  await act(async () => {
+    scans.forEach((scan) => scan.resolve([]));
+    await Promise.all(scans.map((scan) => scan.promise));
+  });
+
+  cancels.forEach((cancel) => expect(cancel).toHaveBeenCalledTimes(1));
+  expect(xxmi.StartGame).not.toHaveBeenCalled();
+});
+
 const pendingUpdates = [
   { importer: "GIMI", package: "importer:GIMI", installed: "1.2.3", latestVersion: "1.3.0" },
   { importer: "GIMI", package: "xxmi-libs", installed: "1.7.5", latestVersion: "1.7.6" },

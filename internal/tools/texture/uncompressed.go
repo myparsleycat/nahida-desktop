@@ -29,10 +29,10 @@ const (
 	uncompressedWorkers   = 4
 )
 
+// B8G8R8X8 is left out because ddsutil cannot decode it, so offering it would only fail.
 var uncompressedTextureFormats = []string{
 	"DXGI_FORMAT_R8G8B8A8_UNORM", "DXGI_FORMAT_R8G8B8A8_UNORM_SRGB",
 	"DXGI_FORMAT_B8G8R8A8_UNORM", "DXGI_FORMAT_B8G8R8A8_UNORM_SRGB",
-	"DXGI_FORMAT_B8G8R8X8_UNORM", "DXGI_FORMAT_B8G8R8X8_UNORM_SRGB",
 }
 
 // UncompressedTexture is a large 32-bit DDS that a block-compressed format would shrink.

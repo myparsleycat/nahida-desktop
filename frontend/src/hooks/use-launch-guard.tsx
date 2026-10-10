@@ -20,7 +20,7 @@ import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/x
 import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -88,7 +88,8 @@ export type LaunchGuardResult =
         | "launch-error"
         | "update"
         | "preset-effects"
-        | "uncompressed-textures";
+        | "uncompressed-textures"
+        | "cancelled";
     };
 
 export function launchErrorCode(message: string): (typeof launchErrorCodes)[number] | null {
@@ -157,6 +158,19 @@ export function useLaunchGuard() {
     importer: string;
     textures: UncompressedTexture[];
   } | null>(null);
+  // Each launch button waits on its own, so scans for different importers can overlap.
+  const textureScans = useRef(new Set<{ cancel: () => unknown; cancelled: boolean }>());
+
+  // Scanning a large Mods folder can outlast the page, and its result must not start the game then.
+  useEffect(
+    () => () => {
+      textureScans.current.forEach((scan) => {
+        scan.cancelled = true;
+        void scan.cancel();
+      });
+    },
+    [],
+  );
 
   const launch = useCallback(
     async (importer: string, withLogging = false): Promise<LaunchGuardResult> => {
@@ -196,8 +210,16 @@ export function useLaunchGuard() {
 
   const launchWithTextures = useCallback(
     async (importer: string): Promise<LaunchGuardResult> => {
+      const request = XXMI.LaunchUncompressedTextures(importer);
+      const scan = { cancel: () => request.cancel(), cancelled: false };
+      textureScans.current.add(scan);
       // A failed scan must not keep the game from launching.
-      const found = await XXMI.LaunchUncompressedTextures(importer).catch(() => null);
+      const found = await request.catch(() => null);
+      textureScans.current.delete(scan);
+      if (scan.cancelled) {
+        return { status: "blocked", kind: "cancelled" };
+      }
+
       const textures = found?.filter((texture) => !ignoredTextures.has(texture.path));
       if (textures?.length) {
         setPendingTextures({ importer, textures });
