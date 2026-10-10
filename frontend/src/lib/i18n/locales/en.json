@@ -2448,6 +2448,7 @@
           "d3dx": {
             "applyNotice": "Only options this importer's d3dx.ini sets are listed. Changes are written to the file the next time the game is launched from here.",
             "empty": "There is no d3dx.ini yet. Install the importer package first.",
+            "loadFailed": "Could not read d3dx.ini.",
             "managedHint": "Set by the other importer settings; every launch overwrites it.",
             "managedRenderingHint": "Kept at the value this importer needs while \"Enforce rendering\" is on in the Advanced tab.",
             "overrideHint": "Every launch applies this value to d3dx.ini.",

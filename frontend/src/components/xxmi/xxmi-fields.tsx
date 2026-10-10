@@ -14,7 +14,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
 import { FolderOpenIcon } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -123,6 +123,7 @@ export function NumberRow({
   onValueChange: (value: number) => void;
 }) {
   const labelId = useId();
+  const [draft, setDraft] = useState<string | null>(null);
 
   return (
     <SectionRow title={label} titleId={labelId} description={description}>
@@ -134,8 +135,15 @@ export function NumberRow({
         max={max}
         step={step}
         disabled={disabled}
-        value={value}
-        onChange={(event) => onValueChange(Number(event.target.value))}
+        value={draft ?? value}
+        onChange={(event) => {
+          // A number input reports "" for an empty or partial entry such as "-", which would otherwise commit as 0
+          // and replace what the user is still typing.
+          const text = event.target.value;
+          setDraft(text);
+          if (text !== "" && Number.isFinite(Number(text))) onValueChange(Number(text));
+        }}
+        onBlur={() => setDraft(null)}
       />
     </SectionRow>
   );

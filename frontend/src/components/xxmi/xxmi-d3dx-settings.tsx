@@ -16,6 +16,7 @@ import {
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { NumberRow, SelectRow, ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
+import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { groupBy, omit } from "es-toolkit";
 import { useTranslation } from "react-i18next";
@@ -32,12 +33,28 @@ export function XXMID3DXSettings({
   onChange: (next: ImporterConfig) => void;
 }) {
   const { t } = useTranslation();
-  const { data: options } = useQuery({
+  const query = useQuery({
     queryKey: ["xxmi:d3dx-options", importer],
     queryFn: () => XXMI.GetD3DXOptions(importer),
   });
+  const options = query.data;
 
-  if (!options) return null;
+  if (!options) {
+    if (!query.isError) return null;
+    return (
+      <div className="flex items-center justify-between gap-4 px-1">
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm text-destructive">
+            {t("page.setting.xxmi.builtin.d3dx.loadFailed")}
+          </p>
+          <p className="text-xs break-words text-muted-foreground">{toErrorMessage(query.error)}</p>
+        </div>
+        <Button variant="outline" size="sm" onClickPromise={() => query.refetch()}>
+          {t("page.setting.xxmi.dllVersionRetry")}
+        </Button>
+      </div>
+    );
+  }
   if (options.length === 0) {
     return (
       <p className="px-1 text-sm text-muted-foreground">
