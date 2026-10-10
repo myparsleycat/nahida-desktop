@@ -23,6 +23,20 @@ jobs:
             throw "Desktop releases may only run from main or v3; got '${{ github.ref }}'."
           }
 
+      # Hosted Windows runners keep TEMP and the Go caches on C:, which is much slower than the workspace drive for
+      # the many small files that tests, builds, and the Go cache restore write. Must run before Set up Go so the
+      # cache is saved and restored at these paths.
+      - name: Keep temporary files and Go caches on the workspace drive
+        shell: pwsh
+        run: |
+          $goCache = Join-Path (Split-Path -Qualifier $env:GITHUB_WORKSPACE) 'go-cache'
+          @(
+            "TEMP=$env:RUNNER_TEMP"
+            "TMP=$env:RUNNER_TEMP"
+            "GOCACHE=$(Join-Path $goCache 'build')"
+            "GOMODCACHE=$(Join-Path $goCache 'mod')"
+          ) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+
       - name: Check out complete history
         uses: actions/checkout@v7
         with:

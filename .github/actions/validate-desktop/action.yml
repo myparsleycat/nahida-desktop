@@ -10,14 +10,11 @@ runs:
         go mod tidy
         git diff --exit-code -- go.mod go.sum
 
-    - name: Generate Wails bindings
+    # Runs first because it generates the Wails bindings and frontend/dist that the Go and frontend gates below
+    # need; generating them separately would repeat both.
+    - name: Build Windows application
       shell: pwsh
-      run: task common:generate:bindings
-
-    - name: Build frontend for Go embedding
-      shell: pwsh
-      working-directory: frontend
-      run: pnpm build
+      run: task build ARCH=amd64
 
     - name: Test Go backend
       shell: pwsh
@@ -42,7 +39,3 @@ runs:
       shell: pwsh
       working-directory: frontend
       run: pnpm test
-
-    - name: Build Windows application
-      shell: pwsh
-      run: task build ARCH=amd64
