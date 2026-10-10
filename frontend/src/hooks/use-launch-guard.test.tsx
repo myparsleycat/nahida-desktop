@@ -35,7 +35,12 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.f
 
 import { toast } from "sonner";
 
-import { launchDialog, launchErrorCode, useLaunchGuard } from "./use-launch-guard";
+import {
+  launchDialog,
+  launchErrorCode,
+  smoothMotionDLLOutdated,
+  useLaunchGuard,
+} from "./use-launch-guard";
 
 const toastError = vi.mocked(toast.error);
 const toastWarning = vi.mocked(toast.warning);
@@ -98,6 +103,17 @@ it("picks one launch dialog for the blocker codes", () => {
   expect(launchDialog("XXMI_GAME_FOLDER_NOT_CONFIGURED")).toBe("game-folder");
   expect(launchDialog("XXMI_RUNTIME_CORRUPTED")).toBe("runtime-repair");
   expect(launchDialog("XXMI is not configured")).toBeNull();
+});
+
+it("reads the versions off an outdated DLL blocker", () => {
+  const message =
+    "GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED: XXMI_SMOOTH_MOTION_DLL_OUTDATED:1.2.2-nhd.2:1.2.2-nhd.3";
+  expect(launchDialog(message)).toBe("launch-blockers");
+  expect(smoothMotionDLLOutdated(message)).toEqual({
+    version: "1.2.2-nhd.2",
+    since: "1.2.2-nhd.3",
+  });
+  expect(smoothMotionDLLOutdated("NVIDIA_SMOOTH_MOTION_ENABLED")).toBeNull();
 });
 
 it.each([

@@ -338,21 +338,63 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	return &providerRuntimeDLL{source: spec.overlayPackage + "@" + version, data: data}, nil
 }
 
-// smoothMotionSupported reports whether the d3d11.dll the importer's next deployment writes renders alongside
+// smoothMotionSupport is how the d3d11.dll an importer's next deployment writes gets along with NVIDIA Smooth
+// Motion.
+type smoothMotionSupport struct {
+	supported bool
+	// provider, pin and version name that d3d11.dll as far as they were resolved before the verdict.
+	provider, pin, version string
+	// since is the provider's first release that renders alongside Smooth Motion, or "".
+	since string
+	// reason is why the DLL counts as unsupported, and err the failure behind it, if any.
+	reason string
+	err    error
+}
+
+const (
+	smoothMotionCustomDLL           = "custom-dll"
+	smoothMotionProviderUnresolved  = "provider-unresolved"
+	smoothMotionProviderUnsupported = "provider-unsupported"
+	smoothMotionVersionUnresolved   = "version-unresolved"
+	smoothMotionVersionOutdated     = "version-outdated"
+)
+
+// smoothMotionSupport reports whether the d3d11.dll the importer's next deployment writes renders alongside
 // NVIDIA Smooth Motion. A release that cannot be resolved counts as unsupported; the deployment that follows
 // reports why.
-func (x *XXMI) smoothMotionSupported(ctx context.Context, cfg ImporterConfig) bool {
-	spec, err := x.deployedLibsProvider(ctx, cfg)
-	if err != nil || spec.smoothMotionSince == "" {
-		return false
-	}
-	pin, _, err := x.libsPin(ctx, cfg)
+func (x *XXMI) smoothMotionSupport(ctx context.Context, cfg ImporterConfig) smoothMotionSupport {
+	custom, err := x.launchesCustomDLL(ctx, cfg)
 	if err != nil {
-		return false
+		return smoothMotionSupport{reason: smoothMotionProviderUnresolved, err: err}
 	}
-	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
-	return err == nil && semver.IsValid("v"+version) &&
-		semver.Compare("v"+version, "v"+spec.smoothMotionSince) >= 0
+	if custom {
+		return smoothMotionSupport{reason: smoothMotionCustomDLL}
+	}
+	spec, err := x.libsProvider(ctx, cfg)
+	support := smoothMotionSupport{provider: spec.id, since: spec.smoothMotionSince}
+	if err != nil {
+		support.reason, support.err = smoothMotionProviderUnresolved, err
+		return support
+	}
+	if spec.smoothMotionSince == "" {
+		support.reason = smoothMotionProviderUnsupported
+		return support
+	}
+
+	support.reason = smoothMotionVersionUnresolved
+	if support.pin, _, support.err = x.libsPin(ctx, cfg); support.err != nil {
+		return support
+	}
+	support.version, support.err = x.resolveProviderDLLVersion(ctx, spec, support.pin, cfg.ImporterFolder)
+	if support.err != nil || !semver.IsValid("v"+support.version) {
+		return support
+	}
+	support.supported = semver.Compare("v"+support.version, "v"+spec.smoothMotionSince) >= 0
+	support.reason = smoothMotionVersionOutdated
+	if support.supported {
+		support.reason = ""
+	}
+	return support
 }
 
 // providerPin moves a pinned libraries version to a provider: to the release built on the same signed

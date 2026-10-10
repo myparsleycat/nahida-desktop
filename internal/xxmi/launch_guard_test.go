@@ -32,6 +32,18 @@ func (f *fakeLaunch) smoothMotionEnabled(context.Context, string) (bool, error) 
 	return f.smooth, f.smoothErr
 }
 
+// cancelingLaunch cancels the launch right after Smooth Motion is read, like a user closing the launch while
+// the release behind the DLL is still being resolved.
+type cancelingLaunch struct {
+	*fakeLaunch
+	cancel context.CancelFunc
+}
+
+func (c cancelingLaunch) smoothMotionEnabled(ctx context.Context, exe string) (bool, error) {
+	defer c.cancel()
+	return c.fakeLaunch.smoothMotionEnabled(ctx, exe)
+}
+
 func (f *fakeLaunch) disableGIMIDCR(context.Context) error {
 	f.dcrDisabled++
 	if f.disableDCRErr == nil {
@@ -508,6 +520,7 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 		t.Fatal(err)
 	}
 	cfg.Enabled = true
+	guards := launchGuards{dcr: true, smoothMotion: true}
 
 	for _, tc := range []struct {
 		name          string
@@ -515,18 +528,26 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 		pin           VersionPin
 		migotoDLLUsed bool
 		blocked       bool
+		outdated      bool
 	}{
-		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}, true, false},
-		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false},
-		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.2"}, true, true},
-		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true},
-		{"launch without the XXMI DLL", "myparsleycat", VersionPin{Follow: "latest"}, false, true},
+		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}, true, false, false},
+		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false, false},
+		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.2"}, true, true, true},
+		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true, false},
+		{"launch without the XXMI DLL", "myparsleycat", VersionPin{Follow: "latest"}, false, true, false},
 	} {
 		cfg.LibsProvider, cfg.XXMIVersion = tc.provider, tc.pin
-		settings := service.builtinLaunchSettings(ctx, cfg, tc.migotoDLLUsed)
+		settings := service.builtinLaunchSettings(cfg, tc.migotoDLLUsed, guards)
 		err := service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
 		if blocked := errors.Is(err, errSmoothMotionEnabled); blocked != tc.blocked || err != nil && !blocked {
 			t.Fatalf("%s: error = %v, want blocked = %t", tc.name, err, tc.blocked)
+		}
+
+		// The renderer reads both versions off this text to name the release that lifts the blocker.
+		outdated := err != nil &&
+			strings.Contains(err.Error(), "XXMI_SMOOTH_MOTION_DLL_OUTDATED:1.2.2-nhd.2:1.2.2-nhd.3")
+		if outdated != tc.outdated {
+			t.Fatalf("%s: error = %v, want outdated = %t", tc.name, err, tc.outdated)
 		}
 	}
 
@@ -535,9 +556,17 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 	cfg.LibsProvider, cfg.XXMIVersion = "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}
 	cfg.Migoto.UnsafeMode = true
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, customDLLName), older)
-	settings := service.builtinLaunchSettings(ctx, cfg, true)
+	settings := service.builtinLaunchSettings(cfg, true, guards)
 	err = service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
 	if !errors.Is(err, errSmoothMotionEnabled) {
 		t.Fatalf("kept DLL without a manifest: error = %v, want the smooth motion blocker", err)
+	}
+
+	canceled, cancel := context.WithCancel(ctx)
+	service.launchSettings = cancelingLaunch{&fakeLaunch{smooth: true}, cancel}
+	settings = service.builtinLaunchSettings(cfg, true, guards)
+	err = service.rejectLaunchBlockersFrom(canceled, "WWMI", "Client-Win64-Shipping.exe", false, settings)
+	if !errors.Is(err, context.Canceled) || errors.Is(err, errSmoothMotionEnabled) {
+		t.Fatalf("launch canceled while resolving the DLL: error = %v, want only the cancellation", err)
 	}
 }

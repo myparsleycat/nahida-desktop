@@ -602,7 +602,8 @@
         "smooth-motion": {
           "title": "Smooth Motion is on",
           "description": "Mods will not apply correctly unless Smooth Motion is off. Turn it off and start the game?",
-          "confirm": "Turn off and start"
+          "confirm": "Turn off and start",
+          "outdated": "The 3DMigoto DLL selected for this game ({{version}}) does not support Smooth Motion. Updating it to {{since}} or later lets you keep Smooth Motion on."
         },
         "launch-blockers": {
           "title": "Settings need to be turned off before launch",

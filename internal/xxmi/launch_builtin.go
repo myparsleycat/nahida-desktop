@@ -211,7 +211,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if blockerTarget == "" {
 		blockerTarget = processName
 	}
-	launchSettings := guards.settings(x.builtinLaunchSettings(ctx, cfg, migotoDLLUsed))
+	launchSettings := x.builtinLaunchSettings(cfg, migotoDLLUsed, guards)
 	if err := x.rejectLaunchBlockersFrom(ctx, key, blockerTarget, checkDCR, launchSettings); err != nil {
 		return err
 	}

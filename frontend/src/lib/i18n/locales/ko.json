@@ -602,7 +602,8 @@
         "smooth-motion": {
           "title": "부드러운 모션이 켜져 있습니다",
           "description": "모드가 정상적으로 적용되려면 부드러운 모션이 꺼져 있어야 합니다. 끄고 게임을 실행할까요?",
-          "confirm": "끄고 실행"
+          "confirm": "끄고 실행",
+          "outdated": "이 게임에 선택된 3DMigoto DLL({{version}})은 부드러운 모션을 지원하지 않습니다. {{since}} 이상으로 업데이트하면 부드러운 모션을 켠 채로 실행할 수 있습니다."
         },
         "launch-blockers": {
           "title": "실행 전에 끌 설정이 있습니다",
