@@ -441,19 +441,21 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 		t.Fatalf("notified=%d, want 1", notified)
 	}
 
-	// Dropping the announced release mirrors the reset a failed check performs,
-	// so the next check discovers the newer release through the normal path.
-	u.mu.Lock()
-	u.available, u.downloaded = false, false
-	u.releaseVersion, u.originalNotes = "", ""
-	u.mu.Unlock()
+	// The first release stays downloaded, so the automatic check has to look
+	// past its own candidate to find the newer one.
 	engine.release = &wailsupdater.Release{Version: "1.2.4"}
 
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
 		t.Fatalf("check for the newer release: %v", err)
 	}
-	if notified != 2 || engine.downloads != 2 {
-		t.Fatalf("newer release notified=%d downloads=%d, want 2/2", notified, engine.downloads)
+	status, _ := u.GetStatus(context.Background())
+	if notified != 2 || engine.downloads != 2 || status.ReleaseVersion == nil || *status.ReleaseVersion != "1.2.4" {
+		t.Fatalf(
+			"newer release notified=%d downloads=%d status=%#v, want 2/2/1.2.4",
+			notified,
+			engine.downloads,
+			status,
+		)
 	}
 
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
@@ -461,6 +463,54 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 	}
 	if notified != 2 {
 		t.Fatalf("automatic recheck notified=%d, want 2", notified)
+	}
+
+	// The restart helper now owns the staged file, which a download of an even
+	// newer release would delete.
+	if err := u.InstallUpdate(context.Background()); err != nil {
+		t.Fatalf("InstallUpdate: %v", err)
+	}
+	engine.release = &wailsupdater.Release{Version: "1.2.5"}
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("check during install: %v", err)
+	}
+	status, _ = u.GetStatus(context.Background())
+	if engine.downloads != 2 || status.ReleaseVersion == nil || *status.ReleaseVersion != "1.2.4" {
+		t.Fatalf("check during install downloads=%d status=%#v, want 2/1.2.4", engine.downloads, status)
+	}
+}
+
+func TestUpdaterRefreshFinishingDuringInstallKeepsDownloadedRelease(t *testing.T) {
+	t.Parallel()
+
+	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3"}}
+	u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "auto"}, ctx: context.Background()}
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("CheckForUpdates: %v", err)
+	}
+
+	// The refresh announces its checking phase before it asks the engine, which
+	// is where an install request can start ahead of the result.
+	u.emit = func(string, ...any) {
+		u.mu.Lock()
+		u.installing = true
+		u.mu.Unlock()
+	}
+	engine.release = nil
+	if err := u.CheckForUpdates(context.Background(), false); err != nil {
+		t.Fatalf("refresh during install: %v", err)
+	}
+	status, _ := u.GetStatus(context.Background())
+	if !status.UpdateDownloaded || status.ReleaseVersion == nil || *status.ReleaseVersion != "1.2.3" {
+		t.Fatalf("status after refresh during install = %#v, want downloaded 1.2.3", status)
+	}
+
+	// A failed restart releases the install, and the retry still has its release.
+	u.mu.Lock()
+	u.emit, u.installing = nil, false
+	u.mu.Unlock()
+	if err := u.InstallUpdate(context.Background()); err != nil || engine.restarts != 1 {
+		t.Fatalf("InstallUpdate retry = %v, restarts=%d", err, engine.restarts)
 	}
 }
 

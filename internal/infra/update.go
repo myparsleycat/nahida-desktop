@@ -95,6 +95,7 @@ type Updater struct {
 	dialogDismissed             bool
 	checking                    bool
 	downloading                 bool
+	installing                  bool
 	recheckAfterBusy            bool
 	channelRefreshPending       bool
 	includePrereleaseGeneration uint64
@@ -306,14 +307,14 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 		return errors.New("updater is nil")
 	}
 	u.mu.Lock()
-	if u.checking {
+	if u.checking || u.installing {
 		u.mu.Unlock()
 		return nil
 	}
 	refreshPending := u.channelRefreshPending
 	u.mu.Unlock()
 	if refreshPending {
-		return u.refreshUpdateCandidate(ctx, userInitiated)
+		return u.refreshUpdateCandidate(ctx, userInitiated, true)
 	}
 	allowed, err := u.githubRateAllowsCheck(ctx, userInitiated)
 	if err != nil {
@@ -324,29 +325,11 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	}
 
 	u.mu.Lock()
-	if u.checking {
+	if u.checking || u.installing {
 		u.mu.Unlock()
 		return nil
 	}
 	engine := u.engine
-	if u.downloaded {
-		if userInitiated {
-			u.dialogDismissed = false
-		}
-		// Automatic checks repeat every hour, so the ready prompt is announced
-		// once per release unless the user asked for the check. Claiming the
-		// version here keeps overlapping checks from announcing it twice.
-		notify := userInitiated || u.releaseVersion != u.notifiedVersion
-		if notify {
-			u.notifiedVersion = u.releaseVersion
-		}
-		u.mu.Unlock()
-		if notify {
-			u.notifyReady()
-		}
-		u.broadcastStatus(ctx)
-		return nil
-	}
 	available, downloading := u.available, u.downloading
 	u.mu.Unlock()
 	if engine == nil {
@@ -355,19 +338,17 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 		u.mu.Unlock()
 		return errors.New("updater is not configured")
 	}
+	if available {
+		// A newer release can ship while a candidate is known or already
+		// downloaded, so every check looks again instead of keeping it.
+		if downloading {
+			return nil
+		}
+		return u.refreshUpdateCandidate(ctx, userInitiated, false)
+	}
 	mode, err := u.mode(ctx)
 	if err != nil {
 		return err
-	}
-	if available {
-		// The known candidate may be stale, so an explicit check looks again.
-		if userInitiated && !downloading {
-			return u.refreshUpdateCandidate(ctx, true)
-		}
-		if mode == "auto" && !downloading {
-			return u.DownloadUpdate(ctx)
-		}
-		return nil
 	}
 
 	u.mu.Lock()
@@ -414,18 +395,22 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 
 func (u *Updater) resetCheckedRelease(ctx context.Context) {
 	u.mu.Lock()
+	u.resetCheckedReleaseLocked()
+	u.mu.Unlock()
+	u.broadcastStatus(ctx)
+}
+
+func (u *Updater) resetCheckedReleaseLocked() {
 	u.checking, u.downloading = false, false
 	u.available, u.downloaded = false, false
 	u.releaseVersion, u.releaseChannel, u.originalNotes = "", "", ""
 	u.clearTranslationLocked()
 	u.dialogDismissed = false
-	u.mu.Unlock()
-	u.broadcastStatus(ctx)
 }
 
 func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	u.mu.Lock()
-	if u.downloaded || !u.available || u.downloading {
+	if u.downloaded || !u.available || u.downloading || u.installing {
 		u.mu.Unlock()
 		return nil
 	}
@@ -479,16 +464,32 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 
 func (u *Updater) InstallUpdate(ctx context.Context) error {
 	u.mu.Lock()
+	if u.installing {
+		u.mu.Unlock()
+		return nil
+	}
 	ready := u.downloaded && u.available
 	engine := u.engine
-	u.mu.Unlock()
-	if !ready {
-		return errors.New("no update available to install")
-	}
-	if engine == nil {
+	if !ready || engine == nil {
+		u.mu.Unlock()
+		if !ready {
+			return errors.New("no update available to install")
+		}
 		return errors.New("updater is not configured")
 	}
-	return engine.Restart(ctx)
+	// The restart helper takes the staged file by path, and the engine deletes
+	// that file when another download starts. Holding this until the process
+	// exits keeps a check from replacing the release being installed.
+	u.installing = true
+	u.mu.Unlock()
+
+	if err := engine.Restart(ctx); err != nil {
+		u.mu.Lock()
+		u.installing = false
+		u.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 func (u *Updater) DismissUpdateDialog() {
@@ -579,11 +580,15 @@ func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool
 		if mode == "off" {
 			return nil
 		}
-		return u.refreshUpdateCandidate(ctx, false)
+		return u.refreshUpdateCandidate(ctx, false, true)
 	}
 	u.channelRefreshPending = false
 	if u.checking || u.downloading {
 		u.recheckAfterBusy = true
+		u.mu.Unlock()
+		return nil
+	}
+	if u.installing {
 		u.mu.Unlock()
 		return nil
 	}
@@ -604,15 +609,17 @@ func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool
 	return u.CheckForUpdates(ctx, false)
 }
 
-func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool) error {
+// refreshUpdateCandidate looks for a release again while one is already known.
+// channelChange marks a refresh caused by the pre-release setting: it bypasses
+// the metadata cache and is retried once a busy updater settles.
+func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated, channelChange bool) error {
 	u.mu.Lock()
 	if u.checking || u.downloading {
-		u.recheckAfterBusy = true
+		u.recheckAfterBusy = u.recheckAfterBusy || channelChange
 		u.mu.Unlock()
 		return nil
 	}
 	previousVersion := u.releaseVersion
-	previousDownloaded := u.downloaded
 	engine := u.engine
 	u.mu.Unlock()
 	if engine == nil {
@@ -625,7 +632,7 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool
 
 	u.mu.Lock()
 	if u.checking || u.downloading {
-		u.recheckAfterBusy = true
+		u.recheckAfterBusy = u.recheckAfterBusy || channelChange
 		u.mu.Unlock()
 		return nil
 	}
@@ -633,7 +640,8 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
 
-	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, "app-update-channel"), true)
+	operation := lo.Ternary(channelChange, "app-update-channel", "app-update")
+	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, operation), userInitiated || channelChange)
 	release, err := engine.Check(checkCtx)
 	if err != nil {
 		u.mu.Lock()
@@ -652,25 +660,37 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool
 		u.finishIncludePrereleaseChange(ctx)
 		return err
 	}
-	if release == nil {
-		u.mu.Lock()
-		u.channelRefreshPending = false
+
+	// The install check and the result share one critical section, so an
+	// install request cannot start between them and lose its release.
+	u.mu.Lock()
+	u.checking = false
+	if u.installing {
 		u.mu.Unlock()
-		u.resetCheckedRelease(ctx)
+		u.broadcastStatus(ctx)
+		return nil
+	}
+	u.channelRefreshPending = false
+	if release == nil {
+		u.resetCheckedReleaseLocked()
+		u.mu.Unlock()
+		u.broadcastStatus(ctx)
 		u.finishIncludePrereleaseChange(ctx)
 		return nil
 	}
-
-	u.mu.Lock()
-	u.checking = false
-	u.channelRefreshPending = false
 	u.available = true
 	u.releaseChannel = release.Channel
 	sameRelease := release.Version == previousVersion && previousVersion != ""
+	notify := false
 	if sameRelease {
-		u.downloaded = previousDownloaded
-		if userInitiated && previousDownloaded {
+		if userInitiated && u.downloaded {
 			u.dialogDismissed = false
+		}
+		// Automatic checks repeat every hour, so the ready prompt is announced
+		// once per release unless the user asked for the check. Claiming the
+		// version here keeps overlapping checks from announcing it twice.
+		notify = u.downloaded && (userInitiated || u.releaseVersion != u.notifiedVersion)
+		if notify {
 			u.notifiedVersion = u.releaseVersion
 		}
 	} else {
@@ -688,7 +708,7 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated bool
 		u.translateCurrentReleaseNotes(ctx)
 	}
 	u.broadcastStatus(ctx)
-	if sameRelease && downloaded && userInitiated {
+	if notify {
 		u.notifyReady()
 	}
 	if mode == "auto" && !downloaded {
