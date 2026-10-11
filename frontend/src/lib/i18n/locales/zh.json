@@ -2469,6 +2469,7 @@
               "Rendering": {
                 "shader_hash": "识别着色器的方式。模组针对某一种方式制作，更改后将无法匹配。",
                 "texture_hash": "使用较新的纹理识别方式。模组针对某一种方式制作，更改后将无法匹配。",
+                "dx12": "DirectX 12 支持（开发中）：游戏以 DirectX 12 渲染时应用为 DirectX 11 制作的模组。“auto”会在游戏以 DirectX 12 输出画面时启用。",
                 "cache_shaders": "将编译后的着色器保存到磁盘，减少之后启动时加载过程中的卡顿。",
                 "shader_regex_background": "在后台线程中进行 ShaderRegex 分析和已修补着色器的编译，减少首次绘制时的卡顿。",
                 "share_duplicate_resources": "内容相同的模组纹理和缓冲区只加载一次，节省加载时间和显存。",
@@ -2538,6 +2539,11 @@
                 }
               },
               "Rendering": {
+                "dx12": {
+                  "auto": "auto · 游戏使用 DirectX 12 时",
+                  "0": "0 · 关闭",
+                  "1": "1 · 始终开启"
+                },
                 "shader_regex_background": {
                   "0": "0 · 关闭",
                   "1": "1 · 就绪前以未修补状态绘制",

@@ -2521,6 +2521,7 @@
               "Rendering": {
                 "shader_hash": "How shaders are identified. Mods are made for one method, so changing it stops them from matching.",
                 "texture_hash": "Uses the newer way of identifying textures. Mods are made for one method, so changing it stops them from matching.",
+                "dx12": "DirectX 12 support (work in progress): applies mods made for DirectX 11 when the game renders with DirectX 12. \"auto\" turns it on once the game presents with DirectX 12.",
                 "cache_shaders": "Saves compiled shaders to disk so later launches stutter less while loading.",
                 "shader_regex_background": "Runs ShaderRegex analysis and patched shader compilation on background threads instead of stalling the first draw.",
                 "share_duplicate_resources": "Loads mod textures and buffers with identical contents only once, saving load time and VRAM.",
@@ -2590,6 +2591,11 @@
                 }
               },
               "Rendering": {
+                "dx12": {
+                  "auto": "auto · When the game uses DirectX 12",
+                  "0": "0 · Off",
+                  "1": "1 · Always on"
+                },
                 "shader_regex_background": {
                   "0": "0 · Off",
                   "1": "1 · Draw unpatched until ready",

@@ -126,6 +126,7 @@ var d3dxOptionSpecs = func() []d3dxOptionSpec {
 
 		option("Rendering", "shader_hash", D3DXOptionEnum, "3dmigoto", "embedded", "bytecode"),
 		option("Rendering", "texture_hash", D3DXOptionBool),
+		option("Rendering", "dx12", D3DXOptionEnum, "auto", "0", "1"),
 		option("Rendering", "cache_shaders", D3DXOptionBool),
 		option("Rendering", "shader_regex_background", D3DXOptionEnum, "0", "1", "2"),
 		option("Rendering", "share_duplicate_resources", D3DXOptionBool),
