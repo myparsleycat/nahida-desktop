@@ -570,3 +570,40 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 		t.Fatalf("launch canceled while resolving the DLL: error = %v, want only the cancellation", err)
 	}
 }
+
+func TestDX12WarningFollowsProviderDLLSupport(t *testing.T) {
+	ctx := context.Background()
+	supporting, older := testCustomDLLImage("1.2.2-nhd.6"), testCustomDLLImage("1.2.2-nhd.5")
+	service, _, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.6", data: supporting, digest: providerTestDigest(supporting)},
+		{tag: "v1.2.2-nhd.5", data: older, digest: providerTestDigest(older)},
+	})
+	cfg, err := DefaultImporterConfig("ZZMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+
+	for _, tc := range []struct {
+		name     string
+		provider string
+		pin      VersionPin
+		skipD3D  bool
+		warned   bool
+	}{
+		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.6"}, true, false},
+		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false},
+		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.5"}, true, true},
+		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true},
+		{"DirectX 11 launch", defaultLibsProvider, VersionPin{Follow: "latest"}, false, false},
+	} {
+		cfg.LibsProvider, cfg.XXMIVersion, cfg.SkipD3D11Switch = tc.provider, tc.pin, tc.skipD3D
+		warning := service.dx12Warning(ctx, cfg)
+		if warned := warning != nil; warned != tc.warned {
+			t.Fatalf("%s: warning = %+v, want warned = %t", tc.name, warning, tc.warned)
+		}
+		if warning != nil && warning.code != launchWarningDX12Unsupported {
+			t.Fatalf("%s: warning code = %q", tc.name, warning.code)
+		}
+	}
+}

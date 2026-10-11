@@ -44,6 +44,9 @@ type libsProviderSpec struct {
 	// smoothMotionSince is the first release whose d3d11.dll renders alongside NVIDIA Smooth Motion, or ""
 	// when Smooth Motion has to be off for mods to load.
 	smoothMotionSince string
+	// dx12Since is the first release whose d3d11.dll applies mods to a game rendering with DirectX 12, or ""
+	// when mods only load with DirectX 11.
+	dx12Since string
 }
 
 var libsProviders = []libsProviderSpec{
@@ -54,6 +57,7 @@ var libsProviders = []libsProviderSpec{
 		overlayPackage:    "xxmi-libs-myparsleycat",
 		versionMark:       "-nhd.",
 		smoothMotionSince: "1.2.2-nhd.3",
+		dx12Since:         "1.2.2-nhd.6",
 	},
 }
 
@@ -338,13 +342,13 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	return &providerRuntimeDLL{source: spec.overlayPackage + "@" + version, data: data}, nil
 }
 
-// smoothMotionSupport is how the d3d11.dll an importer's next deployment writes gets along with NVIDIA Smooth
-// Motion.
-type smoothMotionSupport struct {
+// dllFeatureSupport is whether the d3d11.dll an importer's next deployment writes has a feature only some
+// provider releases ship, such as rendering alongside NVIDIA Smooth Motion.
+type dllFeatureSupport struct {
 	supported bool
 	// provider, pin and version name that d3d11.dll as far as they were resolved before the verdict.
 	provider, pin, version string
-	// since is the provider's first release that renders alongside Smooth Motion, or "".
+	// since is the provider's first release with the feature, or "".
 	since string
 	// reason is why the DLL counts as unsupported, and err the failure behind it, if any.
 	reason string
@@ -352,36 +356,40 @@ type smoothMotionSupport struct {
 }
 
 const (
-	smoothMotionCustomDLL           = "custom-dll"
-	smoothMotionProviderUnresolved  = "provider-unresolved"
-	smoothMotionProviderUnsupported = "provider-unsupported"
-	smoothMotionVersionUnresolved   = "version-unresolved"
-	smoothMotionVersionOutdated     = "version-outdated"
+	dllFeatureCustomDLL           = "custom-dll"
+	dllFeatureProviderUnresolved  = "provider-unresolved"
+	dllFeatureProviderUnsupported = "provider-unsupported"
+	dllFeatureVersionUnresolved   = "version-unresolved"
+	dllFeatureVersionOutdated     = "version-outdated"
 )
 
-// smoothMotionSupport reports whether the d3d11.dll the importer's next deployment writes renders alongside
-// NVIDIA Smooth Motion. A release that cannot be resolved counts as unsupported; the deployment that follows
-// reports why.
-func (x *XXMI) smoothMotionSupport(ctx context.Context, cfg ImporterConfig) smoothMotionSupport {
+// dllFeatureSupport reports whether the d3d11.dll the importer's next deployment writes has the feature whose
+// first release since names for a provider. A release that cannot be resolved counts as unsupported; the
+// deployment that follows reports why.
+func (x *XXMI) dllFeatureSupport(
+	ctx context.Context,
+	cfg ImporterConfig,
+	since func(libsProviderSpec) string,
+) dllFeatureSupport {
 	custom, err := x.launchesCustomDLL(ctx, cfg)
 	if err != nil {
-		return smoothMotionSupport{reason: smoothMotionProviderUnresolved, err: err}
+		return dllFeatureSupport{reason: dllFeatureProviderUnresolved, err: err}
 	}
 	if custom {
-		return smoothMotionSupport{reason: smoothMotionCustomDLL}
+		return dllFeatureSupport{reason: dllFeatureCustomDLL}
 	}
 	spec, err := x.libsProvider(ctx, cfg)
-	support := smoothMotionSupport{provider: spec.id, since: spec.smoothMotionSince}
+	support := dllFeatureSupport{provider: spec.id, since: since(spec)}
 	if err != nil {
-		support.reason, support.err = smoothMotionProviderUnresolved, err
+		support.reason, support.err = dllFeatureProviderUnresolved, err
 		return support
 	}
-	if spec.smoothMotionSince == "" {
-		support.reason = smoothMotionProviderUnsupported
+	if support.since == "" {
+		support.reason = dllFeatureProviderUnsupported
 		return support
 	}
 
-	support.reason = smoothMotionVersionUnresolved
+	support.reason = dllFeatureVersionUnresolved
 	if support.pin, _, support.err = x.libsPin(ctx, cfg); support.err != nil {
 		return support
 	}
@@ -389,8 +397,8 @@ func (x *XXMI) smoothMotionSupport(ctx context.Context, cfg ImporterConfig) smoo
 	if support.err != nil || !semver.IsValid("v"+support.version) {
 		return support
 	}
-	support.supported = semver.Compare("v"+support.version, "v"+spec.smoothMotionSince) >= 0
-	support.reason = smoothMotionVersionOutdated
+	support.supported = semver.Compare("v"+support.version, "v"+support.since) >= 0
+	support.reason = dllFeatureVersionOutdated
 	if support.supported {
 		support.reason = ""
 	}

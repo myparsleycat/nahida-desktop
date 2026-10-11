@@ -216,6 +216,11 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := x.rejectLaunchBlockersFrom(ctx, key, blockerTarget, checkDCR, launchSettings); err != nil {
 		return err
 	}
+	if migotoDLLUsed {
+		if warning := x.dx12Warning(ctx, cfg); warning != nil {
+			x.notifyLaunchWarning(key, *warning)
+		}
+	}
 	if x.elevated == nil {
 		return errors.New("XXMI_ELEVATION_DENIED: elevated helper is unavailable")
 	}

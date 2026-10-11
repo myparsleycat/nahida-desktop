@@ -2234,7 +2234,8 @@
             "RESHADE_NOT_INSTALLED": "无法准备 ReShade。请检查网络连接，或在 XXMI 的 ReShade 页面中下载。"
           },
           "launchWarnings": {
-            "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。"
+            "GIMI_DCR_UNREADABLE": "无法读取动态角色分辨率设置。若该选项已开启，模组可能无法正常生效，请检查游戏画面设置。",
+            "XXMI_DX12_UNSUPPORTED": "未将游戏固定为 DirectX 11，但当前的 XXMI 库仅在 DirectX 11 下应用模组。若游戏以 DirectX 12 启动，模组将不会生效；请改用支持 DirectX 12 的 XXMI 库，或将渲染器改回 DirectX 11。"
           },
           "importerFolder": "导入器文件夹",
           "gameFolder": "游戏文件夹",

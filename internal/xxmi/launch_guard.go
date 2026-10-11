@@ -17,6 +17,7 @@ const (
 	// The renderer localizes a launch warning by this code. Keep it in sync with the launchWarnings keys in
 	// frontend/src/lib/i18n/locales.
 	launchWarningGimiDCRUnreadable = "GIMI_DCR_UNREADABLE"
+	launchWarningDX12Unsupported   = "XXMI_DX12_UNSUPPORTED"
 
 	// Storage keys of the xxmi.launchGuard* settings. Keep them in sync with internal/setting/keys.go.
 	launchGuardKey             = "xxmi_launch_guard"
@@ -146,7 +147,7 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 	if err != nil || !enabled {
 		return enabled, err
 	}
-	support := g.x.smoothMotionSupport(ctx, g.cfg)
+	support := g.x.dllFeatureSupport(ctx, g.cfg, func(spec libsProviderSpec) string { return spec.smoothMotionSince })
 
 	// A lookup that was cut short says nothing about the DLL, so it must not turn into the blocker.
 	if err := ctx.Err(); err != nil {
@@ -176,7 +177,7 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 		g.x.log.Info(fields, xxmiLaunchGuardWhere)
 	}
 	g.blocker = errSmoothMotionEnabled
-	if support.reason == smoothMotionVersionOutdated {
+	if support.reason == dllFeatureVersionOutdated {
 		g.blocker = fmt.Errorf(
 			"%w: %s:%s:%s", errSmoothMotionEnabled, smoothMotionDLLOutdatedCode, support.version, support.since,
 		)
@@ -199,6 +200,33 @@ func (x *XXMI) builtinLaunchSettings(cfg ImporterConfig, migotoDLLUsed bool, gua
 		return settings
 	}
 	return &smoothMotionGate{launchFixer: settings, x: x, cfg: cfg}
+}
+
+// dx12Warning returns the notice for a launch that leaves the renderer to the game, or asks it for DirectX
+// 12, while the d3d11.dll about to be deployed only applies mods with DirectX 11. It is nil for a DLL that
+// could not be told: a user-provided one may well support DirectX 12, and a release that cannot be resolved
+// fails the deployment that follows.
+func (x *XXMI) dx12Warning(ctx context.Context, cfg ImporterConfig) *launchWarning {
+	if !cfg.SkipD3D11Switch {
+		return nil
+	}
+	support := x.dllFeatureSupport(ctx, cfg, func(spec libsProviderSpec) string { return spec.dx12Since })
+	switch support.reason {
+	case dllFeatureProviderUnsupported:
+		return &launchWarning{
+			code: launchWarningDX12Unsupported,
+			err:  fmt.Errorf("XXMI libraries of %s do not apply mods with DirectX 12", support.provider),
+		}
+	case dllFeatureVersionOutdated:
+		return &launchWarning{
+			code: launchWarningDX12Unsupported,
+			err: fmt.Errorf(
+				"XXMI libraries %s of %s do not apply mods with DirectX 12, which %s is the first release to do",
+				support.version, support.provider, support.since,
+			),
+		}
+	}
+	return nil
 }
 
 func collectLaunchBlockers(
