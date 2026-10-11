@@ -137,6 +137,30 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 	}
 }
 
+func TestRebuildINIWritesValidUTF8(t *testing.T) {
+	t.Parallel()
+	template := []byte("[Rendering]\n; the game\x92s buffer\nresize = 1\n\n[Logging]\nshow_warnings = 1\n")
+	previous := []byte("[Rendering]\r\n; the game\x92s buffer\r\nresize = 0\r\nmine = caf\xe9\r\n\r\n" +
+		"[Logging]\r\nshow_warnings = 0\r\n")
+	want := "[Rendering]\n; the game’s buffer\nresize = 0\nmine = café\n\n[Logging]\nshow_warnings = 0\n"
+
+	doc, lost := rebuildINI(template, previous)
+	if got := string(doc.Bytes()); got != want || lost {
+		t.Fatalf("INI mismatch (lost = %t)\n got %q\nwant %q", lost, got, want)
+	}
+
+	again, lost := rebuildINI(template, []byte(want))
+	if got := string(again.Bytes()); got != want || lost {
+		t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
+	}
+
+	// Windows-1252 leaves 0x81 undefined, so the original value survives only in a backup.
+	undefined := bytes.Replace(previous, []byte("caf\xe9"), []byte("caf\x81"), 1)
+	if _, lost := rebuildINI(template, undefined); !lost {
+		t.Fatal("a byte replaced without an equivalent was not reported")
+	}
+}
+
 func TestRebuildINIKeepsOnlyFirstVerbatimSection(t *testing.T) {
 	t.Parallel()
 	previous := []byte("[CommandListUser]\nrun = CommandListFirst\n" +

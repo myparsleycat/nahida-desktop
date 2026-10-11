@@ -5,6 +5,9 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 var iniOptionPattern = regexp.MustCompile(`^(\s*)([^\s=;#]+)(\s*=\s*)(.*)$`)
@@ -171,7 +174,9 @@ func iniVerbatimSection(name string) bool {
 // The result rebuilds into itself, so a launch that repeats it leaves the file alone. lost reports whether a
 // line of previous is gone, which is when the caller backs the file up.
 func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
+	template, _ = iniValidUTF8(template)
 	tpl := parseINI(template)
+	previous, lost = iniValidUTF8(previous)
 	// A file with mixed line endings would otherwise parse into lines that span several options.
 	prev := parseINI(bytes.ReplaceAll(previous, []byte("\r\n"), []byte("\n")))
 	out := &iniDocument{bom: tpl.bom, newline: tpl.newline, terminal: tpl.terminal}
@@ -298,6 +303,26 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 		return line != "" && !kept[line]
 	})
 	return out, lost
+}
+
+// iniValidUTF8 returns data with every byte that is not part of a UTF-8 sequence read as Windows-1252. 3DMigoto
+// reads a d3dx.ini as UTF-8 and stops at the first invalid byte, which silently drops the rest of the file.
+// lossy reports a byte Windows-1252 does not define, which is replaced and cannot be told from the result.
+func iniValidUTF8(data []byte) (valid []byte, lossy bool) {
+	if utf8.Valid(data) {
+		return data, false
+	}
+	valid = make([]byte, 0, len(data)+utf8.UTFMax)
+	for len(data) > 0 {
+		char, size := utf8.DecodeRune(data)
+		if char == utf8.RuneError && size == 1 {
+			char = charmap.Windows1252.DecodeByte(data[0])
+			lossy = lossy || char == utf8.RuneError
+		}
+		valid = utf8.AppendRune(valid, char)
+		data = data[size:]
+	}
+	return valid, lossy
 }
 
 var iniSettingKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
