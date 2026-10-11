@@ -114,6 +114,15 @@ func TestPlatformCommandLine(t *testing.T) {
 			ImporterConfig{GameLaunch: "Epic", LaunchOptions: "-a"}, "-force-d3d11",
 		},
 		{
+			"renderer left to the game", "EFMI",
+			ImporterConfig{GameLaunch: "Steam", SkipD3D11Switch: true, UseLaunchOptions: true, LaunchOptions: "-a"},
+			"-a",
+		},
+		{
+			"DirectX 12 named for Zenless Zone Zero", "ZZMI",
+			ImporterConfig{GameLaunch: "Epic", SkipD3D11Switch: true}, "-use-d3d12",
+		},
+		{
 			"launch options", "GIMI",
 			ImporterConfig{GameLaunch: "Steam", UseLaunchOptions: true, LaunchOptions: ` -path C:\Data `},
 			"-path C:/Data",
@@ -123,11 +132,11 @@ func TestPlatformCommandLine(t *testing.T) {
 			ImporterConfig{
 				GameLaunch: "Steam", SkipPlatformGameLauncher: true, UseLaunchOptions: true, LaunchOptions: "-a",
 			},
-			`"C:\Game\Game.exe" && %command% -a`,
+			`"C:\Game\Game.exe" && %command% -force-d3d11 -a`,
 		},
 		{
 			"game launcher skip is Steam only", "ZZMI",
-			ImporterConfig{GameLaunch: "Epic", SkipPlatformGameLauncher: true}, "",
+			ImporterConfig{GameLaunch: "Epic", SkipPlatformGameLauncher: true}, "-force-d3d11",
 		},
 	} {
 		if got := platformCommandLine(tc.key, tc.cfg, `C:\Game\Game.exe`); got != tc.want {
@@ -135,7 +144,7 @@ func TestPlatformCommandLine(t *testing.T) {
 		}
 	}
 	cfg := ImporterConfig{GameLaunch: "Steam", SkipPlatformGameLauncher: true}
-	if got := platformCommandLine("ZZMI", cfg, ""); got != "" {
+	if got := platformCommandLine("ZZMI", cfg, ""); got != "-force-d3d11" {
 		t.Errorf("command line without a located executable = %q", got)
 	}
 }

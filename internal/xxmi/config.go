@@ -165,11 +165,14 @@ type ImporterConfig struct {
 	WoundedFXDecided bool                `json:"woundedFXDecided"`
 	// D3D11ModeNoticeShown records that the user saw the reminder to turn on DirectX 11 in the
 	// game's own launcher, which an Epic Games launch cannot do for them.
-	D3D11ModeNoticeShown bool         `json:"d3d11ModeNoticeShown"`
-	GIMI                 *GIMIOptions `json:"gimi,omitempty"`
-	SRMI                 *SRMIOptions `json:"srmi,omitempty"`
-	HIMI                 *HIMIOptions `json:"himi,omitempty"`
-	WWMI                 *WWMIOptions `json:"wwmi,omitempty"`
+	D3D11ModeNoticeShown bool `json:"d3d11ModeNoticeShown"`
+	// SkipD3D11Switch leaves out the DirectX 11 argument a WWMI, EFMI, or ZZMI launch otherwise passes, so the
+	// game starts with the renderer it picks itself. A ZZMI launch passes the DirectX 12 argument instead.
+	SkipD3D11Switch bool         `json:"skipD3D11Switch"`
+	GIMI            *GIMIOptions `json:"gimi,omitempty"`
+	SRMI            *SRMIOptions `json:"srmi,omitempty"`
+	HIMI            *HIMIOptions `json:"himi,omitempty"`
+	WWMI            *WWMIOptions `json:"wwmi,omitempty"`
 }
 
 func xxmiCacheRoot() (string, error) {

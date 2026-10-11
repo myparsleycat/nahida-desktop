@@ -167,8 +167,8 @@ func openShellURI(uri string) error {
 	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
 }
 
-// platformCommandLine builds the game arguments a store client passes on: the DirectX 11 switch
-// the importer needs, then the user's launch options.
+// platformCommandLine builds the game arguments a store client passes on: the renderer switch
+// of the importer's game, then the user's launch options.
 func platformCommandLine(key string, cfg ImporterConfig, gameExe string) string {
 	var parts []string
 
@@ -177,11 +177,8 @@ func platformCommandLine(key string, cfg ImporterConfig, gameExe string) string 
 	if cfg.GameLaunch == "Steam" && key == "ZZMI" && cfg.SkipPlatformGameLauncher && gameExe != "" {
 		parts = append(parts, `"`+gameExe+`" && %command%`)
 	}
-	switch key {
-	case "WWMI":
-		parts = append(parts, "-dx11")
-	case "EFMI":
-		parts = append(parts, "-force-d3d11")
+	if renderer := rendererSwitch(key, cfg); renderer != "" {
+		parts = append(parts, renderer)
 	}
 	if options := strings.TrimSpace(cfg.LaunchOptions); cfg.UseLaunchOptions && options != "" {
 		parts = append(parts, strings.ReplaceAll(options, `\`, "/"))

@@ -561,6 +561,26 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
                       onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
                     />
+                    {(importer === "WWMI" || importer === "EFMI" || importer === "ZZMI") && (
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.renderer")}
+                        description={t("page.setting.xxmi.builtin.rendererDescription")}
+                        value={config.skipD3D11Switch ? "other" : "d3d11"}
+                        options={[
+                          { value: "d3d11", label: "DirectX 11" },
+                          {
+                            value: "other",
+                            label:
+                              importer === "ZZMI"
+                                ? "DirectX 12"
+                                : t("page.setting.xxmi.builtin.rendererGameDefault"),
+                          },
+                        ]}
+                        onValueChange={(renderer) =>
+                          setConfig({ ...config, skipD3D11Switch: renderer !== "d3d11" })
+                        }
+                      />
+                    )}
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.useLaunchOptions")}
                       description={
