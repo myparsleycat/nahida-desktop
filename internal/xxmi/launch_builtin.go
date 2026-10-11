@@ -735,20 +735,17 @@ func (x *XXMI) builtinLaunchSpec(
 			return inject.LaunchSpec{}, fmt.Errorf("parse launch options: %w", err)
 		}
 	}
-	switch key {
-	case "WWMI":
-		if cfg.UseLaunchOptions && gameExe != "" {
-			spec.StartExe = filepath.Join(
-				filepath.Dir(gameExe), "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe",
-			)
-			spec.WorkDir = filepath.Dir(spec.StartExe)
-		}
-		spec.StartArgs = append([]string{"-dx11"}, spec.StartArgs...)
-		if tier := wwmiResourceTierArgument(key, cfg); tier != "" {
-			spec.StartArgs = append(spec.StartArgs, tier)
-		}
-	case "EFMI":
-		spec.StartArgs = append([]string{"-force-d3d11"}, spec.StartArgs...)
+	if key == "WWMI" && cfg.UseLaunchOptions && gameExe != "" {
+		spec.StartExe = filepath.Join(
+			filepath.Dir(gameExe), "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe",
+		)
+		spec.WorkDir = filepath.Dir(spec.StartExe)
+	}
+	if tier := wwmiResourceTierArgument(key, cfg); tier != "" {
+		spec.StartArgs = append(spec.StartArgs, tier)
+	}
+	if renderer := rendererSwitch(key, cfg); renderer != "" {
+		spec.StartArgs = append([]string{renderer}, spec.StartArgs...)
 	}
 	if usesFPSUnlocker(cfg) {
 		folder, err := fpsUnlockerFolder()
@@ -882,9 +879,28 @@ var errWWMIResourceTierUndecided = errors.New("WWMI_RESOURCE_TIER_DECISION_REQUI
 var errD3D11ModeNoticeRequired = errors.New("XXMI_D3D11_MODE_NOTICE_REQUIRED")
 
 // d3d11ModeNoticeRequired reports whether the launch still owes the DirectX 11 reminder. The games'
-// official launchers, which Epic Games opens first, pick the renderer themselves.
+// official launchers, which Epic Games opens first, pick the renderer themselves. The launcher of
+// Zenless Zone Zero has no such choice, so ZZMI owes none.
 func d3d11ModeNoticeRequired(key string, cfg ImporterConfig) bool {
-	return cfg.GameLaunch == "Epic" && (key == "WWMI" || key == "EFMI") && !cfg.D3D11ModeNoticeShown
+	return cfg.GameLaunch == "Epic" && (key == "WWMI" || key == "EFMI") && !cfg.SkipD3D11Switch &&
+		!cfg.D3D11ModeNoticeShown
+}
+
+// rendererSwitch returns the argument that picks the renderer of the importer's game: DirectX 11 unless
+// the user turned that off, or "" when the game has no such argument or is left to pick for itself.
+func rendererSwitch(key string, cfg ImporterConfig) string {
+	switch {
+	case key == "ZZMI" && cfg.SkipD3D11Switch:
+		// Zenless Zone Zero picks DirectX 11 on its own, so leaving the argument out changes nothing.
+		return "-use-d3d12"
+	case cfg.SkipD3D11Switch:
+		return ""
+	case key == "WWMI":
+		return "-dx11"
+	case key == "EFMI" || key == "ZZMI":
+		return "-force-d3d11"
+	}
+	return ""
 }
 
 // wwmiResourceTierArgument returns the resource quality argument Wuthering Waves needs to load, or ""
