@@ -21,10 +21,12 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
+// An automatic check reuses release metadata younger than the check interval,
+// so a new release is seen within two intervals of the last fetch: one hour.
 const (
 	updaterRepository        = "myparsleycat/nahida-desktop"
 	updaterChecksumAsset     = "SHA256SUMS"
-	updaterCheckInterval     = time.Hour
+	updaterCheckInterval     = 30 * time.Minute
 	releaseChannelPrerelease = "prerelease"
 	translationEndpoint      = "https://api.nahida.live/translate"
 	maxTranslationPayload    = 8 << 20
@@ -355,7 +357,7 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	u.checking = true
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
-	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, "app-update"), userInitiated)
+	checkCtx := WithGitHubRefresh(u.metadataContext(ctx, "app-update"), userInitiated)
 	release, err := engine.Check(checkCtx)
 	if err != nil {
 		u.resetCheckedRelease(ctx)
@@ -391,6 +393,13 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	}
 	u.finishIncludePrereleaseChange(ctx)
 	return nil
+}
+
+func (u *Updater) metadataContext(ctx context.Context, operation string) context.Context {
+	u.mu.Lock()
+	interval := u.interval
+	u.mu.Unlock()
+	return WithGitHubMaxAge(WithGitHubOperation(ctx, operation), interval)
 }
 
 func (u *Updater) resetCheckedRelease(ctx context.Context) {
@@ -641,7 +650,7 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated, cha
 	u.broadcastStatus(ctx)
 
 	operation := lo.Ternary(channelChange, "app-update-channel", "app-update")
-	checkCtx := WithGitHubRefresh(WithGitHubOperation(ctx, operation), userInitiated || channelChange)
+	checkCtx := WithGitHubRefresh(u.metadataContext(ctx, operation), userInitiated || channelChange)
 	release, err := engine.Check(checkCtx)
 	if err != nil {
 		u.mu.Lock()
@@ -686,7 +695,7 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated, cha
 		if userInitiated && u.downloaded {
 			u.dialogDismissed = false
 		}
-		// Automatic checks repeat every hour, so the ready prompt is announced
+		// Automatic checks repeat on a timer, so the ready prompt is announced
 		// once per release unless the user asked for the check. Claiming the
 		// version here keeps overlapping checks from announcing it twice.
 		notify = u.downloaded && (userInitiated || u.releaseVersion != u.notifiedVersion)
