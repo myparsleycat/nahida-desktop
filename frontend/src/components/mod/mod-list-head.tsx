@@ -22,7 +22,7 @@ export function ListHead() {
   };
 
   return (
-    <div role="rowgroup" className="shrink-0 bg-background text-sm">
+    <div role="rowgroup" className="shrink-0 text-sm">
       <div
         role="row"
         className="grid h-8 items-center"

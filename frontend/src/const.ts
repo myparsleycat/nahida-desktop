@@ -1,1 +1,1 @@
-export const DEFAULT_BG = "bg-background/50";
+export const DEFAULT_BG = "bg-background/70";
