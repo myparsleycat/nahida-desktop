@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -261,7 +262,7 @@ func deployRuntimeFiles(
 }
 
 // deployCustomRuntimeFiles deploys the runtime with custom, or else provider, in place of the signed
-// d3d11.dll when one is set.
+// d3d11.dll when one is set. A provider's companion libraries are written beside it.
 func deployCustomRuntimeFiles(
 	ctx context.Context,
 	key string,
@@ -307,11 +308,11 @@ func deployCustomRuntimeFiles(
 			}
 			desired[name] = data
 		}
-		if provider != nil {
-			desired[customDLLName] = provider.data
-		}
 		if custom != nil {
 			desired[customDLLName] = custom.data
+		} else if provider != nil {
+			desired[customDLLName] = provider.data
+			maps.Copy(desired, provider.companions)
 		}
 	} else {
 		data, err := os.ReadFile(filepath.Join(sourceFolder, "source.json"))
@@ -656,8 +657,13 @@ func validateDeployedRuntime(folder string, mode RuntimeMode) error {
 }
 
 // validateXXMIRuntimeFiles checks the deployed runtime against the verified caches it was copied from.
-// d3d11Folder is the signed cache folder, or the provider's when its d3d11.dll was deployed instead.
-func validateXXMIRuntimeFiles(importerFolder, cacheFolder, d3d11Folder string, unsafeMode bool) error {
+// d3d11Folder is the signed cache folder, or the provider's when its d3d11.dll was deployed instead, and
+// companions names the provider's libraries deployed with it.
+func validateXXMIRuntimeFiles(
+	importerFolder, cacheFolder, d3d11Folder string,
+	companions []string,
+	unsafeMode bool,
+) error {
 	if unsafeMode {
 		return nil
 	}
@@ -666,7 +672,11 @@ func validateXXMIRuntimeFiles(importerFolder, cacheFolder, d3d11Folder string, u
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	for name, folder := range map[string]string{customDLLName: d3d11Folder, "d3dcompiler_47.dll": cacheFolder} {
+	folders := map[string]string{customDLLName: d3d11Folder, "d3dcompiler_47.dll": cacheFolder}
+	for _, name := range companions {
+		folders[name] = d3d11Folder
+	}
+	for name, folder := range folders {
 		deployed, _, err := root.readFile(name)
 		if err != nil {
 			return fmt.Errorf("read deployed %s: %w", name, err)

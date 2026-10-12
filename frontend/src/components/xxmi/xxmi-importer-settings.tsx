@@ -1418,6 +1418,31 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </Button>
                       <Button
                         variant="outline"
+                        disabled={dirty}
+                        title={
+                          dirty
+                            ? t("page.setting.xxmi.builtin.unsavedChanges")
+                            : t("page.setting.xxmi.builtin.repairPackageDescription")
+                        }
+                        onClickPromise={async () => {
+                          try {
+                            await XXMI.RepairImporterPackage(importer);
+                            refresh();
+                            toast.success(t("page.setting.xxmi.builtin.packageRepaired"));
+                          } catch (error) {
+                            const code = importerFolderErrorCode(error);
+                            toast.error(
+                              code
+                                ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${code}`)
+                                : toErrorMessage(error),
+                            );
+                          }
+                        }}
+                      >
+                        {t("page.setting.xxmi.builtin.repairPackage")}
+                      </Button>
+                      <Button
+                        variant="outline"
                         onClickPromise={async () => {
                           try {
                             await XXMI.OpenImporterFolder(importer);

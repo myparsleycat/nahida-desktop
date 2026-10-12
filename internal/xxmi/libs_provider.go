@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,6 +48,49 @@ type libsProviderSpec struct {
 	// dx12Since is the first release whose d3d11.dll applies mods to a game rendering with DirectX 12, or ""
 	// when mods only load with DirectX 11.
 	dx12Since string
+	// companions are the libraries a provider release may ship for its d3d11.dll to load. They are deployed
+	// beside it.
+	companions []providerCompanion
+}
+
+type providerCompanion struct {
+	name string
+	// since is the first release that may ship the library. An earlier release is known not to, so its cache
+	// entry is complete without looking for it.
+	since string
+}
+
+// companionsOf returns the companion libraries a release of the provider may ship.
+func (spec libsProviderSpec) companionsOf(version string) []string {
+	var names []string
+	for _, companion := range spec.companions {
+		if semver.IsValid("v"+version) && semver.Compare("v"+version, "v"+companion.since) < 0 {
+			continue
+		}
+		names = append(names, companion.name)
+	}
+	return names
+}
+
+func (spec libsProviderSpec) companionNames() []string {
+	names := make([]string, 0, len(spec.companions))
+	for _, companion := range spec.companions {
+		names = append(names, companion.name)
+	}
+	return names
+}
+
+// releaseFiles names the files a release of the provider may ship beside its d3d11.dll. Adding one here is all
+// it takes for the entries cached without it to be searched for it again.
+func (spec libsProviderSpec) releaseFiles(version string) []string {
+	return append([]string{providerININame}, spec.companionsOf(version)...)
+}
+
+func providerFileSizeLimit(name string) int64 {
+	if name == providerININame {
+		return providerINISizeLimit
+	}
+	return customDLLSizeLimit
 }
 
 var libsProviders = []libsProviderSpec{
@@ -58,6 +102,10 @@ var libsProviders = []libsProviderSpec{
 		versionMark:       "-nhd.",
 		smoothMotionSince: "1.2.2-nhd.3",
 		dx12Since:         "1.2.2-nhd.6",
+		companions: []providerCompanion{
+			{name: "dxcompiler.dll", since: "1.2.2-nhd.8"},
+			{name: "dxil.dll", since: "1.2.2-nhd.8"},
+		},
 	},
 }
 
@@ -69,9 +117,9 @@ type providerDLLSource struct {
 	SHA256    string `json:"sha256"`
 	Size      int64  `json:"size"`
 	FetchedAt string `json:"fetchedAt"`
-	// INIChecked marks an entry whose release was searched for a d3dx.ini. An entry without it was cached
-	// before the app looked for one, so its release may ship one that was never downloaded.
-	INIChecked bool `json:"iniChecked,omitempty"`
+	// Searched names the files beside the DLL the release was searched for. A build that did not know of a
+	// file leaves its name out, so the release may ship one that was never downloaded.
+	Searched []string `json:"searched,omitempty"`
 }
 
 // providerRuntimeDLL is the provider d3d11.dll a deployment writes instead of the signed one.
@@ -79,6 +127,8 @@ type providerRuntimeDLL struct {
 	// source is the manifest entry, "<overlay package>@<version>".
 	source string
 	data   []byte
+	// companions are the libraries the release ships for the DLL to load, by file name.
+	companions map[string][]byte
 }
 
 func lookupLibsProvider(id string) (libsProviderSpec, bool) {
@@ -339,7 +389,13 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	if err != nil {
 		return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 	}
-	return &providerRuntimeDLL{source: spec.overlayPackage + "@" + version, data: data}, nil
+	companions, err := x.readVerifiedProviderCompanions(ctx, root, spec, version)
+	if err != nil {
+		return nil, fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
+	}
+	return &providerRuntimeDLL{
+		source: spec.overlayPackage + "@" + version, data: data, companions: companions,
+	}, nil
 }
 
 // dllFeatureSupport is whether the d3d11.dll an importer's next deployment writes has a feature only some
@@ -487,13 +543,45 @@ func (x *XXMI) resolveProviderDLLVersion(
 func (x *XXMI) ensureProviderDLL(ctx context.Context, spec libsProviderSpec, version string) error {
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
-	return x.ensureProviderDLLLocked(ctx, spec, version)
+	return x.ensureProviderDLLLocked(ctx, spec, version, false)
+}
+
+// redownloadProviderRelease replaces the cached provider release an importer deploys with a fresh download and
+// returns its manifest entry, or "" for an importer that deploys none. The cached files are only ever held to
+// the digests they were downloaded with, so a release published again under its version is not fetched
+// otherwise. A download that fails leaves the cached entry as it was.
+func (x *XXMI) redownloadProviderRelease(ctx context.Context, cfg ImporterConfig) (string, error) {
+	spec, err := x.deployedLibsProvider(ctx, cfg)
+	if err != nil || spec.overlayPackage == "" {
+		return "", err
+	}
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+	if err != nil {
+		return "", err
+	}
+
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+	return spec.overlayPackage + "@" + version, x.ensureProviderDLLLocked(ctx, spec, version, true)
 }
 
 // ensureProviderDLLLocked downloads a provider d3d11.dll into the package cache unless a verified copy is
-// already there. The caller must hold packageMu.
-func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpec, version string) error {
+// already there. redownload fetches the release again even then, with its metadata read from GitHub instead of
+// the cached listing. The caller must hold packageMu.
+func (x *XXMI) ensureProviderDLLLocked(
+	ctx context.Context,
+	spec libsProviderSpec,
+	version string,
+	redownload bool,
+) error {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-provider-dll")
+	if redownload {
+		ctx = infra.WithGitHubRefresh(ctx, true)
+	}
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return fmt.Errorf("invalid %s version", spec.overlayPackage)
@@ -510,21 +598,28 @@ func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpe
 			return fmt.Errorf("%s cache is not a regular directory", spec.overlayPackage)
 		}
 		replace = true
-		if source, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version); err == nil {
-			if source.INIChecked {
-				if _, err := x.readVerifiedProviderINI(ctx, root, spec, version); err == nil {
-					return nil
-				}
+		source, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version)
+		if err == nil && !redownload {
+			stale := x.staleProviderFiles(ctx, root, spec, version, source)
+			if len(stale) == 0 {
+				return nil
 			}
 
-			// The verified DLL still launches, so a d3dx.ini that cannot be fetched only leaves its options
-			// out until a later launch reaches it.
-			err := x.refreshProviderINI(ctx, spec, version, destination, source)
+			err := x.refreshProviderFiles(ctx, spec, version, destination, source, stale)
 			if err == nil || infra.IsCancellationError(err) {
 				return err
 			}
+
+			// The DLL may not work without its companion libraries, and an entry that was never searched for
+			// them reads as a release that ships none.
+			if slices.ContainsFunc(stale, func(name string) bool { return name != providerININame }) {
+				return fmt.Errorf("refresh %s %s: %w", spec.overlayPackage, version, err)
+			}
+
+			// The verified DLL still launches, so a refresh that could not run only leaves the options of
+			// its d3dx.ini out until a later launch reaches it.
 			_ = infra.ReportError(x.log, err, "XXMI.ensureProviderDLL", infra.Diagnostic{
-				Severity: infra.DiagnosticWarn, Operation: "ensure-libs-provider", Stage: "refresh-ini",
+				Severity: infra.DiagnosticWarn, Operation: "ensure-libs-provider", Stage: "refresh",
 				Fields: map[string]any{"package": spec.overlayPackage, "version": version},
 			})
 			return nil
@@ -619,9 +714,20 @@ func (x *XXMI) downloadProviderRelease(
 	if err != nil {
 		return err
 	}
+	companionHashes, err := x.downloadProviderCompanions(
+		ctx,
+		spec,
+		version,
+		*release,
+		staging,
+		spec.companionsOf(version),
+	)
+	if err != nil {
+		return err
+	}
 	metadata, err := json.MarshalIndent(providerDLLSource{
 		Version: version, Tag: release.TagName, SHA256: hashBytes(data), Size: int64(len(data)),
-		FetchedAt: time.Now().UTC().Format(time.RFC3339), INIChecked: true,
+		FetchedAt: time.Now().UTC().Format(time.RFC3339), Searched: spec.releaseFiles(version),
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -654,7 +760,7 @@ func (x *XXMI) downloadProviderRelease(
 	if replace {
 		x.reportCleanup(os.RemoveAll(replaced), "replace-provider-release")
 	}
-	return x.recordProviderHashes(ctx, spec, version, hashBytes(data), iniHash)
+	return x.recordProviderHashes(ctx, spec, version, hashBytes(data), iniHash, companionHashes)
 }
 
 func (x *XXMI) findProviderRelease(
@@ -720,16 +826,102 @@ func (x *XXMI) downloadProviderINI(
 	return hashBytes(ini), nil
 }
 
-// refreshProviderINI brings the d3dx.ini of a cache entry in line with its release and leaves the verified DLL
-// in place. The metadata is written last, so an entry that was only partly refreshed is refreshed again. The
-// caller must hold packageMu.
-func (x *XXMI) refreshProviderINI(
+// downloadProviderCompanions downloads the named companion libraries of a provider release into staging and
+// returns their hashes by file name; a release ships any of them or none. The game loads them like the DLL, so each is
+// held to its published digest, and one that could not be checked is not downloaded at all.
+func (x *XXMI) downloadProviderCompanions(
+	ctx context.Context,
+	spec libsProviderSpec,
+	version string,
+	release github.Release,
+	staging string,
+	names []string,
+) (map[string]string, error) {
+	hashes := map[string]string{}
+	for _, name := range names {
+		index := slices.IndexFunc(release.Assets, func(asset github.Asset) bool {
+			return asset.Name == name && asset.BrowserDownloadURL != ""
+		})
+		if index < 0 {
+			continue
+		}
+		asset := release.Assets[index]
+		if asset.Size > customDLLSizeLimit {
+			return nil, fmt.Errorf("%s %s %s exceeds size limit", spec.overlayPackage, version, name)
+		}
+		if asset.Digest == "" {
+			return nil, fmt.Errorf("%s release %s has no asset digest for %s", spec.overlayPackage, version, name)
+		}
+
+		path := filepath.Join(staging, name)
+		if err := x.downloadPackageFile(
+			ctx,
+			spec.overlayPackage, version,
+			github.FileRequest{
+				Repo: spec.repo, URL: asset.BrowserDownloadURL, Destination: path, MaxSize: customDLLSizeLimit,
+			},
+		); err != nil {
+			return nil, fmt.Errorf("download %s %s %s: %w", spec.overlayPackage, version, name, err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		verified, err := verifyReleaseDigest(release, name, data)
+		if err == nil && !verified {
+			err = errors.New("no asset digest")
+		}
+		if err == nil {
+			err = validateCustomDLLImage(data)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s %s %s: %w", spec.overlayPackage, version, name, err)
+		}
+		hashes[name] = hashBytes(data)
+	}
+	return hashes, nil
+}
+
+// staleProviderFiles names the files beside a cached provider d3d11.dll that have to be fetched again: the ones
+// the release was never searched for, and the ones whose cached copy is no longer the verified download.
+func (x *XXMI) staleProviderFiles(
+	ctx context.Context,
+	root string,
+	spec libsProviderSpec,
+	version string,
+	source providerDLLSource,
+) []string {
+	var stale []string
+	for _, name := range spec.releaseFiles(version) {
+		if !slices.Contains(source.Searched, name) {
+			stale = append(stale, name)
+			continue
+		}
+		if _, err := x.readVerifiedProviderFile(
+			ctx, root, spec, version, name, providerFileSizeLimit(name),
+		); err != nil {
+			stale = append(stale, name)
+		}
+	}
+	return stale
+}
+
+// refreshProviderFiles brings the stale files of a cache entry in line with its release and leaves the verified
+// DLL and the other files in place. A d3dx.ini that cannot be fetched is reported and does not fail the refresh.
+// The metadata is written last, so an entry that was only partly refreshed is refreshed again. The caller must
+// hold packageMu.
+func (x *XXMI) refreshProviderFiles(
 	ctx context.Context,
 	spec libsProviderSpec,
 	version, destination string,
 	source providerDLLSource,
+	stale []string,
 ) error {
 	release, err := x.findProviderRelease(ctx, spec, version)
+	if err != nil {
+		return err
+	}
+	recorded, err := x.providerDLLHashes(ctx)
 	if err != nil {
 		return err
 	}
@@ -738,11 +930,50 @@ func (x *XXMI) refreshProviderINI(
 		return err
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
-	iniHash, err := x.downloadProviderINI(ctx, spec, version, *release, staging)
+
+	// A file this refresh does not look for keeps its cached copy and its record.
+	iniHash := recorded[providerFileHashKey(spec, version, providerININame)]
+	companionHashes := map[string]string{}
+	for _, name := range spec.companionNames() {
+		companionHashes[name] = recorded[providerFileHashKey(spec, version, name)]
+	}
+
+	// fetched tells whether the release ships each file this refresh looked for.
+	fetched := map[string]bool{}
+	staleCompanions := slices.DeleteFunc(slices.Clone(stale), func(name string) bool {
+		return name == providerININame
+	})
+	downloaded, err := x.downloadProviderCompanions(ctx, spec, version, *release, staging, staleCompanions)
 	if err != nil {
 		return err
 	}
-	source.INIChecked = true
+	for _, name := range staleCompanions {
+		companionHashes[name] = downloaded[name]
+		fetched[name] = downloaded[name] != ""
+	}
+	searched := append(slices.Clone(source.Searched), staleCompanions...)
+
+	// A launch works without the d3dx.ini, so one that cannot be fetched does not hold back the companion
+	// libraries. The cached file and its record stay as they are, and the entry counts as never searched for
+	// it so that the next refresh looks again.
+	if slices.Contains(stale, providerININame) {
+		hash, iniErr := x.downloadProviderINI(ctx, spec, version, *release, staging)
+		switch {
+		case iniErr == nil:
+			iniHash, fetched[providerININame] = hash, hash != ""
+			searched = append(searched, providerININame)
+		case infra.IsCancellationError(iniErr):
+			return iniErr
+		default:
+			_ = infra.ReportError(x.log, iniErr, "XXMI.ensureProviderDLL", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "ensure-libs-provider", Stage: "refresh-ini",
+				Fields: map[string]any{"package": spec.overlayPackage, "version": version},
+			})
+			searched = slices.DeleteFunc(searched, func(name string) bool { return name == providerININame })
+		}
+	}
+	slices.Sort(searched)
+	source.Searched = slices.Compact(searched)
 	metadata, err := json.MarshalIndent(source, "", "  ")
 	if err != nil {
 		return err
@@ -756,28 +987,30 @@ func (x *XXMI) refreshProviderINI(
 
 	// The record goes first: it is the step a cancellation can still fail, and failing it here leaves the
 	// cached file and its old record in agreement.
-	if err := x.recordProviderHashes(ctx, spec, version, source.SHA256, iniHash); err != nil {
+	if err := x.recordProviderHashes(ctx, spec, version, source.SHA256, iniHash, companionHashes); err != nil {
 		return err
 	}
-	cached := filepath.Join(destination, providerININame)
-	if iniHash == "" {
-		if err := os.Remove(cached); err != nil && !errors.Is(err, os.ErrNotExist) {
+	for name, present := range fetched {
+		cached := filepath.Join(destination, name)
+		if !present {
+			if err := os.Remove(cached); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		} else if err := platform.ReplaceAtomic(filepath.Join(staging, name), cached); err != nil {
 			return err
 		}
-	} else if err := platform.ReplaceAtomic(filepath.Join(staging, providerININame), cached); err != nil {
-		return err
 	}
 	return platform.ReplaceAtomic(
 		filepath.Join(staging, providerDLLMetadata), filepath.Join(destination, providerDLLMetadata),
 	)
 }
 
-func providerINIHashKey(spec libsProviderSpec, version string) string {
-	return spec.overlayPackage + "@" + version + "/" + providerININame
+func providerFileHashKey(spec libsProviderSpec, version, name string) string {
+	return spec.overlayPackage + "@" + version + "/" + name
 }
 
 // providerDLLHashes returns the hashes of the provider files this installation checked against their published
-// digest, keyed "<overlay package>@<version>" for the DLL and providerINIHashKey for the d3dx.ini. They are
+// digest, keyed "<overlay package>@<version>" for the DLL and providerFileHashKey for the files beside it. They are
 // stored outside the package cache, so a cache entry whose DLL and metadata were rewritten together does not
 // pass for the verified download.
 func (x *XXMI) providerDLLHashes(ctx context.Context) (map[string]string, error) {
@@ -801,12 +1034,14 @@ func (x *XXMI) providerDLLHashes(ctx context.Context) (map[string]string, error)
 	return hashes, nil
 }
 
-// recordProviderHashes remembers the downloaded and verified files of a provider release. An empty ini drops
-// the record of a d3dx.ini the release no longer ships. The caller must hold packageMu.
+// recordProviderHashes remembers the downloaded and verified files of a provider release. An empty ini or a
+// companion library without a hash drops the record of a file the release no longer ships. The caller must
+// hold packageMu.
 func (x *XXMI) recordProviderHashes(
 	ctx context.Context,
 	spec libsProviderSpec,
 	version, dll, ini string,
+	companions map[string]string,
 ) error {
 	client, err := x.settingsClient()
 	if err != nil {
@@ -817,10 +1052,16 @@ func (x *XXMI) recordProviderHashes(
 		return err
 	}
 	hashes[spec.overlayPackage+"@"+version] = dll
-	if ini == "" {
-		delete(hashes, providerINIHashKey(spec, version))
-	} else {
-		hashes[providerINIHashKey(spec, version)] = ini
+	files := map[string]string{providerININame: ini}
+	for _, name := range spec.companionNames() {
+		files[name] = companions[name]
+	}
+	for name, hash := range files {
+		if hash == "" {
+			delete(hashes, providerFileHashKey(spec, version, name))
+		} else {
+			hashes[providerFileHashKey(spec, version, name)] = hash
+		}
 	}
 	encoded, err := json.Marshal(hashes)
 	if err != nil {
@@ -865,19 +1106,52 @@ func (x *XXMI) verifiedProviderINI(ctx context.Context, root, source string) ([]
 }
 
 // readVerifiedProviderINI returns the cached d3dx.ini of a provider release, or nil when no d3dx.ini was
-// downloaded for it. A recorded file that is missing is an error like one that was rewritten.
+// downloaded for it.
 func (x *XXMI) readVerifiedProviderINI(
 	ctx context.Context,
 	root string,
 	spec libsProviderSpec,
 	version string,
 ) ([]byte, error) {
+	return x.readVerifiedProviderFile(ctx, root, spec, version, providerININame, providerINISizeLimit)
+}
+
+// readVerifiedProviderCompanions returns the cached companion libraries of a provider release by file name,
+// each still the file this installation downloaded and verified.
+func (x *XXMI) readVerifiedProviderCompanions(
+	ctx context.Context,
+	root string,
+	spec libsProviderSpec,
+	version string,
+) (map[string][]byte, error) {
+	companions := map[string][]byte{}
+	for _, name := range spec.companionsOf(version) {
+		data, err := x.readVerifiedProviderFile(ctx, root, spec, version, name, customDLLSizeLimit)
+		if err != nil {
+			return nil, err
+		}
+		if data != nil {
+			companions[name] = data
+		}
+	}
+	return companions, nil
+}
+
+// readVerifiedProviderFile returns a file cached beside a provider d3d11.dll, or nil when none was downloaded
+// for the release. A recorded file that is missing is an error like one that was rewritten.
+func (x *XXMI) readVerifiedProviderFile(
+	ctx context.Context,
+	root string,
+	spec libsProviderSpec,
+	version, name string,
+	sizeLimit int64,
+) ([]byte, error) {
 	hashes, err := x.providerDLLHashes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	want, recorded := hashes[providerINIHashKey(spec, version)]
-	path := filepath.Join(root, "packages", spec.overlayPackage, version, providerININame)
+	want, recorded := hashes[providerFileHashKey(spec, version, name)]
+	path := filepath.Join(root, "packages", spec.overlayPackage, version, name)
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) && !recorded {
 		return nil, nil
@@ -885,7 +1159,7 @@ func (x *XXMI) readVerifiedProviderINI(
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Size() > providerINISizeLimit {
+	if !info.Mode().IsRegular() || info.Size() > sizeLimit {
 		return nil, fmt.Errorf("%s is not a regular file or exceeds size limit", path)
 	}
 	data, err := os.ReadFile(path)
@@ -916,9 +1190,28 @@ func readProviderDLL(root string, spec libsProviderSpec, version string) (provid
 	if err != nil {
 		return providerDLLSource{}, nil, err
 	}
-	var source providerDLLSource
-	if err := json.Unmarshal(metadata, &source); err != nil {
+	// Builds before Searched recorded a search as one flag per kind of file. The companion flag stands for the
+	// two libraries those builds knew of, not for the ones added since.
+	var stored struct {
+		providerDLLSource
+		INIChecked        bool `json:"iniChecked"`
+		CompanionsChecked bool `json:"companionsChecked"`
+	}
+	if err := json.Unmarshal(metadata, &stored); err != nil {
 		return providerDLLSource{}, nil, fmt.Errorf("decode %s metadata: %w", spec.overlayPackage, err)
+	}
+	source := stored.providerDLLSource
+	var flagged []string
+	if stored.INIChecked {
+		flagged = append(flagged, providerININame)
+	}
+	if stored.CompanionsChecked {
+		flagged = append(flagged, "dxcompiler.dll", "dxil.dll")
+	}
+	for _, name := range flagged {
+		if !slices.Contains(source.Searched, name) {
+			source.Searched = append(source.Searched, name)
+		}
 	}
 	if source.Version != version || source.SHA256 == "" {
 		return providerDLLSource{}, nil, fmt.Errorf("%s metadata mismatch", spec.overlayPackage)
@@ -943,16 +1236,21 @@ func (x *XXMI) verifiedProviderDLL(ctx context.Context, spec libsProviderSpec, v
 }
 
 // verifiedProviderDLLFolder returns the cache folder of a deployed provider d3d11.dll, named by the runtime
-// manifest as "<overlay package>@<version>", after verifying the cached file.
-func (x *XXMI) verifiedProviderDLLFolder(ctx context.Context, root, source string) (string, error) {
+// manifest as "<overlay package>@<version>", and the names of the companion libraries cached in it, after
+// verifying the cached files.
+func (x *XXMI) verifiedProviderDLLFolder(ctx context.Context, root, source string) (string, []string, error) {
 	spec, version, err := parseProviderSource(source)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if _, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return filepath.Join(root, "packages", spec.overlayPackage, version), nil
+	companions, err := x.readVerifiedProviderCompanions(ctx, root, spec, version)
+	if err != nil {
+		return "", nil, err
+	}
+	return filepath.Join(root, "packages", spec.overlayPackage, version), slices.Collect(maps.Keys(companions)), nil
 }
 
 // deployedProviderVersion returns the provider d3d11.dll version the last deployment wrote, or "".
