@@ -14,6 +14,8 @@ interface ViewState {
     setSortType: (
         sortType: "NAME:ASC" | "NAME:DESC" | "SIZE:ASC" | "SIZE:DESC" | "DATE:ASC" | "DATE:DESC",
     ) => void;
+    listColumnWidths: { size: number; date: number } | null;
+    setListColumnWidths: (widths: { size: number; date: number }) => void;
     searchInDirQuery: string;
     setSearchInDirQuery: (query: string) => void;
     includeSubdirs: boolean;
@@ -37,6 +39,8 @@ export const viewStore = createStore<ViewState>((set) => ({
     setLayout: (layout) => set({ layout }),
     sortType: "NAME:ASC",
     setSortType: (sortType) => set({ sortType }),
+    listColumnWidths: null,
+    setListColumnWidths: (listColumnWidths) => set({ listColumnWidths }),
     searchInDirQuery: "",
     setSearchInDirQuery: (searchInDirQuery) => set({ searchInDirQuery }),
     includeSubdirs: false,
