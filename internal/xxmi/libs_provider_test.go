@@ -578,6 +578,9 @@ func TestDeployRuntimeFilesWritesProviderDLL(t *testing.T) {
 	unsafe.Migoto.UnsafeMode = true
 	manifest = deploy(unsafe, &customRuntimeDLL{id: "abcdef123456", data: []byte("custom")}, provider)
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "custom")
+	if _, err := os.Stat(filepath.Join(importer, "dxcompiler.dll")); !os.IsNotExist(err) {
+		t.Fatalf("companion library deployed beside a custom DLL: %v", err)
+	}
 	if manifest.Provider != "" || manifest.Custom != "abcdef123456" || manifest.Files["d3d11.dll"] != "" {
 		t.Fatalf("custom manifest = %+v", manifest)
 	}

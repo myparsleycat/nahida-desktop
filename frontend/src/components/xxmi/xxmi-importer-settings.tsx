@@ -1418,7 +1418,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       </Button>
                       <Button
                         variant="outline"
-                        title={t("page.setting.xxmi.builtin.repairPackageDescription")}
+                        disabled={dirty}
+                        title={
+                          dirty
+                            ? t("page.setting.xxmi.builtin.unsavedChanges")
+                            : t("page.setting.xxmi.builtin.repairPackageDescription")
+                        }
                         onClickPromise={async () => {
                           try {
                             await XXMI.RepairImporterPackage(importer);

@@ -308,12 +308,11 @@ func deployCustomRuntimeFiles(
 			}
 			desired[name] = data
 		}
-		if provider != nil {
-			desired[customDLLName] = provider.data
-			maps.Copy(desired, provider.companions)
-		}
 		if custom != nil {
 			desired[customDLLName] = custom.data
+		} else if provider != nil {
+			desired[customDLLName] = provider.data
+			maps.Copy(desired, provider.companions)
 		}
 	} else {
 		data, err := os.ReadFile(filepath.Join(sourceFolder, "source.json"))
