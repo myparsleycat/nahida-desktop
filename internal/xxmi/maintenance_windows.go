@@ -3,6 +3,7 @@
 package xxmi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) {
@@ -46,6 +49,20 @@ func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) 
 		if err != nil {
 			return nil, err
 		}
+
+		// The deployment below still writes the verified cached release when a fresh one cannot be fetched.
+		source, err := x.redownloadProviderRelease(ctx, cfg)
+		if infra.IsCancellationError(err) {
+			return nil, err
+		}
+		if err != nil {
+			_ = infra.ReportError(x.log, err, "XXMI.RepairRuntime", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "repair-runtime", Stage: "redownload-provider",
+				Fields: map[string]any{"importer": key, "provider": source},
+			})
+			warnings = append(warnings, "Could not download "+cmp.Or(source, "the libraries provider release")+
+				" again: "+err.Error())
+		}
 	case RuntimeLegacy:
 		cfg, warnings, err = x.repairLegacyCache(ctx, cfg)
 		if err != nil {
@@ -55,6 +72,63 @@ func (x *XXMI) RepairRuntime(ctx context.Context, key string) ([]string, error) 
 	cfg.Migoto.UnsafeMode = false
 	deployedWarnings, err := x.deployRuntime(ctx, key, cfg, true)
 	return append(warnings, deployedWarnings...), err
+}
+
+// RepairImporterPackage installs the importer's package again over the installed one, at the version that is
+// installed, so that package files that were changed or removed come back. Mods are left alone, and the
+// d3dx.ini is treated as any other installation of the package treats it.
+func (x *XXMI) RepairImporterPackage(ctx context.Context, key string) (returnErr error) {
+	stage, version := "validate", ""
+	defer func() {
+		returnErr = infra.ReportError(x.log, returnErr, "XXMI.RepairImporterPackage", infra.Diagnostic{
+			Operation: "repair-importer-package", Stage: stage,
+			Fields: map[string]any{"importer": installDiagnosticValue(key), "version": version},
+		})
+	}()
+	spec, ok := lookupImporterPackage(key)
+	if !ok {
+		return errors.New("unknown XXMI importer")
+	}
+	for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
+		pid, err := x.findProcess(ctx, name)
+		if err != nil {
+			return err
+		}
+		if pid != 0 {
+			return errors.New("XXMI_GAME_RUNNING")
+		}
+	}
+
+	stage = "resolve-version"
+	cfg, err := x.GetImporterConfig(ctx, spec.key)
+	if err != nil {
+		return err
+	}
+	if installed := readImporterVersion(cfg.ImporterFolder, spec); installed != nil {
+		version = *installed
+	} else if version = normalizeVersion(cfg.PackageVersion.Pinned); version == "" {
+		// The file that names the installed version is part of what is being repaired.
+		releases, err := x.ListReleases(ctx, "importer:"+spec.key)
+		if err != nil {
+			return err
+		}
+		if len(releases) == 0 {
+			return fmt.Errorf("importer %s has no releases", spec.key)
+		}
+		version = releases[0].Version
+	}
+
+	// A release installed without a signature was accepted by the user when it was installed, and the record
+	// of that outlives the file that names the installed version. A record that cannot be read accepts
+	// nothing, and a signed release is installed again without one.
+	record, err := readPackageVerification(cfg.ImporterFolder)
+	allowUnsigned := err == nil && record != nil && record.Method != "ecdsa" &&
+		normalizeVersion(record.Version) == normalizeVersion(version)
+
+	stage = "install-package"
+	return x.InstallImporterPackage(ctx, InstallImporterPackageInput{
+		Importer: spec.key, Version: version, AllowUnsigned: allowUnsigned,
+	})
 }
 
 func (x *XXMI) repairLegacyCache(ctx context.Context, cfg ImporterConfig) (ImporterConfig, []string, error) {

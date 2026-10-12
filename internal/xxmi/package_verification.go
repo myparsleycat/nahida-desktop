@@ -24,7 +24,21 @@ func (x *XXMI) GetImporterPackageVerification(ctx context.Context, key string) (
 	if !ok {
 		return nil, fmt.Errorf("unknown importer %q", key)
 	}
-	root, err := openInstallRoot(cfg.ImporterFolder)
+	record, err := readPackageVerification(cfg.ImporterFolder)
+	if err != nil || record == nil {
+		return nil, err
+	}
+	installed := readImporterVersion(cfg.ImporterFolder, spec)
+	if installed == nil || *installed != record.Version {
+		return nil, nil
+	}
+	return record, nil
+}
+
+// readPackageVerification returns the record the last installation into the importer folder left, or nil when
+// there is none. It may be of another version than the package files now in the folder.
+func readPackageVerification(importerFolder string) (*PackageVerification, error) {
+	root, err := openInstallRoot(importerFolder)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -48,10 +62,6 @@ func (x *XXMI) GetImporterPackageVerification(ctx context.Context, key string) (
 	}
 	if record.Method != "ecdsa" && record.Method != "digest" && record.Method != "none" {
 		return nil, errors.New("invalid package verification method")
-	}
-	installed := readImporterVersion(cfg.ImporterFolder, spec)
-	if installed == nil || *installed != record.Version {
-		return nil, nil
 	}
 	return &record, nil
 }

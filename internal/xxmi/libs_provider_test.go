@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1340,12 +1341,14 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 			t.Fatal(err)
 		}
 		folder := providerTestCache(t, version)
-		metadata, err := json.Marshal(providerDLLSource{Version: version, SHA256: hashBytes(image), INIChecked: true})
+		metadata, err := json.Marshal(providerDLLSource{
+			Version: version, SHA256: hashBytes(image), Searched: []string{providerININame},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
-		for _, name := range spec.companionFiles {
+		for _, name := range spec.companionNames() {
 			if err := os.Remove(filepath.Join(folder, name)); err != nil {
 				t.Fatal(err)
 			}
@@ -1360,11 +1363,14 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 	})
 
-	// seedEntry caches a release the way a build that did not look for companion libraries left it.
-	seedEntry := func(t *testing.T, service *XXMI, version string) {
+	// seedEntry caches a release the way a build that did not look for companion libraries left it, with the
+	// metadata that build wrote.
+	seedEntry := func(t *testing.T, service *XXMI, version string, iniChecked bool) {
 		t.Helper()
 		folder := providerTestCache(t, version)
-		metadata, err := json.Marshal(providerDLLSource{Version: version, SHA256: hashBytes(image), INIChecked: true})
+		metadata, err := json.Marshal(map[string]any{
+			"version": version, "sha256": hashBytes(image), "iniChecked": iniChecked,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1379,7 +1385,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		mismatch := release
 		mismatch.companionDigest = providerTestDigest(image)
 		service, _, downloads := newProviderTestService(t, []providerTestRelease{mismatch})
-		seedEntry(t, service, version)
+		seedEntry(t, service, version, true)
 
 		// An entry cached without its libraries is not deployed as a release that ships none.
 		if provider, err := service.providerRuntimeDLL(ctx, cfg); err == nil {
@@ -1390,7 +1396,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 
 		// A release from before the libraries existed is complete as cached, with GitHub out of reach.
-		seedEntry(t, service, "1.2.2-nhd.7")
+		seedEntry(t, service, "1.2.2-nhd.7", true)
 		before := downloads.Load()
 		if err := service.ensureProviderDLL(ctx, spec, "1.2.2-nhd.7"); err != nil || downloads.Load() != before {
 			t.Fatalf("earlier release downloaded %d files, err = %v", downloads.Load()-before, err)
@@ -1401,7 +1407,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		badINI := release
 		badINI.ini, badINI.iniDigest = []byte("[System]"), providerTestDigest(image)
 		service, _, downloads := newProviderTestService(t, []providerTestRelease{badINI})
-		seedEntry(t, service, version)
+		seedEntry(t, service, version, false)
 
 		// The d3dx.ini only adds options, so losing it does not hold back the libraries the DLL needs.
 		provider, err := service.providerRuntimeDLL(ctx, cfg)
@@ -1418,6 +1424,68 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		provider, err = service.providerRuntimeDLL(ctx, cfg)
 		if err != nil || len(provider.companions) != 2 {
 			t.Fatalf("provider after the retry = %+v, err = %v", provider, err)
+		}
+	})
+
+	t.Run("entry flagged by an earlier build", func(t *testing.T) {
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{release})
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatal(err)
+		}
+		metadata, err := json.Marshal(map[string]any{
+			"version": version, "sha256": hashBytes(image), "iniChecked": true, "companionsChecked": true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(providerTestCache(t, version), providerDLLMetadata), metadata)
+
+		// The libraries that build verified are complete as cached, with GitHub out of reach.
+		before := downloads.Load()
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before {
+			t.Fatalf("flagged entry downloaded %d files, err = %v", downloads.Load()-before, err)
+		}
+	})
+
+	t.Run("library the provider adds later", func(t *testing.T) {
+		extra := testCustomDLLImage("extra")
+		shipped := release
+		shipped.companions = map[string][]byte{"dxcompiler.dll": dxc, "dxil.dll": dxil, "extra.dll": extra}
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{shipped})
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatal(err)
+		}
+
+		// A build that knows of one more library finds the entry was never searched for it and fetches it
+		// alone.
+		learned := spec
+		learned.companions = append(slices.Clone(spec.companions), providerCompanion{name: "extra.dll", since: version})
+		before := downloads.Load()
+		if err := service.ensureProviderDLL(ctx, learned, version); err != nil || downloads.Load() != before+1 {
+			t.Fatalf("refresh downloaded %d files, want the new library alone, err = %v", downloads.Load()-before, err)
+		}
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		companions, err := service.readVerifiedProviderCompanions(ctx, root, learned, version)
+		if err != nil || !bytes.Equal(companions["extra.dll"], extra) || len(companions) != 3 {
+			t.Fatalf("companions = %v, err = %v", slices.Collect(maps.Keys(companions)), err)
+		}
+	})
+
+	t.Run("repair downloads a verified entry again", func(t *testing.T) {
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{release})
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatal(err)
+		}
+		before := downloads.Load()
+		source, err := service.redownloadProviderRelease(ctx, cfg)
+		if err != nil || source != providerTestPackage+"@"+version || downloads.Load() != before+3 {
+			t.Fatalf("source = %q, downloaded %d files, err = %v", source, downloads.Load()-before, err)
+		}
+		if provider, err := service.providerRuntimeDLL(ctx, cfg); err != nil || len(provider.companions) != 2 {
+			t.Fatalf("provider after the repair = %+v, err = %v", provider, err)
 		}
 	})
 

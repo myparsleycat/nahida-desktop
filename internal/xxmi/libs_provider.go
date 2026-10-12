@@ -48,20 +48,49 @@ type libsProviderSpec struct {
 	// dx12Since is the first release whose d3d11.dll applies mods to a game rendering with DirectX 12, or ""
 	// when mods only load with DirectX 11.
 	dx12Since string
-	// companionFiles names the libraries a provider release may ship for its d3d11.dll to load. They are
-	// deployed beside it.
-	companionFiles []string
-	// companionsSince is the first release that may ship companionFiles. An earlier release is known to have
-	// none, so its cache entry is complete without looking for them.
-	companionsSince string
+	// companions are the libraries a provider release may ship for its d3d11.dll to load. They are deployed
+	// beside it.
+	companions []providerCompanion
+}
+
+type providerCompanion struct {
+	name string
+	// since is the first release that may ship the library. An earlier release is known not to, so its cache
+	// entry is complete without looking for it.
+	since string
 }
 
 // companionsOf returns the companion libraries a release of the provider may ship.
 func (spec libsProviderSpec) companionsOf(version string) []string {
-	if semver.IsValid("v"+version) && semver.Compare("v"+version, "v"+spec.companionsSince) < 0 {
-		return nil
+	var names []string
+	for _, companion := range spec.companions {
+		if semver.IsValid("v"+version) && semver.Compare("v"+version, "v"+companion.since) < 0 {
+			continue
+		}
+		names = append(names, companion.name)
 	}
-	return spec.companionFiles
+	return names
+}
+
+func (spec libsProviderSpec) companionNames() []string {
+	names := make([]string, 0, len(spec.companions))
+	for _, companion := range spec.companions {
+		names = append(names, companion.name)
+	}
+	return names
+}
+
+// releaseFiles names the files a release of the provider may ship beside its d3d11.dll. Adding one here is all
+// it takes for the entries cached without it to be searched for it again.
+func (spec libsProviderSpec) releaseFiles(version string) []string {
+	return append([]string{providerININame}, spec.companionsOf(version)...)
+}
+
+func providerFileSizeLimit(name string) int64 {
+	if name == providerININame {
+		return providerINISizeLimit
+	}
+	return customDLLSizeLimit
 }
 
 var libsProviders = []libsProviderSpec{
@@ -73,8 +102,10 @@ var libsProviders = []libsProviderSpec{
 		versionMark:       "-nhd.",
 		smoothMotionSince: "1.2.2-nhd.3",
 		dx12Since:         "1.2.2-nhd.6",
-		companionFiles:    []string{"dxcompiler.dll", "dxil.dll"},
-		companionsSince:   "1.2.2-nhd.8",
+		companions: []providerCompanion{
+			{name: "dxcompiler.dll", since: "1.2.2-nhd.8"},
+			{name: "dxil.dll", since: "1.2.2-nhd.8"},
+		},
 	},
 }
 
@@ -86,11 +117,9 @@ type providerDLLSource struct {
 	SHA256    string `json:"sha256"`
 	Size      int64  `json:"size"`
 	FetchedAt string `json:"fetchedAt"`
-	// INIChecked marks an entry whose release was searched for a d3dx.ini. An entry without it was cached
-	// before the app looked for one, so its release may ship one that was never downloaded.
-	INIChecked bool `json:"iniChecked,omitempty"`
-	// CompanionsChecked marks an entry whose release was searched for companion libraries, like INIChecked.
-	CompanionsChecked bool `json:"companionsChecked,omitempty"`
+	// Searched names the files beside the DLL the release was searched for. A build that did not know of a
+	// file leaves its name out, so the release may ship one that was never downloaded.
+	Searched []string `json:"searched,omitempty"`
 }
 
 // providerRuntimeDLL is the provider d3d11.dll a deployment writes instead of the signed one.
@@ -514,13 +543,45 @@ func (x *XXMI) resolveProviderDLLVersion(
 func (x *XXMI) ensureProviderDLL(ctx context.Context, spec libsProviderSpec, version string) error {
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
-	return x.ensureProviderDLLLocked(ctx, spec, version)
+	return x.ensureProviderDLLLocked(ctx, spec, version, false)
+}
+
+// redownloadProviderRelease replaces the cached provider release an importer deploys with a fresh download and
+// returns its manifest entry, or "" for an importer that deploys none. The cached files are only ever held to
+// the digests they were downloaded with, so a release published again under its version is not fetched
+// otherwise. A download that fails leaves the cached entry as it was.
+func (x *XXMI) redownloadProviderRelease(ctx context.Context, cfg ImporterConfig) (string, error) {
+	spec, err := x.deployedLibsProvider(ctx, cfg)
+	if err != nil || spec.overlayPackage == "" {
+		return "", err
+	}
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+	if err != nil {
+		return "", err
+	}
+
+	x.packageMu.Lock()
+	defer x.packageMu.Unlock()
+	return spec.overlayPackage + "@" + version, x.ensureProviderDLLLocked(ctx, spec, version, true)
 }
 
 // ensureProviderDLLLocked downloads a provider d3d11.dll into the package cache unless a verified copy is
-// already there. The caller must hold packageMu.
-func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpec, version string) error {
+// already there. redownload fetches the release again even then, with its metadata read from GitHub instead of
+// the cached listing. The caller must hold packageMu.
+func (x *XXMI) ensureProviderDLLLocked(
+	ctx context.Context,
+	spec libsProviderSpec,
+	version string,
+	redownload bool,
+) error {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-provider-dll")
+	if redownload {
+		ctx = infra.WithGitHubRefresh(ctx, true)
+	}
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return fmt.Errorf("invalid %s version", spec.overlayPackage)
@@ -537,26 +598,21 @@ func (x *XXMI) ensureProviderDLLLocked(ctx context.Context, spec libsProviderSpe
 			return fmt.Errorf("%s cache is not a regular directory", spec.overlayPackage)
 		}
 		replace = true
-		if source, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version); err == nil {
-			companionsReady := len(spec.companionsOf(version)) == 0
-			if !companionsReady && source.CompanionsChecked {
-				_, err := x.readVerifiedProviderCompanions(ctx, root, spec, version)
-				companionsReady = err == nil
-			}
-			if source.INIChecked && companionsReady {
-				if _, err := x.readVerifiedProviderINI(ctx, root, spec, version); err == nil {
-					return nil
-				}
+		source, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version)
+		if err == nil && !redownload {
+			stale := x.staleProviderFiles(ctx, root, spec, version, source)
+			if len(stale) == 0 {
+				return nil
 			}
 
-			err := x.refreshProviderFiles(ctx, spec, version, destination, source, companionsReady)
+			err := x.refreshProviderFiles(ctx, spec, version, destination, source, stale)
 			if err == nil || infra.IsCancellationError(err) {
 				return err
 			}
 
 			// The DLL may not work without its companion libraries, and an entry that was never searched for
 			// them reads as a release that ships none.
-			if !companionsReady {
+			if slices.ContainsFunc(stale, func(name string) bool { return name != providerININame }) {
 				return fmt.Errorf("refresh %s %s: %w", spec.overlayPackage, version, err)
 			}
 
@@ -658,13 +714,20 @@ func (x *XXMI) downloadProviderRelease(
 	if err != nil {
 		return err
 	}
-	companionHashes, err := x.downloadProviderCompanions(ctx, spec, version, *release, staging)
+	companionHashes, err := x.downloadProviderCompanions(
+		ctx,
+		spec,
+		version,
+		*release,
+		staging,
+		spec.companionsOf(version),
+	)
 	if err != nil {
 		return err
 	}
 	metadata, err := json.MarshalIndent(providerDLLSource{
 		Version: version, Tag: release.TagName, SHA256: hashBytes(data), Size: int64(len(data)),
-		FetchedAt: time.Now().UTC().Format(time.RFC3339), INIChecked: true, CompanionsChecked: true,
+		FetchedAt: time.Now().UTC().Format(time.RFC3339), Searched: spec.releaseFiles(version),
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -763,8 +826,8 @@ func (x *XXMI) downloadProviderINI(
 	return hashBytes(ini), nil
 }
 
-// downloadProviderCompanions downloads the companion libraries of a provider release into staging and returns
-// their hashes by file name; a release ships any of them or none. The game loads them like the DLL, so each is
+// downloadProviderCompanions downloads the named companion libraries of a provider release into staging and
+// returns their hashes by file name; a release ships any of them or none. The game loads them like the DLL, so each is
 // held to its published digest, and one that could not be checked is not downloaded at all.
 func (x *XXMI) downloadProviderCompanions(
 	ctx context.Context,
@@ -772,9 +835,10 @@ func (x *XXMI) downloadProviderCompanions(
 	version string,
 	release github.Release,
 	staging string,
+	names []string,
 ) (map[string]string, error) {
 	hashes := map[string]string{}
-	for _, name := range spec.companionsOf(version) {
+	for _, name := range names {
 		index := slices.IndexFunc(release.Assets, func(asset github.Asset) bool {
 			return asset.Name == name && asset.BrowserDownloadURL != ""
 		})
@@ -818,17 +882,40 @@ func (x *XXMI) downloadProviderCompanions(
 	return hashes, nil
 }
 
-// refreshProviderFiles brings the d3dx.ini and the companion libraries of a cache entry in line with its
-// release and leaves the verified DLL in place. companionsReady keeps the companion libraries the entry already
-// holds verified instead of downloading them again. A d3dx.ini that cannot be fetched is reported and does not
-// fail the refresh. The metadata is written last, so an entry that was only partly refreshed is refreshed
-// again. The caller must hold packageMu.
+// staleProviderFiles names the files beside a cached provider d3d11.dll that have to be fetched again: the ones
+// the release was never searched for, and the ones whose cached copy is no longer the verified download.
+func (x *XXMI) staleProviderFiles(
+	ctx context.Context,
+	root string,
+	spec libsProviderSpec,
+	version string,
+	source providerDLLSource,
+) []string {
+	var stale []string
+	for _, name := range spec.releaseFiles(version) {
+		if !slices.Contains(source.Searched, name) {
+			stale = append(stale, name)
+			continue
+		}
+		if _, err := x.readVerifiedProviderFile(
+			ctx, root, spec, version, name, providerFileSizeLimit(name),
+		); err != nil {
+			stale = append(stale, name)
+		}
+	}
+	return stale
+}
+
+// refreshProviderFiles brings the stale files of a cache entry in line with its release and leaves the verified
+// DLL and the other files in place. A d3dx.ini that cannot be fetched is reported and does not fail the refresh.
+// The metadata is written last, so an entry that was only partly refreshed is refreshed again. The caller must
+// hold packageMu.
 func (x *XXMI) refreshProviderFiles(
 	ctx context.Context,
 	spec libsProviderSpec,
 	version, destination string,
 	source providerDLLSource,
-	companionsReady bool,
+	stale []string,
 ) error {
 	release, err := x.findProviderRelease(ctx, spec, version)
 	if err != nil {
@@ -844,43 +931,49 @@ func (x *XXMI) refreshProviderFiles(
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 
-	// fetched tells whether the release ships each file this refresh looked for. A file it did not look for
-	// keeps its cached copy and its record.
-	fetched := map[string]bool{}
+	// A file this refresh does not look for keeps its cached copy and its record.
+	iniHash := recorded[providerFileHashKey(spec, version, providerININame)]
 	companionHashes := map[string]string{}
-	if companionsReady {
-		for _, name := range spec.companionFiles {
-			companionHashes[name] = recorded[providerFileHashKey(spec, version, name)]
-		}
-	} else {
-		companionHashes, err = x.downloadProviderCompanions(ctx, spec, version, *release, staging)
-		if err != nil {
-			return err
-		}
-		for _, name := range spec.companionFiles {
-			fetched[name] = companionHashes[name] != ""
-		}
-		source.CompanionsChecked = true
+	for _, name := range spec.companionNames() {
+		companionHashes[name] = recorded[providerFileHashKey(spec, version, name)]
 	}
 
-	// A launch works without the d3dx.ini, so one that cannot be fetched does not hold back the companion
-	// libraries. The cached file and its record stay as they are, and the entry counts as never searched so
-	// that the next refresh looks again.
-	iniHash, iniErr := x.downloadProviderINI(ctx, spec, version, *release, staging)
-	switch {
-	case iniErr == nil:
-		fetched[providerININame] = iniHash != ""
-		source.INIChecked = true
-	case infra.IsCancellationError(iniErr):
-		return iniErr
-	default:
-		_ = infra.ReportError(x.log, iniErr, "XXMI.ensureProviderDLL", infra.Diagnostic{
-			Severity: infra.DiagnosticWarn, Operation: "ensure-libs-provider", Stage: "refresh-ini",
-			Fields: map[string]any{"package": spec.overlayPackage, "version": version},
-		})
-		iniHash = recorded[providerFileHashKey(spec, version, providerININame)]
-		source.INIChecked = false
+	// fetched tells whether the release ships each file this refresh looked for.
+	fetched := map[string]bool{}
+	staleCompanions := slices.DeleteFunc(slices.Clone(stale), func(name string) bool {
+		return name == providerININame
+	})
+	downloaded, err := x.downloadProviderCompanions(ctx, spec, version, *release, staging, staleCompanions)
+	if err != nil {
+		return err
 	}
+	for _, name := range staleCompanions {
+		companionHashes[name] = downloaded[name]
+		fetched[name] = downloaded[name] != ""
+	}
+	searched := append(slices.Clone(source.Searched), staleCompanions...)
+
+	// A launch works without the d3dx.ini, so one that cannot be fetched does not hold back the companion
+	// libraries. The cached file and its record stay as they are, and the entry counts as never searched for
+	// it so that the next refresh looks again.
+	if slices.Contains(stale, providerININame) {
+		hash, iniErr := x.downloadProviderINI(ctx, spec, version, *release, staging)
+		switch {
+		case iniErr == nil:
+			iniHash, fetched[providerININame] = hash, hash != ""
+			searched = append(searched, providerININame)
+		case infra.IsCancellationError(iniErr):
+			return iniErr
+		default:
+			_ = infra.ReportError(x.log, iniErr, "XXMI.ensureProviderDLL", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "ensure-libs-provider", Stage: "refresh-ini",
+				Fields: map[string]any{"package": spec.overlayPackage, "version": version},
+			})
+			searched = slices.DeleteFunc(searched, func(name string) bool { return name == providerININame })
+		}
+	}
+	slices.Sort(searched)
+	source.Searched = slices.Compact(searched)
 	metadata, err := json.MarshalIndent(source, "", "  ")
 	if err != nil {
 		return err
@@ -960,7 +1053,7 @@ func (x *XXMI) recordProviderHashes(
 	}
 	hashes[spec.overlayPackage+"@"+version] = dll
 	files := map[string]string{providerININame: ini}
-	for _, name := range spec.companionFiles {
+	for _, name := range spec.companionNames() {
 		files[name] = companions[name]
 	}
 	for name, hash := range files {
@@ -1097,9 +1190,28 @@ func readProviderDLL(root string, spec libsProviderSpec, version string) (provid
 	if err != nil {
 		return providerDLLSource{}, nil, err
 	}
-	var source providerDLLSource
-	if err := json.Unmarshal(metadata, &source); err != nil {
+	// Builds before Searched recorded a search as one flag per kind of file. The companion flag stands for the
+	// two libraries those builds knew of, not for the ones added since.
+	var stored struct {
+		providerDLLSource
+		INIChecked        bool `json:"iniChecked"`
+		CompanionsChecked bool `json:"companionsChecked"`
+	}
+	if err := json.Unmarshal(metadata, &stored); err != nil {
 		return providerDLLSource{}, nil, fmt.Errorf("decode %s metadata: %w", spec.overlayPackage, err)
+	}
+	source := stored.providerDLLSource
+	var flagged []string
+	if stored.INIChecked {
+		flagged = append(flagged, providerININame)
+	}
+	if stored.CompanionsChecked {
+		flagged = append(flagged, "dxcompiler.dll", "dxil.dll")
+	}
+	for _, name := range flagged {
+		if !slices.Contains(source.Searched, name) {
+			source.Searched = append(source.Searched, name)
+		}
 	}
 	if source.Version != version || source.SHA256 == "" {
 		return providerDLLSource{}, nil, fmt.Errorf("%s metadata mismatch", spec.overlayPackage)
