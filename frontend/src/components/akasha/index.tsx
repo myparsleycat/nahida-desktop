@@ -381,6 +381,7 @@ export function AkashaHeadButtons({
 export function ListHead() {
   const sortType = useViewStore((s) => s.sortType);
   const setSortType = useViewStore((s) => s.setSortType);
+  const columnWidths = useViewStore((s) => s.listColumnWidths);
   const { t } = useTranslation();
 
   const handleSort = (field: "NAME" | "SIZE" | "DATE") => {
@@ -395,69 +396,74 @@ export function ListHead() {
   };
 
   return (
-    <thead className="sticky top-0 bg-background text-sm">
-      <tr className="h-8">
-        <th className="w-full pl-3 text-left align-middle font-normal">
-          <button
-            className="flex w-full flex-row items-center justify-start"
-            onClick={() => handleSort("NAME")}
+    <div
+      className="grid h-8 shrink-0 items-center text-sm"
+      style={{
+        gridTemplateColumns: columnWidths
+          ? `minmax(0, 1fr) ${columnWidths.size}px ${columnWidths.date}px`
+          : "minmax(0, 1fr) auto auto",
+      }}
+    >
+      <div className="pl-3">
+        <button
+          className="flex w-full flex-row items-center justify-start"
+          onClick={() => handleSort("NAME")}
+        >
+          <div
+            className={cn(
+              "flex flex-row items-center gap-2",
+              sortType.startsWith("NAME") ? "text-primary" : "text-muted-foreground",
+            )}
           >
-            <div
-              className={cn(
-                "flex flex-row items-center gap-2",
-                sortType.startsWith("NAME") ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <p className="dragselect-start-disallowed whitespace-nowrap">
-                {t("page.drive.list_head.name")}
-              </p>
-              {sortType === "NAME:DESC" && <ArrowDownIcon size="16" />}
-              {sortType === "NAME:ASC" && <ArrowUpIcon size="16" />}
-            </div>
-          </button>
-        </th>
+            <p className="dragselect-start-disallowed whitespace-nowrap">
+              {t("page.drive.list_head.name")}
+            </p>
+            {sortType === "NAME:DESC" && <ArrowDownIcon size="16" />}
+            {sortType === "NAME:ASC" && <ArrowUpIcon size="16" />}
+          </div>
+        </button>
+      </div>
 
-        <th className="w-[1%] px-2 align-middle font-normal whitespace-nowrap">
-          <button
-            className="flex w-full flex-row items-center justify-end"
-            onClick={() => handleSort("SIZE")}
+      <div className="px-2 whitespace-nowrap">
+        <button
+          className="flex w-full flex-row items-center justify-end"
+          onClick={() => handleSort("SIZE")}
+        >
+          <div
+            className={cn(
+              "flex flex-row items-center justify-end gap-2",
+              sortType.startsWith("SIZE") ? "text-primary" : "text-muted-foreground",
+            )}
           >
-            <div
-              className={cn(
-                "flex flex-row items-center justify-end gap-2",
-                sortType.startsWith("SIZE") ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <p className="dragselect-start-disallowed whitespace-nowrap">
-                {t("page.drive.list_head.size")}
-              </p>
-              {sortType === "SIZE:DESC" && <ArrowDownIcon size="16" />}
-              {sortType === "SIZE:ASC" && <ArrowUpIcon size="16" />}
-            </div>
-          </button>
-        </th>
+            <p className="dragselect-start-disallowed whitespace-nowrap">
+              {t("page.drive.list_head.size")}
+            </p>
+            {sortType === "SIZE:DESC" && <ArrowDownIcon size="16" />}
+            {sortType === "SIZE:ASC" && <ArrowUpIcon size="16" />}
+          </div>
+        </button>
+      </div>
 
-        <th className="w-[1%] pr-3 align-middle font-normal whitespace-nowrap">
-          <button
-            className="flex w-full flex-row items-center justify-end"
-            onClick={() => handleSort("DATE")}
+      <div className="pr-3 whitespace-nowrap">
+        <button
+          className="flex w-full flex-row items-center justify-end"
+          onClick={() => handleSort("DATE")}
+        >
+          <div
+            className={cn(
+              "flex flex-row items-center justify-end gap-2",
+              sortType.startsWith("DATE") ? "text-primary" : "text-muted-foreground",
+            )}
           >
-            <div
-              className={cn(
-                "flex flex-row items-center justify-end gap-2",
-                sortType.startsWith("DATE") ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <p className="dragselect-start-disallowed whitespace-nowrap">
-                {t("page.drive.list_head.date")}
-              </p>
-              {sortType === "DATE:DESC" && <ArrowDownIcon size="16" />}
-              {sortType === "DATE:ASC" && <ArrowUpIcon size="16" />}
-            </div>
-          </button>
-        </th>
-      </tr>
-    </thead>
+            <p className="dragselect-start-disallowed whitespace-nowrap">
+              {t("page.drive.list_head.date")}
+            </p>
+            {sortType === "DATE:DESC" && <ArrowDownIcon size="16" />}
+            {sortType === "DATE:ASC" && <ArrowUpIcon size="16" />}
+          </div>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -509,10 +515,30 @@ export function ContentMenuList(props: ContentMenuProps) {
   const dialog = useDialogStore();
   const cutIds = cutItemIds(selection.copyOrCuts);
 
+  // The header lives outside the scroll area, so it copies the widths the table settles on.
+  const setListColumnWidths = useViewStore((s) => s.setListColumnWidths);
+  const sizeCellRef = useRef<HTMLTableCellElement>(null);
+  const dateCellRef = useRef<HTMLTableCellElement>(null);
+  const firstItemId = sortedContents[0]?.id;
+  useEffect(() => {
+    const sizeCell = sizeCellRef.current;
+    const dateCell = dateCellRef.current;
+    if (!sizeCell || !dateCell) return;
+
+    const observer = new ResizeObserver(() =>
+      setListColumnWidths({
+        size: sizeCell.getBoundingClientRect().width,
+        date: dateCell.getBoundingClientRect().width,
+      }),
+    );
+    observer.observe(sizeCell);
+    observer.observe(dateCell);
+    return () => observer.disconnect();
+  }, [firstItemId, setListColumnWidths]);
+
   return (
     <>
       <table className="w-full table-auto border-collapse">
-        <ListHead />
         <tbody>
           {sortedContents.map((item, idx) => (
             <tr
@@ -569,10 +595,16 @@ export function ContentMenuList(props: ContentMenuProps) {
                 </div>
               </td>
 
-              <td className="w-[1%] p-2 text-right align-middle text-sm whitespace-nowrap text-muted-foreground">
+              <td
+                ref={idx === 0 ? sizeCellRef : undefined}
+                className="w-[1%] min-w-22 p-2 text-right align-middle text-sm whitespace-nowrap text-muted-foreground"
+              >
                 {formatSize(Number(item.size))}
               </td>
-              <td className="w-[1%] p-2 pr-3 text-right align-middle text-sm whitespace-nowrap text-muted-foreground">
+              <td
+                ref={idx === 0 ? dateCellRef : undefined}
+                className="w-[1%] min-w-32 p-2 pr-3 text-right align-middle text-sm whitespace-nowrap text-muted-foreground"
+              >
                 {formatDate(item.updatedAt, i18n.language)}
               </td>
             </tr>

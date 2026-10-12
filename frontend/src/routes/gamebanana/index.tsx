@@ -351,7 +351,7 @@ function RouteComponent() {
   };
 
   return (
-    <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
+    <main className="flex h-full flex-1 flex-col overflow-hidden">
       <div className="flex h-full items-center justify-center p-4 lg:hidden">
         <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
           <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>

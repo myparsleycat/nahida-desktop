@@ -6,6 +6,7 @@ import {
   ContentMenuGrid,
   ContentMenuList,
   HandlerProvider,
+  ListHead,
 } from "@renderer/components/akasha";
 import {
   ConflictNameDialog,
@@ -226,42 +227,45 @@ function RouteComponent() {
                 currentId={effectiveId}
               >
                 {displayContents.length > 0 ? (
-                  <ScrollArea
-                    className="flex h-full flex-1 flex-col"
-                    viewportClassName="[overflow-anchor:none]"
-                  >
-                    <>
-                      {layout === "list" ? (
-                        <ContentMenuList
-                          sortedContents={displayContents}
-                          isFetching={query.isFetching}
-                          itemId={effectiveId}
-                        />
-                      ) : layout === "grid" ? (
-                        <ContentMenuGrid
-                          sortedContents={displayContents}
-                          isFetching={query.isFetching}
-                          itemId={effectiveId}
-                        />
-                      ) : null}
+                  <div className="flex h-full flex-col">
+                    {layout === "list" && <ListHead />}
+                    <ScrollArea
+                      className="flex min-h-0 flex-1 flex-col"
+                      viewportClassName="[overflow-anchor:none]"
+                    >
+                      <>
+                        {layout === "list" ? (
+                          <ContentMenuList
+                            sortedContents={displayContents}
+                            isFetching={query.isFetching}
+                            itemId={effectiveId}
+                          />
+                        ) : layout === "grid" ? (
+                          <ContentMenuGrid
+                            sortedContents={displayContents}
+                            isFetching={query.isFetching}
+                            itemId={effectiveId}
+                          />
+                        ) : null}
 
-                      {isDescendantSearch && hasNextPage && (
-                        <div className="flex justify-center p-4">
-                          <Button
-                            variant="outline"
-                            disabled={isFetchingNextPage}
-                            onClick={() => {
-                              void loadMore();
-                            }}
-                          >
-                            {t("page.drive.head_buttons.search_load_more")}
-                          </Button>
-                        </div>
-                      )}
+                        {isDescendantSearch && hasNextPage && (
+                          <div className="flex justify-center p-4">
+                            <Button
+                              variant="outline"
+                              disabled={isFetchingNextPage}
+                              onClick={() => {
+                                void loadMore();
+                              }}
+                            >
+                              {t("page.drive.head_buttons.search_load_more")}
+                            </Button>
+                          </div>
+                        )}
 
-                      <DriveClipboardSpacer />
-                    </>
-                  </ScrollArea>
+                        <DriveClipboardSpacer />
+                      </>
+                    </ScrollArea>
+                  </div>
                 ) : isSearchFailed ? (
                   <Center className="flex-col">
                     <p className="text-center text-lg">{searchErrorMessage}</p>

@@ -129,7 +129,7 @@ func (w *Window) Create() application.Window {
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
 		Windows: application.WindowsWindow{
-			BackdropType: application.Acrylic,
+			BackdropType: application.Mica,
 			// A fixed theme keeps Wails from re-applying the system theme; SyncTheme owns it afterwards.
 			Theme:                      initialTheme,
 			DisableMenu:                true,
@@ -464,7 +464,7 @@ func normalizeWindowRoute(route string) string {
 }
 
 // SyncTheme matches the native window theme to the renderer theme.
-// The Acrylic backdrop takes its tint from the window theme, not from the page.
+// The Mica backdrop takes its tint from the window theme, not from the page.
 func (w *Window) SyncTheme(dark bool) {
 	if w == nil {
 		return

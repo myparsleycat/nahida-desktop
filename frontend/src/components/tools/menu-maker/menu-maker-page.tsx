@@ -106,7 +106,7 @@ export function MenuMakerPage({ path, name, ini }: MenuMakerPageProps) {
   };
   const empty = !state.document;
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-full min-h-0 flex-col text-foreground">
       <header className="flex flex-wrap items-center gap-2 border-b border-border p-3">
         <div className="mr-auto min-w-0">
           <h1 className="truncate text-sm font-semibold">{t("page.tools.menu_maker.title")}</h1>
