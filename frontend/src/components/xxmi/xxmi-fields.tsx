@@ -86,7 +86,7 @@ export function SelectRow({
           if (next !== null) onValueChange(next);
         }}
       >
-        <SelectTrigger className="w-44 shrink-0" aria-labelledby={labelId}>
+        <SelectTrigger className="w-fit max-w-80 min-w-44 shrink-0" aria-labelledby={labelId}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
