@@ -1,12 +1,14 @@
 package xxmi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -18,6 +20,9 @@ type CachedLibs struct {
 	Referenced bool   `json:"referenced"`
 	// InUse marks the version selected for a launch; Referenced also protects older deployed versions.
 	InUse bool `json:"inUse"`
+	// InUseVersions names the releases launched from this version. A provider release deploys over the signed
+	// libraries it was built on, so it is listed here under its own version, as in "1.2.2-nhd.1".
+	InUseVersions []string `json:"inUseVersions"`
 }
 
 type LegacyRuntimeInfo struct {
@@ -41,9 +46,10 @@ func (x *XXMI) ListCachedLibs(ctx context.Context) ([]CachedLibs, error) {
 	for _, entry := range entries {
 		if entry.IsDir() && !strings.Contains(entry.Name(), ".tmp-") {
 			result = append(result, CachedLibs{
-				Version:    entry.Name(),
-				Referenced: referenced[entry.Name()].Referenced,
-				InUse:      referenced[entry.Name()].InUse,
+				Version:       entry.Name(),
+				Referenced:    referenced[entry.Name()].Referenced,
+				InUse:         referenced[entry.Name()].InUse,
+				InUseVersions: referenced[entry.Name()].InUseVersions,
 			})
 		}
 	}
@@ -152,7 +158,7 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 			return "", nil, err
 		}
 
-		selected := signedLibsVersion(pin)
+		selected, release := signedLibsVersion(pin), ""
 
 		// A provider d3d11.dll deploys over the signed libraries its release was built on, whichever
 		// signed release is the latest.
@@ -163,7 +169,7 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 		if provider.overlayPackage != "" {
 			version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder)
 			if err == nil {
-				selected = signedLibsVersion(version)
+				selected, release = signedLibsVersion(version), version
 			}
 		}
 		if selected == "" && cfg.Mode == RuntimeXXMI {
@@ -172,7 +178,12 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 			selected = newestCachedPackageVersion("xxmi-libs")
 		}
 		if selected != "" {
-			referenced[selected] = CachedLibs{Version: selected, Referenced: true, InUse: true}
+			reference := referenced[selected]
+			reference.Version, reference.Referenced, reference.InUse = selected, true, true
+			if release = cmp.Or(release, selected); !slices.Contains(reference.InUseVersions, release) {
+				reference.InUseVersions = append(reference.InUseVersions, release)
+			}
+			referenced[selected] = reference
 		}
 	}
 	return filepath.Join(cacheRoot, "packages", "xxmi-libs"), referenced, nil

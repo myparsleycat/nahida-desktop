@@ -467,7 +467,7 @@ export function XXMIDashboard() {
                   versions={libs?.map((entry) => ({
                     key: entry.version,
                     label: entry.inUse
-                      ? `${entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
+                      ? `${entry.inUseVersions?.join(", ") || entry.version} · ${t("page.setting.xxmi.builtin.inUse")}`
                       : entry.version,
                     active: entry.inUse,
                   }))}

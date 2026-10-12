@@ -999,7 +999,8 @@ func TestPruneLibsCacheKeepsProviderSignedLibraries(t *testing.T) {
 	}
 
 	_, referenced, err := service.libsCacheReferences(ctx)
-	if err != nil || !referenced["1.2.2"].InUse || !referenced["1.2.0"].Referenced {
+	if err != nil || !referenced["1.2.2"].InUse || !referenced["1.2.0"].Referenced ||
+		!slices.Equal(referenced["1.2.2"].InUseVersions, []string{forkLatest}) {
 		t.Fatalf("references = %+v, err = %v", referenced, err)
 	}
 	removed, err := service.PruneLibsCache(ctx)
