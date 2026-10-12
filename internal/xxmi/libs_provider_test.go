@@ -37,6 +37,10 @@ type providerTestRelease struct {
 	// ini is the d3dx.ini the release ships beside the DLL; nil ships none.
 	ini       []byte
 	iniDigest string
+	// companions are the libraries the release ships beside the DLL, by asset name.
+	companions map[string][]byte
+	// companionDigest is the digest published for every companion; empty publishes the real one.
+	companionDigest string
 }
 
 func providerTestDigest(data []byte) string {
@@ -83,6 +87,14 @@ func newProviderTestService(
 					"digest": release.iniDigest, "size": len(release.ini),
 				})
 				assets[iniURL] = providerTestRelease{data: release.ini}
+			}
+			for name, data := range release.companions {
+				url := strings.TrimSuffix(providerTestAssetURL(release.tag), "d3d11.dll") + name
+				listedAssets = append(listedAssets, map[string]any{
+					"name": name, "browser_download_url": url,
+					"digest": cmp.Or(release.companionDigest, providerTestDigest(data)), "size": len(data),
+				})
+				assets[url] = providerTestRelease{data: data}
 			}
 			entry["assets"] = listedAssets
 		}
@@ -488,12 +500,15 @@ func TestDeployRuntimeFilesWritesProviderDLL(t *testing.T) {
 	for path, content := range map[string]string{
 		filepath.Join(importer, "d3dx.ini"): "[Loader]",
 		filepath.Join(libs, "d3d11.dll"):    "official", filepath.Join(libs, "d3dcompiler_47.dll"): "compiler",
-		filepath.Join(fork, "d3d11.dll"): "fork",
+		filepath.Join(fork, "d3d11.dll"): "fork", filepath.Join(fork, "dxcompiler.dll"): "dxc",
 	} {
 		writeTestFile(t, path, []byte(content))
 	}
 	cfg := ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}
-	provider := &providerRuntimeDLL{source: providerTestPackage + "@0.2.0", data: []byte("fork")}
+	provider := &providerRuntimeDLL{
+		source: providerTestPackage + "@0.2.0", data: []byte("fork"),
+		companions: map[string][]byte{"dxcompiler.dll": []byte("dxc")},
+	}
 	deploy := func(cfg ImporterConfig, custom *customRuntimeDLL, provider *providerRuntimeDLL) runtimeManifest {
 		t.Helper()
 		if _, err := deployCustomRuntimeFiles(
@@ -514,8 +529,10 @@ func TestDeployRuntimeFilesWritesProviderDLL(t *testing.T) {
 	manifest := deploy(cfg, nil, provider)
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "fork")
 	assertFileContent(t, filepath.Join(importer, "d3dcompiler_47.dll"), "compiler")
+	assertFileContent(t, filepath.Join(importer, "dxcompiler.dll"), "dxc")
 	if manifest.Provider != provider.source || manifest.Source != "xxmi-libs@1" ||
-		manifest.Files["d3d11.dll"] != hashBytes([]byte("fork")) || len(manifest.UserManaged) != 0 {
+		manifest.Files["d3d11.dll"] != hashBytes([]byte("fork")) ||
+		manifest.Files["dxcompiler.dll"] != hashBytes([]byte("dxc")) || len(manifest.UserManaged) != 0 {
 		t.Fatalf("provider manifest = %+v", manifest)
 	}
 	spec, _ := lookupOverlayPackage(providerTestPackage)
@@ -524,24 +541,34 @@ func TestDeployRuntimeFilesWritesProviderDLL(t *testing.T) {
 	}
 
 	// The launch accepts the provider's DLL without unsafe mode, but only against the provider's cache.
-	if err := validateXXMIRuntimeFiles(importer, libs, fork, false); err != nil {
+	companions := []string{"dxcompiler.dll"}
+	if err := validateXXMIRuntimeFiles(importer, libs, fork, companions, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateXXMIRuntimeFiles(importer, libs, libs, false); err == nil {
+	if err := validateXXMIRuntimeFiles(importer, libs, libs, nil, false); err == nil {
 		t.Fatal("provider DLL passed the signed-cache comparison")
 	}
 	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("tampered"))
-	if err := validateXXMIRuntimeFiles(importer, libs, fork, false); err == nil {
+	if err := validateXXMIRuntimeFiles(importer, libs, fork, nil, false); err == nil {
 		t.Fatal("tampered provider DLL passed validation")
 	}
 
-	// Returning to the signed provider restores the signed DLL.
+	writeTestFile(t, filepath.Join(importer, "d3d11.dll"), []byte("fork"))
+	writeTestFile(t, filepath.Join(importer, "dxcompiler.dll"), []byte("tampered"))
+	if err := validateXXMIRuntimeFiles(importer, libs, fork, companions, false); err == nil {
+		t.Fatal("tampered companion library passed validation")
+	}
+
+	// Returning to the signed provider restores the signed DLL and takes the provider's libraries with it.
 	manifest = deploy(cfg, nil, nil)
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "official")
+	if _, err := os.Stat(filepath.Join(importer, "dxcompiler.dll")); !os.IsNotExist(err) {
+		t.Fatalf("companion library outlived its provider: %v", err)
+	}
 	if manifest.Provider != "" || deployedProviderVersion(importer, spec) != "" {
 		t.Fatalf("signed manifest = %+v", manifest)
 	}
-	if err := validateXXMIRuntimeFiles(importer, libs, libs, false); err != nil {
+	if err := validateXXMIRuntimeFiles(importer, libs, libs, nil, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1273,6 +1300,137 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 				t.Fatalf("%s: release was cached", name)
 			}
 			if _, err := os.Stat(providerTestCache(t, "0.2.0")); !os.IsNotExist(err) {
+				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
+			}
+		}
+	})
+}
+
+func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
+	ctx := context.Background()
+	const version = "1.2.2-nhd.8"
+	image, dxc, dxil := testCustomDLLImage(version), testCustomDLLImage("dxc"), testCustomDLLImage("dxil")
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	release := providerTestRelease{
+		tag: "v" + version, data: image, digest: providerTestDigest(image),
+		companions: map[string][]byte{"dxcompiler.dll": dxc, "dxil.dll": dxil},
+	}
+	cfg := ImporterConfig{Mode: RuntimeXXMI, LibsProvider: "myparsleycat", ImporterFolder: t.TempDir()}
+
+	t.Run("verified download", func(t *testing.T) {
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{release})
+		provider, err := service.providerRuntimeDLL(ctx, cfg)
+		if err != nil || !bytes.Equal(provider.companions["dxcompiler.dll"], dxc) ||
+			!bytes.Equal(provider.companions["dxil.dll"], dxil) || downloads.Load() != 3 {
+			t.Fatalf("provider = %+v, downloads = %d, err = %v", provider, downloads.Load(), err)
+		}
+
+		// The game loads the library, so a rewritten one is fetched again instead of deployed.
+		cached := filepath.Join(providerTestCache(t, version), "dxcompiler.dll")
+		writeTestFile(t, cached, testCustomDLLImage("evil"))
+		provider, err = service.providerRuntimeDLL(ctx, cfg)
+		if err != nil || !bytes.Equal(provider.companions["dxcompiler.dll"], dxc) {
+			t.Fatalf("repaired provider = %+v, err = %v", provider, err)
+		}
+	})
+
+	t.Run("entry cached before the lookup", func(t *testing.T) {
+		service, _, _ := newProviderTestService(t, []providerTestRelease{release})
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatal(err)
+		}
+		folder := providerTestCache(t, version)
+		metadata, err := json.Marshal(providerDLLSource{Version: version, SHA256: hashBytes(image), INIChecked: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+		for _, name := range spec.companionFiles {
+			if err := os.Remove(filepath.Join(folder, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), "", nil); err != nil {
+			t.Fatal(err)
+		}
+
+		provider, err := service.providerRuntimeDLL(ctx, cfg)
+		if err != nil || len(provider.companions) != 2 {
+			t.Fatalf("refreshed provider = %+v, err = %v", provider, err)
+		}
+	})
+
+	// seedEntry caches a release the way a build that did not look for companion libraries left it.
+	seedEntry := func(t *testing.T, service *XXMI, version string) {
+		t.Helper()
+		folder := providerTestCache(t, version)
+		metadata, err := json.Marshal(providerDLLSource{Version: version, SHA256: hashBytes(image), INIChecked: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(folder, customDLLName), image)
+		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("lookup that fails", func(t *testing.T) {
+		mismatch := release
+		mismatch.companionDigest = providerTestDigest(image)
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{mismatch})
+		seedEntry(t, service, version)
+
+		// An entry cached without its libraries is not deployed as a release that ships none.
+		if provider, err := service.providerRuntimeDLL(ctx, cfg); err == nil {
+			t.Fatalf("provider without its companion libraries = %+v", provider)
+		}
+		if !service.verifiedProviderDLL(ctx, spec, version) {
+			t.Fatal("failed refresh lost the verified DLL")
+		}
+
+		// A release from before the libraries existed is complete as cached, with GitHub out of reach.
+		seedEntry(t, service, "1.2.2-nhd.7")
+		before := downloads.Load()
+		if err := service.ensureProviderDLL(ctx, spec, "1.2.2-nhd.7"); err != nil || downloads.Load() != before {
+			t.Fatalf("earlier release downloaded %d files, err = %v", downloads.Load()-before, err)
+		}
+	})
+
+	t.Run("lookup with an unverifiable d3dx.ini", func(t *testing.T) {
+		badINI := release
+		badINI.ini, badINI.iniDigest = []byte("[System]"), providerTestDigest(image)
+		service, _, downloads := newProviderTestService(t, []providerTestRelease{badINI})
+		seedEntry(t, service, version)
+
+		// The d3dx.ini only adds options, so losing it does not hold back the libraries the DLL needs.
+		provider, err := service.providerRuntimeDLL(ctx, cfg)
+		if err != nil || len(provider.companions) != 2 {
+			t.Fatalf("provider = %+v, err = %v", provider, err)
+		}
+
+		// The entry stays marked as never searched, so the next launch looks for the d3dx.ini again. The
+		// libraries it already verified are not downloaded with it.
+		before := downloads.Load()
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before+1 {
+			t.Fatalf("retry downloaded %d files, want the d3dx.ini alone, err = %v", downloads.Load()-before, err)
+		}
+		provider, err = service.providerRuntimeDLL(ctx, cfg)
+		if err != nil || len(provider.companions) != 2 {
+			t.Fatalf("provider after the retry = %+v, err = %v", provider, err)
+		}
+	})
+
+	t.Run("unverifiable", func(t *testing.T) {
+		mismatch, text := release, release
+		mismatch.companionDigest = providerTestDigest(image)
+		text.companions = map[string][]byte{"dxil.dll": []byte("plain text")}
+		for name, release := range map[string]providerTestRelease{"digest mismatch": mismatch, "not a DLL": text} {
+			service, _, _ := newProviderTestService(t, []providerTestRelease{release})
+			if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
+				t.Fatalf("%s: release was cached", name)
+			}
+			if _, err := os.Stat(providerTestCache(t, version)); !os.IsNotExist(err) {
 				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
 			}
 		}

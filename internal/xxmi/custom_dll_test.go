@@ -267,7 +267,7 @@ func TestDeployRuntimeReplacesCustomDLLWithoutUnsafeMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(importer, "d3d11.dll"), "xxmi")
-	if err := validateXXMIRuntimeFiles(importer, libs, libs, false); err != nil {
+	if err := validateXXMIRuntimeFiles(importer, libs, libs, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	backups, err := os.ReadDir(filepath.Join(base, "backups"))

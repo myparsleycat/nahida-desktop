@@ -271,14 +271,15 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
 			d3d11Folder := cacheFolder
+			var companions []string
 			if runtimeProvider != "" && !cfg.Migoto.UnsafeMode {
-				d3d11Folder, err = x.verifiedProviderDLLFolder(ctx, cacheRoot, runtimeProvider)
+				d3d11Folder, companions, err = x.verifiedProviderDLLFolder(ctx, cacheRoot, runtimeProvider)
 				if err != nil {
 					return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 				}
 			}
 			if err := validateXXMIRuntimeFiles(
-				cfg.ImporterFolder, cacheFolder, d3d11Folder, cfg.Migoto.UnsafeMode,
+				cfg.ImporterFolder, cacheFolder, d3d11Folder, companions, cfg.Migoto.UnsafeMode,
 			); err != nil {
 				return fmt.Errorf("XXMI_RUNTIME_CORRUPTED: %w", err)
 			}
