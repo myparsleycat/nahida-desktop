@@ -1811,7 +1811,8 @@
         "advanced": "高级设置",
         "drive": "网盘",
         "transfer": "Transfer",
-        "tools": "工具"
+        "tools": "工具",
+        "feedback": "问题反馈"
       },
       "tools": {
         "title": "工具",
@@ -2632,6 +2633,51 @@
         "retry": "重试",
         "my_account": "我的账户",
         "logout": "登出"
+      },
+      "feedback": {
+        "title": "问题反馈",
+        "description": "请告诉我们您遇到的问题。您发送的内容仅用于确认和解决问题。",
+        "category": {
+          "label": "分类",
+          "desktop": "Desktop 应用问题",
+          "service": "Nahida 服务问题",
+          "xxmi-libs": "XXMI 库问题"
+        },
+        "body": {
+          "label": "内容",
+          "placeholder": "请描述出现了什么问题，以及如何重现。"
+        },
+        "attachments": {
+          "label": "附件",
+          "description": "可以附加图片、视频和文本文件，合计最多 100MB。",
+          "add_files": "添加文件",
+          "add_mod": "添加模组文件夹",
+          "filter": "图片、视频、文本",
+          "remove": "移除附件",
+          "file_count": "{{count}} 个文件",
+          "mod_description": "可以附加出现问题的整个模组文件夹。网盘不支持的文件类型会被排除。",
+          "mod_login_required": "登录后才能附加模组文件夹。"
+        },
+        "log": {
+          "label": "附加日志",
+          "description": "附加有助于解决问题的日志。PC 用户名等敏感信息会被匿名处理。"
+        },
+        "submit": "发送",
+        "sending": "发送中...",
+        "cancel": "取消",
+        "sent": "已收到您的反馈，谢谢。",
+        "failed": "反馈发送失败。",
+        "skipped_mod_files": "已排除 {{count}} 个不支持类型的模组文件。",
+        "error": {
+          "body_too_long": "内容不能超过 10,000 个字符。",
+          "FEEDBACK_UNSUPPORTED_FILE": "无法附加此文件：{{name}}",
+          "empty_file": "无法附加空文件：{{name}}",
+          "FEEDBACK_MEDIA_TOO_LARGE": "图片、视频和文本附件合计不能超过 100MB。",
+          "FEEDBACK_TOO_MANY_MEDIA": "最多可以附加 {{count}} 个图片、视频和文本文件。",
+          "FEEDBACK_TOO_MANY_MOD_FILES": "模组文件合计最多可以附加 {{count}} 个。",
+          "FEEDBACK_EMPTY_MOD": "模组文件夹中没有可以附加的文件。",
+          "FEEDBACK_BUSY": "已有反馈正在发送。"
+        }
       },
       "adv": {
         "title": "高级设置",

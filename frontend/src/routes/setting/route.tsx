@@ -11,6 +11,7 @@ import {
   GamepadIcon,
   HardDrive,
   Menu,
+  MessageSquareWarning,
   Network,
   ServerCrash,
   Settings,
@@ -51,6 +52,11 @@ function RouteComponent() {
       { icon: Wrench, label: t("page.setting.tabs.tools"), path: "/setting/tools" },
       { icon: BotIcon, label: t("page.agent.title"), path: "/setting/agent" },
       { icon: ServerCrash, label: t("page.setting.tabs.advanced"), path: "/setting/adv" },
+      {
+        icon: MessageSquareWarning,
+        label: t("page.setting.tabs.feedback"),
+        path: "/setting/feedback",
+      },
     ],
     [t],
   );

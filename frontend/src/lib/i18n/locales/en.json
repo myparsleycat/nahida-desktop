@@ -1811,7 +1811,8 @@
         "account": "Account",
         "advanced": "Advanced",
         "drive": "Drive",
-        "tools": "Tools"
+        "tools": "Tools",
+        "feedback": "Report a problem"
       },
       "tools": {
         "title": "Tools",
@@ -2684,6 +2685,51 @@
         "retry": "Retry",
         "my_account": "My Account",
         "logout": "Logout"
+      },
+      "feedback": {
+        "title": "Report a problem",
+        "description": "Tell us about the problem you ran into. What you send is used only to investigate and fix it.",
+        "category": {
+          "label": "Category",
+          "desktop": "Desktop app problem",
+          "service": "Nahida service problem",
+          "xxmi-libs": "XXMI library problem"
+        },
+        "body": {
+          "label": "Details",
+          "placeholder": "Describe what went wrong and how to make it happen again."
+        },
+        "attachments": {
+          "label": "Attachments",
+          "description": "Attach images, videos and text files, up to 100 MB in total.",
+          "add_files": "Add files",
+          "add_mod": "Add mod folder",
+          "filter": "Images, videos, text",
+          "remove": "Remove attachment",
+          "file_count": "{{count}} files",
+          "mod_description": "You can attach the whole folder of a mod that has the problem. Files of a type the drive does not accept are left out.",
+          "mod_login_required": "Sign in to attach a mod folder."
+        },
+        "log": {
+          "label": "Attach logs",
+          "description": "Attaches logs that help solve the problem. Sensitive information such as your PC user name is anonymized."
+        },
+        "submit": "Send",
+        "sending": "Sending...",
+        "cancel": "Cancel",
+        "sent": "Your report was received. Thank you.",
+        "failed": "The report could not be sent.",
+        "skipped_mod_files": "{{count}} mod files of an unsupported type were left out.",
+        "error": {
+          "body_too_long": "Details cannot exceed 10,000 characters.",
+          "FEEDBACK_UNSUPPORTED_FILE": "This file cannot be attached: {{name}}",
+          "empty_file": "An empty file cannot be attached: {{name}}",
+          "FEEDBACK_MEDIA_TOO_LARGE": "Images, videos and text files cannot exceed 100 MB in total.",
+          "FEEDBACK_TOO_MANY_MEDIA": "You can attach up to {{count}} images, videos and text files.",
+          "FEEDBACK_TOO_MANY_MOD_FILES": "You can attach up to {{count}} mod files in total.",
+          "FEEDBACK_EMPTY_MOD": "The mod folder has no files that can be attached.",
+          "FEEDBACK_BUSY": "A report is already being sent."
+        }
       },
       "adv": {
         "title": "Advanced",

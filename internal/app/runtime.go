@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -14,6 +15,7 @@ import (
 	"nahida.live/desktop/internal/backup"
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/feedback"
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
@@ -42,6 +44,7 @@ type runtime struct {
 	download          *infra.Download
 	archive           *infra.Archive
 	agent             *agent.Service
+	feedback          *feedback.Service
 	auth              *auth.Auth
 	backup            *backup.Backup
 	setting           *setting.Setting
@@ -289,6 +292,31 @@ func newRuntime() *runtime {
 		Input:     rt.input,
 		Screen:    rt.screen,
 	})
+	rt.feedback = feedback.New(feedback.Options{
+		Remote:    httpClient,
+		Log:       log,
+		EventEmit: eventEmit,
+		LogPath: func() (string, error) {
+			if rt.appData == nil {
+				return "", os.ErrNotExist
+			}
+			logs, err := rt.appData.Resolve(appdata.LogsDir)
+			if err != nil {
+				return "", err
+			}
+			return infra.DesktopLogPath(logs), nil
+		},
+		ModFileRule: func(ctx context.Context) (feedback.ModFileRule, error) {
+			rules, err := rt.drive.UploadRules(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return func(name string, size int64) bool {
+				maxSize, ok := rules.MaxSizeFor(name)
+				return ok && size <= maxSize
+			}, nil
+		},
+	})
 	rt.backup = backup.New(backup.Options{
 		Remote:    rt.drive,
 		Settings:  rt.setting,
@@ -333,6 +361,7 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
 		newLoggedService(rt, "Dialog", rt.dialog),
 		newGuardedService(rt, "Drive", rt.drive, waitForAllMethods),
+		newLoggedService(rt, "Feedback", rt.feedback),
 		newGuardedService(rt, "FS", rt.fs, waitForAllMethods),
 		newLoggedService(rt, "GameBanana", rt.gamebanana),
 		newLoggedService(rt, "Input", rt.input),

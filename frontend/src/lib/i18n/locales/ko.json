@@ -1811,7 +1811,8 @@
         "advanced": "고급",
         "drive": "드라이브",
         "transfer": "전송",
-        "tools": "도구"
+        "tools": "도구",
+        "feedback": "문제 신고"
       },
       "tools": {
         "title": "도구",
@@ -2632,6 +2633,51 @@
         "retry": "다시 시도",
         "my_account": "내 계정",
         "logout": "로그아웃"
+      },
+      "feedback": {
+        "title": "문제 신고",
+        "description": "겪고 있는 문제를 알려 주세요. 보내주신 내용은 문제를 확인하고 해결하는 데에만 사용됩니다.",
+        "category": {
+          "label": "분류",
+          "desktop": "Desktop 앱 문제",
+          "service": "Nahida 서비스 문제",
+          "xxmi-libs": "XXMI 라이브러리 문제"
+        },
+        "body": {
+          "label": "내용",
+          "placeholder": "어떤 문제가 있었는지, 어떻게 하면 다시 나타나는지 적어 주세요."
+        },
+        "attachments": {
+          "label": "첨부",
+          "description": "이미지·영상·텍스트 파일을 합쳐 100MB까지 첨부할 수 있습니다.",
+          "add_files": "파일 추가",
+          "add_mod": "모드 폴더 추가",
+          "filter": "이미지, 영상, 텍스트",
+          "remove": "첨부 제거",
+          "file_count": "파일 {{count}}개",
+          "mod_description": "문제가 있는 모드 폴더를 통째로 첨부할 수 있습니다. 드라이브에 올릴 수 없는 형식의 파일은 제외됩니다.",
+          "mod_login_required": "모드 폴더를 첨부하려면 로그인이 필요합니다."
+        },
+        "log": {
+          "label": "로그 첨부",
+          "description": "문제 해결에 도움이 되는 로그를 첨부합니다. PC 사용자 이름 같은 민감한 정보는 익명 처리됩니다."
+        },
+        "submit": "보내기",
+        "sending": "보내는 중...",
+        "cancel": "취소",
+        "sent": "신고가 접수되었습니다. 감사합니다.",
+        "failed": "신고를 보내지 못했습니다.",
+        "skipped_mod_files": "지원하지 않는 형식의 모드 파일 {{count}}개는 제외되었습니다.",
+        "error": {
+          "body_too_long": "내용은 10,000자를 넘을 수 없습니다.",
+          "FEEDBACK_UNSUPPORTED_FILE": "첨부할 수 없는 파일입니다: {{name}}",
+          "empty_file": "빈 파일은 첨부할 수 없습니다: {{name}}",
+          "FEEDBACK_MEDIA_TOO_LARGE": "이미지·영상·텍스트 첨부는 합쳐서 100MB를 넘을 수 없습니다.",
+          "FEEDBACK_TOO_MANY_MEDIA": "이미지·영상·텍스트 파일은 {{count}}개까지 첨부할 수 있습니다.",
+          "FEEDBACK_TOO_MANY_MOD_FILES": "모드 파일은 모두 합쳐 {{count}}개까지 첨부할 수 있습니다.",
+          "FEEDBACK_EMPTY_MOD": "첨부할 수 있는 파일이 모드 폴더에 없습니다.",
+          "FEEDBACK_BUSY": "이미 보내는 중인 신고가 있습니다."
+        }
       },
       "adv": {
         "title": "고급",

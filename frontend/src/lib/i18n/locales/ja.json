@@ -1811,7 +1811,8 @@
         "advanced": "詳細",
         "drive": "ドライブ",
         "transfer": "Transfer",
-        "tools": "ツール"
+        "tools": "ツール",
+        "feedback": "問題を報告"
       },
       "tools": {
         "title": "ツール",
@@ -2632,6 +2633,51 @@
         "retry": "再試行",
         "my_account": "マイアカウント",
         "logout": "ログアウト"
+      },
+      "feedback": {
+        "title": "問題を報告",
+        "description": "発生している問題をお知らせください。送信された内容は、問題の確認と解決にのみ使用されます。",
+        "category": {
+          "label": "分類",
+          "desktop": "Desktop アプリの問題",
+          "service": "Nahida サービスの問題",
+          "xxmi-libs": "XXMI ライブラリの問題"
+        },
+        "body": {
+          "label": "内容",
+          "placeholder": "どのような問題が起きたか、どうすれば再現できるかを記入してください。"
+        },
+        "attachments": {
+          "label": "添付",
+          "description": "画像・動画・テキストファイルを合計 100MB まで添付できます。",
+          "add_files": "ファイルを追加",
+          "add_mod": "Mod フォルダーを追加",
+          "filter": "画像、動画、テキスト",
+          "remove": "添付を削除",
+          "file_count": "{{count}} 個のファイル",
+          "mod_description": "問題のある Mod フォルダーをまるごと添付できます。ドライブにアップロードできない形式のファイルは除外されます。",
+          "mod_login_required": "Mod フォルダーを添付するにはログインが必要です。"
+        },
+        "log": {
+          "label": "ログを添付",
+          "description": "問題の解決に役立つログを添付します。PC のユーザー名などの機密情報は匿名化されます。"
+        },
+        "submit": "送信",
+        "sending": "送信中...",
+        "cancel": "キャンセル",
+        "sent": "報告を受け付けました。ありがとうございます。",
+        "failed": "報告を送信できませんでした。",
+        "skipped_mod_files": "対応していない形式の Mod ファイル {{count}} 個は除外されました。",
+        "error": {
+          "body_too_long": "内容は 10,000 文字を超えられません。",
+          "FEEDBACK_UNSUPPORTED_FILE": "添付できないファイルです: {{name}}",
+          "empty_file": "空のファイルは添付できません: {{name}}",
+          "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキストの添付は合計 100MB を超えられません。",
+          "FEEDBACK_TOO_MANY_MEDIA": "画像・動画・テキストファイルは {{count}} 個まで添付できます。",
+          "FEEDBACK_TOO_MANY_MOD_FILES": "Mod ファイルは合計 {{count}} 個まで添付できます。",
+          "FEEDBACK_EMPTY_MOD": "Mod フォルダーに添付できるファイルがありません。",
+          "FEEDBACK_BUSY": "送信中の報告がすでにあります。"
+        }
       },
       "adv": {
         "title": "詳細設定",
