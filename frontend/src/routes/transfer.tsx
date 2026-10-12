@@ -126,7 +126,7 @@ function RouteComponent() {
   } = useTransferFilter({ transfers: transferItems });
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
+    <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-none border-b px-4 pt-4 pb-4">
         <div className="flex flex-col gap-6">
           <TransferStats

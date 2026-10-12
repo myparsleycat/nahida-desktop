@@ -195,9 +195,9 @@ body {
     user-select: none;
 }
 
-/* The main window has a native Acrylic backdrop; the shell tints it and the content panel stays opaque. */
+/* The main window has a native Mica backdrop; the shell shows it as is and the content panel tints it. */
 body:has(.app-shell) {
-    background: color-mix(in oklab, var(--background) 70%, transparent);
+    background: transparent;
 }
 
 /* Route navigation that sits on the shell backdrop; its presence makes the root content panel transparent. */
@@ -253,7 +253,7 @@ body:has(.titlebar) [data-slot="alert-dialog-content"] {
 .toaster [data-sonner-toast].cn-toast[data-styled="true"] {
     background: color-mix(
         in oklab,
-        var(--toast-surface, var(--normal-bg)) var(--toast-surface-opacity, 50%),
+        var(--toast-surface, var(--normal-bg)) var(--toast-surface-opacity, 85%),
         transparent
     );
 }

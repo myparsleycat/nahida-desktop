@@ -93,7 +93,7 @@ export function ModelViewerPage({
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-full min-h-0 flex-col text-foreground">
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b px-3">
         <div className="flex min-w-0 items-center gap-2">
           <Button render={<Link to="/tools" />} variant="ghost" size="sm" className="h-8 gap-1">

@@ -25,7 +25,7 @@ function RouteComponent() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden text-foreground">
       <header className="flex h-10 shrink-0 items-center border-b border-border px-4">
         <span className="font-mono text-xs font-medium text-foreground">Development</span>
       </header>
