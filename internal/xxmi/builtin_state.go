@@ -77,14 +77,13 @@ type Overview struct {
 	// SharedLibsProvider is the XXMI libraries provider of importers that do not choose their own.
 	SharedLibsProvider string `json:"sharedLibsProvider"`
 	// LibsProviders lists the selectable provider IDs, the default one first.
-	LibsProviders    []string            `json:"libsProviders"`
-	CustomDLLs       []CustomDLL         `json:"customDlls"`
-	Importers        []EnabledImporter   `json:"importers"`
-	LibsCache        []CachedLibs        `json:"libsCache"`
-	LegacyRuntimes   []LegacyRuntimeInfo `json:"legacyRuntimes"`
-	FPSVersions      []string            `json:"fpsVersions"`
-	CacheIssues      []string            `json:"cacheIssues,omitempty"`
-	ExternalLauncher *ExternalLauncher   `json:"externalLauncher,omitempty"`
+	LibsProviders  []string            `json:"libsProviders"`
+	CustomDLLs     []CustomDLL         `json:"customDlls"`
+	Importers      []EnabledImporter   `json:"importers"`
+	LibsCache      []CachedLibs        `json:"libsCache"`
+	LegacyRuntimes []LegacyRuntimeInfo `json:"legacyRuntimes"`
+	FPSVersions    []string            `json:"fpsVersions"`
+	CacheIssues    []string            `json:"cacheIssues,omitempty"`
 }
 
 func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
@@ -179,14 +178,6 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	}
 	if err := ctx.Err(); err != nil {
 		return Overview{}, err
-	}
-	if !overview.Configured {
-		external, err := x.DetectExternalLauncher(ctx)
-		if err == nil {
-			overview.ExternalLauncher = external
-		} else if !strings.Contains(err.Error(), "not found") {
-			return Overview{}, err
-		}
 	}
 	return overview, nil
 }
