@@ -87,6 +87,26 @@ func TestDetectExternalLauncherScansDrivesOnce(t *testing.T) {
 	}
 }
 
+func TestUnconfiguredBuiltinOverviewDoesNotScanDrives(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	scans := 0
+	service := NewWithOptions(Options{SearchRoots: func() ([]string, error) {
+		scans++
+		return nil, nil
+	}})
+	service.UseClient(newXXMITestClient(t))
+	useBuiltinLauncher(t, service)
+
+	overview, err := service.GetOverview(context.Background())
+	if err != nil || overview.Configured {
+		t.Fatalf("overview=%+v err=%v", overview, err)
+	}
+	if scans != 0 {
+		t.Fatalf("drive scans = %d, want 0", scans)
+	}
+}
+
 func TestFindFileAcrossRootsHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

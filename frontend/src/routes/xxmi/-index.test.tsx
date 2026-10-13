@@ -87,7 +87,9 @@ vi.mock("@tanstack/react-query", () => ({
             ? [{ version: "1.7.5" }, { version: "1.7.6" }]
             : queryKey[0] === "xxmi:shared-dll-configs"
               ? state.overview.sharedDllConfigs
-              : state.updates,
+              : queryKey[0] === "xxmi:external-launcher"
+                ? null
+                : state.updates,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));

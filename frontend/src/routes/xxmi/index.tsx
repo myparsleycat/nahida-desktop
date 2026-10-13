@@ -98,6 +98,16 @@ export function XXMIDashboard() {
   const libs = overview?.libsCache;
   const legacy = overview?.legacyRuntimes;
   const fpsVersions = overview?.fpsVersions;
+  // Detection may scan every drive, so it loads apart from the overview instead of holding the page.
+  const importable = !!overview && !external && !overview.configured;
+  const { data: detectedLauncher } = useQuery({
+    queryKey: ["xxmi:external-launcher"],
+    queryFn: XXMI.DetectExternalLauncher,
+    enabled: importable,
+    retry: false,
+  });
+  // A disabled query keeps its last result, and importing again would overwrite the configured importers.
+  const externalLauncher = importable ? detectedLauncher : undefined;
   const { data: fpsReleases } = useQuery({
     queryKey: ["xxmi:fps-releases"],
     queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
@@ -144,7 +154,7 @@ export function XXMIDashboard() {
   };
 
   const importExternal = async (input: ImportExternalLauncherInput) => {
-    if (!overview?.externalLauncher) return;
+    if (!externalLauncher) return;
     const userData = input.userData;
     const imported = await XXMI.ImportExternalLauncher(input).catch((error: unknown) => {
       const message = toErrorMessage(error);
@@ -234,7 +244,8 @@ export function XXMIDashboard() {
   return (
     <main className="min-h-0 flex-1 scrollbar-gutter-stable overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl p-4">
-        {external ? (
+        {/* Without the overview the mode is unknown, and the built-in form would show empty values. */}
+        {!overview ? null : external ? (
           <div className="space-y-6 text-sm">
             <XXMIExternalLauncher />
             <XXMILaunchGuardSettings />
@@ -323,14 +334,12 @@ export function XXMIDashboard() {
                     {t("g.save")}
                   </Button>
                 </PathField>
-                {overview?.externalLauncher && (
+                {externalLauncher && (
                   <Alert>
                     <InfoIcon />
                     <AlertTitle>{t("page.setting.xxmi.builtin.externalDetected")}</AlertTitle>
                     <AlertDescription className="space-y-2">
-                      <p className="font-mono text-xs break-all">
-                        {overview.externalLauncher.path}
-                      </p>
+                      <p className="font-mono text-xs break-all">{externalLauncher.path}</p>
                       <p>{t("page.setting.xxmi.builtin.externalWarning")}</p>
                       <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                         {t("page.setting.xxmi.builtin.import")}
@@ -624,9 +633,9 @@ export function XXMIDashboard() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        {importOpen && overview?.externalLauncher && (
+        {importOpen && externalLauncher && (
           <XXMIImportDialog
-            path={overview.externalLauncher.path}
+            path={externalLauncher.path}
             root={importRoot}
             onImport={importExternal}
             onClose={() => setImportOpen(false)}

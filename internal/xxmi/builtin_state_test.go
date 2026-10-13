@@ -171,7 +171,7 @@ func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	overview, err := service.GetOverview(ctx)
-	if err != nil || !overview.Configured || len(overview.Importers) != 0 || overview.ExternalLauncher != nil {
+	if err != nil || !overview.Configured || len(overview.Importers) != 0 {
 		t.Fatalf("disabled importer overview = %+v, err = %v", overview, err)
 	}
 }
@@ -200,7 +200,7 @@ func TestOverviewKeepsBuiltinRootWhenExternalLauncherIsFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	overview, err := service.GetOverview(ctx)
-	if err != nil || overview.ExternalLauncher == nil || overview.Root != cacheRoot {
+	if err != nil || overview.Root != cacheRoot {
 		t.Fatalf("default root with external launcher = %+v, err = %v", overview, err)
 	}
 	chosen := t.TempDir()
