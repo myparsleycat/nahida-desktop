@@ -1877,6 +1877,8 @@
           "elevatedHelperDescription": "Start a separate helper with administrator rights to handle actions that require them. Windows will show a UAC prompt when the app starts.",
           "titlebarActivityBadgeClickNavigate": "Click titlebar activity badges to open",
           "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
+          "windowBackdrop": "Mica backdrop",
+          "windowBackdropDescription": "Use the Windows Mica effect for the window background. Changing this reopens the window.",
           "checkUpdate": "Check for updates",
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",

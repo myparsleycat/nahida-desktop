@@ -355,6 +355,9 @@ func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
 	if key == definitionsByKey[KeyDebugOpenConsole].StorageKey {
 		s.opts.Hooks.openConsoleChanged(stored == "true")
 	}
+	if key == definitionsByKey[KeyGeneralWindowBackdrop].StorageKey {
+		s.opts.Hooks.windowBackdropChanged(parseBooleanSetting(&stored, true))
+	}
 	s.opts.Hooks.set(key, stored)
 	s.opts.Hooks.rendererReload()
 	return nil
@@ -435,6 +438,10 @@ func (s *Setting) SetRunInBackground(ctx context.Context, enabled bool) error {
 
 func (s *Setting) GetTheme(ctx context.Context) (string, error) {
 	return s.getString(ctx, KeyGeneralTheme)
+}
+
+func (s *Setting) GetWindowBackdrop(ctx context.Context) (bool, error) {
+	return s.getBool(ctx, KeyGeneralWindowBackdrop)
 }
 
 func (s *Setting) GetElevatedHelperEnabled(ctx context.Context) (bool, error) {

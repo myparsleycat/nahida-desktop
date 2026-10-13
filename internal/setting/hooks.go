@@ -12,6 +12,7 @@ type Hooks struct {
 	AfterPowerSaveBlockChanged    func()
 	AfterBandwidthLimitChanged    func(mibps int)
 	AfterOpenConsoleChanged       func(enabled bool)
+	AfterWindowBackdropChanged    func(enabled bool)
 	AfterPersistTogglesChanged    func(enabled bool)
 	AfterElevatedHelperChanged    func(enabled bool)
 	AfterRendererReload           func()
@@ -75,6 +76,12 @@ func (h Hooks) bandwidthLimitChanged(mibps int) {
 func (h Hooks) openConsoleChanged(enabled bool) {
 	if h.AfterOpenConsoleChanged != nil {
 		h.AfterOpenConsoleChanged(enabled)
+	}
+}
+
+func (h Hooks) windowBackdropChanged(enabled bool) {
+	if h.AfterWindowBackdropChanged != nil {
+		h.AfterWindowBackdropChanged(enabled)
 	}
 }
 

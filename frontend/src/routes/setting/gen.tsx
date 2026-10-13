@@ -52,6 +52,7 @@ const settingsConfig = {
   defaultStartPage: "general.defaultStartPage",
   logLevel: "general.logLevel",
   elevatedHelperEnabled: "general.elevatedHelperEnabled",
+  windowBackdrop: "general.windowBackdrop",
 } as const;
 
 function RouteComponent() {
@@ -271,6 +272,17 @@ function RouteComponent() {
               onCheckedChange={(val) => update("titlebarActivityBadgeClickNavigate", val)}
             />
           </SectionRow>
+          {appStatus?.supportsWindowBackdrop && (
+            <SectionRow
+              title={t("page.setting.gen.application.windowBackdrop")}
+              description={t("page.setting.gen.application.windowBackdropDescription")}
+            >
+              <Switch
+                checked={settings.windowBackdrop}
+                onCheckedChange={(val) => update("windowBackdrop", val)}
+              />
+            </SectionRow>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="language">

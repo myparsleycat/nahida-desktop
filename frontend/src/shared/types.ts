@@ -35,6 +35,7 @@ export interface AppStatus {
     isPackaged: boolean;
     isDev: boolean;
     supportsAutostart: boolean;
+    supportsWindowBackdrop: boolean;
     platform: string;
 }
 

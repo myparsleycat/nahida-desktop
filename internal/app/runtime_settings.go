@@ -81,6 +81,11 @@ func runtimeSettingHooks(
 				windowService.SetConsoleWindowEnabled(enabled)
 			}
 		},
+		AfterWindowBackdropChanged: func(enabled bool) {
+			if windowService != nil {
+				windowService.SetBackdropEnabled(enabled)
+			}
+		},
 		AfterPersistTogglesChanged: func(bool) {
 			if toolsService == nil {
 				return

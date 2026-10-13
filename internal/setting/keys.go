@@ -18,6 +18,7 @@ const (
 	KeyGeneralTitlebarActivityBadgeClickNavigate = "general.titlebarActivityBadgeClickNavigate"
 	KeyGeneralElevatedHelperEnabled              = "general.elevatedHelperEnabled"
 	KeyGeneralTheme                              = "general.theme"
+	KeyGeneralWindowBackdrop                     = "general.windowBackdrop"
 
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
@@ -117,6 +118,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralTitlebarActivityBadgeClickNavigate, ScopeGeneral, "general_titlebar_activity_badge_click_navigate"},
 	{KeyGeneralElevatedHelperEnabled, ScopeGeneral, "general_elevated_helper_enabled"},
 	{KeyGeneralTheme, ScopeGeneral, "general_theme"},
+	{KeyGeneralWindowBackdrop, ScopeGeneral, "general_window_backdrop"},
 
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},

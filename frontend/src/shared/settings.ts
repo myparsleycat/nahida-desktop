@@ -27,6 +27,7 @@ export interface AppSettings {
     "general.titlebarActivityBadgeClickNavigate": boolean;
     "general.elevatedHelperEnabled": boolean;
     "general.theme": Theme;
+    "general.windowBackdrop": boolean;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -174,6 +175,11 @@ export const APP_SETTINGS = {
         publicKey: "general.theme",
         scope: "general",
         storageKey: "general_theme",
+    },
+    "general.windowBackdrop": {
+        publicKey: "general.windowBackdrop",
+        scope: "general",
+        storageKey: "general_window_backdrop",
     },
 
     "mod.archiveExtractPathMode": {

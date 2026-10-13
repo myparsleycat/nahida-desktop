@@ -1877,6 +1877,8 @@
           "elevatedHelperDescription": "管理者権限が必要な操作を処理するため、アプリ起動時に別のヘルパーを管理者権限で起動します。Windows の UAC 確認が表示されます。",
           "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
           "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
+          "windowBackdrop": "Mica 背景効果",
+          "windowBackdropDescription": "ウィンドウの背景に Windows の Mica 効果を使用します。変更するとウィンドウが開き直されます。",
           "checkUpdate": "更新確認",
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",

@@ -49,6 +49,7 @@ vi.mock("@renderer/hooks/use-settings", () => ({
       defaultStartPage: "/mod",
       logLevel: "warn",
       elevatedHelperEnabled: false,
+      windowBackdrop: true,
     },
     update: mocks.update,
     isLoading: false,

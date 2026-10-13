@@ -190,6 +190,20 @@ func buildSpecs() map[string]spec {
 		),
 		KeyGeneralElevatedHelperEnabled: elevatedHelper,
 		KeyGeneralTheme:                 enumSpec(definitionsByKey[KeyGeneralTheme], ThemeSystem, themes),
+		KeyGeneralWindowBackdrop: {
+			def:        definitionsByKey[KeyGeneralWindowBackdrop],
+			getDefault: func(*Setting) any { return true },
+			fromStored: func(_ *Setting, value *string) any {
+				return parseBooleanSetting(value, true)
+			},
+			toStored: func(_ *Setting, value any) string {
+				return formatBool(asBool(value))
+			},
+			afterSet: func(s *Setting, _ context.Context, value any) error {
+				s.opts.Hooks.windowBackdropChanged(asBool(value))
+				return nil
+			},
+		},
 
 		KeyModArchiveExtractPathMode: enumSpec(
 			definitionsByKey[KeyModArchiveExtractPathMode],

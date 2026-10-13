@@ -25,26 +25,29 @@ type Window struct {
 	mu       sync.Mutex
 	boundsMu sync.Mutex
 
-	app          *application.App
-	window       application.Window
-	settings     *setting.Setting
-	log          *infra.Log
-	ready        bool
-	startHidden  bool
-	everShown    bool
-	consoleOpen  bool
-	currentRoute string
-	pendingRoute string
-	saveTimer    *time.Timer
-	taskbar      *nativeTaskbar
-	taskbarValue *float64
-	taskbarMode  string
+	app             *application.App
+	window          application.Window
+	settings        *setting.Setting
+	log             *infra.Log
+	ready           bool
+	startHidden     bool
+	everShown       bool
+	consoleOpen     bool
+	solidBackground bool
+	currentRoute    string
+	pendingRoute    string
+	pendingMaximise bool
+	saveTimer       *time.Timer
+	taskbar         *nativeTaskbar
+	taskbarValue    *float64
+	taskbarMode     string
 }
 
 const screenCacheWait = time.Second
 
-// Without system backdrops Wails falls back to an untinted blur-behind that shows the desktop
-// through the transparent shell, so the main window uses a solid shell colour there instead.
+// The shell colour of a main window without the Mica backdrop. Where system backdrops are
+// unsupported Wails would fall back to an untinted blur-behind that shows the desktop through
+// the transparent shell, so the backdrop is never requested there.
 func mainWindowBackground(dark bool) application.RGBA {
 	if dark {
 		return application.NewRGB(23, 23, 23)
@@ -113,6 +116,7 @@ func (w *Window) Create() application.Window {
 	consoleOpen := w.consoleOpen
 	w.mu.Unlock()
 
+	solidBackground := !w32.SupportsBackdropTypes()
 	initialTheme := application.Light
 	if w32.IsCurrentlyDarkMode() {
 		initialTheme = application.Dark
@@ -172,6 +176,9 @@ func (w *Window) Create() application.Window {
 			consoleOpen = enabled
 			opts.DevToolsEnabled = enabled
 		}
+		if enabled, err := settings.GetWindowBackdrop(context.Background()); err == nil && !enabled {
+			solidBackground = true
+		}
 		screens := waitForScreens(app.Screen.GetAll, screenCacheWait)
 		if bounds, err := settings.GetBounds(context.Background()); err == nil && validSavedBounds(bounds, screens) {
 			opts.X, opts.Y = bounds.X, bounds.Y
@@ -179,7 +186,7 @@ func (w *Window) Create() application.Window {
 			opts.InitialPosition = application.WindowXY
 		}
 	}
-	if !w32.SupportsBackdropTypes() {
+	if solidBackground {
 		opts.BackgroundType = application.BackgroundTypeSolid
 		opts.BackgroundColour = mainWindowBackground(opts.Windows.Theme == application.Dark)
 	}
@@ -188,6 +195,7 @@ func (w *Window) Create() application.Window {
 	w.window = created
 	w.ready = false
 	w.consoleOpen = consoleOpen
+	w.solidBackground = solidBackground
 	w.currentRoute = route
 	w.mu.Unlock()
 	w.registerEvents(created)
@@ -237,11 +245,16 @@ func (w *Window) registerEvents(window application.Window) {
 		w.startHidden = false
 		route := w.pendingRoute
 		w.pendingRoute = ""
+		maximise := w.pendingMaximise
+		w.pendingMaximise = false
 		w.mu.Unlock()
 		if !startHidden {
 			w.mu.Lock()
 			w.everShown = true
 			w.mu.Unlock()
+			if maximise {
+				window.Maximise()
+			}
 			window.Show()
 		}
 		w.syncTaskbarProgress(window)
@@ -403,7 +416,7 @@ func (w *Window) HandleArguments(args []string) {
 func (w *Window) OpenSetting() { w.FocusAndNavigate("/setting/gen") }
 
 // SyncRoute keeps the SPA route available when the native window must be
-// recreated to change WebView devtools availability.
+// recreated to change WebView devtools availability or the backdrop.
 func (w *Window) SyncRoute(ctx context.Context, route string) {
 	if w == nil {
 		return
@@ -427,7 +440,6 @@ func (w *Window) SetConsoleWindowEnabled(enabled bool) {
 	previous := w.consoleOpen
 	w.consoleOpen = enabled
 	ready := w.ready
-	route := w.currentRoute
 	w.mu.Unlock()
 	if current == nil {
 		return
@@ -439,30 +451,58 @@ func (w *Window) SetConsoleWindowEnabled(enabled bool) {
 		return
 	}
 
+	if !w.recreate(current) {
+		w.mu.Lock()
+		w.consoleOpen = previous
+		w.mu.Unlock()
+	}
+}
+
+//wails:ignore
+func (w *Window) SetBackdropEnabled(enabled bool) {
+	if w == nil || !w32.SupportsBackdropTypes() {
+		return
+	}
+	w.mu.Lock()
+	current, solidBackground := w.window, w.solidBackground
+	w.mu.Unlock()
+	if current == nil || solidBackground == !enabled {
+		return
+	}
+	w.recreate(current)
+}
+
+// recreate replaces the main window so creation-time options take effect, reopening it on the
+// current route. It reports false when no replacement could be created and current was kept.
+func (w *Window) recreate(current application.Window) bool {
 	w.saveBounds(current)
+	// Bounds are not saved while maximised, so the replacement would open at its normal size.
+	maximised := current.IsMaximised()
 	w.mu.Lock()
 	if w.window != current {
 		w.mu.Unlock()
-		return
+		return true
 	}
+	ready := w.ready
 	w.window = nil
 	w.ready = false
-	w.pendingRoute = route
+	w.pendingRoute = w.currentRoute
+	w.pendingMaximise = maximised
 	w.mu.Unlock()
 
-	replacement := w.Create()
-	if replacement == nil {
+	if w.Create() == nil {
 		w.mu.Lock()
 		if w.window == nil {
 			w.window = current
 			w.ready = ready
-			w.consoleOpen = previous
 			w.pendingRoute = ""
+			w.pendingMaximise = false
 		}
 		w.mu.Unlock()
-		return
+		return false
 	}
 	current.Close()
+	return true
 }
 
 func normalizeWindowRoute(route string) string {
@@ -484,13 +524,13 @@ func (w *Window) SyncTheme(dark bool) {
 		return
 	}
 	w.mu.Lock()
-	window := w.window
+	window, solidBackground := w.window, w.solidBackground
 	w.mu.Unlock()
 	if window == nil {
 		return
 	}
 
-	if !w32.SupportsBackdropTypes() {
+	if solidBackground {
 		window.SetBackgroundColour(mainWindowBackground(dark))
 	}
 	application.InvokeAsync(func() {
