@@ -43,6 +43,15 @@ type Window struct {
 
 const screenCacheWait = time.Second
 
+// Without system backdrops Wails falls back to an untinted blur-behind that shows the desktop
+// through the transparent shell, so the main window uses a solid shell colour there instead.
+func mainWindowBackground(dark bool) application.RGBA {
+	if dark {
+		return application.NewRGB(23, 23, 23)
+	}
+	return application.NewRGB(250, 250, 250)
+}
+
 //wails:ignore
 func (w *Window) SetStartHidden(hidden bool) {
 	if w == nil {
@@ -169,6 +178,10 @@ func (w *Window) Create() application.Window {
 			opts.Width, opts.Height = bounds.Width, bounds.Height
 			opts.InitialPosition = application.WindowXY
 		}
+	}
+	if !w32.SupportsBackdropTypes() {
+		opts.BackgroundType = application.BackgroundTypeSolid
+		opts.BackgroundColour = mainWindowBackground(opts.Windows.Theme == application.Dark)
 	}
 	created := app.Window.NewWithOptions(opts)
 	w.mu.Lock()
@@ -464,7 +477,8 @@ func normalizeWindowRoute(route string) string {
 }
 
 // SyncTheme matches the native window theme to the renderer theme.
-// The Mica backdrop takes its tint from the window theme, not from the page.
+// The Mica backdrop takes its tint from the window theme, not from the page; the solid
+// fallback colour follows the same theme.
 func (w *Window) SyncTheme(dark bool) {
 	if w == nil {
 		return
@@ -476,6 +490,9 @@ func (w *Window) SyncTheme(dark bool) {
 		return
 	}
 
+	if !w32.SupportsBackdropTypes() {
+		window.SetBackgroundColour(mainWindowBackground(dark))
+	}
 	application.InvokeAsync(func() {
 		if w32.IsCurrentlyHighContrastMode() {
 			return
