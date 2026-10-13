@@ -99,12 +99,15 @@ export function XXMIDashboard() {
   const legacy = overview?.legacyRuntimes;
   const fpsVersions = overview?.fpsVersions;
   // Detection may scan every drive, so it loads apart from the overview instead of holding the page.
-  const { data: externalLauncher } = useQuery({
+  const importable = !!overview && !external && !overview.configured;
+  const { data: detectedLauncher } = useQuery({
     queryKey: ["xxmi:external-launcher"],
     queryFn: XXMI.DetectExternalLauncher,
-    enabled: !!overview && !external && !overview.configured,
+    enabled: importable,
     retry: false,
   });
+  // A disabled query keeps its last result, and importing again would overwrite the configured importers.
+  const externalLauncher = importable ? detectedLauncher : undefined;
   const { data: fpsReleases } = useQuery({
     queryKey: ["xxmi:fps-releases"],
     queryFn: () => XXMI.ListReleases("gi-fps-unlocker"),
