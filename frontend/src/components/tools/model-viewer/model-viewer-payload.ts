@@ -525,8 +525,9 @@ function applyEvaluatedMaps(
         material.normalScale.y = -1;
     }
     // ZZMI's packed maps are not generic Three.js AO/PBR maps. LightMap.G is
-    // metallic and MaterialMap.G is glossiness; the shader adapter below
-    // performs the required channel selection and glossiness inversion.
+    // metallic and MaterialMap.G is roughness, not glossiness: game textures
+    // store it highest on cloth and hair, lower on skin, and lowest on metal.
+    // The shader adapter below performs the required channel selection.
     material.aoMap = null;
     material.metalnessMap =
         userData.materialProfile === "zzmi" && evaluated.lightMapKey
@@ -672,10 +673,10 @@ uniform float modelViewerRabbitFXLightSigned;`,
         shader.fragmentShader = shader.fragmentShader
             .replace("#include <normal_fragment_maps>", normalChunk)
             .replace(
-                "roughnessFactor *= 1.0 - texelRoughness.g;",
+                "roughnessFactor *= texelRoughness.g;",
                 `float modelViewerRoughnessSample = mix( texelRoughness.g, texelRoughness.r, modelViewerRoughnessBC4 );
     if ( modelViewerRoughnessSigned > 0.5 ) modelViewerRoughnessSample = modelViewerRoughnessSample * 0.5 + 0.5;
-    roughnessFactor *= 1.0 - modelViewerRoughnessSample;`,
+    roughnessFactor *= modelViewerRoughnessSample;`,
             )
             .replace(
                 "metalnessFactor *= texelMetalness.g;",
@@ -754,7 +755,7 @@ function configurePackedMaterialShader(material: MeshStandardMaterial): void {
                 `float roughnessFactor = roughness;
 #ifdef USE_ROUGHNESSMAP
     vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
-    roughnessFactor *= 1.0 - texelRoughness.g;
+    roughnessFactor *= texelRoughness.g;
 #endif`,
             )
             .replace(
