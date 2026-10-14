@@ -42,6 +42,14 @@ describe("fuzzy match", () => {
         assert.equal(findBestFuzzyMatch(["Lull"], "full", { threshold: 0.85 }), null);
     });
 
+    it("rejects names that diverge after a shared prefix", () => {
+        assert.equal(findBestFuzzyMatch(["Lucy"], "LuciaSummer", { threshold: 0.85 }), null);
+        assert.equal(
+            findBestFuzzyMatch(["RaidenShogun"], "RaidenKimono", { threshold: 0.85 })?.value,
+            "RaidenShogun",
+        );
+    });
+
     it("allows single edits after a stable prefix", () => {
         assert.equal(
             findBestFuzzyMatch(["alice"], "AlxceDefault", { threshold: 0.85 })?.value,

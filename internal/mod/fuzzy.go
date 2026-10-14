@@ -2,7 +2,6 @@ package mod
 
 import (
 	"context"
-	"math"
 	"sort"
 	"strings"
 	"unicode"
@@ -156,8 +155,10 @@ func scoreFuzzyToken(candidate, token string) float64 {
 	if transposed {
 		distance = 1
 	}
+	// A partial shared prefix such as "lucy"/"lucia" names a different character, so only an
+	// abbreviation, where one side is a whole prefix of the other, earns the prefix score.
 	strongPrefix := 0.0
-	if prefix >= max(2, int(math.Ceil(float64(shorter)*0.6))) {
+	if shorter >= 4 && prefix == shorter {
 		strongPrefix = 0.85 + 0.1*float64(prefix)/float64(longer)
 	}
 	transpositionScore := 0.0

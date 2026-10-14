@@ -767,6 +767,8 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 	secondRoot := filepath.Join(root, "second")
 	for _, path := range []string{
 		filepath.Join(firstRoot, "Veltrionna"),
+		filepath.Join(firstRoot, "Lucy"),
+		filepath.Join(firstRoot, "RaidenShogun"),
 		filepath.Join(firstRoot, "CharF"),
 		filepath.Join(secondRoot, "CharF"),
 	} {
@@ -786,6 +788,20 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 	}
 	if match == nil || match.Game != "Genshin" || match.Group.Name != "Veltrionna" || match.Score < 0.85 {
 		t.Fatalf("match = %#v", match)
+	}
+	divergent, err := service.ResolveDownloadTarget(ctx, "Lucia Summer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if divergent != nil {
+		t.Fatalf("divergent prefix match = %#v", divergent)
+	}
+	abbreviated, err := service.ResolveDownloadTarget(ctx, "Raiden Kimono", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if abbreviated == nil || abbreviated.Group.Name != "RaidenShogun" {
+		t.Fatalf("abbreviated match = %#v", abbreviated)
 	}
 	ambiguous, err := service.ResolveDownloadTarget(ctx, "CharF", nil)
 	if err != nil {

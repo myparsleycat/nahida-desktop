@@ -97,8 +97,10 @@ function scoreToken(candidate: string, token: string) {
     const tokenDistance = hasSingleAdjacentTransposition(candidate, token)
         ? 1
         : levenshteinDistance(candidate, token);
+    // A partial shared prefix such as "lucy"/"lucia" names a different character, so only an
+    // abbreviation, where one side is a whole prefix of the other, earns the prefix score.
     const strongPrefixScore =
-        commonPrefixLength >= Math.max(2, Math.ceil(shorterLength * 0.6))
+        shorterLength >= 4 && commonPrefixLength === shorterLength
             ? 0.85 + 0.1 * (commonPrefixLength / longerLength)
             : 0;
     const transpositionScore = hasSingleAdjacentTransposition(candidate, token) ? 0.88 : 0;
