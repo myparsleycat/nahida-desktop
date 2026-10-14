@@ -35,8 +35,12 @@ type modelViewerVariableName struct {
 var (
 	modelViewerVariableUseRE  = regexp.MustCompile(`\$(\w+)`)
 	modelViewerVariableDeclRE = regexp.MustCompile(`(?i)^global\s+(?:persist\s+)?\$(\w+)\b`)
-	modelViewerZZMIResourceRE = regexp.MustCompile(`(?i)Resource\\ZZMI\\(?:Diffuse|NormalMap|LightMap|MaterialMap)`)
-	modelViewerWWMIMarkerRE   = regexp.MustCompile(
+	// Hash-override ZZMI exports bind no Resource\ZZMI slots; the ZZMI-only skin
+	// command list is then the evidence that the maps use ZZZ channel packing.
+	modelViewerZZMIMarkerRE = regexp.MustCompile(
+		`(?i)(?:Resource\\ZZMI\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|^run\s*=\s*CommandListSkinTexture$)`,
+	)
+	modelViewerWWMIMarkerRE = regexp.MustCompile(
 		`(?i)(?:global\s+\$required_wwmi_version\b|(?:Resource|CommandList|\$)\\WWMIv1\\)`,
 	)
 	modelViewerRabbitFXRE = regexp.MustCompile(
@@ -50,7 +54,7 @@ func detectModelViewerMaterialProfile(sections []modINISection) string {
 		for _, line := range section.Lines {
 			wwmi = wwmi || modelViewerWWMIMarkerRE.MatchString(line)
 			rabbitFX = rabbitFX || modelViewerRabbitFXRE.MatchString(line)
-			zzmi = zzmi || modelViewerZZMIResourceRE.MatchString(line)
+			zzmi = zzmi || modelViewerZZMIMarkerRE.MatchString(line)
 		}
 	}
 	if wwmi && rabbitFX {

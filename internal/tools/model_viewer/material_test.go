@@ -200,6 +200,11 @@ resource\rabbitfx\diffuse = ref ResourceTexture15`,
 Resource\RabbitFX\Diffuse = ref ResourceTexture15`, want: ""},
 		{name: "existing ZZMI", ini: `[CommandListTextures]
 Resource\ZZMI\Diffuse = ref ResourceTexture15`, want: "zzmi"},
+		{name: "hash override ZZMI", ini: `[TextureOverrideBodyA]
+hash = 1817f3ca
+match_first_index = 0
+run = CommandListSkinTexture
+ib = ResourceBodyAIB`, want: "zzmi"},
 		{
 			name: "strong WWMI RabbitFX wins stray ZZMI resource",
 			ini: `[Constants]
