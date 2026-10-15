@@ -847,9 +847,10 @@ func TestProviderReleasePinsSignedLibraries(t *testing.T) {
 	ctx := context.Background()
 	newest, first, old := testCustomDLLImage("1.2.2-nhd.2"), testCustomDLLImage("1.2.2-nhd.1"),
 		testCustomDLLImage("1.2.0-nhd.1")
+	// GitHub can list an older release first, as it did with v1.2.2-nhd.9 ahead of v1.2.2-nhd.10.
 	service, client, _ := newProviderTestService(t, []providerTestRelease{
-		{tag: "v1.2.2-nhd.2", data: newest, digest: providerTestDigest(newest)},
 		{tag: "v1.2.2-nhd.1", data: first, digest: providerTestDigest(first)},
+		{tag: "v1.2.2-nhd.2", data: newest, digest: providerTestDigest(newest)},
 		{tag: "v1.2.0-nhd.1", data: old, digest: providerTestDigest(old)},
 	})
 	for version, signed := range map[string]string{

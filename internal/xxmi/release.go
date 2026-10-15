@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
+
+	"golang.org/x/mod/semver"
 
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
@@ -114,5 +117,21 @@ func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]Re
 			out = append(out, info)
 		}
 	}
+
+	// Callers take the first release as the latest one, but GitHub does not list releases by version: a release
+	// edited after a newer one was published can come first.
+	slices.SortStableFunc(out, func(a, b ReleaseInfo) int {
+		validA, validB := semver.IsValid("v"+a.Version), semver.IsValid("v"+b.Version)
+		if validA != validB {
+			if validA {
+				return -1
+			}
+			return 1
+		}
+		if !validA {
+			return 0
+		}
+		return semver.Compare("v"+b.Version, "v"+a.Version)
+	})
 	return out, nil
 }
