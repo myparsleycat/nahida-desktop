@@ -120,10 +120,7 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateXXMILibsSharedDefault(ctx); err != nil {
 		return err
 	}
-	if err := c.migrateXXMICustomDLLFollowProvider(ctx); err != nil {
-		return err
-	}
-	return c.dropToggleViewerArtifactTable(ctx)
+	return c.migrateXXMICustomDLLFollowProvider(ctx)
 }
 
 // seedBlenderMCPDefault publishes the built-in Blender transport as a ready-made MCP server entry.
@@ -793,31 +790,6 @@ WHERE NOT `+followsShared+`
 	return c.SchemaState.Upsert(
 		ctx,
 		SchemaKeyXXMICustomDLLFollowProvider,
-		"1",
-		time.Now().UTC().Format(time.RFC3339Nano),
-	)
-}
-
-func (c *Client) dropToggleViewerArtifactTable(ctx context.Context) error {
-	migrated, err := c.SchemaState.Get(ctx, SchemaKeyToggleViewerArtifactDropped)
-	if err != nil {
-		return err
-	}
-	if migrated != nil && migrated.Value == "1" {
-		return nil
-	}
-
-	if err := c.exec(ctx, `DROP TABLE IF EXISTS `+quoteIdent("toggle_viewer_artifact")); err != nil {
-		return fmt.Errorf("drop toggle_viewer_artifact: %w", err)
-	}
-	if err := c.exec(ctx, `DELETE FROM "setting" WHERE "key" IN (?, ?)`,
-		"xxmi_toggle_viewer_auto_generate", "xxmi_toggle_viewer_hotkey"); err != nil {
-		return fmt.Errorf("delete toggle viewer settings: %w", err)
-	}
-
-	return c.SchemaState.Upsert(
-		ctx,
-		SchemaKeyToggleViewerArtifactDropped,
 		"1",
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)

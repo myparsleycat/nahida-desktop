@@ -109,6 +109,43 @@ func runtimeSettingHooks(
 				)
 			}
 		},
+		AfterToggleViewerAutoGenerateChanged: func(enabled bool) {
+			if toolsService == nil {
+				return
+			}
+			if !enabled {
+				toolsService.ToggleViewerCancelCurrentWork()
+			}
+			if err := toolsService.StartToggleViewerWatcher(context.Background()); err != nil {
+				_ = infra.ReportError(
+					log,
+					err,
+					"Setting.xxmi.toggleViewerAutoGenerate",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "Setting.xxmi.toggleViewerAutoGenerate",
+						Stage:     "background",
+					},
+				)
+			}
+		},
+		AfterToggleViewerHotkeyChanged: func(hotkey string) {
+			if toolsService == nil {
+				return
+			}
+			if err := toolsService.ToggleViewerApplyHotkeyToArtifacts(context.Background(), hotkey); err != nil {
+				_ = infra.ReportError(
+					log,
+					err,
+					"Setting.xxmi.toggleViewerHotkey",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticError,
+						Operation: "Setting.xxmi.toggleViewerHotkey",
+						Stage:     "background",
+					},
+				)
+			}
+		},
 	}
 }
 

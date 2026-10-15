@@ -74,6 +74,9 @@ const (
 	KeyXXMIIncludePrereleases = "xxmi.includePrereleases"
 	KeyXXMIPersistToggles     = "xxmi.persistToggles"
 
+	KeyXXMIToggleViewerAutoGenerate = "xxmi.toggleViewerAutoGenerate"
+	KeyXXMIToggleViewerHotkey       = "xxmi.toggleViewerHotkey"
+
 	KeyXXMILaunchGuard             = "xxmi.launchGuard"
 	KeyXXMILaunchGuardDcr          = "xxmi.launchGuardDcr"
 	KeyXXMILaunchGuardSmoothMotion = "xxmi.launchGuardSmoothMotion"
@@ -170,6 +173,8 @@ var allDefinitions = []Definition{
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
+	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},
+	{KeyXXMIToggleViewerHotkey, ScopeXXMI, "xxmi_toggle_viewer_hotkey"},
 	{KeyXXMIRoot, ScopeXXMI, "xxmi_root"},
 	{KeyXXMIAutoUpdate, ScopeXXMI, "xxmi_auto_update"},
 	{KeyXXMIIncludePrereleases, ScopeXXMI, "xxmi_include_prereleases"},

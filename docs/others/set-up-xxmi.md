@@ -34,3 +34,4 @@ After the XXMI path is configured, you can use the following features:
 - d3d11.dll Builder
 - Change importer package versions
 - Persist Toggles
+- Toggle Viewer Generator

@@ -1,11 +1,10 @@
 package db
 
-const AppSchemaVersion = 8
+const AppSchemaVersion = 9
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
 	SchemaKeyGamePathsNTELauncher        = "game_paths_nte_launcher_path"
-	SchemaKeyToggleViewerArtifactDropped = "toggle_viewer_artifact_dropped"
 	SchemaKeyBlenderMCPDefaultSeeded     = "blender_mcp_default_seeded"
 	SchemaKeyXXMILibsSharedDefault       = "xxmi_libs_shared_default"
 	SchemaKeyXXMICustomDLLFollowProvider = "xxmi_custom_dll_follow_provider"
@@ -406,6 +405,25 @@ var TableSpecs = []TableSpec{
 		},
 	},
 	{
+		Name: "toggle_viewer_artifact",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "target_ini_path", Type: TypeText, NotNull: true},
+			{Name: "toggle_txt_path", Type: TypeText, NotNull: true},
+			{Name: "toggle_ini_path", Type: TypeText, NotNull: true},
+			{Name: "toggle_txt_hash", Type: TypeText, NotNull: true},
+			{Name: "toggle_ini_hash", Type: TypeText, NotNull: true},
+			{Name: "updated_at", Type: TypeText, NotNull: true},
+		},
+		Indexes: []IndexSpec{
+			{
+				Name:    "toggle_viewer_artifact_target_ini_path_unique",
+				Columns: []string{"target_ini_path"},
+				Unique:  true,
+			},
+		},
+	},
+	{
 		Name: "_schema_state",
 		Columns: []ColumnSpec{
 			{Name: "key", Type: TypeText, PrimaryKey: true, NotNull: true},
@@ -616,6 +634,16 @@ type ScriptPresetItemUsage struct {
 	ScriptID   string
 	Order      int64
 	PresetName string
+}
+
+type ToggleViewerArtifactRow struct {
+	ID            string
+	TargetIniPath string
+	ToggleTxtPath string
+	ToggleIniPath string
+	ToggleTxtHash string
+	ToggleIniHash string
+	UpdatedAt     string
 }
 
 type SchemaStateRow struct {

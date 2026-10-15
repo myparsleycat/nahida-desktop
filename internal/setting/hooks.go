@@ -3,19 +3,21 @@ package setting
 // Hooks are optional afterSet side effects owned by runtime services.
 // Empty Hooks are a no-op so settings remain usable in tests and headless callers.
 type Hooks struct {
-	AfterSet                      func(key string, value any)
-	AfterRunOnStartupChanged      func(enabled bool) error
-	AfterLanguageChanged          func(language string)
-	AfterAutoUpdateModeChanged    func(mode string)
-	AfterIncludePrereleaseChanged func(enabled bool)
-	AfterLogLevelChanged          func(level string)
-	AfterPowerSaveBlockChanged    func()
-	AfterBandwidthLimitChanged    func(mibps int)
-	AfterOpenConsoleChanged       func(enabled bool)
-	AfterWindowBackdropChanged    func(enabled bool)
-	AfterPersistTogglesChanged    func(enabled bool)
-	AfterElevatedHelperChanged    func(enabled bool)
-	AfterRendererReload           func()
+	AfterSet                             func(key string, value any)
+	AfterRunOnStartupChanged             func(enabled bool) error
+	AfterLanguageChanged                 func(language string)
+	AfterAutoUpdateModeChanged           func(mode string)
+	AfterIncludePrereleaseChanged        func(enabled bool)
+	AfterLogLevelChanged                 func(level string)
+	AfterPowerSaveBlockChanged           func()
+	AfterBandwidthLimitChanged           func(mibps int)
+	AfterOpenConsoleChanged              func(enabled bool)
+	AfterWindowBackdropChanged           func(enabled bool)
+	AfterPersistTogglesChanged           func(enabled bool)
+	AfterToggleViewerAutoGenerateChanged func(enabled bool)
+	AfterToggleViewerHotkeyChanged       func(hotkey string)
+	AfterElevatedHelperChanged           func(enabled bool)
+	AfterRendererReload                  func()
 }
 
 func (h Hooks) elevatedHelperChanged(enabled bool) {
@@ -88,6 +90,18 @@ func (h Hooks) windowBackdropChanged(enabled bool) {
 func (h Hooks) persistTogglesChanged(enabled bool) {
 	if h.AfterPersistTogglesChanged != nil {
 		h.AfterPersistTogglesChanged(enabled)
+	}
+}
+
+func (h Hooks) toggleViewerAutoGenerateChanged(enabled bool) {
+	if h.AfterToggleViewerAutoGenerateChanged != nil {
+		h.AfterToggleViewerAutoGenerateChanged(enabled)
+	}
+}
+
+func (h Hooks) toggleViewerHotkeyChanged(hotkey string) {
+	if h.AfterToggleViewerHotkeyChanged != nil {
+		h.AfterToggleViewerHotkeyChanged(hotkey)
 	}
 }
 

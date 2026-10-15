@@ -337,6 +337,23 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("find with scripts: %v %v", with, err)
 	}
 
+	if err := client.ToggleViewerArtifacts.Upsert(ctx, ToggleViewerArtifactRow{
+		ID: "tv1", TargetIniPath: "a.ini", ToggleTxtPath: "a.txt", ToggleIniPath: "t.ini",
+		ToggleTxtHash: "h1", ToggleIniHash: "h2", UpdatedAt: "t",
+	}); err != nil {
+		t.Fatalf("toggle upsert: %v", err)
+	}
+	if err := client.ToggleViewerArtifacts.UpdateIniHash(ctx, "tv1", "h3", "t2"); err != nil {
+		t.Fatalf("toggle hashes: %v", err)
+	}
+	toggles, err := client.ToggleViewerArtifacts.List(ctx)
+	if err != nil || len(toggles) != 1 || toggles[0].ToggleIniHash != "h3" {
+		t.Fatalf("toggle list: %+v %v", toggles, err)
+	}
+	if err := client.ToggleViewerArtifacts.Delete(ctx, "tv1", "a.ini"); err != nil {
+		t.Fatalf("toggle delete: %v", err)
+	}
+
 	if err := client.SchemaState.Upsert(ctx, "manual", "x", "now"); err != nil {
 		t.Fatalf("schema upsert: %v", err)
 	}

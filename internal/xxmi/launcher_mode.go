@@ -57,6 +57,7 @@ func (x *XXMI) SetLauncherMode(ctx context.Context, mode LauncherMode) error {
 		return err
 	}
 	x.wakeRunningWatch()
+	x.notifyImportersChanged(ctx)
 	if x.log != nil {
 		x.log.Info(fmt.Sprintf("Switched XXMI launcher mode from %s to %s", current, mode), "XXMI.setLauncherMode")
 	}

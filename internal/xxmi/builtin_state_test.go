@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,8 +40,19 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	var changes []int
+	service.UseImportersChanged(func(ctx context.Context) {
+		importers, err := service.GetEnabledImporters(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+		changes = append(changes, len(importers))
+	})
 	if err := service.EnableImporter(ctx, "GIMI", importerFolder); err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(changes, []int{1}) {
+		t.Fatalf("importer changes = %v", changes)
 	}
 	latest := "1.2.4"
 	if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{

@@ -452,6 +452,7 @@ export type IpcEvents = {
     "tools:textureUpscaleProgress": (event: TextureUpscaleProgressEvent) => void;
     "tools:touchProfileProgress": (event: TouchProfileProgressEvent) => void;
     "tools:bisectState": (snapshot: BisectSnapshot) => void;
+    "tools:toggle-viewer-logs": (logs: string[]) => void;
     "ftm:log": (event: FixToolLogEvent) => void;
     "updater:status-changed": (status: UpdaterStatus) => void;
     "updater:update-available": () => void;

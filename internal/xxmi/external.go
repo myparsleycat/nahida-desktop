@@ -150,14 +150,8 @@ func (x *XXMI) SetExternalImporterEnabled(ctx context.Context, key string, enabl
 	// Notify consumers after disabledMu is released so they can read the saved selection.
 	changed := false
 	defer func() {
-		if !changed {
-			return
-		}
-		x.mu.RLock()
-		notify := x.externalImportersChanged
-		x.mu.RUnlock()
-		if notify != nil {
-			notify(ctx)
+		if changed {
+			x.notifyImportersChanged(ctx)
 		}
 	}()
 
@@ -228,6 +222,7 @@ func (x *XXMI) SaveXXMIPath(ctx context.Context, inputPath string) error {
 	if err := client.Settings.Upsert(ctx, xxmiPathKey, &absolute); err != nil {
 		return err
 	}
+	x.notifyImportersChanged(ctx)
 	if x.eventEmit != nil {
 		x.eventEmit("renderer:reload")
 	}

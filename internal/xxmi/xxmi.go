@@ -147,14 +147,14 @@ type XXMI struct {
 	searchRoots func() ([]string, error)
 	busy        map[string]bool
 	// launching holds importers whose game is being started; unlike busy, it is reported as running.
-	launching                map[string]bool
-	runningWatchMu           sync.Mutex
-	runningCancel            context.CancelFunc
-	runningDone              chan struct{}
-	runningWake              chan struct{}
-	processSnapshot          func(context.Context) (map[string]bool, error)
-	externalImportersChanged func(context.Context)
-	importerMaintenance      func(context.Context) (func([]ImportedImporter) error, error)
+	launching           map[string]bool
+	runningWatchMu      sync.Mutex
+	runningCancel       context.CancelFunc
+	runningDone         chan struct{}
+	runningWake         chan struct{}
+	processSnapshot     func(context.Context) (map[string]bool, error)
+	importersChanged    func(context.Context)
+	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
 	// killExecutableProcess returns a terminator for processes running from one executable; tests
@@ -214,13 +214,24 @@ func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Unlock()
 }
 
-// UseExternalImportersChanged registers a backend consumer of external importer selection changes.
+// UseImportersChanged registers a backend consumer of changes to the enabled importers or their folders.
+// Changes made during importer maintenance are not reported, because resuming restarts the consumers.
 //
 //wails:ignore
-func (x *XXMI) UseExternalImportersChanged(changed func(context.Context)) {
+func (x *XXMI) UseImportersChanged(changed func(context.Context)) {
 	x.mu.Lock()
-	x.externalImportersChanged = changed
+	x.importersChanged = changed
 	x.mu.Unlock()
+}
+
+// notifyImportersChanged must run without importer locks held so consumers can read the saved selection.
+func (x *XXMI) notifyImportersChanged(ctx context.Context) {
+	x.mu.RLock()
+	notify := x.importersChanged
+	x.mu.RUnlock()
+	if notify != nil {
+		notify(ctx)
+	}
 }
 
 // UseImporterMaintenance registers the backend pause/resume boundary for importer filesystem changes.

@@ -19,7 +19,11 @@ func (t *Tools) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.Import
 	if err != nil {
 		return nil, errors.Join(err, resumeInspection(nil))
 	}
+	resumeToggleViewer, err := t.toggleViewer.SuspendImporterWatcher(ctx)
+	if err != nil {
+		return nil, errors.Join(err, resumePersist(), resumeInspection(nil))
+	}
 	return func(moved []xxmi.ImportedImporter) error {
-		return errors.Join(resumePersist(), resumeInspection(moved))
+		return errors.Join(resumeToggleViewer(), resumePersist(), resumeInspection(moved))
 	}, nil
 }

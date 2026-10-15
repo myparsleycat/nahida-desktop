@@ -29,6 +29,7 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { getSetting } from "@renderer/lib/settings";
 import { getFallbackStartPage, requiresAuthForStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
 import type { AutoUpdateMode } from "@shared/updater";
@@ -90,9 +91,12 @@ function RouteComponent() {
       return;
     }
 
-    const persistEnabled = await Setting.GetPersistToggles();
+    const background = await getSetting([
+      "xxmi.persistToggles",
+      "xxmi.toggleViewerAutoGenerate",
+    ] as const);
 
-    if (persistEnabled) {
+    if (background["xxmi.persistToggles"] || background["xxmi.toggleViewerAutoGenerate"]) {
       setIsRunInBackgroundConfirmOpen(true);
       setSettings((prev) => ({ ...prev, runInBackground: true }));
       return;

@@ -201,7 +201,7 @@ func TestSetExternalImporterEnabledHidesImporterFromConsumers(t *testing.T) {
 	service.UseClient(newXXMITestClient(t))
 	useExternalLauncher(t, service, root)
 	var changes []int
-	service.UseExternalImportersChanged(func(ctx context.Context) {
+	service.UseImportersChanged(func(ctx context.Context) {
 		importers, err := service.GetEnabledImporters(ctx)
 		if err != nil {
 			t.Fatal(err)

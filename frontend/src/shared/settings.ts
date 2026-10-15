@@ -79,6 +79,8 @@ export interface AppSettings {
     "modelViewer.toonShadows": boolean;
 
     "xxmi.persistToggles": boolean;
+    "xxmi.toggleViewerAutoGenerate": boolean;
+    "xxmi.toggleViewerHotkey": string;
     "xxmi.root": string;
     "xxmi.autoUpdate": AutoUpdateMode;
     "xxmi.includePrereleases": boolean;
@@ -407,6 +409,16 @@ export const APP_SETTINGS = {
         publicKey: "xxmi.persistToggles",
         scope: "xxmi",
         storageKey: "xxmi_persist_toggles",
+    },
+    "xxmi.toggleViewerAutoGenerate": {
+        publicKey: "xxmi.toggleViewerAutoGenerate",
+        scope: "xxmi",
+        storageKey: "xxmi_toggle_viewer_auto_generate",
+    },
+    "xxmi.toggleViewerHotkey": {
+        publicKey: "xxmi.toggleViewerHotkey",
+        scope: "xxmi",
+        storageKey: "xxmi_toggle_viewer_hotkey",
     },
     "xxmi.root": {
         publicKey: "xxmi.root",

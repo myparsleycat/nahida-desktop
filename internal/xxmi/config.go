@@ -13,6 +13,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type RuntimeMode string
@@ -344,19 +345,31 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
+	selectionChanged, err := x.saveImporterConfig(ctx, key, cfg)
+	if err != nil {
+		return err
+	}
+	if selectionChanged {
+		x.notifyImportersChanged(ctx)
+	}
+	return nil
+}
+
+// saveImporterConfig reports whether the importer was enabled, disabled, or moved to another folder.
+func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) (bool, error) {
 	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
 	key = strings.ToUpper(strings.TrimSpace(key))
 	if err := ValidateImporterSettings(key, cfg); err != nil {
-		return err
+		return false, err
 	}
 	// A disabled importer never launches or installs, so a missing pinned package or a rejected folder must not
 	// keep it from being turned off.
 	if cfg.Enabled {
 		if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
-			return err
+			return false, err
 		}
 		if err := validateInstalledImporterPackage(key, cfg); err != nil {
-			return infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
+			return false, infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
 				Operation: "save-importer-config", Stage: "validate-package",
 				Fields: map[string]any{"importer": key, "version": cfg.PackageVersion.Pinned,
 					"importerFolder": cfg.ImporterFolder},
@@ -367,35 +380,38 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	client := x.client
 	x.mu.RUnlock()
 	if client == nil {
-		return errors.New("XXMI settings store is not configured")
+		return false, errors.New("XXMI settings store is not configured")
 	}
 	x.customDLLMu.Lock()
 	defer x.customDLLMu.Unlock()
 
 	previous, err := client.XXMIImporters.Get(ctx, key)
 	if err != nil {
-		return err
+		return false, err
 	}
 	previousCustomDLL := ""
+	selectionChanged := cfg.Enabled
 	if previous != nil {
 		var old ImporterConfig
 		if err := json.Unmarshal([]byte(previous.Config), &old); err != nil {
-			return err
+			return false, err
 		}
 		previousCustomDLL = old.CustomDLL
+		selectionChanged = old.Enabled != cfg.Enabled ||
+			(cfg.Enabled && !platform.SamePathFold(old.ImporterFolder, cfg.ImporterFolder))
 		if old.Mode != cfg.Mode {
 			if !x.acquireImporter(key) {
-				return errors.New("XXMI_GAME_RUNNING")
+				return false, errors.New("XXMI_GAME_RUNNING")
 			}
 			defer x.releaseImporter(key)
 			spec, _ := lookupImporterPackage(key)
 			for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
 				pid, err := x.findProcess(ctx, name)
 				if err != nil {
-					return err
+					return false, err
 				}
 				if pid != 0 {
-					return errors.New("XXMI_GAME_RUNNING")
+					return false, errors.New("XXMI_GAME_RUNNING")
 				}
 			}
 		}
@@ -403,21 +419,21 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	// Only a newly selected custom DLL has to exist, so a config whose cached DLL is gone can still be saved.
 	if cfg.CustomDLL != "" && cfg.CustomDLL != previousCustomDLL {
 		if err := x.requireCustomDLL(cfg.CustomDLL); err != nil {
-			return err
+			return false, err
 		}
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := client.XXMIImporters.Upsert(ctx, key, string(data)); err != nil {
-		return err
+		return false, err
 	}
 	if cfg.CustomDLL != previousCustomDLL {
 		x.reportCleanup(x.pruneCustomDLLsLocked(ctx), "prune-custom-dll")
 	}
 	x.wakeRunningWatch()
-	return nil
+	return selectionChanged, nil
 }
 
 func (x *XXMI) EnableImporter(ctx context.Context, key, folder string) error {

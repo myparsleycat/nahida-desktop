@@ -19,6 +19,7 @@ import (
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 	"nahida.live/desktop/internal/tools/texture"
 	togglepersist "nahida.live/desktop/internal/tools/toggle_persist"
+	toggleviewer "nahida.live/desktop/internal/tools/toggle_viewer"
 	touchprofile "nahida.live/desktop/internal/tools/touch_profile"
 	wuwafixer "nahida.live/desktop/internal/tools/wuwa_fixer"
 	zzmifixer "nahida.live/desktop/internal/tools/zzmi_fixer"
@@ -76,6 +77,7 @@ type Tools struct {
 	modelViewer   *modelviewer.Service
 	texture       *texture.Service
 	persist       *togglepersist.Service
+	toggleViewer  *toggleviewer.Service
 	touchProfile  *touchprofile.Service
 	wuwa          *wuwafixer.Service
 	zzmi          *zzmifixer.Service
@@ -115,6 +117,11 @@ func NewWithOptions(opts Options) *Tools {
 		Runner:    fixTool,
 	})
 	fixInspection.Register(zzmifixer.NewInspector(zzmi))
+	toggleViewerSettings, _ := opts.Settings.(toggleviewer.Settings)
+	var toggleViewerImporters toggleviewer.Importers
+	if opts.XXMI != nil {
+		toggleViewerImporters = opts.XXMI
+	}
 	return &Tools{
 		modFilesChanged: modFilesChanged,
 		githubRate:      opts.GitHubRate,
@@ -162,6 +169,12 @@ func NewWithOptions(opts Options) *Tools {
 			Settings:  opts.Settings,
 			XXMI:      opts.XXMI,
 		}),
+		toggleViewer: toggleviewer.NewWithOptions(toggleviewer.Options{
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			Settings:  toggleViewerSettings,
+			Importers: toggleViewerImporters,
+		}),
 		touchProfile: touchprofile.NewWithOptions(touchprofile.Options{
 			Log:       opts.Log,
 			EventEmit: opts.EventEmit,
@@ -195,6 +208,7 @@ func (t *Tools) UseClient(client *db.Client) {
 	t.fixTool.UseClient(client)
 	t.fixer4001.UseClient(client)
 	t.texture.UseClient(client)
+	t.toggleViewer.UseClient(client)
 	t.wuwa.UseClient(client)
 	t.zzmi.UseClient(client)
 }
@@ -226,5 +240,6 @@ func (t *Tools) ServiceShutdown() error {
 		t.shutdownBodyShape(),
 		t.shutdownModelViewer(),
 		t.shutdownPersistWatcher(),
+		t.shutdownToggleViewer(),
 	)
 }

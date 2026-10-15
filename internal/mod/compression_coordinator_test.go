@@ -816,7 +816,7 @@ func TestExternalImporterEnableRefreshesCompression(t *testing.T) {
 		XXMI:     externalCompressionImporterSource{settings: settings, importerFolder: importer},
 	})
 	m.UseClient(settings.Client())
-	service.UseExternalImportersChanged(m.RefreshCompressionImporters)
+	service.UseImportersChanged(m.RefreshCompressionImporters)
 	t.Cleanup(func() {
 		_ = m.ServiceShutdown()
 		_ = settings.Close()

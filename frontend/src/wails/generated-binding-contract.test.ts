@@ -15,6 +15,7 @@ describe("generated Wails binding contract", () => {
             "bindings/nahida.live/desktop/internal/tools/modmesh/models.ts",
             "bindings/nahida.live/desktop/internal/tools/texture/models.ts",
             "bindings/nahida.live/desktop/internal/tools/toggle_persist/models.ts",
+            "bindings/nahida.live/desktop/internal/tools/toggle_viewer/models.ts",
             "bindings/nahida.live/desktop/internal/tools/touch_profile/models.ts",
             "bindings/nahida.live/desktop/internal/tools/wuwa_fixer/models.ts",
             "bindings/nahida.live/desktop/internal/tools/zzmi_fixer/models.ts",

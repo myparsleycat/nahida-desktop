@@ -92,6 +92,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 		{"bisect-recovery", rt.tools.RecoverBisects},
 		{"compression", rt.runCompressionMaintenance},
 		{"persist-watcher", rt.tools.StartPersistWatcher},
+		{"toggle-viewer-watcher", rt.tools.StartToggleViewerWatcher},
 	})
 	if ctx.Err() != nil {
 		return

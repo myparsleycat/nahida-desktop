@@ -188,10 +188,6 @@ func newRuntime() *runtime {
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
 		GameBanana: gameBananaService, Native: native, Download: download, Elevated: elevatedFiles,
 	})
-	xxmiService.UseExternalImportersChanged(func(ctx context.Context) {
-		modService.RefreshCompressionImporters(ctx)
-		modService.InvalidateLibraries()
-	})
 	download.UseClient(httpClient)
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
@@ -264,6 +260,17 @@ func newRuntime() *runtime {
 		gameBananaLogin:   login,
 		notifications:     notifier,
 	}
+	rt.xxmi.UseImportersChanged(func(ctx context.Context) {
+		rt.mod.RefreshCompressionImporters(ctx)
+		rt.mod.InvalidateLibraries()
+		if err := rt.tools.StartToggleViewerWatcher(ctx); err != nil {
+			_ = infra.ReportError(log, err, "XXMI.importersChanged", infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "toggle-viewer.watcher",
+				Stage:     "importer-selection",
+			})
+		}
+	})
 	rt.xxmi.UseImporterMaintenance(func(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
 		resumeTools, err := rt.tools.SuspendImporterWatchers(ctx)
 		if err != nil {
