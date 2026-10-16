@@ -27,8 +27,11 @@ type Window struct {
 
 	app             *application.App
 	window          application.Window
+	focus           func(application.Window)
 	settings        *setting.Setting
 	log             *infra.Log
+	creating        bool
+	focusing        bool
 	ready           bool
 	startHidden     bool
 	everShown       bool
@@ -79,7 +82,7 @@ func (w *Window) SetInitialRoute(route string) {
 }
 
 func NewWindow() *Window {
-	w := &Window{}
+	w := &Window{focus: focusNativeWindow}
 	w.taskbar = newNativeTaskbar(w.logTaskbarError)
 	return w
 }
@@ -99,7 +102,14 @@ func (w *Window) Create() application.Window {
 	if w == nil {
 		return nil
 	}
+
+	// Native creation pumps Windows messages, so another tray click can reenter
+	// before NewWithOptions returns. Waiting here would block the UI thread.
 	w.mu.Lock()
+	if w.creating {
+		w.mu.Unlock()
+		return nil
+	}
 	if w.window != nil {
 		window := w.window
 		w.mu.Unlock()
@@ -111,10 +121,16 @@ func (w *Window) Create() application.Window {
 		w.mu.Unlock()
 		return nil
 	}
+	w.creating = true
 	route := w.pendingRoute
 	w.pendingRoute = ""
 	consoleOpen := w.consoleOpen
 	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		w.creating = false
+		w.mu.Unlock()
+	}()
 
 	solidBackground := !w32.SupportsBackdropTypes()
 	initialTheme := application.Light
@@ -382,6 +398,7 @@ func (w *Window) FocusAndNavigate(route string) {
 		return
 	}
 	w.mu.Lock()
+	w.startHidden = false
 	if route != "" {
 		w.pendingRoute = route
 	}
@@ -579,7 +596,24 @@ func (w *Window) CloseTaskbar() {
 }
 
 //wails:ignore
-func (w *Window) Focus() { w.FocusAndNavigate("") }
+func (w *Window) Focus() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	if w.focusing {
+		w.mu.Unlock()
+		return
+	}
+	w.focusing = true
+	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		w.focusing = false
+		w.mu.Unlock()
+	}()
+	w.FocusAndNavigate("")
+}
 
 // WaitReady waits for the current main window's Wails runtime to be ready. The
 // boolean is true when it was already ready at entry, allowing Electron-style
@@ -701,6 +735,10 @@ func (w *Window) bringToForeground(window application.Window) {
 	w.mu.Lock()
 	w.everShown = true
 	w.mu.Unlock()
+	w.focus(window)
+}
+
+func focusNativeWindow(window application.Window) {
 	application.InvokeSync(func() {
 		window.Show()
 		if hwnd := webviewHWND(window); hwnd != 0 {

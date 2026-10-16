@@ -3,12 +3,102 @@ package app
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/setting"
 )
+
+func TestCreateDeduplicatesReentrantRequests(t *testing.T) {
+	app := application.New(application.Options{Name: "window-create-test"})
+	window := NewWindow()
+	window.Configure(app, nil, nil)
+	created := 0
+	observeWindowCreations(t, app, func() {
+		created++
+		if created == 1 {
+			window.Create()
+		}
+	})
+
+	current := window.Create()
+	if current == nil || created != 1 {
+		t.Fatalf("Create produced %d windows, want one", created)
+	}
+	if window.window != current {
+		t.Fatal("Create did not retain the returned window")
+	}
+}
+
+func TestCreateDeduplicatesConcurrentRequests(t *testing.T) {
+	// Wails' process-wide transport goroutines must stay outside the synctest bubble.
+	app := application.New(application.Options{Name: "window-concurrent-create-test"})
+	synctest.Test(t, func(t *testing.T) {
+		window := NewWindow()
+		window.Configure(app, nil, nil)
+		started := make(chan struct{})
+		release := make(chan struct{})
+		created := 0
+		observeWindowCreations(t, app, func() {
+			created++
+			if created == 1 {
+				close(started)
+				<-release
+			}
+		})
+		done := make(chan application.Window, 1)
+		go func() { done <- window.Create() }()
+		<-started
+		window.Create()
+		close(release)
+		current := <-done
+		if current == nil || created != 1 {
+			t.Fatalf("concurrent Create produced %d windows, want one", created)
+		}
+	})
+}
+
+func observeWindowCreations(t *testing.T, app *application.App, callback func()) {
+	t.Helper()
+	active := true
+	var ids []uint
+	app.Window.OnCreate(func(window application.Window) {
+		if !active {
+			return
+		}
+		ids = append(ids, window.ID())
+		callback()
+	})
+	t.Cleanup(func() {
+		active = false
+		for _, id := range ids {
+			app.Window.Remove(id)
+		}
+	})
+}
+
+func TestFocusCoalescesReentrantRequests(t *testing.T) {
+	window := NewWindow()
+	window.window = &viewerTestWindow{}
+	focused := 0
+	window.focus = func(application.Window) {
+		focused++
+		if focused == 1 {
+			window.Focus()
+		}
+	}
+
+	window.Focus()
+	if focused != 1 {
+		t.Fatalf("reentrant Focus ran %d native activations, want one", focused)
+	}
+	window.Focus()
+	if focused != 2 {
+		t.Fatalf("subsequent Focus ran %d native activations, want two", focused)
+	}
+}
 
 func TestWaitReadyDistinguishesWarmAndColdWindow(t *testing.T) {
 	window := NewWindow()
