@@ -31,7 +31,7 @@ import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
 import { CheckIcon, Loader2Icon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -151,7 +151,8 @@ export function ModelViewerWorkspace({
     doubleSidedEnabledRef.current = doubleSidedEnabled;
   }, [doubleSidedEnabled]);
 
-  useEffect(() => {
+  // A passive effect can run after the new viewer already reported onLoad, which would discard that load as stale.
+  useLayoutEffect(() => {
     viewerSourceGenerationRef.current += 1;
   }, [source]);
 
