@@ -6,15 +6,85 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
+
+func TestWriteFileAtomicPreservesUserEdits(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"unchanged", "before write", "during write"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			folder := t.TempDir()
+			path := filepath.Join(folder, "d3dx.ini")
+			original := "[Rendering]\ncache_shaders = 0\n"
+			userEdit := "[Rendering]\ncache_shaders = 1\n"
+			timestamp := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+			if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(path, timestamp, timestamp); err != nil {
+				t.Fatal(err)
+			}
+			root, err := openInstallRoot(folder)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = root.Close() }()
+			_, snapshot, err := root.readFile("d3dx.ini")
+			if err != nil {
+				t.Fatal(err)
+			}
+			edit := func() {
+				t.Helper()
+				if err := os.WriteFile(path, []byte(userEdit), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chtimes(path, timestamp, timestamp); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if stage == "before write" {
+				edit()
+			}
+			updated := original + "allow_buffer_resize = 1\n"
+			var input io.Reader = strings.NewReader(updated)
+			if stage == "during write" {
+				input = installTestReader(func(buffer []byte) (int, error) {
+					edit()
+					return copy(buffer, updated), io.EOF
+				})
+			}
+			err = root.writeFileAtomic(context.Background(), "d3dx.ini", input, 0o600, snapshot)
+			want := updated
+			if stage != "unchanged" {
+				want = userEdit
+				if err == nil || !strings.Contains(err.Error(), "content changed") {
+					t.Fatalf("write error = %v; want content conflict", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			assertFile(t, path, want)
+			entries, err := os.ReadDir(folder)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("temporary write files remain: %v, err = %v", entries, err)
+			}
+		})
+	}
+}
+
+type installTestReader func([]byte) (int, error)
+
+func (r installTestReader) Read(buffer []byte) (int, error) { return r(buffer) }
 
 func TestInstallImporterPackageLogsValidationFailure(t *testing.T) {
 	var output bytes.Buffer

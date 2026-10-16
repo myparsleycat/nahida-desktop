@@ -109,7 +109,7 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 	)
 	want := "; head\n[Loader]\ntarget = Old.exe\nlaunch = old.exe\n; loader notes\n;launch = x\n\n; includes\n" +
 		"[Include]\ninclude = Core\\main.ini\nexclude_recursive = DISABLED*\n\n; system\n" +
-		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 7\n;disabled = 1\nfresh = 2\n;gone = 1\nlegacy = 3\n\n; constants\n" +
+		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 7\n; disabled = 0\nfresh = 2\n;gone = 1\nlegacy = 3\n\n; constants\n" +
 		"[Constants]\n; declare globals\nglobal $x = 1\n\n; present\n[Present]\nrun = CommandListNew\n\n[Stereo]\nautomatic_mode = 0\n;unlock = 1\n"
 
 	doc, lost := rebuildINI(template, previous)
@@ -134,6 +134,30 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 		if ok || !updated.mentionsOption(option[0], option[1]) {
 			t.Fatalf("a later template turned %s on (%q): %q", option[1], value, updated.Bytes())
 		}
+	}
+}
+
+func TestRebuildINIPreservesCommentedValues(t *testing.T) {
+	t.Parallel()
+	previous := []byte("[Device]\n;REFRESH_RATE = 144 ; keep for later\n")
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{name: "active template option", template: "[Device]\nrefresh_rate = 60\n"},
+		{name: "commented template option", template: "[Device]\n;refresh_rate = 60\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, lost := rebuildINI([]byte(tc.template), previous)
+			if got := doc.Bytes(); !bytes.Equal(got, previous) || lost {
+				t.Fatalf("commented value changed (lost = %t): got %q, want %q", lost, got, previous)
+			}
+			again, lost := rebuildINI([]byte(tc.template), doc.Bytes())
+			if got := again.Bytes(); !bytes.Equal(got, previous) || lost {
+				t.Fatalf("second rebuild changed the value (lost = %t): got %q, want %q", lost, got, previous)
+			}
+		})
 	}
 }
 

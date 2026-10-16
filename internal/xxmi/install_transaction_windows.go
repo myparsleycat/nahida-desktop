@@ -42,7 +42,7 @@ type importerInstallTransaction struct {
 	hadLive      bool
 	liveIdentity os.FileInfo
 	configRaw    []byte
-	configInfo   os.FileInfo
+	configInfo   *installFileSnapshot
 	state        string
 	// preserved names top-level live entries that are moved into the new tree instead of copied.
 	preserved []string
@@ -290,7 +290,7 @@ func (t *importerInstallTransaction) commit(
 		if err != nil {
 			return nil, parsedConfig{}, err
 		}
-		if !os.SameFile(t.configInfo, currentInfo) || !bytes.Equal(t.configRaw, currentConfig) {
+		if !os.SameFile(t.configInfo.info, currentInfo.info) || !bytes.Equal(t.configRaw, currentConfig) {
 			return nil, parsedConfig{}, errors.New("XXMI configuration changed during installation")
 		}
 	}

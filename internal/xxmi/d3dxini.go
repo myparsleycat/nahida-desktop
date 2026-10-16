@@ -165,7 +165,7 @@ func iniVerbatimSection(name string) bool {
 }
 
 // rebuildINI returns template holding what previous set. An option both set takes the previous value in the
-// template's place, and one previous only has commented out is commented out: it was turned off on purpose.
+// template's place, and one previous only has commented out keeps its line: it was turned off on purpose.
 // Options the template does not set, and commented-out ones it does not mention, are kept ahead of the banner
 // that ends their section. A section of
 // commands keeps its previous body, where a line means something only in its place, and sections the template
@@ -232,20 +232,28 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 		body := make([]string, 0, len(block.body))
 		for _, line := range block.body {
 			match := iniOptionPattern.FindStringSubmatch(line)
-			if len(match) == 0 {
+			optionKey := iniMentionedKey(line)
+			if len(match) == 0 && !iniSettingKeyPattern.MatchString(optionKey) {
 				body = append(body, line)
 				continue
 			}
-			id := key + "." + strings.ToLower(match[2])
+			id := key + "." + strings.ToLower(optionKey)
 			if carried[id] {
 				body = append(body, line)
 				continue
 			}
-			if value, ok := prev.Option(block.name, match[2]); ok {
-				carried[id] = true
-				line = match[1] + match[2] + match[3] + value + iniCommentSuffix(match[4])
-			} else if prev.mentionsOption(block.name, match[2]) {
-				line = ";" + line
+			if value, ok := prev.Option(block.name, optionKey); ok {
+				if len(match) != 0 {
+					carried[id] = true
+					line = match[1] + match[2] + match[3] + value + iniCommentSuffix(match[4])
+				}
+			} else {
+				for _, previousLine := range old {
+					if strings.EqualFold(iniMentionedKey(previousLine), optionKey) {
+						line = previousLine
+						break
+					}
+				}
 			}
 			body = append(body, line)
 		}

@@ -27,6 +27,11 @@ type installRoot struct {
 	root *os.Root
 }
 
+type installFileSnapshot struct {
+	info os.FileInfo
+	hash string
+}
+
 // openInstallRoot opens path as a confined root. The root itself is chosen by the user or by this
 // application, so a linked root is followed like the reference launcher does; only entries below it are
 // confined.
@@ -172,10 +177,10 @@ func (r *installRoot) withDirectory(
 	return operation(current.root)
 }
 
-func (r *installRoot) readFile(relative string) ([]byte, os.FileInfo, error) {
+func (r *installRoot) readFile(relative string) ([]byte, *installFileSnapshot, error) {
 	var (
-		data []byte
-		info os.FileInfo
+		data     []byte
+		snapshot *installFileSnapshot
 	)
 	err := r.withParent(relative, false, 0, func(parent *os.Root, name string) error {
 		before, err := parent.Lstat(name)
@@ -199,11 +204,11 @@ func (r *installRoot) readFile(relative string) ([]byte, os.FileInfo, error) {
 		}
 		data, err = io.ReadAll(file)
 		if err == nil {
-			info = after
+			snapshot = &installFileSnapshot{info: after, hash: hashBytes(data)}
 		}
 		return err
 	})
-	return data, info, err
+	return data, snapshot, err
 }
 
 func (r *installRoot) writeFileAtomic(
@@ -211,7 +216,7 @@ func (r *installRoot) writeFileAtomic(
 	relative string,
 	input io.Reader,
 	perm fs.FileMode,
-	expected os.FileInfo,
+	expected *installFileSnapshot,
 ) error {
 	return r.withParent(relative, true, 0o755, func(parent *os.Root, name string) (operationErr error) {
 		before, err := parent.Lstat(name)
@@ -220,7 +225,7 @@ func (r *installRoot) writeFileAtomic(
 			if err := validateInstallFile(before, filepath.Join(r.path, relative)); err != nil {
 				return err
 			}
-			if expected != nil && !os.SameFile(expected, before) {
+			if expected != nil && !os.SameFile(expected.info, before) {
 				return fmt.Errorf("file identity changed before replacing %q", filepath.Join(r.path, relative))
 			}
 		case errors.Is(err, os.ErrNotExist):
@@ -267,6 +272,18 @@ func (r *installRoot) writeFileAtomic(
 			}
 		default:
 			return err
+		}
+		if expected != nil {
+			_, current, err := r.readFile(relative)
+			if err != nil {
+				return err
+			}
+			if !os.SameFile(expected.info, current.info) {
+				return fmt.Errorf("file identity changed before replacing %q", filepath.Join(r.path, relative))
+			}
+			if expected.hash != current.hash {
+				return fmt.Errorf("file content changed before replacing %q", filepath.Join(r.path, relative))
+			}
 		}
 		if err := parent.Rename(temporary, name); err != nil {
 			return err
