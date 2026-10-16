@@ -509,10 +509,9 @@ func TestCollectLaunchBlockersHonorsCancellation(t *testing.T) {
 
 func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) {
 	ctx := context.Background()
-	supporting, older := testCustomDLLImage("1.2.2-nhd.3"), testCustomDLLImage("1.2.2-nhd.2")
+	image := testCustomDLLImage("1.2.2-nhd.10")
 	service, _, _ := newProviderTestService(t, []providerTestRelease{
-		{tag: "v1.2.2-nhd.3", data: supporting, digest: providerTestDigest(supporting)},
-		{tag: "v1.2.2-nhd.2", data: older, digest: providerTestDigest(older)},
+		{tag: "v1.2.2-nhd.10", data: image, digest: providerTestDigest(image)},
 	})
 	service.launchSettings = &fakeLaunch{smooth: true}
 	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
@@ -525,37 +524,26 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 	for _, tc := range []struct {
 		name          string
 		provider      string
-		pin           VersionPin
 		migotoDLLUsed bool
 		blocked       bool
-		outdated      bool
 	}{
-		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}, true, false, false},
-		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false, false},
-		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.2"}, true, true, true},
-		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true, false},
-		{"launch without the XXMI DLL", "myparsleycat", VersionPin{Follow: "latest"}, false, true, false},
+		{"supporting provider", "myparsleycat", true, false},
+		{"signed libraries", defaultLibsProvider, true, true},
+		{"launch without the XXMI DLL", "myparsleycat", false, true},
 	} {
-		cfg.LibsProvider, cfg.XXMIVersion = tc.provider, tc.pin
+		cfg.LibsProvider = tc.provider
 		settings := service.builtinLaunchSettings(cfg, tc.migotoDLLUsed, guards)
 		err := service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
 		if blocked := errors.Is(err, errSmoothMotionEnabled); blocked != tc.blocked || err != nil && !blocked {
 			t.Fatalf("%s: error = %v, want blocked = %t", tc.name, err, tc.blocked)
 		}
-
-		// The renderer reads both versions off this text to name the release that lifts the blocker.
-		outdated := err != nil &&
-			strings.Contains(err.Error(), "XXMI_SMOOTH_MOTION_DLL_OUTDATED:1.2.2-nhd.2:1.2.2-nhd.3")
-		if outdated != tc.outdated {
-			t.Fatalf("%s: error = %v, want outdated = %t", tc.name, err, tc.outdated)
-		}
 	}
 
-	// Unsafe mode keeps a DLL found in a folder nothing was deployed to yet, so the supporting release the
+	// Unsafe mode keeps a DLL found in a folder nothing was deployed to yet, so the supporting provider the
 	// importer is set to is not the one the game loads.
-	cfg.LibsProvider, cfg.XXMIVersion = "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.3"}
+	cfg.LibsProvider = "myparsleycat"
 	cfg.Migoto.UnsafeMode = true
-	writeTestFile(t, filepath.Join(cfg.ImporterFolder, customDLLName), older)
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, customDLLName), testCustomDLLImage("kept"))
 	settings := service.builtinLaunchSettings(cfg, true, guards)
 	err = service.rejectLaunchBlockersFrom(ctx, "WWMI", "Client-Win64-Shipping.exe", false, settings)
 	if !errors.Is(err, errSmoothMotionEnabled) {
@@ -573,10 +561,9 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 
 func TestDX12WarningFollowsProviderDLLSupport(t *testing.T) {
 	ctx := context.Background()
-	supporting, older := testCustomDLLImage("1.2.2-nhd.6"), testCustomDLLImage("1.2.2-nhd.5")
+	image := testCustomDLLImage("1.2.2-nhd.10")
 	service, _, _ := newProviderTestService(t, []providerTestRelease{
-		{tag: "v1.2.2-nhd.6", data: supporting, digest: providerTestDigest(supporting)},
-		{tag: "v1.2.2-nhd.5", data: older, digest: providerTestDigest(older)},
+		{tag: "v1.2.2-nhd.10", data: image, digest: providerTestDigest(image)},
 	})
 	cfg, err := DefaultImporterConfig("ZZMI", t.TempDir())
 	if err != nil {
@@ -587,17 +574,14 @@ func TestDX12WarningFollowsProviderDLLSupport(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		provider string
-		pin      VersionPin
 		skipD3D  bool
 		warned   bool
 	}{
-		{"first supporting release", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.6"}, true, false},
-		{"latest release", "myparsleycat", VersionPin{Follow: "latest"}, true, false},
-		{"release before support", "myparsleycat", VersionPin{Pinned: "1.2.2-nhd.5"}, true, true},
-		{"signed libraries", defaultLibsProvider, VersionPin{Follow: "latest"}, true, true},
-		{"DirectX 11 launch", defaultLibsProvider, VersionPin{Follow: "latest"}, false, false},
+		{"supporting provider", "myparsleycat", true, false},
+		{"signed libraries", defaultLibsProvider, true, true},
+		{"DirectX 11 launch", defaultLibsProvider, false, false},
 	} {
-		cfg.LibsProvider, cfg.XXMIVersion, cfg.SkipD3D11Switch = tc.provider, tc.pin, tc.skipD3D
+		cfg.LibsProvider, cfg.SkipD3D11Switch = tc.provider, tc.skipD3D
 		warning := service.dx12Warning(ctx, cfg)
 		if warned := warning != nil; warned != tc.warned {
 			t.Fatalf("%s: warning = %+v, want warned = %t", tc.name, warning, tc.warned)

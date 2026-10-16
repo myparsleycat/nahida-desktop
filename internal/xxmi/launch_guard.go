@@ -25,11 +25,6 @@ const (
 	launchGuardSmoothMotionKey = "xxmi_launch_guard_smooth_motion"
 	launchGuardLoggingKey      = "xxmi_launch_guard_logging"
 	launchGuardTexturesKey     = "xxmi_launch_guard_textures"
-
-	// Follows errSmoothMotionEnabled as "<code>:<deployed version>:<first supporting version>" when a newer
-	// release of the importer's provider would lift the blocker. Keep it in sync with
-	// frontend/src/hooks/use-launch-guard.tsx.
-	smoothMotionDLLOutdatedCode = "XXMI_SMOOTH_MOTION_DLL_OUTDATED"
 )
 
 var (
@@ -133,13 +128,11 @@ func (g launchGuards) settings(src launchFixer) launchFixer {
 
 // smoothMotionGate is the launch settings of a built-in launch that loads the XXMI DLL. Smooth Motion blocks
 // the launch only while the d3d11.dll about to be deployed cannot render alongside it, which is looked up once
-// the setting is found on because resolving the release can reach GitHub.
+// the setting is found on.
 type smoothMotionGate struct {
 	launchFixer
 	x   *XXMI
 	cfg ImporterConfig
-	// blocker is the Smooth Motion blocker of the last read that found the setting on.
-	blocker error
 }
 
 func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) (bool, error) {
@@ -147,7 +140,7 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 	if err != nil || !enabled {
 		return enabled, err
 	}
-	support := g.x.dllFeatureSupport(ctx, g.cfg, func(spec libsProviderSpec) string { return spec.smoothMotionSince })
+	support := g.x.dllFeatureSupport(ctx, g.cfg, func(spec libsProviderSpec) bool { return spec.smoothMotion })
 
 	// A lookup that was cut short says nothing about the DLL, so it must not turn into the blocker.
 	if err := ctx.Err(); err != nil {
@@ -160,12 +153,11 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 		return false, nil
 	}
 
-	// The dialog only says that Smooth Motion is on, so the log is what tells a kept DLL, an older release
-	// and a failed lookup apart. A lookup failure its own layer already reported is not written again.
+	// The dialog only says that Smooth Motion is on, so the log is what tells a kept DLL, a provider without
+	// support and a failed lookup apart. A lookup failure its own layer already reported is not written again.
 	fields := map[string]any{
 		"importer_folder": g.cfg.ImporterFolder, "executable": exe, "reason": support.reason,
-		"provider": support.provider, "pin": support.pin, "version": support.version,
-		"supported_since": support.since,
+		"provider": support.provider,
 	}
 	switch {
 	case support.err != nil && !infra.IsReportedError(support.err):
@@ -176,21 +168,7 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 	case g.x.log != nil:
 		g.x.log.Info(fields, xxmiLaunchGuardWhere)
 	}
-	g.blocker = errSmoothMotionEnabled
-	if support.reason == dllFeatureVersionOutdated {
-		g.blocker = fmt.Errorf(
-			"%w: %s:%s:%s", errSmoothMotionEnabled, smoothMotionDLLOutdatedCode, support.version, support.since,
-		)
-	}
 	return true, nil
-}
-
-// smoothMotionBlocker returns the blocker for Smooth Motion that src found on.
-func smoothMotionBlocker(src launchChecker) error {
-	if gate, ok := src.(*smoothMotionGate); ok && gate.blocker != nil {
-		return gate.blocker
-	}
-	return errSmoothMotionEnabled
 }
 
 // builtinLaunchSettings returns the settings a built-in launch of cfg is held to under guards.
@@ -204,29 +182,20 @@ func (x *XXMI) builtinLaunchSettings(cfg ImporterConfig, migotoDLLUsed bool, gua
 
 // dx12Warning returns the notice for a launch that leaves the renderer to the game, or asks it for DirectX
 // 12, while the d3d11.dll about to be deployed only applies mods with DirectX 11. It is nil for a DLL that
-// could not be told: a user-provided one may well support DirectX 12, and a release that cannot be resolved
+// could not be told: a user-provided one may well support DirectX 12, and a provider that cannot be resolved
 // fails the deployment that follows.
 func (x *XXMI) dx12Warning(ctx context.Context, cfg ImporterConfig) *launchWarning {
 	if !cfg.SkipD3D11Switch {
 		return nil
 	}
-	support := x.dllFeatureSupport(ctx, cfg, func(spec libsProviderSpec) string { return spec.dx12Since })
-	switch support.reason {
-	case dllFeatureProviderUnsupported:
-		return &launchWarning{
-			code: launchWarningDX12Unsupported,
-			err:  fmt.Errorf("XXMI libraries of %s do not apply mods with DirectX 12", support.provider),
-		}
-	case dllFeatureVersionOutdated:
-		return &launchWarning{
-			code: launchWarningDX12Unsupported,
-			err: fmt.Errorf(
-				"XXMI libraries %s of %s do not apply mods with DirectX 12, which %s is the first release to do",
-				support.version, support.provider, support.since,
-			),
-		}
+	support := x.dllFeatureSupport(ctx, cfg, func(spec libsProviderSpec) bool { return spec.dx12 })
+	if support.reason != dllFeatureProviderUnsupported {
+		return nil
 	}
-	return nil
+	return &launchWarning{
+		code: launchWarningDX12Unsupported,
+		err:  fmt.Errorf("XXMI libraries of %s do not apply mods with DirectX 12", support.provider),
+	}
 }
 
 func collectLaunchBlockers(
@@ -264,7 +233,7 @@ func collectLaunchBlockers(
 		)
 	}
 	if enabled {
-		blocked = append(blocked, smoothMotionBlocker(src))
+		blocked = append(blocked, errSmoothMotionEnabled)
 	}
 	return blocked, warnings, nil
 }

@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/mod/semver"
-
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -42,48 +40,21 @@ type libsProviderSpec struct {
 	// versionMark separates the signed libraries version a provider release is built on from the provider's
 	// own revision, as in "1.2.2-nhd.1".
 	versionMark string
-	// smoothMotionSince is the first release whose d3d11.dll renders alongside NVIDIA Smooth Motion, or ""
-	// when Smooth Motion has to be off for mods to load.
-	smoothMotionSince string
-	// dx12Since is the first release whose d3d11.dll applies mods to a game rendering with DirectX 12, or ""
-	// when mods only load with DirectX 11.
-	dx12Since string
+	// smoothMotion is whether the provider's d3d11.dll renders alongside NVIDIA Smooth Motion. Without it,
+	// Smooth Motion has to be off for mods to load.
+	smoothMotion bool
+	// dx12 is whether the provider's d3d11.dll applies mods to a game rendering with DirectX 12. Without it,
+	// mods only load with DirectX 11.
+	dx12 bool
 	// companions are the libraries a provider release may ship for its d3d11.dll to load. They are deployed
 	// beside it.
-	companions []providerCompanion
+	companions []string
 }
 
-type providerCompanion struct {
-	name string
-	// since is the first release that may ship the library. An earlier release is known not to, so its cache
-	// entry is complete without looking for it.
-	since string
-}
-
-// companionsOf returns the companion libraries a release of the provider may ship.
-func (spec libsProviderSpec) companionsOf(version string) []string {
-	var names []string
-	for _, companion := range spec.companions {
-		if semver.IsValid("v"+version) && semver.Compare("v"+version, "v"+companion.since) < 0 {
-			continue
-		}
-		names = append(names, companion.name)
-	}
-	return names
-}
-
-func (spec libsProviderSpec) companionNames() []string {
-	names := make([]string, 0, len(spec.companions))
-	for _, companion := range spec.companions {
-		names = append(names, companion.name)
-	}
-	return names
-}
-
-// releaseFiles names the files a release of the provider may ship beside its d3d11.dll. Adding one here is all
-// it takes for the entries cached without it to be searched for it again.
-func (spec libsProviderSpec) releaseFiles(version string) []string {
-	return append([]string{providerININame}, spec.companionsOf(version)...)
+// releaseFiles names the files a provider release may ship beside its d3d11.dll. Adding one here is all it
+// takes for the entries cached without it to be searched for it again.
+func (spec libsProviderSpec) releaseFiles() []string {
+	return append([]string{providerININame}, spec.companions...)
 }
 
 func providerFileSizeLimit(name string) int64 {
@@ -96,16 +67,13 @@ func providerFileSizeLimit(name string) int64 {
 var libsProviders = []libsProviderSpec{
 	{id: defaultLibsProvider, repo: libsRepo},
 	{
-		id:                "myparsleycat",
-		repo:              github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
-		overlayPackage:    "xxmi-libs-myparsleycat",
-		versionMark:       "-nhd.",
-		smoothMotionSince: "1.2.2-nhd.3",
-		dx12Since:         "1.2.2-nhd.6",
-		companions: []providerCompanion{
-			{name: "dxcompiler.dll", since: "1.2.2-nhd.8"},
-			{name: "dxil.dll", since: "1.2.2-nhd.8"},
-		},
+		id:             "myparsleycat",
+		repo:           github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
+		overlayPackage: "xxmi-libs-myparsleycat",
+		versionMark:    "-nhd.",
+		smoothMotion:   true,
+		dx12:           true,
+		companions:     []string{"dxcompiler.dll", "dxil.dll"},
 	},
 }
 
@@ -399,13 +367,10 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 }
 
 // dllFeatureSupport is whether the d3d11.dll an importer's next deployment writes has a feature only some
-// provider releases ship, such as rendering alongside NVIDIA Smooth Motion.
+// providers ship, such as rendering alongside NVIDIA Smooth Motion.
 type dllFeatureSupport struct {
 	supported bool
-	// provider, pin and version name that d3d11.dll as far as they were resolved before the verdict.
-	provider, pin, version string
-	// since is the provider's first release with the feature, or "".
-	since string
+	provider  string
 	// reason is why the DLL counts as unsupported, and err the failure behind it, if any.
 	reason string
 	err    error
@@ -415,17 +380,14 @@ const (
 	dllFeatureCustomDLL           = "custom-dll"
 	dllFeatureProviderUnresolved  = "provider-unresolved"
 	dllFeatureProviderUnsupported = "provider-unsupported"
-	dllFeatureVersionUnresolved   = "version-unresolved"
-	dllFeatureVersionOutdated     = "version-outdated"
 )
 
-// dllFeatureSupport reports whether the d3d11.dll the importer's next deployment writes has the feature whose
-// first release since names for a provider. A release that cannot be resolved counts as unsupported; the
-// deployment that follows reports why.
+// dllFeatureSupport reports whether the d3d11.dll the importer's next deployment writes comes from a provider
+// with the feature. A user-provided DLL cannot be told, so it counts as unsupported.
 func (x *XXMI) dllFeatureSupport(
 	ctx context.Context,
 	cfg ImporterConfig,
-	since func(libsProviderSpec) string,
+	has func(libsProviderSpec) bool,
 ) dllFeatureSupport {
 	custom, err := x.launchesCustomDLL(ctx, cfg)
 	if err != nil {
@@ -435,30 +397,13 @@ func (x *XXMI) dllFeatureSupport(
 		return dllFeatureSupport{reason: dllFeatureCustomDLL}
 	}
 	spec, err := x.libsProvider(ctx, cfg)
-	support := dllFeatureSupport{provider: spec.id, since: since(spec)}
 	if err != nil {
-		support.reason, support.err = dllFeatureProviderUnresolved, err
-		return support
+		return dllFeatureSupport{provider: spec.id, reason: dllFeatureProviderUnresolved, err: err}
 	}
-	if support.since == "" {
-		support.reason = dllFeatureProviderUnsupported
-		return support
+	if !has(spec) {
+		return dllFeatureSupport{provider: spec.id, reason: dllFeatureProviderUnsupported}
 	}
-
-	support.reason = dllFeatureVersionUnresolved
-	if support.pin, _, support.err = x.libsPin(ctx, cfg); support.err != nil {
-		return support
-	}
-	support.version, support.err = x.resolveProviderDLLVersion(ctx, spec, support.pin, cfg.ImporterFolder)
-	if support.err != nil || !semver.IsValid("v"+support.version) {
-		return support
-	}
-	support.supported = semver.Compare("v"+support.version, "v"+support.since) >= 0
-	support.reason = dllFeatureVersionOutdated
-	if support.supported {
-		support.reason = ""
-	}
-	return support
+	return dllFeatureSupport{provider: spec.id, supported: true}
 }
 
 // providerPin moves a pinned libraries version to a provider: to the release built on the same signed
@@ -720,14 +665,14 @@ func (x *XXMI) downloadProviderRelease(
 		version,
 		*release,
 		staging,
-		spec.companionsOf(version),
+		spec.companions,
 	)
 	if err != nil {
 		return err
 	}
 	metadata, err := json.MarshalIndent(providerDLLSource{
 		Version: version, Tag: release.TagName, SHA256: hashBytes(data), Size: int64(len(data)),
-		FetchedAt: time.Now().UTC().Format(time.RFC3339), Searched: spec.releaseFiles(version),
+		FetchedAt: time.Now().UTC().Format(time.RFC3339), Searched: spec.releaseFiles(),
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -892,7 +837,7 @@ func (x *XXMI) staleProviderFiles(
 	source providerDLLSource,
 ) []string {
 	var stale []string
-	for _, name := range spec.releaseFiles(version) {
+	for _, name := range spec.releaseFiles() {
 		if !slices.Contains(source.Searched, name) {
 			stale = append(stale, name)
 			continue
@@ -934,7 +879,7 @@ func (x *XXMI) refreshProviderFiles(
 	// A file this refresh does not look for keeps its cached copy and its record.
 	iniHash := recorded[providerFileHashKey(spec, version, providerININame)]
 	companionHashes := map[string]string{}
-	for _, name := range spec.companionNames() {
+	for _, name := range spec.companions {
 		companionHashes[name] = recorded[providerFileHashKey(spec, version, name)]
 	}
 
@@ -1053,7 +998,7 @@ func (x *XXMI) recordProviderHashes(
 	}
 	hashes[spec.overlayPackage+"@"+version] = dll
 	files := map[string]string{providerININame: ini}
-	for _, name := range spec.companionNames() {
+	for _, name := range spec.companions {
 		files[name] = companions[name]
 	}
 	for name, hash := range files {
@@ -1125,7 +1070,7 @@ func (x *XXMI) readVerifiedProviderCompanions(
 	version string,
 ) (map[string][]byte, error) {
 	companions := map[string][]byte{}
-	for _, name := range spec.companionsOf(version) {
+	for _, name := range spec.companions {
 		data, err := x.readVerifiedProviderFile(ctx, root, spec, version, name, customDLLSizeLimit)
 		if err != nil {
 			return nil, err

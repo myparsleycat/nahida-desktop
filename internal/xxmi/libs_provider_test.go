@@ -1268,7 +1268,9 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 			t.Fatal(err)
 		}
 		folder := providerTestCache(t, "0.2.0")
-		metadata, err := json.Marshal(providerDLLSource{Version: "0.2.0", SHA256: hashBytes(image)})
+		metadata, err := json.Marshal(providerDLLSource{
+			Version: "0.2.0", SHA256: hashBytes(image), Searched: spec.companions,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1313,7 +1315,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 
 func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 	ctx := context.Background()
-	const version = "1.2.2-nhd.8"
+	const version = "1.2.2-nhd.10"
 	image, dxc, dxil := testCustomDLLImage(version), testCustomDLLImage("dxc"), testCustomDLLImage("dxil")
 	spec, _ := lookupOverlayPackage(providerTestPackage)
 	release := providerTestRelease{
@@ -1352,7 +1354,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 			t.Fatal(err)
 		}
 		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
-		for _, name := range spec.companionNames() {
+		for _, name := range spec.companions {
 			if err := os.Remove(filepath.Join(folder, name)); err != nil {
 				t.Fatal(err)
 			}
@@ -1388,7 +1390,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 	t.Run("lookup that fails", func(t *testing.T) {
 		mismatch := release
 		mismatch.companionDigest = providerTestDigest(image)
-		service, _, downloads := newProviderTestService(t, []providerTestRelease{mismatch})
+		service, _, _ := newProviderTestService(t, []providerTestRelease{mismatch})
 		seedEntry(t, service, version, true)
 
 		// An entry cached without its libraries is not deployed as a release that ships none.
@@ -1397,13 +1399,6 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 		if !service.verifiedProviderDLL(ctx, spec, version) {
 			t.Fatal("failed refresh lost the verified DLL")
-		}
-
-		// A release from before the libraries existed is complete as cached, with GitHub out of reach.
-		seedEntry(t, service, "1.2.2-nhd.7", true)
-		before := downloads.Load()
-		if err := service.ensureProviderDLL(ctx, spec, "1.2.2-nhd.7"); err != nil || downloads.Load() != before {
-			t.Fatalf("earlier release downloaded %d files, err = %v", downloads.Load()-before, err)
 		}
 	})
 
@@ -1463,7 +1458,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		// A build that knows of one more library finds the entry was never searched for it and fetches it
 		// alone.
 		learned := spec
-		learned.companions = append(slices.Clone(spec.companions), providerCompanion{name: "extra.dll", since: version})
+		learned.companions = append(slices.Clone(spec.companions), "extra.dll")
 		before := downloads.Load()
 		if err := service.ensureProviderDLL(ctx, learned, version); err != nil || downloads.Load() != before+1 {
 			t.Fatalf("refresh downloaded %d files, want the new library alone, err = %v", downloads.Load()-before, err)
