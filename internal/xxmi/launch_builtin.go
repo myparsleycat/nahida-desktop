@@ -533,8 +533,7 @@ func (x *XXMI) updateLaunchINI(
 
 	// Where the file has no hotkey the launch writes one, so a saved override takes the place of the default.
 	migoto := cfg.Migoto
-	toggleInput, _ := lookupD3DXOption(d3dxOverrideKey("Input", "toggle_input"))
-	if value, ok := cfg.D3DXOverrides[d3dxOverrideKey("Input", "toggle_input")]; ok && toggleInput.accepts(value) {
+	if value, ok := lookupD3DXOverride(cfg.D3DXOverrides, "Input", "toggle_input"); ok && validD3DXValue(value) {
 		migoto.ToggleInput = value
 	}
 	applyMigotoINI(doc, key, migoto, logLevel)
