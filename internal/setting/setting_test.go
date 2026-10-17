@@ -699,30 +699,6 @@ func TestAdvancedSetEmitsUpdateAndReload(t *testing.T) {
 	}
 }
 
-func TestImageCacheThroughSetting(t *testing.T) {
-	t.Parallel()
-
-	s, _ := openTemp(t, Options{})
-	ctx := context.Background()
-	blob := []byte{0, 1, 2, 3, 255}
-	if err := s.Client().ImageCache.InsertIgnore(ctx, db.ImageCacheRow{
-		Hash: "abc", Image: blob, Size: int64(len(blob)),
-	}); err != nil {
-		t.Fatalf("InsertIgnore: %v", err)
-	}
-	sum, err := s.GetImageCacheSize(ctx)
-	if err != nil || sum != int64(len(blob)) {
-		t.Fatalf("GetImageCacheSize = %d %v, want %d", sum, err, len(blob))
-	}
-	if err := s.ClearImageCache(ctx); err != nil {
-		t.Fatalf("ClearImageCache: %v", err)
-	}
-	sum, err = s.GetImageCacheSize(ctx)
-	if err != nil || sum != 0 {
-		t.Fatalf("after clear = %d %v, want 0", sum, err)
-	}
-}
-
 func TestPersistTogglesEnablesRunInBackground(t *testing.T) {
 	t.Parallel()
 

@@ -1,5 +1,4 @@
 import { Updater } from "@bindings/infra";
-import { Setting } from "@bindings/setting";
 import { type Theme, useTheme } from "@renderer/components/theme-provider";
 import {
   AlertDialog,
@@ -33,10 +32,9 @@ import { getSetting } from "@renderer/lib/settings";
 import { getFallbackStartPage, requiresAuthForStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
 import type { AutoUpdateMode } from "@shared/updater";
-import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
-import { DownloadIcon, LoaderIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/gen")({
@@ -75,15 +73,8 @@ function RouteComponent() {
 
   const { settings, update, isLoading, setSettings } = useSettings(settingsConfig);
 
-  const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
   const [isRunInBackgroundConfirmOpen, setIsRunInBackgroundConfirmOpen] = useState(false);
   const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
-
-  useEffect(() => {
-    void Setting.GetImageCacheSize().then((size) => {
-      setImageCacheSize(size);
-    });
-  }, []);
 
   const handleRunInBackgroundChange = async (val: boolean) => {
     if (val) {
@@ -490,42 +481,6 @@ function RouteComponent() {
                 )}
               </Button>
             )}
-          </SectionRow>
-        </SectionContent>
-      </Section>
-
-      <Section>
-        <SectionHeader>
-          <SectionTitle>{t("page.setting.gen.other.title")}</SectionTitle>
-        </SectionHeader>
-        <SectionContent>
-          <SectionRow
-            title={t("page.setting.gen.other.imageCacheTitle")}
-            description={t("page.setting.gen.other.imageCacheDescription")}
-          >
-            <div className="flex items-center gap-2">
-              <p className="text-sm">
-                {imageCacheSize === null ? (
-                  <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
-                ) : (
-                  formatSize(imageCacheSize)
-                )}
-              </p>
-              <Button
-                variant="outline"
-                disabled={imageCacheSize === null}
-                onClick={() => {
-                  setImageCacheSize(null);
-                  void Setting.ClearImageCache().then(() => {
-                    void Setting.GetImageCacheSize().then((size) => {
-                      setImageCacheSize(size);
-                    });
-                  });
-                }}
-              >
-                {t("page.setting.gen.other.imageCacheClear")}
-              </Button>
-            </div>
           </SectionRow>
         </SectionContent>
       </Section>

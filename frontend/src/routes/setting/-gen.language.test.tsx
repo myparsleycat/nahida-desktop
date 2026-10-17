@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
-import { Setting } from "@bindings/setting";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentType, Suspense } from "react";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Route } from "./gen";
 
@@ -14,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@bindings/infra", () => ({ Updater: {} }));
-vi.mock("@bindings/setting", () => ({ Setting: { GetImageCacheSize: vi.fn() } }));
 // Both routes to the i18n instance share one spy: the hook result and the module singleton.
 vi.mock("@renderer/lib/i18n", () => ({
   default: { changeLanguage: mocks.changeLanguage, t: (key: string) => key },
@@ -99,10 +97,6 @@ async function renderGeneralSettings() {
   );
   await act(async () => {});
 }
-
-beforeEach(() => {
-  vi.mocked(Setting.GetImageCacheSize).mockResolvedValue(0);
-});
 
 afterEach(() => {
   cleanup();

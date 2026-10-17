@@ -181,7 +181,6 @@ func TestMaintenanceGuardPolicies(t *testing.T) {
 	}{
 		{"mod", waitForAllMethods, "Toggle", true},
 		{"setting-write", isSettingWrite, "SetPersistToggles", true},
-		{"setting-clear", isSettingWrite, "ClearImageCache", true},
 		{"setting-read", isSettingWrite, "Get", false},
 		{"shell-trash", waitForShellTrash, "Trash", true},
 		{"shell-external", waitForShellTrash, "OpenExternal", false},

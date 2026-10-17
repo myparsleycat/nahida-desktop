@@ -1946,14 +1946,10 @@
           "select": "Select Level"
         },
         "other": {
-          "title": "Other",
           "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
           "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
           "powerSaveBlockInTransfer": "Prevent sleep mode",
-          "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress.",
-          "imageCacheTitle": "Image Cache",
-          "imageCacheDescription": "Clears the preview image cache",
-          "imageCacheClear": "Clear Cache"
+          "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress."
         }
       },
       "mod": {

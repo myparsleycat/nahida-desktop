@@ -23,7 +23,6 @@ type Client struct {
 	ModPresets              ModPresetsStore
 	ModPresetItems          ModPresetItemsStore
 	ModClassifications      ModClassificationsStore
-	ImageCache              ImageCacheStore
 	TouchProfileVisionCache TouchProfileVisionCacheStore
 	ModScanCache            ModScanCacheStore
 	AgentSessions           AgentSessionsStore
@@ -60,7 +59,6 @@ func newClient(sqlDB *sql.DB) *Client {
 	c.ModPresets = ModPresetsStore{c: c}
 	c.ModPresetItems = ModPresetItemsStore{c: c}
 	c.ModClassifications = ModClassificationsStore{c: c}
-	c.ImageCache = ImageCacheStore{c: c}
 	c.TouchProfileVisionCache = TouchProfileVisionCacheStore{c: c}
 	c.ModScanCache = ModScanCacheStore{c: c}
 	c.AgentSessions = AgentSessionsStore{c: c}
