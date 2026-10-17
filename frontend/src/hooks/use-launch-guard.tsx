@@ -147,6 +147,7 @@ export function useLaunchGuard() {
   const confirmGeneration = useRef(0);
   // The user chose to launch with logging on; later dialogs of the same launch must not ask again.
   const keepLogging = useRef(false);
+  const ignoreSmoothMotion = useRef(false);
   const queryClient = useQueryClient();
   const [pendingUpdate, setPendingUpdate] = useState<{
     importer: string;
@@ -175,10 +176,15 @@ export function useLaunchGuard() {
   );
 
   const launch = useCallback(
-    async (importer: string, withLogging = false): Promise<LaunchGuardResult> => {
+    async (
+      importer: string,
+      withLogging = false,
+      withoutSmoothMotionGuard = false,
+    ): Promise<LaunchGuardResult> => {
       keepLogging.current = withLogging;
+      ignoreSmoothMotion.current = withoutSmoothMotionGuard;
       try {
-        await (withLogging ? XXMI.StartGameWithLogging(importer) : XXMI.StartGame(importer));
+        await startGame(importer, withLogging, withoutSmoothMotionGuard);
         return { status: "started" };
       } catch (error) {
         const message = toErrorMessage(error);
@@ -384,6 +390,11 @@ export function useLaunchGuard() {
       } else if (dialog === "xxmi-logging") {
         await XXMI.DisableLogging(importer);
         void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
+      } else if (ignoreSmoothMotion.current) {
+        await XXMI.ClearLaunchBlockersWithOptions(importer, {
+          keepLogging: keepLogging.current,
+          ignoreSmoothMotion: true,
+        });
       } else {
         await XXMI.ClearLaunchBlockers(importer);
       }
@@ -417,11 +428,9 @@ export function useLaunchGuard() {
     // asked twice, and the launch may still need another question, so those go through the guard again.
     try {
       if (dialog === "wwmi-resource-tier" || dialog === "d3d11-mode" || dialog === "xxmi-logging") {
-        await launch(importer, keepLogging.current);
-      } else if (keepLogging.current) {
-        await XXMI.StartGameWithLogging(importer);
+        await launch(importer, keepLogging.current, ignoreSmoothMotion.current);
       } else {
-        await XXMI.StartGame(importer);
+        await startGame(importer, keepLogging.current, ignoreSmoothMotion.current);
       }
     } catch (error) {
       toast.error(toErrorMessage(error));
@@ -443,7 +452,7 @@ export function useLaunchGuard() {
       });
       if (confirmGeneration.current !== generation) return;
       setPendingImporter(null);
-      await (keepLogging.current ? XXMI.StartGameWithLogging(importer) : XXMI.StartGame(importer));
+      await startGame(importer, keepLogging.current, ignoreSmoothMotion.current);
     } catch (error) {
       if (confirmGeneration.current === generation) toast.error(toErrorMessage(error));
     } finally {
@@ -458,7 +467,19 @@ export function useLaunchGuard() {
     confirmGeneration.current += 1;
     setPendingImporter(null);
     try {
-      await launch(importer, true);
+      await launch(importer, true, ignoreSmoothMotion.current);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
+  }, [launch, pendingImporter]);
+
+  const handleIgnoreSmoothMotion = useCallback(async () => {
+    if (!pendingImporter) return;
+    const importer = pendingImporter;
+    confirmGeneration.current += 1;
+    setPendingImporter(null);
+    try {
+      await launch(importer, keepLogging.current, true);
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
@@ -474,7 +495,11 @@ export function useLaunchGuard() {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          className={
+            dialog === "smooth-motion" || dialog === "launch-blockers" ? "sm:max-w-lg" : undefined
+          }
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t(
@@ -580,6 +605,15 @@ export function useLaunchGuard() {
                 {t("page.mod.dialog.xxmi-logging.keep")}
               </AlertDialogAction>
             )}
+            {(dialog === "smooth-motion" || dialog === "launch-blockers") && (
+              <AlertDialogAction
+                variant="outline"
+                disabled={isConfirming}
+                onClickPromise={handleIgnoreSmoothMotion}
+              >
+                {t("page.mod.dialog.smooth-motion.ignore")}
+              </AlertDialogAction>
+            )}
             <AlertDialogAction
               disabled={isConfirming || (dialog === "game-folder" && !gameFolder.trim())}
               onClickPromise={handleConfirm}
@@ -603,6 +637,7 @@ export function useLaunchGuard() {
       gameFolder,
       handleConfirm,
       handleKeepLogging,
+      handleIgnoreSmoothMotion,
       handleKeepWounded,
       isConfirming,
       pendingImporter,
@@ -648,4 +683,11 @@ export function useLaunchGuard() {
       </>
     ),
   };
+}
+
+function startGame(importer: string, keepLogging: boolean, ignoreSmoothMotion: boolean) {
+  if (ignoreSmoothMotion) {
+    return XXMI.StartGameWithOptions(importer, { keepLogging, ignoreSmoothMotion });
+  }
+  return keepLogging ? XXMI.StartGameWithLogging(importer) : XXMI.StartGame(importer);
 }

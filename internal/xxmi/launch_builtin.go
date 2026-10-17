@@ -24,7 +24,12 @@ import (
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
-func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg ImporterConfig) (returnErr error) {
+func (x *XXMI) launchBuiltinGameLocked(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	options LaunchOptions,
+) (returnErr error) {
 	stage := "validate"
 	runtimeSource := "xxmi-libs@latest"
 	if cfg.Mode == RuntimeLegacy {
@@ -197,6 +202,10 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err != nil {
 		return err
 	}
+	if options.IgnoreSmoothMotion {
+		guards.smoothMotion = false
+	}
+
 	// Mods do not render with DCR on, so it is turned off without asking whenever the XXMI DLL is loaded.
 	// Unlike the reference launcher, this does not depend on ConfigureGame: DCR is all that option
 	// would control for GIMI, and leaving it on only breaks mods silently.

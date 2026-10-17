@@ -365,7 +365,8 @@ func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
 	}
 
 	// The game's own launcher picks the renderer, so the first launch stops for the reminder.
-	if err := service.launchBuiltinGameLocked(ctx, "EFMI", cfg); !errors.Is(err, errD3D11ModeNoticeRequired) {
+	err = service.launchBuiltinGameLocked(ctx, "EFMI", cfg, LaunchOptions{})
+	if !errors.Is(err, errD3D11ModeNoticeRequired) {
 		t.Fatalf("first launch error = %v", err)
 	}
 	if helper.calls != 0 || len(opened) != 0 {
@@ -373,7 +374,7 @@ func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
 	}
 	cfg.D3D11ModeNoticeShown = true
 	stages = nil
-	if err := service.launchBuiltinGameLocked(ctx, "EFMI", cfg); err != nil {
+	if err := service.launchBuiltinGameLocked(ctx, "EFMI", cfg, LaunchOptions{}); err != nil {
 		t.Fatal(err)
 	}
 

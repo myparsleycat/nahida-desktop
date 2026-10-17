@@ -6,8 +6,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const xxmi = vi.hoisted(() => ({
   StartGame: vi.fn(),
   StartGameWithLogging: vi.fn(),
+  StartGameWithOptions: vi.fn(),
   DisableLogging: vi.fn(),
   ClearLaunchBlockers: vi.fn(),
+  ClearLaunchBlockersWithOptions: vi.fn(),
   GetImporterConfig: vi.fn(),
   SaveImporterConfig: vi.fn(),
   DetectGameFolders: vi.fn(),
@@ -57,8 +59,10 @@ afterEach(() => {
   toastWarning.mockClear();
   xxmi.StartGame.mockReset();
   xxmi.StartGameWithLogging.mockReset();
+  xxmi.StartGameWithOptions.mockReset();
   xxmi.DisableLogging.mockReset();
   xxmi.ClearLaunchBlockers.mockReset();
+  xxmi.ClearLaunchBlockersWithOptions.mockReset();
   xxmi.GetImporterConfig.mockReset();
   xxmi.SaveImporterConfig.mockReset();
   xxmi.DetectGameFolders.mockReset();
@@ -294,6 +298,83 @@ it("keeps logging on through the later dialogs of the same launch", async () => 
   expect(xxmi.ClearLaunchBlockers).toHaveBeenCalledWith("GIMI");
   expect(xxmi.DisableLogging).not.toHaveBeenCalled();
   expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
+});
+
+it("ignores Smooth Motion only for this launch and preserves later guard choices", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("NVIDIA_SMOOTH_MOTION_ENABLED"));
+  xxmi.StartGameWithOptions.mockRejectedValueOnce(
+    new Error("XXMI_LOGGING_ENABLED"),
+  ).mockResolvedValueOnce(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "page.mod.dialog.smooth-motion.ignore" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "page.mod.dialog.xxmi-logging.keep" }));
+
+  await waitFor(() => expect(xxmi.StartGameWithOptions).toHaveBeenCalledTimes(2));
+  expect(xxmi.StartGameWithOptions).toHaveBeenNthCalledWith(1, "GIMI", {
+    keepLogging: false,
+    ignoreSmoothMotion: true,
+  });
+  expect(xxmi.StartGameWithOptions).toHaveBeenNthCalledWith(2, "GIMI", {
+    keepLogging: true,
+    ignoreSmoothMotion: true,
+  });
+  expect(xxmi.ClearLaunchBlockers).not.toHaveBeenCalled();
+  expect(xxmi.ClearLaunchBlockersWithOptions).not.toHaveBeenCalled();
+
+  xxmi.StartGame.mockRejectedValueOnce(new Error("NVIDIA_SMOOTH_MOTION_ENABLED"));
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByRole("button", { name: "page.mod.dialog.smooth-motion.ignore" });
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(2);
+  expect(xxmi.StartGameWithOptions).toHaveBeenCalledTimes(2);
+});
+
+it("keeps DCR guarded when Smooth Motion is ignored in the combined dialog", async () => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("GIMI_DCR_ENABLED\nNVIDIA_SMOOTH_MOTION_ENABLED"));
+  xxmi.StartGameWithOptions.mockRejectedValueOnce(
+    new Error("GIMI_DCR_ENABLED"),
+  ).mockResolvedValueOnce(undefined);
+  xxmi.ClearLaunchBlockersWithOptions.mockResolvedValue(undefined);
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "page.mod.dialog.smooth-motion.ignore" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "page.mod.dialog.gimi-dcr.confirm" }));
+
+  await waitFor(() => expect(xxmi.StartGameWithOptions).toHaveBeenCalledTimes(2));
+  expect(xxmi.ClearLaunchBlockersWithOptions).toHaveBeenCalledWith("GIMI", {
+    keepLogging: false,
+    ignoreSmoothMotion: true,
+  });
+  expect(xxmi.ClearLaunchBlockers).not.toHaveBeenCalled();
+});
+
+it.each(["cancel", "disable-failure"])("does not launch after Smooth Motion %s", async (choice) => {
+  xxmi.StartGame.mockRejectedValueOnce(new Error("NVIDIA_SMOOTH_MOTION_ENABLED"));
+  xxmi.ClearLaunchBlockers.mockRejectedValueOnce(new Error("driver write failed"));
+
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "play" }));
+  await screen.findByRole("alertdialog");
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: choice === "cancel" ? "g.cancel" : "page.mod.dialog.smooth-motion.confirm",
+    }),
+  );
+
+  if (choice === "cancel") {
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(xxmi.ClearLaunchBlockers).not.toHaveBeenCalled();
+  } else {
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("driver write failed"));
+  }
+  expect(xxmi.StartGame).toHaveBeenCalledTimes(1);
+  expect(xxmi.StartGameWithOptions).not.toHaveBeenCalled();
 });
 
 it("does not launch when the logging dialog is cancelled", async () => {

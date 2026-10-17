@@ -11,17 +11,26 @@ import (
 	"nahida.live/desktop/internal/reshade"
 )
 
+type LaunchOptions struct {
+	KeepLogging        bool `json:"keepLogging"`
+	IgnoreSmoothMotion bool `json:"ignoreSmoothMotion"`
+}
+
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
-	return x.startGame(ctx, importer, false)
+	return x.startGame(ctx, importer, LaunchOptions{})
 }
 
 // StartGameWithLogging starts the game without asking about 3DMigoto logging: the user chose to
 // keep it on, or the caller has no dialog to ask with.
 func (x *XXMI) StartGameWithLogging(ctx context.Context, importer string) error {
-	return x.startGame(ctx, importer, true)
+	return x.startGame(ctx, importer, LaunchOptions{KeepLogging: true})
 }
 
-func (x *XXMI) startGame(ctx context.Context, importer string, keepLogging bool) error {
+func (x *XXMI) StartGameWithOptions(ctx context.Context, importer string, options LaunchOptions) error {
+	return x.startGame(ctx, importer, options)
+}
+
+func (x *XXMI) startGame(ctx context.Context, importer string, options LaunchOptions) error {
 	importer = strings.ToUpper(strings.TrimSpace(importer))
 	if !x.acquireImporter(importer) {
 		return errors.New("XXMI_BUSY")
@@ -38,19 +47,22 @@ func (x *XXMI) startGame(ctx context.Context, importer string, keepLogging bool)
 	if err != nil {
 		return err
 	}
-	if !keepLogging && guards.logging {
+	if !options.KeepLogging && guards.logging {
 		if err := x.rejectLogging(ctx, importer, external); err != nil {
 			return err
 		}
 	}
 	if external {
+		if options.IgnoreSmoothMotion {
+			guards.smoothMotion = false
+		}
 		return x.startExternalGame(ctx, importer, guards)
 	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
 	}
-	return x.launchBuiltinGameLocked(ctx, importer, cfg)
+	return x.launchBuiltinGameLocked(ctx, importer, cfg, options)
 }
 
 // The legacy loader injects on its own schedule, so ReShade cannot be ordered ahead of it.

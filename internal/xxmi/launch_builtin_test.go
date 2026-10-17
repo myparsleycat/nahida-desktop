@@ -112,7 +112,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
 	}})
-	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg)
+	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg, LaunchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
 		t.Fatalf("launch error = %v", err)
 	}
@@ -452,11 +452,12 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 	registryMissing := fmt.Errorf("%w: genshin impact registry key is not found", errGimiDCRUnreadable)
 	registryDenied := errors.New("registry write denied")
 	states := []struct {
-		name     string
-		settings fakeLaunch
-		guardOff bool
-		want     string
-		wantErr  error
+		name               string
+		settings           fakeLaunch
+		guardOff           bool
+		ignoreSmoothMotion bool
+		want               string
+		wantErr            error
 	}{
 		{name: "settings off", want: "XXMI_ELEVATION_DENIED"},
 		{name: "DCR enabled", settings: fakeLaunch{dcr: true}, want: "XXMI_ELEVATION_DENIED"},
@@ -475,6 +476,15 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 		{
 			name: "smooth motion enabled", settings: fakeLaunch{smooth: true},
 			want: errSmoothMotionEnabled.Error(), wantErr: errSmoothMotionEnabled,
+		},
+		{
+			name: "ignore smooth motion", settings: fakeLaunch{smooth: true, dcr: true},
+			ignoreSmoothMotion: true, want: "XXMI_ELEVATION_DENIED",
+		},
+		{
+			name:               "ignore smooth motion preserves DCR failure",
+			settings:           fakeLaunch{smooth: true, dcr: true, disableDCRErr: registryDenied},
+			ignoreSmoothMotion: true, want: registryDenied.Error(), wantErr: registryDenied,
 		},
 		{
 			name: "DCR guard off", settings: fakeLaunch{dcr: true}, guardOff: true,
@@ -520,7 +530,12 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 				service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 				settings := state.settings
 				service.launchSettings = &settings
-				err = service.launchBuiltinGameLocked(t.Context(), "GIMI", cfg)
+				err = service.launchBuiltinGameLocked(
+					t.Context(),
+					"GIMI",
+					cfg,
+					LaunchOptions{IgnoreSmoothMotion: state.ignoreSmoothMotion},
+				)
 				want := state.want
 				if launch == "Direct" {
 					want = "XXMI_GAME_FOLDER_NOT_CONFIGURED"
@@ -558,6 +573,12 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 					}
 					return
 				}
+				if state.ignoreSmoothMotion {
+					if settings.dcrReads != 1 || settings.smoothReads != 0 || settings.smoothDisabled != 0 {
+						t.Fatalf("launch settings = %+v; want DCR checked and Smooth Motion unchanged", settings)
+					}
+					return
+				}
 				if settings.dcrReads != 1 || settings.smoothReads != 1 || settings.smoothDisabled != 0 {
 					t.Fatalf("launch settings = %+v; want blocker checks without disabling smooth motion", settings)
 				}
@@ -590,12 +611,12 @@ func TestWWMIDirectLaunchAsksForResourceTierOnce(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.GameFolder, "Engine"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg)
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{})
 	if !errors.Is(err, errWWMIResourceTierUndecided) {
 		t.Fatalf("launch error = %v", err)
 	}
 	cfg.WWMI.ResourceTierDecided = true
-	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg)
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{})
 	if err == nil || errors.Is(err, errWWMIResourceTierUndecided) {
 		t.Fatalf("launch after the decision = %v", err)
 	}

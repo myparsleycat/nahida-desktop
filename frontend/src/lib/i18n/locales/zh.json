@@ -601,12 +601,13 @@
         },
         "smooth-motion": {
           "title": "平滑运动已开启",
-          "description": "要正常应用模组，需要关闭平滑运动。要关闭并启动游戏吗？",
-          "confirm": "关闭并启动"
+          "description": "使用当前 DLL 时，开启平滑运动可能导致模组无法正常应用。您可以忽略并启动，或关闭平滑运动后启动。",
+          "confirm": "关闭并启动",
+          "ignore": "忽略并启动"
         },
         "launch-blockers": {
           "title": "启动前需要关闭设置",
-          "description": "动态角色分辨率和平滑运动已开启。要正常应用模组，需要将两者都关闭。要关闭并启动游戏吗？",
+          "description": "动态角色分辨率和平滑运动已开启，可能导致模组无法正常应用。您可以关闭两者，或仅忽略平滑运动并继续检查其他启动防护。",
           "confirm": "关闭并启动"
         },
         "wwmi-wounded": {
@@ -2064,7 +2065,7 @@
           "dcr": "动态角色分辨率",
           "dcrDescription": "原神的动态角色分辨率开启时，在启动前将其关闭。通过 XXMI Launcher 启动时会先询问。开启时模组无法正常应用。",
           "smoothMotion": "NVIDIA 平滑运动",
-          "smoothMotionDescription": "游戏开启了平滑运动时，在启动前询问是否关闭。开启时模组可能无法正常应用。",
+          "smoothMotionDescription": "游戏开启了平滑运动且无法确认 DLL 支持时，在启动前询问。可选择取消、仅本次忽略或关闭并启动。",
           "logging": "3DMigoto 日志",
           "loggingDescription": "3DMigoto 日志开启时，在启动前询问是否关闭。记录日志可能导致游戏性能严重下降。",
           "textures": "未压缩的纹理",

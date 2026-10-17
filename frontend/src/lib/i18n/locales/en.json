@@ -601,12 +601,13 @@
         },
         "smooth-motion": {
           "title": "Smooth Motion is on",
-          "description": "Mods will not apply correctly unless Smooth Motion is off. Turn it off and start the game?",
-          "confirm": "Turn off and start"
+          "description": "Mods may not apply correctly with Smooth Motion on when using the current DLL. You can ignore it and start, or turn Smooth Motion off before starting.",
+          "confirm": "Turn off and start",
+          "ignore": "Ignore and start"
         },
         "launch-blockers": {
           "title": "Settings need to be turned off before launch",
-          "description": "Dynamic Character Resolution and Smooth Motion are on. Mods will not apply correctly unless both are off. Turn them off and start the game?",
+          "description": "Dynamic Character Resolution and Smooth Motion are on, which may prevent mods from applying correctly. Turn both off, or ignore only Smooth Motion and continue checking the other launch guards.",
           "confirm": "Turn off and start"
         },
         "wwmi-wounded": {
@@ -2116,7 +2117,7 @@
           "dcr": "Dynamic Character Resolution",
           "dcrDescription": "Turns Genshin Impact's Dynamic Character Resolution off before starting, asking first when the game starts through XXMI Launcher. Mods do not apply correctly while it is on.",
           "smoothMotion": "NVIDIA Smooth Motion",
-          "smoothMotionDescription": "Asks to turn Smooth Motion off for the game before starting. Mods may not apply correctly while it is on.",
+          "smoothMotionDescription": "Asks before starting when Smooth Motion is on for the game and DLL support cannot be confirmed. Cancel, ignore it for this launch, or turn it off and start.",
           "logging": "3DMigoto logging",
           "loggingDescription": "Asks to turn 3DMigoto logging off before starting. Logging can slow the game down severely.",
           "textures": "Uncompressed textures",
