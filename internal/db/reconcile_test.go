@@ -570,19 +570,46 @@ func TestReconcileKeepsXXMICustomDLLWhenItFollowsProvider(t *testing.T) {
 func TestReconcileKeepsSignedXXMILibsProviderForPins(t *testing.T) {
 	t.Parallel()
 
+	const (
+		shared = `{"xxmiVersion":{"follow":"shared"}}`
+		latest = `{"xxmiVersion":{"follow":"latest"}}`
+		pinned = `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":""}`
+		unsafe = `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"","migoto":{"unsafeMode":true}}`
+		legacy = `{"mode":"legacy","xxmiVersion":{"pinned":"1.7.6"}}`
+		owned  = `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"myparsleycat"}`
+	)
 	for _, tc := range []struct {
-		name     string
-		version  string
-		provider string
-		config   string
-		want     string
+		name      string
+		settings  map[string]string
+		importers map[string]string
+		provider  string
+		want      map[string]string
 	}{
-		{"shared version pin", "1.7.6", "", `{"xxmiVersion":{"follow":"shared"}}`, "spectrumqt"},
-		{"own version pin", "", "", `{"xxmiVersion":{"pinned":"1.7.6"}}`, "spectrumqt"},
-		{"latest libraries", "", "", `{"xxmiVersion":{"follow":"latest"}}`, ""},
-		{"pin with its own provider", "", "", `{"xxmiVersion":{"pinned":"1.7.6"},"libsProvider":"spectrumqt"}`, ""},
-		{"pin in the legacy runtime", "", "", `{"mode":"legacy","xxmiVersion":{"pinned":"1.7.6"}}`, ""},
-		{"chosen provider", "1.7.6-nhd.1", "myparsleycat", `{"xxmiVersion":{"follow":"shared"}}`, "myparsleycat"},
+		{
+			name:      "shared version pin",
+			settings:  map[string]string{"xxmi_libs_version": "1.7.6"},
+			importers: map[string]string{"GIMI": shared, "SRMI": pinned},
+			provider:  "spectrumqt",
+			want:      map[string]string{"GIMI": shared, "SRMI": pinned},
+		},
+		{
+			// Only the importers on their own pins keep the signed libraries; followers take the new default.
+			name:      "own version pins among followers",
+			settings:  map[string]string{"xxmi_custom_dll": "aaaaaaaaaaaa"},
+			importers: map[string]string{"GIMI": pinned, "SRMI": unsafe, "ZZMI": shared, "WWMI": latest, "HIMI": legacy, "EFMI": owned},
+			want: map[string]string{
+				"GIMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"","libsProvider":"spectrumqt"}`,
+				"SRMI": `{"xxmiVersion":{"pinned":"1.7.6"},"customDll":"aaaaaaaaaaaa","libsProvider":"spectrumqt","migoto":{"unsafeMode":true}}`,
+				"ZZMI": shared, "WWMI": latest, "HIMI": legacy, "EFMI": owned,
+			},
+		},
+		{
+			name:      "chosen provider",
+			settings:  map[string]string{"xxmi_libs_version": "1.7.6-nhd.1", "xxmi_libs_provider": "myparsleycat"},
+			importers: map[string]string{"GIMI": pinned},
+			provider:  "myparsleycat",
+			want:      map[string]string{"GIMI": pinned},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -603,18 +630,15 @@ func TestReconcileKeepsSignedXXMILibsProviderForPins(t *testing.T) {
 			); err != nil {
 				t.Fatalf("clear flag: %v", err)
 			}
-			for key, value := range map[string]string{
-				"xxmi_libs_version": tc.version, "xxmi_libs_provider": tc.provider,
-			} {
-				if value == "" {
-					continue
-				}
+			for key, value := range tc.settings {
 				if err := client.Settings.Upsert(ctx, key, &value); err != nil {
 					t.Fatalf("seed %s: %v", key, err)
 				}
 			}
-			if err := client.XXMIImporters.Upsert(ctx, "GIMI", tc.config); err != nil {
-				t.Fatalf("seed importer: %v", err)
+			for key, config := range tc.importers {
+				if err := client.XXMIImporters.Upsert(ctx, key, config); err != nil {
+					t.Fatalf("seed %s: %v", key, err)
+				}
 			}
 
 			if err := client.Reconcile(ctx); err != nil {
@@ -628,8 +652,14 @@ func TestReconcileKeepsSignedXXMILibsProviderForPins(t *testing.T) {
 			if provider != nil {
 				got = *provider
 			}
-			if got != tc.want {
-				t.Fatalf("provider = %q, want %q", got, tc.want)
+			if got != tc.provider {
+				t.Fatalf("provider = %q, want %q", got, tc.provider)
+			}
+			for key, want := range tc.want {
+				row, err := client.XXMIImporters.Get(ctx, key)
+				if err != nil || row == nil || row.Config != want {
+					t.Fatalf("%s after migration = %+v, err = %v; want %s", key, row, err, want)
+				}
 			}
 		})
 	}
