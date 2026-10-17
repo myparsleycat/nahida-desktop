@@ -33,13 +33,13 @@ func compressDisabledZstd(
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
-	folders, err := disabledModFolders(roots)
+	folders, err := disabledModFolders(ctx, roots)
 	if err != nil {
 		return err
 	}
 	var files []compressionFile
 	for _, folder := range folders {
-		found, err := collectZstdFiles([]string{folder}, func(path string, info fs.FileInfo) bool {
+		found, err := collectZstdFiles(ctx, []string{folder}, func(path string, info fs.FileInfo) bool {
 			return info.Size() >= threshold && !isZstdArchivePath(path) && !isCompressionInProgressPath(path)
 		}, mark, onError)
 		files = append(files, found...)
@@ -88,7 +88,7 @@ func restoreZstdFiles(
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) error {
-	archives, err := collectZstdFiles(roots, func(path string, _ fs.FileInfo) bool {
+	archives, err := collectZstdFiles(ctx, roots, func(path string, _ fs.FileInfo) bool {
 		return isManagedZstdPath(path) && include(path)
 	}, mark, onError)
 	if err != nil {
@@ -222,7 +222,7 @@ func restoreZstdFolder(
 	)
 }
 
-func disabledModFolders(roots []string) ([]string, error) {
+func disabledModFolders(ctx context.Context, roots []string) ([]string, error) {
 	var folders []string
 	var errs []error
 	for _, root := range roots {
@@ -230,7 +230,15 @@ func disabledModFolders(roots []string) ([]string, error) {
 			folders = append(folders, root)
 			continue
 		}
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		release, err := diskio.AcquireDir(ctx, root)
+		if err != nil {
+			errs = append(errs, err)
+			break
+		}
+		err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
 				return nil
@@ -255,6 +263,7 @@ func disabledModFolders(roots []string) ([]string, error) {
 			}
 			return nil
 		})
+		release()
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -263,18 +272,19 @@ func disabledModFolders(roots []string) ([]string, error) {
 }
 
 func filesForZstd(folder string, threshold int64) ([]compressionFile, error) {
-	return walkCompressionFiles([]string{folder}, func(path string, info fs.FileInfo) bool {
+	return walkCompressionFiles(context.Background(), []string{folder}, func(path string, info fs.FileInfo) bool {
 		return info.Size() >= threshold && !isZstdArchivePath(path) && !isLegacyZstdArtifact(path)
 	})
 }
 
 func collectZstdFiles(
+	ctx context.Context,
 	roots []string,
 	accept func(string, fs.FileInfo) bool,
 	mark compressionMutationMarker,
 	onError func(string, error),
 ) ([]compressionFile, error) {
-	return walkCompressionFiles(roots, func(path string, info fs.FileInfo) bool {
+	return walkCompressionFiles(ctx, roots, func(path string, info fs.FileInfo) bool {
 		if !isLegacyZstdArtifact(path) {
 			return accept(path, info)
 		}

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/samber/lo"
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/diskio"
@@ -36,6 +37,7 @@ var (
 	wofSetFileDataLocationCall = nativeWofSetFileDataLocation
 	deleteExternalBackingCall  = nativeDeleteExternalBacking
 	wofStateCall               = nativeWofState
+	unallocatedFilesCall       = nativeUnallocatedFiles
 	fileIdentityCall           = nativeFileIdentity
 	volumeClusterSizeCall      = volumeClusterSize
 )
@@ -131,7 +133,7 @@ func restoreWOF(
 	if ownership.empty() {
 		return ctx.Err()
 	}
-	files, err := walkCompressionFiles(roots, func(string, fs.FileInfo) bool { return true })
+	files, err := walkCompressionFiles(ctx, roots, func(string, fs.FileInfo) bool { return true })
 	if err != nil {
 		return err
 	}
@@ -260,7 +262,7 @@ func xpressCompressionFiles(
 	roots []string,
 	declined *compressionDeclinedFiles,
 ) ([]compressionFile, error) {
-	files, scanErr := walkCompressionFiles(roots, func(path string, _ fs.FileInfo) bool {
+	files, scanErr := walkCompressionFiles(ctx, roots, func(path string, _ fs.FileInfo) bool {
 		_, skipped := xpressSkippedExtensions[strings.ToLower(filepath.Ext(path))]
 		return !skipped && !isCompressionInProgressPath(path)
 	})
@@ -296,6 +298,7 @@ func xpressCompressionFiles(
 			candidates = append(candidates, file)
 		}
 	}
+	candidates = withoutUnallocatedFiles(ctx, candidates)
 
 	// Files WOF already backs are left out before totals are published, so a
 	// watcher pass over a compressed mod neither reports work nor rewrites data.
@@ -320,6 +323,40 @@ func xpressCompressionFiles(
 	})
 	slices.SortFunc(result, func(a, b compressionFile) int { return strings.Compare(a.path, b.path) })
 	return result, err
+}
+
+// withoutUnallocatedFiles drops files whose folder listing reports data but no
+// allocation. WOF keeps a backed file's data outside its main stream, so one
+// listing per folder rules out already compressed files without opening each
+// of them, which costs a seek per file on a rotational disk. Files the listing
+// cannot rule out are still inspected one by one.
+func withoutUnallocatedFiles(ctx context.Context, files []compressionFile) []compressionFile {
+	byDir := lo.GroupBy(files, func(file compressionFile) string { return filepath.Dir(file.path) })
+	var mu sync.Mutex
+	skipped := make(map[string]struct{})
+	_ = runXpressJobs(ctx, lo.Keys(byDir), func(dir string) {
+		release, err := diskio.AcquireDir(ctx, dir)
+		if err != nil {
+			return
+		}
+		names, err := unallocatedFilesCall(dir)
+		release()
+		if err != nil {
+			return
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		for _, file := range byDir[dir] {
+			if _, ok := names[filepath.Base(file.path)]; ok {
+				skipped[file.path] = struct{}{}
+			}
+		}
+	})
+	return lo.Filter(files, func(file compressionFile, _ int) bool {
+		_, ok := skipped[file.path]
+		return !ok
+	})
 }
 
 func runXpressWorkers(
@@ -394,6 +431,67 @@ func nativeWofState(path string) (bool, uint32, uint32, error) {
 		return false, 0, 0, hresultError(hr)
 	}
 	return external != 0, provider, info.Algorithm, nil
+}
+
+// fileFullDirInfo is FILE_FULL_DIR_INFO.
+type fileFullDirInfo struct {
+	NextEntryOffset uint32
+	FileIndex       uint32
+	CreationTime    int64
+	LastAccessTime  int64
+	LastWriteTime   int64
+	ChangeTime      int64
+	EndOfFile       int64
+	AllocationSize  int64
+	FileAttributes  uint32
+	FileNameLength  uint32
+	EaSize          uint32
+	FileName        [1]uint16
+}
+
+// nativeUnallocatedFiles returns the names of files in dir that hold data but
+// no allocation in their main stream, as WOF-backed files do.
+func nativeUnallocatedFiles(dir string) (map[string]struct{}, error) {
+	dirPtr, err := windows.UTF16PtrFromString(dir)
+	if err != nil {
+		return nil, err
+	}
+	handle, err := windows.CreateFile(
+		dirPtr, windows.FILE_LIST_DIRECTORY,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = windows.CloseHandle(handle) }()
+
+	// uint64 elements keep the entries 8-byte aligned.
+	buffer := make([]uint64, 8<<10)
+	start := unsafe.Pointer(&buffer[0])
+	names := make(map[string]struct{})
+	class := uint32(windows.FileFullDirectoryRestartInfo)
+	for {
+		err := windows.GetFileInformationByHandleEx(handle, class, (*byte)(start), uint32(len(buffer)*8))
+		if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+			return names, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		class = windows.FileFullDirectoryInfo
+		for offset := uintptr(0); ; {
+			entry := (*fileFullDirInfo)(unsafe.Add(start, offset))
+			if entry.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY == 0 && entry.EndOfFile > 0 &&
+				entry.AllocationSize == 0 {
+				names[windows.UTF16ToString(unsafe.Slice(&entry.FileName[0], entry.FileNameLength/2))] = struct{}{}
+			}
+			if entry.NextEntryOffset == 0 {
+				break
+			}
+			offset += uintptr(entry.NextEntryOffset)
+		}
+	}
 }
 
 var errCompressionNotBeneficial = errors.New("compression not beneficial")

@@ -113,6 +113,33 @@ func TestXpressCompressionFilesSkipUnaddressableNames(t *testing.T) {
 	}
 }
 
+func TestXpressCompressionFilesRuleOutWofBackedFilesFromTheListing(t *testing.T) {
+	root := t.TempDir()
+	backed := writeCompressionTestFileAt(t, root, "backed.dds", bytes.Repeat([]byte("texture"), 64*1024))
+	plain := writeCompressionTestFileAt(t, root, "plain.dds", bytes.Repeat([]byte("texture"), 64*1024))
+	if err := wofCompress(backed); err != nil {
+		t.Skipf("WOF compression is unavailable on this test volume: %v", err)
+	}
+	t.Cleanup(func() { _ = wofDecompress(backed) })
+
+	previous := wofStateCall
+	t.Cleanup(func() { wofStateCall = previous })
+	wofStateCall = func(path string) (bool, uint32, uint32, error) {
+		if path == backed {
+			t.Errorf("WOF-backed file %q was opened", path)
+		}
+		return nativeWofState(path)
+	}
+
+	files, err := xpressCompressionFiles(t.Context(), []string{root}, &compressionDeclinedFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].path != plain {
+		t.Fatalf("files = %+v", files)
+	}
+}
+
 func TestApplyXpress4KSkipsWofBackedFilesBeforeTotals(t *testing.T) {
 	root := t.TempDir()
 	backed := writeCompressionTestFileAt(t, root, "backed.dds", bytes.Repeat([]byte{'x'}, 8192))

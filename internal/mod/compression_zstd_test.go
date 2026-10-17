@@ -76,7 +76,7 @@ func TestCompressionRootsResolveConfiguredSymlinkAndSkipNestedLinks(t *testing.T
 		t.Fatalf("roots = %v, want resolved target %s", roots, canonicalPath(t, target))
 	}
 
-	files, err := walkCompressionFiles(roots, func(string, os.FileInfo) bool { return true })
+	files, err := walkCompressionFiles(t.Context(), roots, func(string, os.FileInfo) bool { return true })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestDisabledModFoldersAndZstdThreshold(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	folders, err := disabledModFolders([]string{root})
+	folders, err := disabledModFolders(t.Context(), []string{root})
 	if err != nil {
 		t.Fatal(err)
 	}

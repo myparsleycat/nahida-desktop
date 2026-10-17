@@ -15,6 +15,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
@@ -1128,11 +1129,23 @@ func setCompressionTotals(files []compressionFile, setTotals func(int, int64)) {
 	setTotals(len(files), totalBytes)
 }
 
-func walkCompressionFiles(roots []string, accept func(string, fs.FileInfo) bool) ([]compressionFile, error) {
+func walkCompressionFiles(
+	ctx context.Context,
+	roots []string,
+	accept func(string, fs.FileInfo) bool,
+) ([]compressionFile, error) {
 	var files []compressionFile
 	var errs []error
 	for _, root := range roots {
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		release, err := diskio.AcquireDir(ctx, root)
+		if err != nil {
+			errs = append(errs, err)
+			break
+		}
+		err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
 				if entry != nil && entry.IsDir() {
@@ -1162,6 +1175,7 @@ func walkCompressionFiles(roots []string, accept func(string, fs.FileInfo) bool)
 			}
 			return nil
 		})
+		release()
 		if err != nil {
 			errs = append(errs, err)
 		}
