@@ -240,15 +240,6 @@ func (s *Setting) setStoredBounds(ctx context.Context, key string, bounds Bounds
 	return settingError(s.client.Settings.Upsert(ctx, key, &value), "bounds-set", "write", key, infra.DiagnosticError)
 }
 
-func (s *Setting) GetImageCacheSize(ctx context.Context) (int64, error) {
-	size, err := s.client.ImageCache.SumSize(ctx)
-	return size, settingError(err, "image-cache", "measure", "", infra.DiagnosticError)
-}
-
-func (s *Setting) ClearImageCache(ctx context.Context) error {
-	return settingError(s.client.ImageCache.DeleteAll(ctx), "image-cache", "clear", "", infra.DiagnosticError)
-}
-
 // rendererStatePrefix keeps renderer-owned rows apart from backend state in app_state.
 const rendererStatePrefix = "renderer:"
 

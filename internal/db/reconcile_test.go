@@ -31,6 +31,40 @@ func TestReconcileEmptyDatabaseCreatesElectronSchema(t *testing.T) {
 	}
 }
 
+func TestReconcileRemovesImageCache(t *testing.T) {
+	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			t.Parallel()
+			client := mustNewTemp(t)
+			ctx := t.Context()
+			if legacy {
+				if err := client.exec(ctx, `CREATE TABLE "image_cache" (
+"hash" TEXT PRIMARY KEY NOT NULL, "image" BLOB NOT NULL, "size" INTEGER NOT NULL DEFAULT 0)`); err != nil {
+					t.Fatal(err)
+				}
+				if err := client.exec(ctx, `INSERT INTO "image_cache" VALUES ('legacy', X'010203', 3)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for range 2 {
+				if err := client.Reconcile(ctx); err != nil {
+					t.Fatal(err)
+				}
+				tables, err := client.listUserTables(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, exists := tables["image_cache"]; exists {
+					t.Fatal("obsolete image_cache table remains after reconcile")
+				}
+				assertElectronSchema(t, client)
+			}
+		})
+	}
+}
+
 func TestReconcileCreatesMissingTables(t *testing.T) {
 	t.Parallel()
 

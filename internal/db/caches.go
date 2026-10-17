@@ -8,47 +8,6 @@ import (
 	"github.com/samber/lo"
 )
 
-type ImageCacheStore struct{ c *Client }
-
-func (s ImageCacheStore) GetByHash(ctx context.Context, hash string) (*ImageCacheRow, error) {
-	var row ImageCacheRow
-	err := s.c.db.QueryRowContext(ctx, `SELECT "hash", "image", "size" FROM "image_cache" WHERE "hash" = ? LIMIT 1`, hash).
-		Scan(&row.Hash, &row.Image, &row.Size)
-	if isNoRows(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
-}
-
-func (s ImageCacheStore) InsertIgnore(ctx context.Context, row ImageCacheRow) error {
-	return s.c.exec(
-		ctx,
-		`INSERT OR IGNORE INTO "image_cache" ("hash", "image", "size") VALUES (?, ?, ?)`,
-		row.Hash,
-		row.Image,
-		row.Size,
-	)
-}
-
-func (s ImageCacheStore) SumSize(ctx context.Context) (int64, error) {
-	var total sql.NullInt64
-	err := s.c.db.QueryRowContext(ctx, `SELECT SUM("size") FROM "image_cache"`).Scan(&total)
-	if err != nil {
-		return 0, err
-	}
-	if !total.Valid {
-		return 0, nil
-	}
-	return total.Int64, nil
-}
-
-func (s ImageCacheStore) DeleteAll(ctx context.Context) error {
-	return s.c.exec(ctx, `DELETE FROM "image_cache"`)
-}
-
 type TouchProfileVisionCacheStore struct{ c *Client }
 
 func (s TouchProfileVisionCacheStore) Get(ctx context.Context, cacheKey string) (*TouchProfileVisionCacheRow, error) {

@@ -1946,14 +1946,10 @@
           "select": "レベルを選択"
         },
         "other": {
-          "title": "その他",
           "moveTransferPageWhenStartTransfer": "転送開始時にページ移動",
           "moveTransferPageWhenStartTransferDescription": "ファイル転送が始まると自動的に転送管理ページへ移動します。",
           "powerSaveBlockInTransfer": "スリープモード防止",
-          "powerSaveBlockInTransferDescription": "転送または同期中はシステムが待機状態になるのを防ぎます。",
-          "imageCacheTitle": "画像キャッシュ",
-          "imageCacheDescription": "プレビュー画像キャッシュをクリアします",
-          "imageCacheClear": "キャッシュクリア"
+          "powerSaveBlockInTransferDescription": "転送または同期中はシステムが待機状態になるのを防ぎます。"
         }
       },
       "mod": {

@@ -389,7 +389,7 @@ func (rt *runtime) services() []application.Service {
 }
 
 func isSettingWrite(name string) bool {
-	return strings.HasPrefix(name, "Set") || name == "ClearImageCache" || name == "AdvancedSet"
+	return strings.HasPrefix(name, "Set") || name == "AdvancedSet"
 }
 
 func newGuardedService[T any](

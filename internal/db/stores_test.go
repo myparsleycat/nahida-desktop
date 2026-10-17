@@ -226,27 +226,6 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("boolean items: %+v %v", items, err)
 	}
 
-	blob := []byte{0, 1, 2, 3, 255}
-	if err := client.ImageCache.InsertIgnore(
-		ctx,
-		ImageCacheRow{Hash: "abc", Image: blob, Size: int64(len(blob))},
-	); err != nil {
-		t.Fatalf("image insert: %v", err)
-	}
-	if err := client.ImageCache.InsertIgnore(ctx, ImageCacheRow{Hash: "abc", Image: []byte{9}, Size: 1}); err != nil {
-		t.Fatalf("image insert ignore: %v", err)
-	}
-	cached, err := client.ImageCache.GetByHash(ctx, "abc")
-	if err != nil || cached == nil || !bytes.Equal(cached.Image, blob) || cached.Size != int64(len(blob)) {
-		t.Fatalf("blob round-trip: %+v %v", cached, err)
-	}
-	if sum, err := client.ImageCache.SumSize(ctx); err != nil || sum != int64(len(blob)) {
-		t.Fatalf("sum size: %d %v", sum, err)
-	}
-	if err := client.ImageCache.DeleteAll(ctx); err != nil {
-		t.Fatalf("delete images: %v", err)
-	}
-
 	if err := client.TouchProfileVisionCache.Upsert(
 		ctx,
 		TouchProfileVisionCacheRow{CacheKey: "k", Result: "{}", UpdatedAt: "now"},

@@ -1,6 +1,6 @@
 package db
 
-const AppSchemaVersion = 9
+const AppSchemaVersion = 10
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
@@ -9,6 +9,7 @@ const (
 	SchemaKeyXXMILibsSharedDefault       = "xxmi_libs_shared_default"
 	SchemaKeyXXMICustomDLLFollowProvider = "xxmi_custom_dll_follow_provider"
 	SchemaKeyXXMILibsProviderPinned      = "xxmi_libs_provider_pinned"
+	SchemaKeyImageCacheRemoved           = "image_cache_removed"
 	NTEImporter                          = "NTE"
 	NTEGameExeKeepSuffix                 = "%htgame.exe"
 	// BlenderMCPTransport names the built-in Blender compatibility layer. It is the transport value
@@ -208,14 +209,6 @@ var TableSpecs = []TableSpec{
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
 			},
-		},
-	},
-	{
-		Name: "image_cache",
-		Columns: []ColumnSpec{
-			{Name: "hash", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "image", Type: TypeBlob, NotNull: true},
-			{Name: "size", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
 		},
 	},
 	{
@@ -495,12 +488,6 @@ type ModClassificationGroupRow struct {
 type ModClassificationWithGroups struct {
 	ModClassificationRow
 	Groups []ModClassificationGroupRow
-}
-
-type ImageCacheRow struct {
-	Hash  string
-	Image []byte
-	Size  int64
 }
 
 type TouchProfileVisionCacheRow struct {

@@ -123,7 +123,24 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateXXMICustomDLLFollowProvider(ctx); err != nil {
 		return err
 	}
-	return c.migrateXXMILibsProviderPinned(ctx)
+	if err := c.migrateXXMILibsProviderPinned(ctx); err != nil {
+		return err
+	}
+	return c.removeLegacyImageCache(ctx)
+}
+
+func (c *Client) removeLegacyImageCache(ctx context.Context) error {
+	removed, err := c.SchemaState.Get(ctx, SchemaKeyImageCacheRemoved)
+	if err != nil {
+		return err
+	}
+	if removed != nil && removed.Value == "1" {
+		return nil
+	}
+	if err := c.exec(ctx, `DROP TABLE IF EXISTS "image_cache"`); err != nil {
+		return fmt.Errorf("remove legacy image cache: %w", err)
+	}
+	return c.SchemaState.Upsert(ctx, SchemaKeyImageCacheRemoved, "1", time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 // seedBlenderMCPDefault publishes the built-in Blender transport as a ready-made MCP server entry.
