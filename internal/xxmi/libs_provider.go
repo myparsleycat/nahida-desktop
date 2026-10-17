@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	defaultLibsProvider   = "spectrumqt"
+	signedLibsProvider    = "spectrumqt"
+	defaultLibsProvider   = "myparsleycat"
 	sharedLibsProviderKey = "xxmi_libs_provider"
 	providerDLLHashesKey  = "xxmi_libs_provider_hashes"
 	providerDLLMetadata   = "source.json"
@@ -65,9 +66,9 @@ func providerFileSizeLimit(name string) int64 {
 }
 
 var libsProviders = []libsProviderSpec{
-	{id: defaultLibsProvider, repo: libsRepo},
+	{id: signedLibsProvider, repo: libsRepo},
 	{
-		id:             "myparsleycat",
+		id:             defaultLibsProvider,
 		repo:           github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
 		overlayPackage: "xxmi-libs-myparsleycat",
 		versionMark:    "-nhd.",
@@ -108,7 +109,7 @@ func lookupLibsProvider(id string) (libsProviderSpec, bool) {
 	return libsProviderSpec{}, false
 }
 
-// libsProviderIDs lists the selectable providers, the default one first.
+// libsProviderIDs lists the selectable providers, the signed one first.
 func libsProviderIDs() []string {
 	ids := make([]string, 0, len(libsProviders))
 	for _, spec := range libsProviders {
@@ -303,7 +304,7 @@ func (x *XXMI) sharedLibsProvider(ctx context.Context) (libsProviderSpec, error)
 // libsProvider returns the provider whose libraries an importer deploys. Only the XXMI runtime has one; an
 // importer without its own choice follows the shared provider.
 func (x *XXMI) libsProvider(ctx context.Context, cfg ImporterConfig) (libsProviderSpec, error) {
-	fallback, _ := lookupLibsProvider(defaultLibsProvider)
+	fallback, _ := lookupLibsProvider(signedLibsProvider)
 	if cfg.Mode != RuntimeXXMI {
 		return fallback, nil
 	}
@@ -325,7 +326,7 @@ func (x *XXMI) deployedLibsProvider(ctx context.Context, cfg ImporterConfig) (li
 		return libsProviderSpec{}, err
 	}
 	if custom {
-		fallback, _ := lookupLibsProvider(defaultLibsProvider)
+		fallback, _ := lookupLibsProvider(signedLibsProvider)
 		return fallback, nil
 	}
 	return x.libsProvider(ctx, cfg)

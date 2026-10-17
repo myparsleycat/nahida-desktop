@@ -285,6 +285,9 @@ func (x *XXMI) ImportExternalLauncher(
 				cfg.ExtraLibraries.Paths[i] = filepath.Join(path, library)
 			}
 		}
+		if cfg.EFMI != nil && cfg.EFMI.LauncherFolder != "" && !filepath.IsAbs(cfg.EFMI.LauncherFolder) {
+			cfg.EFMI.LauncherFolder = filepath.Join(path, cfg.EFMI.LauncherFolder)
+		}
 		if err := ValidateImporterSettings(key, cfg); err != nil {
 			return nil, fmt.Errorf("import %s config: %w", key, err)
 		}
@@ -439,6 +442,12 @@ func (x *XXMI) ImportExternalLauncher(
 		"xxmi_auto_update":         &autoUpdateValue,
 		"xxmi_include_prereleases": &prereleasesValue,
 		sharedLibsVersionKey:       &sharedLibsValue,
+	}
+	// The launcher ran the signed libraries, and a pin names their release, which the default provider may
+	// have no release built on.
+	if sharedLibsValue != "" {
+		provider := signedLibsProvider
+		settings[sharedLibsProviderKey] = &provider
 	}
 	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, settings); err != nil {
 		return nil, err
@@ -596,6 +605,9 @@ func mapExternalImporterSettings(cfg *ImporterConfig, importer, migoto map[strin
 			cfg.WWMI.ResourceTier = externalEnumValue(value, "UHD", "HD", "SD")
 		}
 		cfg.WWMI.ResourceTierDecided = getBool("resource_tier_warned", cfg.WWMI.ResourceTierDecided)
+	}
+	if cfg.EFMI != nil {
+		cfg.EFMI.LauncherFolder = strings.TrimSpace(getString("launcher_folder"))
 	}
 	cfg.D3D11ModeNoticeShown = getBool("d3d11_mode_cmd_args_warned", cfg.D3D11ModeNoticeShown)
 	return nil

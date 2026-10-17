@@ -76,7 +76,7 @@ type Overview struct {
 	SharedCustomDLL string `json:"sharedCustomDll"`
 	// SharedLibsProvider is the XXMI libraries provider of importers that do not choose their own.
 	SharedLibsProvider string `json:"sharedLibsProvider"`
-	// LibsProviders lists the selectable provider IDs, the default one first.
+	// LibsProviders lists the selectable provider IDs, the signed one first.
 	LibsProviders  []string            `json:"libsProviders"`
 	CustomDLLs     []CustomDLL         `json:"customDlls"`
 	Importers      []EnabledImporter   `json:"importers"`

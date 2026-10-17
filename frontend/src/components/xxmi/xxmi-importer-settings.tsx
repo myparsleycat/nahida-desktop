@@ -127,7 +127,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
-  // A legacy runtime and a user-provided DLL deploy the default provider's signed libraries, so that is the
+  // A legacy runtime and a user-provided DLL deploy the first provider's signed libraries, so that is the
   // provider whose releases their libraries version names.
   // The importer's own DLL comes first; the shared one reaches importers that follow the shared provider.
   const selectedDll = (cfg: ImporterConfig) =>
@@ -504,6 +504,18 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       )}
                       onValueChange={(gameLaunch) => setConfig({ ...config, gameLaunch })}
                     />
+                    {config.efmi && config.gameLaunch === "Direct" && (
+                      <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                        <PathField
+                          label={t("page.setting.xxmi.builtin.launcherFolder")}
+                          description={t("page.setting.xxmi.builtin.launcherFolderDescription")}
+                          value={config.efmi.launcherFolder}
+                          onValueChange={(launcherFolder) =>
+                            setConfig({ ...config, efmi: { launcherFolder } })
+                          }
+                        />
+                      </div>
+                    )}
                     {config.gameLaunch === "Custom" && (
                       <div className="space-y-3 rounded-md bg-muted/50 p-3">
                         <SectionRow

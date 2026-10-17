@@ -93,6 +93,7 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	x := New()
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
@@ -411,6 +412,7 @@ func TestCheckUpdatesResolvesXXMILibrariesWithoutDeployedSource(t *testing.T) {
 			if err := client.Reconcile(ctx); err != nil {
 				t.Fatal(err)
 			}
+			useSignedSharedProvider(t, client)
 			x := New()
 			x.UseClient(client)
 			useBuiltinLauncher(t, x)
@@ -501,6 +503,7 @@ func TestCheckUpdatesFollowsSharedAndImporterXXMILibrariesSelection(t *testing.T
 			if err := client.Reconcile(ctx); err != nil {
 				t.Fatal(err)
 			}
+			useSignedSharedProvider(t, client)
 			x := New()
 			x.UseClient(client)
 			useBuiltinLauncher(t, x)
@@ -556,6 +559,7 @@ func TestAutoUpdateLeavesNotifyingXXMILibrariesPinInPlace(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	x := New()
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
@@ -653,6 +657,7 @@ func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	checks := 0
 	x := NewWithOptions(Options{EventEmit: func(name string, _ ...any) {
 		if name == "xxmi:updates" {
@@ -706,6 +711,7 @@ func TestLaunchUpdatesAsksOnlyForInstallablePackagesWhenNotifying(t *testing.T) 
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	x := New()
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)

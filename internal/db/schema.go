@@ -8,6 +8,7 @@ const (
 	SchemaKeyBlenderMCPDefaultSeeded     = "blender_mcp_default_seeded"
 	SchemaKeyXXMILibsSharedDefault       = "xxmi_libs_shared_default"
 	SchemaKeyXXMICustomDLLFollowProvider = "xxmi_custom_dll_follow_provider"
+	SchemaKeyXXMILibsProviderPinned      = "xxmi_libs_provider_pinned"
 	NTEImporter                          = "NTE"
 	NTEGameExeKeepSuffix                 = "%htgame.exe"
 	// BlenderMCPTransport names the built-in Blender compatibility layer. It is the transport value

@@ -405,7 +405,7 @@ func TestWWMILaunchTargetFollowsLaunchOptions(t *testing.T) {
 				GameLaunch: tc.launch, ProcessStartMethod: "Native", XXMIDLLInjectMode: "Inject",
 				WWMI: &WWMIOptions{ResourceTier: "UHD"},
 			}
-			spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe", true)
+			spec, err := New().builtinLaunchSpec(context.Background(), "WWMI", cfg, wrapper, "Client-Win64-Shipping.exe", "", true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -614,7 +614,7 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 		ImporterFolder: root, Mode: RuntimeLegacy, GameLaunch: "Custom", XXMIDLLInjectMode: "Bypass",
 		CustomLaunch: CustomLaunch{Command: "start game"},
 	}
-	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", true)
+	spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,7 +626,7 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 	cfg.ImporterFolder = filepath.Join(root, "not installed")
 	for _, mode := range []RuntimeMode{RuntimeLegacy, RuntimeXXMI} {
 		cfg.Mode = mode
-		spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", false)
+		spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, gameExe, "game.exe", "", false)
 		if err != nil || spec.ModuleDLL != "" || spec.LoaderDLL.Path != "" || spec.LegacyLoader.Path != "" {
 			t.Fatalf("%s bypass spec without an importer = %+v, %v", mode, spec, err)
 		}
@@ -665,7 +665,7 @@ func TestSRMIDirectLaunchLeavesGameFolderOfEpicInstall(t *testing.T) {
 				ImporterFolder: root, Mode: RuntimeLegacy, GameLaunch: tc.launch, XXMIDLLInjectMode: "Bypass",
 			}
 			spec, err := New().builtinLaunchSpec(
-				context.Background(), "SRMI", cfg, filepath.Join(gameFolder, "StarRail.exe"), "StarRail.exe", true,
+				context.Background(), "SRMI", cfg, filepath.Join(gameFolder, "StarRail.exe"), "StarRail.exe", "", true,
 			)
 			want := gameFolder
 			if tc.epic {
@@ -701,6 +701,7 @@ func TestInjectionModeControlsLaunchAndDLLUsage(t *testing.T) {
 				cfg,
 				filepath.Join(root, "game.exe"),
 				"game.exe",
+				"",
 				true,
 			)
 			if err != nil || spec.InjectMode != mode || spec.UseHook != (mode == "Hook") {
@@ -794,7 +795,7 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			cfg.Mode, cfg.ImporterFolder, cfg.GameLaunch = RuntimeLegacy, root, tc.launch
 			cfg.CustomLaunch.Command = "start game"
 			spec, err := New().builtinLaunchSpec(
-				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", true,
+				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", "", true,
 			)
 			if err != nil || spec.StartMethod != tc.method || spec.CustomLaunchCmd != tc.command {
 				t.Fatalf("launch spec = %+v, %v", spec, err)
@@ -804,7 +805,7 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			}
 
 			// A custom command or a manual start works without a located game.
-			spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, "", "GenshinImpact.exe", true)
+			spec, err = New().builtinLaunchSpec(context.Background(), "GIMI", cfg, "", "GenshinImpact.exe", "", true)
 			if err != nil || spec.WorkDir != root {
 				t.Fatalf("launch spec without a game = %+v, %v", spec, err)
 			}
@@ -840,7 +841,7 @@ func TestNativeLaunchSpecDoesNotRequireLoader(t *testing.T) {
 				if bypass {
 					cfg.XXMIDLLInjectMode = "Bypass"
 				}
-				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", true)
+				spec, err := New().builtinLaunchSpec(context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", "", true)
 				if err != nil {
 					t.Fatal(err)
 				}

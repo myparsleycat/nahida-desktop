@@ -172,6 +172,10 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 		// skips the steps that edit game files.
 		cfg.GameFolder = ""
 	}
+	parentExe, err := x.efmiParentExe(key, cfg, gameExe)
+	if err != nil {
+		return err
+	}
 	processName := launchProcessName(cfg, packageSpec, gameExe)
 	progress("auto-update")
 	if err := x.autoUpdateForLaunch(ctx, key); err != nil {
@@ -381,7 +385,7 @@ func (x *XXMI) launchBuiltinGameLocked(ctx context.Context, key string, cfg Impo
 	if err := elevationDenied(lease.Hold(ctx)); err != nil {
 		return err
 	}
-	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, migotoDLLUsed)
+	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, parentExe, migotoDLLUsed)
 	if err != nil {
 		return err
 	}
@@ -694,7 +698,7 @@ func (x *XXMI) builtinLaunchSpec(
 	ctx context.Context,
 	key string,
 	cfg ImporterConfig,
-	gameExe, processName string,
+	gameExe, processName, parentExe string,
 	migotoDLLUsed bool,
 ) (inject.LaunchSpec, error) {
 	if _, ok := lookupImporterPackage(key); !ok {
@@ -730,6 +734,7 @@ func (x *XXMI) builtinLaunchSpec(
 		InjectMode: cfg.XXMIDLLInjectMode, UseHook: cfg.XXMIDLLInjectMode == "Hook",
 		TimeoutSeconds:  cfg.ProcessTimeout,
 		InjectionMethod: cfg.InjectionMethod,
+		ParentExe:       parentExe,
 	}
 	if migotoDLLUsed {
 		spec.ModuleDLL = filepath.Join(cfg.ImporterFolder, "d3d11.dll")

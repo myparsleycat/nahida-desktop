@@ -71,6 +71,15 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	if err := os.WriteFile(gameExe, []byte("test game"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	gamesExe := filepath.Join(root, "1.6.0", "Games.exe")
+	if err := os.MkdirAll(filepath.Dir(gamesExe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{filepath.Join(root, "Launcher.exe"), gamesExe} {
+		if err := os.WriteFile(file, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cacheRoot, err := xxmiCacheRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -109,6 +118,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	service.UseClient(client)
 	service.launchSettings = &fakeLaunch{}
 	service.findProcess = noGameProcess
+	service.gryphlinkFolders = func() []string { return nil }
 	useBuiltinLauncher(t, service)
 	if err := service.SaveImporterConfig(ctx, "EFMI", cfg); err != nil {
 		t.Fatal(err)
@@ -130,7 +140,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		t.Fatalf("launch warnings = %v; want %v", warnings, helper.warnings)
 	}
 	if helper.calls != 1 || helper.spec.Mode != inject.ModeLegacy || helper.spec.StartExe != gameExe ||
-		helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
+		helper.spec.ParentExe != gamesExe || helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
 		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, helper.spec)
 	}
 	if helper.leases != 1 || helper.released != 1 {

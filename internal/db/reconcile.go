@@ -120,7 +120,10 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateXXMILibsSharedDefault(ctx); err != nil {
 		return err
 	}
-	return c.migrateXXMICustomDLLFollowProvider(ctx)
+	if err := c.migrateXXMICustomDLLFollowProvider(ctx); err != nil {
+		return err
+	}
+	return c.migrateXXMILibsProviderPinned(ctx)
 }
 
 // seedBlenderMCPDefault publishes the built-in Blender transport as a ready-made MCP server entry.
@@ -790,6 +793,75 @@ WHERE NOT `+followsShared+`
 	return c.SchemaState.Upsert(
 		ctx,
 		SchemaKeyXXMICustomDLLFollowProvider,
+		"1",
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
+}
+
+// migrateXXMILibsProviderPinned keeps the signed provider for libraries pinned while it was the unset default.
+// The default became the fork, which may have no release built on such a pin, so following it would fail
+// launches that worked. Whatever follows the latest libraries moves to the new default.
+func (c *Client) migrateXXMILibsProviderPinned(ctx context.Context) error {
+	migrated, err := c.SchemaState.Get(ctx, SchemaKeyXXMILibsProviderPinned)
+	if err != nil {
+		return err
+	}
+	if migrated != nil && migrated.Value == "1" {
+		return nil
+	}
+
+	if err := c.withImmediate(ctx, func(q queryExec) error {
+		var sharedProvider, sharedVersion, sharedDLL string
+		if err := q.QueryRowContext(ctx, `
+SELECT COALESCE((SELECT trim("value") FROM "setting" WHERE "key" = 'xxmi_libs_provider'), ''),
+       COALESCE((SELECT trim("value") FROM "setting" WHERE "key" = 'xxmi_libs_version'), ''),
+       COALESCE((SELECT trim("value") FROM "setting" WHERE "key" = 'xxmi_custom_dll'), '')`,
+		).Scan(&sharedProvider, &sharedVersion, &sharedDLL); err != nil {
+			return err
+		}
+		if sharedProvider != "" {
+			return nil
+		}
+		if sharedVersion != "" {
+			_, err := q.ExecContext(
+				ctx,
+				`INSERT INTO "setting" ("key", "value") VALUES ('xxmi_libs_provider', 'spectrumqt')
+ON CONFLICT("key") DO UPDATE SET "value" = excluded."value"`,
+			)
+			return err
+		}
+
+		// An importer pins its own version when it stores one without following the shared version, and only
+		// the XXMI runtime without its own provider follows the shared one.
+		const ownPin = `COALESCE(json_extract("config", '$.mode'), 'xxmi') = 'xxmi'
+  AND COALESCE(json_extract("config", '$.libsProvider'), '') = ''
+  AND COALESCE(json_extract("config", '$.xxmiVersion.follow'), '') = ''
+  AND COALESCE(json_extract("config", '$.xxmiVersion.pinned'), '') <> ''`
+
+		// A provider of its own stops the shared custom DLL from reaching the importer, so the one it launched
+		// in unsafe mode becomes its own.
+		if sharedDLL != "" {
+			if _, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.customDll', ?)
+WHERE `+ownPin+`
+  AND json_extract("config", '$.migoto.unsafeMode') = 1
+  AND COALESCE(json_extract("config", '$.customDll'), '') = ''`, sharedDLL); err != nil {
+				return err
+			}
+		}
+		_, err := q.ExecContext(ctx, `
+UPDATE "xxmi_importers"
+SET "config" = json_set("config", '$.libsProvider', 'spectrumqt')
+WHERE `+ownPin)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migrate xxmi libraries provider pins: %w", err)
+	}
+
+	return c.SchemaState.Upsert(
+		ctx,
+		SchemaKeyXXMILibsProviderPinned,
 		"1",
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)

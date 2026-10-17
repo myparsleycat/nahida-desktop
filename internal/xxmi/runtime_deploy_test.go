@@ -494,6 +494,7 @@ func TestResolveLibsVersionFetchesLatestBeforeUpdateCheck(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if !strings.Contains(request.URL.Path, "XXMI-Libs-Package") {
 			t.Errorf("unexpected release request %s", request.URL)
@@ -528,6 +529,7 @@ func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
+	useSignedSharedProvider(t, client)
 	x := NewWithOptions(Options{})
 	x.UseClient(client)
 	folder := t.TempDir()

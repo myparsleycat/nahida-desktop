@@ -528,7 +528,7 @@ func TestBuiltinLaunchAllowsSmoothMotionWithSupportingProviderDLL(t *testing.T) 
 		blocked       bool
 	}{
 		{"supporting provider", "myparsleycat", true, false},
-		{"signed libraries", defaultLibsProvider, true, true},
+		{"signed libraries", signedLibsProvider, true, true},
 		{"launch without the XXMI DLL", "myparsleycat", false, true},
 	} {
 		cfg.LibsProvider = tc.provider
@@ -578,8 +578,8 @@ func TestDX12WarningFollowsProviderDLLSupport(t *testing.T) {
 		warned   bool
 	}{
 		{"supporting provider", "myparsleycat", true, false},
-		{"signed libraries", defaultLibsProvider, true, true},
-		{"DirectX 11 launch", defaultLibsProvider, false, false},
+		{"signed libraries", signedLibsProvider, true, true},
+		{"DirectX 11 launch", signedLibsProvider, false, false},
 	} {
 		cfg.LibsProvider, cfg.SkipD3D11Switch = tc.provider, tc.skipD3D
 		warning := service.dx12Warning(ctx, cfg)
