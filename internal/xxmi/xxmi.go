@@ -174,6 +174,9 @@ type XXMI struct {
 	epicManifest      func() string
 	runPlatformClient func(exe string, args ...string) error
 	openLaunchURI     func(uri string) error
+	// gryphlinkFolders lists installed GRYPHLINK launcher folders from the registry and known paths; tests
+	// replace it so the host installation is not read.
+	gryphlinkFolders func() []string
 }
 
 func New() *XXMI {
@@ -204,6 +207,7 @@ func NewWithOptions(opts Options) *XXMI {
 	x.epicManifest = gameplatform.EpicManifestPath
 	x.runPlatformClient = startPlatformClient
 	x.openLaunchURI = openShellURI
+	x.gryphlinkFolders = installedGryphlinkFolders
 	return x
 }
 

@@ -761,6 +761,10 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.WorkDir = folder
 		spec.StartArgs = nil
 	}
+	spec.ParentExe, err = x.efmiParentExe(key, cfg, gameExe)
+	if err != nil {
+		return inject.LaunchSpec{}, err
+	}
 	switch cfg.GameLaunch {
 	case "Custom":
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command

@@ -45,6 +45,8 @@ const launchErrorCodes = [
   "XXMI_LOADER_TOO_OLD",
   "XXMI_INJECT_FAILED",
   "XXMI_GAME_START_TIMEOUT",
+  // Keep in sync with errGameLauncherNotFound in internal/xxmi/efmi_launcher_windows.go.
+  "XXMI_GAME_LAUNCHER_NOT_FOUND",
   "XXMI_LEGACY_LOADER_RUNNING",
   "XXMI_LEGACY_LOADER_EXITED",
   "XXMI_LEGACY_LOADER_NOT_READY",

@@ -504,6 +504,18 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       )}
                       onValueChange={(gameLaunch) => setConfig({ ...config, gameLaunch })}
                     />
+                    {config.efmi && config.gameLaunch === "Direct" && (
+                      <div className="space-y-3 rounded-md bg-muted/50 p-3">
+                        <PathField
+                          label={t("page.setting.xxmi.builtin.launcherFolder")}
+                          description={t("page.setting.xxmi.builtin.launcherFolderDescription")}
+                          value={config.efmi.launcherFolder}
+                          onValueChange={(launcherFolder) =>
+                            setConfig({ ...config, efmi: { launcherFolder } })
+                          }
+                        />
+                      </div>
+                    )}
                     {config.gameLaunch === "Custom" && (
                       <div className="space-y-3 rounded-md bg-muted/50 p-3">
                         <SectionRow

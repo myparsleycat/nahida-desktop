@@ -41,6 +41,9 @@ type LaunchSpec struct {
 	StartMethod     string      `json:"startMethod"`
 	Priority        string      `json:"priority"`
 	CustomLaunchCmd string      `json:"customLaunchCmd"`
+	// ParentExe is started suspended and hidden for the length of the launch so the game process is created as
+	// its child, for games that exit unless their official launcher started them.
+	ParentExe string `json:"parentExe"`
 	// ReadyEvent names an event the helper signals once the game may start. The caller then starts
 	// the game itself, which keeps a store client it opens from running elevated.
 	ReadyEvent      string       `json:"readyEvent"`
@@ -54,6 +57,9 @@ type LaunchSpec struct {
 	ExtraDLLs      []string     `json:"extraDLLs"`
 	LegacyLoader   VerifiedFile `json:"legacyLoader"`
 	TimeoutSeconds int          `json:"timeoutSeconds"`
+
+	// parent is the running ParentExe process, set by Launch for the start of the game.
+	parent *parentProcess
 }
 
 type LaunchResult struct {
@@ -96,6 +102,15 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 		}
 		if spec.CustomLaunchCmd != "" || spec.StartMethod == "Manual" {
 			return errors.New("ready event cannot be combined with another launch")
+		}
+	}
+
+	if spec.ParentExe != "" {
+		if spec.StartMethod != "Native" || spec.CustomLaunchCmd != "" || spec.ReadyEvent != "" {
+			return errors.New("parent executable requires a native start of the game")
+		}
+		if err := validateRegularLocalFile(spec.ParentExe); err != nil {
+			return fmt.Errorf("parent executable: %w", err)
 		}
 	}
 

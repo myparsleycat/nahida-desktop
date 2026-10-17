@@ -115,6 +115,11 @@ type WWMIOptions struct {
 	RetiredEngineOptionsPending bool `json:"retiredEngineOptionsPending,omitempty"`
 }
 
+type EFMIOptions struct {
+	// LauncherFolder is the GRYPHLINK launcher folder a direct launch starts the game under; empty detects it.
+	LauncherFolder string `json:"launcherFolder"`
+}
+
 // importerConfigSchema is the stored ImporterConfig layout. Version 2 follows XXMI Launcher 2.3.
 const importerConfigSchema = 2
 
@@ -174,6 +179,7 @@ type ImporterConfig struct {
 	SRMI            *SRMIOptions `json:"srmi,omitempty"`
 	HIMI            *HIMIOptions `json:"himi,omitempty"`
 	WWMI            *WWMIOptions `json:"wwmi,omitempty"`
+	EFMI            *EFMIOptions `json:"efmi,omitempty"`
 }
 
 func xxmiCacheRoot() (string, error) {
@@ -236,6 +242,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 		cfg.LaunchOptions = "-SkipSplash"
 	case "EFMI":
 		cfg.ProcessTimeout = 60
+		cfg.EFMI = &EFMIOptions{}
 	}
 	return cfg, nil
 }

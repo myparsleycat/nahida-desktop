@@ -18,9 +18,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func Launch(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
+func Launch(ctx context.Context, spec LaunchSpec) (_ LaunchResult, err error) {
 	if err := ValidateLaunchSpec(spec); err != nil {
 		return LaunchResult{}, err
+	}
+	if spec.ParentExe != "" {
+		spec.parent = &parentProcess{path: spec.ParentExe}
+		defer func() { spec.parent.stop(ctx, err == nil) }()
 	}
 	if spec.InjectionMethod == "Native" {
 		return launchNative(ctx, spec)
@@ -252,6 +256,13 @@ func startGameProcess(spec LaunchSpec) error {
 	}
 	command.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.CREATE_NEW_CONSOLE | windows.CREATE_DEFAULT_ERROR_MODE | priority,
+	}
+	if spec.parent != nil {
+		parent, err := spec.parent.start()
+		if err != nil {
+			return err
+		}
+		command.SysProcAttr.ParentProcess = syscall.Handle(parent)
 	}
 	if err := command.Start(); err != nil {
 		return err
