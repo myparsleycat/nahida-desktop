@@ -79,7 +79,7 @@ func TestOfficialDLLConfigOwnsTheLibrariesVersion(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := officialDLLConfig(ImporterConfig{XXMIVersion: test.version}, test.sharedVersion)
-			if cfg.XXMIVersion != test.want || cfg.LibsProvider != defaultLibsProvider {
+			if cfg.XXMIVersion != test.want || cfg.LibsProvider != signedLibsProvider {
 				t.Fatalf("version = %+v, provider = %q, want %+v", cfg.XXMIVersion, cfg.LibsProvider, test.want)
 			}
 		})

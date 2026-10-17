@@ -70,7 +70,7 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 func officialDLLConfig(cfg ImporterConfig, sharedVersion string) ImporterConfig {
 	cfg.Migoto.UnsafeMode = false
 	cfg.CustomDLL = ""
-	cfg.LibsProvider = defaultLibsProvider
+	cfg.LibsProvider = signedLibsProvider
 	if cfg.XXMIVersion.Follow != followShared {
 		return cfg
 	}

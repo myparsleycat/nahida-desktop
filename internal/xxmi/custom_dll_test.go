@@ -145,7 +145,7 @@ func TestDeployRuntimeAppliesCustomDLLOncePerSelection(t *testing.T) {
 	}
 	// Its own provider keeps the importer off the shared selection, which needs the settings store.
 	cfg := ImporterConfig{
-		ImporterFolder: importer, Mode: RuntimeXXMI, LibsProvider: defaultLibsProvider,
+		ImporterFolder: importer, Mode: RuntimeXXMI, LibsProvider: signedLibsProvider,
 		Migoto: MigotoOptions{UnsafeMode: true},
 	}
 	deploy := func(custom *customRuntimeDLL) runtimeManifest {
@@ -348,7 +348,7 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 		t.Fatalf("shared selection resolved %q, want %q", id, shared.ID)
 	}
 	ownProvider := following
-	ownProvider.LibsProvider = defaultLibsProvider
+	ownProvider.LibsProvider = signedLibsProvider
 	if id := resolve(ownProvider); id != "" {
 		t.Fatalf("own provider resolved the shared selection %q", id)
 	}

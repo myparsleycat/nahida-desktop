@@ -127,7 +127,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
   const config = draft ?? saved ?? null;
   const dirty = draft !== null && !isEqual(draft, saved);
-  // A legacy runtime and a user-provided DLL deploy the default provider's signed libraries, so that is the
+  // A legacy runtime and a user-provided DLL deploy the first provider's signed libraries, so that is the
   // provider whose releases their libraries version names.
   // The importer's own DLL comes first; the shared one reaches importers that follow the shared provider.
   const selectedDll = (cfg: ImporterConfig) =>

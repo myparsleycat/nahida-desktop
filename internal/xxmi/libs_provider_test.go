@@ -144,6 +144,14 @@ func newProviderTestService(
 	return service, client, downloads
 }
 
+func useSignedSharedProvider(t *testing.T, client *db.Client) {
+	t.Helper()
+	provider := signedLibsProvider
+	if err := client.Settings.Upsert(context.Background(), sharedLibsProviderKey, &provider); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func providerTestCache(t *testing.T, version string) string {
 	t.Helper()
 	root, err := xxmiCacheRoot()
@@ -165,7 +173,7 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	if err != nil || overview.SharedLibsProvider != defaultLibsProvider {
 		t.Fatalf("default provider = %q, err = %v", overview.SharedLibsProvider, err)
 	}
-	if !slices.Equal(overview.LibsProviders, []string{defaultLibsProvider, "myparsleycat"}) {
+	if !slices.Equal(overview.LibsProviders, []string{signedLibsProvider, "myparsleycat"}) {
 		t.Fatalf("selectable providers = %v", overview.LibsProviders)
 	}
 	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
@@ -211,7 +219,7 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	}
 
 	// The signed provider adds nothing to download.
-	if err := service.SetSharedLibsProvider(ctx, defaultLibsProvider); err != nil || downloads.Load() != 3 {
+	if err := service.SetSharedLibsProvider(ctx, signedLibsProvider); err != nil || downloads.Load() != 3 {
 		t.Fatalf("default provider downloaded %d times, err = %v", downloads.Load(), err)
 	}
 	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
@@ -467,17 +475,17 @@ func TestLibsProviderFollowsSharedUnlessImporterChooses(t *testing.T) {
 		t.Fatalf("shared provider = %q", got)
 	}
 	own := cfg
-	own.LibsProvider = defaultLibsProvider
-	if got := resolve(own); got != defaultLibsProvider {
+	own.LibsProvider = signedLibsProvider
+	if got := resolve(own); got != signedLibsProvider {
 		t.Fatalf("importer provider = %q", got)
 	}
 	legacy := cfg
 	legacy.Mode = RuntimeLegacy
-	if got := resolve(legacy); got != defaultLibsProvider {
+	if got := resolve(legacy); got != signedLibsProvider {
 		t.Fatalf("legacy runtime provider = %q", got)
 	}
 
-	// A provider this build does not know falls back to the signed libraries instead of failing launches.
+	// A provider this build does not know falls back to the default instead of failing launches.
 	removed := "removed"
 	if err := client.Settings.Upsert(ctx, sharedLibsProviderKey, &removed); err != nil {
 		t.Fatal(err)
@@ -598,7 +606,7 @@ func TestSetSharedLibsProviderKeepsSelectionOrder(t *testing.T) {
 	results := make(chan error, 2)
 	go func() { results <- service.SetSharedLibsProvider(ctx, "myparsleycat") }()
 	<-started
-	go func() { results <- service.SetSharedLibsProvider(ctx, defaultLibsProvider) }()
+	go func() { results <- service.SetSharedLibsProvider(ctx, signedLibsProvider) }()
 	close(proceed)
 	for range 2 {
 		if err := <-results; err != nil {
@@ -606,7 +614,7 @@ func TestSetSharedLibsProviderKeepsSelectionOrder(t *testing.T) {
 		}
 	}
 	overview, err := service.GetOverview(ctx)
-	if err != nil || overview.SharedLibsProvider != defaultLibsProvider {
+	if err != nil || overview.SharedLibsProvider != signedLibsProvider {
 		t.Fatalf("selected provider = %q, err = %v", overview.SharedLibsProvider, err)
 	}
 }
@@ -746,7 +754,7 @@ func TestCustomDLLHidesProviderUpdates(t *testing.T) {
 
 	// Restoring the official DLL drops the custom DLL and keeps the fork from taking its place.
 	restored := officialDLLConfig(cfg, "")
-	if spec, err := service.libsProvider(ctx, restored); err != nil || spec.id != defaultLibsProvider {
+	if spec, err := service.libsProvider(ctx, restored); err != nil || spec.id != signedLibsProvider {
 		t.Fatalf("restored provider = %q, err = %v", spec.id, err)
 	}
 	if id, err := service.customDLLID(ctx, restored); err != nil || id != "" || restored.Migoto.UnsafeMode {
@@ -772,6 +780,7 @@ func TestCheckUpdatesTracksProviderDLL(t *testing.T) {
 	service, client, downloads := newProviderTestService(t, []providerTestRelease{
 		{tag: "v0.2.0", data: latest, digest: providerTestDigest(latest)},
 	})
+	useSignedSharedProvider(t, client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -952,7 +961,7 @@ func TestProviderReleasePinsSignedLibraries(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(providerTestCache(t, "1.2.2-nhd.2"), customDLLName)); err != nil {
 		t.Fatalf("pinned fork release was not cached: %v", err)
 	}
-	if got := selectProvider("1.2.0-nhd.1", defaultLibsProvider); got != "1.2.0" {
+	if got := selectProvider("1.2.0-nhd.1", signedLibsProvider); got != "1.2.0" {
 		t.Fatalf("shared version under the signed provider = %q", got)
 	}
 	if got := selectProvider("1.1.7", "myparsleycat"); got != "" {
@@ -1044,10 +1053,11 @@ func TestPruneLibsCacheKeepsProviderSignedLibraries(t *testing.T) {
 func TestSharedProviderSelectionMovesImporterPins(t *testing.T) {
 	ctx := context.Background()
 	newest, first := testCustomDLLImage("1.2.2-nhd.2"), testCustomDLLImage("1.2.2-nhd.1")
-	service, _, _ := newProviderTestService(t, []providerTestRelease{
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
 		{tag: "v1.2.2-nhd.2", data: newest, digest: providerTestDigest(newest)},
 		{tag: "v1.2.2-nhd.1", data: first, digest: providerTestDigest(first)},
 	})
+	useSignedSharedProvider(t, client)
 	for key, pin := range map[string]VersionPin{
 		"GIMI": {Pinned: "1.2.2", Notify: true},
 		"SRMI": {Pinned: "1.1.7"},
@@ -1084,7 +1094,7 @@ func TestSharedProviderSelectionMovesImporterPins(t *testing.T) {
 		t.Fatalf("moved pin's fork release was not cached: %v", err)
 	}
 
-	if err := service.SetSharedLibsProvider(ctx, defaultLibsProvider); err != nil {
+	if err := service.SetSharedLibsProvider(ctx, signedLibsProvider); err != nil {
 		t.Fatal(err)
 	}
 	if got := pin("GIMI"); got != (VersionPin{Pinned: "1.2.2", Notify: true}) {
@@ -1098,6 +1108,7 @@ func TestSharedLibsVersionNeedsReleaseOfFollowingProviders(t *testing.T) {
 	service, client, _ := newProviderTestService(t, []providerTestRelease{
 		{tag: "v1.2.2-nhd.1", data: latest, digest: providerTestDigest(latest)},
 	})
+	useSignedSharedProvider(t, client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1121,6 +1132,7 @@ func TestSharedLibsVersionNeedsReleaseOfFollowingProviders(t *testing.T) {
 func TestCheckUpdatesComparesSignedLibrariesOfProviderPin(t *testing.T) {
 	ctx := context.Background()
 	service, client, _ := newProviderTestService(t, nil)
+	useSignedSharedProvider(t, client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)

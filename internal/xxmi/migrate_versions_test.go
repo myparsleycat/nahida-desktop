@@ -174,12 +174,16 @@ func TestImportExternalLauncherAppliesConfirmedVersionPolicy(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantPin := VersionPin{Pinned: "1.2.3"}
-			wantShared := "1.7.6"
+			wantShared, wantProvider := "1.7.6", signedLibsProvider
 			if mode == ImportVersionLatest {
-				wantPin, wantShared = VersionPin{Follow: "latest"}, ""
+				wantPin, wantShared, wantProvider = VersionPin{Follow: "latest"}, "", defaultLibsProvider
 			}
 			if cfg.PackageVersion != wantPin {
 				t.Fatalf("package selection = %+v", cfg.PackageVersion)
+			}
+			// A pin names a signed release, which the default provider may have nothing built on.
+			if provider, err := service.libsProvider(ctx, cfg); err != nil || provider.id != wantProvider {
+				t.Fatalf("libraries provider = %q, err = %v", provider.id, err)
 			}
 			if shared, err := client.Settings.GetValue(
 				ctx,

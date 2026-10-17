@@ -567,6 +567,74 @@ func TestReconcileKeepsXXMICustomDLLWhenItFollowsProvider(t *testing.T) {
 	}
 }
 
+func TestReconcileKeepsSignedXXMILibsProviderForPins(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		version  string
+		provider string
+		config   string
+		want     string
+	}{
+		{"shared version pin", "1.7.6", "", `{"xxmiVersion":{"follow":"shared"}}`, "spectrumqt"},
+		{"own version pin", "", "", `{"xxmiVersion":{"pinned":"1.7.6"}}`, "spectrumqt"},
+		{"latest libraries", "", "", `{"xxmiVersion":{"follow":"latest"}}`, ""},
+		{"pin with its own provider", "", "", `{"xxmiVersion":{"pinned":"1.7.6"},"libsProvider":"spectrumqt"}`, ""},
+		{"pin in the legacy runtime", "", "", `{"mode":"legacy","xxmiVersion":{"pinned":"1.7.6"}}`, ""},
+		{"chosen provider", "1.7.6-nhd.1", "myparsleycat", `{"xxmiVersion":{"follow":"shared"}}`, "myparsleycat"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			client, err := New(filepath.Join(t.TempDir(), "xxmi.db"))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			defer func() { _ = client.Close() }()
+			ctx := context.Background()
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatalf("first reconcile: %v", err)
+			}
+
+			if _, err := client.db.Exec(
+				`DELETE FROM "_schema_state" WHERE "key" = ?`,
+				SchemaKeyXXMILibsProviderPinned,
+			); err != nil {
+				t.Fatalf("clear flag: %v", err)
+			}
+			for key, value := range map[string]string{
+				"xxmi_libs_version": tc.version, "xxmi_libs_provider": tc.provider,
+			} {
+				if value == "" {
+					continue
+				}
+				if err := client.Settings.Upsert(ctx, key, &value); err != nil {
+					t.Fatalf("seed %s: %v", key, err)
+				}
+			}
+			if err := client.XXMIImporters.Upsert(ctx, "GIMI", tc.config); err != nil {
+				t.Fatalf("seed importer: %v", err)
+			}
+
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatalf("migrate reconcile: %v", err)
+			}
+			provider, err := client.Settings.GetValue(ctx, "xxmi_libs_provider")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := ""
+			if provider != nil {
+				got = *provider
+			}
+			if got != tc.want {
+				t.Fatalf("provider = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestReconcileSeedsBuiltInBlenderMCPServerOnce(t *testing.T) {
 	t.Parallel()
 

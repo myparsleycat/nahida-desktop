@@ -440,6 +440,12 @@ func (x *XXMI) ImportExternalLauncher(
 		"xxmi_include_prereleases": &prereleasesValue,
 		sharedLibsVersionKey:       &sharedLibsValue,
 	}
+	// The launcher ran the signed libraries, and a pin names their release, which the default provider may
+	// have no release built on.
+	if sharedLibsValue != "" {
+		provider := signedLibsProvider
+		settings[sharedLibsProviderKey] = &provider
+	}
 	if err := client.XXMIImporters.ApplyImport(ctx, importRows, packageRows, settings); err != nil {
 		return nil, err
 	}
