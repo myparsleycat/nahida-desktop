@@ -285,6 +285,9 @@ func (x *XXMI) ImportExternalLauncher(
 				cfg.ExtraLibraries.Paths[i] = filepath.Join(path, library)
 			}
 		}
+		if cfg.EFMI != nil && cfg.EFMI.LauncherFolder != "" && !filepath.IsAbs(cfg.EFMI.LauncherFolder) {
+			cfg.EFMI.LauncherFolder = filepath.Join(path, cfg.EFMI.LauncherFolder)
+		}
 		if err := ValidateImporterSettings(key, cfg); err != nil {
 			return nil, fmt.Errorf("import %s config: %w", key, err)
 		}
