@@ -138,8 +138,14 @@ type wgcCaptureResult struct {
 // without bringing it to the foreground. Every WinRT and D3D11 call runs on a
 // dedicated thread because RoInitialize binds the apartment to the calling
 // thread. A nil frame with a nil error means the compositor had no frame for
-// the window, in which case the caller falls back to PrintWindow.
+// the window, in which case the caller falls back to PrintWindow. A handle
+// that names no window is rejected before any WinRT or D3D11 setup, which on
+// a cold or GPU-less machine can take seconds.
 func captureWindowWGC(handle win.HWND, timeout time.Duration) (wgcCaptureResult, error) {
+	if !handle.IsWindow() {
+		return wgcCaptureResult{}, fmt.Errorf("%w: 0x%X is not a window", ErrCaptureUnavailable, uintptr(handle))
+	}
+
 	type outcome struct {
 		result wgcCaptureResult
 		err    error

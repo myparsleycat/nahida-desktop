@@ -11,9 +11,9 @@ import (
 	"github.com/rodrigocfd/windigo/win"
 )
 
-// TestCaptureWindowWGCRejectsInvalidHandles exercises the real WGC path
-// against handles that cannot yield a frame: the call fails fast with
-// CAPTURE_UNAVAILABLE instead of burning the poll budget.
+// TestCaptureWindowWGCRejectsInvalidHandles feeds a handle that names no
+// window: the call fails fast with CAPTURE_UNAVAILABLE instead of paying for
+// the WinRT and D3D11 setup or burning the poll budget.
 func TestCaptureWindowWGCRejectsInvalidHandles(t *testing.T) {
 	start := time.Now()
 	_, err := captureWindowWGC(win.HWND(0), 3*time.Second)
