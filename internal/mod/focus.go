@@ -19,7 +19,7 @@ func (m *Mod) GetPreviousFocusedGame(ctx context.Context) (*string, error) {
 	if len(previous) == 0 {
 		return nil, nil
 	}
-	games, err := m.GetGames(ctx)
+	games, err := m.listGames(ctx)
 	if err != nil {
 		if m.log != nil {
 			_ = infra.ReportError(

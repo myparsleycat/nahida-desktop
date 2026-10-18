@@ -78,6 +78,13 @@ export function useGameMutations() {
                 return;
             }
 
+            if (errorMessage.includes("IMPORTER_NOT_AVAILABLE")) {
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.add-game-mutation.importer-not-available"),
+                );
+                return;
+            }
+
             if (errorMessage.includes("INVALID_PARAMS")) {
                 toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
                 return;
@@ -178,6 +185,13 @@ export function useGameMutations() {
                     t(
                         "page.mod.hooks.use-mod-mutations.add-game-mutation.duplicate-mod-folder-path",
                     ),
+                );
+                return;
+            }
+
+            if (errorMessage.includes("IMPORTER_NOT_AVAILABLE")) {
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.add-game-mutation.importer-not-available"),
                 );
                 return;
             }

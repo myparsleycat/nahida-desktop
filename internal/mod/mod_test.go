@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 type testSettings struct {
@@ -124,6 +125,90 @@ func TestAddGameRequiresExistingModFolder(t *testing.T) {
 	games, err := service.GetGames(ctx)
 	if err != nil || len(games) != 0 {
 		t.Fatalf("games = %#v, %v", games, err)
+	}
+}
+
+func TestXXMIGameFollowsImporterModsFolder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	oldImporter := filepath.Join(root, "old", "GIMI")
+	newImporter := filepath.Join(root, "new", "GIMI")
+	custom := filepath.Join(root, "custom-mods")
+	for _, dir := range []string{oldImporter, newImporter, custom} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	importer := "GIMI"
+
+	service.xxmi = compressionImporterSource{{Key: importer, ImporterFolder: oldImporter}}
+	if err := service.AddGame(ctx, "Genshin", custom, &importer, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	path, err := service.GetGamePath(ctx, "Genshin")
+	if err != nil || path == nil || !samePath(*path, filepath.Join(oldImporter, "Mods")) {
+		t.Fatalf("added path = %v, %v; want the importer Mods folder", path, err)
+	}
+
+	service.xxmi = compressionImporterSource{{Key: importer, ImporterFolder: newImporter}}
+	games, err := service.GetGames(ctx)
+	want := filepath.Join(newImporter, "Mods")
+	if err != nil || len(games) != 1 || !samePath(games[0].ModFolderPath, want) {
+		t.Fatalf("games = %#v, %v; want %q", games, err, want)
+	}
+	path, err = service.GetGamePath(ctx, "Genshin")
+	if err != nil || path == nil || !samePath(*path, want) {
+		t.Fatalf("stored path = %v, %v; want %q", path, err, want)
+	}
+}
+
+// editingImporterSource saves an edit of the game while the sync is looking up importer folders.
+type editingImporterSource struct {
+	importers []xxmi.EnabledImporter
+	edit      func()
+}
+
+func (s *editingImporterSource) GetEnabledImporters(context.Context) ([]xxmi.EnabledImporter, error) {
+	if edit := s.edit; edit != nil {
+		s.edit = nil
+		edit()
+	}
+	return s.importers, nil
+}
+
+func TestImporterSyncKeepsGameEditSavedDuringLookup(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	oldImporter := filepath.Join(root, "old", "GIMI")
+	newImporter := filepath.Join(root, "new", "GIMI")
+	manual := filepath.Join(root, "manual-mods")
+	for _, dir := range []string{oldImporter, newImporter, manual} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	importer := "GIMI"
+	service.xxmi = compressionImporterSource{{Key: importer, ImporterFolder: oldImporter}}
+	if err := service.AddGame(ctx, "Genshin", "", &importer, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service.xxmi = &editingImporterSource{
+		importers: []xxmi.EnabledImporter{{Key: importer, ImporterFolder: newImporter}},
+		edit: func() {
+			if err := service.UpdateGame(ctx, "Genshin", GameUpdates{ModFolderPath: manual}); err != nil {
+				t.Error(err)
+			}
+		},
+	}
+	if err := service.SyncImporterModFolders(ctx); err != nil {
+		t.Fatal(err)
+	}
+	row, err := service.client.GamePaths.GetByGame(ctx, "Genshin")
+	if err != nil || row == nil || row.Importer != nil || !samePath(row.ModFolderPath, manual) {
+		t.Fatalf("row = %#v, %v; want the manual folder saved during the sync", row, err)
 	}
 }
 

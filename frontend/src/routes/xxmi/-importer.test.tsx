@@ -14,10 +14,6 @@ const xxmi = vi.hoisted(() => ({
 const fileDrop = vi.hoisted(() => ({
   drop: (_drop: { paths: string[]; target: { id: string } }) => {},
 }));
-const mod = vi.hoisted(() => ({
-  GetGames: vi.fn(),
-  UpdateGame: vi.fn(),
-}));
 const overview = vi.hoisted(() => ({
   importers: [] as Array<{
     key: string;
@@ -83,7 +79,6 @@ const config = {
 };
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
-vi.mock("@bindings/mod", () => ({ Mod: mod }));
 vi.mock("@bindings/platform", () => ({ Dialog: {} }));
 vi.mock("@renderer/wails/file-drop", () => ({
   FileDropTargetID: { xxmiSharedCustomDll: "shared-dll", xxmiImporterCustomDll: "importer-dll" },
@@ -114,7 +109,9 @@ vi.mock("@tanstack/react-query", () => ({
                 ]
               : queryKey[0] === "xxmi:libs-releases"
                 ? [{ version: "1.7.5" }, { version: "1.7.6" }]
-                : [],
+                : queryKey[0] === "xxmi:mod-folder"
+                  ? { path: "C:\\XXMI\\GIMI\\Mods", linkTarget: "", targetMissing: false }
+                  : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -341,7 +338,6 @@ it("discards the pending package selection together with the draft", async () =>
 it("lets an importer whose pinned package is missing be disabled and saved", async () => {
   config.packageVersion = { pinned: "2.0.0" };
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   expect(screen.getByText("page.setting.xxmi.builtin.packageInstallRequired")).toBeTruthy();
 
@@ -369,8 +365,6 @@ afterEach(() => {
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
   xxmi.ImportCustomDLL.mockReset();
-  mod.GetGames.mockReset();
-  mod.UpdateGame.mockReset();
   overview.importers = [];
   overview.sharedCustomDll = "";
   overview.customDlls = [];
@@ -379,7 +373,6 @@ afterEach(() => {
 
 it("defaults old configs to the existing injector and saves the native selection", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
 
   const injector = screen.getByRole("combobox", {
@@ -412,7 +405,6 @@ async function chooseOption(combobox: RegExp, option: string) {
 it("pins the importer's own XXMI version without update notices by default", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
   expect(screen.queryByRole("switch", { name: "page.setting.xxmi.builtin.libsNotify" })).toBeNull();
@@ -436,7 +428,6 @@ it("pins the importer's own XXMI version without update notices by default", asy
 
 it("follows the latest release again when the pinned version's provider changes", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
@@ -461,7 +452,6 @@ it("pins a legacy importer's XXMI version to the signed libraries under a shared
   overview.sharedLibsProvider = "myparsleycat";
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
@@ -474,7 +464,6 @@ it("pins a legacy importer's XXMI version to the signed libraries under a shared
 
 it("keeps switched-on update notices when another pinned XXMI version is chosen", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   config.xxmiVersion = { pinned: "1.7.5", notify: true };
 
   try {
@@ -494,7 +483,6 @@ it("keeps switched-on update notices when another pinned XXMI version is chosen"
 
 it("follows the shared settings for the provider and its version together", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   config.xxmiVersion = { pinned: "1.7.5", notify: true };
 
   try {
@@ -538,7 +526,6 @@ it("keeps the shared version when the importer takes the shared provider as its 
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
   xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   config.xxmiVersion = { follow: "shared" };
   overview.sharedLibsVersion = "1.7.5";
 
@@ -628,7 +615,6 @@ it("explains the legacy runtime's XXMI version and hides it for the native injec
 it("caches the importer's own libraries provider before saving it", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   config.xxmiVersion = { follow: "shared" };
   overview.sharedLibsVersion = "1.7.5";
 
@@ -664,7 +650,6 @@ it("caches the importer's own libraries provider before saving it", async () => 
 
 it("leaves the draft unsaved when the importer's libraries provider cannot be cached", async () => {
   xxmi.EnsureLibsProvider.mockRejectedValue(new Error("offline"));
-  mod.GetGames.mockResolvedValue([]);
   render(<XXMIImporterSettings importer="GIMI" />);
   fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
 
@@ -724,95 +709,7 @@ it("requires a fresh unsigned confirmation for each selected release", async () 
       config: expect.objectContaining({ packageVersion: { pinned: "2.0.0" } }),
     }),
   );
-  expect(mod.GetGames).not.toHaveBeenCalled();
   expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
-});
-
-const linkedGame = {
-  game: "Genshin",
-  modFolderPath: "C:\\XXMI\\GIMI\\Mods",
-  importer: "GIMI",
-  linkedModFolderPath: "C:\\XXMI\\GIMI\\Mods",
-  gameInstallPath: "D:\\Genshin Impact",
-  gameExecutablePath: "D:\\Genshin Impact\\GenshinImpact.exe",
-};
-
-async function installAfterFolderMove() {
-  fireEvent.change(screen.getByLabelText("page.setting.xxmi.builtin.importerFolder"), {
-    target: { value: "D:\\New\\GIMI" },
-  });
-  fireEvent.click(screen.getByRole("tab", { name: "page.setting.xxmi.builtin.packageTab" }));
-  const dialog = openPackageInstall("1.0.0");
-  fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }));
-  fireEvent.click(dialog.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
-  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" });
-}
-
-it("confirms a linked mod folder before installing into a new importer folder", async () => {
-  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  xxmi.InstallImporterPackage.mockResolvedValue(undefined);
-  mod.UpdateGame.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([
-    linkedGame,
-    { ...linkedGame, game: "Other", modFolderPath: "C:\\Other\\Mods" },
-  ]);
-  render(<XXMIImporterSettings importer="GIMI" />);
-  await installAfterFolderMove();
-  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
-  expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
-
-  fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  await waitFor(() =>
-    expect(screen.queryByText("page.setting.xxmi.builtin.updateModPathsDescription")).toBeNull(),
-  );
-  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
-  expect(xxmi.InstallImporterPackage).not.toHaveBeenCalled();
-
-  const dialog = openPackageInstall("1.0.0");
-  fireEvent.click(dialog.getByRole("switch", { name: "page.setting.xxmi.builtin.allowUnsigned" }));
-  fireEvent.click(dialog.getByRole("button", { name: "page.setting.xxmi.builtin.install" }));
-  await screen.findByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" });
-  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.updateModPaths" }));
-  await waitFor(() =>
-    expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
-      importer: "GIMI",
-      version: "1.0.0",
-      allowUnsigned: true,
-      config: expect.objectContaining({
-        importerFolder: "D:\\New\\GIMI",
-        packageVersion: { pinned: "1.0.0" },
-      }),
-    }),
-  );
-  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
-  expect(mod.UpdateGame).toHaveBeenCalledTimes(1);
-  expect(mod.UpdateGame).toHaveBeenCalledWith("Genshin", {
-    modFolderPath: "D:\\New\\GIMI\\Mods",
-    importer: "GIMI",
-    linkedModFolderPath: linkedGame.linkedModFolderPath,
-    gameInstallPath: linkedGame.gameInstallPath,
-    gameExecutablePath: linkedGame.gameExecutablePath,
-  });
-});
-
-it("installs without moving mod folders when that choice is confirmed", async () => {
-  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  xxmi.InstallImporterPackage.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([linkedGame]);
-  render(<XXMIImporterSettings importer="GIMI" />);
-  await installAfterFolderMove();
-
-  fireEvent.click(screen.getByRole("button", { name: "page.setting.xxmi.builtin.keepModPaths" }));
-  await waitFor(() =>
-    expect(xxmi.InstallImporterPackage).toHaveBeenCalledWith({
-      importer: "GIMI",
-      version: "1.0.0",
-      allowUnsigned: true,
-      config: expect.objectContaining({ importerFolder: "D:\\New\\GIMI" }),
-    }),
-  );
-  expect(xxmi.SaveImporterConfig).not.toHaveBeenCalled();
-  expect(mod.UpdateGame).not.toHaveBeenCalled();
 });
 
 it("offers restoring the official DLL when the importer uses a custom DLL", async () => {
@@ -908,7 +805,6 @@ async function dropImporterCustomDLL() {
 
 it("saves a dropped custom DLL together with unsafe mode once the prompt is confirmed", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   fireEvent.click(await dropImporterCustomDLL());
 
   expect(await screen.findByText("custom.dll")).toBeTruthy();
@@ -944,7 +840,6 @@ it("leaves the draft untouched when the unsafe mode prompt is cancelled", async 
 
 it("drops the importer's custom DLL when a provider is chosen again", async () => {
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
   fireEvent.click(await dropImporterCustomDLL());
   await screen.findByText("custom.dll");
 
@@ -976,7 +871,6 @@ it("prepares the provider chosen in place of a saved custom DLL and releases its
   overview.customDlls = [{ id: "abcdef123456", name: "custom.dll" }];
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsProvider.mockResolvedValue(undefined);
-  mod.GetGames.mockResolvedValue([]);
 
   try {
     render(<XXMIImporterSettings importer="GIMI" />);

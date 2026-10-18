@@ -155,21 +155,42 @@ function EditGameDialogContent({
   const currentGameIndex = games.findIndex((game) => game.game === editingGame.game);
   const canMoveUp = currentGameIndex > 0;
   const canMoveDown = currentGameIndex >= 0 && currentGameIndex < games.length - 1;
-  const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
+  // A game whose importer is no longer enabled still shows it, so opening the dialog never changes it.
+  const importers = [
+    ...enabledImporters,
+    ...(editingGame.importer &&
+    !isNteImporter(editingGame.importer) &&
+    !enabledImporters.some((importer) => importer.key === editingGame.importer)
+      ? [{ key: editingGame.importer }]
+      : []),
+    { key: NTE_IMPORTER_KEY },
+  ];
+
+  const editingImporter = editingGame.importer ?? NO_IMPORTER_VALUE;
+  // The path field holds an NTE install folder, a mod folder without an importer, or nothing for XXMI, so it
+  // only starts from the saved value while the importer keeps the saved kind.
+  const defaultPath = (importer: string) => {
+    if (pathKind(importer) !== pathKind(editingImporter)) return "";
+    if (isNteImporter(importer)) {
+      return (
+        editingGame.gameInstallPath ?? editingGame.linkedModFolderPath ?? editingGame.modFolderPath
+      );
+    }
+    return importer === NO_IMPORTER_VALUE ? editingGame.modFolderPath : "";
+  };
 
   const form = useForm({
     defaultValues: {
-      path:
-        editingGame.gameInstallPath ?? editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
+      path: defaultPath(editingImporter),
       customModFolderPath: editingGame.linkedModFolderPath ? editingGame.modFolderPath : "",
-      importer: editingGame.importer ?? NO_IMPORTER_VALUE,
+      importer: editingImporter,
     },
     onSubmit: async ({ value }) => {
       const path = value.path.trim();
       const customModFolderPath = value.customModFolderPath.trim();
       const importer = value.importer === NO_IMPORTER_VALUE ? null : value.importer;
       const isNte = isNteImporter(importer);
-      if (!path) {
+      if ((isNte || !importer) && !path) {
         return;
       }
 
@@ -191,8 +212,9 @@ function EditGameDialogContent({
         return;
       }
 
+      // The backend resolves an XXMI importer's own Mods folder, so only a game without one sends a path.
       onUpdateGame(editingGame.game, {
-        modFolderPath: path,
+        modFolderPath: importer ? "" : path,
         importer,
         linkedModFolderPath: null,
         gameInstallPath: null,
@@ -203,6 +225,7 @@ function EditGameDialogContent({
 
   const selectedImporter = useStore(form.store, (s) => s.values.importer);
   const isNteSelected = isNteImporter(selectedImporter);
+  const isManualSelected = selectedImporter === NO_IMPORTER_VALUE;
 
   const handlePickFolder = async () => {
     const path = await onPickFolder();
@@ -267,55 +290,6 @@ function EditGameDialogContent({
         }}
       >
         <form.Field
-          name="path"
-          validators={{
-            onChange: ({ value }) => (value.trim() ? undefined : t("page.mod.dialog.add-game.#.1")),
-          }}
-          children={(field) => (
-            <Field>
-              <FieldLabel>{t("page.mod.dialog.edit-game.path_label")}</FieldLabel>
-              <div className="flex gap-2">
-                <Input
-                  placeholder={
-                    isNteSelected
-                      ? t("page.mod.dialog.add-game.nte_install_path")
-                      : t("page.mod.dialog.add-game.path_input_placeholder")
-                  }
-                  value={field.state.value}
-                  readOnly={!isNteSelected}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => {
-                    field.handleChange(event.target.value);
-                    setNteResolution(null);
-                    setIsNteNotFound(false);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={isNteSelected && isResolvingNte}
-                  onClick={() => void handlePickFolder()}
-                >
-                  <FolderOpen className="size-4" />
-                </Button>
-              </div>
-              {nteResolution && isNteSelected ? (
-                <p className="text-xs break-all text-muted-foreground">
-                  {nteResolution.modFolderPath}
-                </p>
-              ) : null}
-              {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
-              ) : null}
-              {isNteSelected && isNteNotFound ? (
-                <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
-              ) : null}
-            </Field>
-          )}
-        />
-
-        <form.Field
           name="importer"
           children={(field) => (
             <Field>
@@ -336,15 +310,15 @@ function EditGameDialogContent({
                   if (value === null) return;
                   const wasNte = isNteImporter(field.state.value);
                   const nextIsNte = isNteImporter(value);
+                  const kindChanged = pathKind(field.state.value) !== pathKind(value);
                   field.handleChange(value);
                   setNteResolution(null);
                   setIsNteNotFound(false);
 
+                  if (kindChanged) {
+                    form.setFieldValue("path", defaultPath(value));
+                  }
                   if (wasNte && !nextIsNte) {
-                    form.setFieldValue(
-                      "path",
-                      isNteImporter(editingGame.importer) ? "" : (editingGame.modFolderPath ?? ""),
-                    );
                     form.setFieldValue("customModFolderPath", "");
                   }
                 }}
@@ -368,6 +342,68 @@ function EditGameDialogContent({
             </Field>
           )}
         />
+
+        {(isNteSelected || isManualSelected) && (
+          <form.Field
+            name="path"
+            validators={{
+              onChange: ({ value }) =>
+                value.trim()
+                  ? undefined
+                  : t(
+                      isNteSelected
+                        ? "page.mod.dialog.add-game.#.2"
+                        : "page.mod.dialog.add-game.#.1",
+                    ),
+            }}
+            children={(field) => (
+              <Field>
+                <FieldLabel>
+                  {isNteSelected
+                    ? t("page.mod.dialog.add-game.nte_install_path")
+                    : t("page.mod.dialog.edit-game.path_label")}
+                </FieldLabel>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={
+                      isNteSelected
+                        ? t("page.mod.dialog.add-game.nte_install_path")
+                        : t("page.mod.dialog.add-game.path_input_placeholder")
+                    }
+                    value={field.state.value}
+                    readOnly={!isNteSelected}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => {
+                      field.handleChange(event.target.value);
+                      setNteResolution(null);
+                      setIsNteNotFound(false);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isNteSelected && isResolvingNte}
+                    onClick={() => void handlePickFolder()}
+                  >
+                    <FolderOpen className="size-4" />
+                  </Button>
+                </div>
+                {isNteSelected && nteResolution ? (
+                  <p className="text-xs break-all text-muted-foreground">
+                    {nteResolution.modFolderPath}
+                  </p>
+                ) : null}
+                {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                  <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+                ) : null}
+                {isNteSelected && isNteNotFound ? (
+                  <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          />
+        )}
 
         {isNteSelected && (
           <form.Field
@@ -477,6 +513,11 @@ function EditGameDialogContent({
       </DialogFooter>
     </DialogContent>
   );
+}
+
+function pathKind(importer: string) {
+  if (isNteImporter(importer)) return "nte";
+  return importer === NO_IMPORTER_VALUE ? "manual" : "xxmi";
 }
 
 function resolveNteLinkedModFolderPath(resolution: NteResolution, customModFolderPath: string) {

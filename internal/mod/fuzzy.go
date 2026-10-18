@@ -22,7 +22,7 @@ func (m *Mod) ResolveDownloadTarget(
 	input string,
 	gameFilter *string,
 ) (*DownloadTarget, error) {
-	games, err := m.GetGames(ctx)
+	games, err := m.listGames(ctx)
 	if err != nil {
 		return nil, err
 	}

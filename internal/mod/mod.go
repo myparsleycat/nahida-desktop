@@ -80,41 +80,43 @@ type Options struct {
 }
 
 type Mod struct {
-	appData           *appdata.Store
-	client            *db.Client
-	fs                *platform.FS
-	settings          Settings
-	archive           *infra.Archive
-	http              *infra.Client
-	download          *infra.Download
-	xxmi              ImporterSource
-	log               *infra.Log
-	pathDiagnostic    infra.DiagnosticThrottle
-	dialog            *platform.Dialog
-	shaders           *ShaderFixes
-	transfer          *transfer.Transfer
-	gamebanana        *gamebanana.GameBanana
-	native            *platform.Native
-	elevated          elevated.FileGateway
-	paths             *pathSelector
-	downloader        *infra.ParallelDownloader
-	extractMu         sync.Mutex
-	extractPrompts    map[string]chan string
-	mu                sync.Mutex
-	watchMu           sync.Mutex
-	gameWatcher       *managedWatcher
-	characterWatcher  *managedWatcher
-	emit              func(string, ...any)
-	inspectAddedMods  func([]string)
-	nteSigBypasserURL string
-	nteASILoaderURL   string
-	compression       *compressionCoordinator
-	classifiedMu      sync.Mutex
-	classifiedFolders map[string]*classifiedFolderIndex
-	classifiedChanges uint64
-	libraryMu         sync.Mutex
-	libraryIndexes    map[string]libraryIndex
-	libraryChanges    uint64
+	appData        *appdata.Store
+	client         *db.Client
+	fs             *platform.FS
+	settings       Settings
+	archive        *infra.Archive
+	http           *infra.Client
+	download       *infra.Download
+	xxmi           ImporterSource
+	log            *infra.Log
+	pathDiagnostic infra.DiagnosticThrottle
+	// importerSyncDiagnostic keeps a failing importer folder lookup from logging on every game listing.
+	importerSyncDiagnostic infra.DiagnosticThrottle
+	dialog                 *platform.Dialog
+	shaders                *ShaderFixes
+	transfer               *transfer.Transfer
+	gamebanana             *gamebanana.GameBanana
+	native                 *platform.Native
+	elevated               elevated.FileGateway
+	paths                  *pathSelector
+	downloader             *infra.ParallelDownloader
+	extractMu              sync.Mutex
+	extractPrompts         map[string]chan string
+	mu                     sync.Mutex
+	watchMu                sync.Mutex
+	gameWatcher            *managedWatcher
+	characterWatcher       *managedWatcher
+	emit                   func(string, ...any)
+	inspectAddedMods       func([]string)
+	nteSigBypasserURL      string
+	nteASILoaderURL        string
+	compression            *compressionCoordinator
+	classifiedMu           sync.Mutex
+	classifiedFolders      map[string]*classifiedFolderIndex
+	classifiedChanges      uint64
+	libraryMu              sync.Mutex
+	libraryIndexes         map[string]libraryIndex
+	libraryChanges         uint64
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -244,6 +246,7 @@ type GameConfig struct {
 }
 
 type GameUpdates struct {
+	// ModFolderPath is ignored for an XXMI importer, whose own Mods folder is used.
 	ModFolderPath       string  `json:"modFolderPath"`
 	Importer            *string `json:"importer"`
 	LinkedModFolderPath *string `json:"linkedModFolderPath"`
@@ -342,7 +345,17 @@ func (m *Mod) GetGamePath(ctx context.Context, game string) (*string, error) {
 	return &value, nil
 }
 
+// GetGames first follows importer folders that moved since the last call, including edits to an external
+// launcher's config made outside this app.
 func (m *Mod) GetGames(ctx context.Context) ([]GameConfig, error) {
+	err := m.SyncImporterModFolders(ctx)
+	m.importerSyncDiagnostic.Report(m.log, err, "Mod:syncImporterModFolders", infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "Mod:syncImporterModFolders", Stage: "get-games",
+	})
+	return m.listGames(ctx)
+}
+
+func (m *Mod) listGames(ctx context.Context) ([]GameConfig, error) {
 	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
@@ -379,6 +392,7 @@ func (m *Mod) SetGamePath(ctx context.Context, game, modFolderPath string) error
 	return client.GamePaths.Upsert(ctx, db.GamePathRow{Game: game, ModFolderPath: path, Order: order})
 }
 
+// AddGame ignores modFolderPath for an XXMI importer and uses that importer's Mods folder.
 func (m *Mod) AddGame(
 	ctx context.Context,
 	game, modFolderPath string,
@@ -389,13 +403,17 @@ func (m *Mod) AddGame(
 		return err
 	}
 	game = strings.TrimSpace(game)
-	if game == "" || strings.TrimSpace(modFolderPath) == "" {
+	importerKey, xxmiGame := xxmiImporterKey(importer)
+	if game == "" || (!xxmiGame && strings.TrimSpace(modFolderPath) == "") {
 		return errors.New("INVALID_PARAMS")
 	}
-	if isNTEImporter(importer) {
+	switch {
+	case xxmiGame:
+		modFolderPath, err = m.resolveImporterModFolder(ctx, importerKey)
+	case isNTEImporter(importer):
 		// The NTE setup below creates the mod folder itself.
 		modFolderPath, err = configuredDirectory(modFolderPath)
-	} else {
+	default:
 		modFolderPath, err = validDirectory(modFolderPath)
 	}
 	if err != nil {
@@ -483,10 +501,15 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 		return err
 	}
 	game = strings.TrimSpace(game)
-	if game == "" || strings.TrimSpace(updates.ModFolderPath) == "" {
+	importerKey, xxmiGame := xxmiImporterKey(updates.Importer)
+	if game == "" || (!xxmiGame && strings.TrimSpace(updates.ModFolderPath) == "") {
 		return fmt.Errorf("%s", "Game and modFolderPath are required")
 	}
-	updates.ModFolderPath, err = configuredDirectory(updates.ModFolderPath)
+	if xxmiGame {
+		updates.ModFolderPath, err = m.resolveImporterModFolder(ctx, importerKey)
+	} else {
+		updates.ModFolderPath, err = configuredDirectory(updates.ModFolderPath)
+	}
 	if err != nil {
 		return err
 	}
@@ -565,6 +588,140 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 		}
 	}
 	return client.GamePaths.Delete(ctx, game)
+}
+
+// SyncImporterModFolders points every XXMI game at its importer's current Mods folder. A game whose importer
+// is not enabled keeps its last folder, and one whose folder another game already uses is left alone.
+//
+//wails:ignore
+func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
+	client, err := m.requireClient()
+	if err != nil {
+		return err
+	}
+	rows, err := client.GamePaths.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	var importers []xxmi.EnabledImporter
+	loaded := false
+	changed, conflicts := []string{}, []string{}
+	for _, row := range rows {
+		key, ok := xxmiImporterKey(row.Importer)
+		if !ok {
+			continue
+		}
+		if !loaded {
+			if importers, err = m.enabledImporters(ctx); err != nil {
+				return err
+			}
+			loaded = true
+		}
+		folder, ok := importerModFolder(importers, key)
+		if !ok || platform.SamePathFold(folder, row.ModFolderPath) {
+			continue
+		}
+		duplicate, err := client.GamePaths.FindByModFolderPathOtherGame(ctx, row.Game, folder)
+		if err != nil {
+			return err
+		}
+		if duplicate != nil {
+			conflicts = append(conflicts, row.Game)
+			continue
+		}
+		// A game edited since the listing keeps that edit; the next sync follows its new importer if any.
+		moved, err := client.GamePaths.MoveModFolderPath(ctx, row.Game, row.Importer, row.ModFolderPath, folder)
+		if err != nil {
+			return err
+		}
+		if moved {
+			changed = append(changed, row.Game)
+		}
+	}
+
+	for _, game := range changed {
+		m.invalidateClassifiedFolders(game)
+	}
+	if len(changed) > 0 {
+		m.InvalidateLibraries()
+		if m.log != nil {
+			m.log.Info(map[string]any{"games": changed}, "Mod:syncImporterModFolders")
+		}
+	}
+	if len(conflicts) > 0 {
+		return infra.AnnotateError(errors.New("DUPLICATE_MOD_FOLDER_PATH"), infra.Diagnostic{
+			Fields: map[string]any{"games": conflicts},
+		})
+	}
+	return nil
+}
+
+// InvalidateImporterGames makes the next listing of every XXMI game search its folders again. An importer change,
+// such as a relinked Mods folder, can replace what the folder holds while its path stays the same.
+//
+//wails:ignore
+func (m *Mod) InvalidateImporterGames(ctx context.Context) error {
+	client, err := m.requireClient()
+	if err != nil {
+		return err
+	}
+	rows, err := client.GamePaths.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, ok := xxmiImporterKey(row.Importer); ok {
+			m.invalidateClassifiedFolders(row.Game)
+		}
+	}
+	return nil
+}
+
+func (m *Mod) enabledImporters(ctx context.Context) ([]xxmi.EnabledImporter, error) {
+	if m.xxmi == nil {
+		return nil, errors.New("XXMI importer source is not configured")
+	}
+	return m.xxmi.GetEnabledImporters(ctx)
+}
+
+// resolveImporterModFolder returns the Mods folder the importer loads, creating it as a launch would.
+func (m *Mod) resolveImporterModFolder(ctx context.Context, key string) (string, error) {
+	importers, err := m.enabledImporters(ctx)
+	if err != nil {
+		return "", err
+	}
+	folder, ok := importerModFolder(importers, key)
+	if !ok {
+		return "", errors.New("IMPORTER_NOT_AVAILABLE")
+	}
+	info, err := os.Stat(filepath.Dir(folder))
+	if err != nil || !info.IsDir() {
+		return "", infra.WithCause(errors.New("IMPORTER_NOT_AVAILABLE"), err)
+	}
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		return "", err
+	}
+	return folder, nil
+}
+
+func importerModFolder(importers []xxmi.EnabledImporter, key string) (string, bool) {
+	for _, importer := range importers {
+		if strings.EqualFold(importer.Key, key) && strings.TrimSpace(importer.ImporterFolder) != "" {
+			return filepath.Join(filepath.Clean(importer.ImporterFolder), "Mods"), true
+		}
+	}
+	return "", false
+}
+
+// xxmiImporterKey returns the importer whose Mods folder is the game's mod folder. NTE and games without an
+// importer keep the folder they were given.
+func xxmiImporterKey(importer *string) (string, bool) {
+	if importer == nil || isNTEImporter(importer) {
+		return "", false
+	}
+	key := strings.TrimSpace(*importer)
+	return key, key != ""
 }
 
 func (m *Mod) rollbackNteDiskChanges(rollbacks []func() error) {
@@ -866,7 +1023,7 @@ func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error)
 	if err != nil {
 		return nil, err
 	}
-	games, err := m.GetGames(ctx)
+	games, err := m.listGames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1080,7 +1237,7 @@ func (m *Mod) shaderGames() []shaderGame {
 	if m == nil || m.client == nil {
 		return nil
 	}
-	games, err := m.GetGames(context.Background())
+	games, err := m.listGames(context.Background())
 	if err != nil {
 		m.logShaderError(err, "Mod:getShaderFixesManifestSearchRoots:games")
 		return nil

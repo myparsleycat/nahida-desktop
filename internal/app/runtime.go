@@ -261,6 +261,13 @@ func newRuntime() *runtime {
 		notifications:     notifier,
 	}
 	rt.xxmi.UseImportersChanged(func(ctx context.Context) {
+		if err := errors.Join(rt.mod.SyncImporterModFolders(ctx), rt.mod.InvalidateImporterGames(ctx)); err != nil {
+			_ = infra.ReportError(log, err, "XXMI.importersChanged", infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "mod.sync-importer-mod-folders",
+				Stage:     "importer-selection",
+			})
+		}
 		rt.mod.RefreshCompressionImporters(ctx)
 		rt.mod.InvalidateLibraries()
 		if err := rt.tools.StartToggleViewerWatcher(ctx); err != nil {

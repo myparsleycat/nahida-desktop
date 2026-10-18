@@ -1,5 +1,3 @@
-import { Mod } from "@bindings/mod";
-import type { GameConfig } from "@bindings/mod/models";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type CustomDLL, type ImporterConfig } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
@@ -46,6 +44,7 @@ import {
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
 import { importerFolderErrorCode } from "@renderer/components/xxmi/xxmi-importer-folder-error";
+import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -65,27 +64,13 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-type PendingImporterFolderChange = {
-  next: ImporterConfig;
-  games: GameConfig[];
-  install?: { version: string; allowUnsigned: boolean };
-};
+type PackageInstall = { version: string; allowUnsigned: boolean };
 
 // Offered beside the libraries providers and versions, whose names it must not collide with.
 const FOLLOW_SHARED = "__shared__";
 
 function normalizedFolder(folder: string) {
   return folder.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
-}
-
-async function linkedGamesForImporterMove(previousFolder: string | undefined, nextFolder: string) {
-  const previous = previousFolder ? normalizedFolder(previousFolder) : "";
-  const changed = normalizedFolder(nextFolder);
-  if (!previous || previous === changed) return [];
-  const oldMods = `${previous}\\mods`;
-  return ((await Mod.GetGames()) ?? []).filter(
-    (game) => normalizedFolder(game.modFolderPath) === oldMods,
-  );
 }
 
 async function resolveImporterGameFolder(importer: string, next: ImporterConfig) {
@@ -190,21 +175,16 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const [detectedFolders, setDetectedFolders] = useState<
     Awaited<ReturnType<typeof XXMI.DetectGameFolders>> | undefined
   >();
-  const [pendingFolderChange, setPendingFolderChange] =
-    useState<PendingImporterFolderChange | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:package-verification", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
+    void queryClient.invalidateQueries({ queryKey: modFolderQueryKey(importer) });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
   };
-  const persist = async (
-    next: ImporterConfig,
-    games: GameConfig[] = [],
-    install?: PendingImporterFolderChange["install"],
-  ) => {
+  const persist = async (next: ImporterConfig, install?: PackageInstall) => {
     setIsSaving(true);
     try {
       if (install) {
@@ -225,20 +205,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
         }
         await XXMI.SaveImporterConfig(importer, next);
       }
-      for (const game of games) {
-        await Mod.UpdateGame(game.game, {
-          modFolderPath: `${next.importerFolder}\\Mods`,
-          importer: game.importer,
-          linkedModFolderPath: game.linkedModFolderPath,
-          gameInstallPath: game.gameInstallPath,
-          gameExecutablePath: game.gameExecutablePath,
-        });
-      }
-      setPendingFolderChange(null);
       setPackageDialogVersion(null);
       setConfig(null);
       setPickingCustomDll(false);
       refresh();
+      // Listing games makes the backend follow a moved importer folder with the games that use it.
+      void queryClient.invalidateQueries({ queryKey: ["games"] });
       return true;
     } catch (error) {
       const code = importerFolderErrorCode(error);
@@ -261,21 +233,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     )
       return;
     try {
-      const resolved = await resolveImporterGameFolder(importer, next);
-      const games = await linkedGamesForImporterMove(saved?.importerFolder, next.importerFolder);
-      if (games.length) {
-        setPendingFolderChange({ next: resolved, games });
-        return;
-      }
-      await persist(resolved);
+      await persist(await resolveImporterGameFolder(importer, next));
     } catch (error) {
       toast.error(toErrorMessage(error));
     }
-  };
-  const confirmPendingFolderChange = async (updateGames: boolean) => {
-    if (!pendingFolderChange) return;
-    const pending = pendingFolderChange;
-    await persist(pending.next, updateGames ? pending.games : [], pending.install);
   };
   // Switching importers or pages drops the draft, so leaving with unsaved changes asks first.
   const leave = useBlocker({
@@ -414,6 +375,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                       description={t("page.setting.xxmi.builtin.importerFolderDescription")}
                       value={config.importerFolder}
                       onValueChange={(importerFolder) => setConfig({ ...config, importerFolder })}
+                    />
+                    <XXMIModFolderField
+                      importer={importer}
+                      disabledReason={
+                        normalizedFolder(config.importerFolder) !==
+                        normalizedFolder(saved?.importerFolder ?? "")
+                          ? t("page.setting.xxmi.builtin.unsavedChanges")
+                          : undefined
+                      }
                     />
                     <PathField
                       label={t("page.setting.xxmi.builtin.gameFolder")}
@@ -1562,17 +1532,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                   setConfig(next);
                   setIsSaving(true);
                   try {
-                    const resolved = await resolveImporterGameFolder(importer, next);
-                    const games = await linkedGamesForImporterMove(
-                      saved?.importerFolder,
-                      next.importerFolder,
-                    );
-                    if (games.length) {
-                      setPackageDialogVersion(null);
-                      setPendingFolderChange({ next: resolved, games, install });
-                      return;
-                    }
-                    await persist(resolved, [], install);
+                    await persist(await resolveImporterGameFolder(importer, next), install);
                   } catch (error) {
                     toast.error(toErrorMessage(error));
                   } finally {
@@ -1614,30 +1574,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
           ) : (
             <p className="text-muted-foreground">{t("page.setting.xxmi.builtin.noGameFolders")}</p>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={pendingFolderChange !== null}
-        onOpenChange={(open) => !open && setPendingFolderChange(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("page.setting.xxmi.builtin.updateModPaths")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm">
-            {t("page.setting.xxmi.builtin.updateModPathsDescription", {
-              count: pendingFolderChange?.games.length ?? 0,
-            })}
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClickPromise={() => confirmPendingFolderChange(false)}>
-              {t("page.setting.xxmi.builtin.keepModPaths")}
-            </Button>
-            <Button onClickPromise={() => confirmPendingFolderChange(true)}>
-              {t("page.setting.xxmi.builtin.updateModPaths")}
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 

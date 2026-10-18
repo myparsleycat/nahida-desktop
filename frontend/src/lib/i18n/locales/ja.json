@@ -577,7 +577,8 @@
           },
           "#": {
             "0": "ゲーム名を入力してください",
-            "1": "MODフォルダーのパスを選択してください"
+            "1": "MODフォルダーのパスを選択してください",
+            "2": "NTE のインストールフォルダーを選択してください"
           }
         },
         "edit-game": {
@@ -880,6 +881,7 @@
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
             "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
             "invalid-mod-folder-path": "MODフォルダーが見つかりません。パスを確認してください",
+            "importer-not-available": "Importer がインストールされていないか、有効になっていません。Importer 設定を確認してください。",
             "failed": "ゲームの追加に失敗しました",
             "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
             "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
@@ -2154,7 +2156,6 @@
           "importUserDataMoveHint": "移動: 新しいインポーターフォルダーへ移動し、元の Mods フォルダーを使っていたゲームのパスも更新します。別のドライブへ移動する場合はコピーするため、時間がかかることがあります。元のデータは自動で削除されず、以後の変更はコピーと同期されません。インポートしたデータを確認したうえで、必要に応じて元のデータを手動で削除してください。",
           "importUserDataKeep": "既存の場所を維持",
           "importUserDataMove": "ここへ移動",
-          "importGamesFailed": "ランチャー設定はインポートしましたが、一部のゲームを移動後の Mods フォルダーに切り替えられませんでした。ゲーム設定で Mods フォルダーを更新してください。",
           "importCheckingVersions": "インストール済みと最新のバージョンを確認中…",
           "importPackage": "パッケージ",
           "importInstalledVersion": "外部ランチャーのバージョン",
@@ -2267,9 +2268,6 @@
           "launcherFolder": "公式ランチャーフォルダー",
           "mode": "ランタイムモード",
           "legacyWarning": "新しいインポーターパッケージは従来の DLL に対応しない場合があります。必要に応じて古いバージョンに固定してください。",
-          "updateModPaths": "関連するMODフォルダーを更新",
-          "updateModPathsDescription": "古い Mods フォルダーを参照するゲーム {{count}} 件のパスも更新しますか？",
-          "keepModPaths": "現在のパスを維持",
           "packageVersion": "パッケージのバージョン",
           "packageDetails": "パッケージの内容",
           "noPackageNotes": "このバージョンのパッケージ説明はありません。",
@@ -2311,6 +2309,27 @@
           "leaveDescription": "保存されていない変更は失われます。",
           "leaveConfirm": "破棄して戻る",
           "importerFolderDescription": "このインポーターの Mods、ShaderFixes フォルダーと d3dx.ini を含むフォルダーです。",
+          "modFolder": "MODフォルダー",
+          "modFolderDescription": "このインポーターが読み込む Mods フォルダーです。別のフォルダーを選ぶと、MOD をそこに置けます。",
+          "modFolderLinked": "リンク済み",
+          "modFolderLinkedDescription": "{{path}} がこのフォルダーにリンクされているため、インポーターはここから MOD を読み込みます。",
+          "modFolderTargetMissing": "リンク先のフォルダーが見つかりません。ドライブを再接続するか、別のフォルダーを選ぶかリンクを解除してください。",
+          "modFolderChange": "MODフォルダーを変更",
+          "modFolderUnlink": "リンクを解除",
+          "modFolderChangeTitle": "MODフォルダーを変更しますか？",
+          "modFolderMoveDescription": "現在の Mods フォルダーの MOD をこのフォルダーへ移動し、Mods をこのフォルダーにリンクします。両方のフォルダーに MOD がある場合は変更できません。別のドライブへ移動する場合は先にコピーするため、時間がかかることがあります。",
+          "modFolderRelinkDescription": "Mods をこのフォルダーにリンクし直します。以前のリンク先にある MOD はそのまま残ります。",
+          "modFolderUnlinkTitle": "MODフォルダーのリンクを解除しますか？",
+          "modFolderUnlinkDescription": "リンクを削除し、空の Mods フォルダーを作成します。リンク先の MOD はそのまま残ります。",
+          "modFolderChanged": "MODフォルダーを変更しました",
+          "modFolderUnlinked": "MODフォルダーのリンクを解除しました",
+          "modFolderErrors": {
+            "XXMI_MOD_FOLDER_TARGET_NOT_EMPTY": "現在の Mods フォルダーと選択したフォルダーの両方に MOD があります。どちらかを先に空にしてください。",
+            "XXMI_MOD_FOLDER_INVALID_TARGET": "インポーターフォルダーの外にあるローカルドライブのフォルダーを選択してください。",
+            "XXMI_IMPORT_NO_SPACE": "選択したドライブの空き容量が足りません。",
+            "XXMI_GAME_RUNNING": "MODフォルダーを変更する前にゲームを終了してください。",
+            "XXMI_BUSY": "インポーターが別の処理中です。終わってから再度お試しください。"
+          },
           "gameFolderDescription": "ゲームの実行ファイルがあるフォルダーです。",
           "launcherFolderDescription": "GRYPHLINK ランチャーのフォルダーです。ゲームは公式ランチャーを経由しないと終了するため、直接起動ではこのランチャーを通してゲームを起動します。空欄の場合は自動で検出します。",
           "modeDescription": "通常は XXMI を使います。従来の 3DMigoto ビルドが必要な場合のみ 3DMigoto を選んでください。",

@@ -577,7 +577,8 @@
           },
           "#": {
             "0": "请输入游戏名称",
-            "1": "请选择模组文件夹路径"
+            "1": "请选择模组文件夹路径",
+            "2": "请选择 NTE 安装文件夹"
           }
         },
         "edit-game": {
@@ -880,6 +881,7 @@
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
             "invalid-params": "请输入游戏名称和模组文件夹路径",
             "invalid-mod-folder-path": "找不到模组文件夹，请检查路径",
+            "importer-not-available": "Importer 未安装或未启用。请检查 Importer 设置。",
             "failed": "添加游戏失败",
             "nte_mods_link_conflict": "游戏 Mods 文件夹和自定义模组文件夹都包含文件。链接前请先清空其中一个。",
             "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",
@@ -2154,7 +2156,6 @@
           "importUserDataMoveHint": "移动：移到新的导入器文件夹，并更新使用旧 Mods 文件夹的游戏路径。移动到其他驱动器时会复制数据，可能需要一些时间。原数据不会自动删除，后续更改也不会与副本同步。确认导入的数据后，如有需要，请手动删除原数据。",
           "importUserDataKeep": "保留现有位置",
           "importUserDataMove": "移到此处",
-          "importGamesFailed": "已导入启动器设置，但部分游戏未能切换到移动后的 Mods 文件夹。请在游戏设置中更新其 Mods 文件夹。",
           "importCheckingVersions": "正在检查已安装版本和最新版本…",
           "importPackage": "软件包",
           "importInstalledVersion": "外部启动器版本",
@@ -2267,9 +2268,6 @@
           "launcherFolder": "官方启动器文件夹",
           "mode": "运行时模式",
           "legacyWarning": "较新的导入器软件包可能与旧版 DLL 不兼容。必要时请固定较旧的软件包版本。",
-          "updateModPaths": "更新关联的模组文件夹",
-          "updateModPathsDescription": "是否更新指向旧 Mods 文件夹的 {{count}} 个游戏条目？",
-          "keepModPaths": "保留现有路径",
           "packageVersion": "软件包版本",
           "packageDetails": "软件包内容",
           "noPackageNotes": "此版本没有软件包说明。",
@@ -2311,6 +2309,27 @@
           "leaveDescription": "未保存的更改将会丢失。",
           "leaveConfirm": "放弃并离开",
           "importerFolderDescription": "存放此导入器的 Mods、ShaderFixes 文件夹和 d3dx.ini 的文件夹。",
+          "modFolder": "模组文件夹",
+          "modFolderDescription": "此导入器加载的 Mods 文件夹。选择其他文件夹即可将模组存放在别处。",
+          "modFolderLinked": "已链接",
+          "modFolderLinkedDescription": "{{path}} 已链接到此文件夹，导入器会从这里加载模组。",
+          "modFolderTargetMissing": "找不到链接的文件夹。请重新连接驱动器，或选择其他文件夹或解除链接。",
+          "modFolderChange": "更改模组文件夹",
+          "modFolderUnlink": "解除链接",
+          "modFolderChangeTitle": "要更改模组文件夹吗？",
+          "modFolderMoveDescription": "当前 Mods 文件夹中的模组将移动到此文件夹，并将 Mods 链接到此处。如果两个文件夹都有模组，则无法更改。移动到其他驱动器时会先复制文件，可能需要一些时间。",
+          "modFolderRelinkDescription": "Mods 将改为链接到此文件夹。之前链接的文件夹中的模组保持不变。",
+          "modFolderUnlinkTitle": "要解除模组文件夹的链接吗？",
+          "modFolderUnlinkDescription": "将删除链接并创建一个空的 Mods 文件夹。链接的文件夹中的模组保持不变。",
+          "modFolderChanged": "已更改模组文件夹",
+          "modFolderUnlinked": "已解除模组文件夹的链接",
+          "modFolderErrors": {
+            "XXMI_MOD_FOLDER_TARGET_NOT_EMPTY": "当前 Mods 文件夹和所选文件夹中都有模组。请先清空其中一个。",
+            "XXMI_MOD_FOLDER_INVALID_TARGET": "请选择导入器文件夹之外的本地驱动器文件夹。",
+            "XXMI_IMPORT_NO_SPACE": "所选驱动器的可用空间不足。",
+            "XXMI_GAME_RUNNING": "更改模组文件夹前请先关闭游戏。",
+            "XXMI_BUSY": "导入器正在执行其他操作。请在完成后重试。"
+          },
           "gameFolderDescription": "游戏可执行文件所在的文件夹。",
           "launcherFolderDescription": "GRYPHLINK 启动器所在的文件夹。游戏若不经由官方启动器启动会自动退出，因此直接启动时会通过此启动器启动游戏。留空则自动检测。",
           "modeDescription": "通常使用 XXMI。仅在需要旧版 3DMigoto 构建时选择 3DMigoto。",

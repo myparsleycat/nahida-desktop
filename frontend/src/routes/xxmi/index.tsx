@@ -1,8 +1,6 @@
-import { Mod } from "@bindings/mod";
 import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
 import {
-  ImportUserDataMode,
   LauncherMode,
   RuntimeMode,
   type ImportExternalLauncherInput,
@@ -155,7 +153,6 @@ export function XXMIDashboard() {
 
   const importExternal = async (input: ImportExternalLauncherInput) => {
     if (!externalLauncher) return;
-    const userData = input.userData;
     const imported = await XXMI.ImportExternalLauncher(input).catch((error: unknown) => {
       const message = toErrorMessage(error);
       const code = importErrorCodes.find((code) => message.includes(code));
@@ -168,32 +165,8 @@ export function XXMIDashboard() {
     refresh();
     void queryClient.invalidateQueries({ queryKey: ["settings"] });
     toast.success(t("page.setting.xxmi.builtin.imported"));
-    if (userData !== ImportUserDataMode.ImportUserDataMove) return;
-
-    // The import is already committed, so a game that fails to follow the moved Mods folder is reported on its own
-    // instead of failing the import.
-    const normalize = (path: string) =>
-      path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
-    const games = await Mod.GetGames().catch(() => undefined);
-    let failed = games === undefined;
-    for (const importer of imported ?? []) {
-      const oldMods = normalize(`${importer.previousFolder}\\Mods`);
-      for (const game of (games ?? []).filter(
-        (game) => normalize(game.modFolderPath) === oldMods,
-      )) {
-        await Mod.UpdateGame(game.game, {
-          modFolderPath: `${importer.importerFolder}\\Mods`,
-          importer: game.importer,
-          linkedModFolderPath: game.linkedModFolderPath,
-          gameInstallPath: game.gameInstallPath,
-          gameExecutablePath: game.gameExecutablePath,
-        }).catch(() => {
-          failed = true;
-        });
-      }
-    }
+    // Listing games makes the backend follow the imported importer folders with the games that use them.
     void queryClient.invalidateQueries({ queryKey: ["games"] });
-    if (failed) toast.warning(t("page.setting.xxmi.builtin.importGamesFailed"));
   };
 
   const selectSharedCustomDll = async (path: string) => {

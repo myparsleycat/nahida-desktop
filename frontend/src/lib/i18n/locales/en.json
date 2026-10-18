@@ -577,7 +577,8 @@
           },
           "#": {
             "0": "Please enter a game name",
-            "1": "Please select a mod folder path"
+            "1": "Please select a mod folder path",
+            "2": "Please select the NTE install folder"
           }
         },
         "edit-game": {
@@ -880,6 +881,7 @@
             "duplicate-mod-folder-path": "That mod folder path is already in use",
             "invalid-params": "Game name and mod folder path are required",
             "invalid-mod-folder-path": "The mod folder could not be found. Check the path.",
+            "importer-not-available": "The importer is not installed or enabled. Check the Importer settings.",
             "failed": "Failed to add game",
             "nte_mods_link_conflict": "Both the game Mods folder and the custom mod folder contain files. Clear one before linking.",
             "nte_mods_link_path_occupied": "The game Mods folder path is occupied and cannot be linked.",
@@ -2206,7 +2208,6 @@
           "importUserDataMoveHint": "Move: they move into the new importer folders, and games that used the old Mods folders are updated. Moving to another drive copies the data, which can take a while. The originals are not deleted automatically, and later changes are not synced with the copies. After checking the imported data, delete the originals manually if needed.",
           "importUserDataKeep": "Keep existing location",
           "importUserDataMove": "Move here",
-          "importGamesFailed": "Launcher settings were imported, but some games could not be switched to the moved Mods folder. Update their Mods folder in the game settings.",
           "importCheckingVersions": "Checking installed and latest versions…",
           "importPackage": "Package",
           "importInstalledVersion": "External launcher version",
@@ -2319,9 +2320,6 @@
           "launcherFolder": "Official launcher folder",
           "mode": "Runtime mode",
           "legacyWarning": "Recent importer packages may not work with the legacy DLL. Pin an older package version if needed.",
-          "updateModPaths": "Update linked mod folders",
-          "updateModPathsDescription": "Update {{count}} game entries that point to the old Mods folder?",
-          "keepModPaths": "Keep existing paths",
           "packageVersion": "Package versions",
           "packageDetails": "Package details",
           "noPackageNotes": "No package notes are available for this version.",
@@ -2363,6 +2361,27 @@
           "leaveDescription": "Your unsaved changes will be lost.",
           "leaveConfirm": "Discard and leave",
           "importerFolderDescription": "Holds this importer's Mods and ShaderFixes folders and d3dx.ini.",
+          "modFolder": "Mod folder",
+          "modFolderDescription": "The Mods folder this importer loads. Choose another folder to keep mods elsewhere.",
+          "modFolderLinked": "Linked",
+          "modFolderLinkedDescription": "{{path}} is linked to this folder, so the importer loads mods from here.",
+          "modFolderTargetMissing": "The linked folder cannot be found. Reconnect the drive, or choose another folder or unlink it.",
+          "modFolderChange": "Change mod folder",
+          "modFolderUnlink": "Unlink",
+          "modFolderChangeTitle": "Change the mod folder?",
+          "modFolderMoveDescription": "The mods in the current Mods folder move to this folder, and Mods is linked to it. If both folders already hold mods, the change is refused. Moving to another drive copies the files first and can take a while.",
+          "modFolderRelinkDescription": "Mods is linked to this folder instead. The mods in the previously linked folder stay where they are.",
+          "modFolderUnlinkTitle": "Unlink the mod folder?",
+          "modFolderUnlinkDescription": "The link is removed and an empty Mods folder takes its place. The mods in the linked folder stay where they are.",
+          "modFolderChanged": "Mod folder changed",
+          "modFolderUnlinked": "Mod folder unlinked",
+          "modFolderErrors": {
+            "XXMI_MOD_FOLDER_TARGET_NOT_EMPTY": "Both the current Mods folder and the selected folder hold mods. Empty one of them first.",
+            "XXMI_MOD_FOLDER_INVALID_TARGET": "Choose a folder on a local drive outside the importer folder.",
+            "XXMI_IMPORT_NO_SPACE": "There is not enough free space on the selected drive.",
+            "XXMI_GAME_RUNNING": "Close the game before changing the mod folder.",
+            "XXMI_BUSY": "The importer is busy. Try again once it finishes."
+          },
           "gameFolderDescription": "The folder that contains the game executable.",
           "launcherFolderDescription": "The GRYPHLINK launcher folder. The game closes unless its official launcher starts it, so a direct launch starts the game under this launcher. Leave empty to detect it automatically.",
           "modeDescription": "XXMI is the standard choice. Choose 3DMigoto only if you need a legacy 3DMigoto build.",

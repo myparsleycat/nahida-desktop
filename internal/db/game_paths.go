@@ -144,6 +144,29 @@ WHERE "game" = ?`,
 		argString(updates.GameInstallPath), argString(updates.GameExecutablePath), game)
 }
 
+// MoveModFolderPath points game at to only while its row still holds the importer and the from folder the caller
+// read, and no other game uses to, so an edit saved meanwhile is never overwritten. It reports whether it moved.
+func (s GamePathsStore) MoveModFolderPath(
+	ctx context.Context,
+	game string,
+	importer *string,
+	from, to string,
+) (bool, error) {
+	result, err := s.c.db.ExecContext(ctx, `
+UPDATE "game_paths" SET "modFolderPath" = ?
+WHERE "game" = ? AND "modFolderPath" = ? AND "importer" IS ?
+  AND NOT EXISTS (
+    SELECT 1 FROM "game_paths" AS "other"
+    WHERE "other"."game" <> ? AND ("other"."modFolderPath" = ? OR "other"."linkedModFolderPath" = ?)
+  )`,
+		to, game, from, argString(importer), game, to, to)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected > 0, err
+}
+
 func (s GamePathsStore) SetNteLauncherPath(ctx context.Context, game, nteLauncherPath string) error {
 	return s.c.exec(ctx, `UPDATE "game_paths" SET "nteLauncherPath" = ? WHERE "game" = ?`, nteLauncherPath, game)
 }

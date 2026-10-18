@@ -391,11 +391,22 @@ function ModRouteContent() {
     }
   }, [characters, downloadMode, pendingTargetVersion, selectedGroupPath, setSelectedGroup]);
 
+  const selectedModFolder = games.find((game) => game.game === selectedGame)?.modFolderPath;
+  const watchedFolderRef = useRef<{ game: string; folder?: string } | null>(null);
   useEffect(() => {
-    if (selectedGame) {
-      void Mod.WatchGame(selectedGame);
+    if (!selectedGame) return;
+    void Mod.WatchGame(selectedGame);
+
+    // The backend moves a game with its importer folder, which leaves the listing of the old folder cached.
+    const watched = watchedFolderRef.current;
+    watchedFolderRef.current = { game: selectedGame, folder: selectedModFolder };
+    if (watched?.game !== selectedGame || !watched.folder || watched.folder === selectedModFolder) {
+      return;
     }
-  }, [selectedGame]);
+    setSelectedGroup(null);
+    void queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+    void queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+  }, [queryClient, selectedGame, selectedModFolder, setSelectedGroup]);
 
   useEffect(() => {
     if (selectedGroupPath) {

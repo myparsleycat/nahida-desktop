@@ -95,6 +95,7 @@ function AddGameDialogContent({
   const [isNteNotFound, setIsNteNotFound] = useState(false);
   const [selectedImporter, setSelectedImporter] = useState(NO_IMPORTER_VALUE);
   const isNteSelected = isNteImporter(selectedImporter);
+  const isManualSelected = selectedImporter === NO_IMPORTER_VALUE;
 
   const { data: xxmiOverview } = useQuery({
     queryKey: ["xxmi:overview"],
@@ -128,7 +129,7 @@ function AddGameDialogContent({
       const path = value.path.trim();
       const customModFolderPath = value.customModFolderPath.trim();
 
-      if (!name || !path) {
+      if (!name || ((isNte || !importer) && !path)) {
         return;
       }
 
@@ -154,7 +155,8 @@ function AddGameDialogContent({
         return;
       }
 
-      onAddGame(name, path, importer);
+      // The backend resolves an XXMI importer's own Mods folder, so only a game without one sends a path.
+      onAddGame(name, importer ? "" : path, importer);
     },
   });
 
@@ -183,27 +185,20 @@ function AddGameDialogContent({
     void navi({ to: "/xxmi" });
   };
 
-  const defaultModFolderPath = (importer: string) => {
-    const folder = enabledImporters.find((item) => item.key === importer)?.importerFolder;
-    return folder ? `${folder.replace(/[\\/]+$/, "")}\\Mods` : "";
-  };
-
   const handleImporterChange = (value: string, onChange: (value: string) => void) => {
     const wasNte = isNteImporter(selectedImporter);
     const nextIsNte = isNteImporter(value);
-    const path = form.getFieldValue("path");
     onChange(value);
     setSelectedImporter(value);
     setNteResolution(null);
     setIsNteNotFound(false);
 
+    // The path field holds an NTE install folder or a mod folder, so a value of one kind never carries over.
+    if (wasNte !== nextIsNte) {
+      form.setFieldValue("path", "");
+    }
     if (wasNte && !nextIsNte) {
       form.setFieldValue("customModFolderPath", "");
-    }
-
-    // A folder the user picked themselves survives importer changes; only the previous default is replaced.
-    if (wasNte || !path || path === defaultModFolderPath(selectedImporter)) {
-      form.setFieldValue("path", defaultModFolderPath(value));
     }
 
     if (nextIsNte) {
@@ -318,55 +313,64 @@ function AddGameDialogContent({
           )}
         />
 
-        <form.Field
-          name="path"
-          validators={{
-            onChange: ({ value }) => (value.trim() ? undefined : t("page.mod.dialog.add-game.#.1")),
-          }}
-          children={(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                {isNteSelected
-                  ? t("page.mod.dialog.add-game.nte_install_path")
-                  : t("page.mod.dialog.add-game.path_input_placeholder")}
-              </FieldLabel>
-              <div className="flex gap-2">
-                <Input
-                  id={field.name}
-                  value={field.state.value}
-                  readOnly={!isNteSelected}
-                  hideFocusRing
-                  onBlur={field.handleBlur}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value);
-                    setNteResolution(null);
-                    setIsNteNotFound(false);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={isNteSelected && isResolvingNte}
-                  onClick={() => void handlePickFolder()}
-                >
-                  <FolderOpen className="size-4" />
-                </Button>
-              </div>
-              {nteResolution && isNteSelected ? (
-                <p className="text-xs break-all text-muted-foreground">
-                  {nteResolution.modFolderPath}
-                </p>
-              ) : null}
-              {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
-              ) : null}
-              {isNteSelected && isNteNotFound ? (
-                <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
-              ) : null}
-            </Field>
-          )}
-        />
+        {(isNteSelected || isManualSelected) && (
+          <form.Field
+            name="path"
+            validators={{
+              onChange: ({ value }) =>
+                value.trim()
+                  ? undefined
+                  : t(
+                      isNteSelected
+                        ? "page.mod.dialog.add-game.#.2"
+                        : "page.mod.dialog.add-game.#.1",
+                    ),
+            }}
+            children={(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  {isNteSelected
+                    ? t("page.mod.dialog.add-game.nte_install_path")
+                    : t("page.mod.dialog.add-game.path_input_placeholder")}
+                </FieldLabel>
+                <div className="flex gap-2">
+                  <Input
+                    id={field.name}
+                    value={field.state.value}
+                    readOnly={!isNteSelected}
+                    hideFocusRing
+                    onBlur={field.handleBlur}
+                    onChange={(e) => {
+                      field.handleChange(e.target.value);
+                      setNteResolution(null);
+                      setIsNteNotFound(false);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isNteSelected && isResolvingNte}
+                    onClick={() => void handlePickFolder()}
+                  >
+                    <FolderOpen className="size-4" />
+                  </Button>
+                </div>
+                {isNteSelected && nteResolution ? (
+                  <p className="text-xs break-all text-muted-foreground">
+                    {nteResolution.modFolderPath}
+                  </p>
+                ) : null}
+                {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                  <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+                ) : null}
+                {isNteSelected && isNteNotFound ? (
+                  <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          />
+        )}
 
         {isNteSelected && (
           <form.Field
