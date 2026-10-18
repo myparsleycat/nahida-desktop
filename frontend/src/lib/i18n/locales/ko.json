@@ -1691,6 +1691,42 @@
         "no_bones": "일치하는 본이 없습니다",
         "bone_label_short": "본 {{id}}"
       },
+      "efmi_outline": {
+        "title": "Vulkan 외곽선 보정",
+        "description": "Vulkan에서는 이 모드의 일부 파츠가 외곽선 패스에서 한 번 더 그려져 불투명하게 보입니다. 외곽선 패스에서 뺄 파츠를 고르세요.",
+        "empty": "Vulkan 외곽선 패스에서만 그려지는 파츠가 없습니다.",
+        "lines": "{{lines}}번째 줄",
+        "locked": "원본 파일에서 이미 빠져 있음",
+        "revert": "되돌리기",
+        "applied": "적용했습니다. 게임에서 F10을 눌러 모드를 다시 읽으세요.",
+        "reverted": "원본 파일로 되돌렸습니다.",
+        "adopted": "현재 파일을 원본으로 삼았습니다.",
+        "state": {
+          "original": "원본",
+          "applied": "적용됨",
+          "modified": "직접 수정됨",
+          "unsupported": "지원하지 않는 인코딩"
+        },
+        "manual": {
+          "title": "수동 확인 ({{count}})",
+          "condition": "조건을 판단할 수 없음",
+          "structure": "if/endif 구조가 맞지 않음",
+          "call": "도형을 그리는 섹션을 호출함"
+        },
+        "modified": {
+          "title": "적용한 뒤 이 파일이 직접 수정되었습니다",
+          "description": "파일은 그대로 두었습니다. 다시 적용하거나 되돌리려면 현재 파일을 새 원본으로 삼으세요.",
+          "adopt": "현재 파일을 원본으로 사용",
+          "confirm_title": "현재 파일을 원본으로 사용할까요?",
+          "confirm_description": "저장해 둔 원본 백업이 삭제됩니다. 되돌릴 수 없습니다."
+        },
+        "error": {
+          "not_efmi": "이 도구는 명일방주: 엔드필드(EFMI) 모드에서만 사용할 수 있습니다.",
+          "modified": "{{file}} 파일이 적용 뒤 직접 수정되어 변경하지 않았습니다.",
+          "stale": "모드 파일이 바뀌었습니다. 다시 불러온 뒤 시도하세요.",
+          "unsupported": "{{file}} 파일은 지원하지 않는 인코딩입니다."
+        }
+      },
       "body_shape": {
         "title": "체형 변경",
         "mod_path": "모드 폴더",

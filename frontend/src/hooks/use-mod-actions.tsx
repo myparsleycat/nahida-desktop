@@ -33,7 +33,7 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup, ModInfo } from "@renderer/types/mod";
-import { isNteImporter, stripDisabledPrefix } from "@shared/mod";
+import { isEfmiImporter, isNteImporter, stripDisabledPrefix } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
@@ -43,6 +43,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
+import { EfmiOutlineDialog } from "../components/mod/efmi-outline-dialog";
 import { ModConflictFinderDialog } from "../components/mod/mod-conflict-finder-dialog";
 import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
@@ -80,6 +81,7 @@ export interface ModActionApi {
   overlays: ReactNode;
   runner: ReturnType<typeof useModFixRunner>;
   isNteGame: boolean;
+  isEfmiGame: boolean;
   convertingModelPath: string | null;
   /** Runs enable at once, or after the user confirms when enabling a mod with a missing dependency. */
   confirmEnable: (mod: ModInfo, enable: () => void) => void;
@@ -91,6 +93,7 @@ export interface ModActionApi {
   openTextureResizeDialog: (mod: ModInfo) => void;
   openBodyShapeDialog: (mod: ModInfo) => void;
   openTouchProfileDialog: (mod: ModInfo) => void;
+  openEfmiOutlineDialog: (mod: ModInfo) => void;
   openConflictFinder: (mod: ModInfo) => void;
   openModFixer: (mod: ModInfo) => Promise<void>;
   markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
@@ -110,11 +113,14 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const runner = useModFixRunner();
   const selectedGame = useModStore((s) => s.selectedGame);
   const { data: games = [] } = useGames();
-  const isNteGame = isNteImporter(games.find((game) => game.game === selectedGame)?.importer);
+  const selectedImporter = games.find((game) => game.game === selectedGame)?.importer;
+  const isNteGame = isNteImporter(selectedImporter);
+  const isEfmiGame = isEfmiImporter(selectedImporter);
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [bodyShapeMod, setBodyShapeMod] = useState<ModInfo | null>(null);
   const [touchProfileMod, setTouchProfileMod] = useState<ModInfo | null>(null);
+  const [efmiOutlineMod, setEfmiOutlineMod] = useState<ModInfo | null>(null);
   const [conflictFinderMod, setConflictFinderMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
     groupPath?: string;
@@ -435,6 +441,13 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         }}
       />
 
+      <EfmiOutlineDialog
+        open={efmiOutlineMod !== null}
+        onOpenChange={(open) => !open && setEfmiOutlineMod(null)}
+        modPath={efmiOutlineMod?.path ?? ""}
+        modName={efmiOutlineMod?.name ?? ""}
+      />
+
       <ModConflictFinderDialog
         open={conflictFinderMod !== null}
         onOpenChange={(open) => !open && setConflictFinderMod(null)}
@@ -465,6 +478,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     overlays,
     runner,
     isNteGame,
+    isEfmiGame,
     convertingModelPath,
     confirmEnable,
     openDeleteMod,
@@ -478,6 +492,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
     openTouchProfileDialog: (mod) => setTouchProfileMod(mod),
+    openEfmiOutlineDialog: (mod) => setEfmiOutlineMod(mod),
     openConflictFinder: (mod) => setConflictFinderMod(mod),
     openModFixer: async (mod) => {
       await runner.handleOpenModFixer(mod.path);

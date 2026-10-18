@@ -54,6 +54,11 @@ export const NTE_IMPORTER_KEY = "NTE";
 
 export const isNteImporter = (importer: string | null | undefined) => importer === NTE_IMPORTER_KEY;
 
+export const EFMI_IMPORTER_KEY = "EFMI";
+
+export const isEfmiImporter = (importer: string | null | undefined) =>
+    importer === EFMI_IMPORTER_KEY;
+
 export function getParentGroupPath(groupPath: string) {
     const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
     return separatorIndex < 0 ? null : groupPath.slice(0, separatorIndex);

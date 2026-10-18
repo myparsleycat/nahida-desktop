@@ -1691,6 +1691,42 @@
         "no_bones": "没有匹配的骨骼",
         "bone_label_short": "骨骼 {{id}}"
       },
+      "efmi_outline": {
+        "title": "Vulkan 描边修正",
+        "description": "在 Vulkan 下，此模组的部分部件会在描边通道中再次绘制，显示为不透明。请选择要从描边通道中排除的部件。",
+        "empty": "此模组没有仅在 Vulkan 描边通道中绘制的部件。",
+        "lines": "第 {{lines}} 行",
+        "locked": "原始文件中已排除",
+        "revert": "还原",
+        "applied": "已应用。请在游戏中按 F10 重新加载模组。",
+        "reverted": "已还原为原始文件。",
+        "adopted": "已将当前文件作为原始文件。",
+        "state": {
+          "original": "原始",
+          "applied": "已应用",
+          "modified": "已手动修改",
+          "unsupported": "不支持的编码"
+        },
+        "manual": {
+          "title": "需手动检查 ({{count}})",
+          "condition": "无法判断条件",
+          "structure": "if/endif 结构不完整",
+          "call": "调用了绘制几何体的段落"
+        },
+        "modified": {
+          "title": "应用后此文件被手动修改",
+          "description": "文件未被改动。如需再次应用或还原，请将当前文件作为新的原始文件。",
+          "adopt": "将当前文件作为原始文件",
+          "confirm_title": "要将当前文件作为原始文件吗？",
+          "confirm_description": "已保存的原始文件备份将被删除，且无法恢复。"
+        },
+        "error": {
+          "not_efmi": "此工具仅适用于明日方舟：终末地 (EFMI) 模组。",
+          "modified": "{{file}} 在应用后被手动修改，因此未作更改。",
+          "stale": "模组文件已变化。请重新加载后再试。",
+          "unsupported": "{{file}} 使用了不支持的编码。"
+        }
+      },
       "body_shape": {
         "title": "体型修改",
         "mod_path": "模组文件夹",
