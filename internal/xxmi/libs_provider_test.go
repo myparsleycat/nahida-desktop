@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -1281,7 +1282,9 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 		}
 		folder := providerTestCache(t, "0.2.0")
 		metadata, err := json.Marshal(providerDLLSource{
-			Version: "0.2.0", SHA256: hashBytes(image), Searched: spec.companions,
+			Version:  "0.2.0",
+			SHA256:   hashBytes(image),
+			Searched: append(slices.Clone(spec.legacyCompanions), providerDependenciesName),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -1366,12 +1369,12 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 			t.Fatal(err)
 		}
 		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
-		for _, name := range spec.companions {
+		for _, name := range spec.legacyCompanions {
 			if err := os.Remove(filepath.Join(folder, name)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), "", nil); err != nil {
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1394,7 +1397,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 		writeTestFile(t, filepath.Join(folder, customDLLName), image)
 		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
-		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), "", nil); err != nil {
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1451,37 +1454,131 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 		writeTestFile(t, filepath.Join(providerTestCache(t, version), providerDLLMetadata), metadata)
 
-		// The libraries that build verified are complete as cached, with GitHub out of reach.
+		// The libraries that build verified stay as cached. Only the dependency manifest it never looked for is
+		// searched for, and this release ships none.
 		before := downloads.Load()
 		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before {
 			t.Fatalf("flagged entry downloaded %d files, err = %v", downloads.Load()-before, err)
 		}
 	})
 
-	t.Run("library the provider adds later", func(t *testing.T) {
+	t.Run("entry cached before the dependency manifest", func(t *testing.T) {
 		extra := testCustomDLLImage("extra")
+		manifest := providerTestManifest("dxcompiler.dll", "dxil.dll", "extra.dll")
 		shipped := release
-		shipped.companions = map[string][]byte{"dxcompiler.dll": dxc, "dxil.dll": dxil, "extra.dll": extra}
+		shipped.companions = map[string][]byte{
+			"dxcompiler.dll": dxc, "dxil.dll": dxil, "extra.dll": extra, providerDependenciesName: manifest,
+		}
 		service, _, downloads := newProviderTestService(t, []providerTestRelease{shipped})
 		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
 			t.Fatal(err)
 		}
 
-		// A build that knows of one more library finds the entry was never searched for it and fetches it
-		// alone.
-		learned := spec
-		learned.companions = append(slices.Clone(spec.companions), "extra.dll")
+		// A build that did not read the manifest cached the libraries it knew of and nothing else, at a time the
+		// release did not ship dxil.dll yet.
+		folder := providerTestCache(t, version)
+		metadata, err := json.Marshal(providerDLLSource{
+			Version:  version,
+			SHA256:   hashBytes(image),
+			Searched: []string{providerININame, "dxcompiler.dll", "dxil.dll"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+		for _, name := range []string{"dxil.dll", "extra.dll", providerDependenciesName} {
+			if err := os.Remove(filepath.Join(folder, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), map[string]string{
+			"dxcompiler.dll": hashBytes(dxc),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// The entry is searched for the manifest and the libraries it requires, and the verified one is kept.
 		before := downloads.Load()
-		if err := service.ensureProviderDLL(ctx, learned, version); err != nil || downloads.Load() != before+1 {
-			t.Fatalf("refresh downloaded %d files, want the new library alone, err = %v", downloads.Load()-before, err)
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before+3 {
+			t.Fatalf("refresh downloaded %d files, want the manifest and two libraries, err = %v",
+				downloads.Load()-before, err)
+		}
+
+		// A listed library that is missing from the cache with no record is fetched again as well.
+		if err := os.Remove(filepath.Join(folder, "dxil.dll")); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), map[string]string{
+			"dxcompiler.dll": hashBytes(
+				dxc,
+			),
+			"extra.dll":              hashBytes(extra),
+			providerDependenciesName: hashBytes(manifest),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		before = downloads.Load()
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before+1 {
+			t.Fatalf("refresh downloaded %d files, want dxil.dll alone, err = %v", downloads.Load()-before, err)
 		}
 		root, err := xxmiCacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
-		companions, err := service.readVerifiedProviderCompanions(ctx, root, learned, version)
+		companions, err := service.readVerifiedProviderCompanions(ctx, root, spec, version)
 		if err != nil || !bytes.Equal(companions["extra.dll"], extra) || len(companions) != 3 {
 			t.Fatalf("companions = %v, err = %v", slices.Collect(maps.Keys(companions)), err)
+		}
+	})
+
+	t.Run("manifest lookup that fails", func(t *testing.T) {
+		// legacyEntry caches a release the way a build that did not read the manifest left it, complete with
+		// the two libraries it knew of.
+		legacyEntry := func(t *testing.T, service *XXMI) {
+			t.Helper()
+			folder := providerTestCache(t, version)
+			metadata, err := json.Marshal(map[string]any{
+				"version": version, "sha256": hashBytes(image), "iniChecked": true, "companionsChecked": true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeTestFile(t, filepath.Join(folder, customDLLName), image)
+			writeTestFile(t, filepath.Join(folder, "dxcompiler.dll"), dxc)
+			writeTestFile(t, filepath.Join(folder, "dxil.dll"), dxil)
+			writeTestFile(t, filepath.Join(folder, providerDLLMetadata), metadata)
+			if err := service.recordProviderHashes(ctx, spec, version, hashBytes(image), map[string]string{
+				"dxcompiler.dll": hashBytes(dxc), "dxil.dll": hashBytes(dxil),
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// With the release out of reach, the entry keeps launching with the libraries it has.
+		service, _, _ := newProviderTestService(t, nil)
+		legacyEntry(t, service)
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatalf("unreachable manifest blocked a complete entry: %v", err)
+		}
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if companions, err := service.readVerifiedProviderCompanions(ctx, root, spec, version); err != nil ||
+			len(companions) != 2 {
+			t.Fatalf("companions = %v, err = %v", slices.Collect(maps.Keys(companions)), err)
+		}
+
+		// A release whose manifest names a file it does not ship is unusable all the same.
+		broken := release
+		broken.companions = map[string][]byte{
+			"dxcompiler.dll": dxc, "dxil.dll": dxil,
+			providerDependenciesName: providerTestManifest("dxcompiler.dll", "SPIRV-Tools-shared.dll"),
+		}
+		service, _, _ = newProviderTestService(t, []providerTestRelease{broken})
+		legacyEntry(t, service)
+		if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
+			t.Fatal("entry of a release with an unusable manifest was kept")
 		}
 	})
 
@@ -1506,6 +1603,189 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		text.companions = map[string][]byte{"dxil.dll": []byte("plain text")}
 		for name, release := range map[string]providerTestRelease{"digest mismatch": mismatch, "not a DLL": text} {
 			service, _, _ := newProviderTestService(t, []providerTestRelease{release})
+			if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
+				t.Fatalf("%s: release was cached", name)
+			}
+			if _, err := os.Stat(providerTestCache(t, version)); !os.IsNotExist(err) {
+				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
+			}
+		}
+	})
+}
+
+func providerTestManifest(names ...string) []byte {
+	files := make([]map[string]any, 0, len(names))
+	for _, name := range names {
+		files = append(files, map[string]any{"name": name, "for": []string{"dx12"}, "purpose": "test"})
+	}
+	data, err := json.Marshal(map[string]any{"schema": 1, "files": files})
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+func TestProviderDependencyManifestRules(t *testing.T) {
+	t.Parallel()
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	tooMany := make([]string, providerDependenciesMaxFiles+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("lib%d.dll", i)
+	}
+	oversized := fmt.Appendf(
+		nil,
+		`{"schema":1,"files":[],"pad":%q}`,
+		strings.Repeat("x", providerDependenciesSizeLimit),
+	)
+
+	accepted := map[string]struct {
+		manifest []byte
+		want     []string
+		listed   bool
+	}{
+		"listed": {
+			manifest: providerTestManifest("dxcompiler.dll", "SPIRV-Tools-shared.dll"),
+			want:     []string{"dxcompiler.dll", "SPIRV-Tools-shared.dll"}, listed: true,
+		},
+		"unknown fields": {
+			manifest: []byte(
+				`{"schema":1,"extra":{},"files":[{"name":"a_b-1.dll","for":["vulkan","metal"],"size":3}]}`,
+			),
+			want:   []string{"a_b-1.dll"},
+			listed: true,
+		},
+		"nothing listed": {manifest: []byte(`{"schema":1,"files":[]}`), want: nil, listed: true},
+		"no manifest":    {manifest: nil, want: spec.legacyCompanions},
+		"newer schema":   {manifest: []byte(`{"schema":2,"files":"elsewhere"}`), want: spec.legacyCompanions},
+	}
+	for name, tc := range accepted {
+		names, listed, err := spec.dependencies(tc.manifest)
+		if err != nil || listed != tc.listed || !slices.Equal(names, tc.want) {
+			t.Errorf("%s: names = %v, listed = %t, err = %v", name, names, listed, err)
+		}
+	}
+
+	refused := map[string][]byte{
+		"not JSON":          []byte("dxil.dll"),
+		"no schema":         []byte(`{"files":[]}`),
+		"older schema":      []byte(`{"schema":0,"files":[]}`),
+		"no files":          []byte(`{"schema":1}`),
+		"files not a list":  []byte(`{"schema":1,"files":{"name":"a.dll"}}`),
+		"oversized":         oversized,
+		"too many":          providerTestManifest(tooMany...),
+		"folder":            providerTestManifest("sub/a.dll"),
+		"parent":            providerTestManifest(`..\a.dll`),
+		"absolute":          providerTestManifest(`C:\Windows\a.dll`),
+		"not a library":     providerTestManifest("a.exe"),
+		"upper extension":   providerTestManifest("a.DLL"),
+		"leading dot":       providerTestManifest(".a.dll"),
+		"empty":             providerTestManifest(""),
+		"device":            providerTestManifest("NUL.dll"),
+		"provider DLL":      providerTestManifest("D3D11.dll"),
+		"signed compiler":   providerTestManifest("d3dcompiler_47.dll"),
+		"duplicate":         providerTestManifest("dxil.dll", "DXIL.dll"),
+		"duplicate exactly": providerTestManifest("dxil.dll", "dxil.dll"),
+	}
+	for name, manifest := range refused {
+		if names, _, err := spec.dependencies(manifest); err == nil {
+			t.Errorf("%s: manifest was accepted with %v", name, names)
+		}
+	}
+}
+
+func TestProviderDependencyManifestDecidesDeployedLibraries(t *testing.T) {
+	ctx := context.Background()
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	dxc, spirv := testCustomDLLImage("dxc"), testCustomDLLImage("spirv")
+	release := func(version string, companions map[string][]byte) providerTestRelease {
+		image := testCustomDLLImage(version)
+		return providerTestRelease{
+			tag: "v" + version, data: image, digest: providerTestDigest(image), companions: companions,
+		}
+	}
+	cachedCompanions := func(t *testing.T, service *XXMI, version string) map[string][]byte {
+		t.Helper()
+		root, err := xxmiCacheRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		companions, err := service.readVerifiedProviderCompanions(ctx, root, spec, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return companions
+	}
+
+	t.Run("library a later release drops", func(t *testing.T) {
+		service, _, _ := newProviderTestService(t, []providerTestRelease{
+			release("1.2.2-nhd.13", map[string][]byte{
+				"dxcompiler.dll": dxc, providerDependenciesName: providerTestManifest("dxcompiler.dll"),
+			}),
+			release("1.2.2-nhd.12", map[string][]byte{
+				"dxcompiler.dll": dxc, "SPIRV-Tools-shared.dll": spirv,
+				providerDependenciesName: providerTestManifest("dxcompiler.dll", "SPIRV-Tools-shared.dll"),
+			}),
+		})
+		base := t.TempDir()
+		importer, libs := filepath.Join(base, "GIMI"), filepath.Join(base, "libs")
+		writeTestFile(t, filepath.Join(importer, "d3dx.ini"), []byte("[Loader]"))
+		writeTestFile(t, filepath.Join(libs, "d3d11.dll"), []byte("official"))
+		writeTestFile(t, filepath.Join(libs, "d3dcompiler_47.dll"), []byte("compiler"))
+		deploy := func(version string) {
+			t.Helper()
+			if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+				t.Fatal(err)
+			}
+			provider := &providerRuntimeDLL{
+				source: spec.overlayPackage + "@" + version, data: testCustomDLLImage(version),
+				companions: cachedCompanions(t, service, version),
+			}
+			if _, err := deployCustomRuntimeFiles(
+				ctx, "GIMI", ImporterConfig{ImporterFolder: importer, Mode: RuntimeXXMI}, libs, "xxmi-libs@1", base,
+				false, noGameProcess, nil, provider,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		deploy("1.2.2-nhd.12")
+		assertFileContent(t, filepath.Join(importer, "SPIRV-Tools-shared.dll"), string(spirv))
+		deploy("1.2.2-nhd.13")
+		assertFileContent(t, filepath.Join(importer, "dxcompiler.dll"), string(dxc))
+		if _, err := os.Stat(filepath.Join(importer, "SPIRV-Tools-shared.dll")); !os.IsNotExist(err) {
+			t.Fatalf("library the newer manifest dropped is still deployed: %v", err)
+		}
+	})
+
+	t.Run("newer schema", func(t *testing.T) {
+		const version = "1.2.2-nhd.14"
+		service, _, _ := newProviderTestService(t, []providerTestRelease{
+			release(version, map[string][]byte{
+				"dxcompiler.dll": dxc, "SPIRV-Tools-shared.dll": spirv,
+				providerDependenciesName: []byte(`{"schema":2,"libraries":["SPIRV-Tools-shared.dll"]}`),
+			}),
+		})
+		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
+			t.Fatal(err)
+		}
+		companions := cachedCompanions(t, service, version)
+		if !bytes.Equal(companions["dxcompiler.dll"], dxc) || len(companions) != 1 {
+			t.Fatalf("companions = %v", slices.Collect(maps.Keys(companions)))
+		}
+	})
+
+	t.Run("unusable release", func(t *testing.T) {
+		const version = "1.2.2-nhd.15"
+		for name, companions := range map[string]map[string][]byte{
+			"listed file without an asset": {
+				"dxcompiler.dll":         dxc,
+				providerDependenciesName: providerTestManifest("dxcompiler.dll", "SPIRV-Tools-shared.dll"),
+			},
+			"refused manifest": {
+				"dxcompiler.dll": dxc, providerDependenciesName: providerTestManifest("dxcompiler.dll", "d3d11.dll"),
+			},
+		} {
+			service, _, _ := newProviderTestService(t, []providerTestRelease{release(version, companions)})
 			if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
 				t.Fatalf("%s: release was cached", name)
 			}
