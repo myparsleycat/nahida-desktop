@@ -110,13 +110,48 @@ func (s *Service) Apply(ctx context.Context, input OutlineApplyInput) (OutlineIn
 			plans = append(plans, plan{file: file, output: output})
 		}
 
+		// One apply covers every file of the mod, so a failed write puts back the
+		// files this call already changed instead of leaving the mod half applied.
+		var written []*loadedFile
 		for _, p := range plans {
-			if err := p.file.write(p.output, stage); err != nil {
-				return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{"file": p.file.rel}})
+			err := p.file.write(p.output, stage)
+			if err == nil {
+				if p.file.written {
+					written = append(written, p.file)
+				}
+				continue
 			}
+
+			rollback := "none"
+			if len(written) > 0 {
+				rollback = "restored"
+				if rollbackErr := rollbackFiles(written); rollbackErr != nil {
+					rollback = "failed"
+					err = errors.Join(err, rollbackErr)
+				}
+			}
+			rolledBack := make([]string, 0, len(written))
+			for _, file := range written {
+				rolledBack = append(rolledBack, file.rel)
+			}
+			return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{
+				"file":       p.file.rel,
+				"rollback":   rollback,
+				"rolledBack": rolledBack,
+			}})
 		}
 		return nil
 	})
+}
+
+func rollbackFiles(files []*loadedFile) error {
+	var errs []error
+	for _, file := range slices.Backward(files) {
+		if err := file.rollback(); err != nil {
+			errs = append(errs, fmt.Errorf("roll back %q: %w", file.rel, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Service) Revert(ctx context.Context, modPath, file string) (OutlineInspection, error) {
@@ -320,8 +355,11 @@ func iniFiles(root string) ([]string, error) {
 type loadedFile struct {
 	rel, path, backup string
 	current           []byte
+	original          []byte
 	hasBackup         bool
-	state             OutlineFileState
+	// written records that write changed the file or its backup.
+	written bool
+	state   OutlineFileState
 	// baseDoc is the original: the backup when one exists, else the file itself.
 	baseDoc    *document
 	currentDoc *document
@@ -351,7 +389,7 @@ func loadFile(root, rel string) (*loadedFile, error) {
 	original, err := os.ReadFile(file.backup)
 	switch {
 	case err == nil:
-		file.hasBackup = true
+		file.hasBackup, file.original = true, original
 	case !errors.Is(err, fs.ErrNotExist):
 		return nil, fmt.Errorf("read backup %q: %w", file.backup, err)
 	}
@@ -426,7 +464,11 @@ func (f *loadedFile) write(output []byte, stage *string) error {
 			return nil
 		}
 		*stage = stageRestore
-		return platform.ReplaceAtomic(f.backup, f.path)
+		if err := platform.ReplaceAtomic(f.backup, f.path); err != nil {
+			return err
+		}
+		f.written = true
+		return nil
 	}
 	if bytes.Equal(output, f.current) {
 		return nil
@@ -446,6 +488,26 @@ func (f *loadedFile) write(output []byte, stage *string) error {
 			err = errors.Join(err, os.Remove(f.backup))
 		}
 		return err
+	}
+	f.written = true
+	return nil
+}
+
+// rollback puts the file and its backup back as they were loaded. The
+// original is restored before anything that held it is removed.
+func (f *loadedFile) rollback() error {
+	if f.hasBackup {
+		if _, err := os.Stat(f.backup); errors.Is(err, fs.ErrNotExist) {
+			if err := writeAtomic(f.backup, f.original); err != nil {
+				return err
+			}
+		}
+	}
+	if err := writeAtomic(f.path, f.current); err != nil {
+		return err
+	}
+	if !f.hasBackup {
+		return removeIfExists(f.backup)
 	}
 	return nil
 }

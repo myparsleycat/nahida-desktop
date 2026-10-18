@@ -224,3 +224,49 @@ func TestAcceptsAModReachedThroughAJunction(t *testing.T) {
 		t.Fatalf("inspection = %+v, want one file with two parts", inspection)
 	}
 }
+
+// A read-only destination makes the second replace fail after the first file
+// was already written; the first file must not stay half applied.
+func TestApplyRollsBackEarlierFilesWhenALaterWriteFails(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, _, modDir := newTestMod(t, "EFMI")
+	first := filepath.Join(modDir, "mod.ini")
+	second := filepath.Join(modDir, "zz.ini")
+	if err := os.WriteFile(second, []byte(serviceFixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inspection, err := service.Inspect(ctx, modDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var selections []OutlineSelection
+	for _, file := range inspection.Files {
+		selection := OutlineSelection{Path: file.Path}
+		for _, p := range file.Parts {
+			selection.PartIDs = append(selection.PartIDs, p.ID)
+		}
+		selections = append(selections, selection)
+	}
+	if len(selections) != 2 || selections[0].Path != "mod.ini" {
+		t.Fatalf("selections = %+v, want mod.ini then zz.ini", selections)
+	}
+
+	if err := os.Chmod(second, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(second, 0o644) })
+	if _, err := service.Apply(ctx, OutlineApplyInput{ModPath: modDir, Files: selections}); err == nil {
+		t.Fatal("apply over a read-only file succeeded")
+	}
+
+	for _, path := range []string{first, second} {
+		if got := readFile(t, path); got != serviceFixture {
+			t.Fatalf("%s left changed after the failed apply:\n%q", filepath.Base(path), got)
+		}
+		if _, err := os.Stat(path + backupSuffix); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s backup left behind: %v", filepath.Base(path), err)
+		}
+	}
+}
