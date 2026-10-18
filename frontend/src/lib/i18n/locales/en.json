@@ -1689,6 +1689,42 @@
         "no_bones": "No matching bones",
         "bone_label_short": "Bone {{id}}"
       },
+      "efmi_outline": {
+        "title": "Vulkan Outline Fix",
+        "description": "On Vulkan, some parts of this mod are drawn again in the outline pass and look opaque. Choose the parts to keep out of the outline pass.",
+        "empty": "No part of this mod is drawn only in the Vulkan outline pass.",
+        "lines": "Lines {{lines}}",
+        "locked": "Already excluded in the original file",
+        "revert": "Revert",
+        "applied": "Applied. Press F10 in game to reload mods.",
+        "reverted": "Restored the original file.",
+        "adopted": "The current file is now the original.",
+        "state": {
+          "original": "Original",
+          "applied": "Applied",
+          "modified": "Edited by hand",
+          "unsupported": "Unsupported encoding"
+        },
+        "manual": {
+          "title": "Check manually ({{count}})",
+          "condition": "Condition cannot be evaluated",
+          "structure": "Broken if/endif structure",
+          "call": "Calls a section that draws geometry"
+        },
+        "modified": {
+          "title": "This file was edited after applying",
+          "description": "It was left untouched. To apply or revert again, use the current file as the new original.",
+          "adopt": "Use current file as original",
+          "confirm_title": "Use the current file as the original?",
+          "confirm_description": "The saved backup of the original file will be deleted. This cannot be undone."
+        },
+        "error": {
+          "not_efmi": "This tool only works with Arknights: Endfield (EFMI) mods.",
+          "modified": "{{file}} was edited after applying, so it was not changed.",
+          "stale": "The mod files changed. Reload and try again.",
+          "unsupported": "{{file}} uses an unsupported encoding."
+        }
+      },
       "body_shape": {
         "title": "Body Shape",
         "mod_path": "Mod folder",

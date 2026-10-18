@@ -21,6 +21,7 @@ import {
   BoxIcon,
   FolderIcon,
   ImageIcon,
+  LayersIcon,
   Loader2Icon,
   PanelsTopLeftIcon,
   PersonStandingIcon,
@@ -128,6 +129,18 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     <SparklesIcon className="size-4" />
                     {t("page.tools.touch_profile.title")} ({t("g.beta")})
                   </DropdownMenuItem>
+
+                  {actions.isEfmiGame && (
+                    <DropdownMenuItem
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        actions.openEfmiOutlineDialog(mod);
+                      }}
+                    >
+                      <LayersIcon className="size-4" />
+                      {t("page.tools.efmi_outline.title")}
+                    </DropdownMenuItem>
+                  )}
 
                   <DropdownMenuItem
                     onClick={(event) => {

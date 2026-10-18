@@ -11,6 +11,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	bodyshape "nahida.live/desktop/internal/tools/body_shape"
+	efmioutline "nahida.live/desktop/internal/tools/efmi_outline"
 	fixinspection "nahida.live/desktop/internal/tools/fix_inspection"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 	fixer4001 "nahida.live/desktop/internal/tools/fixer_4001"
@@ -70,6 +71,7 @@ type Tools struct {
 
 	bisect        *modbisect.Service
 	bodyShape     *bodyshape.Service
+	efmiOutline   *efmioutline.Service
 	fixInspection *fixinspection.Service
 	fixTool       *fixtool.Service
 	fixer4001     *fixer4001.Service
@@ -137,6 +139,7 @@ func NewWithOptions(opts Options) *Tools {
 			Protocol: opts.Protocol,
 			Mod:      opts.Mod,
 		}),
+		efmiOutline:   efmioutline.NewWithOptions(efmioutline.Options{Log: opts.Log}),
 		fixInspection: fixInspection,
 		fixTool:       fixTool,
 		fixer4001: fixer4001.NewWithOptions(fixer4001.Options{
@@ -204,6 +207,7 @@ func (t *Tools) UseClient(client *db.Client) {
 		t.githubRate.UseAppState(client.AppState)
 	}
 	t.bisect.UseClient(client)
+	t.efmiOutline.UseClient(client)
 	t.fixInspection.UseClient(client)
 	t.fixTool.UseClient(client)
 	t.fixer4001.UseClient(client)

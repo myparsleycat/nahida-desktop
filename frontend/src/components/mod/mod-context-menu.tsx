@@ -24,6 +24,7 @@ import {
   FolderIcon,
   FolderTreeIcon,
   ImageIcon,
+  LayersIcon,
   Loader2Icon,
   PanelsTopLeftIcon,
   PencilIcon,
@@ -274,6 +275,12 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                 <SparklesIcon className="mr-2 size-4" />
                 {t("page.tools.touch_profile.title")} ({t("g.beta")})
               </ContextMenuItem>
+              {actions.isEfmiGame && (
+                <ContextMenuItem onClick={() => actions.openEfmiOutlineDialog(mod)}>
+                  <LayersIcon className="mr-2 size-4" />
+                  {t("page.tools.efmi_outline.title")}
+                </ContextMenuItem>
+              )}
               <ContextMenuItem onClick={() => actions.openConflictFinder(mod)}>
                 <SwordsIcon className="mr-2 size-4" />
                 {t("page.mod.context-menu.find-conflict")}
