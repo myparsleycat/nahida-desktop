@@ -369,7 +369,9 @@ func TestRequestCannotMutateReplacedSession(t *testing.T) {
 				t.Fatal(err)
 			}
 			close(release)
-			<-done
+			if err := <-done; (err == nil) != (status == http.StatusOK) {
+				t.Fatalf("status %d returned %v", status, err)
+			}
 			cookie, _ := service.getCookie(ctx)
 			if cookie != "rmc=new" {
 				t.Fatal("old response changed new cookie")

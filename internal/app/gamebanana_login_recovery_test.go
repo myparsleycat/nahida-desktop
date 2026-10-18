@@ -152,7 +152,9 @@ func TestGameBananaOldWindowCannotCloseNewLogin(t *testing.T) {
 		t.Fatal("old event closed new login")
 	}
 	cancel()
-	<-done
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled login returned %v", err)
+	}
 }
 
 func TestGameBananaInitializationErrorCode(t *testing.T) {

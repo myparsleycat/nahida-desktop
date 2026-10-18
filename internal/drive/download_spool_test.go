@@ -101,7 +101,10 @@ func TestDownloadSpoolReleasesFileWhenIterationStopsEarly(t *testing.T) {
 	t.Parallel()
 
 	plan := spoolTestPlan(t, []transfer.DownloadFile{{ID: "a"}, {ID: "b"}})
-	for range plan.files() {
+	for _, err := range plan.files() {
+		if err != nil {
+			t.Fatal(err)
+		}
 		break
 	}
 	// Windows refuses to delete a file that is still open.
