@@ -341,8 +341,13 @@ func TestImportExternalLauncherRestoresReusedFolderOnFailure(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(target, "Mods"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The link reaches the source through another link, so a restore that resolves it again would change it.
 	shaders := filepath.Join(target, "ShaderFixes")
-	if err := createJunction(shaders, filepath.Join(source, "ShaderFixes")); err != nil {
+	alias := filepath.Join(t.TempDir(), "ShaderAlias")
+	if err := writeJunction(alias, filepath.Join(source, "ShaderFixes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJunction(shaders, alias); err != nil {
 		t.Fatal(err)
 	}
 	fakeImportInstaller(t, service, errors.New("install failed"))
@@ -363,6 +368,7 @@ func TestImportExternalLauncherRestoresReusedFolderOnFailure(t *testing.T) {
 		!linksTo(shaders, filepath.Join(source, "ShaderFixes")) {
 		t.Fatalf("ShaderFixes link not restored: info = %v, err = %v", info, err)
 	}
+	assertLinksTo(t, shaders, alias)
 	assertFile(t, filepath.Join(target, "d3dx_user.ini"), "built-in state")
 }
 

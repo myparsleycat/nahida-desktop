@@ -199,7 +199,7 @@ func (m *Mod) SetCharacterClassification(
 	}
 	gameName = game.Game
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, folderPath))
-	if relative == "" || relative == "." || relative == ".." || strings.HasPrefix(relative, "../") {
+	if relative == "" || relative == "." || escapesRoot(relative) {
 		return errors.New("INVALID_CLASSIFICATION_PATH")
 	}
 	// A deeper assignment would never be found by the listing, so it is refused rather than silently lost.

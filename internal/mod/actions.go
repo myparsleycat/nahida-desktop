@@ -16,7 +16,7 @@ import (
 func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, modPath)
+	game, modPath, err := m.ownedTarget(ctx, modPath)
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +41,7 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, modPath)
+	game, modPath, err := m.ownedTarget(ctx, modPath)
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +72,7 @@ func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, err
 func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, modPath)
+	game, modPath, err := m.ownedTarget(ctx, modPath)
 	if err != nil {
 		return "", err
 	}
@@ -90,7 +90,7 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, modPath)
+	game, modPath, err := m.ownedTarget(ctx, modPath)
 	if err != nil {
 		return "", err
 	}
@@ -171,7 +171,8 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	if _, err := m.ownedPath(ctx, modPath); err != nil {
+	_, modPath, err := m.ownedTarget(ctx, modPath)
+	if err != nil {
 		return "", err
 	}
 	release, err := m.rejectActiveDownloadAction(modPath)
@@ -209,7 +210,7 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, groupPath)
+	game, groupPath, err := m.ownedTarget(ctx, groupPath)
 	if err != nil {
 		return err
 	}
@@ -242,7 +243,7 @@ func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
 	defer m.InvalidateLibraries()
 
-	game, err := m.ownedPath(ctx, groupPath)
+	game, groupPath, err := m.ownedTarget(ctx, groupPath)
 	if err != nil {
 		return err
 	}

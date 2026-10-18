@@ -34,7 +34,12 @@ func TestImportExternalLauncherCopiesUserDataAcrossVolumes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(linked, "linked.ini"), []byte("linked mod"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := createJunction(filepath.Join(source, "Mods", "Linked"), linked); err != nil {
+	// The junction reaches its folder through another one, which the copy must keep as a rename would.
+	alias := filepath.Join(t.TempDir(), "LinkedAlias")
+	if err := writeJunction(alias, linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJunction(filepath.Join(source, "Mods", "Linked"), alias); err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
@@ -69,6 +74,7 @@ func TestImportExternalLauncherCopiesUserDataAcrossVolumes(t *testing.T) {
 	if info, err := os.Lstat(link); err != nil || !isInstallReparsePoint(info) || !linksTo(link, linked) {
 		t.Fatalf("junction was not recreated: info = %v, err = %v", info, err)
 	}
+	assertLinksTo(t, link, alias)
 	assertFile(t, filepath.Join(linked, "linked.ini"), "linked mod")
 
 	copied := map[string]bool{}

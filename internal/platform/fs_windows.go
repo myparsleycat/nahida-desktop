@@ -3,6 +3,8 @@ package platform
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -84,4 +86,21 @@ func FinalPath(path string) (string, error) {
 		return `\\` + rest, nil
 	}
 	return strings.TrimPrefix(final, `\\?\`), nil
+}
+
+// PhysicalPath is FinalPath for a path that may not exist yet: the deepest existing ancestor is resolved and the
+// missing names are appended to it, so links above an entry not created yet are still followed.
+func PhysicalPath(path string) (string, error) {
+	missing := []string{}
+	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
+		final, err := FinalPath(current)
+		if err == nil {
+			slices.Reverse(missing)
+			return filepath.Join(append([]string{final}, missing...)...), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || filepath.Dir(current) == current {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(current))
+	}
 }

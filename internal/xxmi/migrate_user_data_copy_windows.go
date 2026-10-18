@@ -122,7 +122,7 @@ func copyUserData(ctx context.Context, from, to string, report func(int64)) erro
 			if info.Mode()&os.ModeSymlink != 0 {
 				err = os.Symlink(linkTo, target)
 			} else {
-				err = createJunction(target, linkTo)
+				err = writeJunction(target, linkTo)
 			}
 			if err != nil || !entry.IsDir() {
 				return err

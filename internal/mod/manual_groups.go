@@ -11,6 +11,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type manualSubGroups map[string][]string
@@ -21,7 +22,7 @@ func (m *Mod) SetManualSubGroup(ctx context.Context, modPath string, enabled boo
 		return infra.WithCause(errors.New("INVALID_MANUAL_SUBGROUP_PATH"), err)
 	}
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, modPath))
-	if relative == "" {
+	if relative == "" || escapesRoot(relative) {
 		return errors.New("INVALID_MANUAL_SUBGROUP_PATH")
 	}
 	info, err := os.Stat(modPath)
@@ -74,6 +75,9 @@ func (m *Mod) GetManualSubGroups(
 		return nil, err
 	}
 	parentRelative := manualRelativePath(gameRelativePath(game.ModFolderPath, folderPath))
+	if escapesRoot(parentRelative) {
+		return []FolderGroup{}, nil
+	}
 	children, err := m.manualChildPaths(ctx, *game, parentRelative)
 	if err != nil || len(children) == 0 {
 		return []FolderGroup{}, err
@@ -136,6 +140,9 @@ func (m *Mod) filterManualMods(
 	group FolderGroup,
 ) FolderGroup {
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, groupPath))
+	if escapesRoot(relative) {
+		return group
+	}
 	children, childErr := m.manualChildPaths(ctx, game, relative)
 	m.logShaderError(childErr, "manual-subgroups:read")
 	group.HasManualSubGroups = len(children) > 0
@@ -258,10 +265,20 @@ func manualSegmentMatches(entryName, storedSegment string) bool {
 	return strings.EqualFold(entryName, storedSegment) || strings.EqualFold(stripDisabled(entryName), storedSegment)
 }
 
+// gameRelativePath returns target relative to root, matching by physical location when target is spelled
+// through a different junction than root. A target outside root yields a path that escapesRoot reports.
 func gameRelativePath(root, target string) string {
 	relative, err := filepath.Rel(root, target)
+	if err == nil && !escapesRoot(filepath.ToSlash(relative)) {
+		return filepath.ToSlash(relative)
+	}
+	if physicalRoot, rootErr := platform.PhysicalPath(root); rootErr == nil {
+		if mapped, ok := physicalRelativePath(physicalRoot, target); ok {
+			return filepath.ToSlash(mapped)
+		}
+	}
 	if err != nil {
-		return ""
+		return ".."
 	}
 	return filepath.ToSlash(relative)
 }

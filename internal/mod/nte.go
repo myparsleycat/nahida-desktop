@@ -13,6 +13,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -134,14 +135,16 @@ func nteRootsFor(game GameConfig) nteRoots {
 	return root
 }
 
+// nteRelative maps target into either root by physical location too, as ownedPath accepts it, so a target spelled
+// through a junction to a root does not fall back to the root itself.
 func nteRelative(roots nteRoots, target string) string {
-	if pathWithin(roots.modRoot, target) {
-		relative, _ := filepath.Rel(roots.modRoot, target)
-		return relative
-	}
-	if roots.linkedRoot != "" && pathWithin(roots.linkedRoot, target) {
-		relative, _ := filepath.Rel(roots.linkedRoot, target)
-		return relative
+	for _, root := range []string{roots.modRoot, roots.linkedRoot} {
+		if root == "" {
+			continue
+		}
+		if relative := gameRelativePath(root, target); !escapesRoot(relative) {
+			return filepath.FromSlash(relative)
+		}
 	}
 	return ""
 }
@@ -533,7 +536,13 @@ func configureNteModFolder(modRoot string, linkedRoot *string) error {
 	if err := ensureNteFolders(modRoot); err != nil {
 		return err
 	}
-	if err := reconcileNteJunction(modRoot, *linkedRoot); err != nil {
+	// The junction points at the physical folder so it never chains onto a link the mod folder is reached through;
+	// reconciling also repoints an existing chained junction.
+	target := modRoot
+	if physical, err := platform.PhysicalPath(modRoot); err == nil && len(filepath.VolumeName(physical)) == 2 {
+		target = physical
+	}
+	if err := reconcileNteJunction(target, *linkedRoot); err != nil {
 		return err
 	}
 	return ensureNteFolders(modRoot)
