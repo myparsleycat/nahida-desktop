@@ -698,6 +698,21 @@ func TestNteWrappedPakFolders(t *testing.T) {
 	})
 }
 
+// ownedPath accepts a group spelled through the physical folder of a junctioned root, so the scan must map it
+// into the root rather than fall back to the root itself.
+func TestNteScanGroupMapsPhysicalSpellingIntoRoot(t *testing.T) {
+	t.Parallel()
+	physical := t.TempDir()
+	writePak(t, filepath.Join(physical, "Character", "Hero", "Hero Mod"), "hero_P.pak")
+	alias := filepath.Join(t.TempDir(), "Mods")
+	createJunction(t, physical, alias)
+
+	group := nteScanGroup(testNteRoots(alias), filepath.Join(physical, "Character", "Hero"), false)
+	if !samePath(group.Path, filepath.Join(alias, "Character", "Hero")) || len(group.Mods) != 1 {
+		t.Fatalf("group = %s with %v, want Hero in the root's spelling", group.Path, modNames(group))
+	}
+}
+
 func TestNtePreviewDiscovery(t *testing.T) {
 	t.Parallel()
 

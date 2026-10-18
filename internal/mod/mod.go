@@ -980,7 +980,32 @@ func (m *Mod) GetExpandedGroups(ctx context.Context) ([]string, error) {
 	if err != nil || value == nil {
 		return []string{}, err
 	}
-	return decodeStringSlice(*value), nil
+	games, err := m.listGames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return managedExpandedGroups(m.managedRoots(games), decodeStringSlice(*value)), nil
+}
+
+// managedExpandedGroups rewrites each stored folder into the spelling of the root that holds it, since the
+// renderer matches them against listed paths, and drops folders no root holds any longer. A folder can be
+// stored under another spelling when a root was later replaced by a junction to the same location.
+func managedExpandedGroups(roots []managedRoot, paths []string) []string {
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if lo.SomeBy(roots, func(root managedRoot) bool { return pathWithin(root.path, path) }) {
+			result = append(result, path)
+			continue
+		}
+		resolved, err := resolveForCompare(path, nil)
+		if err != nil {
+			continue
+		}
+		if root, relative, ok := owningRoot(roots, resolved); ok {
+			result = append(result, filepath.Join(root.path, relative))
+		}
+	}
+	return lo.Uniq(result)
 }
 
 func (m *Mod) SetExpandedGroups(ctx context.Context, paths []string) error {
@@ -1019,37 +1044,125 @@ func (m *Mod) resolvePreviewSetting(ctx context.Context, override *bool) (bool, 
 }
 
 func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error) {
-	target, err := resolveForCompare(strings.TrimSpace(target), m.reportUnresolvedPath)
+	game, _, err := m.ownedTarget(ctx, target)
+	return game, err
+}
+
+// ownedTarget is ownedPath that also returns target in the spelling of the root that holds it. A target matched
+// only by physical location is rewritten below the configured root, because download reservations, ShaderFixes
+// ownership and listings all compare paths in that spelling; any other target is returned as given.
+func (m *Mod) ownedTarget(ctx context.Context, target string) (*GameConfig, string, error) {
+	input := strings.TrimSpace(target)
+	target, err := resolveForCompare(input, m.reportUnresolvedPath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	games, err := m.listGames(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	var best *GameConfig
-	bestRootLength := 0
+	roots := m.managedRoots(games)
+	root, relative, ok := owningRoot(roots, target)
+	if !ok {
+		fields := map[string]any{
+			"inputPath": input, "resolvedPath": target,
+			"managedRoots": lo.Map(roots, func(root managedRoot, _ int) string { return root.resolved }),
+		}
+		if physical, physicalErr := platform.PhysicalPath(target); physicalErr == nil {
+			fields["physicalPath"] = physical
+		}
+		return nil, "", infra.AnnotateError(errors.New("MOD_PATH_OUTSIDE_MANAGED_ROOT"), infra.Diagnostic{
+			Operation: "resolve-owned-path", Stage: "match-root", Fields: fields,
+		})
+	}
+	game := games[root.game]
+	if pathWithin(root.resolved, target) {
+		return &game, input, nil
+	}
+	return &game, filepath.Join(root.path, relative), nil
+}
+
+type managedRoot struct {
+	game int
+	// path is the root as configured, which is the spelling listings return.
+	path     string
+	resolved string
+}
+
+// managedRoots returns every game's mod folders that resolveForCompare can resolve.
+func (m *Mod) managedRoots(games []GameConfig) []managedRoot {
+	var roots []managedRoot
 	for i := range games {
-		roots := []string{games[i].ModFolderPath}
+		paths := []string{games[i].ModFolderPath}
 		if games[i].LinkedModFolderPath != nil {
-			roots = append(roots, *games[i].LinkedModFolderPath)
+			paths = append(paths, *games[i].LinkedModFolderPath)
 		}
-		for _, root := range roots {
-			resolvedRoot, resolveErr := resolveForCompare(root, m.reportUnresolvedPath)
-			if resolveErr != nil {
-				continue
-			}
-			if pathWithin(resolvedRoot, target) && len(resolvedRoot) > bestRootLength {
-				copy := games[i]
-				best = &copy
-				bestRootLength = len(resolvedRoot)
+		for _, path := range paths {
+			if resolved, err := resolveForCompare(path, m.reportUnresolvedPath); err == nil {
+				roots = append(roots, managedRoot{game: i, path: path, resolved: resolved})
 			}
 		}
 	}
-	if best == nil {
-		return nil, errors.New("MOD_PATH_OUTSIDE_MANAGED_ROOT")
+	return roots
+}
+
+// owningRoot returns the deepest root holding target, a resolveForCompare result, and target relative
+// to it. Resolved paths keep junctions in place, so a target spelled through the physical location of a
+// junctioned root, or through another junction to it, matches only by physical location. Symbolic links
+// are already followed in target, so the physical match cannot reach through one out of the root.
+func owningRoot(roots []managedRoot, target string) (managedRoot, string, bool) {
+	best, bestRelative, bestLength := -1, "", 0
+	for i, root := range roots {
+		if !pathWithin(root.resolved, target) || len(root.resolved) <= bestLength {
+			continue
+		}
+		if relative, err := filepath.Rel(root.resolved, target); err == nil {
+			best, bestRelative, bestLength = i, relative, len(root.resolved)
+		}
 	}
-	return best, nil
+	if best >= 0 {
+		return roots[best], bestRelative, true
+	}
+
+	for i, root := range roots {
+		physicalRoot, err := platform.PhysicalPath(root.resolved)
+		if err != nil || len(physicalRoot) <= bestLength {
+			continue
+		}
+		if relative, ok := physicalRelativePath(physicalRoot, target); ok {
+			best, bestRelative, bestLength = i, relative, len(physicalRoot)
+		}
+	}
+	if best < 0 {
+		return managedRoot{}, "", false
+	}
+	return roots[best], bestRelative, true
+}
+
+// physicalRelativePath returns target relative to physicalRoot when target physically lies below it.
+// The topmost ancestor that lies below the root is the one mapped, and every name below it is kept, so a junction
+// below the root, whether a mod installed as one or an alias to another folder in the root, keeps its place in the
+// root as it does in a lexical comparison.
+func physicalRelativePath(physicalRoot, target string) (string, bool) {
+	mapped, found := "", false
+	var suffix []string
+	for current := filepath.Clean(target); ; current = filepath.Dir(current) {
+		if physical, err := platform.FinalPath(current); err == nil {
+			relative, relErr := filepath.Rel(physicalRoot, physical)
+			if relErr == nil && !escapesRoot(filepath.ToSlash(relative)) {
+				mapped, found = filepath.Join(append([]string{relative}, suffix...)...), true
+			}
+		}
+		if filepath.Dir(current) == current {
+			return mapped, found
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+	}
+}
+
+// escapesRoot reports whether a slash-separated path relative to a root leaves it.
+func escapesRoot(relative string) bool {
+	return relative == ".." || strings.HasPrefix(relative, "../")
 }
 
 // reportUnresolvedPath records why an existing folder fell back to the parent walk.

@@ -42,10 +42,12 @@ type importerFolderMove struct {
 // importerDisplacedEntry is an entry of an existing importer folder that the import replaced: a link, an empty
 // folder, or a file whose content is kept so rollback can put it back.
 type importerDisplacedEntry struct {
-	path   string
-	linkTo string
-	dir    bool
-	data   []byte
+	path string
+	// linkTo is the target a displaced link stored, restored as it was rather than resolved again.
+	linkTo  string
+	symlink bool
+	dir     bool
+	data    []byte
 }
 
 // importerFolderMigration records every filesystem change made while importing so a failed import can be undone.
@@ -155,7 +157,7 @@ func (m *importerFolderMigration) prepare(
 	// An import by an earlier version linked ShaderFixes to source, and the installer keeps top-level links.
 	shaders := filepath.Join(target, "ShaderFixes")
 	if from := filepath.Join(source, "ShaderFixes"); linksTo(shaders, from) {
-		if err := m.displace(shaders, from); err != nil {
+		if err := m.displace(shaders); err != nil {
 			return err
 		}
 	}
@@ -178,10 +180,12 @@ func (m *importerFolderMigration) prepare(
 			return err
 		}
 
-		if m.mode != ImportUserDataMove && info.IsDir() && linksTo(to, from) {
+		// A link that reaches from through another link is replaced by one to the physical folder.
+		_, chained := chainedLink(to)
+		if m.mode != ImportUserDataMove && info.IsDir() && linksTo(to, from) && !chained {
 			continue
 		}
-		if err := m.displace(to, from); err != nil {
+		if err := m.displace(to); err != nil {
 			return err
 		}
 		switch {
@@ -207,9 +211,9 @@ func (m *importerFolderMigration) prepare(
 	return nil
 }
 
-// displace clears the way for from to be carried over to path. checkImporterUserDataTarget has already rejected
-// entries holding user data, so what remains is a link to from, an empty folder, or a file.
-func (m *importerFolderMigration) displace(path, from string) error {
+// displace clears path for user data to be carried over to it. checkImporterUserDataTarget has already rejected
+// entries holding user data, so what remains is a link to the source, an empty folder, or a file.
+func (m *importerFolderMigration) displace(path string) error {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -220,7 +224,10 @@ func (m *importerFolderMigration) displace(path, from string) error {
 	entry := importerDisplacedEntry{path: path}
 	switch {
 	case isInstallReparsePoint(info):
-		entry.linkTo = from
+		if entry.linkTo, err = os.Readlink(path); err != nil {
+			return err
+		}
+		entry.symlink = info.Mode()&os.ModeSymlink != 0
 	case info.IsDir():
 		entry.dir = true
 	default:
@@ -271,8 +278,10 @@ func (m *importerFolderMigration) rollback() error {
 	for _, entry := range slices.Backward(m.displaced) {
 		var err error
 		switch {
+		case entry.symlink:
+			err = os.Symlink(entry.linkTo, entry.path)
 		case entry.linkTo != "":
-			err = createJunction(entry.path, entry.linkTo)
+			err = writeJunction(entry.path, entry.linkTo)
 		case entry.dir:
 			err = os.Mkdir(entry.path, 0o755)
 		default:

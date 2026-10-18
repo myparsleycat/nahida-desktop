@@ -319,6 +319,72 @@ func TestOwnedPathRejectsEscapingAndCyclicSymlinks(t *testing.T) {
 	}
 }
 
+// An XXMI importer's Mods folder is a junction to the game's mod folder, so the renderer can hold paths
+// spelled through either location, including folders stored before the junction replaced the root.
+func TestOwnedPathAcceptsPhysicalSpellingOfJunctionedRoot(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	physicalRoot := filepath.Join(root, "WWMI", "Mods")
+	characters := filepath.Join(physicalRoot, "Characters")
+	modPath := filepath.Join(characters, "Mod")
+	other := filepath.Join(physicalRoot, "Other")
+	external := filepath.Join(root, "external")
+	linkedRoot := filepath.Join(root, "importer", "Mods")
+	for _, dir := range []string{modPath, other, external, filepath.Dir(linkedRoot)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	createJunction(t, physicalRoot, linkedRoot)
+	createJunction(t, external, filepath.Join(characters, "Linked"))
+	createJunction(t, other, filepath.Join(characters, "Alias"))
+	if err := service.AddGame(ctx, "Game", linkedRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{characters, modPath, filepath.Join(characters, "Linked", "child")} {
+		if game, err := service.ownedPath(ctx, path); err != nil || game.Game != "Game" {
+			t.Fatalf("ownedPath(%s) = %+v, %v; want the owning game", path, game, err)
+		}
+	}
+	// Download reservations and ShaderFixes ownership compare paths in the root's spelling.
+	if _, owned, err := service.ownedTarget(ctx, modPath); err != nil ||
+		!samePath(owned, filepath.Join(linkedRoot, "Characters", "Mod")) {
+		t.Fatalf("ownedTarget(%s) = %s, %v; want the path in the root's spelling", modPath, owned, err)
+	}
+	if relative := gameRelativePath(linkedRoot, filepath.Join(characters, "Alias")); relative != "Characters/Alias" {
+		t.Fatalf("gameRelativePath of a junction within the root = %q; want its own place", relative)
+	}
+	if _, err := service.ownedPath(ctx, external); err == nil || err.Error() != "MOD_PATH_OUTSIDE_MANAGED_ROOT" {
+		t.Fatalf("junction target outside the root err = %v", err)
+	}
+
+	if err := service.SetManualSubGroup(ctx, modPath, true); err != nil {
+		t.Fatalf("SetManualSubGroup through the physical spelling: %v", err)
+	}
+	for _, parent := range []string{characters, filepath.Join(linkedRoot, "Characters")} {
+		groups, err := service.GetManualSubGroups(ctx, parent, nil)
+		if err != nil || len(groups) != 1 || groups[0].Name != "Mod" {
+			t.Fatalf("GetManualSubGroups(%s) = %+v, %v; want the manual subgroup", parent, groups, err)
+		}
+	}
+
+	if err := service.SetExpandedGroups(ctx, []string{characters, filepath.Join(root, "gone")}); err != nil {
+		t.Fatal(err)
+	}
+	expanded, err := service.GetExpandedGroups(ctx)
+	if err != nil || len(expanded) != 1 || !samePath(expanded[0], filepath.Join(linkedRoot, "Characters")) {
+		t.Fatalf("GetExpandedGroups = %v, %v; want the folder in the root's spelling", expanded, err)
+	}
+}
+
+func createJunction(t *testing.T, target, link string) {
+	t.Helper()
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+}
+
 // Denying list access on the parent makes FindFirstFile, and with it EvalSymlinks,
 // fail for a child that Lstat still finds.
 func TestOwnedPathAcceptsExistingFolderWhenEvalSymlinksFails(t *testing.T) {

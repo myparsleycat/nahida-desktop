@@ -12,16 +12,35 @@ import (
 	"unicode/utf16"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 // createJunction creates link as a directory junction to target. Junctions need no elevation, unlike symbolic
 // links, and 3DMigoto follows them like ordinary folders.
-func createJunction(link, target string) (returnErr error) {
+//
+// The junction points at where target physically is. Linking to another link would chain them, so the junction
+// would break or move whenever that link changes, and the same folder would be reached under several paths.
+func createJunction(link, target string) error {
 	target, err := filepath.Abs(target)
 	if err != nil {
 		return err
 	}
-	if len(filepath.VolumeName(target)) != 2 || strings.HasPrefix(target, `\\`) {
+	// A target that cannot be resolved, such as one on a removed drive, or that resolves off the local drives keeps
+	// its own path, as the junction would have before.
+	if physical, err := platform.PhysicalPath(target); err == nil && isLocalDrivePath(physical) {
+		target = physical
+	}
+	return writeJunction(link, target)
+}
+
+// writeJunction creates link as a junction to target exactly as given, which restoring a previous link needs.
+func writeJunction(link, target string) (returnErr error) {
+	target, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	if !isLocalDrivePath(target) {
 		return fmt.Errorf("junction target must be on a local drive: %q", target)
 	}
 
@@ -71,4 +90,8 @@ func createJunction(link, target string) (returnErr error) {
 		return fmt.Errorf("create junction %q -> %q: %w", link, target, err)
 	}
 	return nil
+}
+
+func isLocalDrivePath(path string) bool {
+	return len(filepath.VolumeName(path)) == 2 && !strings.HasPrefix(path, `\\`)
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -199,7 +198,7 @@ func retargetModsLink(mods, target string, unlink bool) error {
 		err = createJunction(mods, target)
 	}
 	if err != nil {
-		return errors.Join(err, createJunction(mods, previous))
+		return errors.Join(err, writeJunction(mods, previous))
 	}
 	return nil
 }
@@ -307,7 +306,7 @@ func validModFolderTarget(importerFolder, target string) (string, error) {
 	}
 
 	// A target reached through a link may still resolve into the importer folder.
-	physicalTarget, err := physicalFolder(target)
+	physicalTarget, err := platform.PhysicalPath(target)
 	if err != nil {
 		return "", err
 	}
@@ -319,22 +318,6 @@ func validModFolderTarget(importerFolder, target string) (string, error) {
 		return "", fmt.Errorf("%w: %q resolves to %q", errModFolderInvalidTarget, target, physicalTarget)
 	}
 	return physicalTarget, nil
-}
-
-// physicalFolder resolves path through every link on the way, including those above a folder not created yet.
-func physicalFolder(path string) (string, error) {
-	missing := []string{}
-	for current := path; ; current = filepath.Dir(current) {
-		final, err := platform.FinalPath(current)
-		if err == nil {
-			slices.Reverse(missing)
-			return filepath.Join(append([]string{final}, missing...)...), nil
-		}
-		if !errors.Is(err, os.ErrNotExist) || filepath.Dir(current) == current {
-			return "", err
-		}
-		missing = append(missing, filepath.Base(current))
-	}
 }
 
 // removeUserDataTree deletes a folder tree without following links: a junction or symbolic link inside it is
