@@ -31,7 +31,7 @@ func RuntimeSpec() modruntime.Spec {
 		Importers: []string{"EFMI"},
 		Namespace: runtimeNamespace,
 		Files:     files,
-		Seed:      seedRuntime,
+		Seed:      map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader},
 		Legacy:    []modruntime.Legacy{{Dir: "LiquidGravityProbe/LiquidGravityProbe", Manifest: legacyRuntimeManifest}},
 		Settings:  runtimeSettings(),
 	}
@@ -82,15 +82,15 @@ func runtimeSettings() []modruntime.Setting {
 	}
 }
 
-// seedRuntime gives a fresh install the profile loader its INI includes,
-// binding the profiles left from an earlier install.
-func seedRuntime(root, modsRoot string) (map[string][]byte, error) {
+// seedLoader gives an install without one the profile loader its INI
+// includes, binding the profiles left from an earlier install.
+func seedLoader(root, modsRoot string) ([]byte, error) {
 	layout := runtimeLayout{root: root}
 	index, err := readIndex(layout, modsRoot)
 	if err != nil {
 		return nil, err
 	}
-	return map[string][]byte{profileLoaderFile: loaderINI(loaderKeys(layout, index, "", false))}, nil
+	return loaderINI(loaderKeys(layout, index, "", false)), nil
 }
 
 // runtimeError keeps the emitter's own codes for runtime states the renderer

@@ -653,6 +653,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			drawSource: &DrawSource{
 				INIPath:    iniPath,
 				Section:    record.sectionName,
+				IB:         draw.state.ib,
 				IBPath:     ibPath,
 				IBFormat:   ib.Format,
 				StartIndex: record.draw.StartIndex,

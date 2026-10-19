@@ -356,7 +356,7 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
-	sites := text.drawSites(source.Section, source.StartIndex, source.IndexCount, source.BaseVertex)
+	sites := text.drawSites(source)
 	if len(sites) == 0 {
 		return infra.ContractError(ErrorDrawNotFound + ":" + source.Section)
 	}
@@ -381,7 +381,7 @@ func (s *Service) apply(
 	text.removeHooks(func(candidate int) bool { return replaced[candidate] })
 	firstIndex := source.StartIndex + anchor.FaceIndex*3
 	text.insertHooks(
-		text.drawSites(source.Section, source.StartIndex, source.IndexCount, source.BaseVertex),
+		text.drawSites(source),
 		pid, firstIndex, source.BaseVertex,
 	)
 

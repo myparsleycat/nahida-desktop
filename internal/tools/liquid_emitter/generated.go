@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -77,9 +76,10 @@ func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection
 	})
 }
 
-// applyAsNewMod disables the original, copies it next to itself and applies
-// the emitter to the copy. A failure deletes the copy and enables the
-// original again.
+// applyAsNewMod copies the original next to itself, applies the emitter to
+// the copy and then disables the original. Disabling schedules compression
+// of the original's files, so it waits until the copy is complete. A failure
+// deletes the copy and leaves the original enabled.
 func (s *Service) applyAsNewMod(
 	ctx context.Context,
 	sc *scope,
@@ -99,16 +99,6 @@ func (s *Service) applyAsNewMod(
 	} else if generated {
 		return Inspection{}, infra.ContractError(ErrorGeneratedMod + ":" + sc.root)
 	}
-	// A foreign runtime would fail the apply only after the original was disabled.
-	_, err = s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
-		if rt.status.State == modruntime.StateForeign {
-			return Inspection{}, infra.ContractError(ErrorRuntimeForeign + ":" + rt.status.Path)
-		}
-		return Inspection{}, nil
-	})
-	if err != nil {
-		return Inspection{}, err
-	}
 
 	sourceRoot := sc.root
 	parent := filepath.Dir(sourceRoot)
@@ -124,17 +114,7 @@ func (s *Service) applyAsNewMod(
 	target := filepath.Join(parent, s.fs.GetUniqueName(base+generatedSuffix, names))
 	sc.fields["target"] = target
 
-	origin := &modMarker{Source: sourceRoot}
-	if !disabledPrefixRE.MatchString(filepath.Base(sourceRoot)) {
-		sc.stage = stageDisable
-		disabled, err := s.mod.Disable(ctx, sourceRoot)
-		if err != nil {
-			return Inspection{}, err
-		}
-		origin.Source, origin.ReenableSource = disabled, true
-	}
-	sc.fields["disabledSource"] = origin.Source
-
+	origin := &modMarker{Source: sourceRoot, ReenableSource: !disabledPrefixRE.MatchString(filepath.Base(sourceRoot))}
 	created := false
 	inspection, err := s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
 		sc.stage = stageCopy
@@ -142,7 +122,7 @@ func (s *Service) applyAsNewMod(
 			return Inspection{}, err
 		}
 		created = true
-		if err := copyModTree(ctx, origin.Source, target); err != nil {
+		if err := copyModTree(ctx, sourceRoot, target); err != nil {
 			return Inspection{}, err
 		}
 		rel, err := filepath.Rel(sourceRoot, source.INIPath)
@@ -156,31 +136,63 @@ func (s *Service) applyAsNewMod(
 		}
 		return s.inspection(sc, rt)
 	})
-	if err != nil {
-		return Inspection{}, s.undoNewMod(ctx, sc, err, created, origin)
+	switch {
+	case err != nil && !created:
+		return Inspection{}, err
+	case err != nil:
+		return Inspection{}, s.undoNewMod(ctx, sc, err, "")
+	case !origin.ReenableSource:
+		return inspection, nil
 	}
+
+	sc.stage = stageDisable
+	disabled, err := s.mod.Disable(ctx, sourceRoot)
+	if err != nil {
+		return Inspection{}, s.undoNewMod(ctx, sc, err, "")
+	}
+	sc.fields["disabledSource"] = disabled
+
+	// The marker written with the emitter names the original by the path it
+	// had until now.
+	origin.Source = disabled
+	if err := s.rewriteMarker(sc, origin); err != nil {
+		return Inspection{}, s.undoNewMod(ctx, sc, err, disabled)
+	}
+	inspection.SourcePath = disabled
 	return inspection, nil
 }
 
-func (s *Service) undoNewMod(ctx context.Context, sc *scope, cause error, created bool, origin *modMarker) error {
+func (s *Service) rewriteMarker(sc *scope, origin *modMarker) error {
+	marker, err := readMarker(sc.root)
+	if err != nil {
+		return err
+	}
+	changes, err := markerChange(sc.root, marker.ModKey, origin)
+	if err != nil {
+		return err
+	}
+	return s.commit(sc, changes)
+}
+
+// undoNewMod deletes the copy of a new-mod apply that failed with cause and,
+// when disabled is set, enables the original again.
+func (s *Service) undoNewMod(ctx context.Context, sc *scope, cause error, disabled string) error {
 	ctx = context.WithoutCancel(ctx)
 	target, _ := sc.fields["target"].(string)
-	state := map[string]any{"copyRemoved": false, "sourceEnabled": !origin.ReenableSource}
+	state := map[string]any{"copyRemoved": false, "sourceEnabled": disabled == ""}
 	var undoErrs []error
-	if created {
-		// Splitting the copy from the original commits on its own, before
-		// the apply that failed.
-		if err := s.dropCopyProfile(ctx, sc, target); err != nil {
-			undoErrs = append(undoErrs, err)
-		}
-		if err := os.RemoveAll(target); err != nil {
-			undoErrs = append(undoErrs, err)
-		} else {
-			state["copyRemoved"] = true
-		}
+	// The copy's profile and its split from the original are already
+	// committed, unless the apply itself failed part way.
+	if err := s.dropCopyProfile(ctx, sc, target); err != nil {
+		undoErrs = append(undoErrs, err)
 	}
-	if origin.ReenableSource {
-		if _, err := s.mod.Enable(ctx, origin.Source); err != nil {
+	if err := os.RemoveAll(target); err != nil {
+		undoErrs = append(undoErrs, err)
+	} else {
+		state["copyRemoved"] = true
+	}
+	if disabled != "" {
+		if _, err := s.mod.Enable(ctx, disabled); err != nil {
 			undoErrs = append(undoErrs, err)
 		} else {
 			state["sourceEnabled"] = true

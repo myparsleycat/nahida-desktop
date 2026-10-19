@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
 const captureCommand = `run = CommandList\LiquidGravityProbe\CaptureSurface`
@@ -183,10 +184,10 @@ type drawSite struct {
 	pid int
 }
 
-// drawSites finds the drawindexed lines with these literal arguments that run
-// under [TextureOverride<section>], following run = and CommandList
-// assignments within the same file.
-func (t *iniText) drawSites(section string, startIndex, indexCount, baseVertex int) []drawSite {
+// drawSites finds the drawindexed lines with the draw's literal arguments
+// that run under [TextureOverride<section>] with the draw's index buffer
+// bound, following run = and CommandList assignments within the same file.
+func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
 	bodies := make(map[string][][2]int)
 	current := ""
 	for index, raw := range t.lines {
@@ -202,38 +203,100 @@ func (t *iniText) drawSites(section string, startIndex, indexCount, baseVertex i
 		}
 	}
 
-	var sites []drawSite
-	visited := map[string]bool{}
-	queue := []string{strings.ToLower("TextureOverride" + section)}
-	for len(queue) > 0 && len(visited) < 256 {
-		name := queue[0]
-		queue = queue[1:]
-		if visited[name] {
-			continue
+	walk := &drawWalk{text: t, bodies: bodies, source: source, found: map[int]bool{}}
+	// An empty name stands for the buffer bound before the override runs.
+	walk.visit(strings.ToLower("TextureOverride"+source.Section), []string{""}, map[string]bool{})
+	return walk.sites
+}
+
+type drawWalk struct {
+	text       *iniText
+	bodies     map[string][][2]int
+	source     modelviewer.DrawSource
+	found      map[int]bool
+	sites      []drawSite
+	expansions int
+}
+
+// ifFrame is an open if block: the buffers bound when it was entered and
+// those bound at the end of each branch already walked.
+type ifFrame struct {
+	entry, exits []string
+	hasElse      bool
+}
+
+// visit walks a section in execution order with the index buffers that may
+// be bound on entry and returns those that may be bound on exit. Each branch
+// of an if block starts from the buffers bound at the if, and the block ends
+// with those any of its branches, or skipping it without an else, can leave.
+func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []string {
+	if active[name] || w.expansions >= 256 {
+		return bound
+	}
+	w.expansions++
+	active[name] = true
+	defer delete(active, name)
+
+	var frames []ifFrame
+	endIf := func() {
+		frame := frames[len(frames)-1]
+		frames = frames[:len(frames)-1]
+		bound = unionBuffers(frame.exits, bound)
+		if !frame.hasElse {
+			bound = unionBuffers(bound, frame.entry)
 		}
-		visited[name] = true
-		for _, span := range bodies[name] {
-			for index := span[0]; index < span[1]; index++ {
-				key, value, ok := strings.Cut(strings.TrimSpace(strings.SplitN(t.lines[index], ";", 2)[0]), "=")
-				if !ok {
-					continue
+	}
+	for _, span := range w.bodies[name] {
+		for index := span[0]; index < span[1]; index++ {
+			line := strings.TrimSpace(strings.SplitN(w.text.lines[index], ";", 2)[0])
+			lower := strings.ToLower(line)
+			switch {
+			case strings.HasPrefix(lower, "if "):
+				frames = append(frames, ifFrame{entry: bound})
+				continue
+			case strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if ") || lower == "else":
+				if len(frames) > 0 {
+					frame := &frames[len(frames)-1]
+					frame.exits = unionBuffers(frame.exits, bound)
+					frame.hasElse = frame.hasElse || lower == "else"
+					bound = frame.entry
 				}
-				key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
-				if nested := nestedSection(key, value); nested != "" {
-					queue = append(queue, nested)
-					continue
+				continue
+			case lower == "endif":
+				if len(frames) > 0 {
+					endIf()
 				}
-				if drawMatches(key, value, startIndex, indexCount, baseVertex) {
-					sites = append(sites, drawSite{
-						line:   index,
-						indent: lineIndent(t.lines[index]),
-						pid:    t.hookAbove(index),
-					})
-				}
+				continue
+			}
+			key, value, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
+			switch nested := nestedSection(key, value); {
+			case nested != "":
+				bound = w.visit(nested, bound, active)
+			case key == "ib":
+				bound = []string{value}
+			case drawMatches(key, value, w.source) && !w.found[index] &&
+				slices.ContainsFunc(bound, func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) }):
+				w.found[index] = true
+				w.sites = append(w.sites, drawSite{
+					line:   index,
+					indent: lineIndent(w.text.lines[index]),
+					pid:    w.text.hookAbove(index),
+				})
 			}
 		}
 	}
-	return sites
+	for len(frames) > 0 {
+		endIf()
+	}
+	return bound
+}
+
+func unionBuffers(a, b []string) []string {
+	return slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(a), b...))))
 }
 
 func nestedSection(key, value string) string {
@@ -249,14 +312,14 @@ func nestedSection(key, value string) string {
 
 // drawMatches compares only the index range. EFMI writes the instance
 // arguments of drawindexedinstanced as INSTANCE_COUNT and FIRST_INSTANCE.
-func drawMatches(key, value string, startIndex, indexCount, baseVertex int) bool {
+func drawMatches(key, value string, source modelviewer.DrawSource) bool {
 	fields := strings.Split(value, ",")
 	var want map[int]int
 	switch {
 	case key == "drawindexed" && len(fields) == 3:
-		want = map[int]int{0: indexCount, 1: startIndex, 2: baseVertex}
+		want = map[int]int{0: source.IndexCount, 1: source.StartIndex, 2: source.BaseVertex}
 	case key == "drawindexedinstanced" && len(fields) == 5:
-		want = map[int]int{0: indexCount, 2: startIndex, 3: baseVertex}
+		want = map[int]int{0: source.IndexCount, 2: source.StartIndex, 3: source.BaseVertex}
 	default:
 		return false
 	}

@@ -54,9 +54,10 @@ type Spec struct {
 	// declaring it is a second copy the importer would load as well.
 	Namespace string
 	Files     fs.FS
-	// Seed returns files, by slash path, that an install creates when they
-	// are missing. The feature owns them afterwards; updates never replace them.
-	Seed func(root, modsRoot string) (map[string][]byte, error)
+	// Seed builds, by slash path, files the runtime needs that its feature
+	// owns. An install creates each one that is missing, and the runtime reads
+	// as modified without it; updates never replace them.
+	Seed map[string]func(root, modsRoot string) ([]byte, error)
 	// Legacy lists earlier install locations to move below GroupDir.
 	Legacy []Legacy
 	// Settings are values in Files the user can change, such as hotkeys.

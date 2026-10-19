@@ -78,12 +78,14 @@ const characterINI = "\xef\xbb\xbf[TextureOverrideBody]\r\n" +
 	"endif\r\n" +
 	"drawindexed = 9, 3, 0\r\n"
 
+var bodyDraw = modelviewer.DrawSource{Section: "Body", StartIndex: 3, IndexCount: 6}
+
 func TestINIHooksRoundTrip(t *testing.T) {
 	text, err := parseINIText([]byte(characterINI))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sites := text.drawSites("Body", 3, 6, 0)
+	sites := text.drawSites(bodyDraw)
 	if len(sites) != 2 {
 		t.Fatalf("sites = %+v, want both literal 6,3,0 draws", sites)
 	}
@@ -93,7 +95,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		captureCommand+"\r\n\t; nahida-liquid 7 end\r\n\tdrawindexed = 6, 3, 0") != 2 {
 		t.Fatalf("hooks not placed above both draws:\n%s", patched)
 	}
-	if again := text.drawSites("Body", 3, 6, 0); again[0].pid != 7 || again[1].pid != 7 {
+	if again := text.drawSites(bodyDraw); again[0].pid != 7 || again[1].pid != 7 {
 		t.Fatalf("existing hooks not detected: %+v", again)
 	}
 
@@ -111,7 +113,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text.insertHooks(text.drawSites("Body", 3, 6, 0), 7, 6, 0)
+	text.insertHooks(text.drawSites(bodyDraw), 7, 6, 0)
 	if patched := string(text.bytes()); strings.Count(patched, "; nahida-liquid 7 end\ndrawindexed = 6, 3, 0") != 2 {
 		t.Fatalf("hooks not placed above both draws:\n%s", patched)
 	}
@@ -123,8 +125,39 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	if text, err = parseINIText([]byte(efmi)); err != nil {
 		t.Fatal(err)
 	}
-	if sites := text.drawSites("_Component0", 3, 6, 0); len(sites) != 1 || sites[0].line != 4 {
+	component := modelviewer.DrawSource{Section: "_Component0", StartIndex: 3, IndexCount: 6}
+	if sites := text.drawSites(component); len(sites) != 1 || sites[0].line != 4 {
 		t.Fatalf("EFMI draw sites = %+v", sites)
+	}
+
+	// Draws with the same arguments over different index buffers are separate
+	// parts. The buffer bound before a run carries into the command list, and
+	// each branch of an if starts from the buffer bound before it.
+	for _, sample := range []struct {
+		ini   string
+		lines map[string]int
+	}{
+		{
+			ini: "[TextureOverrideBody]\nib = ResourceBodyIB\ndrawindexed = 6, 3, 0\n" +
+				"ib = ref ResourceArmIB\nrun = CommandListArm\n\n[CommandListArm]\ndrawindexed = 6, 3, 0\n",
+			lines: map[string]int{"BodyIB": 2, "ArmIB": 7},
+		},
+		{
+			ini: "[TextureOverrideBody]\nif $outfit == 0\n\tib = ResourceBodyIB\n\tdrawindexed = 6, 3, 0\n" +
+				"else\n\tib = ResourceArmIB\n\tdrawindexed = 6, 3, 0\nendif\n",
+			lines: map[string]int{"BodyIB": 3, "ArmIB": 6},
+		},
+	} {
+		if text, err = parseINIText([]byte(sample.ini)); err != nil {
+			t.Fatal(err)
+		}
+		for ib, line := range sample.lines {
+			draw := bodyDraw
+			draw.IB = ib
+			if sites := text.drawSites(draw); len(sites) != 1 || sites[0].line != line {
+				t.Fatalf("draw sites over %s = %+v, want line %d in\n%s", ib, sites, line, sample.ini)
+			}
+		}
 	}
 
 	// One CRLF line in an LF file must not merge the hook lines.
@@ -496,15 +529,36 @@ func (renamingMods) Enable(_ context.Context, path string) (string, error) {
 	return enabled, os.Rename(path, enabled)
 }
 
+// compressingMods compresses a folder as soon as it is disabled, which the
+// mod service schedules to happen at any time after, and restores it when
+// enabled.
+type compressingMods struct{ renamingMods }
+
+func (m compressingMods) Disable(ctx context.Context, path string) (string, error) {
+	disabled, err := m.renamingMods.Disable(ctx, path)
+	if err != nil {
+		return disabled, err
+	}
+	return disabled, os.Rename(filepath.Join(disabled, "body.ib"), filepath.Join(disabled, "body.ib.nzst"))
+}
+
+func (m compressingMods) Enable(ctx context.Context, path string) (string, error) {
+	enabled, err := m.renamingMods.Enable(ctx, path)
+	if err != nil {
+		return enabled, err
+	}
+	return enabled, os.Rename(filepath.Join(enabled, "body.ib.nzst"), filepath.Join(enabled, "body.ib"))
+}
+
 func TestServiceNewModLeavesOriginalAndRestores(t *testing.T) {
 	f := newServiceFixture(t)
-	f.service.mod = renamingMods{}
+	f.service.mod = compressingMods{}
 	ctx := context.Background()
 	disabled := filepath.Join(filepath.Dir(f.modRoot), "DISABLED "+filepath.Base(f.modRoot))
 	input := f.applyInput(0)
 	input.Mode = ApplyNewMod
 
-	// A failed apply deletes the copy and enables the original again.
+	// A failed apply deletes the copy and leaves the original enabled.
 	failing := errors.New("disk full")
 	f.service.writeFile = func(path string, data []byte) error {
 		if filepath.Base(path) == profileIndexFile {
@@ -531,6 +585,9 @@ func TestServiceNewModLeavesOriginalAndRestores(t *testing.T) {
 	if !samePhysicalPath(inspection.ModPath, target) || !samePhysicalPath(inspection.SourcePath, disabled) ||
 		len(inspection.Emitters) != 1 || !inspection.Emitters[0].Hooked {
 		t.Fatalf("new-mod inspection = %+v", inspection)
+	}
+	if _, err := os.Stat(filepath.Join(target, "body.ib")); err != nil {
+		t.Fatalf("copy is missing a file compressed in the original: %v", err)
 	}
 	if original, err := os.ReadFile(
 		filepath.Join(disabled, "mod.ini"),

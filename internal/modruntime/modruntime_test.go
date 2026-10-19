@@ -51,8 +51,8 @@ func newTestManager(t *testing.T) (*Manager, string) {
 				"Probe.ini":      {Data: []byte(bundledProbe)},
 				"shaders/a.hlsl": {Data: []byte("// a")},
 			},
-			Seed: func(string, string) (map[string][]byte, error) {
-				return map[string][]byte{seedFile: []byte("; seeded")}, nil
+			Seed: map[string]func(string, string) ([]byte, error){
+				seedFile: func(string, string) ([]byte, error) { return []byte("; seeded"), nil },
 			},
 			Legacy: []Legacy{{Dir: "Probe/Probe", Manifest: ".legacy.json"}},
 			Settings: []Setting{
@@ -129,8 +129,23 @@ func TestStates(t *testing.T) {
 	if status, err := manager.Install(ctx, "EFMI", "Probe"); err != nil || status.State != StateCurrent {
 		t.Fatalf("repair = %+v (err=%v)", status, err)
 	}
-	if seeded, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(seedFile))); string(seeded) != "; feature" {
+	seedPath := filepath.Join(root, filepath.FromSlash(seedFile))
+	if seeded, _ := os.ReadFile(seedPath); string(seeded) != "; feature" {
 		t.Fatalf("repair replaced the feature's file: %q", seeded)
+	}
+
+	// The runtime files alone do not make an install current.
+	if err := os.Remove(seedPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.state(t).State; got != StateModified {
+		t.Fatalf("without the seed file = %s", got)
+	}
+	if status, err := manager.Install(ctx, "EFMI", "Probe"); err != nil || status.State != StateCurrent {
+		t.Fatalf("repair of the seed file = %+v (err=%v)", status, err)
+	}
+	if seeded, _ := os.ReadFile(seedPath); string(seeded) != "; seeded" {
+		t.Fatalf("repair did not seed the file again: %q", seeded)
 	}
 
 	if status, err := manager.Disable(ctx, "EFMI", "Probe"); err != nil || status.State != StateDisabled {

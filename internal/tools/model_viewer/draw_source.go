@@ -10,8 +10,11 @@ import (
 // hook that draw. Face N of the mesh is triangle N of the draw: compaction
 // renumbers vertices but keeps the triangle order.
 type DrawSource struct {
-	INIPath    string
-	Section    string
+	INIPath string
+	Section string
+	// IB is the resource bound as the draw's index buffer, as ib = names it
+	// without the Resource prefix; empty when unknown.
+	IB         string
 	IBPath     string
 	IBFormat   string
 	StartIndex int
@@ -34,6 +37,13 @@ func (t *Service) DrawSource(sessionID, meshID string) (DrawSource, bool) {
 	}
 	source, exists := session.drawSources[meshID]
 	return source, exists
+}
+
+// MatchesIB reports whether the INI value of an ib = assignment binds the
+// draw's index buffer. Any value matches a draw whose buffer is unknown.
+func (d DrawSource) MatchesIB(value string) bool {
+	return d.IB == "" ||
+		modelViewerNormalizeKey(modelViewerTrimResourcePrefix(value)) == modelViewerNormalizeKey(d.IB)
 }
 
 // TriangleVertices reads the vertex indices of one draw triangle in index

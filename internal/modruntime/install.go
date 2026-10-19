@@ -103,6 +103,14 @@ func inspectAt(root string, spec runtimeSpec) (Status, error) {
 			break
 		}
 	}
+	for name := range spec.Seed {
+		if status.State != StateCurrent {
+			break
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(name))); errors.Is(err, fs.ErrNotExist) {
+			status.State = StateModified
+		}
+	}
 	return status, nil
 }
 
@@ -331,18 +339,16 @@ func installPlan(root, modsRoot string, spec runtimeSpec, values map[string]stri
 	}
 	writes[filepath.Join(root, manifestFile)] = encoded
 
-	if spec.Seed == nil {
-		return writes, nil
-	}
-	seed, err := spec.Seed(root, modsRoot)
-	if err != nil {
-		return nil, err
-	}
-	for name, data := range seed {
+	for name, seed := range spec.Seed {
 		target := filepath.Join(root, filepath.FromSlash(name))
-		if _, err := os.Stat(target); errors.Is(err, fs.ErrNotExist) {
-			writes[target] = data
+		if _, err := os.Stat(target); !errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
+		data, err := seed(root, modsRoot)
+		if err != nil {
+			return nil, err
+		}
+		writes[target] = data
 	}
 	return writes, nil
 }
