@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
@@ -265,12 +266,20 @@ func (c *modelViewerSymbolicScanContext) scan(
 			if isNonDiffusePsSlot(key, resource) {
 				state.nonDiffuse = appendUniqueModelViewer(state.nonDiffuse, resource)
 			}
-			if role, resource, authored, texture := modelViewerTextureAssignment(key, value, c.sectionName); texture {
+			role, textureResource, authored, texture := modelViewerTextureAssignment(key, value, c.sectionName)
+			if !texture {
+				// An unnamed resource at ps-tN keeps its slot as a role; only
+				// attachSlotBoundDiffuse may turn it into a texture role.
+				if slot, ok := modelViewerPsSlotNumber(key); ok && slot != 0 {
+					role, textureResource, texture = modelViewerSlotTextureRole(slot), resource, true
+				}
+			}
+			if texture {
 				delete(state.resolvedTextures, role)
 				state.textures[role] = append(
 					state.textures[role],
 					modelViewerSymbolicAssignment{
-						resource:   resource,
+						resource:   textureResource,
 						authored:   authored,
 						conditions: cloneModelViewerDNF(conditions),
 						sequence:   sequence,
@@ -318,7 +327,20 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 		}
 		states = next
 	}
-	textures := modelViewerSymbolicTextureHistory(state, drawConditions)
+	var textures, slotTextures []modelViewerDirectTextureAssignment
+	for _, assignment := range modelViewerSymbolicTextureHistory(state, drawConditions) {
+		if _, ok := modelViewerSlotTextureNumber(assignment.role); ok {
+			slotTextures = append(slotTextures, assignment)
+		} else {
+			textures = append(textures, assignment)
+		}
+	}
+	// Roles come from map iteration; slot order keeps record dedupe stable.
+	sort.SliceStable(slotTextures, func(i, j int) bool {
+		left, _ := modelViewerSlotTextureNumber(slotTextures[i].role)
+		right, _ := modelViewerSlotTextureNumber(slotTextures[j].role)
+		return left < right
+	})
 	authored := false
 	for _, assignment := range textures {
 		authored = authored || assignment.authored && assignment.role == "diffuse"
@@ -335,6 +357,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 			sectionName:     c.sectionName,
 			state:           variant.state,
 			textureHistory:  append([]modelViewerDirectTextureAssignment(nil), textures...),
+			slotTextures:    append([]modelViewerDirectTextureAssignment(nil), slotTextures...),
 			authoredDiffuse: authored,
 			nonDiffuse:      append([]string(nil), state.nonDiffuse...),
 			thisFiles:       thisFiles,

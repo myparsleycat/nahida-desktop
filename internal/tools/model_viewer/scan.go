@@ -27,6 +27,7 @@ type modelViewerDirectDrawRecord struct {
 	sectionName     string
 	state           modelViewerDirectBufferState
 	textureHistory  []modelViewerDirectTextureAssignment
+	slotTextures    []modelViewerDirectTextureAssignment
 	authoredDiffuse bool
 	nonDiffuse      []string
 	thisFiles       []string
@@ -200,12 +201,13 @@ func dedupeModelViewerDirectDrawRecords(records []modelViewerDirectDrawRecord) [
 	output := make([]modelViewerDirectDrawRecord, 0, len(records))
 	for _, record := range records {
 		key := fmt.Sprintf(
-			"%s|%#v|%#v|%#v|%#v|%t",
+			"%s|%#v|%#v|%#v|%#v|%#v|%t",
 			record.sectionName,
 			record.state,
 			record.draw,
 			record.conditions,
 			record.textureHistory,
+			record.slotTextures,
 			record.auto,
 		)
 		if index, exists := seen[key]; exists {
@@ -537,6 +539,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				resourceFilenames(resourceMap, record.nonDiffuse),
 			)
 			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
+			appendModelViewerSlotTextureCandidates(mesh, record.slotTextures, resourceMap)
 			continue
 		}
 		ibPath, ibOK := resolveModelViewerModBufferPath(modDir, ib.Filename)
@@ -652,6 +655,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			indexCount:             indexCount,
 		}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
+		appendModelViewerSlotTextureCandidates(&mesh, record.slotTextures, resourceMap)
 		geometryIndexes[geometryKey] = len(output)
 		output = append(output, mesh)
 	}
@@ -674,6 +678,9 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	attachIbComponentDumpTextures(output, resources)
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
+	if isModelViewerEFMI(sections) {
+		attachSlotBoundDiffuse(output, modDir)
+	}
 	if timing != nil {
 		timing.AttachMs += time.Since(stageStartedAt).Milliseconds()
 	}
@@ -880,26 +887,42 @@ func appendModelViewerDirectTextureHistory(
 				mesh.textureDefaultFile = assignment.file
 			}
 		}
-		merged := false
-		for index := range mesh.textureAssignments {
-			existing := &mesh.textureAssignments[index]
-			if existing.role != assignment.role ||
-				modelViewerNormalizeKey(existing.resource) != modelViewerNormalizeKey(assignment.resource) {
-				continue
-			}
-			existing.conditions = modelViewerDNFOr(existing.conditions, assignment.conditions)
-			existing.authored = existing.authored || assignment.authored
-			if existing.file == "" {
-				existing.file = assignment.file
-			}
-			merged = true
-			break
-		}
-		if !merged {
-			assignment.conditions = cloneModelViewerDNF(assignment.conditions)
-			mesh.textureAssignments = append(mesh.textureAssignments, assignment)
-		}
+		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, assignment)
 	}
+}
+
+func appendModelViewerSlotTextureCandidates(
+	mesh *modelViewerDirectMesh,
+	assignments []modelViewerDirectTextureAssignment,
+	resourceMap map[string]modelViewerResource,
+) {
+	for _, assignment := range assignments {
+		if resource, ok := resourceMap[modelViewerNormalizeKey(assignment.resource)]; ok {
+			assignment.file = resource.Filename
+		}
+		mesh.slotTextureCandidates = mergeModelViewerTextureAssignment(mesh.slotTextureCandidates, assignment)
+	}
+}
+
+func mergeModelViewerTextureAssignment(
+	assignments []modelViewerDirectTextureAssignment,
+	assignment modelViewerDirectTextureAssignment,
+) []modelViewerDirectTextureAssignment {
+	for index := range assignments {
+		existing := &assignments[index]
+		if existing.role != assignment.role ||
+			modelViewerNormalizeKey(existing.resource) != modelViewerNormalizeKey(assignment.resource) {
+			continue
+		}
+		existing.conditions = modelViewerDNFOr(existing.conditions, assignment.conditions)
+		existing.authored = existing.authored || assignment.authored
+		if existing.file == "" {
+			existing.file = assignment.file
+		}
+		return assignments
+	}
+	assignment.conditions = cloneModelViewerDNF(assignment.conditions)
+	return append(assignments, assignment)
 }
 
 func resourceFilenames(resourceMap map[string]modelViewerResource, names []string) []string {

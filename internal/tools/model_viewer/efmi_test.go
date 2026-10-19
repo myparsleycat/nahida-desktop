@@ -311,6 +311,82 @@ filename = Meshes/Component3_VB2.buf
 	}
 }
 
+func TestLoadModViewerPicksEFMIDiffuseFromUnnamedSlotBinding(t *testing.T) {
+	dir := t.TempDir()
+	writeEFMIComponentBuffers(t, dir, "Component3")
+	writeTextureFile(t, dir, "Textures/Mask.png", encodeFlatPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/A1.png", encodeColorPNG(32, 32))
+	writeTextureFile(t, dir, "Textures/A2.png", encodeColorPNG(16, 16))
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[Constants]
+global $mod_enabled = 0
+global persist $T = 1
+[KeySwapT]
+key = 9
+type = cycle
+$T = 0,1
+[CommandList_Draw_Component3]
+run = CommandList\EFMIv1\OverrideTextures
+ib = ref Resource_Component3_IB
+vb0 = ref Resource_Component3_VB0
+vb1 = ref Resource_Component3_VB1
+vb2 = ref Resource_Component3_VB2
+ps-t12 = Resource_Data
+ps-t13 = Resource_Mask
+ps-t14 = Resource_A1
+if $T == 1
+ps-t14 = Resource_A2
+endif
+drawindexed = 3, 0, 0
+[TextureOverride_Component3]
+hash = 52ebe5f7
+if $mod_enabled && DRAW_TYPE == 4
+    handling = skip
+    run = CommandList_Draw_Component3
+endif
+[Resource_Data]
+type = Buffer
+stride = 12
+filename = Meshes/Component3_VB2.buf
+[Resource_Mask]
+filename = Textures/Mask.png
+[Resource_A1]
+filename = Textures/A1.png
+[Resource_A2]
+filename = Textures/A2.png
+[Resource_Component3_IB]
+type = Buffer
+format = DXGI_FORMAT_R16_UINT
+filename = Meshes/Component3_IB.buf
+[Resource_Component3_VB0]
+type = Buffer
+stride = 16
+filename = Meshes/Component3_VB0.buf
+[Resource_Component3_VB1]
+type = Buffer
+stride = 12
+filename = Meshes/Component3_VB1.buf
+[Resource_Component3_VB2]
+type = Buffer
+stride = 12
+filename = Meshes/Component3_VB2.buf
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := loadViewerDir(t, dir).result
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+
+	// The buffer and the flat map at lower slots are not diffuse; the slot's toggle variants survive.
+	mesh := result.Meshes[0]
+	for value, want := range map[string]string{"0": "A1.png", "1": "A2.png"} {
+		got := viewerEvalResolveTexture(mesh.TextureVariants, mesh.TexKey, map[string]any{"T": value})
+		if !strings.Contains(got, want) {
+			t.Fatalf("T=%s texture = %q, want %s", value, got, want)
+		}
+	}
+}
+
 func TestLoadModViewerLoadsEFMIAlpha10CallbackDraw(t *testing.T) {
 	dir := t.TempDir()
 	writeEFMIComponentBuffers(t, dir, "Component0")

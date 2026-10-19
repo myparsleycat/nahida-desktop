@@ -28,6 +28,7 @@ type modelViewerDirectMesh struct {
 	textureAuthored                    bool
 	textureDefaultFile                 string
 	nonDiffuseTextureFiles             []string
+	slotTextureCandidates              []modelViewerDirectTextureAssignment
 	indexCount                         int
 }
 
