@@ -51,6 +51,12 @@ func prepareModelViewerPayload(
 			)
 			transport.Meshes = append(transport.Meshes, item)
 			meshPayloads = append(meshPayloads, payload)
+			if mesh.drawSource != nil {
+				if prepared.drawSources == nil {
+					prepared.drawSources = make(map[string]DrawSource)
+				}
+				prepared.drawSources[item.ID] = *mesh.drawSource
+			}
 		}
 	}
 	return meshPayloads, texturePayloads, textureStats, ctx.Err()

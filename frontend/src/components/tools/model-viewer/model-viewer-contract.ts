@@ -5,6 +5,7 @@ import type {
     ViewerAnimationFrame,
     ViewerStateValue,
 } from "@shared/mod-viewer/types";
+import type { ReactNode } from "react";
 
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
@@ -88,6 +89,20 @@ export type ModelViewerBodyShapeOverride = {
     positionsChanged?: boolean;
 };
 
+export type ModelViewerVec3 = [number, number, number];
+
+/** A clicked mesh face. Vectors are in the mesh's own (source buffer) space. */
+export type ModelViewerSurfacePick = {
+    meshId: string;
+    faceIndex: number;
+    /** Source vertex buffer indices of the face corners, in viewer corner order. */
+    vertices: ModelViewerVec3;
+    barycentric: ModelViewerVec3;
+    triangle: [ModelViewerVec3, ModelViewerVec3, ModelViewerVec3];
+    point: ModelViewerVec3;
+    normal: ModelViewerVec3;
+};
+
 export type ModelViewerSurfaceProps = {
     className?: string;
     pixelRatio?: number;
@@ -105,6 +120,10 @@ export type ModelViewerSurfaceProps = {
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;
     toonShadows?: boolean;
+    /** Called for a left click without drag; null when the click hit no visible mesh. */
+    onSurfacePick?: (pick: ModelViewerSurfacePick | null) => void;
+    /** Rendered in the model's space, so it can use the coordinates of a surface pick. */
+    overlay?: ReactNode;
     onError?: (error: unknown) => void;
     onLoad?: () => void;
 };

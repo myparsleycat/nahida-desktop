@@ -1,3 +1,4 @@
+import { Manager as ModRuntime } from "@bindings/modruntime";
 import { XXMI } from "@bindings/xxmi";
 import { RuntimeMode, type CustomDLL, type ImporterConfig } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
@@ -45,6 +46,7 @@ import {
 } from "@renderer/components/xxmi/xxmi-fields";
 import { importerFolderError } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
+import { modRuntimesQueryKey, XXMIModRuntimes } from "@renderer/components/xxmi/xxmi-mod-runtimes";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -106,6 +108,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     queryFn: XXMI.ListCachedLibs,
   });
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
+  const { data: modRuntimes } = useQuery({
+    queryKey: modRuntimesQueryKey(importer),
+    queryFn: () => ModRuntime.List(importer),
+  });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
   const sharedLibsVersion = overview?.sharedLibsVersion;
   const libsProviders = overview?.libsProviders ?? [];
@@ -333,6 +339,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <TabsTrigger value="advanced">{t("page.setting.xxmi.builtin.advanced")}</TabsTrigger>
               <TabsTrigger value="d3dx">d3dx.ini</TabsTrigger>
               <TabsTrigger value="tools">{t("page.setting.xxmi.builtin.tools")}</TabsTrigger>
+              {modRuntimes?.runtimes?.length ? (
+                <TabsTrigger value="runtimes">{t("page.setting.xxmi.modRuntimes.tab")}</TabsTrigger>
+              ) : null}
             </TabsList>
           </div>
         </div>
@@ -1457,6 +1466,10 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </div>
                   </SectionContent>
                 </Section>
+              </TabsContent>
+
+              <TabsContent value="runtimes" className="flex flex-col gap-6">
+                <XXMIModRuntimes importer={importer} />
               </TabsContent>
             </div>
           </div>

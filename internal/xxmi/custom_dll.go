@@ -98,6 +98,11 @@ func (x *XXMI) SetSharedCustomDLL(ctx context.Context, id string) error {
 		return err
 	}
 	x.reportCleanup(x.pruneCustomDLLsLocked(ctx), "prune-custom-dll")
+	followers, err := x.sharedDLLFollowers(ctx, client)
+	if err != nil {
+		return err
+	}
+	x.notifyDLLChanged(ctx, followers...)
 	return nil
 }
 

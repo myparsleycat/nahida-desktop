@@ -30,6 +30,7 @@ type modelViewerDirectMesh struct {
 	nonDiffuseTextureFiles             []string
 	slotTextureCandidates              []modelViewerDirectTextureAssignment
 	indexCount                         int
+	drawSource                         *DrawSource
 }
 
 type modelViewerDirectTextureAssignment struct {

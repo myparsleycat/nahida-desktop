@@ -1727,6 +1727,139 @@
           "unsupported": "{{file}} 使用了不支持的编码。"
         }
       },
+      "liquid_emitter": {
+        "title": "液体喷射点",
+        "load_error": "无法加载此模组的模型。",
+        "applied": "已应用喷射点。请在游戏中按 F10 重新加载模组。",
+        "removed": "已移除喷射点。请在游戏中按 F10 重新加载模组。",
+        "apply": "应用到游戏",
+        "remove": "移除喷射点",
+        "f10_hint": "只为所选部位的绘制调用添加钩子。应用后在游戏中按 F10。",
+        "created": "已创建新模组并禁用原模组。请在游戏中按 F10 重新加载模组。",
+        "restored": "已删除生成的模组并重新启用原模组。",
+        "mode": {
+          "title": "应用方式",
+          "in_place": "修改此模组",
+          "in_place_hint": "直接在此模组的 INI 中添加钩子，并将原 INI 备份为 .nhd-liquid-orig。",
+          "new_mod": "创建新模组",
+          "new_mod_hint": "将此模组复制为带“(Liquid)”的新模组并在其中应用，同时禁用原模组。"
+        },
+        "generated": {
+          "title": "由此工具创建的模组",
+          "description": "原模组以禁用状态保留在 {{path}}。",
+          "restore": "恢复原模组",
+          "restore_title": "要恢复原模组吗？",
+          "restore_description": "将删除此模组文件夹及其喷射设置（包括你在其中直接修改的文件），并重新启用原模组。",
+          "restore_confirm": "恢复"
+        },
+        "runtime": {
+          "title": "喷射运行时",
+          "installed": "喷射运行时已就绪。",
+          "state": {
+            "missing": "未安装",
+            "current": "已安装",
+            "outdated": "有更新",
+            "modified": "文件已更改",
+            "disabled": "已禁用",
+            "foreign": "存在其他副本"
+          },
+          "action": {
+            "missing": "安装",
+            "outdated": "更新",
+            "modified": "修复",
+            "disabled": "启用"
+          },
+          "foreign_title": "已安装另一个 LiquidGravityProbe",
+          "foreign_description": "请先禁用或删除 {{path}} 中的副本。两个运行时会在游戏中冲突。",
+          "required": {
+            "missing": {
+              "title": "未安装喷射运行时",
+              "description": "安装运行时后才能指定并应用喷射点。"
+            },
+            "disabled": {
+              "title": "喷射运行时已禁用",
+              "description": "启用运行时后才能指定并应用喷射点。"
+            }
+          }
+        },
+        "pick": {
+          "toggle": "选取表面",
+          "missed": "该位置没有表面。请单独显示部件或换个视角。"
+        },
+        "selection": {
+          "title": "喷射点",
+          "empty": "点击模型表面以放置喷射点。",
+          "triangle": "三角形 {{index}} · 跟随表面"
+        },
+        "history": {
+          "undo": "撤销",
+          "redo": "重做"
+        },
+        "position": {
+          "title": "位置",
+          "hint": "原始网格坐标 · 单位 m（Z 轴向上）"
+        },
+        "offset": {
+          "title": "离开表面 (mm)",
+          "reset": "回到表面位置"
+        },
+        "direction": {
+          "title": "喷射方向",
+          "down": "朝正下方"
+        },
+        "trajectory": {
+          "label": "预览默认强度轨迹",
+          "hint": "默认强度下的平均路径（1/10 速度，0.48 秒） · 不模拟碰撞、移动和脉冲"
+        },
+        "remove_all": {
+          "button": "全部移除",
+          "title": "要移除此模组的所有喷射点吗?",
+          "description": "将从 INI 文件中移除钩子,并删除已保存的喷射点。",
+          "confirm": "全部移除"
+        },
+        "emitters": {
+          "title": "已应用的喷射点 ({{count}})",
+          "empty": "此模组尚未应用喷射点。",
+          "unhooked": "缺少钩子",
+          "missing_mesh": "当前模型中已没有此部件。"
+        },
+        "look": {
+          "title": "该角色的液体",
+          "hint": "在运行时设置的基础上应用于此模组的所有喷射点。保存后请在游戏中按 F10。",
+          "needs_emitter": "请先应用喷射点，才能为该角色单独设置液体。",
+          "strength": "强度修正",
+          "strength_hint": "在游戏内当前强度上增加的级数 · 结果保持在 0~7",
+          "custom_color": "使用专属颜色",
+          "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
+          "tint": "液体颜色",
+          "absorption": "颜色浓度",
+          "absorption_hint": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
+          "reset": "跟随运行时设置",
+          "save": "保存液体设置",
+          "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。"
+        },
+        "error": {
+          "not_efmi": "此工具仅适用于明日方舟:终末地(EFMI)模组。",
+          "runtime_foreign": "{{detail}} 中已安装另一个 LiquidGravityProbe。请先禁用或删除它。",
+          "runtime_disabled": "喷射运行时已禁用。请在模组库中启用。",
+          "viewer_session": "模型视图已过期。请关闭并重新打开此工具。",
+          "unsupported_draw": "此部件使用计算出的索引范围绘制,无法添加喷射点。",
+          "draw_mismatch": "所选面与模组文件不一致。请关闭并重新打开此工具。",
+          "draw_not_found": "在 INI 中找不到此部件的绘制调用。它可能使用了变量,或文件已更改。",
+          "shared_draw": "此部件的绘制调用也会用于使用其他索引缓冲区的部件,无法添加喷射点。",
+          "invalid_anchor": "喷射点无效。请重新选取表面。",
+          "offset_limit": "喷射点最多只能离开表面 250 mm。",
+          "slots_exhausted": "4096 个喷射点槽位已全部使用。请先移除其他模组的喷射点。",
+          "unsupported_ini": "此模组的 INI 使用了不支持的编码。",
+          "damaged_hook": "{{detail}} 中的喷射钩子缺少开始或结束标记，因此未做任何更改。请修复标记，或用 .nhd-liquid-orig 备份恢复该文件。",
+          "invalid_mode": "未知的应用方式：{{detail}}",
+          "generated_mod": "此模组已由此工具创建，其喷射设置会直接在此模组中修改。",
+          "not_generated": "此模组不是由此工具创建的，没有可恢复的原模组。",
+          "source_missing": "原模组已不在 {{detail}}。请先将其移回原位置。",
+          "invalid_look": "液体设置超出范围。",
+          "no_emitters": "请先应用喷射点，再设置该角色的液体。"
+        }
+      },
       "body_shape": {
         "title": "体型修改",
         "mod_path": "模组文件夹",
@@ -2540,6 +2673,90 @@
               "XXMI_IMPORTER_FILE_ACCESS_DENIED": "无法访问 Importer 文件夹中的文件“{{detail}}”，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取该文件的所有权并重置权限。",
               "XXMI_IMPORTER_FOLDER_IN_USE": "Importer 文件夹正被其他程序占用。请关闭游戏、XXMI Launcher 以及打开了该文件夹内文件的程序，然后重试。",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "Importer 文件夹是 XXMI Launcher 的安装文件夹。请为此 Importer 选择单独的文件夹。"
+            }
+          }
+        },
+        "modRuntimes": {
+          "tab": "运行时",
+          "title": "运行时",
+          "description": "工具安装到此游戏 Mods 文件夹 {{folder}} 分组中的全局 Mod",
+          "noModsFolder": "还没有游戏使用此导入器，因此没有可安装运行时的 Mods 文件夹。",
+          "versions": "已安装 {{installed}} · 内置 {{bundled}}",
+          "bundled": "内置 {{bundled}}",
+          "state": {
+            "missing": "未安装",
+            "current": "已安装",
+            "outdated": "需要更新",
+            "modified": "文件已更改",
+            "disabled": "已禁用",
+            "foreign": "存在其他副本"
+          },
+          "action": {
+            "missing": "安装",
+            "outdated": "更新",
+            "modified": "修复",
+            "disabled": "启用"
+          },
+          "done": {
+            "missing": "已安装 {{name}}。",
+            "outdated": "已更新 {{name}}。",
+            "modified": "已修复 {{name}}。",
+            "disabled": "已启用 {{name}}。"
+          },
+          "disable": "禁用",
+          "disabled": "已禁用 {{name}}。",
+          "openFolder": "打开文件夹",
+          "remove": "移除",
+          "removed": "已将 {{name}} 移至回收站。",
+          "removeTitle": "要移除 {{name}} 吗？",
+          "removeDescription": "运行时文件夹将移至回收站，工具保存在其中的数据（例如液体喷射配置）也会一并移走；使用此运行时的 Mod 在重新安装前将无法工作。如需暂时关闭，请改用禁用。",
+          "foreignDescription": "{{path}} 中启用了另一个 {{name}} 副本。游戏会同时加载两者，请先禁用或移除该副本。",
+          "usedBy": {
+            "LiquidGravityProbe": "由液体喷射工具使用"
+          },
+          "errors": {
+            "MOD_RUNTIME_UNKNOWN": "此导入器没有名为 {{detail}} 的运行时。",
+            "MOD_RUNTIME_NO_MODS_FOLDER": "还没有游戏使用 {{detail}}，因此没有可安装的 Mods 文件夹。",
+            "MOD_RUNTIME_FOREIGN": "{{detail}} 中启用了另一个副本，请先禁用或移除它。",
+            "MOD_RUNTIME_DISABLED": "无法启用 {{detail}} 中的运行时。",
+            "MOD_RUNTIME_NOT_INSTALLED": "{{detail}} 尚未安装。",
+            "MOD_RUNTIME_INVALID_SETTING": "设置值无效：{{detail}}"
+          },
+          "settings": {
+            "title": "设置",
+            "hint": "保存后会立即写入运行时文件。如果游戏正在运行，请按 F10 重新加载。",
+            "repairHint": "保存时也会更新或修复运行时文件。",
+            "range": "{{min}}~{{max}}",
+            "keyDescription": "请按下要在游戏中使用的按键组合。",
+            "reset": "恢复默认",
+            "save": "保存设置",
+            "saved": "已保存 {{name}} 的设置。",
+            "LiquidGravityProbe": {
+              "toggleKey": "开启/关闭喷射",
+              "strengthUpKey": "增大强度",
+              "strengthDownKey": "减小强度",
+              "autoPulseKey": "切换自动脉冲",
+              "manualPulseKey": "按住时脉冲",
+              "startEnabled": "游戏启动时开启喷射",
+              "autoPulse": "以自动脉冲开始",
+              "strength": "初始强度",
+              "slotCount": "可同时喷射的角色数",
+              "tint": "液体颜色",
+              "absorptionDepth": "颜色浓度",
+              "wetGround": "湿润地面亮度",
+              "puddleReflection": "水洼反射",
+              "streamReflection": "水流反射",
+              "scattering": "光散射",
+              "refraction": "折射",
+              "hints": {
+                "slotCount": "角色越多，GPU 负担越大。",
+                "absorptionDepth": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
+                "wetGround": "水洼下方地面保留的亮度 · 设为 1 则不变暗",
+                "puddleReflection": "水洼反射的最低强度",
+                "streamReflection": "水流和水滴的反射强度",
+                "scattering": "在深色背景上液体自身颜色的显现程度",
+                "refraction": "背后景物被折射的程度"
+              }
             }
           }
         }

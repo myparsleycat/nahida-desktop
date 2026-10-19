@@ -13,6 +13,8 @@ type modelViewerSession struct {
 	windowID  uint
 	evaluator *modelViewerEvaluator
 	cancel    context.CancelFunc
+	// drawSources maps transport mesh IDs to their INI draw call.
+	drawSources map[string]DrawSource
 }
 
 // CleanupModelViewerWindow also fences loads completing after the native window closes.

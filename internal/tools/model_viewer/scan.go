@@ -653,6 +653,18 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			textureAuthored:        record.authoredDiffuse,
 			nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse),
 			indexCount:             indexCount,
+			drawSource: &DrawSource{
+				INIPath:    iniPath,
+				Section:    record.sectionName,
+				IB:         draw.state.ib,
+				IBPath:     ibPath,
+				IBFormat:   ib.Format,
+				StartIndex: record.draw.StartIndex,
+				IndexCount: record.draw.IndexCount,
+				BaseVertex: record.draw.BaseVertex,
+				Auto:       record.auto,
+				Reversed:   source.kind == modelViewerDrawVertexWWMI,
+			},
 		}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		appendModelViewerSlotTextureCandidates(&mesh, record.slotTextures, resourceMap)

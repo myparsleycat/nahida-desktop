@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -61,6 +63,10 @@ type libsProviderSpec struct {
 	// dx12 is whether the provider's d3d11.dll applies mods to a game rendering with DirectX 12. Without it,
 	// mods only load with DirectX 11.
 	dx12 bool
+	// shaderSamplerSlotsSince is the first provider release whose d3d11.dll binds INI sampler states to the
+	// shader sampler slots (ps-s#, cs-s#); empty when no release does. An older build warns on the overlay
+	// and drops those lines, so the feature counts as present only from this release on.
+	shaderSamplerSlotsSince string
 	// legacyCompanions are the libraries a release without a dependency manifest, or with one of a newer schema
 	// than this build reads, may ship for its d3d11.dll to load, as releases did before the manifest.
 	legacyCompanions []string
@@ -134,13 +140,14 @@ func providerFileSizeLimit(name string) int64 {
 var libsProviders = []libsProviderSpec{
 	{id: signedLibsProvider, repo: libsRepo},
 	{
-		id:               defaultLibsProvider,
-		repo:             github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
-		overlayPackage:   "xxmi-libs-myparsleycat",
-		versionMark:      "-nhd.",
-		smoothMotion:     true,
-		dx12:             true,
-		legacyCompanions: []string{"dxcompiler.dll", "dxil.dll"},
+		id:                      defaultLibsProvider,
+		repo:                    github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
+		overlayPackage:          "xxmi-libs-myparsleycat",
+		versionMark:             "-nhd.",
+		smoothMotion:            true,
+		dx12:                    true,
+		shaderSamplerSlotsSince: "1.2.2-nhd.13",
+		legacyCompanions:        []string{"dxcompiler.dll", "dxil.dll"},
 	},
 }
 
@@ -280,13 +287,18 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (retu
 	if err != nil {
 		return err
 	}
+	var followers []string
 	for _, row := range rows {
 		cfg, err := x.GetImporterConfig(ctx, row.Key)
 		if err != nil {
 			return err
 		}
+		if cfg.Mode != RuntimeXXMI || cfg.LibsProvider != "" {
+			continue
+		}
+		followers = append(followers, row.Key)
 		own := normalizeVersion(cfg.XXMIVersion.Pinned)
-		if cfg.Mode != RuntimeXXMI || cfg.LibsProvider != "" || own == "" {
+		if own == "" {
 			continue
 		}
 
@@ -321,7 +333,11 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (retu
 			return err
 		}
 	}
-	return client.Settings.Upsert(ctx, sharedLibsProviderKey, &provider)
+	if err := client.Settings.Upsert(ctx, sharedLibsProviderKey, &provider); err != nil {
+		return err
+	}
+	x.notifyDLLChanged(ctx, followers...)
+	return nil
 }
 
 // EnsureLibsProvider caches the libraries a provider adds to the signed package, so the next launch deploys
@@ -471,6 +487,112 @@ func (x *XXMI) dllFeatureSupport(
 		return dllFeatureSupport{provider: spec.id, reason: dllFeatureProviderUnsupported}
 	}
 	return dllFeatureSupport{provider: spec.id, supported: true}
+}
+
+// DLLFeatures are the features of the d3d11.dll an importer's next deployment writes that the mod runtimes
+// installed for it pick their files by. A user-provided DLL or a provider that cannot be resolved has none, so
+// those importers get the files every d3d11.dll reads.
+type DLLFeatures struct {
+	ShaderSamplerSlots bool
+	DX12               bool
+}
+
+// customDLLFeaturesEnv lists, comma-separated, the features a user-provided d3d11.dll has: "sampler_slots"
+// and "dx12". It stands in for the provider release check when a provider build runs before its release;
+// nothing reads the DLL itself.
+const customDLLFeaturesEnv = "NHD_CUSTOM_DLL_FEATURES"
+
+// ImporterDLLFeatures reports the features of the d3d11.dll the importer's next deployment writes.
+//
+//wails:ignore
+func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFeatures, error) {
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil {
+		return DLLFeatures{}, err
+	}
+	support := x.dllFeatureSupport(ctx, cfg, func(libsProviderSpec) bool { return true })
+	if support.reason == dllFeatureCustomDLL {
+		return customDLLFeatures(os.Getenv(customDLLFeaturesEnv)), nil
+	}
+	spec, ok := lookupLibsProvider(support.provider)
+	if !support.supported || !ok {
+		return DLLFeatures{}, nil
+	}
+	features := DLLFeatures{DX12: spec.dx12}
+	if spec.shaderSamplerSlotsSince == "" {
+		return features, nil
+	}
+	// The release the next deployment writes decides, as the deployment resolves it: a pin to an older release
+	// must not leave a runtime installed for a feature that release lacks.
+	pin, _, err := x.libsPin(ctx, cfg)
+	if err != nil {
+		return DLLFeatures{}, err
+	}
+	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
+	if err != nil {
+		return DLLFeatures{}, err
+	}
+	features.ShaderSamplerSlots = providerVersionAtLeast(spec, version, spec.shaderSamplerSlotsSince)
+	return features, nil
+}
+
+func customDLLFeatures(declared string) DLLFeatures {
+	var features DLLFeatures
+	for name := range strings.SplitSeq(declared, ",") {
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "sampler_slots":
+			features.ShaderSamplerSlots = true
+		case "dx12":
+			features.DX12 = true
+		}
+	}
+	return features
+}
+
+// providerVersionAtLeast reports whether a provider release is minimum or newer: the signed libraries version
+// it is built on compared first, then the provider's own revision. An unparseable version is older than any.
+func providerVersionAtLeast(spec libsProviderSpec, version, minimum string) bool {
+	parse := func(value string) ([]int, int, bool) {
+		signed, revision, ok := strings.Cut(normalizeVersion(value), spec.versionMark)
+		if !ok || spec.versionMark == "" {
+			return nil, 0, false
+		}
+		base, baseOK := dottedVersion(signed)
+		number, err := strconv.Atoi(revision)
+		if !baseOK || err != nil || number < 0 {
+			return nil, 0, false
+		}
+		return base, number, true
+	}
+	base, revision, ok := parse(version)
+	minBase, minRevision, minOK := parse(minimum)
+	if !ok || !minOK {
+		return false
+	}
+	if c := slices.Compare(base, minBase); c != 0 {
+		return c > 0
+	}
+	return revision >= minRevision
+}
+
+// sharedDLLFollowers lists the importers whose d3d11.dll comes from the shared provider and custom DLL
+// selections.
+func (x *XXMI) sharedDLLFollowers(ctx context.Context, client *db.Client) ([]string, error) {
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var followers []string
+	for _, row := range rows {
+		cfg, err := x.GetImporterConfig(ctx, row.Key)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Mode == RuntimeXXMI && cfg.LibsProvider == "" {
+			followers = append(followers, row.Key)
+		}
+	}
+	return followers, nil
 }
 
 // providerPin moves a pinned libraries version to a provider: to the release built on the same signed

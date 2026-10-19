@@ -154,6 +154,7 @@ type XXMI struct {
 	runningWake         chan struct{}
 	processSnapshot     func(context.Context) (map[string]bool, error)
 	importersChanged    func(context.Context)
+	dllChanged          func(context.Context, string)
 	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
@@ -237,6 +238,29 @@ func (x *XXMI) notifyImportersChanged(ctx context.Context) {
 	x.mu.RUnlock()
 	if notify != nil {
 		notify(ctx)
+	}
+}
+
+// UseDLLChanged registers a backend consumer of changes to where an importer's d3d11.dll comes from: its own
+// provider or custom DLL, or the shared selections it follows.
+//
+//wails:ignore
+func (x *XXMI) UseDLLChanged(changed func(ctx context.Context, importer string)) {
+	x.mu.Lock()
+	x.dllChanged = changed
+	x.mu.Unlock()
+}
+
+// notifyDLLChanged must run without importer locks held so consumers can read the saved selection.
+func (x *XXMI) notifyDLLChanged(ctx context.Context, importers ...string) {
+	x.mu.RLock()
+	notify := x.dllChanged
+	x.mu.RUnlock()
+	if notify == nil {
+		return
+	}
+	for _, importer := range importers {
+		notify(ctx, importer)
 	}
 }
 

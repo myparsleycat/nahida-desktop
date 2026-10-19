@@ -20,6 +20,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/setting"
@@ -52,6 +53,7 @@ type runtime struct {
 	transfer          *transfer.Transfer
 	gamebanana        *gamebanana.GameBanana
 	mod               *mod.Mod
+	modRuntime        *modruntime.Manager
 	xxmi              *xxmi.XXMI
 	reshade           *reshade.ReShade
 	tools             *tools.Tools
@@ -189,6 +191,13 @@ func newRuntime() *runtime {
 		GameBanana: gameBananaService, Native: native, Download: download, Elevated: elevatedFiles,
 	})
 	download.UseClient(httpClient)
+	modRuntime := modruntime.New(modruntime.Options{
+		Log: log, Mod: modService, Trash: shell.Trash, Specs: tools.ModRuntimes(),
+		Capabilities: func(ctx context.Context, importer string) (modruntime.Capabilities, error) {
+			features, err := xxmiService.ImporterDLLFeatures(ctx, importer)
+			return modruntime.Capabilities{ShaderSamplerSlots: features.ShaderSamplerSlots, DX12: features.DX12}, err
+		},
+	})
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
@@ -227,6 +236,7 @@ func newRuntime() *runtime {
 		transfer:   transferService,
 		gamebanana: gameBananaService,
 		mod:        modService,
+		modRuntime: modRuntime,
 		xxmi:       xxmiService,
 		reshade:    reshadeService,
 		tools: tools.NewWithOptions(tools.Options{
@@ -243,6 +253,7 @@ func newRuntime() *runtime {
 			GitHubRate:             githubRate,
 			GitHub:                 githubClient,
 			Mod:                    modService,
+			Runtimes:               modRuntime,
 			Elevated:               elevatedFiles,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
@@ -275,6 +286,16 @@ func newRuntime() *runtime {
 				Severity:  infra.DiagnosticError,
 				Operation: "toggle-viewer.watcher",
 				Stage:     "importer-selection",
+			})
+		}
+	})
+	rt.xxmi.UseDLLChanged(func(ctx context.Context, importer string) {
+		if err := rt.modRuntime.Refresh(ctx, importer); err != nil {
+			_ = infra.ReportError(log, err, "XXMI.dllChanged", infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "mod-runtime-refresh",
+				Stage:     "dll-selection",
+				Fields:    map[string]any{"importer": importer},
 			})
 		}
 	})
@@ -381,6 +402,7 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "Input", rt.input),
 		application.NewService(rt.log),
 		newGuardedService(rt, "Mod", rt.mod, waitForAllMethods),
+		newGuardedService(rt, "ModRuntime", rt.modRuntime, waitForAllMethods),
 		application.NewService(rt.notifications),
 		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
 		newGuardedService(rt, "ReShade", rt.reshade, waitForAllMethods),

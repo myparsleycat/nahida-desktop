@@ -9,12 +9,14 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 	bodyshape "nahida.live/desktop/internal/tools/body_shape"
 	efmioutline "nahida.live/desktop/internal/tools/efmi_outline"
 	fixinspection "nahida.live/desktop/internal/tools/fix_inspection"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 	fixer4001 "nahida.live/desktop/internal/tools/fixer_4001"
+	liquidemitter "nahida.live/desktop/internal/tools/liquid_emitter"
 	"nahida.live/desktop/internal/tools/menumaker"
 	modbisect "nahida.live/desktop/internal/tools/mod_bisect"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
@@ -61,6 +63,13 @@ type Options struct {
 	GitHub *github.Client
 	// Elevated changes files the application cannot write to; nil fails those writes.
 	Elevated elevated.FileGateway
+	// Runtimes installs the global mods the tools depend on; nil gives each tool its own.
+	Runtimes *modruntime.Manager
+}
+
+// ModRuntimes lists the global mods the tools install through modruntime.
+func ModRuntimes() []modruntime.Spec {
+	return []modruntime.Spec{liquidemitter.RuntimeSpec()}
 }
 
 // Tools is the Wails service the renderer calls. Feature behavior lives in the
@@ -75,6 +84,7 @@ type Tools struct {
 	fixInspection *fixinspection.Service
 	fixTool       *fixtool.Service
 	fixer4001     *fixer4001.Service
+	liquidEmitter *liquidemitter.Service
 	menuMaker     *menumaker.MenuMaker
 	modelViewer   *modelviewer.Service
 	texture       *texture.Service
@@ -119,6 +129,11 @@ func NewWithOptions(opts Options) *Tools {
 		Runner:    fixTool,
 	})
 	fixInspection.Register(zzmifixer.NewInspector(zzmi))
+	modelViewer := modelviewer.NewWithOptions(modelviewer.Options{
+		Log:                    opts.Log,
+		Protocol:               opts.Protocol,
+		FindModelViewerPreview: opts.FindModelViewerPreview,
+	})
 	toggleViewerSettings, _ := opts.Settings.(toggleviewer.Settings)
 	var toggleViewerImporters toggleviewer.Importers
 	if opts.XXMI != nil {
@@ -154,12 +169,15 @@ func NewWithOptions(opts Options) *Tools {
 			GitHub:        opts.GitHub,
 			Elevated:      opts.Elevated,
 		}),
-		menuMaker: menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
-		modelViewer: modelviewer.NewWithOptions(modelviewer.Options{
-			Log:                    opts.Log,
-			Protocol:               opts.Protocol,
-			FindModelViewerPreview: opts.FindModelViewerPreview,
+		liquidEmitter: liquidemitter.NewWithOptions(liquidemitter.Options{
+			Log:      opts.Log,
+			Mod:      opts.Mod,
+			Viewer:   modelViewer,
+			FS:       opts.FS,
+			Runtimes: opts.Runtimes,
 		}),
+		menuMaker:   menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
+		modelViewer: modelViewer,
 		texture: texture.NewWithOptions(texture.Options{
 			Log:       opts.Log,
 			EventEmit: opts.EventEmit,
@@ -208,6 +226,7 @@ func (t *Tools) UseClient(client *db.Client) {
 	}
 	t.bisect.UseClient(client)
 	t.efmiOutline.UseClient(client)
+	t.liquidEmitter.UseClient(client)
 	t.fixInspection.UseClient(client)
 	t.fixTool.UseClient(client)
 	t.fixer4001.UseClient(client)

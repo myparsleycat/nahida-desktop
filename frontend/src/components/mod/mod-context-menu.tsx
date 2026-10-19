@@ -24,6 +24,7 @@ import {
   FolderIcon,
   FolderTreeIcon,
   ImageIcon,
+  DropletsIcon,
   LayersIcon,
   Loader2Icon,
   PanelsTopLeftIcon,
@@ -279,6 +280,12 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                 <ContextMenuItem onClick={() => actions.openEfmiOutlineDialog(mod)}>
                   <LayersIcon className="mr-2 size-4" />
                   {t("page.tools.efmi_outline.title")}
+                </ContextMenuItem>
+              )}
+              {actions.isEfmiGame && (
+                <ContextMenuItem onClick={() => actions.openLiquidEmitterDialog(mod)}>
+                  <DropletsIcon className="mr-2 size-4" />
+                  {t("page.tools.liquid_emitter.title")} ({t("g.beta")})
                 </ContextMenuItem>
               )}
               <ContextMenuItem onClick={() => actions.openConflictFinder(mod)}>

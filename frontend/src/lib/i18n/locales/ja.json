@@ -1727,6 +1727,139 @@
           "unsupported": "{{file}} は未対応のエンコーディングです。"
         }
       },
+      "liquid_emitter": {
+        "title": "液体噴射ポイント",
+        "load_error": "このModのモデルを読み込めませんでした。",
+        "applied": "噴射ポイントを適用しました。ゲーム内でF10を押してModを再読み込みしてください。",
+        "removed": "噴射ポイントを削除しました。ゲーム内でF10を押してModを再読み込みしてください。",
+        "apply": "ゲームに適用",
+        "remove": "ポイントを削除",
+        "f10_hint": "選択した部位の描画呼び出しにだけフックを入れます。適用後、ゲーム内で F10 を押してください。",
+        "created": "新しいModを作成し、元のModを無効にしました。ゲーム内で F10 を押してModを再読み込みしてください。",
+        "restored": "作成したModを削除し、元のModを再び有効にしました。",
+        "mode": {
+          "title": "適用方法",
+          "in_place": "このModを編集",
+          "in_place_hint": "このModのINIに直接フックを入れ、元のINIは .nhd-liquid-orig としてバックアップします。",
+          "new_mod": "新しいModとして作成",
+          "new_mod_hint": "このModを「(Liquid)」付きの新しいModにコピーしてそこに適用し、元のModは無効にします。"
+        },
+        "generated": {
+          "title": "このツールで作成したMod",
+          "description": "元のModは {{path}} に無効のまま残っています。",
+          "restore": "元に戻す",
+          "restore_title": "元のModに戻しますか？",
+          "restore_description": "このModフォルダーと噴射設定を削除し、元のModを再び有効にします。このModで直接変更したファイルも削除されます。",
+          "restore_confirm": "元に戻す"
+        },
+        "runtime": {
+          "title": "噴射ランタイム",
+          "installed": "噴射ランタイムの準備ができました。",
+          "state": {
+            "missing": "未インストール",
+            "current": "インストール済み",
+            "outdated": "更新あり",
+            "modified": "ファイル変更あり",
+            "disabled": "無効",
+            "foreign": "別のコピーあり"
+          },
+          "action": {
+            "missing": "インストール",
+            "outdated": "更新",
+            "modified": "修復",
+            "disabled": "有効化"
+          },
+          "foreign_title": "別のLiquidGravityProbeがインストールされています",
+          "foreign_description": "先に{{path}}のコピーを無効化または削除してください。ランタイムが2つあるとゲーム内で競合します。",
+          "required": {
+            "missing": {
+              "title": "噴射ランタイムがインストールされていません",
+              "description": "噴射ポイントを指定して適用するには、ランタイムをインストールしてください。"
+            },
+            "disabled": {
+              "title": "噴射ランタイムが無効になっています",
+              "description": "噴射ポイントを指定して適用するには、ランタイムを有効化してください。"
+            }
+          }
+        },
+        "pick": {
+          "toggle": "表面を選択",
+          "missed": "その位置に表面が見つかりません。パーツを単独表示するか視点を変えてください。"
+        },
+        "selection": {
+          "title": "噴射ポイント",
+          "empty": "モデルの表面をクリックして噴射ポイントを指定してください。",
+          "triangle": "三角形 {{index}} · 表面に追従"
+        },
+        "history": {
+          "undo": "元に戻す",
+          "redo": "やり直す"
+        },
+        "position": {
+          "title": "位置",
+          "hint": "元メッシュの座標 · 単位 m(Zが上)"
+        },
+        "offset": {
+          "title": "表面からの移動 (mm)",
+          "reset": "表面の位置に戻す"
+        },
+        "direction": {
+          "title": "噴射方向",
+          "down": "真下に向ける"
+        },
+        "trajectory": {
+          "label": "標準の強さの軌跡をプレビュー",
+          "hint": "標準の強さでの平均的な経路（1/10速度、0.48秒） · 衝突、移動、パルスは再現なし"
+        },
+        "remove_all": {
+          "button": "すべて削除",
+          "title": "このModの噴射ポイントをすべて削除しますか?",
+          "description": "INIファイルからフックを取り除き、保存した噴射ポイントを削除します。",
+          "confirm": "すべて削除"
+        },
+        "emitters": {
+          "title": "適用済みポイント ({{count}})",
+          "empty": "このModに適用された噴射ポイントはありません。",
+          "unhooked": "フックなし",
+          "missing_mesh": "このパーツは現在のモデルにありません。"
+        },
+        "look": {
+          "title": "このキャラクターの液体",
+          "hint": "ランタイム設定に加えて、このModのすべての噴射ポイントに適用されます。保存後にゲーム内でF10を押してください。",
+          "needs_emitter": "このキャラクター専用の液体を設定するには、先に噴射ポイントを適用してください。",
+          "strength": "強さの補正",
+          "strength_hint": "ゲーム内の現在の強さに加える段階 · 結果は0〜7の範囲",
+          "custom_color": "専用の色を使う",
+          "custom_color_hint": "オフのときはランタイム設定の液体の色と色の濃さを使います。",
+          "tint": "液体の色",
+          "absorption": "色の濃さ",
+          "absorption_hint": "液体の色が完全に現れる厚さ（mm） · 小さいほど濃い",
+          "reset": "ランタイム設定に従う",
+          "save": "液体の設定を保存",
+          "saved": "このキャラクターの液体を保存しました。ゲーム内でF10を押してModを再読み込みしてください。"
+        },
+        "error": {
+          "not_efmi": "このツールはアークナイツ:エンドフィールド(EFMI)のModでのみ使用できます。",
+          "runtime_foreign": "{{detail}}に別のLiquidGravityProbeがインストールされています。先に無効化または削除してください。",
+          "runtime_disabled": "噴射ランタイムが無効になっています。Modライブラリで有効にしてください。",
+          "viewer_session": "モデル表示が古くなっています。ツールを閉じて開き直してください。",
+          "unsupported_draw": "このパーツは計算されたインデックス範囲で描画されるため、噴射ポイントを追加できません。",
+          "draw_mismatch": "選択した面がModファイルと一致しません。ツールを閉じて開き直してください。",
+          "draw_not_found": "INIでこのパーツの描画呼び出しが見つかりませんでした。変数を使っているか、ファイルが変更された可能性があります。",
+          "shared_draw": "このパーツの描画呼び出しは別のインデックスバッファの他のパーツでも実行されるため、噴射ポイントを追加できません。",
+          "invalid_anchor": "噴射ポイントが正しくありません。表面を選び直してください。",
+          "offset_limit": "噴射ポイントは表面から最大250mmまでしか移動できません。",
+          "slots_exhausted": "噴射ポイントの枠4096個をすべて使用しています。先に他のModのポイントを削除してください。",
+          "unsupported_ini": "このModのINIはサポートされていないエンコーディングです。",
+          "damaged_hook": "{{detail}} の噴射フックに開始または終了マーカーがないため、何も変更しませんでした。マーカーを修正するか、.nhd-liquid-orig バックアップからファイルを復元してください。",
+          "invalid_mode": "不明な適用方法です: {{detail}}",
+          "generated_mod": "このツールで作成済みのModです。このModの噴射設定はこのMod内で直接編集されます。",
+          "not_generated": "このツールで作成したModではないため、戻す元のModがありません。",
+          "source_missing": "元のModが {{detail}} にありません。元の場所に戻してから再試行してください。",
+          "invalid_look": "液体の設定値が範囲外です。",
+          "no_emitters": "このキャラクターの液体を設定する前に噴射ポイントを適用してください。"
+        }
+      },
       "body_shape": {
         "title": "体型変更",
         "mod_path": "MODフォルダ",
@@ -2540,6 +2673,90 @@
               "XXMI_IMPORTER_FILE_ACCESS_DENIED": "Importerフォルダー内のファイル「{{detail}}」へのアクセスが拒否され、アクセス許可を復元できませんでした。もう一度試して管理者権限の要求を許可するか、ファイルの所有権を取得してアクセス許可を手動でリセットしてください。",
               "XXMI_IMPORTER_FOLDER_IN_USE": "Importerフォルダーが他のプログラムで使用されています。ゲーム、XXMI Launcher、フォルダー内のファイルを開いているプログラムを終了してから、もう一度お試しください。",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "ImporterフォルダーがXXMI Launcherのインストールフォルダーです。このImporter専用のフォルダーを選択してください。"
+            }
+          }
+        },
+        "modRuntimes": {
+          "tab": "ランタイム",
+          "title": "ランタイム",
+          "description": "ツールがこのゲームの Mods フォルダー内の {{folder}} グループにインストールするグローバル Mod",
+          "noModsFolder": "このインポーターを使うゲームがまだないため、ランタイムをインストールする Mods フォルダーがありません。",
+          "versions": "インストール済み {{installed}} · 同梱 {{bundled}}",
+          "bundled": "同梱 {{bundled}}",
+          "state": {
+            "missing": "未インストール",
+            "current": "インストール済み",
+            "outdated": "更新が必要",
+            "modified": "ファイル変更あり",
+            "disabled": "無効",
+            "foreign": "別のコピーあり"
+          },
+          "action": {
+            "missing": "インストール",
+            "outdated": "更新",
+            "modified": "修復",
+            "disabled": "有効化"
+          },
+          "done": {
+            "missing": "{{name}} をインストールしました。",
+            "outdated": "{{name}} を更新しました。",
+            "modified": "{{name}} を修復しました。",
+            "disabled": "{{name}} を有効化しました。"
+          },
+          "disable": "無効化",
+          "disabled": "{{name}} を無効化しました。",
+          "openFolder": "フォルダーを開く",
+          "remove": "削除",
+          "removed": "{{name}} をごみ箱に移動しました。",
+          "removeTitle": "{{name}} を削除しますか？",
+          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体エミッターのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う Mod は再インストールするまで動作しません。一時的に止めるには無効化を使ってください。",
+          "foreignDescription": "{{path}} で別の {{name}} のコピーが有効になっています。ゲームが両方を読み込むため、先にそのコピーを無効化または削除してください。",
+          "usedBy": {
+            "LiquidGravityProbe": "液体エミッターツールで使用"
+          },
+          "errors": {
+            "MOD_RUNTIME_UNKNOWN": "このインポーターには {{detail}} というランタイムがありません。",
+            "MOD_RUNTIME_NO_MODS_FOLDER": "{{detail}} を使うゲームがまだないため、インストール先の Mods フォルダーがありません。",
+            "MOD_RUNTIME_FOREIGN": "{{detail}} で別のコピーが有効になっています。先に無効化または削除してください。",
+            "MOD_RUNTIME_DISABLED": "{{detail}} のランタイムを有効化できませんでした。",
+            "MOD_RUNTIME_NOT_INSTALLED": "{{detail}} はインストールされていません。",
+            "MOD_RUNTIME_INVALID_SETTING": "設定値が正しくありません: {{detail}}"
+          },
+          "settings": {
+            "title": "設定",
+            "hint": "保存するとランタイムファイルにすぐ反映されます。ゲーム起動中は F10 で再読み込みしてください。",
+            "repairHint": "保存するとランタイムファイルも更新・修復されます。",
+            "range": "{{min}}〜{{max}}",
+            "keyDescription": "ゲーム内で使うキーの組み合わせを押してください。",
+            "reset": "既定値に戻す",
+            "save": "設定を保存",
+            "saved": "{{name}} の設定を保存しました。",
+            "LiquidGravityProbe": {
+              "toggleKey": "噴射のオン/オフ",
+              "strengthUpKey": "強さを上げる",
+              "strengthDownKey": "強さを下げる",
+              "autoPulseKey": "自動パルスの切り替え",
+              "manualPulseKey": "押している間パルス",
+              "startEnabled": "ゲーム開始時に噴射をオン",
+              "autoPulse": "自動パルスで開始",
+              "strength": "開始時の強さ",
+              "slotCount": "同時に放出できるキャラクター数",
+              "tint": "液体の色",
+              "absorptionDepth": "色の濃さ",
+              "wetGround": "濡れた地面の明るさ",
+              "puddleReflection": "水たまりの反射",
+              "streamReflection": "水流の反射",
+              "scattering": "光の散乱",
+              "refraction": "屈折",
+              "hints": {
+                "slotCount": "人数が増えるほどGPU負荷が増えます。",
+                "absorptionDepth": "液体の色が完全に現れる厚さ（mm） · 小さいほど濃い",
+                "wetGround": "水たまりの下の地面に残る明るさ · 1で暗くならない",
+                "puddleReflection": "水たまりの反射の最小の強さ",
+                "streamReflection": "水流と水滴の反射の強さ",
+                "scattering": "暗い背景の上で液体そのものの色が見える度合い",
+                "refraction": "背後の景色が屈折して見える度合い"
+              }
             }
           }
         }

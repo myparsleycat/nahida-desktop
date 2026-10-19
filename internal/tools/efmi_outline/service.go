@@ -226,32 +226,44 @@ func (s *Service) run(
 	return inspection, report(err)
 }
 
-// requireEFMIMod rejects any folder that is not a mod inside an EFMI mod
-// folder. Mods folders are often junctions, so roots are compared both as
-// written and as resolved by Windows.
 func (s *Service) requireEFMIMod(ctx context.Context, modPath string) (string, error) {
 	if s.games == nil {
 		return "", errors.New("efmi outline is not bound to a database")
 	}
-	if strings.TrimSpace(modPath) == "" {
-		return "", infra.ContractError(ErrorNotEFMI + ":")
-	}
-	root, err := filepath.Abs(modPath)
+	root, _, ok, err := ResolveEFMIMod(ctx, s.games, modPath)
 	if err != nil {
-		return "", fmt.Errorf("resolve mod path %q: %w", modPath, err)
+		return "", err
+	}
+	if !ok {
+		return "", infra.ContractError(ErrorNotEFMI + ":" + root)
+	}
+	return root, nil
+}
+
+// ResolveEFMIMod returns the absolute mod folder and the mod root of the game
+// holding it. ok is false for any folder that is not a mod inside an EFMI mod
+// folder. Mods folders are often junctions, so roots are compared both as
+// written and as resolved by Windows.
+func ResolveEFMIMod(ctx context.Context, games GamePaths, modPath string) (root, modsRoot string, ok bool, err error) {
+	if strings.TrimSpace(modPath) == "" {
+		return "", "", false, nil
+	}
+	root, err = filepath.Abs(modPath)
+	if err != nil {
+		return "", "", false, fmt.Errorf("resolve mod path %q: %w", modPath, err)
 	}
 	info, err := os.Stat(root)
 	if err != nil {
-		return "", fmt.Errorf("open mod folder %q: %w", root, err)
+		return root, "", false, fmt.Errorf("open mod folder %q: %w", root, err)
 	}
 	if !info.IsDir() {
-		return "", infra.ContractError(ErrorNotEFMI + ":" + root)
+		return root, "", false, nil
 	}
 	physical := finalOr(root)
 
-	rows, err := s.games.List(ctx)
+	rows, err := games.List(ctx)
 	if err != nil {
-		return "", fmt.Errorf("list game paths: %w", err)
+		return root, "", false, fmt.Errorf("list game paths: %w", err)
 	}
 	importer, longest := "", -1
 	for _, row := range rows {
@@ -268,7 +280,7 @@ func (s *Service) requireEFMIMod(ctx context.Context, modPath string) (string, e
 					len(pair[0]) <= longest {
 					continue
 				}
-				importer, longest = "", len(pair[0])
+				importer, longest, modsRoot = "", len(pair[0]), row.ModFolderPath
 				if row.Importer != nil {
 					importer = *row.Importer
 				}
@@ -276,9 +288,9 @@ func (s *Service) requireEFMIMod(ctx context.Context, modPath string) (string, e
 		}
 	}
 	if !strings.EqualFold(importer, efmiImporter) {
-		return "", infra.ContractError(ErrorNotEFMI + ":" + root)
+		return root, "", false, nil
 	}
-	return root, nil
+	return root, modsRoot, true, nil
 }
 
 func finalOr(path string) string {
