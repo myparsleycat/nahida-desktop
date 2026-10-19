@@ -62,6 +62,9 @@ type BodyShapeMeshSummary struct {
 	VertexCount    int    `json:"vertexCount"`
 	IndexCount     int    `json:"indexCount"`
 	PositionStride int    `json:"positionStride"`
+	// PositionFileKey is the ID of the first mesh reading the same position file;
+	// meshes sharing a key cannot be exported together.
+	PositionFileKey string `json:"positionFileKey"`
 }
 
 type BodyShapeSessionDescriptor struct {
@@ -92,15 +95,20 @@ type BodyShapeMeshDescriptor struct {
 }
 
 type BodyShapeBeginExportInput struct {
-	SessionID      string `json:"sessionId"`
-	MeshID         string `json:"meshId"`
-	IncludeWeights bool   `json:"includeWeights"`
+	SessionID      string   `json:"sessionId"`
+	MeshIDs        []string `json:"meshIds"`
+	IncludeWeights bool     `json:"includeWeights"`
+}
+
+type BodyShapeExportMeshUpload struct {
+	MeshID             string  `json:"meshId"`
+	PositionsUploadURL string  `json:"positionsUploadUrl"`
+	WeightsUploadURL   *string `json:"weightsUploadUrl,omitempty"`
 }
 
 type BodyShapeExportUpload struct {
-	ExportID           string  `json:"exportId"`
-	PositionsUploadURL string  `json:"positionsUploadUrl"`
-	WeightsUploadURL   *string `json:"weightsUploadUrl,omitempty"`
+	ExportID string                      `json:"exportId"`
+	Meshes   []BodyShapeExportMeshUpload `json:"meshes"`
 }
 
 type BodyShapeOK struct {
@@ -117,7 +125,7 @@ type BodyShapeCommitExportInput struct {
 }
 
 type bodyShapeExportSlot struct {
-	meshID         string
+	meshIDs        []string
 	includeWeights bool
 }
 
@@ -135,28 +143,38 @@ type BodyShapeChangeSummary struct {
 	MaxDisplacement float64   `json:"maxDisplacement"`
 }
 
+type BodyShapeExportMesh struct {
+	MeshID         string    `json:"meshId"`
+	PositionPath   string    `json:"positionPath"`
+	PositionStride int       `json:"positionStride"`
+	Positions      []float32 `json:"positions"`
+	VectorPath     *string   `json:"vectorPath,omitempty"`
+	VectorLayout   *string   `json:"vectorLayout"`
+	Weights        []float32 `json:"weights,omitempty"`
+}
+
 type BodyShapeExportInput struct {
 	ModRoot        string                  `json:"modRoot"`
-	PositionPath   string                  `json:"positionPath"`
-	PositionStride int                     `json:"positionStride"`
-	Positions      []float32               `json:"positions"`
-	VectorPath     *string                 `json:"vectorPath,omitempty"`
-	VectorLayout   *string                 `json:"vectorLayout"`
-	Weights        []float32               `json:"weights,omitempty"`
+	Meshes         []BodyShapeExportMesh   `json:"meshes"`
 	Amount         *float64                `json:"amount,omitempty"`
 	AxisScale      []float64               `json:"axisScale,omitempty"`
 	WriteChangeLog *bool                   `json:"writeChangeLog,omitempty"`
 	ChangeSummary  *BodyShapeChangeSummary `json:"changeSummary,omitempty"`
 }
 
-type BodyShapeExportResult struct {
+type BodyShapeExportedMesh struct {
+	MeshID        string  `json:"meshId"`
 	PositionPath  string  `json:"positionPath"`
 	PositionBytes int     `json:"positionBytes"`
 	VectorPath    *string `json:"vectorPath,omitempty"`
 	VectorBytes   *int    `json:"vectorBytes,omitempty"`
-	ChangeLogPath *string `json:"changeLogPath,omitempty"`
-	ModRoot       *string `json:"modRoot,omitempty"`
-	SourceModPath *string `json:"sourceModPath,omitempty"`
+}
+
+type BodyShapeExportResult struct {
+	Meshes        []BodyShapeExportedMesh `json:"meshes"`
+	ChangeLogPath *string                 `json:"changeLogPath,omitempty"`
+	ModRoot       *string                 `json:"modRoot,omitempty"`
+	SourceModPath *string                 `json:"sourceModPath,omitempty"`
 }
 
 func (t *Service) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShapeSessionDescriptor, error) {
@@ -190,14 +208,18 @@ func (t *Service) BodyShapeLoadMod(ctx context.Context, modPath string) (BodySha
 		Meshes:    make([]BodyShapeMeshSummary, 0, len(loaded.Meshes)),
 	}
 	for _, mesh := range loaded.Meshes {
+		first, _ := lo.Find(loaded.Meshes, func(candidate BodyShapeMeshCandidate) bool {
+			return platform.SamePathFold(candidate.PositionPath, mesh.PositionPath)
+		})
 		descriptor.Meshes = append(
 			descriptor.Meshes,
 			BodyShapeMeshSummary{
-				ID:             mesh.ID,
-				Name:           mesh.Name,
-				VertexCount:    mesh.VertexCount,
-				IndexCount:     len(mesh.Indices),
-				PositionStride: mesh.PositionStride,
+				ID:              mesh.ID,
+				Name:            mesh.Name,
+				VertexCount:     mesh.VertexCount,
+				IndexCount:      len(mesh.Indices),
+				PositionStride:  mesh.PositionStride,
+				PositionFileKey: first.ID,
 			},
 		)
 	}
@@ -219,6 +241,14 @@ func (t *Service) BodyShapeExport(
 	}
 	if t.mod == nil {
 		return result, errors.New("tools service has no mod service")
+	}
+	if len(input.Meshes) == 0 {
+		return result, infra.ContractError("No body shape meshes to export")
+	}
+	if err := checkDistinctPositionPaths(lo.Map(input.Meshes, func(mesh BodyShapeExportMesh, _ int) string {
+		return mesh.PositionPath
+	})); err != nil {
+		return result, err
 	}
 	parent := filepath.Dir(sourceRoot)
 	entries, err := os.ReadDir(parent)
@@ -256,20 +286,22 @@ func (t *Service) BodyShapeExport(
 		!errors.Is(removeErr, os.ErrNotExist) {
 		return result, removeErr
 	}
-	remappedPosition, err := remapBodyShapePath(input.PositionPath, sourceRoot, targetRoot)
-	if err != nil {
-		return result, err
-	}
 	remapped := input
-	remapped.ModRoot, remapped.PositionPath = targetRoot, remappedPosition
-	if input.VectorPath != nil {
-		vector, remapErr := remapBodyShapePath(*input.VectorPath, sourceRoot, targetRoot)
-		if remapErr != nil {
-			return result, remapErr
+	remapped.ModRoot, remapped.Meshes = targetRoot, make([]BodyShapeExportMesh, len(input.Meshes))
+	for index, mesh := range input.Meshes {
+		if mesh.PositionPath, err = remapBodyShapePath(mesh.PositionPath, sourceRoot, targetRoot); err != nil {
+			return result, err
 		}
-		remapped.VectorPath = &vector
+		if mesh.VectorPath != nil {
+			vector, remapErr := remapBodyShapePath(*mesh.VectorPath, sourceRoot, targetRoot)
+			if remapErr != nil {
+				return result, remapErr
+			}
+			mesh.VectorPath = &vector
+		}
+		remapped.Meshes[index] = mesh
 	}
-	result, err = exportBodyShapeMesh(remapped, func(message string) {
+	result, err = exportBodyShapeMeshes(remapped, func(message string) {
 		if t.log != nil {
 			t.log.Warn(message, "BodyShapeEditor")
 		}
@@ -366,30 +398,66 @@ func (t *Service) BodyShapeBeginExport(
 	}
 	session.mu.Lock()
 	defer session.mu.Unlock()
-	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
-	if mesh == nil {
-		return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+	if len(input.MeshIDs) == 0 {
+		return BodyShapeExportUpload{}, infra.ContractError("No body shape meshes selected for export")
+	}
+	meshes := make([]*BodyShapeMeshCandidate, 0, len(input.MeshIDs))
+	for _, id := range input.MeshIDs {
+		if lo.ContainsBy(meshes, func(mesh *BodyShapeMeshCandidate) bool { return mesh.ID == id }) {
+			return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh selected twice: %s", id))
+		}
+		mesh := findBodyShapeMesh(session.loaded.Meshes, id)
+		if mesh == nil {
+			return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", id))
+		}
+		meshes = append(meshes, mesh)
+	}
+	if err := checkDistinctPositionPaths(lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string {
+		return mesh.PositionPath
+	})); err != nil {
+		return BodyShapeExportUpload{}, err
 	}
 	exportID, err := newID()
 	if err != nil {
 		return BodyShapeExportUpload{}, err
 	}
-	positionsID := "export:" + exportID + ":positions"
-	positionsURL, err := t.protocol.CreateMemoryUpload(input.SessionID, positionsID, int64(len(mesh.Positions))*4)
-	if err != nil {
-		return BodyShapeExportUpload{}, err
+
+	result := BodyShapeExportUpload{ExportID: exportID, Meshes: make([]BodyShapeExportMeshUpload, 0, len(meshes))}
+	created := make([]string, 0, len(meshes)*2)
+	createUpload := func(id string, size int64) (string, error) {
+		url, uploadErr := t.protocol.CreateMemoryUpload(input.SessionID, id, size)
+		if uploadErr == nil {
+			created = append(created, id)
+		}
+		return url, uploadErr
 	}
-	result := BodyShapeExportUpload{ExportID: exportID, PositionsUploadURL: positionsURL}
-	if input.IncludeWeights {
-		weightsID := "export:" + exportID + ":weights"
-		weightsURL, uploadErr := t.protocol.CreateMemoryUpload(input.SessionID, weightsID, int64(mesh.VertexCount)*4)
+	for index, mesh := range meshes {
+		positionsURL, uploadErr := createUpload(
+			bodyShapeUploadID(exportID, index, "positions"),
+			int64(len(mesh.Positions))*4,
+		)
 		if uploadErr != nil {
-			t.protocol.RemoveMemoryBuffer(input.SessionID, positionsID)
+			t.removeBodyShapeUploads(input.SessionID, created)
 			return BodyShapeExportUpload{}, uploadErr
 		}
-		result.WeightsUploadURL = &weightsURL
+		upload := BodyShapeExportMeshUpload{MeshID: mesh.ID, PositionsUploadURL: positionsURL}
+		if input.IncludeWeights {
+			weightsURL, weightsErr := createUpload(
+				bodyShapeUploadID(exportID, index, "weights"),
+				int64(mesh.VertexCount)*4,
+			)
+			if weightsErr != nil {
+				t.removeBodyShapeUploads(input.SessionID, created)
+				return BodyShapeExportUpload{}, weightsErr
+			}
+			upload.WeightsUploadURL = &weightsURL
+		}
+		result.Meshes = append(result.Meshes, upload)
 	}
-	session.exports[exportID] = bodyShapeExportSlot{meshID: mesh.ID, includeWeights: input.IncludeWeights}
+	session.exports[exportID] = bodyShapeExportSlot{
+		meshIDs:        lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string { return mesh.ID }),
+		includeWeights: input.IncludeWeights,
+	}
 	return result, nil
 }
 
@@ -406,50 +474,89 @@ func (t *Service) BodyShapeCommitExport(
 	if exists {
 		delete(session.exports, input.ExportID)
 	}
-	mesh := findBodyShapeMesh(session.loaded.Meshes, slot.meshID)
+	meshes := lo.Map(slot.meshIDs, func(id string, _ int) *BodyShapeMeshCandidate {
+		return findBodyShapeMesh(session.loaded.Meshes, id)
+	})
 	session.mu.Unlock()
-	if !exists || mesh == nil {
+	if !exists || len(meshes) == 0 || lo.Contains(meshes, nil) {
 		return BodyShapeExportResult{}, infra.ContractError("Body shape export slot not found")
 	}
-	positionsID := "export:" + input.ExportID + ":positions"
-	weightsID := "export:" + input.ExportID + ":weights"
-	defer t.protocol.RemoveMemoryBuffer(input.SessionID, positionsID)
-	defer t.protocol.RemoveMemoryBuffer(input.SessionID, weightsID)
-	positionsRaw, err := t.protocol.TakeMemoryUpload(input.SessionID, positionsID)
-	if err != nil {
-		return BodyShapeExportResult{}, err
+	uploads := make([]string, 0, len(meshes)*2)
+	for index := range meshes {
+		uploads = append(
+			uploads,
+			bodyShapeUploadID(input.ExportID, index, "positions"),
+			bodyShapeUploadID(input.ExportID, index, "weights"),
+		)
 	}
-	positions, err := modmesh.DecodeFloat32Bytes(positionsRaw)
-	if err != nil {
-		return BodyShapeExportResult{}, err
-	}
-	var weights []float32
-	if slot.includeWeights {
-		weightsRaw, takeErr := t.protocol.TakeMemoryUpload(input.SessionID, weightsID)
+	defer t.removeBodyShapeUploads(input.SessionID, uploads)
+
+	exportMeshes := make([]BodyShapeExportMesh, 0, len(meshes))
+	for index, mesh := range meshes {
+		positions, takeErr := t.takeBodyShapeUpload(
+			input.SessionID,
+			bodyShapeUploadID(input.ExportID, index, "positions"),
+		)
 		if takeErr != nil {
 			return BodyShapeExportResult{}, takeErr
 		}
-		weights, err = modmesh.DecodeFloat32Bytes(weightsRaw)
-		if err != nil {
-			return BodyShapeExportResult{}, err
-		}
-	}
-	return t.BodyShapeExport(
-		ctx,
-		BodyShapeExportInput{
-			ModRoot:        session.loaded.ModRoot,
+		exportMesh := BodyShapeExportMesh{
+			MeshID:         mesh.ID,
 			PositionPath:   mesh.PositionPath,
 			PositionStride: mesh.PositionStride,
 			Positions:      positions,
 			VectorPath:     mesh.VectorPath,
 			VectorLayout:   mesh.VectorLayout,
-			Weights:        weights,
+		}
+		if slot.includeWeights {
+			exportMesh.Weights, takeErr = t.takeBodyShapeUpload(
+				input.SessionID,
+				bodyShapeUploadID(input.ExportID, index, "weights"),
+			)
+			if takeErr != nil {
+				return BodyShapeExportResult{}, takeErr
+			}
+		}
+		exportMeshes = append(exportMeshes, exportMesh)
+	}
+	return t.BodyShapeExport(
+		ctx,
+		BodyShapeExportInput{
+			ModRoot:        session.loaded.ModRoot,
+			Meshes:         exportMeshes,
 			Amount:         input.Amount,
 			AxisScale:      input.AxisScale,
 			WriteChangeLog: input.WriteChangeLog,
 			ChangeSummary:  input.ChangeSummary,
 		},
 	)
+}
+
+func bodyShapeUploadID(exportID string, index int, kind string) string {
+	return fmt.Sprintf("export:%s:%d:%s", exportID, index, kind)
+}
+
+func (t *Service) takeBodyShapeUpload(sessionID, id string) ([]float32, error) {
+	raw, err := t.protocol.TakeMemoryUpload(sessionID, id)
+	if err != nil {
+		return nil, err
+	}
+	return modmesh.DecodeFloat32Bytes(raw)
+}
+
+func (t *Service) removeBodyShapeUploads(sessionID string, ids []string) {
+	for _, id := range ids {
+		t.protocol.RemoveMemoryBuffer(sessionID, id)
+	}
+}
+
+func checkDistinctPositionPaths(paths []string) error {
+	for index, path := range paths {
+		if lo.ContainsBy(paths[:index], func(previous string) bool { return platform.SamePathFold(previous, path) }) {
+			return infra.ContractError(fmt.Sprintf("Position buffer selected twice: %s", path))
+		}
+	}
+	return nil
 }
 
 // BodyShapeSessionPaths returns the mod folder a commit of the session copies and disables.
@@ -651,31 +758,61 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 	return result, nil
 }
 
-func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodyShapeExportResult, error) {
+func exportBodyShapeMeshes(input BodyShapeExportInput, warn func(string)) (BodyShapeExportResult, error) {
+	result := BodyShapeExportResult{Meshes: make([]BodyShapeExportedMesh, 0, len(input.Meshes))}
+	for _, mesh := range input.Meshes {
+		written, err := exportBodyShapeMesh(mesh, input.Amount, input.AxisScale, warn)
+		if err != nil {
+			return result, infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "BodyShapeEditor:exportMesh",
+				Stage:     "write-mesh",
+				Fields:    map[string]any{"meshId": mesh.MeshID, "positionPath": mesh.PositionPath},
+			})
+		}
+		result.Meshes = append(result.Meshes, written)
+	}
+
+	if input.WriteChangeLog != nil && !*input.WriteChangeLog {
+		return result, nil
+	}
+	changeLogPath, err := writeBodyShapeChangeLog(input.ModRoot, result.Meshes, input.ChangeSummary)
+	if err != nil {
+		return result, err
+	}
+	result.ChangeLogPath = &changeLogPath
+	return result, nil
+}
+
+func exportBodyShapeMesh(
+	input BodyShapeExportMesh,
+	amount *float64,
+	axisScale []float64,
+	warn func(string),
+) (BodyShapeExportedMesh, error) {
 	positionPath, err := filepath.Abs(input.PositionPath)
 	if err != nil {
-		return BodyShapeExportResult{}, err
+		return BodyShapeExportedMesh{}, err
 	}
 	original, err := os.ReadFile(positionPath)
 	if err != nil {
-		return BodyShapeExportResult{}, infra.WithCause(
+		return BodyShapeExportedMesh{}, infra.WithCause(
 			infra.ContractError(fmt.Sprintf("Position buffer not found: %s", positionPath)),
 			err,
 		)
 	}
 	expected := len(input.Positions) / 3
 	if len(input.Positions)%3 != 0 {
-		return BodyShapeExportResult{}, errors.New("position float count is not divisible by 3")
+		return BodyShapeExportedMesh{}, errors.New("position float count is not divisible by 3")
 	}
 	if _, err := modmesh.ValidatePositionBuffer(len(original), input.PositionStride, &expected); err != nil {
-		return BodyShapeExportResult{}, err
+		return BodyShapeExportedMesh{}, err
 	}
 	written, err := writeBodyPositions(original, input.PositionStride, input.Positions)
 	if err != nil {
-		return BodyShapeExportResult{}, err
+		return BodyShapeExportedMesh{}, err
 	}
 	if len(written) != len(original) {
-		return BodyShapeExportResult{}, infra.ContractError(
+		return BodyShapeExportedMesh{}, infra.ContractError(
 			fmt.Sprintf(
 				"Refusing to write position buffer: size would change from %d to %d",
 				len(original),
@@ -684,13 +821,13 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 		)
 	}
 	if err := writeBodyFileAtomic(positionPath, written, 0o600); err != nil {
-		return BodyShapeExportResult{}, err
+		return BodyShapeExportedMesh{}, err
 	}
-	result := BodyShapeExportResult{PositionPath: positionPath, PositionBytes: len(written)}
+	result := BodyShapeExportedMesh{MeshID: input.MeshID, PositionPath: positionPath, PositionBytes: len(written)}
 	if input.VectorPath != nil && input.VectorLayout != nil && *input.VectorLayout == "snorm8-tangent-normal" &&
 		len(input.Weights) > 0 &&
-		input.Amount != nil &&
-		len(input.AxisScale) == 3 {
+		amount != nil &&
+		len(axisScale) == 3 {
 		vectorPath, absErr := filepath.Abs(*input.VectorPath)
 		if absErr != nil {
 			return result, absErr
@@ -702,7 +839,7 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 		if len(vectors) != expected*8 {
 			warn(fmt.Sprintf("Skipping vector rewrite for %s: size mismatch", vectorPath))
 		} else {
-			corrected, correctionErr := correctBodyVectors(vectors, input.Weights, *input.Amount, input.AxisScale)
+			corrected, correctionErr := correctBodyVectors(vectors, input.Weights, *amount, axisScale)
 			if correctionErr != nil {
 				return result, correctionErr
 			}
@@ -713,48 +850,63 @@ func exportBodyShapeMesh(input BodyShapeExportInput, warn func(string)) (BodySha
 			result.VectorPath, result.VectorBytes = &vectorPath, &bytes
 		}
 	}
-	writeLog := input.WriteChangeLog == nil || *input.WriteChangeLog
-	if writeLog {
-		root, err := filepath.Abs(input.ModRoot)
-		if err != nil {
-			return result, err
-		}
-		if !platform.SameOrChildPath(root, positionPath) {
-			return result, errors.New("position path is outside mod root")
-		}
-		changeLogPath := filepath.Join(root, "변경사항.txt")
-		relativePosition, _ := filepath.Rel(root, positionPath)
-		lines := []string{
-			"[체형 수정 내역]", "", "- 수정 대상 파일: " + relativePosition,
-			"- 방향 버퍼: 수정하지 않음 (레이아웃 미검증 또는 균일 스케일)",
-			"- 유지한 파일: Index, Blend, UV, Color 및 기타 원본 파일",
-			"- 변경 방식: 본/부위 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
-		}
-		if result.VectorPath != nil {
-			relativeVector, _ := filepath.Rel(root, *result.VectorPath)
-			lines[3] = "- 방향 버퍼: " + relativeVector
-		}
-		if summary := input.ChangeSummary; summary != nil && len(summary.AxisScale) == 3 {
-			lines = append(
-				lines,
-				fmt.Sprintf("- 강도: %v", summary.Amount),
-				fmt.Sprintf(
-					"- 축 스케일: X=%v, Y=%v, Z=%v",
-					summary.AxisScale[0],
-					summary.AxisScale[1],
-					summary.AxisScale[2],
-				),
-				fmt.Sprintf("- 이동 정점 수: %d", summary.MovedVertices),
-				fmt.Sprintf("- 최대 이동 거리: %.6f", summary.MaxDisplacement),
-			)
-		}
-		lines = append(lines, "- 참고: 실제 애니메이션과 모든 의상 조합에서 미세 클리핑이 발생할 수 있음", "")
-		if err := writeBodyFileAtomic(changeLogPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
-			return result, err
-		}
-		result.ChangeLogPath = &changeLogPath
-	}
 	return result, nil
+}
+
+func writeBodyShapeChangeLog(
+	modRoot string,
+	meshes []BodyShapeExportedMesh,
+	summary *BodyShapeChangeSummary,
+) (string, error) {
+	root, err := filepath.Abs(modRoot)
+	if err != nil {
+		return "", err
+	}
+	positions := make([]string, 0, len(meshes))
+	vectors := make([]string, 0, len(meshes))
+	for _, mesh := range meshes {
+		if !platform.SameOrChildPath(root, mesh.PositionPath) {
+			return "", errors.New("position path is outside mod root")
+		}
+		relativePosition, _ := filepath.Rel(root, mesh.PositionPath)
+		positions = append(positions, relativePosition)
+		if mesh.VectorPath != nil {
+			relativeVector, _ := filepath.Rel(root, *mesh.VectorPath)
+			vectors = append(vectors, relativeVector)
+		}
+	}
+
+	vectorLine := "- 방향 버퍼: 수정하지 않음 (레이아웃 미검증 또는 균일 스케일)"
+	if len(vectors) > 0 {
+		vectorLine = "- 방향 버퍼: " + strings.Join(vectors, ", ")
+	}
+	lines := []string{
+		"[체형 수정 내역]", "", "- 수정 대상 파일: " + strings.Join(positions, ", "),
+		vectorLine,
+		"- 유지한 파일: Index, Blend, UV, Color 및 기타 원본 파일",
+		"- 변경 방식: 본/부위 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
+	}
+	if summary != nil && len(summary.AxisScale) == 3 {
+		lines = append(
+			lines,
+			fmt.Sprintf("- 강도: %v", summary.Amount),
+			fmt.Sprintf(
+				"- 축 스케일: X=%v, Y=%v, Z=%v",
+				summary.AxisScale[0],
+				summary.AxisScale[1],
+				summary.AxisScale[2],
+			),
+			fmt.Sprintf("- 이동 정점 수: %d", summary.MovedVertices),
+			fmt.Sprintf("- 최대 이동 거리: %.6f", summary.MaxDisplacement),
+		)
+	}
+	lines = append(lines, "- 참고: 실제 애니메이션과 모든 의상 조합에서 미세 클리핑이 발생할 수 있음", "")
+
+	changeLogPath := filepath.Join(root, "변경사항.txt")
+	if err := writeBodyFileAtomic(changeLogPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		return "", err
+	}
+	return changeLogPath, nil
 }
 
 func writeBodyPositions(original []byte, stride int, positions []float32) ([]byte, error) {

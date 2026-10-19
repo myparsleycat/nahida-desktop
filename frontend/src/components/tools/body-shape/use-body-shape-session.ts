@@ -16,16 +16,27 @@ import { toast } from "sonner";
 
 import { BodyShapeMeshWorkerClient } from "./body-shape-mesh-loader";
 
+const MAX_CACHED_SELECTIONS = 8;
+
+export type LoadedMeshSegment = {
+    meshId: string;
+    name: string;
+    vertexOffset: number;
+    vertexCount: number;
+    blendBytes?: Uint8Array;
+    blendStride: number;
+    /** Blend indices are local to this buffer, so bones are never merged across segments. */
+    bones: BlendBoneInfo[];
+};
+
 export type LoadedMesh = {
     id: string;
-    name: string;
+    meshIds: string[];
     vertexCount: number;
     originalPositions: Float32Array;
     previewPositions: Float32Array;
     indices?: Uint32Array;
-    blendBytes?: Uint8Array;
-    blendStride: number;
-    bones: BlendBoneInfo[];
+    segments: LoadedMeshSegment[];
     weightCache: Map<string, Float32Array>;
     selectionWeights: Float32Array;
     adjacency?: VertexAdjacency;
@@ -44,34 +55,45 @@ type LoadResult = {
     cache: Map<string, LoadedMesh>;
 };
 
+export function meshSelectionKey(meshIds: readonly string[]): string {
+    return meshIds.join("\n");
+}
+
 async function loadBodyShapeMesh(
     worker: BodyShapeMeshWorkerClient,
     sessionId: string,
-    summary: BodyShapeMeshSummary,
-    descriptor: BodyShapeMeshDescriptor,
+    summaries: BodyShapeMeshSummary[],
+    descriptors: BodyShapeMeshDescriptor[],
     signal: AbortSignal,
 ): Promise<LoadedMesh> {
-    if (descriptor.sessionId !== sessionId || descriptor.meshId !== summary.id) {
+    if (
+        descriptors.length !== summaries.length ||
+        descriptors.some(
+            (descriptor, index) =>
+                descriptor.sessionId !== sessionId || descriptor.meshId !== summaries[index].id,
+        )
+    ) {
         throw new Error("Body shape mesh descriptor does not match the active session");
     }
     const result = await worker.process(
         {
             sessionId,
-            meshId: summary.id,
-            vertexCount: summary.vertexCount,
-            positionsUrl: descriptor.positionsUrl,
-            positionsCount: descriptor.positionsCount,
-            indicesUrl: descriptor.indicesUrl ?? undefined,
-            indexCount: descriptor.indexCount,
-            blendUrl: descriptor.blendUrl ?? undefined,
-            blendBytes: descriptor.blendBytes,
-            blendStride: descriptor.blendStride ?? DEFAULT_BLEND_STRIDE,
+            meshes: summaries.map((summary, index) => ({
+                meshId: summary.id,
+                vertexCount: summary.vertexCount,
+                positionsUrl: descriptors[index].positionsUrl,
+                positionsCount: descriptors[index].positionsCount,
+                indicesUrl: descriptors[index].indicesUrl ?? undefined,
+                indexCount: descriptors[index].indexCount,
+                blendUrl: descriptors[index].blendUrl ?? undefined,
+                blendBytes: descriptors[index].blendBytes,
+                blendStride: descriptors[index].blendStride ?? DEFAULT_BLEND_STRIDE,
+            })),
         },
         signal,
     );
     const originalPositions = new Float32Array(result.originalPositions);
-    const indices = result.indices ? new Uint32Array(result.indices) : undefined;
-    const blendBytes = result.blendBytes ? new Uint8Array(result.blendBytes) : undefined;
+    const vertexCount = originalPositions.length / 3;
     const adjacency =
         result.adjacencyOffsets && result.adjacencyNeighbors
             ? {
@@ -79,18 +101,22 @@ async function loadBodyShapeMesh(
                   neighbors: new Uint32Array(result.adjacencyNeighbors),
               }
             : undefined;
+    const meshIds = summaries.map((summary) => summary.id);
     return {
-        id: summary.id,
-        name: summary.name,
-        vertexCount: summary.vertexCount,
+        id: meshSelectionKey(meshIds),
+        meshIds,
+        vertexCount,
         originalPositions,
         previewPositions: new Float32Array(originalPositions),
-        indices,
-        blendBytes,
-        blendStride: descriptor.blendStride ?? DEFAULT_BLEND_STRIDE,
-        bones: descriptor.bones ?? [],
+        indices: result.indices ? new Uint32Array(result.indices) : undefined,
+        segments: result.segments.map((segment, index) => ({
+            ...segment,
+            name: summaries[index].name,
+            blendBytes: segment.blendBytes ? new Uint8Array(segment.blendBytes) : undefined,
+            bones: descriptors[index].bones ?? [],
+        })),
         weightCache: new Map(),
-        selectionWeights: new Float32Array(summary.vertexCount),
+        selectionWeights: new Float32Array(vertexCount),
         adjacency,
         originalNormals: result.originalNormals
             ? new Float32Array(result.originalNormals)
@@ -98,21 +124,21 @@ async function loadBodyShapeMesh(
         componentIds: result.componentIds ? new Uint32Array(result.componentIds) : undefined,
         symmetryMap: result.symmetryMap ? new Int32Array(result.symmetryMap) : undefined,
         boundsCenter: result.boundingCenter,
-        geodesicWorkspace: createGeodesicBrushWorkspace(summary.vertexCount),
+        geodesicWorkspace: createGeodesicBrushWorkspace(vertexCount),
     };
 }
 
 export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoaded: () => void) {
     const { t } = useTranslation();
     const [loaded, setLoaded] = useState<LoadResult | null>(null);
-    const [selectedMeshId, setSelectedMeshId] = useState("");
+    const [selectedMeshIds, setSelectedMeshIds] = useState<string[]>([]);
     const [loading, setLoading] = useState(Boolean(fixedTargetPath));
     const activeSessionRef = useRef<string | null>(null);
     const generationRef = useRef(0);
     const workerRef = useRef<BodyShapeMeshWorkerClient | null>(null);
     const meshRef = useRef<{
         generation: number;
-        request?: { cancel(): void };
+        requests?: { cancel(): void }[];
         controller?: AbortController;
     }>({ generation: 0 });
     const onLoadedRef = useRef(onLoaded);
@@ -120,7 +146,7 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
         onLoadedRef.current = onLoaded;
     });
     const cancelMesh = () => {
-        meshRef.current.request?.cancel();
+        for (const request of meshRef.current.requests ?? []) request.cancel();
         meshRef.current.controller?.abort();
         meshRef.current = { generation: meshRef.current.generation + 1 };
     };
@@ -129,30 +155,34 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
             Logger.capture("body-shape:close-session", error);
         });
     };
-    const loadMeshById = async (current: LoadResult, meshId: string) => {
+    const loadMeshes = async (current: LoadResult, meshIds: readonly string[]) => {
         if (activeSessionRef.current !== current.sessionId) return;
         cancelMesh();
         const generation = meshRef.current.generation;
-        if (current.cache.has(meshId)) {
-            setSelectedMeshId(meshId);
+        const summaries = current.meshes.filter((mesh) => meshIds.includes(mesh.id));
+        const ids = summaries.map((summary) => summary.id);
+        const key = meshSelectionKey(ids);
+        if (current.cache.has(key)) {
+            setSelectedMeshIds(ids);
             setLoading(false);
             return;
         }
-        const summary = current.meshes.find((mesh) => mesh.id === meshId);
         const worker = workerRef.current;
-        if (!summary || !worker) return;
+        if (summaries.length === 0 || !worker) return;
         const controller = new AbortController();
-        const request = Tools.BodyShapeGetMesh({ sessionId: current.sessionId, meshId });
-        meshRef.current = { generation, controller, request };
+        const requests = ids.map((meshId) =>
+            Tools.BodyShapeGetMesh({ sessionId: current.sessionId, meshId }),
+        );
+        meshRef.current = { generation, controller, requests };
         setLoading(true);
         try {
-            const descriptor = await request;
+            const descriptors = await Promise.all(requests);
             if (generation !== meshRef.current.generation) return;
             const mesh = await loadBodyShapeMesh(
                 worker,
                 current.sessionId,
-                summary,
-                descriptor,
+                summaries,
+                descriptors,
                 controller.signal,
             );
             if (
@@ -160,8 +190,12 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
                 activeSessionRef.current !== current.sessionId
             )
                 return;
-            current.cache.set(meshId, mesh);
-            setSelectedMeshId(meshId);
+            if (current.cache.size >= MAX_CACHED_SELECTIONS) {
+                const oldest = current.cache.keys().next().value;
+                if (oldest !== undefined) current.cache.delete(oldest);
+            }
+            current.cache.set(key, mesh);
+            setSelectedMeshIds(ids);
             setLoaded({ ...current });
         } catch (error) {
             if (generation !== meshRef.current.generation || isAbortError(error)) return;
@@ -198,10 +232,11 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
                 meshes: result.meshes ?? [],
                 cache: new Map(),
             };
+            const initial = next.meshes[0] ? [next.meshes[0].id] : [];
             setLoaded(next);
-            setSelectedMeshId(next.meshes[0]?.id ?? "");
+            setSelectedMeshIds(initial);
             onLoadedRef.current();
-            if (next.meshes[0]) await loadMeshById(next, next.meshes[0].id);
+            if (initial.length > 0) await loadMeshes(next, initial);
         } catch (error) {
             if (generation !== generationRef.current || isAbortError(error)) return;
             Logger.capture("body-shape:load-mod", error);
@@ -209,7 +244,8 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
                 description: toErrorMessage(error),
             });
         } finally {
-            if (generation === generationRef.current && !meshRef.current.request) setLoading(false);
+            if (generation === generationRef.current && !meshRef.current.requests)
+                setLoading(false);
         }
     };
     useLayoutEffect(() => {
@@ -219,7 +255,7 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
         if (fixedTargetPath) void loadMod(fixedTargetPath);
         else {
             setLoaded(null);
-            setSelectedMeshId("");
+            setSelectedMeshIds([]);
             setLoading(false);
         }
         return () => {
@@ -232,5 +268,5 @@ export function useBodyShapeSession(fixedTargetPath: string | undefined, onLoade
             if (sessionId) void closeSession(sessionId);
         };
     }, [fixedTargetPath]);
-    return { loaded, selectedMeshId, loading, loadMod, loadMeshById };
+    return { loaded, selectedMeshIds, loading, loadMod, loadMeshes };
 }

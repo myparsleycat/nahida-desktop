@@ -14,6 +14,9 @@ type (
 	BodyShapeChangeSummary     = bodyshape.BodyShapeChangeSummary
 	BodyShapeBeginExportInput  = bodyshape.BodyShapeBeginExportInput
 	BodyShapeExportUpload      = bodyshape.BodyShapeExportUpload
+	BodyShapeExportMeshUpload  = bodyshape.BodyShapeExportMeshUpload
+	BodyShapeExportMesh        = bodyshape.BodyShapeExportMesh
+	BodyShapeExportedMesh      = bodyshape.BodyShapeExportedMesh
 	BodyShapeCommitExportInput = bodyshape.BodyShapeCommitExportInput
 	BodyShapeOK                = bodyshape.BodyShapeOK
 	BodyShapeExportInput       = bodyshape.BodyShapeExportInput

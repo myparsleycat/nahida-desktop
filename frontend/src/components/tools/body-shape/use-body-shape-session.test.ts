@@ -82,6 +82,7 @@ beforeEach(() => {
     mocks.close.mockResolvedValue(true);
     mocks.process.mockResolvedValue({
         originalPositions: new Float32Array([0, 0, 0]).buffer,
+        segments: [],
         boundingCenter: [0, 0, 0],
     });
     mocks.mesh.mockImplementation(({ sessionId, meshId }) =>
@@ -99,7 +100,7 @@ describe("body shape session ownership", () => {
         await act(async () => {});
         let pending!: Promise<void>;
         act(() => {
-            pending = result.current.loadMeshById(result.current.loaded!, "second");
+            pending = result.current.loadMeshes(result.current.loaded!, ["second"]);
         });
         await act(async () => {
             first.resolve(descriptor("A", "first"));
@@ -109,7 +110,7 @@ describe("body shape session ownership", () => {
             second.resolve(descriptor("A", "second"));
             await pending;
         });
-        expect(result.current.selectedMeshId).toBe("second");
+        expect(result.current.selectedMeshIds).toEqual(["second"]);
         expect(result.current.loading).toBe(false);
     });
 
@@ -198,25 +199,28 @@ describe("body shape session ownership", () => {
         expect(result.current.loaded?.cache.has("mesh")).toBe(true);
         expect(mocks.error).not.toHaveBeenCalled();
     });
-    it("cancels an uncached selection when selecting a cached mesh", async () => {
+    it("cancels every request of an uncached selection when selecting a cached mesh", async () => {
         mocks.load.mockResolvedValue(session("A", ["cached", "slow"]));
         const { result } = renderHook(() => useBodyShapeSession("A", mocks.reset));
         await act(async () => {});
+        const cached = deferred<ReturnType<typeof descriptor>>();
         const slow = deferred<ReturnType<typeof descriptor>>();
-        mocks.mesh.mockReturnValueOnce(slow.promise);
+        mocks.mesh.mockReturnValueOnce(cached.promise).mockReturnValueOnce(slow.promise);
         let request!: Promise<void>;
         act(() => {
-            request = result.current.loadMeshById(result.current.loaded!, "slow");
+            request = result.current.loadMeshes(result.current.loaded!, ["slow", "cached"]);
         });
-        await act(() => result.current.loadMeshById(result.current.loaded!, "cached"));
+        await act(() => result.current.loadMeshes(result.current.loaded!, ["cached"]));
+        expect(cached.promise.cancel).toHaveBeenCalledTimes(1);
         expect(slow.promise.cancel).toHaveBeenCalledTimes(1);
         await act(async () => {
+            cached.resolve(descriptor("A", "cached"));
             slow.resolve(descriptor("A", "slow"));
             await request;
         });
-        expect(result.current.selectedMeshId).toBe("cached");
+        expect(result.current.selectedMeshIds).toEqual(["cached"]);
         expect(result.current.loading).toBe(false);
-        expect(result.current.loaded?.cache.has("slow")).toBe(false);
+        expect(result.current.loaded?.cache.has("cached\nslow")).toBe(false);
     });
     it("reports a current failure and allows retry", async () => {
         mocks.load
