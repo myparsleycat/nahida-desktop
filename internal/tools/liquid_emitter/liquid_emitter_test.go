@@ -670,18 +670,26 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		t.Fatalf("set settings = %+v (err=%v)", status, err)
 	}
 	written, _ := os.ReadFile(probe)
+
+	// .gitattributes stores the bundle with LF, but a checkout can still carry
+	// CRLF; settings must keep whichever line ending the bundle uses.
+	eol := "\n"
+	if bytes.Contains(bundled, []byte("\r\n")) {
+		eol = "\r\n"
+	}
 	for _, line := range []string{
-		"[KeyToggle]\r\nkey = ctrl VK_F7\r\n",
-		"[KeyStrengthUp]\r\nkey = VK_F8\r\n",
-		"[KeyStrengthDown]\r\nkey = VK_F9\r\n",
-		"[KeyAutoPulse]\r\nkey = VK_F11\r\n",
-		"[KeyManualPulse]\r\nkey = VK_F12\r\n",
-		"global $auto_pulse = 1\r\n",
-		"global $emitting = 0\r\n",
-		"global $effect_requested = 0\r\n",
-		"global $last_effect_request = 0\r\n",
-		"global $strength_level = 6\r\n",
+		"[KeyToggle]\nkey = ctrl VK_F7\n",
+		"[KeyStrengthUp]\nkey = VK_F8\n",
+		"[KeyStrengthDown]\nkey = VK_F9\n",
+		"[KeyAutoPulse]\nkey = VK_F11\n",
+		"[KeyManualPulse]\nkey = VK_F12\n",
+		"global $auto_pulse = 1\n",
+		"global $emitting = 0\n",
+		"global $effect_requested = 0\n",
+		"global $last_effect_request = 0\n",
+		"global $strength_level = 6\n",
 	} {
+		line = strings.ReplaceAll(line, "\n", eol)
 		if !strings.Contains(string(written), line) {
 			t.Fatalf("Probe.ini lacks %q", line)
 		}
