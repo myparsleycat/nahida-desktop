@@ -9,19 +9,29 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 const (
-	SettingKey  = "key"
-	SettingBool = "bool"
-	SettingInt  = "int"
+	SettingKey    = "key"
+	SettingBool   = "bool"
+	SettingInt    = "int"
+	SettingNumber = "number"
+	// SettingColor is "r g b", each channel from 0 to 1. A color has three
+	// targets, and target i receives channel i.
+	SettingColor = "color"
 
 	settingsFile = ".nhd-runtime-settings.json"
 )
 
-var keyTokenRE = regexp.MustCompile(`^[!-~]+$`)
+var (
+	keyTokenRE = regexp.MustCompile(`^[!-~]+$`)
+	// decimalRE is the plain notation the importer's INI parser reads;
+	// strconv.ParseFloat alone would also take exponents, hex and Inf.
+	decimalRE = regexp.MustCompile(`^-?(\d+(\.\d*)?|\.\d+)$`)
+)
 
 // Setting is a value the user can change in the runtime's bundled INI files.
 // Each target is an assignment inside a section; an install writes the value
@@ -31,8 +41,10 @@ type Setting struct {
 	ID      string
 	Kind    string
 	Default string
-	Min     int
-	Max     int
+	// Min and Max bound an int or number; Step is the renderer's increment.
+	Min     float64
+	Max     float64
+	Step    float64
 	Targets []Target
 }
 
@@ -46,12 +58,13 @@ type Target struct {
 }
 
 type SettingValue struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Value   string `json:"value"`
-	Default string `json:"default"`
-	Min     int    `json:"min"`
-	Max     int    `json:"max"`
+	ID      string  `json:"id"`
+	Kind    string  `json:"kind"`
+	Value   string  `json:"value"`
+	Default string  `json:"default"`
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
+	Step    float64 `json:"step"`
 }
 
 type storedSettings struct {
@@ -91,7 +104,7 @@ func settingStatus(spec runtimeSpec, values map[string]string) []SettingValue {
 		}
 		settings = append(settings, SettingValue{
 			ID: setting.ID, Kind: setting.Kind, Value: value, Default: setting.Default,
-			Min: setting.Min, Max: setting.Max,
+			Min: setting.Min, Max: setting.Max, Step: setting.Step,
 		})
 	}
 	return settings
@@ -134,13 +147,40 @@ func (s Setting) valid(value string) error {
 		}
 	case SettingInt:
 		number, err := strconv.Atoi(value)
-		if err != nil || number < s.Min || number > s.Max {
+		if err != nil || float64(number) < s.Min || float64(number) > s.Max {
 			return errors.New("value out of range")
+		}
+	case SettingNumber:
+		if !s.inRange(value) {
+			return errors.New("value out of range")
+		}
+	case SettingColor:
+		channels := strings.Split(value, " ")
+		unit := Setting{Max: 1}
+		if len(channels) != 3 ||
+			slices.ContainsFunc(channels, func(channel string) bool { return !unit.inRange(channel) }) {
+			return errors.New("invalid color")
 		}
 	default:
 		return fmt.Errorf("unknown setting kind %q", s.Kind)
 	}
 	return nil
+}
+
+func (s Setting) inRange(value string) bool {
+	if !decimalRE.MatchString(value) {
+		return false
+	}
+	number, err := strconv.ParseFloat(value, 64)
+	return err == nil && number >= s.Min && number <= s.Max
+}
+
+// targetValue is what the setting writes into its target at index.
+func (s Setting) targetValue(value string, index int) string {
+	if s.Kind != SettingColor {
+		return value
+	}
+	return strings.Split(value, " ")[index]
 }
 
 // renderSettings writes each target of the settings that apply to file name.
@@ -150,9 +190,10 @@ func renderSettings(name string, data []byte, spec runtimeSpec, values map[strin
 	var targets []Target
 	var targetValues []string
 	for _, setting := range spec.Settings {
-		for _, target := range setting.Targets {
+		for index, target := range setting.Targets {
 			if target.File == name {
-				targets, targetValues = append(targets, target), append(targetValues, values[setting.ID])
+				targets = append(targets, target)
+				targetValues = append(targetValues, setting.targetValue(values[setting.ID], index))
 			}
 		}
 	}

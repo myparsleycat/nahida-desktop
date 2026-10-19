@@ -2711,7 +2711,22 @@
               "manualPulseKey": "누르는 동안 펄스",
               "startEnabled": "게임 시작 시 분사 켜기",
               "autoPulse": "자동 펄스로 시작",
-              "strength": "시작 세기"
+              "strength": "시작 세기",
+              "tint": "액체 색",
+              "absorptionDepth": "색 진하기",
+              "wetGround": "젖은 바닥 밝기",
+              "puddleReflection": "웅덩이 반사",
+              "streamReflection": "줄기 반사",
+              "scattering": "빛 산란",
+              "refraction": "굴절",
+              "hints": {
+                "absorptionDepth": "원래 색에 도달하는 액체 두께(mm)입니다. 낮을수록 진해집니다.",
+                "wetGround": "웅덩이 아래 바닥이 유지하는 밝기입니다. 1이면 어두워지지 않습니다.",
+                "puddleReflection": "웅덩이가 반사하는 최소 정도입니다.",
+                "streamReflection": "줄기와 방울이 반사하는 세기입니다.",
+                "scattering": "어두운 배경 위에서 액체 자체의 색이 보이는 정도입니다.",
+                "refraction": "뒤쪽 장면이 굴절되어 보이는 정도입니다."
+              }
             }
           }
         }

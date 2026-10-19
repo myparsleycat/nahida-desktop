@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import { Kbd } from "@renderer/components/ui/kbd";
 import {
   Section,
@@ -262,6 +263,8 @@ function RuntimeSettings({
   const dirty = draft !== null && !isEqual(draft, saved);
   const label = (id: string) =>
     t(`page.setting.xxmi.modRuntimes.settings.${runtime.name}.${id}`, { defaultValue: id });
+  const hint = (id: string) =>
+    t(`page.setting.xxmi.modRuntimes.settings.${runtime.name}.hints.${id}`, { defaultValue: "" });
   const update = (id: string, value: string) => setDraft({ ...values, [id]: value });
 
   return (
@@ -306,6 +309,55 @@ function RuntimeSettings({
             />
           );
         }
+        if (setting.kind === "number") {
+          // The backend accepts plain decimals only, so values are rounded to the step's digits.
+          const digits = String(setting.step).split(".")[1]?.length ?? 0;
+          return (
+            <NumberRow
+              key={setting.id}
+              label={label(setting.id)}
+              description={[
+                hint(setting.id),
+                t("page.setting.xxmi.modRuntimes.settings.range", {
+                  min: setting.min,
+                  max: setting.max,
+                }),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              value={Number(value)}
+              min={setting.min}
+              max={setting.max}
+              step={setting.step || "any"}
+              onValueChange={(next) =>
+                update(
+                  setting.id,
+                  String(
+                    Number(Math.min(setting.max, Math.max(setting.min, next)).toFixed(digits)),
+                  ),
+                )
+              }
+            />
+          );
+        }
+        if (setting.kind === "color") {
+          return (
+            <SectionRow
+              key={setting.id}
+              title={label(setting.id)}
+              description={hint(setting.id) || undefined}
+              className="py-2"
+            >
+              <Input
+                type="color"
+                aria-label={label(setting.id)}
+                className="w-16 shrink-0"
+                value={colorToHex(value)}
+                onChange={(event) => update(setting.id, hexToColor(event.target.value))}
+              />
+            </SectionRow>
+          );
+        }
         return (
           <SectionRow key={setting.id} title={label(setting.id)} className="py-2">
             <KeySettingDialog
@@ -340,6 +392,24 @@ function RuntimeSettings({
       </div>
     </div>
   );
+}
+
+// A color setting is "r g b" with each channel from 0 to 1.
+function colorToHex(value: string) {
+  return `#${value
+    .split(" ")
+    .map((channel) =>
+      Math.round(Math.min(1, Math.max(0, Number(channel) || 0)) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function hexToColor(hex: string) {
+  return [1, 3, 5]
+    .map((start) => String(Number((parseInt(hex.slice(start, start + 2), 16) / 255).toFixed(3))))
+    .join(" ");
 }
 
 function KeySettingDialog({

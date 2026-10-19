@@ -2711,7 +2711,22 @@
               "manualPulseKey": "押している間パルス",
               "startEnabled": "ゲーム開始時に噴射をオン",
               "autoPulse": "自動パルスで開始",
-              "strength": "開始時の強さ"
+              "strength": "開始時の強さ",
+              "tint": "液体の色",
+              "absorptionDepth": "色の濃さ",
+              "wetGround": "濡れた地面の明るさ",
+              "puddleReflection": "水たまりの反射",
+              "streamReflection": "水流の反射",
+              "scattering": "光の散乱",
+              "refraction": "屈折",
+              "hints": {
+                "absorptionDepth": "本来の色になる液体の厚さ（mm）です。小さいほど濃くなります。",
+                "wetGround": "水たまりの下の地面に残る明るさです。1で暗くなりません。",
+                "puddleReflection": "水たまりが反射する最小の度合いです。",
+                "streamReflection": "水流と水滴の反射の強さです。",
+                "scattering": "暗い背景の上で液体そのものの色が見える度合いです。",
+                "refraction": "背後の景色が屈折して見える度合いです。"
+              }
             }
           }
         }

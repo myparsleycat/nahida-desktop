@@ -724,6 +724,7 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		"toggleKey": "ctrl VK_F7", "strengthUpKey": "VK_F8", "strengthDownKey": "VK_F9",
 		"autoPulseKey": "VK_F11", "manualPulseKey": "VK_F12",
 		"startEnabled": "0", "autoPulse": "1", "strength": "6",
+		"tint": "0.5 0.25 1", "refraction": "0.03",
 	})
 	if err != nil || status.State != modruntime.StateCurrent {
 		t.Fatalf("set settings = %+v (err=%v)", status, err)
@@ -747,6 +748,10 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		"global $effect_requested = 0\n",
 		"global $last_effect_request = 0\n",
 		"global $strength_level = 6\n",
+		"global $liquid_tint_r = 0.5\n",
+		"global $liquid_tint_g = 0.25\n",
+		"global $liquid_tint_b = 1\n",
+		"global $liquid_refraction = 0.03\n",
 	} {
 		line = strings.ReplaceAll(line, "\n", eol)
 		if !strings.Contains(string(written), line) {

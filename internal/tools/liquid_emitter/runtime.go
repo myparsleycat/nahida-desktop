@@ -64,6 +64,17 @@ func runtimeSettings() []modruntime.Setting {
 	constant := func(name string) modruntime.Target {
 		return modruntime.Target{File: "Probe.ini", Section: "Constants", Name: "global " + name}
 	}
+	number := func(id, name, value string, low, high, step float64) modruntime.Setting {
+		return modruntime.Setting{
+			ID:      id,
+			Kind:    modruntime.SettingNumber,
+			Default: value,
+			Min:     low,
+			Max:     high,
+			Step:    step,
+			Targets: []modruntime.Target{constant(name)},
+		}
+	}
 	return []modruntime.Setting{
 		key("toggleKey", "KeyToggle", "VK_NUMPAD1"),
 		key("strengthUpKey", "KeyStrengthUp", "VK_NUMPAD2"),
@@ -94,6 +105,22 @@ func runtimeSettings() []modruntime.Setting {
 			Max:     7,
 			Targets: []modruntime.Target{constant("$strength_level")},
 		},
+		// The look of the screen-space fluid, which Probe.ini hands to
+		// FluidComposite.hlsl through IniParams.
+		{
+			ID:      "tint",
+			Kind:    modruntime.SettingColor,
+			Default: "0.9 0.75 0.03",
+			Targets: []modruntime.Target{
+				constant("$liquid_tint_r"), constant("$liquid_tint_g"), constant("$liquid_tint_b"),
+			},
+		},
+		number("absorptionDepth", "$liquid_absorb_mm", "15", 2, 60, 1),
+		number("wetGround", "$liquid_wet_darken", "0.85", 0.5, 1, 0.01),
+		number("puddleReflection", "$liquid_puddle_reflect", "0.15", 0, 0.5, 0.01),
+		number("streamReflection", "$liquid_stream_reflect", "1.6", 0, 3, 0.1),
+		number("scattering", "$liquid_scatter", "0.35", 0, 1, 0.05),
+		number("refraction", "$liquid_refraction", "0.02", 0, 0.06, 0.005),
 	}
 }
 

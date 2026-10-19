@@ -2763,7 +2763,22 @@
               "manualPulseKey": "Pulse while held",
               "startEnabled": "Emit when the game starts",
               "autoPulse": "Start with auto pulse",
-              "strength": "Starting strength"
+              "strength": "Starting strength",
+              "tint": "Liquid color",
+              "absorptionDepth": "Color depth",
+              "wetGround": "Wet ground brightness",
+              "puddleReflection": "Puddle reflection",
+              "streamReflection": "Stream reflection",
+              "scattering": "Light scattering",
+              "refraction": "Refraction",
+              "hints": {
+                "absorptionDepth": "Millimeters of liquid it takes to reach the full color. Lower is deeper.",
+                "wetGround": "How bright the ground stays under a puddle. 1 turns darkening off.",
+                "puddleReflection": "The least a puddle reflects.",
+                "streamReflection": "How strongly the stream and drops reflect.",
+                "scattering": "How much of its own color the liquid shows over dark backgrounds.",
+                "refraction": "How far the liquid bends what is behind it."
+              }
             }
           }
         }

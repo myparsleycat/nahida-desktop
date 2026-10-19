@@ -189,6 +189,11 @@ func New(opts Options) *Manager {
 				panic(fmt.Sprintf("mod runtime %s: invalid variant %q", spec.Name, variant.Name))
 			}
 		}
+		for _, setting := range spec.Settings {
+			if setting.Kind == SettingColor && len(setting.Targets) != 3 {
+				panic(fmt.Sprintf("mod runtime %s: color setting %s needs three targets", spec.Name, setting.ID))
+			}
+		}
 		manager.specs = append(manager.specs, runtimeSpec{
 			Spec: spec,
 			namespace: regexp.MustCompile(
