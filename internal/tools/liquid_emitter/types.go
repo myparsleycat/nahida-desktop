@@ -33,6 +33,7 @@ const (
 	ErrorUnsupportedDraw = "LIQUID_UNSUPPORTED_DRAW"
 	ErrorDrawMismatch    = "LIQUID_DRAW_MISMATCH"
 	ErrorDrawNotFound    = "LIQUID_DRAW_NOT_FOUND"
+	ErrorSharedDraw      = "LIQUID_SHARED_DRAW"
 	ErrorInvalidAnchor   = "LIQUID_INVALID_ANCHOR"
 	ErrorOffsetLimit     = "LIQUID_OFFSET_LIMIT"
 	ErrorSlotsExhausted  = "LIQUID_SLOTS_EXHAUSTED"

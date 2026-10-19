@@ -188,6 +188,35 @@ type drawSite struct {
 // that run under [TextureOverride<section>] with the draw's index buffer
 // bound, following run = and CommandList assignments within the same file.
 func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
+	walk := newDrawWalk(t, t.sectionBodies(), source)
+	// An empty name stands for the buffer bound before the override runs.
+	walk.visit(strings.ToLower("TextureOverride"+source.Section), []string{""}, map[string]bool{})
+	return walk.sites
+}
+
+// sharedDraw reports whether any of sites can also run with another index
+// buffer bound, through a command list that another section runs or another
+// branch of the same override. The hook above it would fire for that other
+// part as well, and an emitter added there would take this one's slot.
+func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bool {
+	bodies := t.sectionBodies()
+	for name := range bodies {
+		walk := newDrawWalk(t, bodies, source)
+		walk.visit(name, []string{""}, map[string]bool{})
+		for _, site := range sites {
+			if slices.ContainsFunc(walk.reached[site.line], func(ib string) bool {
+				return ib != "" && !source.MatchesIB(ib)
+			}) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sectionBodies maps each lowercase section name to the line ranges of its
+// bodies; a name may repeat in one file.
+func (t *iniText) sectionBodies() map[string][][2]int {
 	bodies := make(map[string][][2]int)
 	current := ""
 	for index, raw := range t.lines {
@@ -202,20 +231,23 @@ func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
 			ranges[len(ranges)-1][1] = index + 1
 		}
 	}
-
-	walk := &drawWalk{text: t, bodies: bodies, source: source, found: map[int]bool{}}
-	// An empty name stands for the buffer bound before the override runs.
-	walk.visit(strings.ToLower("TextureOverride"+source.Section), []string{""}, map[string]bool{})
-	return walk.sites
+	return bodies
 }
 
 type drawWalk struct {
-	text       *iniText
-	bodies     map[string][][2]int
-	source     modelviewer.DrawSource
-	found      map[int]bool
-	sites      []drawSite
+	text   *iniText
+	bodies map[string][][2]int
+	source modelviewer.DrawSource
+	found  map[int]bool
+	sites  []drawSite
+	// reached holds the buffers that may be bound at each draw with the
+	// source's arguments, whether or not they match.
+	reached    map[int][]string
 	expansions int
+}
+
+func newDrawWalk(text *iniText, bodies map[string][][2]int, source modelviewer.DrawSource) *drawWalk {
+	return &drawWalk{text: text, bodies: bodies, source: source, found: map[int]bool{}, reached: map[int][]string{}}
 }
 
 // ifFrame is an open if block: the buffers bound when it was entered and
@@ -278,8 +310,12 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 				bound = w.visit(nested, bound, active)
 			case key == "ib":
 				bound = []string{value}
-			case drawMatches(key, value, w.source) && !w.found[index] &&
-				slices.ContainsFunc(bound, func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) }):
+			case drawMatches(key, value, w.source):
+				w.reached[index] = unionBuffers(w.reached[index], bound)
+				if w.found[index] ||
+					!slices.ContainsFunc(bound, func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) }) {
+					continue
+				}
 				w.found[index] = true
 				w.sites = append(w.sites, drawSite{
 					line:   index,

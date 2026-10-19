@@ -1821,6 +1821,7 @@
           "unsupported_draw": "This part is drawn with a computed index range, so it cannot take an emitter.",
           "draw_mismatch": "The picked face does not match the mod files. Close and reopen the tool.",
           "draw_not_found": "The draw call of this part was not found in its INI. It may use variables or have changed.",
+          "shared_draw": "This part's draw call also runs for another part with a different index buffer, so it cannot take an emitter.",
           "invalid_anchor": "The emitter point is invalid. Pick the surface again.",
           "offset_limit": "The emitter can be moved at most 250 mm from the surface.",
           "slots_exhausted": "All 4096 emitter slots are in use. Remove emitters from other mods first.",

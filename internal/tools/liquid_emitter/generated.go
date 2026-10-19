@@ -26,6 +26,12 @@ const (
 
 // RestoreSource deletes a mod made by a new-mod apply, together with its
 // emitter profiles, and enables the original again.
+//
+// The copy is moved aside, out of the game's reach, before the original is
+// enabled, and its profile is released only after that. A failure up to the
+// enable moves the copy back with its marker and profile untouched, so the
+// restore can be retried; nothing is written to the marker on the way, and the
+// original is never disabled again, which could pick another folder name.
 func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection, error) {
 	return s.run(ctx, "restore-source", modPath, func(sc *scope) (Inspection, error) {
 		if s.mod == nil {
@@ -50,12 +56,13 @@ func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection
 			return Inspection{}, infra.ContractError(ErrorSourceMissing + ":" + marker.Source)
 		}
 
+		var key, aside string
 		_, err = s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
-			if err := s.dropKey(sc, rt.root, marker.ModKey); err != nil {
+			if key, _, err = s.ownedKey(sc, runtimeLayout{root: rt.root}); err != nil {
 				return Inspection{}, err
 			}
-			sc.stage = stageDelete
-			return Inspection{}, os.RemoveAll(sc.root)
+			aside, err = s.moveAside(sc)
+			return Inspection{}, err
 		})
 		if err != nil {
 			return Inspection{}, err
@@ -66,14 +73,54 @@ func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection
 			// Enabling renames through the mod service, which takes its own disk slot.
 			sc.stage = stageEnable
 			if restored, err = s.mod.Enable(ctx, marker.Source); err != nil {
-				return Inspection{}, err
+				renameErr := os.Rename(aside, sc.root)
+				return Inspection{}, infra.AnnotateError(errors.Join(err, renameErr), infra.Diagnostic{
+					Fields: map[string]any{"copyRestored": renameErr == nil},
+				})
 			}
+			sc.fields["restoredSource"] = restored
 		}
+
+		// The original is back, so a failure from here leaves the copy
+		// disabled under its aside name, still holding its slots.
+		generatedRoot := sc.root
 		sc.root = restored
 		return s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
+			if key != "" {
+				if err := s.dropKey(sc, rt.root, key); err != nil {
+					return Inspection{}, err
+				}
+			}
+			sc.stage = stageDelete
+			if err := os.RemoveAll(aside); err != nil {
+				_ = infra.ReportError(s.log, err, diagnosticWhere, infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: operationPrefix + "restore-source",
+					Stage:     sc.stage,
+					Fields:    map[string]any{"modPath": generatedRoot, "aside": aside},
+				})
+			}
 			return s.inspection(sc, rt)
 		})
 	})
+}
+
+// moveAside renames the mod at sc.root to a disabled name next to it. A file
+// locked in the folder fails the rename before anything else changes.
+func (s *Service) moveAside(sc *scope) (string, error) {
+	sc.stage = stageDelete
+	parent := filepath.Dir(sc.root)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return "", err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	aside := filepath.Join(parent, s.fs.GetUniqueName("DISABLED_"+filepath.Base(sc.root)+".nhd-restore", names))
+	sc.fields["aside"] = aside
+	return aside, os.Rename(sc.root, aside)
 }
 
 // applyAsNewMod copies the original next to itself, applies the emitter to
@@ -238,8 +285,8 @@ func generatedHere(sc *scope, marker modMarker) (bool, error) {
 	if marker.ModPath != "" && samePhysicalPath(marker.ModPath, sc.root) {
 		return true, nil
 	}
-	shared, err := markerHeldElsewhere(sc.modsRoot, sc.root, marker.ModKey)
-	return !shared, err
+	copies, err := markersElsewhere(sc.modsRoot, sc.root, marker.ModKey)
+	return len(copies) == 0, err
 }
 
 // copyModTree copies a mod folder into the existing empty target.

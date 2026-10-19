@@ -360,6 +360,9 @@ func (s *Service) apply(
 	if len(sites) == 0 {
 		return infra.ContractError(ErrorDrawNotFound + ":" + source.Section)
 	}
+	if text.sharedDraw(source, sites) {
+		return infra.ContractError(ErrorSharedDraw + ":" + source.Section)
+	}
 	replaced := map[int]bool{}
 	pid := -1
 	for _, site := range sites {
@@ -537,8 +540,9 @@ func (s *Service) remove(sc *scope, runtimeRoot string, pids []int) error {
 
 // ownedKey returns the profile key of the mod at sc.root. A folder copied
 // together with its marker still points at the original's profile and slots,
-// so the copy is given its own key, slots and hooks before it is changed; the
-// returned map then gives each shared slot's new number.
+// so the copy is given its own key, slots and hooks before either is changed;
+// when sc.root is the copy, the returned map gives each shared slot's new
+// number.
 func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int, error) {
 	marker, err := readMarker(sc.root)
 	if err != nil || marker.ModKey == "" {
@@ -553,13 +557,27 @@ func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int
 	if owner == "" {
 		owner = marker.ModPath
 	}
+	copies, err := markersElsewhere(sc.modsRoot, sc.root, key)
+	if err != nil {
+		return "", nil, err
+	}
 	if owner != "" && samePhysicalPath(owner, sc.root) {
+		// Releasing or reusing a slot here would otherwise reach the hooks
+		// the copies still share.
+		for _, copied := range copies {
+			copyScope := &scope{root: copied, modsRoot: sc.modsRoot, stage: sc.stage, fields: sc.fields}
+			sc.fields["forkedCopy"] = copied
+			_, _, err := s.forkCopy(copyScope, layout, key, doc)
+			sc.stage = copyScope.stage
+			if err != nil {
+				return "", nil, err
+			}
+		}
 		return key, nil, nil
 	}
-	shared, err := markerHeldElsewhere(sc.modsRoot, sc.root, key)
-	if err != nil || !shared {
+	if len(copies) == 0 {
 		// Only this folder carries the key, so the mod was moved or renamed.
-		return key, nil, err
+		return key, nil, nil
 	}
 	return s.forkCopy(sc, layout, key, doc)
 }
@@ -676,12 +694,12 @@ func (s *Service) forkCopy(
 	return forked, pids, s.commit(sc, changes)
 }
 
-// markerHeldElsewhere reports whether a mod folder other than self, enabled
-// or not, carries the profile key.
-func markerHeldElsewhere(modsRoot, self, key string) (bool, error) {
+// markersElsewhere lists the mod folders other than self, enabled or not,
+// that carry the profile key.
+func markersElsewhere(modsRoot, self, key string) ([]string, error) {
 	const maxDepth = 6
 	modsRoot, self = physicalPath(modsRoot), physicalPath(self)
-	found := false
+	var found []string
 	err := filepath.WalkDir(modsRoot, func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			if name == modsRoot {
@@ -701,8 +719,7 @@ func markerHeldElsewhere(modsRoot, self, key string) (bool, error) {
 			return nil
 		}
 		if other, err := readModMarker(dir); err == nil && other == key {
-			found = true
-			return filepath.SkipAll
+			found = append(found, dir)
 		}
 		return nil
 	})

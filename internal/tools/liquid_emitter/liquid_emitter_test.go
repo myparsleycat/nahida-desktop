@@ -156,10 +156,27 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		for ib, line := range sample.lines {
 			draw := bodyDraw
 			draw.IB = ib
-			if sites := text.drawSites(draw); len(sites) != 1 || sites[0].line != line {
+			sites := text.drawSites(draw)
+			if len(sites) != 1 || sites[0].line != line {
 				t.Fatalf("draw sites over %s = %+v, want line %d in\n%s", ib, sites, line, sample.ini)
 			}
+			if text.sharedDraw(draw, sites) {
+				t.Fatalf("draw over %s reported as shared in\n%s", ib, sample.ini)
+			}
 		}
+	}
+
+	// A command list run under two buffers would fire one hook for both parts.
+	const shared = "[TextureOverrideBody]\nib = ResourceBodyIB\nrun = CommandListShared\n\n" +
+		"[TextureOverrideArm]\nib = ResourceArmIB\nrun = CommandListShared\n\n" +
+		"[CommandListShared]\ndrawindexed = 6, 3, 0\n"
+	if text, err = parseINIText([]byte(shared)); err != nil {
+		t.Fatal(err)
+	}
+	sharedBody := bodyDraw
+	sharedBody.IB = "BodyIB"
+	if sites := text.drawSites(sharedBody); len(sites) != 1 || !text.sharedDraw(sharedBody, sites) {
+		t.Fatalf("draw in a command list shared with another buffer = %+v", sites)
 	}
 
 	// One CRLF line in an LF file must not merge the hook lines.
@@ -452,6 +469,41 @@ func TestServiceApplyAndRemoveRestoreMod(t *testing.T) {
 	}
 }
 
+// Changing the original must not release or reuse a slot an unsplit copy
+// still hooks; the copy is split off first and keeps its emitter.
+func TestServiceOriginalChangeSplitsCopies(t *testing.T) {
+	f := newServiceFixture(t)
+	ctx := context.Background()
+	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
+		t.Fatal(err)
+	}
+	originalKey, _ := readModMarker(f.modRoot)
+	copyRoot := f.modRoot + " - Copy"
+	if err := os.MkdirAll(copyRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(f.modRoot)
+	for _, entry := range entries {
+		data, _ := os.ReadFile(filepath.Join(f.modRoot, entry.Name()))
+		if err := os.WriteFile(filepath.Join(copyRoot, entry.Name()), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
+		t.Fatal(err)
+	}
+	copyKey, _ := readModMarker(copyRoot)
+	inspection, err := f.service.Inspect(ctx, copyRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copyKey == "" || copyKey == originalKey || len(inspection.Emitters) != 1 ||
+		!inspection.Emitters[0].Hooked || inspection.Emitters[0].Anchor.MeshID == "" {
+		t.Fatalf("copy after removing from the original: key=%q emitters=%+v", copyKey, inspection.Emitters)
+	}
+}
+
 func TestServiceCopiedModGetsOwnProfile(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := context.Background()
@@ -552,6 +604,12 @@ func (m compressingMods) Enable(ctx context.Context, path string) (string, error
 	return enabled, os.Rename(filepath.Join(enabled, "body.ib.nzst"), filepath.Join(enabled, "body.ib"))
 }
 
+type failingEnable struct{ compressingMods }
+
+func (failingEnable) Enable(context.Context, string) (string, error) {
+	return "", errors.New("folder in use")
+}
+
 func TestServiceNewModLeavesOriginalAndRestores(t *testing.T) {
 	f := newServiceFixture(t)
 	f.service.mod = compressingMods{}
@@ -613,6 +671,36 @@ func TestServiceNewModLeavesOriginalAndRestores(t *testing.T) {
 	if err != nil || emptied.SourcePath == "" || len(emptied.Emitters) != 0 {
 		t.Fatalf("remove all from a generated mod = %+v (err=%v)", emptied, err)
 	}
+
+	// A file locked in the copy, or an original that cannot be enabled, stops
+	// the restore with the copy whole and the original disabled under the name
+	// the marker records, so a retry can finish.
+	untouched := func(step string) {
+		t.Helper()
+		marker, err := readMarker(target)
+		if err != nil || !samePhysicalPath(marker.Source, disabled) || !marker.ReenableSource {
+			t.Fatalf("copy marker after %s = %+v (err=%v)", step, marker, err)
+		}
+		if _, err := os.Stat(disabled); err != nil {
+			t.Fatalf("original after %s: %v", step, err)
+		}
+	}
+	locked, err := os.Open(filepath.Join(target, "body.ib"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.service.RestoreSource(ctx, target)
+	_ = locked.Close()
+	if err == nil {
+		t.Fatal("restore with a locked file in the copy succeeded")
+	}
+	untouched("a locked copy")
+	f.service.mod = failingEnable{compressingMods{}}
+	if _, err := f.service.RestoreSource(ctx, target); err == nil {
+		t.Fatal("restore with a failing enable succeeded")
+	}
+	untouched("a failed enable")
+	f.service.mod = compressingMods{}
 
 	restored, err := f.service.RestoreSource(ctx, target)
 	if err != nil {
