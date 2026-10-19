@@ -21,6 +21,7 @@ import {
   BoxIcon,
   FolderIcon,
   ImageIcon,
+  DropletsIcon,
   LayersIcon,
   Loader2Icon,
   PanelsTopLeftIcon,
@@ -139,6 +140,18 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     >
                       <LayersIcon className="size-4" />
                       {t("page.tools.efmi_outline.title")}
+                    </DropdownMenuItem>
+                  )}
+
+                  {actions.isEfmiGame && (
+                    <DropdownMenuItem
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        actions.openLiquidEmitterDialog(mod);
+                      }}
+                    >
+                      <DropletsIcon className="size-4" />
+                      {t("page.tools.liquid_emitter.title")} ({t("g.beta")})
                     </DropdownMenuItem>
                   )}
 

@@ -29,6 +29,7 @@ type modelViewerDirectMesh struct {
 	textureDefaultFile                 string
 	nonDiffuseTextureFiles             []string
 	indexCount                         int
+	drawSource                         *DrawSource
 }
 
 type modelViewerDirectTextureAssignment struct {

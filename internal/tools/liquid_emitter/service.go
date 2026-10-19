@@ -1,0 +1,873 @@
+package liquidemitter
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"math"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+
+	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modruntime"
+	"nahida.live/desktop/internal/platform"
+	efmioutline "nahida.live/desktop/internal/tools/efmi_outline"
+	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
+)
+
+const (
+	stageResolve  = "resolve"
+	stageRuntime  = "runtime"
+	stageGeometry = "geometry"
+	stageLoad     = "load"
+	stagePatch    = "patch-ini"
+	stageWrite    = "write"
+	stageFork     = "fork-copy"
+)
+
+type ModToggler interface {
+	Enable(context.Context, string) (string, error)
+	Disable(context.Context, string) (string, error)
+}
+
+type DrawSources interface {
+	DrawSource(sessionID, meshID string) (modelviewer.DrawSource, bool)
+}
+
+type Options struct {
+	Log       *infra.Log
+	GamePaths efmioutline.GamePaths
+	Mod       ModToggler
+	Viewer    DrawSources
+	FS        *platform.FS
+	// Runtimes installs the emitter runtime; nil manages it on its own.
+	Runtimes *modruntime.Manager
+}
+
+type Service struct {
+	log      *infra.Log
+	games    efmioutline.GamePaths
+	mod      ModToggler
+	viewer   DrawSources
+	fs       *platform.FS
+	runtimes *modruntime.Manager
+	mu       sync.Mutex
+	// writeFile is replaced in tests to fail a write part way through a commit.
+	writeFile func(path string, data []byte) error
+}
+
+func NewWithOptions(opts Options) *Service {
+	service := &Service{
+		log:       opts.Log,
+		games:     opts.GamePaths,
+		mod:       opts.Mod,
+		viewer:    opts.Viewer,
+		fs:        opts.FS,
+		runtimes:  opts.Runtimes,
+		writeFile: writeAtomic,
+	}
+	if service.fs == nil {
+		service.fs = platform.NewFS()
+	}
+	if service.runtimes == nil {
+		service.runtimes = modruntime.New(modruntime.Options{
+			Log: opts.Log, Mod: opts.Mod, Specs: []modruntime.Spec{RuntimeSpec()},
+		})
+	}
+	return service
+}
+
+//wails:ignore
+func (s *Service) UseClient(client *db.Client) {
+	if client != nil {
+		s.games = client.GamePaths
+	}
+}
+
+type scope struct {
+	root, modsRoot string
+	stage          string
+	fields         map[string]any
+	// origin is set while applying to a folder just copied from another mod.
+	origin *modMarker
+}
+
+func (s *Service) Inspect(ctx context.Context, modPath string) (Inspection, error) {
+	return s.run(ctx, "inspect", modPath, func(sc *scope) (Inspection, error) {
+		return s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
+			return s.inspection(sc, rt)
+		})
+	})
+}
+
+func (s *Service) InstallRuntime(ctx context.Context, modPath string) (Inspection, error) {
+	return s.run(ctx, "install-runtime", modPath, func(sc *scope) (Inspection, error) {
+		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
+			return s.inspection(sc, rt)
+		})
+	})
+}
+
+func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, error) {
+	return s.run(ctx, "apply", input.ModPath, func(sc *scope) (Inspection, error) {
+		sc.stage = stageGeometry
+		sc.fields["meshId"], sc.fields["faceIndex"] = input.MeshID, input.FaceIndex
+		source, triangle, anchor, err := s.resolveAnchor(sc, input)
+		if err != nil {
+			return Inspection{}, err
+		}
+		sc.fields["ini"], sc.fields["section"] = source.INIPath, source.Section
+
+		switch input.Mode {
+		case "", ApplyInPlace:
+		case ApplyNewMod:
+			return s.applyAsNewMod(ctx, sc, source, triangle, anchor)
+		default:
+			return Inspection{}, infra.ContractError(ErrorInvalidMode + ":" + input.Mode)
+		}
+		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
+			if err := s.apply(sc, rt.root, source, triangle, anchor); err != nil {
+				return Inspection{}, err
+			}
+			return s.inspection(sc, rt)
+		})
+	})
+}
+
+func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, error) {
+	return s.run(ctx, "remove", input.ModPath, func(sc *scope) (Inspection, error) {
+		return s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
+			if err := s.remove(sc, rt.root, input.PIDs); err != nil {
+				return Inspection{}, err
+			}
+			return s.inspection(sc, rt)
+		})
+	})
+}
+
+func (s *Service) run(
+	ctx context.Context,
+	operation, modPath string,
+	action func(*scope) (Inspection, error),
+) (Inspection, error) {
+	sc := &scope{stage: stageResolve, fields: map[string]any{"modPath": modPath}}
+	report := func(err error) error {
+		if err == nil || infra.IsCancellationError(err) {
+			return err
+		}
+		var contract infra.ContractError
+		if errors.As(err, &contract) {
+			return err
+		}
+		return infra.ReportError(s.log, err, diagnosticWhere, infra.Diagnostic{
+			Operation: operationPrefix + operation,
+			Stage:     sc.stage,
+			Fields:    sc.fields,
+		})
+	}
+
+	if s.games == nil {
+		return Inspection{}, report(errors.New("liquid emitter is not bound to a database"))
+	}
+	root, modsRoot, ok, err := efmioutline.ResolveEFMIMod(ctx, s.games, modPath)
+	if err != nil {
+		return Inspection{}, report(err)
+	}
+	if !ok {
+		return Inspection{}, infra.ContractError(ErrorNotEFMI + ":" + root)
+	}
+	sc.root, sc.modsRoot = root, modsRoot
+	sc.fields["modsRoot"] = modsRoot
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	inspection, err := action(sc)
+	return inspection, report(err)
+}
+
+func (s *Service) resolveAnchor(
+	sc *scope,
+	input ApplyInput,
+) (modelviewer.DrawSource, anchorTriangle, EmitterAnchor, error) {
+	var none modelviewer.DrawSource
+	if s.viewer == nil {
+		return none, anchorTriangle{}, EmitterAnchor{}, errors.New("model viewer is unavailable")
+	}
+	source, ok := s.viewer.DrawSource(input.ViewerSessionID, input.MeshID)
+	if !ok || !platform.SameOrChildPath(sc.root, source.INIPath) {
+		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorViewerSession + ":" + input.MeshID)
+	}
+	if source.Auto {
+		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorUnsupportedDraw + ":" + source.Section)
+	}
+	indexOrder, err := source.TriangleVertices(input.FaceIndex)
+	if err != nil {
+		return none, anchorTriangle{}, EmitterAnchor{}, err
+	}
+	triangle, err := orderTriangle(input, indexOrder)
+	if err != nil {
+		return none, anchorTriangle{}, EmitterAnchor{}, err
+	}
+	point, okPoint := toVec3(input.Point)
+	offset, okOffset := toVec3(input.Offset)
+	direction, okDirection := toVec3(input.Direction)
+	if !okPoint || !okOffset || !okDirection {
+		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorInvalidAnchor + ":vector")
+	}
+	anchor := EmitterAnchor{
+		MeshID:            input.MeshID,
+		FaceIndex:         input.FaceIndex,
+		FaceVertices:      slices.Clone(input.FaceVertices),
+		TrianglePositions: slices.Clone(input.TrianglePositions),
+		Barycentric:       slices.Clone(input.Barycentric),
+		Point:             point[:],
+		Offset:            offset[:],
+		Direction:         direction[:],
+	}
+	return source, triangle, anchor, nil
+}
+
+type runtimeState struct {
+	// root holds the profiles: the runtime folder, or its disabled spelling.
+	root   string
+	status modruntime.Status
+}
+
+// withRuntime runs action inside the runtime manager, which holds the disk
+// slot of the Mods folder until it returns. With install, the runtime is
+// enabled and brought up to date first.
+func (s *Service) withRuntime(
+	ctx context.Context,
+	sc *scope,
+	install bool,
+	action func(runtimeState) (Inspection, error),
+) (Inspection, error) {
+	sc.stage = stageRuntime
+	var inspection Inspection
+	err := s.runtimes.Use(ctx, sc.modsRoot, runtimeName, install, func(root string, status modruntime.Status) error {
+		sc.fields["runtime"] = status.State
+		var err error
+		inspection, err = action(runtimeState{root: root, status: status})
+		return err
+	})
+	return inspection, runtimeError(err)
+}
+
+func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
+	sc.stage = stageLoad
+	inspection := Inspection{ModPath: sc.root, Runtime: rt.status, Emitters: []Emitter{}}
+	marker, err := readMarker(sc.root)
+	if err != nil || marker.ModKey == "" {
+		return inspection, err
+	}
+	key := marker.ModKey
+	if generated, err := generatedHere(sc, marker); err != nil {
+		return inspection, err
+	} else if generated {
+		inspection.SourcePath = marker.Source
+	}
+	layout := runtimeLayout{root: rt.root}
+	doc, err := readProfile(layout, key)
+	if err != nil {
+		return inspection, err
+	}
+	index, err := readIndex(layout, sc.modsRoot)
+	if err != nil {
+		return inspection, err
+	}
+	hooks := modHooks(sc.root)
+	listed := make(map[int]bool)
+	for _, emitter := range doc.Emitters {
+		_, hooked := hooks[emitter.INIPath][emitter.PID]
+		listed[emitter.PID] = true
+		inspection.Emitters = append(inspection.Emitters, Emitter{
+			PID:     emitter.PID,
+			INIPath: emitter.INIPath,
+			Section: emitter.Section,
+			Hooked:  hooked,
+			Anchor:  emitter.Anchor,
+		})
+	}
+
+	// Hooks whose profile was lost, with the runtime folder for example, have
+	// no anchor to edit but are listed so they can be removed.
+	var orphans []Emitter
+	for iniPath, sections := range hooks {
+		for pid, section := range sections {
+			owner := index.ownerOf(pid)
+			if listed[pid] || owner != "" && owner != key {
+				continue
+			}
+			listed[pid] = true
+			orphans = append(orphans, Emitter{PID: pid, INIPath: iniPath, Section: section, Hooked: true})
+		}
+	}
+	slices.SortFunc(orphans, func(a, b Emitter) int { return a.PID - b.PID })
+	inspection.Emitters = append(inspection.Emitters, orphans...)
+	return inspection, nil
+}
+
+func (s *Service) apply(
+	sc *scope,
+	runtimeRoot string,
+	source modelviewer.DrawSource,
+	triangle anchorTriangle,
+	anchor EmitterAnchor,
+) error {
+	sc.stage = stageLoad
+	layout := runtimeLayout{root: runtimeRoot}
+	key, _, err := s.ownedKey(sc, layout)
+	if err != nil {
+		return err
+	}
+	sc.stage = stageLoad
+	index, err := readIndex(layout, sc.modsRoot)
+	if err != nil {
+		return err
+	}
+	newKey := key == ""
+	for newKey && (key == "" || index.Owners[key] != nil) {
+		if key, err = newModKey(); err != nil {
+			return err
+		}
+	}
+	doc, err := readProfile(layout, key)
+	if err != nil {
+		return err
+	}
+	iniRel, err := filepath.Rel(sc.root, source.INIPath)
+	if err != nil {
+		return err
+	}
+	iniRel = filepath.ToSlash(iniRel)
+	original, err := os.ReadFile(source.INIPath)
+	if err != nil {
+		return err
+	}
+
+	sc.stage = stagePatch
+	text, err := parseHookedINI(sc.root, source.INIPath, original)
+	if err != nil {
+		return err
+	}
+	sites := text.drawSites(source.Section, source.StartIndex, source.IndexCount, source.BaseVertex)
+	if len(sites) == 0 {
+		return infra.ContractError(ErrorDrawNotFound + ":" + source.Section)
+	}
+	replaced := map[int]bool{}
+	pid := -1
+	for _, site := range sites {
+		if site.pid < 0 {
+			continue
+		}
+		replaced[site.pid] = true
+		if pid < 0 && index.ownerOf(site.pid) == key {
+			pid = site.pid
+		}
+	}
+	if pid < 0 {
+		if pid, err = index.allocate(); err != nil {
+			return err
+		}
+	}
+	replaced[pid] = true
+	sc.fields["pid"] = pid
+	text.removeHooks(func(candidate int) bool { return replaced[candidate] })
+	firstIndex := source.StartIndex + anchor.FaceIndex*3
+	text.insertHooks(
+		text.drawSites(source.Section, source.StartIndex, source.IndexCount, source.BaseVertex),
+		pid, firstIndex, source.BaseVertex,
+	)
+
+	priority := 0.0
+	emitters := make([]profileEmitter, 0, len(doc.Emitters)+1)
+	for _, emitter := range doc.Emitters {
+		if replaced[emitter.PID] {
+			continue
+		}
+		priority = math.Min(priority, emitter.Row[0])
+		emitters = append(emitters, emitter)
+	}
+	direction, _ := toVec3(anchor.Direction)
+	offset, _ := toVec3(anchor.Offset)
+	profile, err := buildSurfaceProfile(triangle, direction, offset, priority-1)
+	if err != nil {
+		return err
+	}
+	emitters = append(emitters, profileEmitter{
+		PID:        pid,
+		INIPath:    iniRel,
+		Section:    source.Section,
+		FirstIndex: firstIndex,
+		BaseVertex: source.BaseVertex,
+		Row:        profile.row,
+		Offset:     profile.offset,
+		Anchor:     anchor,
+	})
+	doc.Emitters, doc.Enabled, doc.ModPath = emitters, true, sc.root
+
+	// Slots recovered from hooks without a profile stay reserved until removed.
+	owned := slices.DeleteFunc(slices.Clone(index.Owners[key]), func(candidate int) bool {
+		return replaced[candidate]
+	})
+	for _, emitter := range doc.Emitters {
+		owned = append(owned, emitter.PID)
+	}
+	slices.Sort(owned)
+	index.Owners[key] = slices.Compact(owned)
+
+	changes, err := s.profileChanges(layout, index, key, doc)
+	if err != nil {
+		return err
+	}
+	changes = append([]fileChange{{path: source.INIPath, data: text.bytes()}}, changes...)
+	backup := source.INIPath + backupSuffix
+	if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
+		changes = append([]fileChange{{path: backup, data: original}}, changes...)
+	}
+	marker, err := markerChange(sc.root, key, sc.origin)
+	if err != nil {
+		return err
+	}
+	return s.commit(sc, append(changes, marker...))
+}
+
+func (s *Service) remove(sc *scope, runtimeRoot string, pids []int) error {
+	sc.stage = stageLoad
+	layout := runtimeLayout{root: runtimeRoot}
+	key, renumbered, err := s.ownedKey(sc, layout)
+	if err != nil || key == "" {
+		return err
+	}
+	if renumbered != nil && len(pids) > 0 {
+		// The caller listed the copy's emitters before it was split off, by
+		// the slots it shared with the original.
+		moved := make([]int, 0, len(pids))
+		for _, pid := range pids {
+			if to, ok := renumbered[pid]; ok {
+				moved = append(moved, to)
+			}
+		}
+		if len(moved) == 0 {
+			return nil
+		}
+		pids = moved
+	}
+	sc.stage = stageLoad
+	index, err := readIndex(layout, sc.modsRoot)
+	if err != nil {
+		return err
+	}
+	doc, err := readProfile(layout, key)
+	if err != nil {
+		return err
+	}
+	targets := make(map[int]bool)
+	for _, emitter := range doc.Emitters {
+		if len(pids) == 0 || slices.Contains(pids, emitter.PID) {
+			targets[emitter.PID] = true
+		}
+	}
+	for _, pid := range index.Owners[key] {
+		if len(pids) == 0 || slices.Contains(pids, pid) {
+			targets[pid] = true
+		}
+	}
+	sc.fields["pids"] = pids
+
+	// A hook nobody owns is left over from lost profiles; inspection lists it
+	// under this mod, so it is removable here.
+	remove := func(pid int) bool {
+		return targets[pid] || (len(pids) == 0 || slices.Contains(pids, pid)) && index.ownerOf(pid) == ""
+	}
+	sc.stage = stagePatch
+	var changes []fileChange
+	err = eachINI(sc.root, func(name string, text *iniText) {
+		if text.removeHooks(remove) == 0 {
+			return
+		}
+		changes = append(changes, fileChange{path: name, data: text.bytes()})
+		if len(text.hookPIDs()) == 0 {
+			changes = append(changes, fileChange{path: name + backupSuffix, remove: true})
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	remaining := doc.Emitters[:0]
+	for _, emitter := range doc.Emitters {
+		if !targets[emitter.PID] {
+			remaining = append(remaining, emitter)
+		}
+	}
+	doc.Emitters, doc.ModPath = remaining, sc.root
+	owned := slices.DeleteFunc(slices.Clone(index.Owners[key]), func(pid int) bool { return targets[pid] })
+	index.Owners[key] = owned
+	marker, err := readMarker(sc.root)
+	if err != nil {
+		return err
+	}
+	if len(doc.Emitters) == 0 && len(owned) == 0 {
+		delete(index.Owners, key)
+	}
+	// A generated mod keeps its marker without emitters: it records the
+	// original to restore.
+	if len(doc.Emitters) == 0 && len(owned) == 0 && marker.Source == "" {
+		changes = append(changes, fileChange{path: filepath.Join(sc.root, modMarkerFile), remove: true})
+	} else {
+		marker, err := markerChange(sc.root, key, sc.origin)
+		if err != nil {
+			return err
+		}
+		changes = append(changes, marker...)
+	}
+	profileChanges, err := s.profileChanges(layout, index, key, doc)
+	if err != nil {
+		return err
+	}
+	return s.commit(sc, append(changes, profileChanges...))
+}
+
+// ownedKey returns the profile key of the mod at sc.root. A folder copied
+// together with its marker still points at the original's profile and slots,
+// so the copy is given its own key, slots and hooks before it is changed; the
+// returned map then gives each shared slot's new number.
+func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int, error) {
+	marker, err := readMarker(sc.root)
+	if err != nil || marker.ModKey == "" {
+		return "", nil, err
+	}
+	key := marker.ModKey
+	doc, err := readProfile(layout, key)
+	if err != nil {
+		return "", nil, err
+	}
+	owner := doc.ModPath
+	if owner == "" {
+		owner = marker.ModPath
+	}
+	if owner != "" && samePhysicalPath(owner, sc.root) {
+		return key, nil, nil
+	}
+	shared, err := markerHeldElsewhere(sc.modsRoot, sc.root, key)
+	if err != nil || !shared {
+		// Only this folder carries the key, so the mod was moved or renamed.
+		return key, nil, err
+	}
+	return s.forkCopy(sc, layout, key, doc)
+}
+
+// markerChange rewrites the marker when it does not yet name this folder
+// under this key, or when origin records the mod this folder was copied from.
+func markerChange(root, key string, origin *modMarker) ([]fileChange, error) {
+	marker, err := readMarker(root)
+	if err != nil {
+		return nil, err
+	}
+	next := modMarker{Version: 1, ModKey: key, ModPath: root}
+	if marker.ModKey == key {
+		next.Source, next.ReenableSource = marker.Source, marker.ReenableSource
+	}
+	if origin != nil {
+		next.Source, next.ReenableSource = origin.Source, origin.ReenableSource
+	}
+	if marker.ModKey == key && marker.ModPath != "" && samePhysicalPath(marker.ModPath, root) &&
+		marker.Source == next.Source && marker.ReenableSource == next.ReenableSource {
+		return nil, nil
+	}
+	encoded, err := encodeJSON(next)
+	if err != nil {
+		return nil, err
+	}
+	return []fileChange{{path: filepath.Join(root, modMarkerFile), data: encoded}}, nil
+}
+
+func (s *Service) forkCopy(
+	sc *scope,
+	layout runtimeLayout,
+	key string,
+	shared profileDocument,
+) (string, map[int]int, error) {
+	sc.stage = stageFork
+	sc.fields["copiedFrom"] = shared.ModPath
+	index, err := readIndex(layout, sc.modsRoot)
+	if err != nil {
+		return "", nil, err
+	}
+	texts := make(map[string]*iniText)
+	hooked := make(map[int]bool)
+	err = eachINI(sc.root, func(name string, text *iniText) {
+		for pid := range text.hookPIDs() {
+			if index.ownerOf(pid) == key {
+				hooked[pid], texts[name] = true, text
+			}
+		}
+	})
+	if err != nil {
+		return "", nil, err
+	}
+
+	forked := ""
+	for forked == "" || index.Owners[forked] != nil {
+		if forked, err = newModKey(); err != nil {
+			return "", nil, err
+		}
+	}
+	pids := make(map[int]int)
+	move := func(from int) error {
+		to, err := index.allocate()
+		if err != nil {
+			return err
+		}
+		pids[from] = to
+		index.Owners[forked] = append(index.Owners[forked], to)
+		return nil
+	}
+	doc := profileDocument{SchemaVersion: 1, Enabled: true, ModPath: sc.root}
+	for _, emitter := range shared.Emitters {
+		if !hooked[emitter.PID] {
+			continue
+		}
+		if err := move(emitter.PID); err != nil {
+			return "", nil, err
+		}
+		emitter.PID = pids[emitter.PID]
+		doc.Emitters = append(doc.Emitters, emitter)
+	}
+	// Hooks whose profile was lost move as well, so the original keeps the
+	// reservation of every slot it still hooks.
+	for _, pid := range slices.Sorted(maps.Keys(hooked)) {
+		if _, moved := pids[pid]; moved {
+			continue
+		}
+		if err := move(pid); err != nil {
+			return "", nil, err
+		}
+	}
+	slices.Sort(index.Owners[forked])
+	sc.fields["forkedKey"], sc.fields["forkedPIDs"] = forked, pids
+
+	marker := filepath.Join(sc.root, modMarkerFile)
+	if len(pids) == 0 {
+		return "", nil, s.commit(sc, []fileChange{{path: marker, remove: true}})
+	}
+	var changes []fileChange
+	for name, text := range texts {
+		if text.renumberHooks(pids) > 0 {
+			changes = append(changes, fileChange{path: name, data: text.bytes()})
+		}
+	}
+	profileChanges, err := s.profileChanges(layout, index, forked, doc)
+	if err != nil {
+		return "", nil, err
+	}
+	encoded, err := encodeJSON(modMarker{Version: 1, ModKey: forked, ModPath: sc.root})
+	if err != nil {
+		return "", nil, err
+	}
+	changes = append(append(changes, profileChanges...), fileChange{path: marker, data: encoded})
+	return forked, pids, s.commit(sc, changes)
+}
+
+// markerHeldElsewhere reports whether a mod folder other than self, enabled
+// or not, carries the profile key.
+func markerHeldElsewhere(modsRoot, self, key string) (bool, error) {
+	const maxDepth = 6
+	modsRoot, self = physicalPath(modsRoot), physicalPath(self)
+	found := false
+	err := filepath.WalkDir(modsRoot, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			if name == modsRoot {
+				return err
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			depth := strings.Count(strings.TrimPrefix(name, modsRoot), string(filepath.Separator))
+			if name != modsRoot && (strings.HasPrefix(entry.Name(), ".") || depth > maxDepth) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		dir := filepath.Dir(name)
+		if entry.Name() != modMarkerFile || platform.SamePathFold(dir, self) {
+			return nil
+		}
+		if other, err := readModMarker(dir); err == nil && other == key {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found, err
+}
+
+// eachINI parses every INI below root. The tool never writes hooks into
+// UTF-16 files, so those are skipped.
+func eachINI(root string, visit func(name string, text *iniText)) error {
+	return filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.EqualFold(filepath.Ext(name), ".ini") {
+			return err
+		}
+		data, err := os.ReadFile(name)
+		if err != nil || isUTF16(data) {
+			return err
+		}
+		text, err := parseHookedINI(root, name, data)
+		if err != nil {
+			return err
+		}
+		visit(name, text)
+		return nil
+	})
+}
+
+// parseHookedINI refuses a file whose hook blocks lost a marker, so neither
+// the INI nor its backup is touched until the user repairs it.
+func parseHookedINI(root, name string, data []byte) (*iniText, error) {
+	text, err := parseINIText(data)
+	if err != nil {
+		return nil, err
+	}
+	if line := text.damagedHook(); line > 0 {
+		rel, relErr := filepath.Rel(root, name)
+		if relErr != nil {
+			rel = name
+		}
+		return nil, infra.ContractError(fmt.Sprintf("%s:%s:%d", ErrorDamagedHook, filepath.ToSlash(rel), line))
+	}
+	return text, nil
+}
+
+// profileChanges writes or drops the mod's profile file, then the index and
+// the loader that binds every remaining profile file.
+func (s *Service) profileChanges(
+	layout runtimeLayout,
+	index profileIndex,
+	key string,
+	doc profileDocument,
+) ([]fileChange, error) {
+	var changes []fileChange
+	if len(doc.Emitters) == 0 {
+		changes = append(changes, fileChange{path: layout.profilePath(key), remove: true})
+	} else {
+		encoded, err := encodeProfile(doc)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, fileChange{path: layout.profilePath(key), data: encoded})
+	}
+	encoded, err := encodeJSON(index)
+	if err != nil {
+		return nil, err
+	}
+	return append(changes,
+		fileChange{path: layout.indexPath(), data: encoded},
+		fileChange{path: layout.loaderPath(), data: loaderINI(loaderKeys(layout, index, key, len(doc.Emitters) > 0))},
+	), nil
+}
+
+type fileChange struct {
+	path   string
+	data   []byte
+	remove bool
+}
+
+type fileSnapshot struct {
+	data    []byte
+	existed bool
+}
+
+// commit applies changes in order. A failure puts back every file already
+// changed so the INI hooks and the profile tables never disagree.
+func (s *Service) commit(sc *scope, changes []fileChange) error {
+	sc.stage = stageWrite
+	snapshots := make([]fileSnapshot, len(changes))
+	for index, change := range changes {
+		data, err := os.ReadFile(change.path)
+		switch {
+		case err == nil:
+			snapshots[index] = fileSnapshot{data: data, existed: true}
+		case !errors.Is(err, fs.ErrNotExist):
+			return err
+		}
+	}
+	for index, change := range changes {
+		err := s.applyChange(change)
+		if err == nil {
+			continue
+		}
+		rollback := "restored"
+		var rollbackErrs []error
+		for undo := index - 1; undo >= 0; undo-- {
+			if undoErr := s.restore(changes[undo].path, snapshots[undo]); undoErr != nil {
+				rollbackErrs = append(rollbackErrs, undoErr)
+			}
+		}
+		if len(rollbackErrs) > 0 {
+			rollback = "failed"
+			err = errors.Join(append([]error{err}, rollbackErrs...)...)
+		}
+		return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{
+			"file":     change.path,
+			"rollback": rollback,
+		}})
+	}
+	return nil
+}
+
+func (s *Service) applyChange(change fileChange) error {
+	if change.remove {
+		return removeIfExists(change.path)
+	}
+	return s.writeFile(change.path, change.data)
+}
+
+func (s *Service) restore(path string, snapshot fileSnapshot) error {
+	if snapshot.existed {
+		return s.writeFile(path, snapshot.data)
+	}
+	return removeIfExists(path)
+}
+
+func writeAtomic(path string, data []byte) (err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".nhd-liquid-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, removeIfExists(temp.Name()))
+		}
+	}()
+	if _, err = temp.Write(data); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err = temp.Sync(); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err = temp.Close(); err != nil {
+		return err
+	}
+	if err = platform.ReplaceAtomic(temp.Name(), path); err != nil {
+		return fmt.Errorf("replace %q: %w", path, err)
+	}
+	return nil
+}
+
+func removeIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}

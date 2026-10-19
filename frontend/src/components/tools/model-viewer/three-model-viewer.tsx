@@ -70,6 +70,10 @@ import {
   modelViewerToneMapping,
 } from "./model-viewer-scene";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+import {
+  raycastModelViewerSurface,
+  resolveModelViewerSurfacePick,
+} from "./model-viewer-surface-pick";
 import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
 
 type BodyShapeBaseline = {
@@ -134,6 +138,8 @@ export const ThreeModelViewer = memo(
       threeToneMapping = "neutral",
       toonShadows = false,
       variantState,
+      onSurfacePick,
+      overlay,
     },
     ref,
   ) {
@@ -205,6 +211,8 @@ export const ThreeModelViewer = memo(
             payloadEval={payloadEval}
             payloadTransport={payloadTransport}
             variantState={variantState}
+            onSurfacePick={onSurfacePick}
+            overlay={overlay}
           />
         </Canvas>
       </div>
@@ -229,6 +237,8 @@ function ThreeModelScene({
   threeToneMapping = "neutral",
   toonShadows = false,
   variantState,
+  onSurfacePick,
+  overlay,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
 }) {
@@ -323,6 +333,51 @@ function ThreeModelScene({
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+
+  const onSurfacePickRef = useRef(onSurfacePick);
+  useEffect(() => {
+    onSurfacePickRef.current = onSurfacePick;
+  }, [onSurfacePick]);
+
+  const pickEnabled = !!onSurfacePick;
+  useEffect(() => {
+    if (!pickEnabled || !modelRoot) {
+      return;
+    }
+    const element = gl.domElement;
+    let pressed: { x: number; y: number } | null = null;
+    const handleDown = (event: PointerEvent) => {
+      pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    };
+    // A drag rotates the camera; only a click that stays in place picks.
+    const handleUp = (event: PointerEvent) => {
+      const start = pressed;
+      pressed = null;
+      if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const hit = raycastModelViewerSurface(
+        modelRoot,
+        camera,
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      if (!hit) {
+        onSurfacePickRef.current?.(null);
+        return;
+      }
+      void resolveModelViewerSurfacePick(hit, uint32BufferCacheRef.current)
+        .then((pick) => onSurfacePickRef.current?.(pick))
+        .catch((error: unknown) => onErrorRef.current?.(error));
+    };
+    element.addEventListener("pointerdown", handleDown);
+    element.addEventListener("pointerup", handleUp);
+    return () => {
+      element.removeEventListener("pointerdown", handleDown);
+      element.removeEventListener("pointerup", handleUp);
+    };
+  }, [camera, gl, modelRoot, pickEnabled]);
 
   useEffect(() => {
     payloadEvalRef.current = payloadEval;
@@ -1017,6 +1072,15 @@ function ThreeModelScene({
       />
       <group ref={groupRef} rotation={rotation}>
         {modelRoot ? <primitive object={modelRoot} /> : null}
+        {modelRoot && overlay ? (
+          <group
+            position={modelRoot.position}
+            quaternion={modelRoot.quaternion}
+            scale={modelRoot.scale}
+          >
+            {overlay}
+          </group>
+        ) : null}
       </group>
     </>
   );

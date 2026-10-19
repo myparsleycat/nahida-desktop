@@ -1727,6 +1727,111 @@
           "unsupported": "{{file}} uses an unsupported encoding."
         }
       },
+      "liquid_emitter": {
+        "title": "Liquid emitter",
+        "load_error": "Could not load this mod's model.",
+        "applied": "Emitter applied. Press F10 in game to reload mods.",
+        "removed": "Emitter removed. Press F10 in game to reload mods.",
+        "apply": "Apply to game",
+        "remove": "Remove emitter",
+        "f10_hint": "Only the selected part's draw call is hooked. Press F10 in game after applying.",
+        "created": "Created a new mod and disabled the original. Press F10 in game to reload mods.",
+        "restored": "Deleted the generated mod and enabled the original again.",
+        "mode": {
+          "title": "Apply as",
+          "in_place": "Edit this mod",
+          "in_place_hint": "Hooks this mod's INI directly and backs up the original INI as .nhd-liquid-orig.",
+          "new_mod": "New mod",
+          "new_mod_hint": "Copies this mod into a new \"(Liquid)\" mod, applies there and disables the original."
+        },
+        "generated": {
+          "title": "Made by this tool",
+          "description": "The original mod is kept disabled at {{path}}.",
+          "restore": "Restore original",
+          "restore_title": "Restore the original mod?",
+          "restore_description": "This mod folder and its emitters are deleted, including any file you changed in it, and the original mod is enabled again.",
+          "restore_confirm": "Restore"
+        },
+        "runtime": {
+          "title": "Emitter runtime",
+          "installed": "Emitter runtime is ready.",
+          "state": {
+            "missing": "Not installed",
+            "current": "Installed",
+            "outdated": "Update available",
+            "modified": "Files changed",
+            "disabled": "Disabled",
+            "foreign": "Another copy"
+          },
+          "action": {
+            "missing": "Install",
+            "outdated": "Update",
+            "modified": "Repair",
+            "disabled": "Enable"
+          },
+          "foreign_title": "Another LiquidGravityProbe is installed",
+          "foreign_description": "Disable or remove the copy at {{path}} first. Two copies of the runtime conflict in game."
+        },
+        "pick": {
+          "toggle": "Pick surface",
+          "missed": "No surface there. Show the part alone or turn the model."
+        },
+        "selection": {
+          "title": "Emitter point",
+          "empty": "Click the model surface to place the emitter.",
+          "triangle": "Triangle {{index}} · follows the surface"
+        },
+        "history": {
+          "undo": "Undo",
+          "redo": "Redo"
+        },
+        "position": {
+          "title": "Position",
+          "hint": "Source mesh coordinates in metres (Z is up)."
+        },
+        "offset": {
+          "title": "Move from surface (mm)",
+          "reset": "Back to the surface point"
+        },
+        "direction": {
+          "title": "Spray direction",
+          "down": "Point straight down"
+        },
+        "trajectory": {
+          "label": "Preview default-strength path",
+          "hint": "The mean path at default strength, shown at 1/10 speed for 0.48 s. Collision, movement and pulses are not simulated."
+        },
+        "remove_all": {
+          "button": "Remove all",
+          "title": "Remove every emitter from this mod?",
+          "description": "The hooks are taken out of the INI files and the saved emitter points are deleted.",
+          "confirm": "Remove all"
+        },
+        "emitters": {
+          "title": "Applied emitters ({{count}})",
+          "empty": "No emitter has been applied to this mod yet.",
+          "unhooked": "Hook missing",
+          "missing_mesh": "This part is no longer in the model."
+        },
+        "error": {
+          "not_efmi": "This tool only works with Arknights: Endfield (EFMI) mods.",
+          "runtime_foreign": "Another LiquidGravityProbe is installed at {{detail}}. Disable or remove it first.",
+          "runtime_disabled": "The emitter runtime is disabled. Enable it in the mod library.",
+          "viewer_session": "The model view is out of date. Close and reopen the tool.",
+          "unsupported_draw": "This part is drawn with a computed index range, so it cannot take an emitter.",
+          "draw_mismatch": "The picked face does not match the mod files. Close and reopen the tool.",
+          "draw_not_found": "The draw call of this part was not found in its INI. It may use variables or have changed.",
+          "invalid_anchor": "The emitter point is invalid. Pick the surface again.",
+          "offset_limit": "The emitter can be moved at most 250 mm from the surface.",
+          "slots_exhausted": "All 4096 emitter slots are in use. Remove emitters from other mods first.",
+          "unsupported_ini": "This mod's INI uses an unsupported encoding.",
+          "damaged_hook": "An emitter hook in {{detail}} is missing a begin or end marker, so nothing was changed. Fix the marker or restore the file from its .nhd-liquid-orig backup.",
+          "invalid_mode": "Unknown apply mode: {{detail}}",
+          "generated_mod": "This mod was already made by this tool. Its emitters are edited in place.",
+          "not_generated": "This mod was not made by this tool, so there is no original to restore.",
+          "source_missing": "The original mod is no longer at {{detail}}. Enable or move it back first."
+        }
+      },
       "body_shape": {
         "title": "Body Shape",
         "mod_path": "Mod folder",
@@ -2630,6 +2735,9 @@
           "removeTitle": "Remove {{name}}?",
           "removeDescription": "The runtime folder moves to the recycle bin together with the data its tool keeps there, such as liquid emitter profiles. Mods that use it stop working until it is installed again. To turn it off for a while, disable it instead.",
           "foreignDescription": "Another copy of {{name}} is enabled at {{path}}. Disable or remove that copy first; the game would load both.",
+          "usedBy": {
+            "LiquidGravityProbe": "Used by the liquid emitter tool."
+          },
           "errors": {
             "MOD_RUNTIME_UNKNOWN": "This importer has no runtime named {{detail}}.",
             "MOD_RUNTIME_NO_MODS_FOLDER": "No game uses {{detail}} yet, so there is no Mods folder to install into.",
@@ -2646,7 +2754,17 @@
             "keyDescription": "Press the key combination to use in game.",
             "reset": "Reset to defaults",
             "save": "Save settings",
-            "saved": "{{name}} settings saved."
+            "saved": "{{name}} settings saved.",
+            "LiquidGravityProbe": {
+              "toggleKey": "Toggle emitting",
+              "strengthUpKey": "Increase strength",
+              "strengthDownKey": "Decrease strength",
+              "autoPulseKey": "Toggle auto pulse",
+              "manualPulseKey": "Pulse while held",
+              "startEnabled": "Emit when the game starts",
+              "autoPulse": "Start with auto pulse",
+              "strength": "Starting strength"
+            }
           }
         }
       },

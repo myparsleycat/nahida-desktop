@@ -127,6 +127,12 @@ drawindexed = 3, 0, 3
 				mesh.geometry.SourceIndices,
 			)
 		}
+		// Tools that hook the draw read the picked face back from the index buffer.
+		vertices, err := mesh.drawSource.TriangleVertices(0)
+		if err != nil || mesh.drawSource.Section != []string{"Body", "Other"}[index] ||
+			vertices != [3]uint32{start, start + 1, start + 2} {
+			t.Fatalf("draw source %+v triangle=%v err=%v", mesh.drawSource, vertices, err)
+		}
 	}
 }
 

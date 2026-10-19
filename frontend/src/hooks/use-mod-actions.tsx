@@ -44,6 +44,7 @@ import { toast } from "sonner";
 
 import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
 import { EfmiOutlineDialog } from "../components/mod/efmi-outline-dialog";
+import { LiquidEmitterDialog } from "../components/mod/liquid-emitter-dialog";
 import { ModConflictFinderDialog } from "../components/mod/mod-conflict-finder-dialog";
 import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
@@ -94,6 +95,7 @@ export interface ModActionApi {
   openBodyShapeDialog: (mod: ModInfo) => void;
   openTouchProfileDialog: (mod: ModInfo) => void;
   openEfmiOutlineDialog: (mod: ModInfo) => void;
+  openLiquidEmitterDialog: (mod: ModInfo) => void;
   openConflictFinder: (mod: ModInfo) => void;
   openModFixer: (mod: ModInfo) => Promise<void>;
   markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
@@ -121,6 +123,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const [bodyShapeMod, setBodyShapeMod] = useState<ModInfo | null>(null);
   const [touchProfileMod, setTouchProfileMod] = useState<ModInfo | null>(null);
   const [efmiOutlineMod, setEfmiOutlineMod] = useState<ModInfo | null>(null);
+  const [liquidEmitterMod, setLiquidEmitterMod] = useState<ModInfo | null>(null);
   const [conflictFinderMod, setConflictFinderMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
     groupPath?: string;
@@ -448,6 +451,16 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         modName={efmiOutlineMod?.name ?? ""}
       />
 
+      <LiquidEmitterDialog
+        open={liquidEmitterMod !== null}
+        onOpenChange={(open) => !open && setLiquidEmitterMod(null)}
+        modPath={liquidEmitterMod?.path ?? ""}
+        modName={liquidEmitterMod?.name ?? ""}
+        onModsChanged={() => {
+          void invalidateModGroup(queryClient, selectedGroupPath);
+        }}
+      />
+
       <ModConflictFinderDialog
         open={conflictFinderMod !== null}
         onOpenChange={(open) => !open && setConflictFinderMod(null)}
@@ -493,6 +506,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
     openTouchProfileDialog: (mod) => setTouchProfileMod(mod),
     openEfmiOutlineDialog: (mod) => setEfmiOutlineMod(mod),
+    openLiquidEmitterDialog: (mod) => setLiquidEmitterMod(mod),
     openConflictFinder: (mod) => setConflictFinderMod(mod),
     openModFixer: async (mod) => {
       await runner.handleOpenModFixer(mod.path);

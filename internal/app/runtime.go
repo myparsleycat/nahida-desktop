@@ -192,7 +192,7 @@ func newRuntime() *runtime {
 	})
 	download.UseClient(httpClient)
 	modRuntime := modruntime.New(modruntime.Options{
-		Log: log, Mod: modService, Trash: shell.Trash,
+		Log: log, Mod: modService, Trash: shell.Trash, Specs: tools.ModRuntimes(),
 	})
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
@@ -249,6 +249,7 @@ func newRuntime() *runtime {
 			GitHubRate:             githubRate,
 			GitHub:                 githubClient,
 			Mod:                    modService,
+			Runtimes:               modRuntime,
 			Elevated:               elevatedFiles,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{

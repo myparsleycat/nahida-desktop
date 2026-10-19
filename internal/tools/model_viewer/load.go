@@ -295,10 +295,11 @@ func (t *Service) loadModViewer(
 		return ModelViewerTransport{}, context.Canceled
 	}
 	t.modelViewerSessions[sessionID] = &modelViewerSession{
-		modPath:   requestedPath,
-		windowID:  windowID,
-		evaluator: evaluator,
-		cancel:    sessionCancel,
+		modPath:     requestedPath,
+		windowID:    windowID,
+		evaluator:   evaluator,
+		cancel:      sessionCancel,
+		drawSources: prepared.drawSources,
 	}
 	t.modelViewerMu.Unlock()
 	keep = true
@@ -365,6 +366,7 @@ type modelViewerPreparedGeometry struct {
 	textures                                   []modelViewerINITextureWork
 	computeDeformers                           []ModelViewerComputeDeformerTransport
 	computeAnimations                          []modelViewerPreparedAnimationClip
+	drawSources                                map[string]DrawSource
 	parseMs, validateMs, referencedMs, buildMs int64
 	timing                                     *modelViewerMeshBuildTiming
 }
