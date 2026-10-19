@@ -2,9 +2,8 @@
 // Position Based Fluids: density constraints generate pressure corrections.
 // Meter/second units; compact support kernels, water-like viscosity, pair cohesion.
 Texture1D<float4> IniParams:register(t120);
-cbuffer SceneRoot:register(b2){float4 sceneRows[208];}
-StructuredBuffer<float4> actor:register(t102);
-StructuredBuffer<float4> surface:register(t103);
+#include "Slots.hlsl"
+// Four rows per slot: root at the end of the last frame, last frame time, nozzle.
 StructuredBuffer<float4> frameState:register(t105);
 StructuredBuffer<float4> pulse:register(t109);
 struct FluidParticle { float4 positionAge; float4 velocityAlive; float4 predictedLambda; float4 densityBirth; };
@@ -25,7 +24,6 @@ RWStructuredBuffer<JetGuide> jetGuide:register(u7);
 #define RHO PARAM.z
 #define NU PARAM.w
 #include "Collision.hlsl"
-struct CollisionEvent{float4 pointSpeed;float4 normalRadius;float4 incoming;};
 RWStructuredBuffer<CollisionEvent> collisionEvents:register(u2);
 RWBuffer<uint> collisionCounter:register(u3);
 static const uint N=PRIMARY_COUNT;
@@ -41,34 +39,71 @@ float storedLaunchSpeed(float value){return max(value-16*floor(value/16)-1,0);}
 bool releasedSheet(FluidParticle p,uint i){float amount=sheetFrame[i].w;return abs(amount)>.001;}
 bool finite3(float3 p){return all(isfinite(p)) && all(abs(p)<100);}
 #ifdef PHASE_STATE
-[numthreads(1,1,1)]
+[numthreads(SLOT_COUNT,1,1)]
 void main(uint3 id:SV_DispatchThreadID){
- float oldOpening=updatedState[2].w>.5?updatedState[2].x:1;
+ uint fs=id.x*4;
+ float oldOpening=updatedState[fs+2].w>.5?updatedState[fs+2].x:1;
  float pressure=nozzlePressure(IniParams[237].z,pulse[2].x);
- updatedState[2]=float4(advanceNozzleOpening(oldOpening,pressure,DT*2),pressure,0,1);
- updatedState[0]=float4(actor[3].xyz,1);updatedState[1]=float4(0,0,0,STEP.y);
+ updatedState[fs+2]=float4(advanceNozzleOpening(oldOpening,pressure,DT*2),pressure,0,1);
+ updatedState[fs]=slotLive(id.x)?float4(slotRoot(id.x),1):0;updatedState[fs+1]=float4(0,0,0,STEP.y);
 }
 #else
+#ifndef PHASE_PREDICT
+// The neighbor sums read their slot's particles through groupshared tiles
+// instead of one global load per pair, which left the loops waiting on
+// memory. A group never spans two slots, and every thread still adds its
+// neighbors in ascending index order, so the sums are the direct loop's.
+static const uint TILE=64;
+groupshared float4 tilePredicted[TILE];
+groupshared uint tileUsable[TILE];
+groupshared uint tileAny;
+#ifdef PHASE_FINALIZE
+groupshared float4 tilePosition[TILE];
+groupshared float4 tileSheet[TILE];
+groupshared float tileDensity[TILE];
+#endif
+// Every thread of the group calls this for each tile; it returns whether any
+// neighbor of the tile takes part.
+bool loadTile(uint first,uint lane){
+ GroupMemoryBarrierWithGroupSync();
+ if(lane==0)tileAny=0;
+ GroupMemoryBarrierWithGroupSync();
+ uint j=first+lane;
+ FluidParticle q=source[j];
+ bool usable=q.velocityAlive.w>.5 && !releasedSheet(q,j);
+ tilePredicted[lane]=q.predictedLambda;tileUsable[lane]=usable?1:0;
+#ifdef PHASE_FINALIZE
+ tilePosition[lane]=q.positionAge;tileSheet[lane]=sheetFrame[j];tileDensity[lane]=q.densityBirth.x;
+#endif
+ if(usable)InterlockedOr(tileAny,1);
+ GroupMemoryBarrierWithGroupSync();
+ return tileAny!=0;
+}
+#endif
 [numthreads(64,1,1)]
-void main(uint3 dispatch:SV_DispatchThreadID){
- uint i=dispatch.x;if(i>=N)return;
+void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
+ // Dispatches cover PRIMARY_COUNT exactly; the neighbor phases must not
+ // return before their group barriers.
+ uint i=dispatch.x;
  FluidParticle p=source[i];
+ // Each slot simulates its own block of particles relative to its own root.
+ uint slot=primarySlot(i),inSlot=i%PRIMARY_PER_SLOT,segment=slot*PRIMARY_PER_SLOT,fs=slot*4;
 #ifdef PHASE_PREDICT
  // Stratified, irregular births: fixed timestamps never stretch the age of live fluid.
  float lifetime=PRIMARY_LIFETIME;
  float cycle=floor(STEP.y/lifetime);
- uint emissionSlot=i%BASE_PRIMARY_COUNT;
- bool reserve=i>=BASE_PRIMARY_COUNT;
+ uint emissionSlot=inSlot%BASE_PRIMARY_COUNT;
+ bool reserve=inSlot>=BASE_PRIMARY_COUNT;
  float offset=reserve?.5:0;
  float scheduled=cycle*lifetime+(float(BASE_PRIMARY_COUNT-1-emissionSlot)+offset+.78*hash1(float(i)*3.71+cycle*7.13))*lifetime/BASE_PRIMARY_COUNT;
  if(scheduled>STEP.y){cycle-=1;scheduled=cycle*lifetime+(float(BASE_PRIMARY_COUNT-1-emissionSlot)+offset+.78*hash1(float(i)*3.71+cycle*7.13))*lifetime/BASE_PRIMARY_COUNT;}
  float age=STEP.y-scheduled;
  float3 shift=0;
- if(STEP.z<.5 && frameState[0].w>.5)shift=frameState[0].xyz-actor[3].xyz;
+ if(STEP.z<.5 && frameState[fs].w>.5)shift=frameState[fs].xyz-slotRoot(slot);
  bool teleport=length(shift)>1.5;
  // Spawn only events belonging to this substep, never catch up old emissions.
  // This same rule covers first activation, reactivation, and teleport recovery.
- bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && surface[4].w>.5;
+ bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot);
  bool initialized=p.densityBirth.w>.5;
  bool birth=emitting && age>=0 && age<DT;
  // Reserve births add density during pressure pulses or raised strength.
@@ -79,20 +114,20 @@ void main(uint3 dispatch:SV_DispatchThreadID){
  }
  if(!birth){
   age=p.positionAge.w+DT;
-  if(age>=lifetime || teleport)p.velocityAlive.w=0;
+  if(age>=lifetime || teleport || !slotLive(slot))p.velocityAlive.w=0;
  }
  // Root-relative storage is only a floating origin. Old fluid never receives emitter velocity.
  float frameTime=STEP.y+(STEP.z<.5?DT:0);
- float elapsed=max(frameTime-frameState[1].w,DT*2);
- float3 inherited=frameState[0].w>.5?(actor[3].xyz-frameState[0].xyz)/elapsed:0;
+ float elapsed=max(frameTime-frameState[fs+1].w,DT*2);
+ float3 inherited=frameState[fs].w>.5?(slotRoot(slot)-frameState[fs].xyz)/elapsed:0;
  if(teleport || !finite3(inherited))inherited=0;
  inherited*=min(1,3/max(length(inherited),1e-6));
  if(!initialized && !birth){p.positionAge.w=age;target[i]=p;return;}
  if(birth){
   float t=STEP.y-age;
   float3 origin=float3(0,.85,0),up=float3(0,1,0),right=float3(1,0,0),forward=float3(0,0,1);
-  if(IniParams[241].x>.5 && surface[4].w>.5){origin=surface[3].xyz-actor[3].xyz;up=surface[1].xyz;right=surface[0].xyz;forward=surface[2].xyz;}
-  float previousOpening=frameState[2].w>.5?frameState[2].x:1;
+  if(IniParams[241].x>.5 && slotSeen(slot)){origin=slotAnchor(slot,3).xyz-slotRoot(slot);up=slotAnchor(slot,1).xyz;right=slotAnchor(slot,0).xyz;forward=slotAnchor(slot,2).xyz;}
+  float previousOpening=frameState[fs+2].w>.5?frameState[fs+2].x:1;
   float nozzleDt=DT*(STEP.z<.5?1:2);
   SoftNozzle nozzle=evaluateSoftNozzle(IniParams[237].z,pulse[2].x,previousOpening,nozzleDt,t);
   // The centerline stays down. Pressure widens a symmetric fore/aft sheet.
@@ -253,48 +288,64 @@ void main(uint3 dispatch:SV_DispatchThreadID){
  if(!finite3(p.predictedLambda.xyz)||length(p.predictedLambda.xyz)>2.5||p.predictedLambda.y< -1.5)p.velocityAlive.w=0;
 #endif
 #ifdef PHASE_DENSITY
- if(releasedSheet(p,i)){p.predictedLambda.w=0;p.densityBirth.x=RHO;target[i]=p;return;}
- if(p.velocityAlive.w>.5){
-  float density=0,sumGradient2=0;float3 gradientI=0;
-  [loop]for(uint j=0;j<N;j++){
-   FluidParticle q=source[j];if(q.velocityAlive.w<.5 || releasedSheet(q,j))continue;
-   float3 d=p.predictedLambda.xyz-q.predictedLambda.xyz;density+=MASS*poly6(dot(d,d));
-   if(j!=i){float3 grad=(MASS/RHO)*gradient(d);sumGradient2+=dot(grad,grad);gradientI+=grad;}
+ bool released=releasedSheet(p,i),active=!released && p.velocityAlive.w>.5;
+ float density=0,sumGradient2=0;float3 gradientI=0;
+ [loop]for(uint tile=0;tile<PRIMARY_PER_SLOT/TILE;tile++){
+  uint first=segment+tile*TILE;
+  bool any=loadTile(first,lane);
+  if(any && active){
+   [loop]for(uint k=0;k<TILE;k++){
+    if(tileUsable[k]==0)continue;
+    float3 d=p.predictedLambda.xyz-tilePredicted[k].xyz;density+=MASS*poly6(dot(d,d));
+    if(first+k!=i){float3 grad=(MASS/RHO)*gradient(d);sumGradient2+=dot(grad,grad);gradientI+=grad;}
+   }
   }
+ }
+ if(released){p.predictedLambda.w=0;p.densityBirth.x=RHO;}
+ else if(active){
   float C=max(density/RHO-1,0); // unilateral incompressibility; no tensile negative pressure
   float denom=sumGradient2+dot(gradientI,gradientI)+10;
   p.predictedLambda.w=-C/denom;p.densityBirth.x=max(density,RHO*.1);
  }
 #endif
 #ifdef PHASE_CORRECT
- if(releasedSheet(p,i)){p.predictedLambda.w=0;target[i]=p;return;}
- if(p.velocityAlive.w>.5){
-  float3 correction=0;
-  [loop]for(uint j=0;j<N;j++){
-   if(j==i)continue;FluidParticle q=source[j];if(q.velocityAlive.w<.5 || releasedSheet(q,j))continue;
-   float3 d=p.predictedLambda.xyz-q.predictedLambda.xyz;
-   correction+=(p.predictedLambda.w+q.predictedLambda.w)*(MASS/RHO)*gradient(d);
+ bool released=releasedSheet(p,i),active=!released && p.velocityAlive.w>.5;
+ float3 correction=0;
+ [loop]for(uint tile=0;tile<PRIMARY_PER_SLOT/TILE;tile++){
+  uint first=segment+tile*TILE;
+  bool any=loadTile(first,lane);
+  if(any && active){
+   [loop]for(uint k=0;k<TILE;k++){
+    if(first+k==i || tileUsable[k]==0)continue;
+    float3 d=p.predictedLambda.xyz-tilePredicted[k].xyz;
+    correction+=(p.predictedLambda.w+tilePredicted[k].w)*(MASS/RHO)*gradient(d);
+   }
   }
+ }
+ if(released)p.predictedLambda.w=0;
+ else if(active){
   float len=length(correction);correction*=min(1,.002/max(len,1e-9));
   p.predictedLambda.xyz+=correction;
  }
 #endif
 #ifdef PHASE_FINALIZE
- if(p.velocityAlive.w>.5){
-  float3 velocity;
-  if(sheetFrame[i].w>.001 || focusMomentum[i].w< -2){
-   velocity=p.velocityAlive.xyz;
-  }else{
+ bool alive=p.velocityAlive.w>.5;
+ bool coupled=alive && !(sheetFrame[i].w>.001 || focusMomentum[i].w< -2);
+ float3 velocity=p.velocityAlive.xyz;
+ float3 viscous=0,cohesion=0,smoothVelocity=0;
+ float4 frozenSheet=sheetFrame[i];
+ float focusDistance=0,ballisticBlend=0,coupling=0;
+ float3 ballisticVelocity=0;
+ float sheetWeight=0,sheetSpring=0,sheetDamping=0;
+ if(coupled){
   velocity=(p.predictedLambda.xyz-p.positionAge.xyz)/DT;
-  float3 viscous=0,cohesion=0,smoothVelocity=0;
-  float4 frozenSheet=sheetFrame[i];
   float launchSpeed=storedLaunchSpeed(p.densityBirth.w);
-  float focusDistance=sheetFocusDistance(frozenSheet.w);
+  focusDistance=sheetFocusDistance(frozenSheet.w);
   float3 gravity=G*jetGravityScale(launchSpeed,p.densityBirth.z);
-  float3 ballisticVelocity=p.velocityAlive.xyz+gravity*DT;
+  ballisticVelocity=p.velocityAlive.xyz+gravity*DT;
   float predictedTravel=p.densityBirth.z+length(ballisticVelocity*DT);
   bool justReleased=frozenSheet.w>.001 && p.densityBirth.z<focusDistance && predictedTravel>=focusDistance;
-  float ballisticBlend=(frozenSheet.w>.001 && predictedTravel>=focusDistance)?1:0;
+  ballisticBlend=(frozenSheet.w>.001 && predictedTravel>=focusDistance)?1:0;
   // Pass through the focus along its frozen geometric incident ray. No reflection,
   // axial re-aiming, or newly randomized spray angle is applied here.
   if(justReleased){
@@ -310,30 +361,39 @@ void main(uint3 dispatch:SV_DispatchThreadID){
   // Advance the actual position with the same restored momentum; merely changing
   // the stored speed would let the next pressure solve remove it again.
   p.predictedLambda.xyz+=(velocity-pressureVelocity)*DT;
-  float coupling=(1-ballisticBlend)*(1-saturate(-frozenSheet.w));
-  float sheetWeight=0,sheetSpring=0,sheetDamping=0;
-  [loop]for(uint j=0;j<N && coupling>0;j++){
-   if(j==i)continue;FluidParticle q=source[j];if(q.velocityAlive.w<.5 || releasedSheet(q,j))continue;
-   float3 d=q.predictedLambda.xyz-p.predictedLambda.xyz;float r=length(d);if(r<1e-7)continue;
-   float3 qv=(q.predictedLambda.xyz-q.positionAge.xyz)/DT;
-   // A reduced, underdamped sheet-restoring force between nearby fluid parcels.
-   // No position targets, emitter attraction, or current character frame are used.
-   float ageGap=abs(q.positionAge.w-p.positionAge.w);
-   if(frozenSheet.w>.001 && r<.028 && ageGap<.030){
-    float4 otherSheet=sheetFrame[j];
-    if(otherSheet.w>.001 && dot(frozenSheet.xyz,otherSheet.xyz)>.85){
-     float w=pow(1-r/.028,2)*pow(1-ageGap/.030,2)*min(frozenSheet.w,otherSheet.w);
-     sheetSpring+=w*dot(d,frozenSheet.xyz);
-     sheetDamping+=w*dot(qv-velocity,frozenSheet.xyz);
-     sheetWeight+=w;
+  coupling=(1-ballisticBlend)*(1-saturate(-frozenSheet.w));
+ }
+ bool gathering=coupled && coupling>0;
+ [loop]for(uint tile=0;tile<PRIMARY_PER_SLOT/TILE;tile++){
+  uint first=segment+tile*TILE;
+  bool any=loadTile(first,lane);
+  if(any && gathering){
+   [loop]for(uint k=0;k<TILE;k++){
+    if(first+k==i || tileUsable[k]==0)continue;
+    float3 d=tilePredicted[k].xyz-p.predictedLambda.xyz;float r=length(d);if(r<1e-7)continue;
+    float3 qv=(tilePredicted[k].xyz-tilePosition[k].xyz)/DT;
+    // A reduced, underdamped sheet-restoring force between nearby fluid parcels.
+    // No position targets, emitter attraction, or current character frame are used.
+    float ageGap=abs(tilePosition[k].w-p.positionAge.w);
+    if(frozenSheet.w>.001 && r<.028 && ageGap<.030){
+     float4 otherSheet=tileSheet[k];
+     if(otherSheet.w>.001 && dot(frozenSheet.xyz,otherSheet.xyz)>.85){
+      float w=pow(1-r/.028,2)*pow(1-ageGap/.030,2)*min(frozenSheet.w,otherSheet.w);
+      sheetSpring+=w*dot(d,frozenSheet.xyz);
+      sheetDamping+=w*dot(qv-velocity,frozenSheet.xyz);
+      sheetWeight+=w;
+     }
     }
+    if(r>=H)continue;
+    float volume=MASS/max(tileDensity[k],RHO*.1),weight=volume*poly6(r*r);
+    viscous+=NU*volume*(qv-velocity)*laplacian(r);
+    smoothVelocity+=weight*(qv-velocity);
+    cohesion+=weight*(d/r); // isotropic finite-range attractive surface potential
    }
-   if(r>=H)continue;
-   float volume=MASS/max(q.densityBirth.x,RHO*.1),weight=volume*poly6(r*r);
-   viscous+=NU*volume*(qv-velocity)*laplacian(r);
-   smoothVelocity+=weight*(qv-velocity);
-   cohesion+=weight*(d/r); // isotropic finite-range attractive surface potential
   }
+ }
+ if(alive){
+  if(coupled){
   float3 velocitySmoothing=smoothVelocity*.01;
   if(frozenSheet.w>.001){
    // Do not erase the emerging fan's opposite transverse velocities immediately.
@@ -364,14 +424,14 @@ void main(uint3 dispatch:SV_DispatchThreadID){
   }
   float speed=length(velocity);velocity*=min(1,6/max(speed,1e-9));
   float3 contact,normal;
-  if(collideFluid(p.positionAge.xyz,p.predictedLambda.xyz,velocity,FLUID_RADIUS,contact,normal)){
+  if(collideFluid(slot,p.positionAge.xyz,p.predictedLambda.xyz,velocity,FLUID_RADIUS,contact,normal)){
    float impact=max(0,-dot(velocity,normal));
    if(impact>.15 || adhesionChance(velocity,normal)>.001){
     // Impact coherence comes from nearby parcels on the same moving path,
     // not from the selected strength. Dispersed rain therefore splashes less.
     float alignedSupport=0;
     float3 incomingAxis=velocity/max(length(velocity),1e-6);
-    [loop]for(uint neighbor=0;neighbor<N;neighbor++){
+    [loop]for(uint neighbor=segment;neighbor<segment+PRIMARY_PER_SLOT;neighbor++){
      if(neighbor==i)continue;
      FluidParticle q=source[neighbor];if(q.velocityAlive.w<.5)continue;
      float3 delta=q.predictedLambda.xyz-p.predictedLambda.xyz;
@@ -386,7 +446,7 @@ void main(uint3 dispatch:SV_DispatchThreadID){
      uint seed=asuint(p.densityBirth.y)^(i*747796405u)^asuint(STEP.y);
      // Pack 16 random bits + 8 coherence bits in an exactly representable float.
      uint packed=(seed&0xffffu)|((uint)round(coherence*255)<<16);
-     e.incoming=float4(velocity,float(packed));collisionEvents[eventId]=e;}
+     e.incoming=float4(velocity,float(packed));e.slot=float4(slot,0,0,0);collisionEvents[eventId]=e;}
    }
    p.velocityAlive.w=0;p.predictedLambda.xyz=contact;
   }

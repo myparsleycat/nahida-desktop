@@ -1,8 +1,7 @@
 #include "ParticleConfig.hlsl"
 #include "Puddle.hlsl"
 Texture1D<float4> IniParams:register(t120);
-StructuredBuffer<float4> actor:register(t102);
-StructuredBuffer<float4> surface:register(t103);
+#include "Slots.hlsl"
 StructuredBuffer<float4> frameState:register(t105);
 StructuredBuffer<float4> pulse:register(t109);
 struct FluidParticle{float4 positionAge;float4 velocityAlive;float4 predictedLambda;float4 densityBirth;};
@@ -11,12 +10,14 @@ RWStructuredBuffer<FluidParticle> target:register(u0);
 #include "Collision.hlsl"
 #include "AdhesionFrame.hlsl"
 #include "SoftNozzle.hlsl"
-struct CollisionEvent{float4 pointSpeed;float4 normalRadius;float4 incoming;};
 StructuredBuffer<CollisionEvent> events:register(t108);
 Buffer<uint> eventCounter:register(t107);
 RWBuffer<uint> freeCounter:register(u4);
 // [0] incoming puddles, [1] free-slot cursor, [2] free floor slots after Update.
 RWBuffer<uint> puddleTransferCounter:register(u6);
+// Airborne indices of the incoming puddles, in the order Update counted them,
+// so a receiving floor slot reads its puddle instead of searching for it.
+RWBuffer<uint> puddleTransferList:register(u7);
 uint mixBits(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float random01(uint seed,uint channel){return float(mixBits(seed+channel*0x9e3779b9u)>>8)*(1.0/16777216.0);}
 // Floor splashes weaken progressively below the default strength.
@@ -43,8 +44,8 @@ void beginFloorPuddle(inout FluidParticle p,float3 normal){
  p.predictedLambda=float4(normal,3);
  p.densityBirth.x=0;p.densityBirth.w=5;p.positionAge.w=0;
 }
-bool puddleDepthUnavailableAtBorder(float3 relativePosition){
- float3 world=relativePosition+collisionRoot();
+bool puddleDepthUnavailableAtBorder(uint s,float3 relativePosition){
+ float3 world=relativePosition+collisionRoot(s);
  float4 c=world.x*collisionCamera[16]+world.y*collisionCamera[17]+world.z*collisionCamera[18]+collisionCamera[19];
  if(!all(isfinite(c)))return false;
  if(c.w<=.05)return true;
@@ -62,8 +63,9 @@ void main(uint3 id:SV_DispatchThreadID){
  uint i=id.x;if(i>=SPLASH_COUNT)return;FluidParticle p=source[i];float dt=IniParams[239].x*2;
 #ifdef SPLASH_UPDATE
  if(p.velocityAlive.w>.5){
-  float3 shift=frameState[0].w>.5?frameState[0].xyz-actor[3].xyz:0;
-  if(length(shift)>1.5){p.velocityAlive.w=0;}else{
+  uint owner=splashSlot(p.velocityAlive.w),fs=owner*4;
+  float3 shift=frameState[fs].w>.5?frameState[fs].xyz-slotRoot(owner):0;
+  if(length(shift)>1.5||!slotLive(owner)){p.velocityAlive.w=0;}else{
    float3 from=p.positionAge.xyz+shift;
    float radius=FLUID_RADIUS*p.densityBirth.z;
    bool puddle=floorPuddle(p.densityBirth.w);
@@ -78,14 +80,14 @@ void main(uint3 id:SV_DispatchThreadID){
     float height=puddleHalfHeight(radius,p.densityBirth.x);
     to=from+displacement;
     float3 floorPoint,floorNormal;
-    bool found=screenSurface(to,floorPoint,floorNormal);
+    bool found=screenSurface(owner,to,floorPoint,floorNormal);
     float gap=dot(to-floorPoint,floorNormal);
     if(found && floorNormal.y>=PUDDLE_MIN_UP && dot(oldNormal,floorNormal)>.97
        && abs(gap-oldHeight)<.012 && length(to-floorPoint)<.04){
      to+=floorNormal*(height+.0002-gap);
      velocity-=floorNormal*dot(velocity,floorNormal);
      p.predictedLambda=float4(floorNormal,3);
-    }else if(!found && puddleDepthUnavailableAtBorder(to)){
+    }else if(!found && puddleDepthUnavailableAtBorder(owner,to)){
      // No offscreen geometry is known: hold the last WORLD position, normal
      // and footprint. Do not invent a continuation of the contact plane.
      to=from;velocity=p.velocityAlive.xyz;
@@ -101,20 +103,20 @@ void main(uint3 id:SV_DispatchThreadID){
     }
    }else if(attached){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
-    if(p.predictedLambda.w>1.5 && liveAdhesionFrame()){
+    if(p.predictedLambda.w>1.5 && liveAdhesionFrame(owner)){
      AdhesionFrame previous=adhesionFrames[i];
-     if(previous.origin.w>.5 && previous.right.w==surface[4].y){
-      float3 oldWorld=p.positionAge.xyz+frameState[0].xyz;
-      float3 carried=surface[3].xyz+carryAdhesionVector(oldWorld-previous.origin.xyz,previous)-collisionRoot();
-      float3 carriedNormal=normalize(carryAdhesionVector(oldNormal,previous));
+     if(previous.origin.w>.5 && previous.right.w==slotAnchor(owner,4).y){
+      float3 oldWorld=p.positionAge.xyz+frameState[fs].xyz;
+      float3 carried=slotAnchor(owner,3).xyz+carryAdhesionVector(owner,oldWorld-previous.origin.xyz,previous)-collisionRoot(owner);
+      float3 carriedNormal=normalize(carryAdhesionVector(owner,oldNormal,previous));
       float3 testPoint,testNormal;
-      bool valid=screenSurface(carried,testPoint,testNormal);
+      bool valid=screenSurface(owner,carried,testPoint,testNormal);
       float gap=dot(carried-testPoint,testNormal);
       // Reject teleports, unrelated depth layers and broken contact geometry.
       if(valid && length(carried-from)<.15 && dot(carriedNormal,testNormal)>.55
          && abs(gap-radius)<.018 && length(carried-testPoint)<.05){
        from=carried+testNormal*(radius+.0001-gap);
-       velocity=carryAdhesionVector(velocity,previous);
+       velocity=carryAdhesionVector(owner,velocity,previous);
        oldNormal=testNormal;
       }
      }
@@ -122,7 +124,7 @@ void main(uint3 id:SV_DispatchThreadID){
     advanceAdhesion(velocity,oldNormal,dt,velocity,displacement);
     to=from+displacement;
     float3 surfacePoint,normal;
-    bool found=screenSurface(to,surfacePoint,normal);
+    bool found=screenSurface(owner,to,surfacePoint,normal);
     float gap=dot(to-surfacePoint,normal);
     // Follow continuous visible surfaces only; never snap to a distant layer.
     if(found && dot(oldNormal,normal)>.55 && abs(gap-radius)<.012 && length(to-surfacePoint)<.04){
@@ -139,7 +141,7 @@ void main(uint3 id:SV_DispatchThreadID){
     velocity=(velocity+float3(0,-9.81,0)*dt)/(1+.8*dt);
     to=from+velocity*dt;
     float3 contactPoint,normal;
-    if(collideFluid(from,to,velocity,radius,contactPoint,normal)){
+    if(collideFluid(owner,from,to,velocity,radius,contactPoint,normal)){
      uint seed=asuint(p.densityBirth.y)^(i*747796405u);
      float vn=dot(velocity,normal);
      float3 bounced=(velocity-normal*vn)*.65-normal*vn*.24;
@@ -150,7 +152,7 @@ void main(uint3 id:SV_DispatchThreadID){
      }else if(random01(seed,213)<adhesionChance(velocity,normal)){
       // Preserve incident tangential momentum; viscous drag acts over time.
       velocity-=normal*dot(velocity,normal);
-      p.predictedLambda=float4(normal,adhesionContactMode(contactPoint,normal));p.densityBirth.w=4;attached=true;
+      p.predictedLambda=float4(normal,adhesionContactMode(owner,contactPoint,normal));p.densityBirth.w=4;attached=true;
      }else{
       float vn=dot(velocity,normal);velocity=(velocity-normal*vn)*.65-normal*vn*.24;
       p.densityBirth.x+=1;
@@ -186,16 +188,7 @@ void main(uint3 id:SV_DispatchThreadID){
     }
     rank=freeSlots+older;
    }
-   if(rank<puddleTransferCounter[0]){
-    uint candidate=0;
-    [loop]for(uint j=0;j<AIRBORNE_SPLASH_COUNT;j++){
-     FluidParticle incoming=source[j];
-     if(incoming.velocityAlive.w>.5 && floorPuddle(incoming.densityBirth.w)){
-      if(candidate==rank){p=incoming;break;}
-      candidate++;
-     }
-    }
-   }
+   if(rank<puddleTransferCounter[0])p=source[puddleTransferList[rank]];
   }
   target[i]=p;return;
  }
@@ -215,13 +208,22 @@ void main(uint3 id:SV_DispatchThreadID){
   float now=IniParams[239].y;
   uint lowCount=(uint)clamp(floor(dt*lowRate+random01(asuint(now),31)),0,8);
   uint pulseCount=(uint)pulse[2].z;
-  uint emitterCount=(IniParams[237].x>.5 && pulse[3].w>.5 && pulse[5].x>.75 && surface[4].w>.5)?pulseCount+lowCount:0;
+  // Nozzle spray takes the first free particles, the same count for every
+  // slot that emits, in slot order; impact children take the rest.
+  bool spraying=IniParams[237].x>.5 && pulse[3].w>.5 && pulse[5].x>.75;
+  uint emitterCount=0,sprayOwner=0,sprayChild=0;
+  [unroll]for(uint s=0;s<SLOT_COUNT;s++){
+   if(!spraying||!slotSeen(s))continue;
+   if(slot>=emitterCount&&slot<emitterCount+pulseCount+lowCount){sprayOwner=s;sprayChild=slot-emitterCount;}
+   emitterCount+=pulseCount+lowCount;
+  }
   uint eventId=0,child=slot>=emitterCount?slot-emitterCount:0;
   [loop]for(;eventId<min(eventCounter[0],EVENT_CAPACITY);eventId++){
    uint count=childCount(events[eventId]);if(child<count)break;child-=count;
   }
   if(slot>=emitterCount && eventId<min(eventCounter[0],EVENT_CAPACITY)){
    CollisionEvent e=events[eventId];float3 n=e.normalRadius.xyz;
+   uint owner=(uint)e.slot.x;
    uint seed=(uint)e.incoming.w&0xffffu,count=childCount(e),channel=child*13;
    float coherence=impactCoherence(e);
    float3 helper=abs(n.x)>.9?float3(0,0,1):float3(1,0,0),x=normalize(cross(n,helper)),y=cross(n,x);
@@ -241,7 +243,7 @@ void main(uint3 id:SV_DispatchThreadID){
    float jitterAngle=random01(seed,channel+6)*6.2831853;
    float jitterRadius=sqrt(random01(seed,channel+7))*e.normalRadius.w*.15;
    float3 position=e.pointSpeed.xyz+n*(e.normalRadius.w*scale+.0001)+(x*cos(jitterAngle)+y*sin(jitterAngle))*jitterRadius;
-   p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,1);
+   p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,splashAliveTag(owner));
    p.predictedLambda=0;p.densityBirth=float4(0,IniParams[239].y,scale,2);
    // Keep fast child droplets airborne; low-speed floor contacts become wet patches.
    if(child==0 && slowFloorContact(p.velocityAlive.xyz,n)){
@@ -249,18 +251,19 @@ void main(uint3 id:SV_DispatchThreadID){
    }else if(child==0 && adhesionEvent(e)){
     // Start at the incoming surface-parallel speed without an impulse brake.
     float3 retained=tangent;
-    p.velocityAlive.xyz=retained;p.predictedLambda=float4(n,adhesionContactMode(position,n));p.densityBirth.w=4;
+    p.velocityAlive.xyz=retained;p.predictedLambda=float4(n,adhesionContactMode(owner,position,n));p.densityBirth.w=4;
    }
   }else if(slot<emitterCount){
-   child=slot;
-   uint seed=mixBits((uint)pulse[2].y*1637u+child*17u+asuint(IniParams[239].y));
-   float3 origin=currentEmitterRelative(),right=float3(1,0,0),up=float3(0,1,0),forward=float3(0,0,1);
-   if(IniParams[241].x>.5&&surface[4].w>.5){right=surface[0].xyz;up=surface[1].xyz;forward=surface[2].xyz;}
+   child=sprayChild;
+   uint owner=sprayOwner;
+   uint seed=mixBits((uint)pulse[2].y*1637u+child*17u+owner*7919u+asuint(IniParams[239].y));
+   float3 origin=currentEmitterRelative(owner),right=float3(1,0,0),up=float3(0,1,0),forward=float3(0,0,1);
+   if(IniParams[241].x>.5&&slotSeen(owner)){right=slotAnchor(owner,0).xyz;up=slotAnchor(owner,1).xyz;forward=slotAnchor(owner,2).xyz;}
    float sign=random01(seed,1)<.5?-1:1;
    // Keep the source in the same tiny socket as the primary flow.
    float3 position=origin+right*sign*(.0005+.002*random01(seed,2))+forward*(.001+.001*random01(seed,3))-up*.0015;
    float3 velocity=up*(-.18+.60*random01(seed,4))+forward*(.12+.38*random01(seed,5))+right*sign*(.08+.22*random01(seed,6));
-   float previousOpening=frameState[2].w>.5?frameState[2].x:1;
+   float previousOpening=frameState[owner*4+2].w>.5?frameState[owner*4+2].x:1;
    SoftNozzle nozzle=evaluateSoftNozzle(IniParams[237].z,pulse[2].x,previousOpening,dt,IniParams[239].y);
    float basicAngle=.5*lerp(.25,1,1-smoothstep(.28,1.69,1.1275));
    float baseAngleScale=atOrAboveBasic?lerp(basicAngle,.5,highDrive):lerp(basicAngle,.5,lowDrive);
@@ -286,7 +289,7 @@ void main(uint3 id:SV_DispatchThreadID){
    }
    // Limit rising through the body and reappearing higher on the abdomen.
    velocity.y=min(velocity.y,.45);
-   p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,1);p.predictedLambda=0;
+   p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,splashAliveTag(owner));p.predictedLambda=0;
    // Full primary/impact radius; marker 3 selects the enhanced splash material.
    p.densityBirth=float4(0,IniParams[239].y,1.0,3);
   }
@@ -296,13 +299,14 @@ void main(uint3 id:SV_DispatchThreadID){
  if(i>=AIRBORNE_SPLASH_COUNT && !floorPuddle(p.densityBirth.w))p.velocityAlive.w=0;
 #ifdef SPLASH_UPDATE
  if(i<AIRBORNE_SPLASH_COUNT && p.velocityAlive.w>.5 && floorPuddle(p.densityBirth.w)){
-  uint ignored;InterlockedAdd(puddleTransferCounter[0],1,ignored);
+  uint rank;InterlockedAdd(puddleTransferCounter[0],1,rank);
+  puddleTransferList[rank]=i;
  }
  if(i>=AIRBORNE_SPLASH_COUNT && p.velocityAlive.w<.5){
   uint ignored;InterlockedAdd(puddleTransferCounter[2],1,ignored);
  }
 #endif
- if(p.velocityAlive.w>.5 && p.predictedLambda.w>.5 && !floorPuddle(p.densityBirth.w))saveAdhesionFrame(i);
+ if(p.velocityAlive.w>.5 && p.predictedLambda.w>.5 && !floorPuddle(p.densityBirth.w))saveAdhesionFrame(splashSlot(p.velocityAlive.w),i);
  target[i]=p;
 }
 

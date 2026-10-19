@@ -1,53 +1,54 @@
 cbuffer CollisionCamera:register(b13){float4 collisionCamera[96];}
 Texture2D<float> collisionDepth:register(t106);
-float3 collisionRoot(){return actor[3].xyz;}
-float3 depthPoint(int2 pixel,uint2 dimensions){
+// Particles of slot s are stored relative to that slot's character root.
+float3 collisionRoot(uint s){return slotRoot(s);}
+float3 depthPoint(uint s,int2 pixel,uint2 dimensions){
  pixel=clamp(pixel,int2(0,0),int2(dimensions)-1);
  float d=collisionDepth.Load(int3(pixel,0));
  float2 uv=(float2(pixel)+.5)/float2(dimensions);
  float4 v=(uv.x*2-1)*collisionCamera[12]+(1-uv.y*2)*collisionCamera[13]+d*collisionCamera[14]+collisionCamera[15];
  float3 rel=(v.x*collisionCamera[4].xyz+v.y*collisionCamera[5].xyz+v.z*collisionCamera[6].xyz)/v.w;
- return rel+(collisionCamera[7].xyz-collisionRoot());
+ return rel+(collisionCamera[7].xyz-collisionRoot(s));
 }
-bool screenSurface(float3 p,out float3 surfacePoint,out float3 normal){
+bool screenSurface(uint s,float3 p,out float3 surfacePoint,out float3 normal){
  surfacePoint=0;normal=float3(0,1,0);uint w,h;collisionDepth.GetDimensions(w,h);if(w<3||h<3)return false;
- float3 world=p+collisionRoot();float4 c=world.x*collisionCamera[16]+world.y*collisionCamera[17]+world.z*collisionCamera[18]+collisionCamera[19];
+ float3 world=p+collisionRoot(s);float4 c=world.x*collisionCamera[16]+world.y*collisionCamera[17]+world.z*collisionCamera[18]+collisionCamera[19];
  if(c.w<=.05||!all(isfinite(c)))return false;
  float2 uv=float2(.5+.5*c.x/c.w,.5-.5*c.y/c.w);if(any(uv<.002)||any(uv>.998))return false;
  int2 px=int2(uv*float2(w,h));float d=collisionDepth.Load(int3(px,0));if(d<=1e-7||d>=1)return false;
- uint2 size=uint2(w,h);surfacePoint=depthPoint(px,size);
- float3 dx1=depthPoint(px+int2(1,0),size)-surfacePoint,dx2=surfacePoint-depthPoint(px-int2(1,0),size);
- float3 dy1=depthPoint(px+int2(0,1),size)-surfacePoint,dy2=surfacePoint-depthPoint(px-int2(0,1),size);
+ uint2 size=uint2(w,h);surfacePoint=depthPoint(s,px,size);
+ float3 dx1=depthPoint(s,px+int2(1,0),size)-surfacePoint,dx2=surfacePoint-depthPoint(s,px-int2(1,0),size);
+ float3 dy1=depthPoint(s,px+int2(0,1),size)-surfacePoint,dy2=surfacePoint-depthPoint(s,px-int2(0,1),size);
  float3 dx=dot(dx1,dx1)<dot(dx2,dx2)?dx1:dx2,dy=dot(dy1,dy1)<dot(dy2,dy2)?dy1:dy2;
  float3 n=cross(dx,dy);float len=length(n);if(!all(isfinite(n))||!all(isfinite(dx))||!all(isfinite(dy))||len<1e-10||length(dx)>.15||length(dy)>.15||!all(isfinite(surfacePoint)))return false;
- normal=n/len;if(dot(normal,collisionCamera[7].xyz-collisionRoot()-surfacePoint)<0)normal=-normal;
+ normal=n/len;if(dot(normal,collisionCamera[7].xyz-collisionRoot(s)-surfacePoint)<0)normal=-normal;
  return true;
 }
-float3 currentEmitterRelative(){
+float3 currentEmitterRelative(uint s){
  float3 origin=float3(0,.846,-.001);
- if(IniParams[241].x>.5 && surface[4].w>.5)origin=surface[3].xyz-collisionRoot()-surface[2].xyz*.001-surface[1].xyz*.004;
+ if(IniParams[241].x>.5 && slotSeen(s))origin=slotAnchor(s,3).xyz-collisionRoot(s)-slotAnchor(s,2).xyz*.001-slotAnchor(s,1).xyz*.004;
  return origin;
 }
 // Keep only an 8 mm self-collision exclusion around the nozzle.
 static const float EMITTER_EXCLUSION_RADIUS = .008;
-bool collideFluid(float3 from,float3 to,float3 velocity,float radius,out float3 contactPoint,out float3 normal){
+bool collideFluid(uint slot,float3 from,float3 to,float3 velocity,float radius,out float3 contactPoint,out float3 normal){
  contactPoint=to;normal=float3(0,1,0);
- float3 emitter=currentEmitterRelative();
+ float3 emitter=currentEmitterRelative(slot);
  [loop]for(uint k=1;k<=4;k++){
   float3 p=lerp(from,to,float(k)/4),s=0,n=float3(0,1,0);
   if(dot(p-emitter,p-emitter)<EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS)continue;
-  if(screenSurface(p,s,n)){
+  if(screenSurface(slot,p,s,n)){
    float gap=dot(p-s,n);
    if(gap<radius&&gap>-.035&&dot(velocity,n)<-.08&&dot(from-s,n)>-radius*2){contactPoint=p+n*(radius-gap);normal=n;return true;}
   }
  }
  // Off-screen fallback is only a root-height plane, not hidden map geometry.
- float3 fallbackSurface=0,fallbackNormal=float3(0,1,0);bool visibleSurface=screenSurface(to,fallbackSurface,fallbackNormal);
+ float3 fallbackSurface=0,fallbackNormal=float3(0,1,0);bool visibleSurface=screenSurface(slot,to,fallbackSurface,fallbackNormal);
  if(dot(to-emitter,to-emitter)>=EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS && !visibleSurface&&to.y<radius+.0001&&from.y>=radius-.02&&velocity.y<-.08){contactPoint=to;contactPoint.y=radius+.0001;normal=float3(0,1,0);return true;}
  return false;
 }
-
-
+// Slot carries the owner of the impacting particle to the splashes it spawns.
+struct CollisionEvent{float4 pointSpeed;float4 normalRadius;float4 incoming;float4 slot;};
 
 // Incidence measured from the tangent plane: preferentially retain grazing hits.
 float adhesionChance(float3 velocity,float3 normal){

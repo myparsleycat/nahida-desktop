@@ -7,7 +7,7 @@
 #include "SheetProfile.hlsl"
 StructuredBuffer<FluidParticle> particles:register(t100);
 StructuredBuffer<FluidParticle> splashes:register(t101);
-StructuredBuffer<float4> actor:register(t102);
+#include "Slots.hlsl"
 StructuredBuffer<JetGuide> renderGuides:register(t112);
 // Disc radius over the puddle particle's own, so neighboring discs overlap.
 static const float PUDDLE_SPLAT_SCALE=2;
@@ -31,9 +31,9 @@ float birthRadiusScale(float value){return value>=48?.70:(value>=32?.85:1);}
 // The slots of a bank are born in order, so slots i-1 and i+1 hold the
 // particles just behind and ahead of slot i in the stream, as long as both
 // are from the same emission cycle and still part of the coherent flow.
-bool streamNeighbor(uint index,float age,float3 center,out float3 position){
+bool streamNeighbor(uint index,float3 root,float age,float3 center,out float3 position){
  FluidParticle q=particles[index];
- position=actor[3].xyz+q.positionAge.xyz;
+ position=root+q.positionAge.xyz;
  return q.velocityAlive.w>.5&&all(isfinite(q.positionAge))
   &&abs(q.positionAge.w-age)<3*PRIMARY_LIFETIME/BASE_PRIMARY_COUNT
   &&renderGuides[index].longLane.w>=-2&&distance(position,center)<BRIDGE_MAX;
@@ -45,9 +45,10 @@ Varying main(uint id:SV_VertexID){
  float radius=SURFACE_RADIUS*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
  bool puddle=!primary&&floorPuddle(p.densityBirth.w);
  if(puddle)radius=SURFACE_RADIUS*max(p.densityBirth.z,.1)*puddleWidth(p.densityBirth.x)*PUDDLE_SPLAT_SCALE;
- float3 center=actor[3].xyz+p.positionAge.xyz;
+ uint owner=primary?primarySlot(poolIndex):splashSlot(p.velocityAlive.w);
+ float3 root=slotRoot(owner),center=root+p.positionAge.xyz;
  float4 projected=project(center);
- bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&actor[4].w>.5&&all(isfinite(projected))&&projected.w>.05;
+ bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&slotLive(owner)&&all(isfinite(projected))&&projected.w>.05;
 
  float4 axisScale=float4(1,0,0,1);
  float fade=1;
@@ -85,8 +86,8 @@ Varying main(uint id:SV_VertexID){
     uint slot=poolIndex%BASE_PRIMARY_COUNT;
     float3 behind=0,ahead=0;
     bool hasBehind=false,hasAhead=false;
-    if(slot>0)hasBehind=streamNeighbor(poolIndex-1,p.positionAge.w,center,behind);
-    if(slot<BASE_PRIMARY_COUNT-1)hasAhead=streamNeighbor(poolIndex+1,p.positionAge.w,center,ahead);
+    if(slot>0)hasBehind=streamNeighbor(poolIndex-1,root,p.positionAge.w,center,behind);
+    if(slot<BASE_PRIMARY_COUNT-1)hasAhead=streamNeighbor(poolIndex+1,root,p.positionAge.w,center,ahead);
     float3 axis=0;float halfLength=0;
     if(hasBehind&&hasAhead){axis=ahead-behind;halfLength=max(distance(behind,center),distance(ahead,center))*.5;}
     else if(hasBehind){axis=center-behind;halfLength=length(axis)*.5;}
