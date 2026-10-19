@@ -9,7 +9,13 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+// Dev builds keep their database relative to the working directory, which a
+// browser-launched deep link does not preserve; leave the scheme to the
+// installed app instead of hijacking it.
 func RegisterNahidaURLProtocol(executable string) error {
+	if !Packaged() {
+		return nil
+	}
 	_, err := registerURLProtocol("nahida", "Nahida Desktop deep link", executable)
 	return err
 }
