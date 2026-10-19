@@ -2740,6 +2740,7 @@
               "startEnabled": "游戏启动时开启喷射",
               "autoPulse": "以自动脉冲开始",
               "strength": "初始强度",
+              "slotCount": "可同时喷射的角色数",
               "tint": "液体颜色",
               "absorptionDepth": "颜色浓度",
               "wetGround": "湿润地面亮度",
@@ -2748,6 +2749,7 @@
               "scattering": "光散射",
               "refraction": "折射",
               "hints": {
+                "slotCount": "角色越多，GPU 负担越大。",
                 "absorptionDepth": "达到原本颜色所需的液体厚度（毫米）。越小颜色越浓。",
                 "wetGround": "水洼下方地面保留的亮度。设为 1 则不会变暗。",
                 "puddleReflection": "水洼反射的最低程度。",

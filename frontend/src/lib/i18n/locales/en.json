@@ -2792,6 +2792,7 @@
               "startEnabled": "Emit when the game starts",
               "autoPulse": "Start with auto pulse",
               "strength": "Starting strength",
+              "slotCount": "Characters that emit at once",
               "tint": "Liquid color",
               "absorptionDepth": "Color depth",
               "wetGround": "Wet ground brightness",
@@ -2800,6 +2801,7 @@
               "scattering": "Light scattering",
               "refraction": "Refraction",
               "hints": {
+                "slotCount": "Each additional character costs more GPU time.",
                 "absorptionDepth": "Millimeters of liquid it takes to reach the full color. Lower is deeper.",
                 "wetGround": "How bright the ground stays under a puddle. 1 turns darkening off.",
                 "puddleReflection": "The least a puddle reflects.",

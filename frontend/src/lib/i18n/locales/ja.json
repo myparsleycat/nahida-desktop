@@ -2740,6 +2740,7 @@
               "startEnabled": "ゲーム開始時に噴射をオン",
               "autoPulse": "自動パルスで開始",
               "strength": "開始時の強さ",
+              "slotCount": "同時に放出できるキャラクター数",
               "tint": "液体の色",
               "absorptionDepth": "色の濃さ",
               "wetGround": "濡れた地面の明るさ",
@@ -2748,6 +2749,7 @@
               "scattering": "光の散乱",
               "refraction": "屈折",
               "hints": {
+                "slotCount": "人数が増えるほどGPU負荷が増えます。",
                 "absorptionDepth": "本来の色になる液体の厚さ（mm）です。小さいほど濃くなります。",
                 "wetGround": "水たまりの下の地面に残る明るさです。1で暗くなりません。",
                 "puddleReflection": "水たまりが反射する最小の度合いです。",

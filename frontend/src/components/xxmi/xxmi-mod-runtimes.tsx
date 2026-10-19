@@ -292,10 +292,15 @@ function RuntimeSettings({
             <NumberRow
               key={setting.id}
               label={label(setting.id)}
-              description={t("page.setting.xxmi.modRuntimes.settings.range", {
-                min: setting.min,
-                max: setting.max,
-              })}
+              description={[
+                hint(setting.id),
+                t("page.setting.xxmi.modRuntimes.settings.range", {
+                  min: setting.min,
+                  max: setting.max,
+                }),
+              ]
+                .filter(Boolean)
+                .join(" ")}
               value={Number(value)}
               min={setting.min}
               max={setting.max}

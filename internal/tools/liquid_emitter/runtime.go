@@ -105,6 +105,16 @@ func runtimeSettings() []modruntime.Setting {
 			Max:     7,
 			Targets: []modruntime.Target{constant("$strength_level")},
 		},
+		// Characters that emit at once; ParticleConfig.hlsl SLOT_COUNT is the most
+		// the pools hold.
+		{
+			ID:      "slotCount",
+			Kind:    modruntime.SettingInt,
+			Default: "4",
+			Min:     1,
+			Max:     8,
+			Targets: []modruntime.Target{constant("$slot_count")},
+		},
 		// The look of the screen-space fluid, which Probe.ini hands to
 		// FluidComposite.hlsl through IniParams.
 		{

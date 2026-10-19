@@ -26,6 +26,7 @@ float3 expectedRoot(uint s){
 void main(uint3 tid:SV_DispatchThreadID){
  float now=IniParams[239].y+IniParams[239].x;
  uint count=min((uint)candidates[0].x,CANDIDATE_CAPACITY);
+ uint active=clamp((uint)IniParams[253].z,1,SLOT_COUNT);
  uint match[SLOT_COUNT];
  bool taken[CANDIDATE_CAPACITY];
  [unroll]for(uint c=0;c<CANDIDATE_CAPACITY;c++)taken[c]=false;
@@ -38,7 +39,7 @@ void main(uint3 tid:SV_DispatchThreadID){
   [loop]for(uint attempt=0;attempt<SLOT_COUNT;attempt++){
    float best=1e30;uint bestSlot=NONE,bestCandidate=NONE;
    [loop]for(uint slot=0;slot<SLOT_COUNT;slot++){
-    if(!slotLive(slot)||match[slot]!=NONE)continue;
+    if(slot>=active||!slotLive(slot)||match[slot]!=NONE)continue;
     float3 expected=expectedRoot(slot);
     float id=slotAnchor(slot,4).y;
     [loop]for(uint candidate=0;candidate<count;candidate++){
@@ -57,7 +58,7 @@ void main(uint3 tid:SV_DispatchThreadID){
  // Characters no slot followed take the empty slots; the rest wait for one.
  [loop]for(uint fresh=0;fresh<count;fresh++){
   if(taken[fresh])continue;
-  [loop]for(uint empty=0;empty<SLOT_COUNT;empty++){
+  [loop]for(uint empty=0;empty<active;empty++){
    if(slotLive(empty)||match[empty]!=NONE)continue;
    match[empty]=fresh;taken[fresh]=true;break;
   }
@@ -84,8 +85,8 @@ void main(uint3 tid:SV_DispatchThreadID){
    float4 anchor=slots[base+4];
    slots[base+4]=float4(anchor.xyz,0);
    // Freeing last keeps the slot from being reused in the frame its
-   // particles are dropped.
-   if(slotLive(target)&&now-slots[base+SLOT_TRACK].x>SLOT_TIMEOUT){
+   // particles are dropped. A slot above $slot_count never waits it out.
+   if(slotLive(target)&&(target>=active||now-slots[base+SLOT_TRACK].x>SLOT_TIMEOUT)){
     slots[base+SLOT_ROOT]=0;slots[base+SLOT_PREVIOUS_ROOT]=0;
    }
   }
