@@ -69,11 +69,20 @@ func FinalPath(path string) (string, error) {
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
 
+	final, err := FinalPathOfHandle(handle)
+	if err != nil {
+		return "", &os.PathError{Op: "resolve", Path: path, Err: err}
+	}
+	return final, nil
+}
+
+// FinalPathOfHandle returns the path of an open file or directory in the form FinalPath does.
+func FinalPathOfHandle(handle windows.Handle) (string, error) {
 	buffer := make([]uint16, windows.MAX_PATH)
 	for {
 		length, err := windows.GetFinalPathNameByHandle(handle, &buffer[0], uint32(len(buffer)), 0)
 		if err != nil {
-			return "", &os.PathError{Op: "resolve", Path: path, Err: err}
+			return "", err
 		}
 		if int(length) < len(buffer) {
 			break

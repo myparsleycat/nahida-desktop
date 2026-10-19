@@ -21,6 +21,8 @@ type Options struct {
 	Prefix         string
 	DryRun         bool
 	ResetCache     bool
+	// Unreadable is told about each INI file skipped because this process may not read it.
+	Unreadable func(path string, err error)
 }
 
 type Change struct {
@@ -65,14 +67,31 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 			return Report{}, err
 		}
 	}
+	// A file the user may not read, such as one left by an older package under other permissions, would
+	// otherwise block every launch. The game usually runs elevated and may still load it unoptimized.
+	read := func(path string) (iniFile, bool, error) {
+		file, err := readINI(path)
+		if !errors.Is(err, fs.ErrPermission) {
+			return file, err == nil, err
+		}
+		if options.Unreadable != nil {
+			options.Unreadable(path, err)
+		}
+		return iniFile{}, false, nil
+	}
+
 	mods := filepath.Join(options.ImporterFolder, "Mods")
 	shaderFixes := filepath.Join(options.ImporterFolder, "ShaderFixes")
 	packagedNamespaces := map[string]bool{}
+	// A skipped library may declare a namespace a mod duplicates, so a run that misses one checks mods against
+	// an incomplete set and must not cache them as clean.
+	librariesComplete := true
 	if options.Importer == "GIMI" || options.Importer == "ZZMI" {
 		library := filepath.Join(options.ImporterFolder, "Core", options.Importer, "Libraries")
 		if err := walkINI(ctx, library, options.Exclude, func(path string, info fs.FileInfo) error {
-			file, err := readINI(path)
-			if err != nil {
+			file, ok, err := read(path)
+			if !ok {
+				librariesComplete = false
 				return err
 			}
 			if namespace := iniNamespace(file); namespace != "" {
@@ -94,8 +113,8 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 			if !options.DryRun && cache[path] == info.ModTime().UnixNano() {
 				return nil
 			}
-			file, err := readINI(path)
-			if err != nil {
+			file, ok, err := read(path)
+			if !ok {
 				return err
 			}
 			changes := inspect(file, options.Importer, folder, packagedNamespaces)
@@ -127,6 +146,9 @@ func Optimize(ctx context.Context, options Options) (Report, error) {
 		}
 		if err := apply(item.file, item.changes, options.Prefix); err != nil {
 			return Report{}, err
+		}
+		if !librariesComplete {
+			continue
 		}
 		if updated, err := os.Stat(item.file.path); err == nil {
 			cache[item.file.path] = updated.ModTime().UnixNano()

@@ -2537,6 +2537,7 @@
             "failed": "選択したImporterパッケージバージョンの適用に失敗しました",
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
             "errors": {
+              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "Importerフォルダー内のファイル「{{detail}}」へのアクセスが拒否され、アクセス許可を復元できませんでした。もう一度試して管理者権限の要求を許可するか、ファイルの所有権を取得してアクセス許可を手動でリセットしてください。",
               "XXMI_IMPORTER_FOLDER_IN_USE": "Importerフォルダーが他のプログラムで使用されています。ゲーム、XXMI Launcher、フォルダー内のファイルを開いているプログラムを終了してから、もう一度お試しください。",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "ImporterフォルダーがXXMI Launcherのインストールフォルダーです。このImporter専用のフォルダーを選択してください。"
             }

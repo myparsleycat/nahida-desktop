@@ -6,16 +6,21 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 func TestWriteFileAtomicPreservesUserEdits(t *testing.T) {
@@ -534,6 +539,178 @@ func TestImporterInstallTransactionReportsFolderInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFile(t, heldPath, "old")
+}
+
+func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, outcome := range []string{"restored", "declined", "cancelled"} {
+		t.Run(outcome, func(t *testing.T) {
+			importerRoot := filepath.Join(t.TempDir(), "ZZMI")
+			libraries := filepath.Join(importerRoot, "Core", "ZZMI", "Libraries")
+			folder := filepath.Join(libraries, "SlotFix")
+			files := []string{filepath.Join(folder, "Resources.ini"), filepath.Join(libraries, "SlotFix.ini")}
+			for _, path := range files {
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("[Loader]\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The folder and a file inside it are denied separately, so restoring the folder only reveals the
+			// file, which a later round must restore under the same consent.
+			for _, path := range append([]string{folder}, files...) {
+				if output, err := exec.Command("icacls", path, "/deny", "*"+current.Uid+":(RD)").
+					CombinedOutput(); err != nil {
+					t.Skipf("filesystem cannot deny reading: %v (%s)", err, output)
+				}
+				t.Cleanup(func() { _ = exec.Command("icacls", path, "/remove:d", "*"+current.Uid).Run() })
+			}
+			if _, err := os.ReadDir(folder); err == nil {
+				t.Skip("filesystem does not enforce the read denial")
+			}
+
+			transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "ZZMI")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = transaction.Close() }()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var requests [][]string
+			transaction.restoreAccess = func(ctx context.Context, paths []string) error {
+				requests = append(requests, paths)
+				switch outcome {
+				case "declined":
+					return errors.New("consent declined")
+				case "cancelled":
+					cancel()
+					return ctx.Err()
+				}
+				for _, path := range paths {
+					if output, err := exec.Command("icacls", path, "/remove:d", "*"+current.Uid).
+						CombinedOutput(); err != nil {
+						return fmt.Errorf("%w (%s)", err, output)
+					}
+				}
+				return nil
+			}
+
+			stage, err := transaction.prepare(ctx)
+			// In walk order, the order the copy meets them.
+			want := [][]string{{folder, files[1]}, {files[0]}}
+			if outcome != "restored" {
+				want = want[:1]
+			}
+			if !slices.EqualFunc(requests, want, slices.Equal) {
+				t.Fatalf("access requests = %v, want %v", requests, want)
+			}
+			switch outcome {
+			case "declined":
+				if want := "XXMI_IMPORTER_FILE_ACCESS_DENIED: " + folder; err == nil || err.Error() != want {
+					t.Fatalf("prepare with access left denied = %v, want %q", err, want)
+				}
+			case "cancelled":
+				if !infra.IsCancellationError(err) ||
+					strings.Contains(err.Error(), "XXMI_IMPORTER_FILE_ACCESS_DENIED") {
+					t.Fatalf("prepare cancelled during the restore = %v, want a cancellation", err)
+				}
+			default:
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = stage.Close()
+				for _, path := range files {
+					relative, _ := filepath.Rel(importerRoot, path)
+					assertFile(
+						t,
+						filepath.Join(filepath.Dir(importerRoot), transaction.stageName, relative),
+						"[Loader]\n",
+					)
+				}
+			}
+			if err := transaction.rollback(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type recordingFileGateway struct {
+	leases int
+	ops    []elevated.FileOp
+}
+
+func (g *recordingFileGateway) Acquire(context.Context) (func(), error) {
+	g.leases++
+	return func() {}, nil
+}
+
+func (g *recordingFileGateway) ApplyFiles(_ context.Context, ops []elevated.FileOp) error {
+	g.ops = append(g.ops, ops...)
+	return nil
+}
+
+func TestImporterAccessRestorerKeepsLaunchLease(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "SlotFix.ini")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gateway := &recordingLaunchHelper{}
+	service := &XXMI{elevated: gateway}
+	lease := elevated.NewFileLease(gateway)
+	defer lease.Release()
+	restore, release := service.importerAccessRestorer(lease)
+	if err := restore(t.Context(), []string{file}); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if err := lease.Hold(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.leases != 1 || gateway.released != 0 {
+		t.Fatalf(
+			"after installation: leases = %d, released = %d; want one held launch lease",
+			gateway.leases,
+			gateway.released,
+		)
+	}
+}
+
+// The helper refuses a path that Windows resolves elsewhere, so a short 8.3 alias or a junction in the
+// importer path must reach it resolved.
+func TestRestoreImporterAccessSendsResolvedPaths(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "Libraries")
+	if err := os.Mkdir(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, folder).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v (%s)", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "SlotFix.ini"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	final, err := platform.FinalPath(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gateway := &recordingFileGateway{}
+	lease := elevated.NewFileLease(gateway)
+	defer lease.Release()
+	if err := (&XXMI{}).restoreImporterAccess(
+		context.Background(), lease, []string{filepath.Join(link, "SlotFix.ini")},
+	); err != nil {
+		t.Fatal(err)
+	}
+	want := []elevated.FileOp{{Kind: elevated.FileOpResetAccess, Target: filepath.Join(final, "SlotFix.ini")}}
+	if gateway.leases != 1 || !slices.Equal(gateway.ops, want) {
+		t.Fatalf("leases = %d, ops = %v; want 1 lease for %v", gateway.leases, gateway.ops, want)
+	}
 }
 
 func TestSaveImporterConfigRejectsLauncherRoot(t *testing.T) {

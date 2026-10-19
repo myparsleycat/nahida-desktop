@@ -582,7 +582,7 @@ func TestAutoUpdateLeavesNotifyingXXMILibrariesPinInPlace(t *testing.T) {
 		}
 	}
 
-	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil {
+	if err := x.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil {
 		t.Fatalf("notifying pin triggered auto-install: %v", err)
 	}
 	stored, err := x.GetImporterConfig(ctx, "GIMI")
@@ -681,21 +681,21 @@ func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil || checks != 1 {
+	if err := x.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil || checks != 1 {
 		t.Fatalf("default auto-update: checks = %d, err = %v", checks, err)
 	}
 	disabled := "false"
 	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil || checks != 1 {
+	if err := x.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil || checks != 1 {
 		t.Fatalf("disabled auto-update: checks = %d, err = %v", checks, err)
 	}
 	notify := "notify"
 	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &notify); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil || checks != 1 {
+	if err := x.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil || checks != 1 {
 		t.Fatalf("asking auto-update: checks = %d, err = %v", checks, err)
 	}
 }
@@ -788,7 +788,7 @@ func TestAutoUpdateLeavesPinnedPackagesUntouched(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := x.autoUpdateForLaunch(ctx, "GIMI"); err != nil {
+	if err := x.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil {
 		t.Fatalf("pinned packages triggered auto-install: %v", err)
 	}
 	stored, err := x.GetImporterConfig(ctx, "GIMI")

@@ -2589,6 +2589,7 @@
             "failed": "Failed to apply the selected importer package version",
             "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again.",
             "errors": {
+              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "Access to the file \"{{detail}}\" in the importer folder was denied, and its permissions could not be restored. Try again and allow the administrator request, or take ownership of the file and reset its permissions yourself.",
               "XXMI_IMPORTER_FOLDER_IN_USE": "The importer folder is in use by another program. Close the game, XXMI Launcher, and any program that has files in the folder open, then try again.",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "The importer folder is an XXMI Launcher installation folder. Choose a separate folder for this importer."
             }

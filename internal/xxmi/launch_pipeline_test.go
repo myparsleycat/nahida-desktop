@@ -1,24 +1,32 @@
 package xxmi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 type recordingLaunchHelper struct {
-	spec     inject.LaunchSpec
-	calls    int
-	warnings []string
-	leases   int
-	released int
+	spec       inject.LaunchSpec
+	calls      int
+	warnings   []string
+	leases     int
+	released   int
+	applyFiles func(context.Context, []elevated.FileOp) error
 }
 
 func (h *recordingLaunchHelper) Acquire(context.Context) (func(), error) {
@@ -32,11 +40,23 @@ func (h *recordingLaunchHelper) LaunchXXMI(_ context.Context, spec inject.Launch
 	return inject.LaunchResult{PID: 42, InjectionVerified: true, Warnings: h.warnings}, nil
 }
 
-func (*recordingLaunchHelper) ApplyFiles(context.Context, []elevated.FileOp) error { return nil }
+func (h *recordingLaunchHelper) ApplyFiles(ctx context.Context, ops []elevated.FileOp) error {
+	if h.applyFiles != nil {
+		return h.applyFiles(ctx, ops)
+	}
+	return nil
+}
 
 func (*recordingLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
 
 func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
+	for _, restore := range []string{"unused", "restored", "failed"} {
+		t.Run(restore, func(t *testing.T) { testLegacyLaunchPipeline(t, restore) })
+	}
+}
+
+func testLegacyLaunchPipeline(t *testing.T, restore string) {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("USERPROFILE", home)
 	ctx := context.Background()
@@ -104,14 +124,53 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	helper := &recordingLaunchHelper{warnings: []string{"Could not verify legacy DLL in game process"}}
+	locked := filepath.Join(cfg.ImporterFolder, "Mods", "locked.ini")
+	if restore != "unused" {
+		if err := os.MkdirAll(filepath.Dir(locked), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for name, content := range map[string]string{"locked.ini": "[TextureOverrideTest]\n", "rogue.ini": "[Loader]\n"} {
+			if err := os.WriteFile(filepath.Join(filepath.Dir(locked), name), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		user, err := windows.GetCurrentProcessToken().GetTokenUser()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sid := "*" + user.User.Sid.String()
+		if output, err := exec.Command("icacls", locked, "/deny", sid+":(RD)").CombinedOutput(); err != nil {
+			t.Fatalf("deny fixture access: %v (%s)", err, output)
+		}
+		t.Cleanup(func() { _ = exec.Command("icacls", locked, "/remove:d", sid).Run() })
+		helper.applyFiles = func(_ context.Context, ops []elevated.FileOp) error {
+			if len(ops) != 1 || ops[0].Kind != elevated.FileOpResetAccess {
+				t.Fatalf("unexpected restore operations: %v", ops)
+			}
+			if restore == "failed" {
+				return errors.New("fixture access restore rejected")
+			}
+			output, err := exec.Command("icacls", locked, "/remove:d", sid).CombinedOutput()
+			if err != nil {
+				t.Fatalf("restore fixture access: %v (%s)", err, output)
+			}
+			return nil
+		}
+	}
+	var logs bytes.Buffer
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true})
+	optimized := 0
 	var stages []string
 	var warnings []string
-	service := NewWithOptions(Options{Elevated: helper, EventEmit: func(name string, data ...any) {
+	service := NewWithOptions(Options{Elevated: helper, Log: log, EventEmit: func(name string, data ...any) {
 		if name == "xxmi:launch-progress" {
 			payload := data[0].(map[string]any)
 			stages = append(stages, payload["stage"].(string))
 			if warning, ok := payload["warning"].(string); ok {
 				warnings = append(warnings, warning)
+			}
+			if count, ok := payload["optimized"].(int); ok {
+				optimized = count
 			}
 		}
 	}})
@@ -133,11 +192,25 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	want := []string{"pre-launch", "resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch",
 		"ensure-runtime", "deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer",
 		"game-tweaks", "elevate", "inject-launch", "inject-launch", "post-load", "finish"}
+	if restore == "failed" {
+		want = slices.Insert(want, 11, "ini-optimizer")
+	}
 	if !slices.Equal(stages, want) {
 		t.Fatalf("launch stages = %v; want %v", stages, want)
 	}
-	if !slices.Equal(warnings, helper.warnings) {
+	if restore == "failed" {
+		if len(warnings) != 2 || !strings.Contains(warnings[0], locked) || warnings[1] != helper.warnings[0] {
+			t.Fatalf("launch warnings = %v, want skipped file and helper warning", warnings)
+		}
+		if !strings.Contains(logs.String(), "fixture access restore rejected") ||
+			!strings.Contains(logs.String(), "restore-importer-access") {
+			t.Fatalf("restore failure lost its cause: %s", logs.String())
+		}
+	} else if !slices.Equal(warnings, helper.warnings) {
 		t.Fatalf("launch warnings = %v; want %v", warnings, helper.warnings)
+	}
+	if restore != "unused" && optimized != 1 {
+		t.Fatalf("optimized = %d, want the change applied before the access restore", optimized)
 	}
 	if helper.calls != 1 || helper.spec.Mode != inject.ModeLegacy || helper.spec.StartExe != gameExe ||
 		helper.spec.ParentExe != gamesExe || helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
