@@ -20,6 +20,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/setting"
@@ -52,6 +53,7 @@ type runtime struct {
 	transfer          *transfer.Transfer
 	gamebanana        *gamebanana.GameBanana
 	mod               *mod.Mod
+	modRuntime        *modruntime.Manager
 	xxmi              *xxmi.XXMI
 	reshade           *reshade.ReShade
 	tools             *tools.Tools
@@ -189,6 +191,9 @@ func newRuntime() *runtime {
 		GameBanana: gameBananaService, Native: native, Download: download, Elevated: elevatedFiles,
 	})
 	download.UseClient(httpClient)
+	modRuntime := modruntime.New(modruntime.Options{
+		Log: log, Mod: modService, Trash: shell.Trash,
+	})
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
 	updaterService := infra.NewUpdater()
@@ -227,6 +232,7 @@ func newRuntime() *runtime {
 		transfer:   transferService,
 		gamebanana: gameBananaService,
 		mod:        modService,
+		modRuntime: modRuntime,
 		xxmi:       xxmiService,
 		reshade:    reshadeService,
 		tools: tools.NewWithOptions(tools.Options{
@@ -381,6 +387,7 @@ func (rt *runtime) services() []application.Service {
 		newLoggedService(rt, "Input", rt.input),
 		application.NewService(rt.log),
 		newGuardedService(rt, "Mod", rt.mod, waitForAllMethods),
+		newGuardedService(rt, "ModRuntime", rt.modRuntime, waitForAllMethods),
 		application.NewService(rt.notifications),
 		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
 		newGuardedService(rt, "ReShade", rt.reshade, waitForAllMethods),

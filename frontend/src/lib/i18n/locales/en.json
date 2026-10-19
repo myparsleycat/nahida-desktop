@@ -2594,6 +2594,60 @@
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "The importer folder is an XXMI Launcher installation folder. Choose a separate folder for this importer."
             }
           }
+        },
+        "modRuntimes": {
+          "tab": "Runtimes",
+          "title": "Runtimes",
+          "description": "Global mods that tools install into this game's Mods folder, kept together in the {{folder}} group.",
+          "noModsFolder": "No game uses this importer yet, so there is no Mods folder to install runtimes into.",
+          "versions": "Installed {{installed}} · bundled {{bundled}}",
+          "bundled": "Bundled {{bundled}}",
+          "state": {
+            "missing": "Not installed",
+            "current": "Installed",
+            "outdated": "Update available",
+            "modified": "Files changed",
+            "disabled": "Disabled",
+            "foreign": "Another copy found"
+          },
+          "action": {
+            "missing": "Install",
+            "outdated": "Update",
+            "modified": "Repair",
+            "disabled": "Enable"
+          },
+          "done": {
+            "missing": "{{name}} installed.",
+            "outdated": "{{name}} updated.",
+            "modified": "{{name}} repaired.",
+            "disabled": "{{name}} enabled."
+          },
+          "disable": "Disable",
+          "disabled": "{{name}} disabled.",
+          "openFolder": "Open folder",
+          "remove": "Remove",
+          "removed": "{{name}} moved to the recycle bin.",
+          "removeTitle": "Remove {{name}}?",
+          "removeDescription": "The runtime folder moves to the recycle bin together with the data its tool keeps there, such as liquid emitter profiles. Mods that use it stop working until it is installed again. To turn it off for a while, disable it instead.",
+          "foreignDescription": "Another copy of {{name}} is enabled at {{path}}. Disable or remove that copy first; the game would load both.",
+          "errors": {
+            "MOD_RUNTIME_UNKNOWN": "This importer has no runtime named {{detail}}.",
+            "MOD_RUNTIME_NO_MODS_FOLDER": "No game uses {{detail}} yet, so there is no Mods folder to install into.",
+            "MOD_RUNTIME_FOREIGN": "Another copy is enabled at {{detail}}. Disable or remove it first.",
+            "MOD_RUNTIME_DISABLED": "The runtime at {{detail}} could not be enabled.",
+            "MOD_RUNTIME_NOT_INSTALLED": "{{detail}} is not installed.",
+            "MOD_RUNTIME_INVALID_SETTING": "Invalid setting value: {{detail}}"
+          },
+          "settings": {
+            "title": "Settings",
+            "hint": "Saving writes the settings into the runtime files. If the game is running, press F10 to reload.",
+            "repairHint": "Saving also updates or repairs the runtime files.",
+            "range": "From {{min}} to {{max}}",
+            "keyDescription": "Press the key combination to use in game.",
+            "reset": "Reset to defaults",
+            "save": "Save settings",
+            "saved": "{{name}} settings saved."
+          }
         }
       },
       "acc": {

@@ -127,9 +127,14 @@ func TestRuntimeRegistersMenuMakerThroughTools(t *testing.T) {
 	if rt.feedback == nil {
 		t.Fatal("Feedback service is not initialized")
 	}
-	if len(rt.services()) != 23 {
-		t.Fatalf("services = %d, want 23 including Nahida Agent, Backup, CDN trace, Feedback, Input, ReShade, and Screen",
-			len(rt.services()))
+	if rt.modRuntime == nil {
+		t.Fatal("ModRuntime service is not initialized")
+	}
+	if len(rt.services()) != 24 {
+		t.Fatalf(
+			"services = %d, want 24 including Nahida Agent, Backup, CDN trace, Feedback, Input, ModRuntime, ReShade, and Screen",
+			len(rt.services()),
+		)
 	}
 }
 

@@ -80,6 +80,7 @@ const config = {
 
 vi.mock("@bindings/xxmi", () => ({ XXMI: xxmi }));
 vi.mock("@bindings/platform", () => ({ Dialog: {} }));
+vi.mock("@bindings/modruntime", () => ({ Manager: {} }));
 vi.mock("@renderer/wails/file-drop", () => ({
   FileDropTargetID: { xxmiSharedCustomDll: "shared-dll", xxmiImporterCustomDll: "importer-dll" },
   useWindowFileDrop: (listener: typeof fileDrop.drop) => {
@@ -111,7 +112,9 @@ vi.mock("@tanstack/react-query", () => ({
                 ? [{ version: "1.7.5" }, { version: "1.7.6" }]
                 : queryKey[0] === "xxmi:mod-folder"
                   ? { path: "C:\\XXMI\\GIMI\\Mods", linkTarget: "", targetMissing: false }
-                  : [],
+                  : queryKey[0] === "mod-runtime"
+                    ? { modsRoot: "", runtimes: [] }
+                    : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));

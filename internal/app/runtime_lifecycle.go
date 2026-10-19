@@ -155,6 +155,9 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 		rt.mod.UseClient(store.DB)
 		rt.mod.UseSettings(rt.setting)
 	}
+	if rt.modRuntime != nil {
+		rt.modRuntime.UseClient(store.DB)
+	}
 	if rt.native != nil {
 		rt.native.StartFocusTracking()
 	}

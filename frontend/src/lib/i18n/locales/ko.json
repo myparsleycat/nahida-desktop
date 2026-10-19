@@ -2542,6 +2542,60 @@
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "임포터 폴더가 XXMI Launcher 설치 폴더입니다. 이 임포터 전용 폴더를 따로 선택하세요."
             }
           }
+        },
+        "modRuntimes": {
+          "tab": "런타임",
+          "title": "런타임",
+          "description": "도구가 이 게임의 Mods 폴더에 설치하는 전역 모드입니다. {{folder}} 그룹에 모아 둡니다.",
+          "noModsFolder": "이 임포터를 쓰는 게임이 아직 없어 런타임을 설치할 Mods 폴더가 없습니다.",
+          "versions": "설치 버전 {{installed}} · 포함 버전 {{bundled}}",
+          "bundled": "포함 버전 {{bundled}}",
+          "state": {
+            "missing": "설치 안 됨",
+            "current": "설치됨",
+            "outdated": "업데이트 필요",
+            "modified": "파일 변경됨",
+            "disabled": "비활성화됨",
+            "foreign": "다른 사본 있음"
+          },
+          "action": {
+            "missing": "설치",
+            "outdated": "업데이트",
+            "modified": "복구",
+            "disabled": "활성화"
+          },
+          "done": {
+            "missing": "{{name}}을(를) 설치했습니다.",
+            "outdated": "{{name}}을(를) 업데이트했습니다.",
+            "modified": "{{name}}을(를) 복구했습니다.",
+            "disabled": "{{name}}을(를) 활성화했습니다."
+          },
+          "disable": "비활성화",
+          "disabled": "{{name}}을(를) 비활성화했습니다.",
+          "openFolder": "폴더 열기",
+          "remove": "제거",
+          "removed": "{{name}}을(를) 휴지통으로 옮겼습니다.",
+          "removeTitle": "{{name}}을(를) 제거할까요?",
+          "removeDescription": "런타임 폴더를 휴지통으로 옮깁니다. 액체 분사 프로필처럼 도구가 그 안에 저장한 데이터도 함께 옮겨지고, 이 런타임을 쓰는 모드는 다시 설치할 때까지 동작하지 않습니다. 잠시 끄려면 비활성화를 사용하세요.",
+          "foreignDescription": "{{path}}에 다른 {{name}} 사본이 활성화되어 있습니다. 게임이 둘 다 불러오므로 그 사본을 먼저 비활성화하거나 제거하세요.",
+          "errors": {
+            "MOD_RUNTIME_UNKNOWN": "이 임포터에는 {{detail}} 런타임이 없습니다.",
+            "MOD_RUNTIME_NO_MODS_FOLDER": "{{detail}}을(를) 쓰는 게임이 아직 없어 설치할 Mods 폴더가 없습니다.",
+            "MOD_RUNTIME_FOREIGN": "{{detail}}에 다른 사본이 활성화되어 있습니다. 먼저 비활성화하거나 제거하세요.",
+            "MOD_RUNTIME_DISABLED": "{{detail}}의 런타임을 활성화하지 못했습니다.",
+            "MOD_RUNTIME_NOT_INSTALLED": "{{detail}}이(가) 설치되어 있지 않습니다.",
+            "MOD_RUNTIME_INVALID_SETTING": "설정 값이 올바르지 않습니다: {{detail}}"
+          },
+          "settings": {
+            "title": "설정",
+            "hint": "저장하면 런타임 파일에 바로 반영됩니다. 게임이 켜져 있으면 F10으로 다시 불러오세요.",
+            "repairHint": "저장하면 런타임 파일도 함께 업데이트·복구됩니다.",
+            "range": "{{min}}~{{max}}",
+            "keyDescription": "게임에서 쓸 키 조합을 누르세요.",
+            "reset": "기본값으로",
+            "save": "설정 저장",
+            "saved": "{{name}} 설정을 저장했습니다."
+          }
         }
       },
       "acc": {

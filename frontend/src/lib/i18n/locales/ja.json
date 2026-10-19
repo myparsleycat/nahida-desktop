@@ -2542,6 +2542,60 @@
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "ImporterフォルダーがXXMI Launcherのインストールフォルダーです。このImporter専用のフォルダーを選択してください。"
             }
           }
+        },
+        "modRuntimes": {
+          "tab": "ランタイム",
+          "title": "ランタイム",
+          "description": "ツールがこのゲームの Mods フォルダーにインストールするグローバル Mod です。{{folder}} グループにまとめて置きます。",
+          "noModsFolder": "このインポーターを使うゲームがまだないため、ランタイムをインストールする Mods フォルダーがありません。",
+          "versions": "インストール済み {{installed}} · 同梱 {{bundled}}",
+          "bundled": "同梱 {{bundled}}",
+          "state": {
+            "missing": "未インストール",
+            "current": "インストール済み",
+            "outdated": "更新が必要",
+            "modified": "ファイル変更あり",
+            "disabled": "無効",
+            "foreign": "別のコピーあり"
+          },
+          "action": {
+            "missing": "インストール",
+            "outdated": "更新",
+            "modified": "修復",
+            "disabled": "有効化"
+          },
+          "done": {
+            "missing": "{{name}} をインストールしました。",
+            "outdated": "{{name}} を更新しました。",
+            "modified": "{{name}} を修復しました。",
+            "disabled": "{{name}} を有効化しました。"
+          },
+          "disable": "無効化",
+          "disabled": "{{name}} を無効化しました。",
+          "openFolder": "フォルダーを開く",
+          "remove": "削除",
+          "removed": "{{name}} をごみ箱に移動しました。",
+          "removeTitle": "{{name}} を削除しますか？",
+          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体エミッターのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う Mod は再インストールするまで動作しません。一時的に止めるには無効化を使ってください。",
+          "foreignDescription": "{{path}} で別の {{name}} のコピーが有効になっています。ゲームが両方を読み込むため、先にそのコピーを無効化または削除してください。",
+          "errors": {
+            "MOD_RUNTIME_UNKNOWN": "このインポーターには {{detail}} というランタイムがありません。",
+            "MOD_RUNTIME_NO_MODS_FOLDER": "{{detail}} を使うゲームがまだないため、インストール先の Mods フォルダーがありません。",
+            "MOD_RUNTIME_FOREIGN": "{{detail}} で別のコピーが有効になっています。先に無効化または削除してください。",
+            "MOD_RUNTIME_DISABLED": "{{detail}} のランタイムを有効化できませんでした。",
+            "MOD_RUNTIME_NOT_INSTALLED": "{{detail}} はインストールされていません。",
+            "MOD_RUNTIME_INVALID_SETTING": "設定値が正しくありません: {{detail}}"
+          },
+          "settings": {
+            "title": "設定",
+            "hint": "保存するとランタイムファイルにすぐ反映されます。ゲーム起動中は F10 で再読み込みしてください。",
+            "repairHint": "保存するとランタイムファイルも更新・修復されます。",
+            "range": "{{min}}〜{{max}}",
+            "keyDescription": "ゲーム内で使うキーの組み合わせを押してください。",
+            "reset": "既定値に戻す",
+            "save": "設定を保存",
+            "saved": "{{name}} の設定を保存しました。"
+          }
         }
       },
       "acc": {
