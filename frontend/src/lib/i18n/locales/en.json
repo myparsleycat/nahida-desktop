@@ -1797,7 +1797,7 @@
         },
         "position": {
           "title": "Position",
-          "hint": "Source mesh coordinates in metres (Z is up)."
+          "hint": "Source mesh coordinates in metres (Z is up)"
         },
         "offset": {
           "title": "Move from surface (mm)",
@@ -1809,7 +1809,7 @@
         },
         "trajectory": {
           "label": "Preview default-strength path",
-          "hint": "The mean path at default strength, shown at 1/10 speed for 0.48 s. Collision, movement and pulses are not simulated."
+          "hint": "Mean path at default strength (1/10 speed, 0.48 s) · collision, movement and pulses not simulated"
         },
         "remove_all": {
           "button": "Remove all",
@@ -1828,12 +1828,12 @@
           "hint": "Applies to every emitter of this mod on top of the runtime settings. Press F10 in game after saving.",
           "needs_emitter": "Apply an emitter first to give this character its own liquid.",
           "strength": "Strength offset",
-          "strength_hint": "Levels added to the current in-game strength. The result stays between 0 and 7.",
+          "strength_hint": "Levels added to the current in-game strength · result stays within 0–7",
           "custom_color": "Use its own color",
           "custom_color_hint": "When off, the color and color depth from the runtime settings are used.",
           "tint": "Liquid color",
           "absorption": "Color depth",
-          "absorption_hint": "Millimeters of liquid it takes to reach the full color. Lower is deeper.",
+          "absorption_hint": "Millimeters of liquid it takes to reach the full color · lower is deeper",
           "reset": "Follow runtime settings",
           "save": "Save liquid",
           "saved": "Saved this character's liquid. Press F10 in game to reload mods."
@@ -2731,7 +2731,7 @@
         "modRuntimes": {
           "tab": "Runtimes",
           "title": "Runtimes",
-          "description": "Global mods that tools install into this game's Mods folder, kept together in the {{folder}} group.",
+          "description": "Global mods that tools install into the {{folder}} group of this game's Mods folder",
           "noModsFolder": "No game uses this importer yet, so there is no Mods folder to install runtimes into.",
           "versions": "Installed {{installed}} · bundled {{bundled}}",
           "bundled": "Bundled {{bundled}}",
@@ -2764,7 +2764,7 @@
           "removeDescription": "The runtime folder moves to the recycle bin together with the data its tool keeps there, such as liquid emitter profiles. Mods that use it stop working until it is installed again. To turn it off for a while, disable it instead.",
           "foreignDescription": "Another copy of {{name}} is enabled at {{path}}. Disable or remove that copy first; the game would load both.",
           "usedBy": {
-            "LiquidGravityProbe": "Used by the liquid emitter tool."
+            "LiquidGravityProbe": "Used by the liquid emitter tool"
           },
           "errors": {
             "MOD_RUNTIME_UNKNOWN": "This importer has no runtime named {{detail}}.",
@@ -2802,12 +2802,12 @@
               "refraction": "Refraction",
               "hints": {
                 "slotCount": "Each additional character costs more GPU time.",
-                "absorptionDepth": "Millimeters of liquid it takes to reach the full color. Lower is deeper.",
-                "wetGround": "How bright the ground stays under a puddle. 1 turns darkening off.",
-                "puddleReflection": "The least a puddle reflects.",
-                "streamReflection": "How strongly the stream and drops reflect.",
-                "scattering": "How much of its own color the liquid shows over dark backgrounds.",
-                "refraction": "How far the liquid bends what is behind it."
+                "absorptionDepth": "Millimeters of liquid it takes to reach the full color · lower is deeper",
+                "wetGround": "How bright the ground stays under a puddle · 1 turns darkening off",
+                "puddleReflection": "The least a puddle reflects",
+                "streamReflection": "How strongly the stream and drops reflect",
+                "scattering": "How much of its own color the liquid shows over dark backgrounds",
+                "refraction": "How far the liquid bends what is behind it"
               }
             }
           }

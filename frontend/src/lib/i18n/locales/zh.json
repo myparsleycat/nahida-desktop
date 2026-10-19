@@ -1797,7 +1797,7 @@
         },
         "position": {
           "title": "位置",
-          "hint": "原始网格坐标,单位 m(Z 轴向上)。"
+          "hint": "原始网格坐标 · 单位 m（Z 轴向上）"
         },
         "offset": {
           "title": "离开表面 (mm)",
@@ -1809,7 +1809,7 @@
         },
         "trajectory": {
           "label": "预览默认强度轨迹",
-          "hint": "以 1/10 速度显示默认强度下 0.48 秒的平均路径。不模拟碰撞、移动和发力。"
+          "hint": "默认强度下的平均路径（1/10 速度，0.48 秒） · 不模拟碰撞、移动和脉冲"
         },
         "remove_all": {
           "button": "全部移除",
@@ -1828,12 +1828,12 @@
           "hint": "在运行时设置的基础上应用于此模组的所有喷射点。保存后请在游戏中按 F10。",
           "needs_emitter": "请先应用喷射点，才能为该角色单独设置液体。",
           "strength": "强度修正",
-          "strength_hint": "在游戏内当前强度上增加的级数，结果保持在 0~7 之间。",
+          "strength_hint": "在游戏内当前强度上增加的级数 · 结果保持在 0~7",
           "custom_color": "使用专属颜色",
           "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
           "tint": "液体颜色",
           "absorption": "颜色浓度",
-          "absorption_hint": "达到原本颜色所需的液体厚度（毫米）。越小颜色越浓。",
+          "absorption_hint": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
           "reset": "跟随运行时设置",
           "save": "保存液体设置",
           "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。"
@@ -2679,7 +2679,7 @@
         "modRuntimes": {
           "tab": "运行时",
           "title": "运行时",
-          "description": "工具安装到此游戏 Mods 文件夹中的全局 Mod，统一放在 {{folder}} 分组中。",
+          "description": "工具安装到此游戏 Mods 文件夹 {{folder}} 分组中的全局 Mod",
           "noModsFolder": "还没有游戏使用此导入器，因此没有可安装运行时的 Mods 文件夹。",
           "versions": "已安装 {{installed}} · 内置 {{bundled}}",
           "bundled": "内置 {{bundled}}",
@@ -2712,7 +2712,7 @@
           "removeDescription": "运行时文件夹将移至回收站，工具保存在其中的数据（例如液体喷射配置）也会一并移走；使用此运行时的 Mod 在重新安装前将无法工作。如需暂时关闭，请改用禁用。",
           "foreignDescription": "{{path}} 中启用了另一个 {{name}} 副本。游戏会同时加载两者，请先禁用或移除该副本。",
           "usedBy": {
-            "LiquidGravityProbe": "由液体喷射工具使用。"
+            "LiquidGravityProbe": "由液体喷射工具使用"
           },
           "errors": {
             "MOD_RUNTIME_UNKNOWN": "此导入器没有名为 {{detail}} 的运行时。",
@@ -2750,12 +2750,12 @@
               "refraction": "折射",
               "hints": {
                 "slotCount": "角色越多，GPU 负担越大。",
-                "absorptionDepth": "达到原本颜色所需的液体厚度（毫米）。越小颜色越浓。",
-                "wetGround": "水洼下方地面保留的亮度。设为 1 则不会变暗。",
-                "puddleReflection": "水洼反射的最低程度。",
-                "streamReflection": "水流和水滴的反射强度。",
-                "scattering": "在深色背景上液体自身颜色的显现程度。",
-                "refraction": "背后景物被折射的程度。"
+                "absorptionDepth": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
+                "wetGround": "水洼下方地面保留的亮度 · 设为 1 则不变暗",
+                "puddleReflection": "水洼反射的最低强度",
+                "streamReflection": "水流和水滴的反射强度",
+                "scattering": "在深色背景上液体自身颜色的显现程度",
+                "refraction": "背后景物被折射的程度"
               }
             }
           }
