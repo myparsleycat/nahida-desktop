@@ -346,6 +346,9 @@ function ThreeModelScene({
     }
     const element = gl.domElement;
     let pressed: { x: number; y: number } | null = null;
+    // A pick resolves after its index buffer loads, so only the latest click of
+    // this model may report.
+    let latestPick = 0;
     const handleDown = (event: PointerEvent) => {
       pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
     };
@@ -356,6 +359,7 @@ function ThreeModelScene({
       if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) {
         return;
       }
+      const pick = ++latestPick;
       const rect = element.getBoundingClientRect();
       const hit = raycastModelViewerSurface(
         modelRoot,
@@ -368,12 +372,17 @@ function ThreeModelScene({
         return;
       }
       void resolveModelViewerSurfacePick(hit, uint32BufferCacheRef.current)
-        .then((pick) => onSurfacePickRef.current?.(pick))
-        .catch((error: unknown) => onErrorRef.current?.(error));
+        .then((resolved) => {
+          if (pick === latestPick) onSurfacePickRef.current?.(resolved);
+        })
+        .catch((error: unknown) => {
+          if (pick === latestPick) onErrorRef.current?.(error);
+        });
     };
     element.addEventListener("pointerdown", handleDown);
     element.addEventListener("pointerup", handleUp);
     return () => {
+      latestPick = -1;
       element.removeEventListener("pointerdown", handleDown);
       element.removeEventListener("pointerup", handleUp);
     };
