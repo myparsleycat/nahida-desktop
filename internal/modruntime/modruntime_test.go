@@ -439,3 +439,117 @@ func TestUpdateRemovesStaleFilesOnlyBelowRoot(t *testing.T) {
 		}
 	}
 }
+
+// 3DMigoto recompiles a custom shader only when its own source is newer than
+// the cached .bin, so an update that changes just an included file must drop
+// the caches of every shader that includes it, also when it is retried after
+// an interruption, and never a cache outside the install folder.
+func TestUpdateDropsCachesOfIncludingShaders(t *testing.T) {
+	manager, modsRoot := newTestManager(t)
+	ctx := context.Background()
+	root := installRoot(modsRoot, "Probe")
+	files := manager.specs[0].Files.(fstest.MapFS)
+	files["shaders/Common.hlsl"] = &fstest.MapFile{Data: []byte("// v1")}
+	files["shaders/b.hlsl"] = &fstest.MapFile{Data: []byte("#include \"common.hlsl\"\n")}
+	files["shaders/c.hlsl"] = &fstest.MapFile{Data: []byte("#define X\n#include \"b.hlsl\"\n")}
+	files["shaders/z.ini"] = &fstest.MapFile{Data: []byte("; v1")}
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); err != nil {
+		t.Fatal(err)
+	}
+	caches := map[string]bool{
+		"a.ps_5_0.8000.bin": true,
+		"b.ps_5_0.8000.bin": false,
+		"b.vs_5_0.8000.bin": false,
+		"c.ps_5_0.8000.bin": false,
+		"bb.ps_5_0.bin":     true,
+	}
+	for name := range caches {
+		if err := os.WriteFile(filepath.Join(root, "shaders", name), []byte("cache"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A shader the last install listed below a junction to another folder.
+	outside := t.TempDir()
+	outsideCache := filepath.Join(outside, "keep.ps_5_0.8000.bin")
+	if err := os.WriteFile(outsideCache, []byte("cache"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, outside).CombinedOutput(); err != nil {
+		t.Logf("filesystem cannot create a junction, skipping that case: %v (%s)", err, output)
+	} else {
+		manifestPath := filepath.Join(root, manifestFile)
+		previous, err := readManifest(manifestPath)
+		if err != nil || previous == nil {
+			t.Fatalf("manifest = %+v (err=%v)", previous, err)
+		}
+		previous.Files["link/keep.hlsl"] = "stale"
+		encoded, err := encodeJSON(previous)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(manifestPath, encoded, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The update stops after Common.hlsl is replaced, so the retry finds it
+	// up to date while the caches built from its old content remain.
+	files["shaders/Common.hlsl"] = &fstest.MapFile{Data: []byte("// v2")}
+	files["shaders/z.ini"] = &fstest.MapFile{Data: []byte("; v2")}
+	manager.specs[0].Version = "3"
+	failing := errors.New("disk full")
+	manager.writeFile = func(name string, data []byte) error {
+		if filepath.Base(name) == "z.ini" {
+			return failing
+		}
+		return writeAtomic(name, data)
+	}
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); !errors.Is(err, failing) {
+		t.Fatalf("interrupted update = %v", err)
+	}
+	manager.writeFile = writeAtomic
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); err != nil {
+		t.Fatal(err)
+	}
+	for name, kept := range caches {
+		_, err := os.Stat(filepath.Join(root, "shaders", name))
+		if exists := err == nil; exists != kept {
+			t.Errorf("%s exists = %v, want %v (err=%v)", name, exists, kept, err)
+		}
+	}
+	if _, err := os.Stat(outsideCache); err != nil {
+		t.Errorf("a cache outside the install folder was removed: %v", err)
+	}
+
+	// A repair of the same version stops after Common.hlsl is restored; the
+	// manifest then matches the disk, so only the recorded progress can tell
+	// the retry that the cache came from the edited include.
+	shaders := filepath.Join(root, "shaders")
+	for name, data := range map[string]string{"Common.hlsl": "// edited", "z.ini": "; edited"} {
+		if err := os.WriteFile(filepath.Join(shaders, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	editedCache := filepath.Join(shaders, "b.ps_5_0.8000.bin")
+	if err := os.WriteFile(editedCache, []byte("cache"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager.writeFile = func(name string, data []byte) error {
+		if filepath.Base(name) == "z.ini" {
+			return failing
+		}
+		return writeAtomic(name, data)
+	}
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); !errors.Is(err, failing) {
+		t.Fatalf("interrupted repair = %v", err)
+	}
+	manager.writeFile = writeAtomic
+	if status, err := manager.Install(ctx, "EFMI", "Probe"); err != nil || status.State != StateCurrent {
+		t.Fatalf("repair = %+v (err=%v)", status, err)
+	}
+	if _, err := os.Stat(editedCache); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the cache of the edited include survived the repair (err=%v)", err)
+	}
+}

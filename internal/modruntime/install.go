@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,7 +22,12 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-var disabledPrefixRE = regexp.MustCompile(`(?i)^disabled[\s_-]*`)
+var (
+	disabledPrefixRE = regexp.MustCompile(`(?i)^disabled[\s_-]*`)
+	// includeRE matches a quoted HLSL include, which resolves beside the file
+	// that has it.
+	includeRE = regexp.MustCompile(`(?m)^[[:blank:]]*#[[:blank:]]*include[[:blank:]]*"([^"]+)"`)
+)
 
 type manifest struct {
 	Name           string `json:"name,omitempty"`
@@ -30,6 +36,10 @@ type manifest struct {
 	// and read as the base one.
 	Variant string            `json:"variant,omitempty"`
 	Files   map[string]string `json:"files"`
+	// PendingShaders are the shaders, by slash path, whose compiled caches an
+	// unfinished install has yet to remove. A retry may find their changed
+	// sources already written and could not tell otherwise.
+	PendingShaders []string `json:"pendingShaders,omitempty"`
 }
 
 func (m manifest) variant() string {
@@ -106,6 +116,9 @@ func inspectAt(root string, sel selection) (Status, error) {
 		return status, nil
 	}
 	status.State = StateCurrent
+	if len(found.PendingShaders) > 0 {
+		status.State = StateModified
+	}
 	for name, hash := range found.Files {
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil || digest(data) != hash {
@@ -282,23 +295,33 @@ func (m *Manager) migrate(modsRoot string, spec runtimeSpec) error {
 // installAt writes into root the runtime files, with the stored settings
 // applied, that differ from what is there, and the seed files that are
 // missing, then removes the files of the last install the variant no longer
-// has. The manifest goes last so an interrupted update still reads as
-// outdated; a first install claims the folder with an empty manifest before
-// any runtime file lands, without which those files would read as a foreign
-// copy.
+// has and the compiled shader caches those changes left stale. The manifest
+// goes last so an interrupted update still reads as outdated. Before any
+// runtime file lands, the manifest records the shader caches to remove, so a
+// retry removes them too; a first install also claims the folder with it,
+// without which those files would read as a foreign copy.
 func (m *Manager) installAt(root, modsRoot string, sel selection) error {
 	spec := sel.runtimeSpec
 	values, err := settingValues(root, spec)
 	if err != nil {
 		return err
 	}
-	writes, stale, err := installPlan(root, modsRoot, sel, values)
+	manifestPath := filepath.Join(root, manifestFile)
+	previous, err := readManifest(manifestPath)
 	if err != nil {
 		return err
 	}
-	manifestPath := filepath.Join(root, manifestFile)
-	if _, err := os.Stat(manifestPath); errors.Is(err, fs.ErrNotExist) {
-		pending, err := encodeJSON(manifest{Name: spec.Name})
+	writes, stale, shaders, err := installPlan(root, modsRoot, sel, values, previous)
+	if err != nil {
+		return err
+	}
+	if previous == nil || !slices.Equal(previous.PendingShaders, shaders) {
+		progress := manifest{Name: spec.Name}
+		if previous != nil {
+			progress = *previous
+		}
+		progress.PendingShaders = shaders
+		pending, err := encodeJSON(progress)
 		if err == nil {
 			err = m.writeFile(manifestPath, pending)
 		}
@@ -323,29 +346,38 @@ func (m *Manager) installAt(root, modsRoot string, sel selection) error {
 			return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{"file": name}})
 		}
 	}
+	for _, name := range shaders {
+		if err := removeShaderCache(root, name); err != nil {
+			return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{"shader": name}})
+		}
+	}
 	if err := m.writeFile(manifestPath, writes[manifestPath]); err != nil {
 		return infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{"file": manifestPath}})
 	}
 	return nil
 }
 
-// installPlan returns the files to write, by path, and the paths of the
-// files the last install wrote that the variant does not have.
+// installPlan returns the files to write, by path, the paths of the files
+// the previous install wrote that the variant does not have, and the slash
+// paths of the shaders whose compiled caches the changes, or the previous
+// unfinished install, leave stale.
 func installPlan(
 	root, modsRoot string,
 	sel selection,
 	values map[string]string,
-) (writes map[string][]byte, stale []string, err error) {
+	previous *manifest,
+) (writes map[string][]byte, stale, shaders []string, err error) {
 	spec := sel.runtimeSpec
 	next := manifest{Name: spec.Name, RuntimeVersion: spec.Version, Variant: sel.variant, Files: map[string]string{}}
 	writes = make(map[string][]byte)
 	files, err := variantFiles(sel)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
+	changed := make(map[string]bool)
 	for name, data := range files {
 		if data, err = renderSettings(name, data, spec, values); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		next.Files[name] = digest(data)
 		target := filepath.Join(root, filepath.FromSlash(name))
@@ -353,27 +385,29 @@ func installPlan(
 			continue
 		}
 		writes[target] = data
+		changed[strings.ToLower(name)] = true
 	}
 	encoded, err := encodeJSON(next)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	writes[filepath.Join(root, manifestFile)] = encoded
-	previous, err := readManifest(filepath.Join(root, manifestFile))
-	if err != nil {
-		return nil, nil, err
-	}
 	if previous != nil {
+		for _, name := range previous.PendingShaders {
+			changed[strings.ToLower(name)] = true
+		}
 		for name := range previous.Files {
 			if _, kept := next.Files[name]; kept {
 				continue
 			}
 			if target, ok := installedPath(root, name); ok {
 				stale = append(stale, target)
+				changed[strings.ToLower(name)] = true
 			}
 		}
 		slices.Sort(stale)
 	}
+	shaders = staleShaders(files, changed)
 
 	for name, seed := range spec.Seed {
 		target := filepath.Join(root, filepath.FromSlash(name))
@@ -382,11 +416,87 @@ func installPlan(
 		}
 		data, err := seed(root, modsRoot)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		writes[target] = data
 	}
-	return writes, stale, nil
+	return writes, stale, shaders, nil
+}
+
+// staleShaders returns the HLSL files among files and changed, by slash path,
+// that changed or include one that did at any depth. 3DMigoto keeps a compiled
+// custom shader in a .bin beside its source and uses it while the source is
+// not newer, so a change to an included file alone leaves the cache stale.
+// changed holds lowercase slash paths.
+func staleShaders(files map[string][]byte, changed map[string]bool) []string {
+	isShader := func(name string) bool { return strings.EqualFold(path.Ext(name), ".hlsl") }
+	affected := maps.Clone(changed)
+	for grew := true; grew; {
+		grew = false
+		for name, data := range files {
+			key := strings.ToLower(name)
+			if affected[key] || !isShader(name) {
+				continue
+			}
+			for _, match := range includeRE.FindAllSubmatch(data, -1) {
+				included := path.Join(path.Dir(name), strings.ReplaceAll(string(match[1]), `\`, "/"))
+				if affected[strings.ToLower(included)] {
+					affected[key], grew = true, true
+					break
+				}
+			}
+		}
+	}
+	var shaders []string
+	for name := range affected {
+		if isShader(name) {
+			shaders = append(shaders, name)
+		}
+	}
+	slices.Sort(shaders)
+	return shaders
+}
+
+// removeShaderCache deletes the caches 3DMigoto compiled from the shader at
+// slash path name below root, such as name.ps_5_0.8000.bin. Like removeStale,
+// it deletes only what physically lies below root, so a junction inside the
+// folder cannot lead it to another folder's files.
+func removeShaderCache(root, name string) error {
+	source, ok := installedPath(root, name)
+	if !ok {
+		return nil
+	}
+	physicalRoot := physicalPath(root)
+	dir, prefix := filepath.Dir(source), strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))+"."
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		base := entry.Name()
+		if !entry.Type().IsRegular() || len(base) <= len(prefix) ||
+			!strings.EqualFold(base[:len(prefix)], prefix) || !strings.EqualFold(filepath.Ext(base), ".bin") {
+			continue
+		}
+		cache := filepath.Join(dir, base)
+		physical, err := platform.FinalPath(cache)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if platform.SamePathFold(physicalRoot, physical) || !platform.SameOrChildPath(physicalRoot, physical) {
+			continue
+		}
+		if err := os.Remove(cache); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // variantFiles reads the files the variant installs, by slash path: the base
