@@ -352,31 +352,42 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
-	selectionChanged, err := x.saveImporterConfig(ctx, key, cfg)
+	key = strings.ToUpper(strings.TrimSpace(key))
+	changes, err := x.saveImporterConfig(ctx, key, cfg)
 	if err != nil {
 		return err
 	}
-	if selectionChanged {
+	if changes.selection {
 		x.notifyImportersChanged(ctx)
+	}
+	if changes.dll {
+		x.notifyDLLChanged(ctx, key)
 	}
 	return nil
 }
 
-// saveImporterConfig reports whether the importer was enabled, disabled, or moved to another folder.
-func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) (bool, error) {
+// configChanges is what a saved importer config changed that other parts of the app follow.
+type configChanges struct {
+	// selection is whether the importer was enabled, disabled, or moved to another folder.
+	selection bool
+	// dll is whether the d3d11.dll the importer deploys may come from somewhere else now.
+	dll bool
+}
+
+func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) (configChanges, error) {
 	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
 	key = strings.ToUpper(strings.TrimSpace(key))
 	if err := ValidateImporterSettings(key, cfg); err != nil {
-		return false, err
+		return configChanges{}, err
 	}
 	// A disabled importer never launches or installs, so a missing pinned package or a rejected folder must not
 	// keep it from being turned off.
 	if cfg.Enabled {
 		if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
-			return false, err
+			return configChanges{}, err
 		}
 		if err := validateInstalledImporterPackage(key, cfg); err != nil {
-			return false, infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
+			return configChanges{}, infra.ReportError(x.log, err, "XXMI.SaveImporterConfig", infra.Diagnostic{
 				Operation: "save-importer-config", Stage: "validate-package",
 				Fields: map[string]any{"importer": key, "version": cfg.PackageVersion.Pinned,
 					"importerFolder": cfg.ImporterFolder},
@@ -387,38 +398,41 @@ func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	client := x.client
 	x.mu.RUnlock()
 	if client == nil {
-		return false, errors.New("XXMI settings store is not configured")
+		return configChanges{}, errors.New("XXMI settings store is not configured")
 	}
 	x.customDLLMu.Lock()
 	defer x.customDLLMu.Unlock()
 
 	previous, err := client.XXMIImporters.Get(ctx, key)
 	if err != nil {
-		return false, err
+		return configChanges{}, err
 	}
 	previousCustomDLL := ""
-	selectionChanged := cfg.Enabled
+	changes := configChanges{selection: cfg.Enabled, dll: true}
 	if previous != nil {
 		var old ImporterConfig
 		if err := json.Unmarshal([]byte(previous.Config), &old); err != nil {
-			return false, err
+			return configChanges{}, err
 		}
 		previousCustomDLL = old.CustomDLL
-		selectionChanged = old.Enabled != cfg.Enabled ||
+		changes.selection = old.Enabled != cfg.Enabled ||
 			(cfg.Enabled && !platform.SamePathFold(old.ImporterFolder, cfg.ImporterFolder))
+		changes.dll = old.Mode != cfg.Mode || old.LibsProvider != cfg.LibsProvider ||
+			old.CustomDLL != cfg.CustomDLL || old.Migoto.UnsafeMode != cfg.Migoto.UnsafeMode ||
+			old.XXMIVersion != cfg.XXMIVersion
 		if old.Mode != cfg.Mode {
 			if !x.acquireImporter(key) {
-				return false, errors.New("XXMI_GAME_RUNNING")
+				return configChanges{}, errors.New("XXMI_GAME_RUNNING")
 			}
 			defer x.releaseImporter(key)
 			spec, _ := lookupImporterPackage(key)
 			for _, name := range append(append([]string{}, spec.gameExeNames...), spec.processNames...) {
 				pid, err := x.findProcess(ctx, name)
 				if err != nil {
-					return false, err
+					return configChanges{}, err
 				}
 				if pid != 0 {
-					return false, errors.New("XXMI_GAME_RUNNING")
+					return configChanges{}, errors.New("XXMI_GAME_RUNNING")
 				}
 			}
 		}
@@ -426,21 +440,21 @@ func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	// Only a newly selected custom DLL has to exist, so a config whose cached DLL is gone can still be saved.
 	if cfg.CustomDLL != "" && cfg.CustomDLL != previousCustomDLL {
 		if err := x.requireCustomDLL(cfg.CustomDLL); err != nil {
-			return false, err
+			return configChanges{}, err
 		}
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
-		return false, err
+		return configChanges{}, err
 	}
 	if err := client.XXMIImporters.Upsert(ctx, key, string(data)); err != nil {
-		return false, err
+		return configChanges{}, err
 	}
 	if cfg.CustomDLL != previousCustomDLL {
 		x.reportCleanup(x.pruneCustomDLLsLocked(ctx), "prune-custom-dll")
 	}
 	x.wakeRunningWatch()
-	return selectionChanged, nil
+	return changes, nil
 }
 
 func (x *XXMI) EnableImporter(ctx context.Context, key, folder string) error {
@@ -505,25 +519,56 @@ func (x *XXMI) SetSharedLibsVersion(ctx context.Context, version string) error {
 		return err
 	}
 	version = normalizeVersion(version)
+	followers, err := x.setSharedLibsVersion(ctx, client, version)
+	if err != nil {
+		return err
+	}
+	// The version decides which release each following importer deploys, and so what its mod runtimes may use.
+	x.notifyDLLChanged(ctx, followers...)
+	return nil
+}
 
+func (x *XXMI) setSharedLibsVersion(ctx context.Context, client *db.Client, version string) ([]string, error) {
 	// A provider selection in progress moves the shared version too.
 	x.libsProviderMu.Lock()
 	defer x.libsProviderMu.Unlock()
 	if version != "" {
 		providers, err := x.sharedVersionProviders(ctx, client)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, provider := range providers {
 			if err := x.EnsureLibsProvider(ctx, provider, version); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		if err := x.EnsureLibsVersion(ctx, version); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return client.Settings.Upsert(ctx, sharedLibsVersionKey, &version)
+	if err := client.Settings.Upsert(ctx, sharedLibsVersionKey, &version); err != nil {
+		return nil, err
+	}
+	return x.sharedVersionFollowers(ctx, client)
+}
+
+// sharedVersionFollowers lists the XXMI importers whose libraries version is the shared one.
+func (x *XXMI) sharedVersionFollowers(ctx context.Context, client *db.Client) ([]string, error) {
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var followers []string
+	for _, row := range rows {
+		cfg, err := x.GetImporterConfig(ctx, row.Key)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Mode == RuntimeXXMI && cfg.XXMIVersion.Follow == followShared {
+			followers = append(followers, row.Key)
+		}
+	}
+	return followers, nil
 }
 
 // sharedVersionProviders lists the providers that deploy the shared libraries version: the shared provider and

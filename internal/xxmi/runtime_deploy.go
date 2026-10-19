@@ -146,9 +146,20 @@ func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig
 	default:
 		return nil, fmt.Errorf("invalid runtime mode %q", cfg.Mode)
 	}
-	return deployCustomRuntimeFiles(
+	before, _ := readXXMIRuntimeManifest(cfg.ImporterFolder)
+	warnings, err := deployCustomRuntimeFiles(
 		ctx, key, cfg, sourceFolder, sourceID, cacheRoot, repair, x.findProcess, custom, provider,
 	)
+	if err != nil {
+		return warnings, err
+	}
+	// A deployment that writes another d3d11.dll than the last one changes what the importer's mod runtimes
+	// may use, which no setting announced when an update was the cause.
+	if after, ok := readXXMIRuntimeManifest(cfg.ImporterFolder); ok &&
+		(after.Provider != before.Provider || after.Custom != before.Custom) {
+		x.notifyDLLChanged(ctx, key)
+	}
+	return warnings, nil
 }
 
 func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (string, error) {

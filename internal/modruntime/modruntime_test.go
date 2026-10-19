@@ -3,6 +3,7 @@ package modruntime
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,8 +32,9 @@ func (renamingMods) Enable(_ context.Context, path string) (string, error) {
 }
 
 const (
-	seedFile     = "surface/Loader.ini"
-	bundledProbe = "namespace = Probe\r\n[Constants]\r\nglobal $strength = 3\r\n[KeyToggle]\r\nkey = VK_F1\r\n"
+	seedFile      = "surface/Loader.ini"
+	bundledProbe  = "namespace = Probe\r\n[Constants]\r\nglobal $strength = 3\r\n[KeyToggle]\r\nkey = VK_F1\r\n"
+	enhancedProbe = bundledProbe + "[ShaderOverrideFluid]\r\nps-s7 = ResourceFluid\r\n"
 )
 
 func newTestManager(t *testing.T) (*Manager, string) {
@@ -48,9 +50,16 @@ func newTestManager(t *testing.T) (*Manager, string) {
 			Importers: []string{"EFMI"},
 			Namespace: "Probe",
 			Files: fstest.MapFS{
-				"Probe.ini":      {Data: []byte(bundledProbe)},
-				"shaders/a.hlsl": {Data: []byte("// a")},
+				"Probe.ini":                {Data: []byte(bundledProbe)},
+				"shaders/a.hlsl":           {Data: []byte("// a")},
+				"enhanced/Probe.ini":       {Data: []byte(enhancedProbe)},
+				"enhanced/extra/Extra.ini": {Data: []byte("; extra")},
 			},
+			Variants: []Variant{{
+				Name:     "enhanced",
+				Requires: func(caps Capabilities) bool { return caps.ShaderSamplerSlots },
+				Dir:      "enhanced",
+			}},
 			Seed: map[string]func(string, string) ([]byte, error){
 				seedFile: func(string, string) ([]byte, error) { return []byte("; seeded"), nil },
 			},
@@ -303,5 +312,130 @@ func TestSettingsSurviveUpdate(t *testing.T) {
 	}
 	if status := manager.state(t); status.Settings[0].Value != "ctrl VK_F7" {
 		t.Fatalf("settings after update = %+v", status.Settings)
+	}
+}
+
+// A d3d11.dll without a variant's capabilities must never get its files, and
+// a DLL change must swap the files of the last install for the new ones.
+func TestVariantFollowsCapabilities(t *testing.T) {
+	manager, modsRoot := newTestManager(t)
+	ctx := context.Background()
+	root := installRoot(modsRoot, "Probe")
+	caps := Capabilities{}
+	manager.capabilities = func(context.Context, string) (Capabilities, error) { return caps, nil }
+	probe := filepath.Join(root, "Probe.ini")
+	extra := filepath.Join(root, "extra", "Extra.ini")
+	absent := func(name string) {
+		t.Helper()
+		if _, err := os.Stat(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s is installed (err=%v)", name, err)
+		}
+	}
+	content := func(name, want string) {
+		t.Helper()
+		if data, _ := os.ReadFile(name); string(data) != want {
+			t.Fatalf("%s:\n%q", name, data)
+		}
+	}
+
+	if status, err := manager.Install(ctx, "EFMI", "Probe"); err != nil || status.State != StateCurrent {
+		t.Fatalf("base install = %+v (err=%v)", status, err)
+	}
+	absent(extra)
+	absent(filepath.Join(root, "enhanced"))
+	content(probe, bundledProbe)
+
+	caps.ShaderSamplerSlots = true
+	if got := manager.state(t).State; got != StateOutdated {
+		t.Fatalf("base install under a capable DLL = %s", got)
+	}
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	content(extra, "; extra")
+	content(probe, enhancedProbe)
+	if got := manager.state(t).State; got != StateCurrent {
+		t.Fatalf("after the refresh = %s", got)
+	}
+
+	caps = Capabilities{}
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	absent(extra)
+	absent(filepath.Dir(extra))
+	content(probe, bundledProbe)
+	content(filepath.Join(root, filepath.FromSlash(seedFile)), "; seeded")
+	if got := manager.state(t).State; got != StateCurrent {
+		t.Fatalf("after switching back = %s", got)
+	}
+
+	// A refresh brings nothing back the user turned off.
+	if _, err := manager.Disable(ctx, "EFMI", "Probe"); err != nil {
+		t.Fatal(err)
+	}
+	caps.ShaderSamplerSlots = true
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.state(t).State; got != StateDisabled {
+		t.Fatalf("disabled runtime after a refresh = %s", got)
+	}
+}
+
+// A manifest entry may be edited by hand or point through a junction; the
+// stale-file cleanup of an update must stay inside the install folder.
+func TestUpdateRemovesStaleFilesOnlyBelowRoot(t *testing.T) {
+	manager, modsRoot := newTestManager(t)
+	ctx := context.Background()
+	root := installRoot(modsRoot, "Probe")
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	keep := filepath.Join(outside, "keep.txt")
+	if err := os.WriteFile(keep, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(filepath.Dir(root), "escape.txt")
+	if err := os.WriteFile(escape, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	junction := true
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, outside).CombinedOutput(); err != nil {
+		t.Logf("filesystem cannot create a junction, skipping that case: %v (%s)", err, output)
+		junction = false
+	}
+
+	manifestPath := filepath.Join(root, manifestFile)
+	previous, err := readManifest(manifestPath)
+	if err != nil || previous == nil {
+		t.Fatalf("manifest = %+v (err=%v)", previous, err)
+	}
+	previous.RuntimeVersion = "0"
+	for _, name := range []string{`..\escape.txt`, "../escape.txt", "./../escape.txt", escape, "link/keep.txt"} {
+		previous.Files[name] = "stale"
+	}
+	encoded, err := encodeJSON(previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if status, err := manager.Install(ctx, "EFMI", "Probe"); err != nil || status.State != StateCurrent {
+		t.Fatalf("update = %+v (err=%v)", status, err)
+	}
+	for _, name := range []string{escape, keep} {
+		if _, err := os.Stat(name); err != nil {
+			t.Errorf("%s was removed by the update: %v", name, err)
+		}
+	}
+	if junction {
+		if _, err := os.Lstat(link); err != nil {
+			t.Errorf("the junction was removed by the update: %v", err)
+		}
 	}
 }

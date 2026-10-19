@@ -193,6 +193,10 @@ func newRuntime() *runtime {
 	download.UseClient(httpClient)
 	modRuntime := modruntime.New(modruntime.Options{
 		Log: log, Mod: modService, Trash: shell.Trash, Specs: tools.ModRuntimes(),
+		Capabilities: func(ctx context.Context, importer string) (modruntime.Capabilities, error) {
+			features, err := xxmiService.ImporterDLLFeatures(ctx, importer)
+			return modruntime.Capabilities{ShaderSamplerSlots: features.ShaderSamplerSlots, DX12: features.DX12}, err
+		},
 	})
 	download.UseLimiter(transferService)
 	transferService.UseSettings(settings)
@@ -282,6 +286,16 @@ func newRuntime() *runtime {
 				Severity:  infra.DiagnosticError,
 				Operation: "toggle-viewer.watcher",
 				Stage:     "importer-selection",
+			})
+		}
+	})
+	rt.xxmi.UseDLLChanged(func(ctx context.Context, importer string) {
+		if err := rt.modRuntime.Refresh(ctx, importer); err != nil {
+			_ = infra.ReportError(log, err, "XXMI.dllChanged", infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "mod-runtime-refresh",
+				Stage:     "dll-selection",
+				Fields:    map[string]any{"importer": importer},
 			})
 		}
 	})

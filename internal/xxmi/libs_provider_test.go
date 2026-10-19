@@ -1795,3 +1795,80 @@ func TestProviderDependencyManifestDecidesDeployedLibraries(t *testing.T) {
 		}
 	})
 }
+
+// The enhanced runtime variant must not reach a fork release that drops its sampler lines.
+func TestProviderVersionAtLeast(t *testing.T) {
+	spec, _ := lookupLibsProvider(defaultLibsProvider)
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{"1.2.2-nhd.13", true},
+		{"v1.2.2-nhd.14", true},
+		{"1.2.2-nhd.9", false},
+		{"1.2.3-nhd.1", true},
+		{"1.3.0-nhd.0", true},
+		{"1.2.2", false},
+		{"", false},
+		{"1.2.2-nhd.x", false},
+	}
+	for _, tc := range cases {
+		if got := providerVersionAtLeast(spec, tc.version, "1.2.2-nhd.13"); got != tc.want {
+			t.Errorf("providerVersionAtLeast(%q) = %v, want %v", tc.version, got, tc.want)
+		}
+	}
+}
+
+// The sampler slot feature follows the release the next deployment writes, so a pin to an older fork release
+// takes the enhanced runtime files away before that release warns about them.
+func TestImporterDLLFeaturesFollowDeployedRelease(t *testing.T) {
+	ctx := context.Background()
+	newer, older := testCustomDLLImage("1.2.2-nhd.13"), testCustomDLLImage("1.2.2-nhd.9")
+	service, _, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v1.2.2-nhd.13", data: newer, digest: providerTestDigest(newer)},
+		{tag: "v1.2.2-nhd.9", data: older, digest: providerTestDigest(older)},
+	})
+	var notified []string
+	service.UseDLLChanged(func(_ context.Context, importer string) { notified = append(notified, importer) })
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.LibsProvider = true, "myparsleycat"
+	features := func(pin VersionPin) DLLFeatures {
+		t.Helper()
+		cfg.XXMIVersion = pin
+		if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+			t.Fatal(err)
+		}
+		got, err := service.ImporterDLLFeatures(ctx, "GIMI")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	if got := features(VersionPin{Pinned: "1.2.2-nhd.13"}); !got.ShaderSamplerSlots || !got.DX12 {
+		t.Fatalf("features at the first release with sampler slots = %+v", got)
+	}
+	if got := features(VersionPin{Pinned: "1.2.2-nhd.9"}); got.ShaderSamplerSlots {
+		t.Fatalf("features pinned before sampler slots = %+v", got)
+	}
+	if got := features(VersionPin{Follow: "latest"}); !got.ShaderSamplerSlots {
+		t.Fatalf("features following the latest release = %+v", got)
+	}
+	// Each pin change moves the deployed DLL, so the runtimes that depend on it are told each time.
+	if len(notified) != 3 {
+		t.Fatalf("DLL change notifications = %v", notified)
+	}
+
+	// A user-provided DLL has no release; its features come from the developer override only.
+	cfg.CustomDLL, cfg.Migoto.UnsafeMode = "", true
+	t.Setenv(customDLLFeaturesEnv, "")
+	if got := customDLLFeatures("sampler_slots, dx12"); !got.ShaderSamplerSlots || !got.DX12 {
+		t.Fatalf("declared custom DLL features = %+v", got)
+	}
+	if got := customDLLFeatures(""); got.ShaderSamplerSlots || got.DX12 {
+		t.Fatalf("undeclared custom DLL features = %+v", got)
+	}
+}

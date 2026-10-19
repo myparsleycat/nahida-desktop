@@ -18,6 +18,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -30,6 +31,10 @@ const (
 	StateModified = "modified"
 	StateDisabled = "disabled"
 	StateForeign  = "foreign"
+
+	// VariantBase is the file set every d3d11.dll reads: Files without the
+	// directories of the Variants.
+	VariantBase = "base"
 
 	ErrorUnknown      = "MOD_RUNTIME_UNKNOWN"
 	ErrorNoModsFolder = "MOD_RUNTIME_NO_MODS_FOLDER"
@@ -54,6 +59,10 @@ type Spec struct {
 	// declaring it is a second copy the importer would load as well.
 	Namespace string
 	Files     fs.FS
+	// Variants are alternative file sets for importers whose d3d11.dll has
+	// more than the base files can use. The first one the capabilities allow
+	// is installed; with none, the base files alone are.
+	Variants []Variant
 	// Seed builds, by slash path, files the runtime needs that its feature
 	// owns. An install creates each one that is missing, and the runtime reads
 	// as modified without it; updates never replace them.
@@ -62,6 +71,27 @@ type Spec struct {
 	Legacy []Legacy
 	// Settings are values in Files the user can change, such as hotkeys.
 	Settings []Setting
+}
+
+// Variant is a set of files below Dir in Spec.Files that only a d3d11.dll
+// with certain capabilities reads, such as INI keys a stock 3DMigoto build
+// warns about and drops. Dir is a slash path. Its files are left out of every
+// other variant and, when the variant is selected, installed over the base
+// files at their paths relative to Dir, so one replaces the base file of the
+// same name. A Dir that Files does not hold is a variant without files.
+type Variant struct {
+	Name     string
+	Requires func(Capabilities) bool
+	Dir      string
+}
+
+// Capabilities are the features of the d3d11.dll an importer deploys that a
+// runtime's files can depend on.
+type Capabilities struct {
+	// ShaderSamplerSlots is whether INI shader sections can bind the extra
+	// sampler slots (ps-s#, cs-s#).
+	ShaderSamplerSlots bool
+	DX12               bool
 }
 
 // Legacy is an install folder, as a slash path relative to the Mods folder,
@@ -104,6 +134,9 @@ type Options struct {
 	// Trash moves a removed runtime to the recycle bin; nil deletes it.
 	Trash func(string) error
 	Specs []Spec
+	// Capabilities reports what the importer's d3d11.dll can run, which
+	// selects the variant of each runtime; nil installs the base variant.
+	Capabilities func(ctx context.Context, importer string) (Capabilities, error)
 }
 
 type runtimeSpec struct {
@@ -111,12 +144,29 @@ type runtimeSpec struct {
 	namespace *regexp.Regexp
 }
 
+// variant selects the runtime's variant for the capabilities.
+func (s runtimeSpec) variant(caps Capabilities) string {
+	for _, variant := range s.Variants {
+		if variant.Requires(caps) {
+			return variant.Name
+		}
+	}
+	return VariantBase
+}
+
+// selection is a runtime with the variant chosen for one importer.
+type selection struct {
+	runtimeSpec
+	variant string
+}
+
 type Manager struct {
-	log   *infra.Log
-	games GamePaths
-	mod   ModToggler
-	trash func(string) error
-	specs []runtimeSpec
+	log          *infra.Log
+	games        GamePaths
+	mod          ModToggler
+	trash        func(string) error
+	capabilities func(ctx context.Context, importer string) (Capabilities, error)
+	specs        []runtimeSpec
 	// mu keeps management actions out while a feature writes into a runtime.
 	mu sync.Mutex
 	// writeFile is replaced in tests to cut an install short.
@@ -125,13 +175,20 @@ type Manager struct {
 
 func New(opts Options) *Manager {
 	manager := &Manager{
-		log:       opts.Log,
-		games:     opts.GamePaths,
-		mod:       opts.Mod,
-		trash:     opts.Trash,
-		writeFile: writeAtomic,
+		log:          opts.Log,
+		games:        opts.GamePaths,
+		mod:          opts.Mod,
+		trash:        opts.Trash,
+		capabilities: opts.Capabilities,
+		writeFile:    writeAtomic,
 	}
 	for _, spec := range opts.Specs {
+		for _, variant := range spec.Variants {
+			if variant.Name == "" || variant.Name == VariantBase || variant.Requires == nil ||
+				variant.Dir == "." || !fs.ValidPath(variant.Dir) {
+				panic(fmt.Sprintf("mod runtime %s: invalid variant %q", spec.Name, variant.Name))
+			}
+		}
 		manager.specs = append(manager.specs, runtimeSpec{
 			Spec: spec,
 			namespace: regexp.MustCompile(
@@ -166,14 +223,19 @@ func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 			listing.Runtimes = append(listing.Runtimes, Status{Name: spec.Name, BundledVersion: spec.Version})
 			continue
 		}
-		sc.fields["runtime"], sc.stage = spec.Name, "inspect"
+		sc.fields["runtime"], sc.stage = spec.Name, "resolve-variant"
+		sel, err := m.resolve(ctx, importer, spec)
+		if err != nil {
+			return listing, m.report(sc, "list", err)
+		}
+		sc.fields["variant"], sc.stage = sel.variant, "inspect"
 		status, err := func() (Status, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			if err := m.migrate(modsRoot, spec); err != nil {
 				return Status{}, err
 			}
-			return m.inspect(modsRoot, spec)
+			return m.inspect(modsRoot, sel)
 		}()
 		if err != nil {
 			return listing, m.report(sc, "list", err)
@@ -186,7 +248,7 @@ func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 // Install installs, updates or repairs the runtime, enabling it first when it
 // is disabled. Files the runtime's feature owns are kept.
 func (m *Manager) Install(ctx context.Context, importer, name string) (Status, error) {
-	return m.operate(ctx, "install", importer, name, func(sc *scope, modsRoot string, _ runtimeSpec) (Status, error) {
+	return m.operate(ctx, "install", importer, name, func(sc *scope, modsRoot string, _ selection) (Status, error) {
 		var installed Status
 		err := m.Use(ctx, modsRoot, name, true, func(_ string, status Status) error {
 			installed = status
@@ -203,10 +265,10 @@ func (m *Manager) Disable(ctx context.Context, importer, name string) (Status, e
 		"disable",
 		importer,
 		name,
-		func(sc *scope, modsRoot string, spec runtimeSpec) (Status, error) {
+		func(sc *scope, modsRoot string, sel selection) (Status, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			status, err := m.prepared(sc, modsRoot, spec)
+			status, err := m.prepared(sc, modsRoot, sel)
 			if err != nil {
 				return status, err
 			}
@@ -217,7 +279,7 @@ func (m *Manager) Disable(ctx context.Context, importer, name string) (Status, e
 			case StateForeign:
 				return status, infra.ContractError(ErrorForeign + ":" + status.Path)
 			default:
-				return status, infra.ContractError(ErrorNotInstalled + ":" + spec.Name)
+				return status, infra.ContractError(ErrorNotInstalled + ":" + sel.Name)
 			}
 			if m.mod == nil {
 				return status, errors.New("mod service is unavailable")
@@ -226,7 +288,7 @@ func (m *Manager) Disable(ctx context.Context, importer, name string) (Status, e
 			if _, err := m.mod.Disable(ctx, status.Path); err != nil {
 				return status, err
 			}
-			return m.inspect(modsRoot, spec)
+			return m.inspect(modsRoot, sel)
 		},
 	)
 }
@@ -243,14 +305,14 @@ func (m *Manager) SetSettings(
 		"set-settings",
 		importer,
 		name,
-		func(sc *scope, modsRoot string, spec runtimeSpec) (Status, error) {
-			normalized, err := normalizeSettings(spec, values)
+		func(sc *scope, modsRoot string, sel selection) (Status, error) {
+			normalized, err := normalizeSettings(sel.runtimeSpec, values)
 			if err != nil {
 				return Status{}, infra.ContractError(ErrorInvalid + ":" + err.Error())
 			}
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			status, err := m.prepared(sc, modsRoot, spec)
+			status, err := m.prepared(sc, modsRoot, sel)
 			if err != nil {
 				return status, err
 			}
@@ -259,7 +321,7 @@ func (m *Manager) SetSettings(
 			case StateForeign:
 				return status, infra.ContractError(ErrorForeign + ":" + status.Path)
 			default:
-				return status, infra.ContractError(ErrorNotInstalled + ":" + spec.Name)
+				return status, infra.ContractError(ErrorNotInstalled + ":" + sel.Name)
 			}
 
 			sc.stage, sc.fields["settings"] = "write", normalized
@@ -272,12 +334,12 @@ func (m *Manager) SetSettings(
 				if err := writeSettings(m.writeFile, status.Path, normalized); err != nil {
 					return err
 				}
-				return m.installAt(status.Path, modsRoot, spec)
+				return m.installAt(status.Path, modsRoot, sel)
 			}()
 			if err != nil {
 				return status, err
 			}
-			return m.inspect(modsRoot, spec)
+			return m.inspect(modsRoot, sel)
 		},
 	)
 }
@@ -285,10 +347,10 @@ func (m *Manager) SetSettings(
 // Remove moves the runtime, together with the data its feature keeps there,
 // to the recycle bin. Another copy is never removed: it is not this app's.
 func (m *Manager) Remove(ctx context.Context, importer, name string) (Status, error) {
-	return m.operate(ctx, "remove", importer, name, func(sc *scope, modsRoot string, spec runtimeSpec) (Status, error) {
+	return m.operate(ctx, "remove", importer, name, func(sc *scope, modsRoot string, sel selection) (Status, error) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		status, err := m.prepared(sc, modsRoot, spec)
+		status, err := m.prepared(sc, modsRoot, sel)
 		if err != nil {
 			return status, err
 		}
@@ -319,8 +381,30 @@ func (m *Manager) Remove(ctx context.Context, importer, name string) (Status, er
 		// The group folder goes with its last runtime; Remove refuses a folder that is not empty.
 		_ = os.Remove(filepath.Join(modsRoot, GroupDir))
 		m.invalidateLibraries()
-		return m.inspect(modsRoot, spec)
+		return m.inspect(modsRoot, sel)
 	})
+}
+
+// Refresh updates the importer's installed runtimes that read as outdated,
+// such as after its d3d11.dll changed which variant they get. Disabled and
+// foreign copies are left as they are.
+//
+//wails:ignore
+func (m *Manager) Refresh(ctx context.Context, importer string) error {
+	listing, err := m.List(ctx, importer)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, status := range listing.Runtimes {
+		if status.State != StateOutdated {
+			continue
+		}
+		if _, err := m.Install(ctx, importer, status.Name); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Use runs fn with the folder the runtime keeps its data in, holding off
@@ -339,17 +423,21 @@ func (m *Manager) Use(
 	if !ok {
 		return infra.ContractError(ErrorUnknown + ":" + name)
 	}
+	sel, err := m.resolve(ctx, m.importerOf(ctx, modsRoot, spec), spec)
+	if err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.migrate(modsRoot, spec); err != nil {
 		return err
 	}
-	status, err := m.inspect(modsRoot, spec)
+	status, err := m.inspect(modsRoot, sel)
 	if err != nil {
 		return err
 	}
 	if install {
-		if status, err = m.enable(ctx, modsRoot, spec, status); err != nil {
+		if status, err = m.enable(ctx, modsRoot, sel, status); err != nil {
 			return err
 		}
 	}
@@ -360,10 +448,10 @@ func (m *Manager) Use(
 	}
 	defer release()
 	if install && status.State != StateCurrent {
-		if err := m.installAt(installRoot(modsRoot, spec.Name), modsRoot, spec); err != nil {
+		if err := m.installAt(installRoot(modsRoot, spec.Name), modsRoot, sel); err != nil {
 			return err
 		}
-		if status, err = m.inspect(modsRoot, spec); err != nil {
+		if status, err = m.inspect(modsRoot, sel); err != nil {
 			return err
 		}
 	}
@@ -376,7 +464,7 @@ func (m *Manager) Use(
 
 // enable turns a disabled install back on through the mod service, which
 // takes its own disk slot, so none is held here.
-func (m *Manager) enable(ctx context.Context, modsRoot string, spec runtimeSpec, status Status) (Status, error) {
+func (m *Manager) enable(ctx context.Context, modsRoot string, sel selection, status Status) (Status, error) {
 	switch status.State {
 	case StateForeign:
 		return status, infra.ContractError(ErrorForeign + ":" + status.Path)
@@ -390,7 +478,7 @@ func (m *Manager) enable(ctx context.Context, modsRoot string, spec runtimeSpec,
 	if _, err := m.mod.Enable(ctx, status.Path); err != nil {
 		return status, infra.AnnotateError(err, infra.Diagnostic{Fields: map[string]any{"runtimePath": status.Path}})
 	}
-	status, err := m.inspect(modsRoot, spec)
+	status, err := m.inspect(modsRoot, sel)
 	if err != nil {
 		return status, err
 	}
@@ -408,7 +496,7 @@ type scope struct {
 func (m *Manager) operate(
 	ctx context.Context,
 	operation, importer, name string,
-	action func(sc *scope, modsRoot string, spec runtimeSpec) (Status, error),
+	action func(sc *scope, modsRoot string, sel selection) (Status, error),
 ) (Status, error) {
 	sc := &scope{stage: "resolve", fields: map[string]any{"importer": importer, "runtime": name}}
 	spec, ok := m.spec(name)
@@ -423,20 +511,67 @@ func (m *Manager) operate(
 	if modsRoot == "" {
 		return Status{}, infra.ContractError(ErrorNoModsFolder + ":" + importer)
 	}
-	sc.fields["modsRoot"] = modsRoot
-	status, err := action(sc, modsRoot, spec)
+	sc.fields["modsRoot"], sc.stage = modsRoot, "resolve-variant"
+	sel, err := m.resolve(ctx, importer, spec)
+	if err != nil {
+		return Status{}, m.report(sc, operation, err)
+	}
+	sc.fields["variant"] = sel.variant
+	status, err := action(sc, modsRoot, sel)
 	return status, m.report(sc, operation, err)
 }
 
 // prepared moves a legacy install into place and inspects the runtime.
-func (m *Manager) prepared(sc *scope, modsRoot string, spec runtimeSpec) (Status, error) {
+func (m *Manager) prepared(sc *scope, modsRoot string, sel selection) (Status, error) {
 	sc.stage = "inspect"
-	if err := m.migrate(modsRoot, spec); err != nil {
+	if err := m.migrate(modsRoot, sel.runtimeSpec); err != nil {
 		return Status{}, err
 	}
-	status, err := m.inspect(modsRoot, spec)
+	status, err := m.inspect(modsRoot, sel)
 	sc.fields["state"], sc.fields["path"] = status.State, status.Path
 	return status, err
+}
+
+// resolve picks the runtime's variant from what the importer's d3d11.dll can
+// run. Without a capabilities source every importer gets the base variant.
+func (m *Manager) resolve(ctx context.Context, importer string, spec runtimeSpec) (selection, error) {
+	sel := selection{runtimeSpec: spec, variant: VariantBase}
+	if m.capabilities == nil || len(spec.Variants) == 0 {
+		return sel, nil
+	}
+	caps, err := m.capabilities(ctx, importer)
+	if err != nil {
+		return sel, fmt.Errorf("resolve capabilities of %s: %w", importer, err)
+	}
+	sel.variant = spec.variant(caps)
+	return sel, nil
+}
+
+// importerOf names the importer whose Mods folder is modsRoot among the
+// ones the runtime supports; the first one stands in when no game path says.
+func (m *Manager) importerOf(ctx context.Context, modsRoot string, spec runtimeSpec) string {
+	if len(spec.Importers) == 0 {
+		return ""
+	}
+	if len(spec.Importers) == 1 || m.games == nil {
+		return spec.Importers[0]
+	}
+	rows, err := m.games.List(ctx)
+	if err != nil {
+		return spec.Importers[0]
+	}
+	for _, row := range rows {
+		if row.Importer == nil || !platform.SamePathFold(row.ModFolderPath, modsRoot) {
+			continue
+		}
+		if slices.ContainsFunc(
+			spec.Importers,
+			func(name string) bool { return strings.EqualFold(name, *row.Importer) },
+		) {
+			return *row.Importer
+		}
+	}
+	return spec.Importers[0]
 }
 
 func (m *Manager) report(sc *scope, operation string, err error) error {

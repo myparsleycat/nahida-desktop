@@ -18,6 +18,13 @@ var runtimeAssets embed.FS
 
 var disabledPrefixRE = regexp.MustCompile(`(?i)^disabled[\s_-]*`)
 
+const (
+	// runtimeEnhancedDir below runtime/ holds the files only the forked
+	// d3d11.dll reads; it is empty until the renderer uses its features.
+	runtimeEnhancedDir     = "enhanced"
+	runtimeVariantEnhanced = "enhanced"
+)
+
 // RuntimeSpec is the LiquidGravityProbe global mod the emitter hooks call.
 // Hooks reach it by namespace, so its folder can move without touching them.
 func RuntimeSpec() modruntime.Spec {
@@ -31,9 +38,17 @@ func RuntimeSpec() modruntime.Spec {
 		Importers: []string{"EFMI"},
 		Namespace: runtimeNamespace,
 		Files:     files,
-		Seed:      map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader},
-		Legacy:    []modruntime.Legacy{{Dir: "LiquidGravityProbe/LiquidGravityProbe", Manifest: legacyRuntimeManifest}},
-		Settings:  runtimeSettings(),
+		// The forked d3d11.dll's sampler slots let the renderer bind more
+		// resources; the INI files that use them go below enhanced/ and only
+		// reach importers whose DLL reads them.
+		Variants: []modruntime.Variant{{
+			Name:     runtimeVariantEnhanced,
+			Requires: func(caps modruntime.Capabilities) bool { return caps.ShaderSamplerSlots },
+			Dir:      runtimeEnhancedDir,
+		}},
+		Seed:     map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader},
+		Legacy:   []modruntime.Legacy{{Dir: "LiquidGravityProbe/LiquidGravityProbe", Manifest: legacyRuntimeManifest}},
+		Settings: runtimeSettings(),
 	}
 }
 
