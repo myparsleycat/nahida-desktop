@@ -2,9 +2,10 @@
 // slots that tracked them in earlier frames, so each keeps its own stream.
 #define SLOT_STATE_WRITER
 #include "ParticleConfig.hlsl"
-#include "Slots.hlsl"
 Texture1D<float4> IniParams:register(t120);
+#include "Slots.hlsl"
 StructuredBuffer<float4> candidates:register(t0);
+StructuredBuffer<float4> profiles:register(t1);
 // FluidSolver's frame state, four rows per slot.
 RWStructuredBuffer<float4> frameState:register(u1);
 // How far a slot follows its character onto a different emitter id, past the
@@ -71,6 +72,12 @@ void main(uint3 tid:SV_DispatchThreadID){
    [unroll]for(uint k=0;k<CANDIDATE_ROWS;k++)slots[base+k]=candidates[source+k];
    slots[base+SLOT_ROOT]=float4(candidates[source+5].xyz,1);
    slots[base+SLOT_TRACK]=float4(now,0,0,0);
+   // A profile reload changes the look of a character already in its slot.
+   uint profileCount,stride;profiles.GetDimensions(profileCount,stride);
+   uint row=(uint)candidates[source+4].y*PROFILE_ROWS;
+   bool known=row+PROFILE_ROWS<=profileCount;
+   slots[base+SLOT_LOOK]=known?profiles[row+3]:0;
+   slots[base+SLOT_TINT]=known?profiles[row+4]:0;
    // A new character must not inherit the motion or nozzle of the last one.
    if(!assigned){frameState[target*4]=0;frameState[target*4+2]=0;}
   }else{

@@ -22,7 +22,7 @@ uint mixBits(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;re
 float random01(uint seed,uint channel){return float(mixBits(seed+channel*0x9e3779b9u)>>8)*(1.0/16777216.0);}
 // Floor splashes weaken progressively below the default strength.
 float lowStrengthFloorSplash(CollisionEvent e){
- float strength=smoothstep(.28,1.69,IniParams[237].z);
+ float strength=smoothstep(.28,1.69,slotDrive((uint)e.slot.x));
  float floorWeight=smoothstep(.35,.8,e.normalRadius.y);
  return lerp(1,lerp(.25,1,strength),floorWeight);
 }
@@ -35,6 +35,12 @@ float3 peripheralVelocity(uint seed,float3 up,float3 right,float3 forward,float 
  float3 lateral=velocity+up*down;float lateralSpeed=length(lateral);
  float angle=atan2(lateralSpeed,down)*angleScale;
  return lateral/max(lateralSpeed,1e-6)*(magnitude*sin(angle))-up*(magnitude*cos(angle));
+}
+// Preserve the baseline spray, widening/increasing it toward maximum strength
+// and toward minimum strength alike.
+float peripheralSpray(float baseline,float drive){
+ if(drive>=1.689)return lerp(baseline,.5,smoothstep(1.69,3.94,drive));
+ return lerp(baseline,.5,1-smoothstep(.28,1.69,drive));
 }
 bool adhesionEvent(CollisionEvent e){
  return random01((uint)e.incoming.w&0xffffu,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz);
@@ -197,25 +203,19 @@ void main(uint3 id:SV_DispatchThreadID){
  if(p.velocityAlive.w>.5 && floorPuddle(p.densityBirth.w))p.velocityAlive.w=0;
  if(p.velocityAlive.w<.5){
   uint slot;InterlockedAdd(freeCounter[0],1,slot);
-  bool atOrAboveBasic=IniParams[237].z>=1.689;
-  float highDrive=smoothstep(1.69,3.94,IniParams[237].z);
-  // Preserve the baseline spray, widening/increasing it toward maximum strength.
-  float baselineFraction=.5*(1-smoothstep(.28,1.69,1.1275));
   float pulseSuppression=1-saturate((pulse[2].x-1)/.85);
-  float lowDrive=1-smoothstep(.28,1.69,IniParams[237].z);
-  float peripheralFraction=atOrAboveBasic?lerp(baselineFraction,.5,highDrive):lerp(baselineFraction,.5,lowDrive);
-  float lowRate=120*peripheralFraction*pulseSuppression;
-  float now=IniParams[239].y;
-  uint lowCount=(uint)clamp(floor(dt*lowRate+random01(asuint(now),31)),0,8);
+  float now=IniParams[239].y,lowJitter=random01(asuint(now),31);
   uint pulseCount=(uint)pulse[2].z;
-  // Nozzle spray takes the first free particles, the same count for every
-  // slot that emits, in slot order; impact children take the rest.
+  // Nozzle spray takes the first free particles, in slot order, each slot
+  // as many as its own strength sprays; impact children take the rest.
   bool spraying=IniParams[237].x>.5 && pulse[3].w>.5 && pulse[5].x>.75;
   uint emitterCount=0,sprayOwner=0,sprayChild=0;
   [unroll]for(uint s=0;s<SLOT_COUNT;s++){
    if(!spraying||!slotSeen(s))continue;
-   if(slot>=emitterCount&&slot<emitterCount+pulseCount+lowCount){sprayOwner=s;sprayChild=slot-emitterCount;}
-   emitterCount+=pulseCount+lowCount;
+   float lowRate=120*peripheralSpray(.5*(1-smoothstep(.28,1.69,1.1275)),slotDrive(s))*pulseSuppression;
+   uint sprayCount=pulseCount+(uint)clamp(floor(dt*lowRate+lowJitter),0,8);
+   if(slot>=emitterCount&&slot<emitterCount+sprayCount){sprayOwner=s;sprayChild=slot-emitterCount;}
+   emitterCount+=sprayCount;
   }
   uint eventId=0,child=slot>=emitterCount?slot-emitterCount:0;
   [loop]for(;eventId<min(eventCounter[0],EVENT_CAPACITY);eventId++){
@@ -264,9 +264,9 @@ void main(uint3 id:SV_DispatchThreadID){
    float3 position=origin+right*sign*(.0005+.002*random01(seed,2))+forward*(.001+.001*random01(seed,3))-up*.0015;
    float3 velocity=up*(-.18+.60*random01(seed,4))+forward*(.12+.38*random01(seed,5))+right*sign*(.08+.22*random01(seed,6));
    float previousOpening=frameState[owner*4+2].w>.5?frameState[owner*4+2].x:1;
-   SoftNozzle nozzle=evaluateSoftNozzle(IniParams[237].z,pulse[2].x,previousOpening,dt,IniParams[239].y);
-   float basicAngle=.5*lerp(.25,1,1-smoothstep(.28,1.69,1.1275));
-   float baseAngleScale=atOrAboveBasic?lerp(basicAngle,.5,highDrive):lerp(basicAngle,.5,lowDrive);
+   float drive=slotDrive(owner);
+   SoftNozzle nozzle=evaluateSoftNozzle(drive,pulse[2].x,previousOpening,dt,IniParams[239].y);
+   float baseAngleScale=peripheralSpray(.5*lerp(.25,1,1-smoothstep(.28,1.69,1.1275)),drive);
    if(child>=pulseCount){
     velocity=peripheralVelocity(seed,up,right,forward,nozzle.speed,baseAngleScale);
    }else{

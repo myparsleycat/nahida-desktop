@@ -7,13 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -41,9 +44,71 @@ type profileEmitter struct {
 type profileDocument struct {
 	SchemaVersion int              `json:"schema_version"`
 	Enabled       bool             `json:"enabled"`
-	GPUData       [][16]float64    `json:"gpu_data"`
+	GPUData       [][]float64      `json:"gpu_data"`
 	ModPath       string           `json:"mod_path"`
 	Emitters      []profileEmitter `json:"emitters"`
+	Look          *Look            `json:"look,omitempty"`
+}
+
+// A Look starts from and stays within the runtime's own settings of the same
+// meaning, so a custom color starts from what the game shows.
+const (
+	settingStrength   = "strength"
+	settingTint       = "tint"
+	settingAbsorption = "absorptionDepth"
+)
+
+func runtimeSetting(id string) modruntime.Setting {
+	for _, setting := range runtimeSettings() {
+		if setting.ID == id {
+			return setting
+		}
+	}
+	panic("liquid emitter runtime has no setting " + id)
+}
+
+func defaultLook() Look {
+	var look Look
+	for index, channel := range strings.Fields(runtimeSetting(settingTint).Default) {
+		if index < len(look.Tint) {
+			look.Tint[index], _ = strconv.ParseFloat(channel, 64)
+		}
+	}
+	look.AbsorptionMM, _ = strconv.ParseFloat(runtimeSetting(settingAbsorption).Default, 64)
+	return look
+}
+
+func validLook(look Look) bool {
+	strength := runtimeSetting(settingStrength)
+	if span := int(strength.Max - strength.Min); look.StrengthOffset < -span || look.StrengthOffset > span {
+		return false
+	}
+	for _, channel := range look.Tint {
+		if math.IsNaN(channel) || channel < 0 || channel > 1 {
+			return false
+		}
+	}
+	absorption := runtimeSetting(settingAbsorption)
+	return look.AbsorptionMM >= absorption.Min && look.AbsorptionMM <= absorption.Max
+}
+
+// lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
+// strength offset, custom color flag, tint and absorption depth in meters. A
+// mod without its own look writes no tail, which a runtime from before looks
+// also reads.
+func lookRecord(look *Look) []float64 {
+	if look == nil || look.StrengthOffset == 0 && !look.CustomColor {
+		return nil
+	}
+	custom := 0.0
+	if look.CustomColor {
+		custom = 1
+	}
+	return []float64{
+		float64(look.StrengthOffset), custom,
+		look.Tint[0], look.Tint[1], look.Tint[2],
+		look.AbsorptionMM / 1000,
+	}
 }
 
 // modMarker ties a mod folder to its profile. ModPath is where the marker was
@@ -218,13 +283,14 @@ func readProfile(layout runtimeLayout, key string) (profileDocument, error) {
 
 func encodeProfile(doc profileDocument) ([]byte, error) {
 	slices.SortFunc(doc.Emitters, func(a, b profileEmitter) int { return a.PID - b.PID })
-	doc.SchemaVersion, doc.GPUData = 1, make([][16]float64, 0, len(doc.Emitters))
+	doc.SchemaVersion, doc.GPUData = 1, make([][]float64, 0, len(doc.Emitters))
+	tail := lookRecord(doc.Look)
 	for _, emitter := range doc.Emitters {
-		var record [16]float64
-		record[0] = float64(emitter.PID)
-		copy(record[1:13], emitter.Row[:])
-		copy(record[13:], emitter.Offset[:])
-		doc.GPUData = append(doc.GPUData, record)
+		record := make([]float64, 0, 16+len(tail))
+		record = append(record, float64(emitter.PID))
+		record = append(record, emitter.Row[:]...)
+		record = append(record, emitter.Offset[:]...)
+		doc.GPUData = append(doc.GPUData, append(record, tail...))
 	}
 	return encodeJSON(doc)
 }

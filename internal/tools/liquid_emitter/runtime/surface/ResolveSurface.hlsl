@@ -22,8 +22,8 @@ void main(uint3 tid:SV_DispatchThreadID){
  if(min(a.w,min(b.w,c.w))<.5)return;
  stats[0].z+=1;
  uint id=(uint)IniParams[243].x;
- uint profileCount,profileStride;profiles.GetDimensions(profileCount,profileStride);if(id*3+2>=profileCount)return;
- float4 profile=profiles[id*3];
+ uint profileCount,profileStride;profiles.GetDimensions(profileCount,profileStride);if((id+1)*PROFILE_ROWS>profileCount)return;
+ float4 profile=profiles[id*PROFILE_ROWS];
  // Cleared slots mean no JSON profile. Never use an old/root fallback.
  if(profile.x>100||abs(profile.y+profile.z+profile.w-1)>.001||min(profile.y,min(profile.z,profile.w))<-.00001)return;
  float3 p=a.xyz*profile.y+b.xyz*profile.z+c.xyz*profile.w+camera[7].xyz;
@@ -52,7 +52,7 @@ void main(uint3 tid:SV_DispatchThreadID){
  // Carry the model's forward/up frame through the live triangle deformation.
  float3 tangent=normalize(b.xyz-a.xyz);
  float3 bitangent=cross(n,tangent);
- float3 f=profiles[id*3+1].xyz,u=profiles[id*3+2].xyz;
+ float3 f=profiles[id*PROFILE_ROWS+1].xyz,u=profiles[id*PROFILE_ROWS+2].xyz;
  float3 forward=normalize(tangent*f.x+bitangent*f.y+n*f.z);
  float3 upHint=normalize(tangent*u.x+bitangent*u.y+n*u.z);
  float3 right=normalize(cross(upHint,forward));

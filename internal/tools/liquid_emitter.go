@@ -10,6 +10,7 @@ type (
 	LiquidEmitterInspection  = liquidemitter.Inspection
 	LiquidEmitterApplyInput  = liquidemitter.ApplyInput
 	LiquidEmitterRemoveInput = liquidemitter.RemoveInput
+	LiquidEmitterLookInput   = liquidemitter.LookInput
 )
 
 func (t *Tools) LiquidEmitterInspect(ctx context.Context, modPath string) (LiquidEmitterInspection, error) {
@@ -32,6 +33,13 @@ func (t *Tools) LiquidEmitterRemove(
 	input LiquidEmitterRemoveInput,
 ) (LiquidEmitterInspection, error) {
 	return t.liquidEmitter.Remove(ctx, input)
+}
+
+func (t *Tools) LiquidEmitterSetLook(
+	ctx context.Context,
+	input LiquidEmitterLookInput,
+) (LiquidEmitterInspection, error) {
+	return t.liquidEmitter.SetLook(ctx, input)
 }
 
 func (t *Tools) LiquidEmitterRestoreSource(ctx context.Context, modPath string) (LiquidEmitterInspection, error) {

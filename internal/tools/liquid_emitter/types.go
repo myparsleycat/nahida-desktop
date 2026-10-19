@@ -22,7 +22,7 @@ const (
 	// The loader reads every .ini below Mods, so the backup must not end in .ini.
 	backupSuffix = ".nhd-liquid-orig"
 
-	// SurfaceProfiles holds 12288 float4 rows, three per profile.
+	// SurfaceProfiles holds 20480 float4 rows, PROFILE_ROWS (5) per profile.
 	maxProfiles = 4096
 	// LoadProfilesJSON rejects a whole profile file when any offset axis exceeds 25 cm.
 	maxOffsetMeters = 0.25
@@ -44,6 +44,8 @@ const (
 	ErrorGeneratedMod    = "LIQUID_GENERATED_MOD"
 	ErrorNotGenerated    = "LIQUID_NOT_GENERATED"
 	ErrorSourceMissing   = "LIQUID_SOURCE_MISSING"
+	ErrorInvalidLook     = "LIQUID_INVALID_LOOK"
+	ErrorNoEmitters      = "LIQUID_NO_EMITTERS"
 
 	diagnosticWhere = "LiquidEmitter"
 	operationPrefix = "liquid-emitter-"
@@ -80,6 +82,19 @@ type Emitter struct {
 	Anchor EmitterAnchor `json:"anchor"`
 }
 
+// Look is the liquid of one mod's character, applied over the runtime's
+// global settings.
+type Look struct {
+	// StrengthOffset shifts the global strength level by whole levels; the
+	// sum is kept within the runtime's levels 0 to 7.
+	StrengthOffset int `json:"strengthOffset"`
+	// CustomColor replaces the global tint and absorption depth with Tint and
+	// AbsorptionMM.
+	CustomColor  bool       `json:"customColor"`
+	Tint         [3]float64 `json:"tint"`
+	AbsorptionMM float64    `json:"absorptionMm"`
+}
+
 type Inspection struct {
 	ModPath  string            `json:"modPath"`
 	Runtime  modruntime.Status `json:"runtime"`
@@ -87,6 +102,7 @@ type Inspection struct {
 	// SourcePath is the original mod this tool copied ModPath from, or empty
 	// when ModPath is not such a copy.
 	SourcePath string `json:"sourcePath"`
+	Look       Look   `json:"look"`
 }
 
 // ApplyInput describes a picked face of a model viewer mesh. FaceVertices,
@@ -105,6 +121,11 @@ type ApplyInput struct {
 	Direction         []float64 `json:"direction"`
 	// Mode is ApplyInPlace or ApplyNewMod; empty means ApplyInPlace.
 	Mode string `json:"mode"`
+}
+
+type LookInput struct {
+	ModPath string `json:"modPath"`
+	Look    Look   `json:"look"`
 }
 
 // RemoveInput removes the listed emitters of a mod; no PIDs removes them all.

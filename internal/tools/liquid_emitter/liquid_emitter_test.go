@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -466,6 +467,59 @@ func TestServiceApplyAndRemoveRestoreMod(t *testing.T) {
 		if _, err := os.Stat(leftover); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s still exists (err=%v)", leftover, err)
 		}
+	}
+}
+
+// LoadProfilesJSON reads a mod's look as six numbers after an emitter's 16,
+// in this order, and a runtime from before looks rejects any record that is
+// not 16 long; a mod that keeps the global settings must still write 16.
+func TestServiceLookExtendsGPURecords(t *testing.T) {
+	f := newServiceFixture(t)
+	ctx := context.Background()
+	look := Look{StrengthOffset: -2, CustomColor: true, Tint: [3]float64{0.2, 0.4, 1}, AbsorptionMM: 30}
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); !hasCode(err, ErrorNoEmitters) {
+		t.Fatalf("look without emitters = %v", err)
+	}
+	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
+		t.Fatal(err)
+	}
+	invalid := look
+	invalid.StrengthOffset = 8
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: invalid}); !hasCode(err, ErrorInvalidLook) {
+		t.Fatalf("out of range look = %v", err)
+	}
+
+	key, _ := readModMarker(f.modRoot)
+	records := func() [][]float64 {
+		t.Helper()
+		var doc profileDocument
+		if _, err := readJSON(filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json"), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc.GPUData
+	}
+	inspection, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Moving the emitter keeps the mod's look.
+	if inspection, err = f.service.Apply(ctx, f.applyInput(1)); err != nil {
+		t.Fatal(err)
+	}
+	if inspection.Look != look {
+		t.Fatalf("inspection look = %+v", inspection.Look)
+	}
+	got := records()
+	if len(got) != 1 || len(got[0]) != 22 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03}) {
+		t.Fatalf("GPU records with a look = %v", got)
+	}
+
+	look.StrengthOffset, look.CustomColor = 0, false
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got) != 1 || len(got[0]) != 16 {
+		t.Fatalf("GPU records with the global look = %v", got)
 	}
 }
 

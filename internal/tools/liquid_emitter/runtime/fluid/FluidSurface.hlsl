@@ -2,6 +2,10 @@
 // nearest view depth lands in o0 through min blending and whose ray chord
 // adds up in o1 as thickness. A floor puddle particle is a soft disc on its
 // ground plane instead: the discs of neighbors add up into one flat film.
+// o2 adds up each particle's absorption weighted by its thickness, with the
+// weight in alpha, and o3 its absorption depth (mm) under the same weight, so
+// the composite colors overlapping liquids of different characters by how
+// much of each the ray crosses.
 #include "SSFRCommon.hlsl"
 #include "JetGuide.hlsl"
 #include "SheetProfile.hlsl"
@@ -25,7 +29,13 @@ struct Varying{
  nointerpolation float4 axisScale:TEXCOORD2;
  nointerpolation float2 radiusFade:TEXCOORD3;
  nointerpolation float mode:TEXCOORD4;
+ // The owner's liquid (Slots.hlsl slotLiquid): absorption per meter and
+ // absorption depth in meters.
+ nointerpolation float4 liquid:TEXCOORD5;
 };
+// Keeps the color weight of a covered pixel above what half floats flush to
+// zero, however thin the film there.
+static const float COLOR_WEIGHT_FLOOR=1e-5;
 float birthRadiusScale(float value){return value>=48?.70:(value>=32?.85:1);}
 #ifdef VERTEX_SHADER
 // The slots of a bank are born in order, so slots i-1 and i+1 hold the
@@ -41,11 +51,11 @@ bool streamNeighbor(uint index,float3 root,float age,float3 center,out float3 po
 Varying main(uint id:SV_VertexID){
  uint i=id/6;bool primary=i<PRIMARY_COUNT;uint poolIndex=primary?i:i-PRIMARY_COUNT;
  FluidParticle p;if(primary)p=particles[poolIndex];else p=splashes[poolIndex];
- float visualScale=lerp(.75,1,smoothstep(.28,1.69,IniParams[237].z));
+ uint owner=primary?primarySlot(poolIndex):splashSlot(p.velocityAlive.w);
+ float visualScale=lerp(.75,1,smoothstep(.28,1.69,slotDrive(owner)));
  float radius=SURFACE_RADIUS*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
  bool puddle=!primary&&floorPuddle(p.densityBirth.w);
  if(puddle)radius=SURFACE_RADIUS*max(p.densityBirth.z,.1)*puddleWidth(p.densityBirth.x)*PUDDLE_SPLAT_SCALE;
- uint owner=primary?primarySlot(poolIndex):splashSlot(p.velocityAlive.w);
  float3 root=slotRoot(owner),center=root+p.positionAge.xyz;
  float4 projected=project(center);
  bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&slotLive(owner)&&all(isfinite(projected))&&projected.w>.05;
@@ -109,11 +119,18 @@ Varying main(uint id:SV_VertexID){
  o.position=valid?project(world):float4(2,2,0,1);
  o.world=world;o.center=center;o.axisScale=axisScale;o.radiusFade=float2(radius,fade);
  o.mode=valid?(puddle?MODE_DISC:MODE_ELLIPSOID):MODE_NONE;
+ o.liquid=slotLiquid(owner);
  return o;
 }
 #endif
 #ifdef PIXEL_SHADER
-struct Surface{float depth:SV_Target0;float thickness:SV_Target1;};
+struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;};
+// Millimeters keep a thin film's weighted depth clear of half-float flushing.
+void weighLiquid(inout Surface o,float4 liquid){
+ float weight=o.thickness+COLOR_WEIGHT_FLOOR;
+ o.color=float4(liquid.rgb*weight,weight);
+ o.absorptionDepth=liquid.w*1000*weight;
+}
 Surface main(Varying i){
  clip(i.mode-.5);
  float3 eye=eyePosition();
@@ -142,6 +159,7 @@ Surface main(Varying i){
   }
   float coverage=1-r*r/(radius*radius);
   o.depth=projected.w;o.thickness=PUDDLE_SPLAT_FILM*coverage*coverage*i.radiusFade.y;
+  weighLiquid(o,i.liquid);
   return o;
  }
  // Scale the ray along the anisotropy axis and intersect the plain sphere.
@@ -160,6 +178,8 @@ Surface main(Varying i){
  float4 projected=project(hit);
  clip(projected.w-.05);
  if(sceneInFront(screenUV(projected),projected))clip(-1);
- o.depth=projected.w;o.thickness=(exit-entry)*i.radiusFade.y;return o;
+ o.depth=projected.w;o.thickness=(exit-entry)*i.radiusFade.y;
+ weighLiquid(o,i.liquid);
+ return o;
 }
 #endif

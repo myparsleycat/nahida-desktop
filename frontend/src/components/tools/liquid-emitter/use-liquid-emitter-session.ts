@@ -1,5 +1,5 @@
 import { Tools } from "@bindings/tools";
-import type { Inspection } from "@bindings/tools/liquid_emitter";
+import type { Inspection, Look } from "@bindings/tools/liquid_emitter";
 import type { ModelViewerDialogSource } from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
 import { normalizeModelViewerTransport } from "@renderer/components/tools/model-viewer/model-viewer-transport";
 import { Logger } from "@renderer/lib/logger";
@@ -77,10 +77,14 @@ export function useLiquidEmitterSession(modPath: string) {
         mutationFn: (pids: number[]) => Tools.LiquidEmitterRemove({ modPath, pids }),
         onSuccess,
     });
+    const setLook = useMutation({
+        mutationFn: (look: Look) => Tools.LiquidEmitterSetLook({ modPath, look }),
+        onSuccess,
+    });
     const restore = useMutation({
         mutationFn: () => Tools.LiquidEmitterRestoreSource(modPath),
         onSuccess: onMoved,
     });
 
-    return { source, loadError, inspection, install, apply, remove, restore };
+    return { source, loadError, inspection, install, apply, remove, setLook, restore };
 }

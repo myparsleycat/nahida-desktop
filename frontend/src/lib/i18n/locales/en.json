@@ -1823,6 +1823,21 @@
           "unhooked": "Hook missing",
           "missing_mesh": "This part is no longer in the model."
         },
+        "look": {
+          "title": "This character's liquid",
+          "hint": "Applies to every emitter of this mod on top of the runtime settings. Press F10 in game after saving.",
+          "needs_emitter": "Apply an emitter first to give this character its own liquid.",
+          "strength": "Strength offset",
+          "strength_hint": "Levels added to the current in-game strength. The result stays between 0 and 7.",
+          "custom_color": "Use its own color",
+          "custom_color_hint": "When off, the color and color depth from the runtime settings are used.",
+          "tint": "Liquid color",
+          "absorption": "Color depth",
+          "absorption_hint": "Millimeters of liquid it takes to reach the full color. Lower is deeper.",
+          "reset": "Follow runtime settings",
+          "save": "Save liquid",
+          "saved": "Saved this character's liquid. Press F10 in game to reload mods."
+        },
         "error": {
           "not_efmi": "This tool only works with Arknights: Endfield (EFMI) mods.",
           "runtime_foreign": "Another LiquidGravityProbe is installed at {{detail}}. Disable or remove it first.",
@@ -1840,7 +1855,9 @@
           "invalid_mode": "Unknown apply mode: {{detail}}",
           "generated_mod": "This mod was already made by this tool. Its emitters are edited in place.",
           "not_generated": "This mod was not made by this tool, so there is no original to restore.",
-          "source_missing": "The original mod is no longer at {{detail}}. Enable or move it back first."
+          "source_missing": "The original mod is no longer at {{detail}}. Enable or move it back first.",
+          "invalid_look": "The liquid settings are out of range.",
+          "no_emitters": "Apply an emitter before setting this character's liquid."
         }
       },
       "body_shape": {

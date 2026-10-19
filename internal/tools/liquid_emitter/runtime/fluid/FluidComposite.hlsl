@@ -3,6 +3,11 @@
 #include "SSFRCommon.hlsl"
 Texture2D<float> fluidDepth:register(t100);
 Texture2D<float> fluidThickness:register(t101);
+// rgb the thickness-weighted absorption of every liquid the pixel crosses,
+// a their weight, and their absorption depth in mm under the same weight
+// (FluidSurface.hlsl); unsmoothed.
+Texture2D<float4> fluidColor:register(t102);
+Texture2D<float> fluidAbsorptionDepth:register(t103);
 Texture2D<float4> sceneLighting:register(t104);
 struct ScreenVarying{float4 position:SV_Position;};
 #ifdef VERTEX_SHADER
@@ -133,9 +138,23 @@ float4 main(ScreenVarying i):SV_Target{
  // in meters; 252 = wet ground darkening, puddle reflectance floor, stream
  // reflection gain and scattering; 253.x = refraction.
  float4 look=IniParams[251],shade=IniParams[252];
- // The default tint passes red and green almost equally and absorbs blue: a
- // urine yellow rather than amber, which over gray ground turns brown.
- float3 tint=saturate(look.rgb);
+ // Beer-Lambert absorption that reaches the body tint at the absorption
+ // depth, 15 mm by default. A film that darkens the ground much more reads
+ // as oil, not urine. The default tint passes red and green almost equally
+ // and absorbs blue: a urine yellow rather than amber, which over gray
+ // ground turns brown. Each character's liquid brings its own absorption
+ // (Slots.hlsl slotLiquid); where several overlap they mix by thickness.
+ float4 mixed=fluidColor.Load(int3(pixel,0));
+ float mixedDepth=fluidAbsorptionDepth.Load(int3(pixel,0));
+ float depthMeters=max(look.w,.001);
+ float3 absorb=-log(max(saturate(look.rgb),.02))/depthMeters;
+ if(mixed.a>0&&all(isfinite(mixed))&&isfinite(mixedDepth)){
+  absorb=max(mixed.rgb/mixed.a,0);
+  depthMeters=max(mixedDepth/mixed.a/1000,.001);
+ }
+ // The body color at the liquid's own absorption depth: each character's
+ // tint, and a thickness-weighted blend where liquids overlap.
+ float3 tint=exp(-absorb*depthMeters);
  // Thickness is the sum of every overlapping particle's chord. A stream
  // keeps most of its chord, while a puddle stacks the discs of every
  // particle lying there and would read as centimeters where the real film
@@ -143,10 +162,6 @@ float4 main(ScreenVarying i):SV_Target{
  // stays a film the ground shows through and a lone drop stays pale.
  float filmLimit=lerp(.005,.0015,puddle);
  float film=filmLimit*(1-exp(-thickness/filmLimit));
- // Beer-Lambert absorption that reaches the body tint at the absorption
- // depth, 15 mm by default. A film that darkens the ground much more reads
- // as oil, not urine.
- float3 absorb=-log(max(tint,.02))/max(look.w,.001);
  float3 transmit=exp(-film*absorb);
  float2 refractionUV=uv+float2(dot(n,right),-dot(n,up))*IniParams[253].x*saturate(film/.004);
  float3 background=hdrBilinear(refractionUV);

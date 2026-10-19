@@ -43,7 +43,7 @@ bool finite3(float3 p){return all(isfinite(p)) && all(abs(p)<100);}
 void main(uint3 id:SV_DispatchThreadID){
  uint fs=id.x*4;
  float oldOpening=updatedState[fs+2].w>.5?updatedState[fs+2].x:1;
- float pressure=nozzlePressure(IniParams[237].z,pulse[2].x);
+ float pressure=nozzlePressure(slotDrive(id.x),pulse[2].x);
  updatedState[fs+2]=float4(advanceNozzleOpening(oldOpening,pressure,DT*2),pressure,0,1);
  updatedState[fs]=slotLive(id.x)?float4(slotRoot(id.x),1):0;updatedState[fs+1]=float4(0,0,0,STEP.y);
 }
@@ -104,11 +104,12 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  // Spawn only events belonging to this substep, never catch up old emissions.
  // This same rule covers first activation, reactivation, and teleport recovery.
  bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot);
+ float drive=slotDrive(slot);
  bool initialized=p.densityBirth.w>.5;
  bool birth=emitting && age>=0 && age<DT;
  // Reserve births add density during pressure pulses or raised strength.
  // Baseline slots and the independently allocated splash pool are untouched.
- float sheetDemand=max(saturate((IniParams[237].z-1.69)/2.25),saturate((pulse[2].x-1)/.85));
+ float sheetDemand=max(saturate((drive-1.69)/2.25),saturate((pulse[2].x-1)/.85));
  if(birth && reserve && sheetDemand<.05){
   p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
  }
@@ -129,11 +130,11 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   if(IniParams[241].x>.5 && slotSeen(slot)){origin=slotAnchor(slot,3).xyz-slotRoot(slot);up=slotAnchor(slot,1).xyz;right=slotAnchor(slot,0).xyz;forward=slotAnchor(slot,2).xyz;}
   float previousOpening=frameState[fs+2].w>.5?frameState[fs+2].x:1;
   float nozzleDt=DT*(STEP.z<.5?1:2);
-  SoftNozzle nozzle=evaluateSoftNozzle(IniParams[237].z,pulse[2].x,previousOpening,nozzleDt,t);
+  SoftNozzle nozzle=evaluateSoftNozzle(drive,pulse[2].x,previousOpening,nozzleDt,t);
   // The centerline stays down. Pressure widens a symmetric fore/aft sheet.
   float3 axis=-up;
   float3 slitLong=normalize(forward-up*dot(forward,up));
-  float lowScatter=lowFlowScatter(IniParams[237].z,pulse[2].x);
+  float lowScatter=lowFlowScatter(drive,pulse[2].x);
   float frozenMode=nozzle.sheetAmount>.001?nozzle.sheetAmount:-lowScatter;
   birthSheetFrame[i]=float4(slitLong,frozenMode);
   float3 socketOrigin=origin-forward*.001-up*.004;
@@ -152,7 +153,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float burstCycle=floor(t/4.8),burstTime=t-burstCycle*4.8;
   float scatterStart=.35+.30*hash1(burstCycle*5.17+11);
   float scatterDuration=.20+1.20*hash1(burstCycle*7.91+23);
-  bool minimumFlow=IniParams[237].z<.4 && pulse[5].x>.75;
+  bool minimumFlow=drive<.4 && pulse[5].x>.75;
   if(minimumFlow){
    // Minimum flow is ballistic; pressure pulses narrow the birth velocity below.
    nozzle.sheetAmount=0;frozenMode=-1;

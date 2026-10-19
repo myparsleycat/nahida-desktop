@@ -1823,6 +1823,21 @@
           "unhooked": "缺少钩子",
           "missing_mesh": "当前模型中已没有此部件。"
         },
+        "look": {
+          "title": "该角色的液体",
+          "hint": "在运行时设置的基础上应用于此模组的所有喷射点。保存后请在游戏中按 F10。",
+          "needs_emitter": "请先应用喷射点，才能为该角色单独设置液体。",
+          "strength": "强度修正",
+          "strength_hint": "在游戏内当前强度上增加的级数，结果保持在 0~7 之间。",
+          "custom_color": "使用专属颜色",
+          "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
+          "tint": "液体颜色",
+          "absorption": "颜色浓度",
+          "absorption_hint": "达到原本颜色所需的液体厚度（毫米）。越小颜色越浓。",
+          "reset": "跟随运行时设置",
+          "save": "保存液体设置",
+          "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。"
+        },
         "error": {
           "not_efmi": "此工具仅适用于明日方舟:终末地(EFMI)模组。",
           "runtime_foreign": "{{detail}} 中已安装另一个 LiquidGravityProbe。请先禁用或删除它。",
@@ -1840,7 +1855,9 @@
           "invalid_mode": "未知的应用方式：{{detail}}",
           "generated_mod": "此模组已由此工具创建，其喷射设置会直接在此模组中修改。",
           "not_generated": "此模组不是由此工具创建的，没有可恢复的原模组。",
-          "source_missing": "原模组已不在 {{detail}}。请先将其移回原位置。"
+          "source_missing": "原模组已不在 {{detail}}。请先将其移回原位置。",
+          "invalid_look": "液体设置超出范围。",
+          "no_emitters": "请先应用喷射点，再设置该角色的液体。"
         }
       },
       "body_shape": {

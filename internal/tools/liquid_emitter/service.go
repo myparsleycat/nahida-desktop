@@ -151,6 +151,22 @@ func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, er
 	})
 }
 
+// SetLook stores the mod's own liquid look with its emitters, so a mod needs
+// at least one emitter to have one.
+func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, error) {
+	return s.run(ctx, "set-look", input.ModPath, func(sc *scope) (Inspection, error) {
+		if !validLook(input.Look) {
+			return Inspection{}, infra.ContractError(ErrorInvalidLook)
+		}
+		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
+			if err := s.setLook(sc, rt.root, input.Look); err != nil {
+				return Inspection{}, err
+			}
+			return s.inspection(sc, rt)
+		})
+	})
+}
+
 func (s *Service) run(
 	ctx context.Context,
 	operation, modPath string,
@@ -261,7 +277,7 @@ func (s *Service) withRuntime(
 
 func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	sc.stage = stageLoad
-	inspection := Inspection{ModPath: sc.root, Runtime: rt.status, Emitters: []Emitter{}}
+	inspection := Inspection{ModPath: sc.root, Runtime: rt.status, Emitters: []Emitter{}, Look: defaultLook()}
 	marker, err := readMarker(sc.root)
 	if err != nil || marker.ModKey == "" {
 		return inspection, err
@@ -276,6 +292,9 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	doc, err := readProfile(layout, key)
 	if err != nil {
 		return inspection, err
+	}
+	if doc.Look != nil {
+		inspection.Look = *doc.Look
 	}
 	index, err := readIndex(layout, sc.modsRoot)
 	if err != nil {
@@ -433,6 +452,42 @@ func (s *Service) apply(
 	backup := source.INIPath + backupSuffix
 	if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
 		changes = append([]fileChange{{path: backup, data: original}}, changes...)
+	}
+	marker, err := markerChange(sc.root, key, sc.origin)
+	if err != nil {
+		return err
+	}
+	return s.commit(sc, append(changes, marker...))
+}
+
+func (s *Service) setLook(sc *scope, runtimeRoot string, look Look) error {
+	sc.stage = stageLoad
+	layout := runtimeLayout{root: runtimeRoot}
+	key, _, err := s.ownedKey(sc, layout)
+	if err != nil {
+		return err
+	}
+	if key == "" {
+		return infra.ContractError(ErrorNoEmitters)
+	}
+	sc.stage = stageLoad
+	doc, err := readProfile(layout, key)
+	if err != nil {
+		return err
+	}
+	if len(doc.Emitters) == 0 {
+		return infra.ContractError(ErrorNoEmitters)
+	}
+	index, err := readIndex(layout, sc.modsRoot)
+	if err != nil {
+		return err
+	}
+	doc.Look, doc.ModPath = &look, sc.root
+	sc.fields["look"] = look
+
+	changes, err := s.profileChanges(layout, index, key, doc)
+	if err != nil {
+		return err
 	}
 	marker, err := markerChange(sc.root, key, sc.origin)
 	if err != nil {
@@ -648,7 +703,7 @@ func (s *Service) forkCopy(
 		index.Owners[forked] = append(index.Owners[forked], to)
 		return nil
 	}
-	doc := profileDocument{SchemaVersion: 1, Enabled: true, ModPath: sc.root}
+	doc := profileDocument{SchemaVersion: 1, Enabled: true, ModPath: sc.root, Look: shared.Look}
 	for _, emitter := range shared.Emitters {
 		if !hooked[emitter.PID] {
 			continue
