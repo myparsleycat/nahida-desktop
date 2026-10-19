@@ -1770,7 +1770,17 @@
             "disabled": "Enable"
           },
           "foreign_title": "Another LiquidGravityProbe is installed",
-          "foreign_description": "Disable or remove the copy at {{path}} first. Two copies of the runtime conflict in game."
+          "foreign_description": "Disable or remove the copy at {{path}} first. Two copies of the runtime conflict in game.",
+          "required": {
+            "missing": {
+              "title": "The emitter runtime is not installed",
+              "description": "Install the runtime to place and apply emitters."
+            },
+            "disabled": {
+              "title": "The emitter runtime is disabled",
+              "description": "Enable the runtime to place and apply emitters."
+            }
+          }
         },
         "pick": {
           "toggle": "Pick surface",

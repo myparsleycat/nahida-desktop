@@ -1770,7 +1770,17 @@
             "disabled": "有効化"
           },
           "foreign_title": "別のLiquidGravityProbeがインストールされています",
-          "foreign_description": "先に{{path}}のコピーを無効化または削除してください。ランタイムが2つあるとゲーム内で競合します。"
+          "foreign_description": "先に{{path}}のコピーを無効化または削除してください。ランタイムが2つあるとゲーム内で競合します。",
+          "required": {
+            "missing": {
+              "title": "噴射ランタイムがインストールされていません",
+              "description": "噴射ポイントを指定して適用するには、ランタイムをインストールしてください。"
+            },
+            "disabled": {
+              "title": "噴射ランタイムが無効になっています",
+              "description": "噴射ポイントを指定して適用するには、ランタイムを有効化してください。"
+            }
+          }
         },
         "pick": {
           "toggle": "表面を選択",

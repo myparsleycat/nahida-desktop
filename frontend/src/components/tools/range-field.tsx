@@ -8,6 +8,7 @@ export function RangeField({
   max,
   step,
   display,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -17,6 +18,7 @@ export function RangeField({
   max: number;
   step: number;
   display: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }) {
   return (
@@ -31,9 +33,11 @@ export function RangeField({
         max={max}
         step={step}
         value={value}
-        className="w-full accent-primary"
+        disabled={disabled}
+        className="w-full accent-primary disabled:cursor-not-allowed disabled:opacity-50"
         onPointerDown={(event) => {
-          if (!(event.ctrlKey || event.metaKey)) return;
+          // Chromium still sends pointer events to a disabled input.
+          if (disabled || !(event.ctrlKey || event.metaKey)) return;
           event.preventDefault();
           onChange(defaultValue);
         }}

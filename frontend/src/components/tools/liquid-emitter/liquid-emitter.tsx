@@ -65,6 +65,8 @@ const HISTORY_LIMIT = 100;
 const MAX_OFFSET_METERS = 0.25;
 const AXES = ["X", "Y", "Z"] as const;
 const DOWN: Vec3 = [0, 0, -1];
+// Applying repairs an outdated or changed runtime, so only these leave editing open.
+const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
 
 export function LiquidEmitterTool({
   modPath,
@@ -98,6 +100,10 @@ export function LiquidEmitterTool({
     session.remove.isPending ||
     session.install.isPending ||
     session.restore.isPending;
+  const editable =
+    inspection !== undefined && EDITABLE_RUNTIME_STATES.has(inspection.runtime.state);
+  const locked = !editable || !anchor;
+  const picks = picking && editable;
   // A mod this tool generated is always edited in place.
   const applyMode = inspection?.sourcePath ? IN_PLACE : mode;
 
@@ -245,8 +251,9 @@ export function LiquidEmitterTool({
         <div className="text-sm font-medium">{t("page.tools.liquid_emitter.title")}</div>
         <Button
           size="sm"
-          variant={picking ? "default" : "outline"}
-          aria-pressed={picking}
+          variant={picks ? "default" : "outline"}
+          aria-pressed={picks}
+          disabled={!editable}
           onClick={() => setPicking((value) => !value)}
         >
           <CrosshairIcon data-icon="inline-start" />
@@ -259,6 +266,7 @@ export function LiquidEmitterTool({
           inspection={inspection}
           error={session.inspection.error}
           busy={busy}
+          installing={session.install.isPending}
           onInstall={handleInstall}
         />
 
@@ -271,7 +279,7 @@ export function LiquidEmitterTool({
               <Button
                 size="icon-sm"
                 variant="ghost"
-                disabled={history.index === 0}
+                disabled={!editable || history.index === 0}
                 aria-label={t("page.tools.liquid_emitter.history.undo")}
                 title={t("page.tools.liquid_emitter.history.undo")}
                 onClick={() => step(-1)}
@@ -281,7 +289,7 @@ export function LiquidEmitterTool({
               <Button
                 size="icon-sm"
                 variant="ghost"
-                disabled={history.index >= history.entries.length - 1}
+                disabled={!editable || history.index >= history.entries.length - 1}
                 aria-label={t("page.tools.liquid_emitter.history.redo")}
                 title={t("page.tools.liquid_emitter.history.redo")}
                 onClick={() => step(1)}
@@ -318,7 +326,7 @@ export function LiquidEmitterTool({
                 <Input
                   type="number"
                   step={0.001}
-                  disabled={!anchor}
+                  disabled={locked}
                   value={position ? Number(position[axis].toFixed(4)) : ""}
                   onChange={(event) => {
                     const value = Number(event.currentTarget.value);
@@ -349,6 +357,7 @@ export function LiquidEmitterTool({
                 max={150}
                 step={0.5}
                 display={`${millimeters.toFixed(1)} mm`}
+                disabled={locked}
                 onChange={(value) => setOffsetAxis(axis, value / 1000, `offset-${axis}`)}
               />
             );
@@ -357,7 +366,7 @@ export function LiquidEmitterTool({
             size="sm"
             variant="outline"
             className="w-full"
-            disabled={!anchor}
+            disabled={locked}
             onClick={() => update("offset-reset", { offset: [0, 0, 0] })}
           >
             {t("page.tools.liquid_emitter.offset.reset")}
@@ -373,7 +382,7 @@ export function LiquidEmitterTool({
                 <Input
                   type="number"
                   step={0.1}
-                  disabled={!anchor}
+                  disabled={locked}
                   value={anchor ? Number(anchor.direction[axis].toFixed(3)) : ""}
                   onChange={(event) => setDirectionAxis(axis, Number(event.currentTarget.value))}
                 />
@@ -384,7 +393,7 @@ export function LiquidEmitterTool({
             size="sm"
             variant="outline"
             className="w-full"
-            disabled={!anchor}
+            disabled={locked}
             onClick={() => update("direction-down", { direction: DOWN })}
           >
             {t("page.tools.liquid_emitter.direction.down")}
@@ -407,6 +416,7 @@ export function LiquidEmitterTool({
           inspection={inspection}
           mode={mode}
           busy={busy}
+          editable={editable}
           onModeChange={setMode}
           onRestore={() => setConfirmRestore(true)}
         />
@@ -414,7 +424,7 @@ export function LiquidEmitterTool({
         <section className="space-y-2">
           <Button
             className="w-full"
-            disabled={!anchor || busy || inspection?.runtime.state === "foreign"}
+            disabled={locked || busy}
             isLoading={session.apply.isPending}
             onClick={handleApply}
           >
@@ -460,7 +470,7 @@ export function LiquidEmitterTool({
         source={session.source}
         doubleSidedEnabled={doubleSided}
         onDoubleSidedChange={setDoubleSided}
-        onSurfacePick={picking ? handlePick : undefined}
+        onSurfacePick={picks ? handlePick : undefined}
         overlay={
           anchor ? (
             <LiquidEmitterOverlay
@@ -528,12 +538,14 @@ function ApplyModeSection({
   inspection,
   mode,
   busy,
+  editable,
   onModeChange,
   onRestore,
 }: {
   inspection: Inspection | undefined;
   mode: ApplyMode;
   busy: boolean;
+  editable: boolean;
   onModeChange: (mode: ApplyMode) => void;
   onRestore: () => void;
 }) {
@@ -565,7 +577,7 @@ function ApplyModeSection({
             className="flex-1"
             variant={mode === value ? "default" : "outline"}
             aria-pressed={mode === value}
-            disabled={busy}
+            disabled={busy || !editable}
             onClick={() => onModeChange(value)}
           >
             {t(`page.tools.liquid_emitter.mode.${value}`)}
@@ -583,11 +595,13 @@ function RuntimeSection({
   inspection,
   error,
   busy,
+  installing,
   onInstall,
 }: {
   inspection: Inspection | undefined;
   error: unknown;
   busy: boolean;
+  installing: boolean;
   onInstall: () => void;
 }) {
   const { t } = useTranslation();
@@ -614,6 +628,22 @@ function RuntimeSection({
             path: inspection.runtime.path,
           })}
         </AlertDescription>
+      </Alert>
+    );
+  }
+  if (state === "missing" || state === "disabled") {
+    return (
+      <Alert>
+        <TriangleAlertIcon />
+        <AlertTitle>{t(`page.tools.liquid_emitter.runtime.required.${state}.title`)}</AlertTitle>
+        <AlertDescription>
+          {t(`page.tools.liquid_emitter.runtime.required.${state}.description`)}
+        </AlertDescription>
+        <div className="col-start-2 pt-2">
+          <Button size="sm" disabled={busy} isLoading={installing} onClick={onInstall}>
+            {t(`page.tools.liquid_emitter.runtime.action.${state}`)}
+          </Button>
+        </div>
       </Alert>
     );
   }

@@ -1770,7 +1770,17 @@
             "disabled": "启用"
           },
           "foreign_title": "已安装另一个 LiquidGravityProbe",
-          "foreign_description": "请先禁用或删除 {{path}} 中的副本。两个运行时会在游戏中冲突。"
+          "foreign_description": "请先禁用或删除 {{path}} 中的副本。两个运行时会在游戏中冲突。",
+          "required": {
+            "missing": {
+              "title": "未安装喷射运行时",
+              "description": "安装运行时后才能指定并应用喷射点。"
+            },
+            "disabled": {
+              "title": "喷射运行时已禁用",
+              "description": "启用运行时后才能指定并应用喷射点。"
+            }
+          }
         },
         "pick": {
           "toggle": "选取表面",

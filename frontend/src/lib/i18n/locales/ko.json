@@ -1770,7 +1770,17 @@
             "disabled": "활성화"
           },
           "foreign_title": "다른 LiquidGravityProbe가 설치되어 있습니다",
-          "foreign_description": "{{path}}에 있는 사본을 먼저 비활성화하거나 제거하세요. 런타임이 두 벌 있으면 게임에서 충돌합니다."
+          "foreign_description": "{{path}}에 있는 사본을 먼저 비활성화하거나 제거하세요. 런타임이 두 벌 있으면 게임에서 충돌합니다.",
+          "required": {
+            "missing": {
+              "title": "분사 런타임이 설치되어 있지 않습니다",
+              "description": "런타임을 설치해야 부착점을 지정하고 적용할 수 있습니다."
+            },
+            "disabled": {
+              "title": "분사 런타임이 비활성화되어 있습니다",
+              "description": "런타임을 활성화해야 부착점을 지정하고 적용할 수 있습니다."
+            }
+          }
         },
         "pick": {
           "toggle": "표면 찍기",
