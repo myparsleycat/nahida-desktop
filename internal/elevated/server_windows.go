@@ -133,7 +133,9 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	}
 	input := platform.NewInput()
 	return serveHelperConnection(ctx, conn, options.Secret, serverOperations{
-		sendKeys: input.SendKeys, launchXXMI: inject.Launch, applyFiles: applyFileOps,
+		sendKeys:   input.SendKeys,
+		launchXXMI: inject.Launch,
+		applyFiles: func(ctx context.Context, ops []FileOp) error { return applyFileOps(ctx, ops, parentSID) },
 	})
 }
 

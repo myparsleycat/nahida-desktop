@@ -14,6 +14,7 @@ import (
 	"golang.org/x/mod/semver"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
@@ -314,6 +315,12 @@ func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
 // InstallUpdates installs the requested packages' available updates. A non-empty importer limits the install
 // to that importer's packages; an empty one covers every importer.
 func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []string) ([]string, error) {
+	return x.installUpdates(ctx, importer, targets, nil)
+}
+
+func (x *XXMI) installUpdates(
+	ctx context.Context, importer string, targets []string, lease *elevated.FileLease,
+) ([]string, error) {
 	statuses, err := x.CheckUpdates(ctx, false)
 	if err != nil {
 		return nil, err
@@ -336,9 +343,9 @@ func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []st
 		case overlay:
 			err = x.installProviderUpdate(ctx, status.Importer, provider, status.LatestVersion)
 		case strings.HasPrefix(status.Package, "importer:"):
-			err = x.InstallImporterPackage(ctx, InstallImporterPackageInput{
+			err = x.installImporterPackage(ctx, InstallImporterPackageInput{
 				Importer: status.Importer, Version: status.LatestVersion,
-			})
+			}, lease)
 		case status.Package == "xxmi-libs":
 			err = x.installLibsUpdate(ctx, status.Importer, status.LatestVersion)
 		case status.Package == "gi-fps-unlocker":
@@ -445,7 +452,7 @@ func (x *XXMI) LaunchUpdates(ctx context.Context, importer string) ([]UpdateStat
 	return pending, nil
 }
 
-func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
+func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string, lease *elevated.FileLease) error {
 	mode, err := x.launchUpdateMode(ctx)
 	if err != nil || mode != launchUpdateAuto {
 		return err
@@ -472,6 +479,6 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	_, err = x.InstallUpdates(ctx, importer, targets)
+	_, err = x.installUpdates(ctx, importer, targets, lease)
 	return err
 }

@@ -43,7 +43,7 @@ import {
   SelectRow,
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
-import { importerFolderErrorCode } from "@renderer/components/xxmi/xxmi-importer-folder-error";
+import { importerFolderError } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
@@ -213,10 +213,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       void queryClient.invalidateQueries({ queryKey: ["games"] });
       return true;
     } catch (error) {
-      const code = importerFolderErrorCode(error);
+      const folderError = importerFolderError(error);
       toast.error(
-        code
-          ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${code}`)
+        folderError
+          ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${folderError.code}`, {
+              detail: folderError.detail,
+            })
           : toErrorMessage(error),
       );
       return false;
@@ -1412,10 +1414,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                             refresh();
                             toast.success(t("page.setting.xxmi.builtin.packageRepaired"));
                           } catch (error) {
-                            const code = importerFolderErrorCode(error);
+                            const folderError = importerFolderError(error);
                             toast.error(
-                              code
-                                ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${code}`)
+                              folderError
+                                ? t(
+                                    `page.setting.xxmi.fn.installImporterPackage.errors.${folderError.code}`,
+                                    { detail: folderError.detail },
+                                  )
                                 : toErrorMessage(error),
                             );
                           }

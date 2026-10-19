@@ -14,8 +14,57 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
+
+func TestFilterImporterAccessPaths(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	importer := filepath.Join(root, "Importer")
+	mods := filepath.Join(root, "Configured Mods")
+	outside := filepath.Join(root, "Importer sibling")
+	for _, folder := range []string{filepath.Join(importer, "Core"), mods, outside} {
+		if err := os.MkdirAll(folder, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(root, "Importer alias")
+	createXXMIJunction(t, importer, alias)
+	createXXMIJunction(t, mods, filepath.Join(importer, "Mods"))
+	createXXMIJunction(t, outside, filepath.Join(importer, "Core", "Escape"))
+	createXXMIJunction(t, outside, filepath.Join(mods, "Escape"))
+
+	paths := []string{
+		filepath.Join(alias, "Core", "library.ini"),
+		filepath.Join(alias, "Mods", "mod.ini"),
+		filepath.Join(alias, "Core", "Escape", "external.ini"),
+		filepath.Join(alias, "Mods", "Escape", "external.ini"),
+		filepath.Join(outside, "external.ini"),
+		filepath.Join(alias, "missing", "unresolved.ini"),
+	}
+	allowed, excluded := filterImporterAccessPaths(alias, paths)
+	physicalImporter, err := platform.FinalPath(importer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	physicalMods, err := platform.FinalPath(mods)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(physicalImporter, "Core", "library.ini"),
+		filepath.Join(physicalMods, "mod.ini"),
+	}
+	if !slices.Equal(allowed, want) || !slices.Equal(excluded, paths[2:]) {
+		t.Fatalf("allowed = %v, excluded = %v; want %v, %v", allowed, excluded, want, paths[2:])
+	}
+
+	allowed, excluded = filterImporterAccessPaths(filepath.Join(root, "missing"), paths)
+	if len(allowed) != 0 || !slices.Equal(excluded, paths) {
+		t.Fatalf("unresolved roots: allowed = %v, excluded = %v; want all paths excluded", allowed, excluded)
+	}
+}
 
 type stubLaunchHelper struct{}
 

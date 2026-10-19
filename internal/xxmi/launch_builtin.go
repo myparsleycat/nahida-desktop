@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -127,6 +129,11 @@ func (x *XXMI) launchBuiltinGameLocked(
 		warn(warning)
 	}
 
+	// One helper lease covers the launch, so importer and game files that need administrator rights
+	// and the launch itself share a single UAC prompt.
+	lease := elevated.NewFileLease(x.elevated)
+	defer lease.Release()
+
 	// Like the reference launcher, a launch that leaves the XXMI DLL out prepares none of the
 	// importer's files, so it also does not need them installed.
 	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)
@@ -183,7 +190,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	processName := launchProcessName(cfg, packageSpec, gameExe)
 	progress("auto-update")
-	if err := x.autoUpdateForLaunch(ctx, key); err != nil {
+	if err := x.autoUpdateForLaunch(ctx, key, lease); err != nil {
 		if x.log != nil {
 			_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
 				Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
@@ -324,12 +331,51 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 		if cfg.IniOptimizer.Enabled {
 			progress("ini-optimizer")
-			report, err := x.OptimizeMods(
-				ctx,
-				OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache},
-			)
+			input := OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache}
+			var unreadable []string
+			skipped := func(path string, _ error) {
+				if !slices.Contains(unreadable, path) {
+					unreadable = append(unreadable, path)
+				}
+			}
+			report, err := x.optimizeMods(ctx, input, skipped)
+			var restorable, excluded []string
+			if err == nil && len(unreadable) > 0 {
+				restorable, excluded = filterImporterAccessPaths(cfg.ImporterFolder, unreadable)
+				if len(excluded) > 0 && x.log != nil {
+					x.log.Warn(map[string]any{
+						"importer": key, "paths": excluded,
+						"warning": "Paths could not be resolved within the importer or Mods folders",
+					}, "XXMI.StartGame")
+				}
+			}
+
+			// The launch asks for administrator rights anyway, so the same consent gives the files back and
+			// the optimizer runs again over them. Without it they stay skipped. A restored library can add a
+			// namespace that mods cached by earlier runs duplicate, so the rerun ignores the cache.
+			if len(restorable) > 0 {
+				restoreErr := x.restoreImporterAccess(ctx, lease, restorable)
+				if restoreErr != nil && infra.IsCancellationError(restoreErr) {
+					return restoreErr
+				}
+				if restoreErr != nil {
+					_ = infra.ReportError(x.log, restoreErr, "XXMI.StartGame", infra.Diagnostic{
+						Severity: infra.DiagnosticWarn, Operation: "restore-importer-access", Stage: stage,
+						Fields: map[string]any{"importer": key, "paths": restorable},
+					})
+				} else {
+					unreadable = excluded
+					input.ResetCache = true
+					retried, retryErr := x.optimizeMods(ctx, input, skipped)
+					report.Changes = append(report.Changes, retried.Changes...)
+					err = retryErr
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("optimize %s INI files: %w", key, err)
+			}
+			if len(unreadable) > 0 {
+				warn("INI optimizer skipped files this app is not allowed to read: " + strings.Join(unreadable, ", "))
 			}
 			if x.eventEmit != nil {
 				x.eventEmit("xxmi:launch-progress", map[string]any{
@@ -338,11 +384,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 			}
 		}
 	}
-
-	// One helper lease covers the launch, so game files that need administrator rights and the
-	// launch itself share a single UAC prompt.
-	lease := elevated.NewFileLease(x.elevated)
-	defer lease.Release()
 
 	progress("game-tweaks")
 	publish := &gameFilePublisher{
@@ -452,6 +493,28 @@ func (x *XXMI) launchBuiltinGameLocked(
 			"XXMI.StartGame")
 	}
 	return nil
+}
+
+func filterImporterAccessPaths(importerFolder string, paths []string) (allowed, excluded []string) {
+	// Unresolved roots stay empty and cannot authorize a path.
+	importer, _ := platform.FinalPath(importerFolder)
+	mods, _ := platform.FinalPath(filepath.Join(importerFolder, "Mods"))
+	for _, path := range paths {
+		// Match restoreImporterAccess: the parent resolves even when the entry cannot be opened.
+		// The elevated helper rejects leaf links and hard links before changing their permissions.
+		folder, err := platform.FinalPath(filepath.Dir(path))
+		if err != nil {
+			excluded = append(excluded, path)
+			continue
+		}
+		target := filepath.Join(folder, filepath.Base(path))
+		if platform.SameOrChildPath(importer, target) || platform.SameOrChildPath(mods, target) {
+			allowed = append(allowed, target)
+		} else {
+			excluded = append(excluded, path)
+		}
+	}
+	return allowed, excluded
 }
 
 // elevationDenied gives a helper that could not be started the code the renderer explains, and

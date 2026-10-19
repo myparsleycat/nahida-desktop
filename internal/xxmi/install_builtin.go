@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
 func (x *XXMI) installBuiltinImporterPackage(
 	ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput,
+	lease *elevated.FileLease,
 ) (returnErr error) {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-importer-package")
 	stage := "validate"
@@ -143,6 +145,9 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if err != nil {
 		return err
 	}
+	var releaseAccess func()
+	transaction.restoreAccess, releaseAccess = x.importerAccessRestorer(lease)
+	defer releaseAccess()
 	defer func() { x.reportCleanup(transaction.Close(), "InstallImporterPackage") }()
 	prepared := false
 	committed := false

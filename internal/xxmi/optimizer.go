@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/xxmi/optimizer"
 )
 
@@ -17,6 +18,14 @@ type OptimizeModsInput struct {
 }
 
 func (x *XXMI) OptimizeMods(ctx context.Context, input OptimizeModsInput) (optimizer.Report, error) {
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(x.log, "XXMI.OptimizeMods", "optimize-mods")
+	return x.optimizeMods(ctx, input, func(_ string, err error) { diagnostics.Add(err) })
+}
+
+func (x *XXMI) optimizeMods(
+	ctx context.Context, input OptimizeModsInput, unreadable func(path string, err error),
+) (optimizer.Report, error) {
 	cfg, err := x.GetImporterConfig(ctx, input.Importer)
 	if err != nil {
 		return optimizer.Report{}, err
@@ -55,6 +64,7 @@ func (x *XXMI) OptimizeMods(ctx context.Context, input OptimizeModsInput) (optim
 		CachePath: filepath.Join(root, "cache", "ini-optimizer", input.Importer+".json"),
 		Exclude:   patterns, Prefix: prefix, DryRun: input.DryRun,
 		ResetCache: input.ResetCache || cfg.IniOptimizer.ResetCache,
+		Unreadable: unreadable,
 	})
 }
 

@@ -4,6 +4,7 @@ package xxmi
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,10 @@ import (
 	"strings"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -46,6 +51,8 @@ type importerInstallTransaction struct {
 	state        string
 	// preserved names top-level live entries that are moved into the new tree instead of copied.
 	preserved []string
+	// restoreAccess, when set, gives the account back the live entries it may not read so staging can go on.
+	restoreAccess func(ctx context.Context, paths []string) error
 }
 
 func beginImporterInstallTransaction(
@@ -187,11 +194,150 @@ func (t *importerInstallTransaction) prepare(ctx context.Context) (*installRoot,
 		first, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
 		return slices.ContainsFunc(t.preserved, func(name string) bool { return strings.EqualFold(name, first) })
 	}
-	if err := copyTreeRoots(ctx, live, stage, skip); err != nil {
+	err = copyTreeRoots(ctx, live, stage, skip)
+	if t.restoreAccess != nil && isInstallSourceDenied(err) {
+		err = t.restoreLiveAccess(ctx, live, skip, err)
+		if err == nil {
+			err = copyTreeRoots(ctx, live, stage, skip)
+		}
+	}
+	if err != nil {
 		_ = stage.Close()
-		return nil, err
+		return nil, importerFileAccessDeniedError(err)
 	}
 	return stage, nil
+}
+
+// restoreLiveAccess restores every live entry this account may not read and returns copyErr when it cannot.
+// Each round collects all denied entries first, so the caller's helper lease asks for consent once. Restoring
+// a folder can reveal entries below it that are denied on their own, so the scan repeats until it finds none
+// it has not restored; an entry that stays denied is left for the copy to report.
+func (t *importerInstallTransaction) restoreLiveAccess(
+	ctx context.Context, live *installRoot, skip func(string) bool, copyErr error,
+) error {
+	// A cancelled scan or restore is not a denied file, so it must not turn into the access error.
+	failed := func(err error) error {
+		if ctx.Err() != nil || infra.IsCancellationError(err) {
+			return cmp.Or(ctx.Err(), err)
+		}
+		return infra.WithCause(copyErr, err)
+	}
+	restored := map[string]bool{}
+	for {
+		denied, err := unreadableInstallEntries(ctx, live, skip)
+		if err != nil {
+			return failed(err)
+		}
+		denied = slices.DeleteFunc(denied, func(path string) bool { return restored[path] })
+		if len(denied) == 0 {
+			return nil
+		}
+		if err := t.restoreAccess(ctx, denied); err != nil {
+			return failed(err)
+		}
+		for _, path := range denied {
+			restored[path] = true
+		}
+	}
+}
+
+func isInstallSourceDenied(err error) bool {
+	var source *installSourceError
+	return errors.As(err, &source) && errors.Is(source, fs.ErrPermission)
+}
+
+// unreadableInstallEntries lists the files below root that this account may not open and the folders it may
+// not list, as absolute paths.
+func unreadableInstallEntries(ctx context.Context, root *installRoot, skip func(string) bool) ([]string, error) {
+	var denied []string
+	err := fs.WalkDir(root.root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		relative := filepath.FromSlash(path)
+		if walkErr != nil {
+			if relative == "." || !errors.Is(walkErr, fs.ErrPermission) {
+				return walkErr
+			}
+			denied = append(denied, filepath.Join(root.path, relative))
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if relative != "." && skip(relative) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		file, err := root.root.Open(relative)
+		if errors.Is(err, fs.ErrPermission) {
+			denied = append(denied, filepath.Join(root.path, relative))
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return file.Close()
+	})
+	return denied, err
+}
+
+// importerAccessRestorer returns the access restore for an installation transaction and the release of the
+// helper lease its rounds share. A supplied launch lease stays held until the launch releases it.
+func (x *XXMI) importerAccessRestorer(
+	lease *elevated.FileLease,
+) (restore func(context.Context, []string) error, release func()) {
+	release = func() {}
+	if lease == nil {
+		lease = elevated.NewFileLease(x.elevated)
+		release = lease.Release
+	}
+	return func(ctx context.Context, paths []string) error {
+		return x.restoreImporterAccess(ctx, lease, paths)
+	}, release
+}
+
+// restoreImporterAccess hands importer entries this account may not read back to it through the elevated
+// helper under lease.
+func (x *XXMI) restoreImporterAccess(ctx context.Context, lease *elevated.FileLease, paths []string) error {
+	ops := make([]elevated.FileOp, 0, len(paths))
+	for _, path := range paths {
+		// The helper accepts only the path Windows resolves the entry to. The folder above an unreadable
+		// entry was listed, so it resolves even when the entry itself does not open.
+		folder, err := platform.FinalPath(filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		ops = append(ops, elevated.FileOp{
+			Kind: elevated.FileOpResetAccess, Target: filepath.Join(folder, filepath.Base(path)),
+		})
+	}
+
+	for batch := range slices.Chunk(ops, 50) {
+		if err := lease.Apply(ctx, batch); err != nil {
+			return err
+		}
+	}
+	if x.log != nil {
+		x.log.Warn(map[string]any{"paths": paths}, "XXMI.restoreImporterAccess")
+	}
+	return nil
+}
+
+// importerFileAccessDeniedError names a live file the current account cannot read, such as a leftover written by
+// an elevated launcher, once restoring its access failed or was declined. The file is not skipped: it may be
+// user data that is not part of the package.
+func importerFileAccessDeniedError(err error) error {
+	var source *installSourceError
+	if !isInstallSourceDenied(err) || !errors.As(err, &source) {
+		return err
+	}
+	return infra.WithCause(fmt.Errorf("XXMI_IMPORTER_FILE_ACCESS_DENIED: %s", source.path), err)
 }
 
 // preservedImporterEntries lists the live entries that belong to the user rather than the package: the Mods

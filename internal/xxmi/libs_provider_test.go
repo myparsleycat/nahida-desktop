@@ -749,7 +749,7 @@ func TestCustomDLLHidesProviderUpdates(t *testing.T) {
 	if tracksProvider() {
 		t.Fatal("a provider hidden by the custom DLL was tracked")
 	}
-	if err := service.autoUpdateForLaunch(ctx, "GIMI"); err != nil || downloads.Load() != 0 {
+	if err := service.autoUpdateForLaunch(ctx, "GIMI", nil); err != nil || downloads.Load() != 0 {
 		t.Fatalf("launch update downloaded %d times, err = %v", downloads.Load(), err)
 	}
 
@@ -770,7 +770,7 @@ func TestCustomDLLHidesProviderUpdates(t *testing.T) {
 	if !tracksProvider() {
 		t.Fatal("the deployed provider was not tracked")
 	}
-	if err := service.autoUpdateForLaunch(ctx, "GIMI"); err == nil {
+	if err := service.autoUpdateForLaunch(ctx, "GIMI", nil); err == nil {
 		t.Fatal("an unverifiable provider release was installed")
 	}
 }

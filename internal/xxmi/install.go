@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -19,7 +20,13 @@ type InstallImporterPackageInput struct {
 	Config        *ImporterConfig `json:"config,omitempty"`
 }
 
-func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) (returnErr error) {
+func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) error {
+	return x.installImporterPackage(ctx, input, nil)
+}
+
+func (x *XXMI) installImporterPackage(
+	ctx context.Context, input InstallImporterPackageInput, lease *elevated.FileLease,
+) (returnErr error) {
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
 
@@ -88,7 +95,7 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 	defer resume(nil)
 
 	stage = "install-package"
-	return x.installBuiltinImporterPackage(ctx, spec, cfg, input)
+	return x.installBuiltinImporterPackage(ctx, spec, cfg, input, lease)
 }
 
 func installDiagnosticValue(value string) string {
@@ -265,15 +272,29 @@ func copyTreeFilterToRoot(ctx context.Context, source string, destination *insta
 	return copyTreeRoots(ctx, sourceRoot, destination, skip)
 }
 
+// installSourceError marks a failure to read the source tree, so callers can tell it apart from a failure to
+// write the destination.
+type installSourceError struct {
+	path string
+	err  error
+}
+
+func (e *installSourceError) Error() string { return e.err.Error() }
+
+func (e *installSourceError) Unwrap() error { return e.err }
+
 func copyTreeRoots(ctx context.Context, source, destination *installRoot, skip func(string) bool) error {
 	return fs.WalkDir(source.root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		relative := filepath.FromSlash(path)
+		sourceErr := func(err error) error {
+			return &installSourceError{path: filepath.Join(source.path, relative), err: err}
+		}
 		if walkErr != nil {
-			return walkErr
+			return sourceErr(walkErr)
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		relative := filepath.FromSlash(path)
 		if skip != nil && relative != "." && skip(relative) {
 			if entry.IsDir() {
 				return fs.SkipDir
@@ -285,24 +306,26 @@ func copyTreeRoots(ctx context.Context, source, destination *installRoot, skip f
 		}
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return sourceErr(err)
 		}
 		if !info.Mode().IsRegular() {
 			return nil
 		}
 		before, err := source.root.Lstat(relative)
 		if err != nil {
-			return err
+			return sourceErr(err)
 		}
 		if err := validateInstallFile(before, filepath.Join(source.path, relative)); err != nil {
 			return err
 		}
 		input, err := source.root.Open(relative)
 		if err != nil {
-			return err
+			return sourceErr(err)
 		}
 		after, err := input.Stat()
-		if err == nil && !os.SameFile(before, after) {
+		if err != nil {
+			err = sourceErr(err)
+		} else if !os.SameFile(before, after) {
 			err = fmt.Errorf("source file identity changed while copying %q", filepath.Join(source.path, relative))
 		}
 		if err == nil {

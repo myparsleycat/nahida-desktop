@@ -8,11 +8,14 @@ import (
 	"encoding/hex"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 func stagedFile(t *testing.T, content string) (path, digest string) {
@@ -44,7 +47,7 @@ func TestApplyFileOpsCopiesAndRemoves(t *testing.T) {
 		{Kind: FileOpCopy, Source: source, Target: replaced, SHA256: strings.ToUpper(digest)},
 		{Kind: FileOpRemove, Target: stale},
 		{Kind: FileOpRemove, Target: filepath.Join(root, "already-gone.db")},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,14 +82,14 @@ func TestApplyFileOpsReplacesReadOnlyTarget(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(target, 0o600) })
 
 	mismatched := FileOp{Kind: FileOpCopy, Source: source, Target: target, SHA256: strings.Repeat("0", 64)}
-	if err := applyFileOps(t.Context(), []FileOp{mismatched}); err == nil {
+	if err := applyFileOps(t.Context(), []FileOp{mismatched}, nil); err == nil {
 		t.Fatal("copy with a mismatched digest was applied")
 	}
 	if info, err := os.Stat(target); err != nil || info.Mode().Perm()&0o200 != 0 {
 		t.Fatalf("refused copy made the target writable: mode = %v, err = %v", info.Mode(), err)
 	}
 
-	err := applyFileOps(t.Context(), []FileOp{{Kind: FileOpCopy, Source: source, Target: target, SHA256: digest}})
+	err := applyFileOps(t.Context(), []FileOp{{Kind: FileOpCopy, Source: source, Target: target, SHA256: digest}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +129,7 @@ func TestApplyFileOpsKeepsReadOnlyTargetItCannotReplace(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = windows.CloseHandle(inUse) })
 
-	err = applyFileOps(t.Context(), []FileOp{{Kind: FileOpCopy, Source: source, Target: target, SHA256: digest}})
+	err = applyFileOps(t.Context(), []FileOp{{Kind: FileOpCopy, Source: source, Target: target, SHA256: digest}}, nil)
 	if err == nil {
 		t.Fatal("a target in use was replaced")
 	}
@@ -176,7 +179,7 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 		{name: "unknown kind", op: FileOp{Kind: "rename", Source: source, Target: existing}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if err := applyFileOps(t.Context(), []FileOp{test.op}); err == nil {
+			if err := applyFileOps(t.Context(), []FileOp{test.op}, nil); err == nil {
 				t.Fatal("unsafe request was applied")
 			}
 			if data, err := os.ReadFile(existing); err != nil || string(data) != "old" {
@@ -196,7 +199,7 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 	}
 
 	t.Run("invalid operation stops the batch before it starts", func(t *testing.T) {
-		err := applyFileOps(t.Context(), []FileOp{valid, {Kind: FileOpRemove, Target: "relative.db"}})
+		err := applyFileOps(t.Context(), []FileOp{valid, {Kind: FileOpRemove, Target: "relative.db"}}, nil)
 		if err == nil {
 			t.Fatal("batch with an invalid operation was applied")
 		}
@@ -208,13 +211,174 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 	t.Run("cancelled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		if err := applyFileOps(ctx, []FileOp{valid}); err == nil {
+		if err := applyFileOps(ctx, []FileOp{valid}, nil); err == nil {
 			t.Fatal("cancelled batch was applied")
 		}
 		if data, err := os.ReadFile(existing); err != nil || string(data) != "old" {
 			t.Fatalf("existing file = %q, err = %v", data, err)
 		}
 	})
+}
+
+func TestApplyFileOpsResetsAccessToInheritedPermissions(t *testing.T) {
+	root, err := platform.FinalPath(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(root, "SlotFix.ini")
+	if err := os.WriteFile(locked, []byte("[Constants]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command(
+		"icacls", locked, "/deny", "*"+user.User.Sid.String()+":(RD)",
+	).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot deny reading a file: %v (%s)", err, output)
+	}
+	t.Cleanup(func() { _ = exec.Command("icacls", locked, "/reset").Run() })
+	if _, err := os.ReadFile(locked); err == nil {
+		t.Skip("filesystem does not enforce the read denial")
+	}
+
+	if err := applyFileOps(
+		t.Context(),
+		[]FileOp{{Kind: FileOpResetAccess, Target: locked}},
+		user.User.Sid,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(locked); err != nil || string(data) != "[Constants]\n" {
+		t.Fatalf("reset file = %q, err = %v", data, err)
+	}
+}
+
+func TestApplyFileOpsRejectsUnsafeAccessResets(t *testing.T) {
+	root, err := platform.FinalPath(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(root, "folder")
+	if err := os.Mkdir(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "inside.ini"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(root, "outside.ini")
+	if err := os.WriteFile(outside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hardLink := filepath.Join(folder, "hard-link.ini")
+	if err := os.Link(outside, hardLink); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, folder).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v (%s)", err, output)
+	}
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name  string
+		op    FileOp
+		owner *windows.SID
+	}{
+		{name: "junction", op: FileOp{Kind: FileOpResetAccess, Target: link}, owner: user.User.Sid},
+		{name: "below a junction", op: FileOp{Kind: FileOpResetAccess, Target: filepath.Join(link, "inside.ini")}, owner: user.User.Sid},
+		{name: "with source", op: FileOp{Kind: FileOpResetAccess, Source: folder, Target: folder}, owner: user.User.Sid},
+		{name: "hard link", op: FileOp{Kind: FileOpResetAccess, Target: hardLink}, owner: user.User.Sid},
+		{name: "unknown owner", op: FileOp{Kind: FileOpResetAccess, Target: folder}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := applyFileOps(t.Context(), []FileOp{test.op}, test.owner); err == nil {
+				t.Fatal("unsafe access reset was applied")
+			}
+		})
+	}
+
+	system, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{filepath.Join(system, "win.ini"), filepath.VolumeName(root) + `\`} {
+		if err := validateFileOp(FileOp{Kind: FileOpResetAccess, Target: target}); err == nil {
+			t.Fatalf("unsafe target was accepted: %q", target)
+		}
+	}
+}
+
+func TestResetFolderAccessLeavesDescendantHardLinkPermissions(t *testing.T) {
+	root, err := platform.FinalPath(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;" + user.User.Sid.String() + ")")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err := descriptor.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := windows.SetNamedSecurityInfo(root, windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, dacl, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	parent := filepath.Join(root, "parent")
+	folder := filepath.Join(parent, "folder")
+	if err := os.Mkdir(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err = windows.SecurityDescriptorFromString(
+		"D:P(A;OICI;FA;;;" + user.User.Sid.String() + ")(A;OICI;FR;;;WD)",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err = descriptor.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := windows.SetNamedSecurityInfo(parent, windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, dacl, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(root, "outside.ini")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(outside, filepath.Join(folder, "linked.ini")); err != nil {
+		t.Fatal(err)
+	}
+	before, err := windows.GetNamedSecurityInfo(outside, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resetFileAccess(folder, user.User.Sid); err != nil {
+		t.Fatal(err)
+	}
+	after, err := windows.GetNamedSecurityInfo(outside, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.String() != after.String() {
+		t.Fatalf("folder reset changed an outside file's DACL: before %s, after %s", before.String(), after.String())
+	}
 }
 
 func TestClientAppliesFilesThroughHelper(t *testing.T) {
@@ -228,7 +392,7 @@ func TestClientAppliesFilesThroughHelper(t *testing.T) {
 	serverDone := make(chan error, 1)
 	go func() {
 		serverDone <- serveHelperConnection(t.Context(), serverConn, "secret", serverOperations{
-			applyFiles: applyFileOps,
+			applyFiles: func(ctx context.Context, ops []FileOp) error { return applyFileOps(ctx, ops, nil) },
 		})
 	}()
 	client := NewClient()

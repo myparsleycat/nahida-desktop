@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 
@@ -27,8 +28,9 @@ const (
 
 // applyFileOps runs ops in order with the helper's administrator rights. Every operation is
 // validated before the first one runs, but they are not a transaction: a failure leaves the
-// earlier operations applied.
-func applyFileOps(ctx context.Context, ops []FileOp) error {
+// earlier operations applied. A reset-access hands its target to owner, the account of the
+// verified parent process.
+func applyFileOps(ctx context.Context, ops []FileOp, owner *windows.SID) error {
 	for _, op := range ops {
 		if err := validateFileOp(op); err != nil {
 			return fmt.Errorf("%s %q: %w", op.Kind, op.Target, err)
@@ -38,11 +40,16 @@ func applyFileOps(ctx context.Context, ops []FileOp) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		apply := removeFile
-		if op.Kind == FileOpCopy {
-			apply = copyVerifiedFile
+		var err error
+		switch op.Kind {
+		case FileOpCopy:
+			err = copyVerifiedFile(ctx, op)
+		case FileOpRemove:
+			err = removeFile(ctx, op)
+		case FileOpResetAccess:
+			err = resetFileAccess(op.Target, owner)
 		}
-		if err := apply(ctx, op); err != nil {
+		if err != nil {
 			return fmt.Errorf("%s %q: %w", op.Kind, op.Target, err)
 		}
 	}
@@ -64,6 +71,17 @@ func validateFileOp(op FileOp) error {
 	case FileOpRemove:
 		if op.Source != "" || op.SHA256 != "" {
 			return errors.New("remove takes only a target")
+		}
+	case FileOpResetAccess:
+		if op.Source != "" || op.SHA256 != "" {
+			return errors.New("reset-access takes only a target")
+		}
+		if filepath.Dir(op.Target) == op.Target {
+			return errors.New("target cannot be a volume root")
+		}
+		if system, err := windows.GetSystemWindowsDirectory(); err != nil ||
+			platform.SameOrChildPath(system, op.Target) {
+			return errors.New("target cannot be in the Windows folder")
 		}
 	default:
 		return errors.New("operation is not allowed")
@@ -166,6 +184,134 @@ func removeFile(_ context.Context, op FileOp) error {
 		return errors.New("target is not a regular file")
 	}
 	return os.Remove(op.Target)
+}
+
+func resetFileAccess(target string, owner *windows.SID) error {
+	if owner == nil {
+		return errors.New("the account to give the file to is unknown")
+	}
+	name, err := windows.UTF16PtrFromString(target)
+	if err != nil {
+		return err
+	}
+
+	// Backup and restore rights let the helper open and rewrite an entry whose permissions shut out even
+	// administrators, which is the case this operation exists for.
+	privileges := []string{"SeBackupPrivilege", "SeTakeOwnershipPrivilege", "SeRestorePrivilege"}
+	return withPrivileges(privileges, func() error {
+		// MAXIMUM_ALLOWED prevents SetSecurityInfo from propagating the DACL into unchecked descendants.
+		// Require the security rights explicitly so an incomplete handle fails before changing ownership.
+		handle, err := windows.CreateFile(
+			name, windows.MAXIMUM_ALLOWED|windows.READ_CONTROL|windows.WRITE_DAC|windows.WRITE_OWNER,
+			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING,
+			windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = windows.CloseHandle(handle) }()
+		var info windows.ByHandleFileInformation
+		if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+			return err
+		}
+		if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return errors.New("target is a link")
+		}
+
+		// Hard links share one security descriptor, so resetting it would also change a file outside the
+		// requested folder.
+		if info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY == 0 && info.NumberOfLinks > 1 {
+			return errors.New("target has other hard links")
+		}
+		final, err := platform.FinalPathOfHandle(handle)
+		if err != nil {
+			return err
+		}
+		if !platform.SamePathFold(final, target) {
+			return errors.New("target is reached through a link")
+		}
+		return resetHandleAccess(handle, owner)
+	})
+}
+
+// The handle keeps both security changes on the checked entry even if its path changes. Setting the owner
+// first makes inherited CREATOR OWNER entries name the account that requested the restore.
+func resetHandleAccess(handle windows.Handle, owner *windows.SID) error {
+	const owned = windows.OWNER_SECURITY_INFORMATION
+	const inherited = windows.DACL_SECURITY_INFORMATION | windows.UNPROTECTED_DACL_SECURITY_INFORMATION
+
+	// "D:" is an empty DACL, which the unprotected flag fills with the inherited entries. A nil DACL would
+	// grant everyone full access instead.
+	descriptor, err := windows.SecurityDescriptorFromString("D:")
+	if err != nil {
+		return err
+	}
+	empty, _, err := descriptor.DACL()
+	if err != nil {
+		return err
+	}
+	current, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, owned)
+	if err != nil {
+		return err
+	}
+	if currentOwner, _, err := current.Owner(); err != nil || !currentOwner.Equals(owner) {
+		if err := windows.SetSecurityInfo(
+			handle,
+			windows.SE_FILE_OBJECT,
+			owned,
+			owner,
+			nil,
+			nil,
+			nil,
+		); err != nil {
+			return fmt.Errorf("set owner: %w", err)
+		}
+	}
+	return windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, inherited, nil, nil, empty, nil)
+}
+
+// withPrivileges enables the named privileges of the process token while run executes and then puts back
+// the ones it changed. A privilege the token lacks stays off, and run meets the ordinary access checks.
+func withPrivileges(names []string, run func() error) error {
+	var token windows.Token
+	if err := windows.OpenProcessToken(
+		windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &token,
+	); err != nil {
+		return err
+	}
+	defer func() { _ = token.Close() }()
+
+	var restore []windows.Tokenprivileges
+	defer func() {
+		for _, previous := range restore {
+			_ = windows.AdjustTokenPrivileges(token, false, &previous, 0, nil, nil)
+		}
+	}()
+	for _, name := range names {
+		privilege, err := windows.UTF16PtrFromString(name)
+		if err != nil {
+			return err
+		}
+		var luid windows.LUID
+		if err := windows.LookupPrivilegeValue(nil, privilege, &luid); err != nil {
+			return err
+		}
+		enable := windows.Tokenprivileges{
+			PrivilegeCount: 1,
+			Privileges:     [1]windows.LUIDAndAttributes{{Luid: luid, Attributes: windows.SE_PRIVILEGE_ENABLED}},
+		}
+		var previous windows.Tokenprivileges
+		var size uint32
+		if err := windows.AdjustTokenPrivileges(
+			token, false, &enable, uint32(unsafe.Sizeof(previous)), &previous, &size,
+		); err != nil {
+			return err
+		}
+		if previous.PrivilegeCount > 0 {
+			restore = append(restore, previous)
+		}
+	}
+	return run()
 }
 
 type readerFunc func([]byte) (int, error)
