@@ -10,13 +10,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
-
-	"nahida.live/desktop/internal/platform"
-	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 type ServerOptions struct {
@@ -24,17 +22,49 @@ type ServerOptions struct {
 	Secret    string
 	ParentPID uint32
 	ParentExe string
+	// Handlers is the complete set of operations the helper serves besides the session ones.
+	Handlers map[string]Handler
 }
 
-type serverOperations struct {
-	sendKeys   func(context.Context, platform.KeyRequest) (platform.KeyResult, error)
-	launchXXMI func(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
-	applyFiles func(context.Context, []FileOp) error
+// Peer is the verified parent process the helper serves.
+type Peer struct {
+	UserSID *windows.SID
+}
+
+// Handler serves one helper operation. The server cancels Run after Timeout or when the client
+// disconnects; Run may apply a shorter deadline that depends on its payload. Classify turns a Run
+// failure into the stable code and detail the client receives, and defaults to the error text.
+type Handler struct {
+	Timeout  time.Duration
+	Run      func(ctx context.Context, peer Peer, payload json.RawMessage) (json.RawMessage, error)
+	Classify func(error) (code, detail string)
+}
+
+func (h Handler) classify(err error) (string, string) {
+	if h.Classify == nil {
+		return "", err.Error()
+	}
+	return h.Classify(err)
+}
+
+func validateHandlers(handlers map[string]Handler) error {
+	for name, handler := range handlers {
+		if name == "" || strings.HasPrefix(name, sessionOperationPrefix) {
+			return fmt.Errorf("elevated helper operation %q is reserved", name)
+		}
+		if handler.Run == nil || handler.Timeout <= 0 {
+			return fmt.Errorf("elevated helper operation %q needs a handler and a timeout", name)
+		}
+	}
+	return nil
 }
 
 func RunServer(ctx context.Context, options ServerOptions) error {
 	if options.Pipe == "" || options.Secret == "" || options.ParentPID == 0 || options.ParentExe == "" {
 		return errors.New("missing elevated helper session parameters")
+	}
+	if err := validateHandlers(options.Handlers); err != nil {
+		return err
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("elevated helper is not running elevated")
@@ -131,18 +161,19 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	if clientPID != options.ParentPID {
 		return fmt.Errorf("reject elevated helper client pid %d, expected %d", clientPID, options.ParentPID)
 	}
-	input := platform.NewInput()
-	return serveHelperConnection(ctx, conn, options.Secret, serverOperations{
-		sendKeys:   input.SendKeys,
-		launchXXMI: inject.Launch,
-		applyFiles: func(ctx context.Context, ops []FileOp) error { return applyFileOps(ctx, ops, parentSID) },
-	})
+	return serveHelperConnection(ctx, conn, options.Secret, Peer{UserSID: parentSID}, options.Handlers)
 }
 
 // serveHelperConnection reads independently of the current operation so a
 // disconnect cancels held keys and loader waits immediately. Operations remain
 // sequential, and the server returns only after their cleanup has completed.
-func serveHelperConnection(ctx context.Context, conn net.Conn, secret string, operations serverOperations) error {
+func serveHelperConnection(
+	ctx context.Context,
+	conn net.Conn,
+	secret string,
+	peer Peer,
+	handlers map[string]Handler,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	stopConnection := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stopConnection()
@@ -201,60 +232,20 @@ func serveHelperConnection(ctx context.Context, conn net.Conn, secret string, op
 				return err
 			}
 			return nil
-		case operationKeys:
-			var keyRequest platform.KeyRequest
-			if err := json.Unmarshal(request.Payload, &keyRequest); err != nil {
-				response.Error = "invalid input request"
-				break
-			}
-			callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			result, err := operations.sendKeys(callCtx, keyRequest)
-			cancel()
-			if err != nil {
-				response.ErrorCode, response.Error = platform.ClassifyInputError(err)
-				break
-			}
-			response.Payload, err = json.Marshal(result)
-			if err != nil {
-				response.Error = "encode input result"
-				break
-			}
-			response.OK = true
-		case operationXXMILaunch:
-			var spec inject.LaunchSpec
-			if err := json.Unmarshal(request.Payload, &spec); err != nil {
-				response.ErrorCode, response.Error = "XXMI_INVALID_LAUNCH", "invalid XXMI launch request"
-				break
-			}
-			callCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutSeconds+60)*time.Second)
-			result, err := operations.launchXXMI(callCtx, spec)
-			cancel()
-			if err != nil {
-				response.ErrorCode, response.Error = inject.ClassifyError(err), err.Error()
-				break
-			}
-			response.Payload, err = json.Marshal(result)
-			if err != nil {
-				response.Error = "encode XXMI launch result"
-				break
-			}
-			response.OK = true
-		case operationFiles:
-			var ops []FileOp
-			if err := json.Unmarshal(request.Payload, &ops); err != nil {
-				response.Error = "invalid file request"
-				break
-			}
-			callCtx, cancel := context.WithTimeout(ctx, fileOpsTimeout)
-			err := operations.applyFiles(callCtx, ops)
-			cancel()
-			if err != nil {
-				response.Error = err.Error()
-				break
-			}
-			response.OK = true
 		default:
-			response.Error = "operation is not allowed"
+			handler, ok := handlers[request.Operation]
+			if !ok {
+				response.Error = "operation is not allowed"
+				break
+			}
+			callCtx, cancel := context.WithTimeout(ctx, handler.Timeout)
+			result, err := handler.Run(callCtx, peer, request.Payload)
+			cancel()
+			if err != nil {
+				response.ErrorCode, response.Error = handler.classify(err)
+				break
+			}
+			response.Payload, response.OK = result, true
 		}
 		if ctx.Err() != nil {
 			return nil

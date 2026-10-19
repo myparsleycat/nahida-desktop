@@ -450,7 +450,7 @@ var _ elevatedHelperClient = (*elevated.Client)(nil)
 
 // xxmiLaunchClient is the helper surface used while a game launch is in flight.
 type xxmiLaunchClient interface {
-	LaunchXXMI(context.Context, inject.LaunchSpec) (inject.LaunchResult, error)
+	elevated.Caller
 	ApplyFiles(context.Context, []elevated.FileOp) error
 	HelperImageName() string
 }
@@ -469,7 +469,7 @@ func (l xxmiElevatedLauncher) Acquire(ctx context.Context) (func(), error) {
 func (l xxmiElevatedLauncher) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
 	ctx, cancel := l.lifecycle.bindShutdown(ctx)
 	defer cancel()
-	return l.client.LaunchXXMI(ctx, spec)
+	return inject.LaunchThroughHelper(ctx, l.client, spec)
 }
 
 func (l xxmiElevatedLauncher) ApplyFiles(ctx context.Context, ops []elevated.FileOp) error {

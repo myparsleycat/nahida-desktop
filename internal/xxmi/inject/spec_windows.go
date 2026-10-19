@@ -62,6 +62,8 @@ type LaunchSpec struct {
 	parent *parentProcess
 }
 
+const maxTimeoutSeconds = 600
+
 type LaunchResult struct {
 	PID               int      `json:"pid"`
 	InjectionVerified bool     `json:"injectionVerified"`
@@ -76,7 +78,7 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 		!strings.EqualFold(filepath.Ext(spec.ProcessName), ".exe") {
 		return errors.New("invalid target process name")
 	}
-	if spec.TimeoutSeconds < 5 || spec.TimeoutSeconds > 600 {
+	if spec.TimeoutSeconds < 5 || spec.TimeoutSeconds > maxTimeoutSeconds {
 		return errors.New("invalid process timeout")
 	}
 	if spec.StartMethod != "Native" && spec.StartMethod != "Shell" && spec.StartMethod != "Manual" {

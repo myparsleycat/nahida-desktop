@@ -8,6 +8,8 @@ import (
 	"os"
 
 	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 func main() {
@@ -18,6 +20,11 @@ func main() {
 	flag.Parse()
 	if err := elevated.RunServer(context.Background(), elevated.ServerOptions{
 		Pipe: *pipe, Secret: *secret, ParentPID: uint32(*parentPID), ParentExe: *parentExe,
+		Handlers: map[string]elevated.Handler{
+			elevated.OperationFiles:     elevated.FileHandler(),
+			elevated.OperationInputKeys: elevated.InputHandler(platform.NewInput().SendKeys),
+			inject.HelperOperation:      inject.HelperHandler(),
+		},
 	}); err != nil {
 		os.Exit(1)
 	}

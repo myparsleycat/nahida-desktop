@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -414,10 +415,10 @@ type blockingHelperClient struct {
 	started chan struct{}
 }
 
-func (b *blockingHelperClient) LaunchXXMI(ctx context.Context, _ inject.LaunchSpec) (inject.LaunchResult, error) {
+func (b *blockingHelperClient) Call(ctx context.Context, _ string, _ json.RawMessage) (json.RawMessage, error) {
 	close(b.started)
 	<-ctx.Done()
-	return inject.LaunchResult{}, ctx.Err()
+	return nil, ctx.Err()
 }
 
 func (b *blockingHelperClient) ApplyFiles(ctx context.Context, _ []elevated.FileOp) error {

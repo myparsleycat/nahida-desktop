@@ -14,7 +14,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/platform"
-	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 type failingConn struct{}
@@ -32,7 +31,7 @@ func TestCallLockedInvalidatesConnectionOnTransportError(t *testing.T) {
 	t.Parallel()
 
 	client := &Client{conn: failingConn{}, secret: "secret"}
-	if _, err := client.callLocked(context.Background(), operationKeys, nil); err == nil {
+	if _, err := client.callLocked(context.Background(), operationPing, nil); err == nil {
 		t.Fatal("callLocked = nil, want a transport error")
 	}
 	if client.conn != nil || client.process != 0 || client.pid != 0 || client.secret != "" {
@@ -148,7 +147,7 @@ func TestCallLockedNotifiesDisconnectOnTransportError(t *testing.T) {
 	disconnected := make(chan struct{}, 1)
 	client := &Client{conn: failingConn{}, secret: "secret", wanted: true}
 	client.UseDisconnect(func() { disconnected <- struct{}{} })
-	if _, err := client.callLocked(context.Background(), operationKeys, nil); err == nil {
+	if _, err := client.callLocked(context.Background(), operationPing, nil); err == nil {
 		t.Fatal("callLocked = nil, want a transport error")
 	}
 	select {
@@ -158,7 +157,7 @@ func TestCallLockedNotifiesDisconnectOnTransportError(t *testing.T) {
 	}
 }
 
-func TestCallLockedPreservesStableErrorCode(t *testing.T) {
+func TestSendKeysPreservesStableErrorCode(t *testing.T) {
 	t.Parallel()
 
 	client, server := net.Pipe()
@@ -177,54 +176,54 @@ func TestCallLockedPreservesStableErrorCode(t *testing.T) {
 	}()
 
 	caller := &Client{conn: client, secret: "secret"}
-	_, err := caller.callLocked(context.Background(), operationKeys, nil)
+	_, err := caller.SendKeys(context.Background(), platform.KeyRequest{})
 	if !errors.Is(err, platform.ErrWindowNotFound) {
-		t.Fatalf("callLocked = %v, want %v", err, platform.ErrWindowNotFound)
+		t.Fatalf("SendKeys = %v, want %v", err, platform.ErrWindowNotFound)
 	}
 	if !strings.HasPrefix(err.Error(), platform.ErrWindowNotFound.Error()) {
-		t.Fatalf("callLocked error = %q, want the stable code first", err)
+		t.Fatalf("SendKeys error = %q, want the stable code first", err)
 	}
 }
 
-func TestLaunchXXMICancelUnblocksReadAndStatus(t *testing.T) {
+func TestCallCancelUnblocksReadAndStatus(t *testing.T) {
 	t.Parallel()
 
-	client, received := stalledXXMILaunch(t)
+	client, received := stalledCall(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	launchErr := startStalledLaunch(client, ctx)
-	waitForLaunchRequest(t, received)
+	callErr := startStalledCall(client, ctx)
+	waitForRequest(t, received)
 
 	connected := make(chan bool, 1)
 	go func() { connected <- client.Connected() }()
 	cancel()
 
 	select {
-	case err := <-launchErr:
+	case err := <-callErr:
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("LaunchXXMI = %v, want context.Canceled", err)
+			t.Fatalf("Call = %v, want context.Canceled", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("LaunchXXMI did not return after cancel")
+		t.Fatal("Call did not return after cancel")
 	}
 	select {
 	case got := <-connected:
 		if got {
-			t.Fatal("Connected still reported a helper after the cancelled launch closed it")
+			t.Fatal("Connected still reported a helper after the cancelled call closed it")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Connected stayed blocked after cancel")
 	}
 }
 
-func TestCloseUnblocksLaunchXXMI(t *testing.T) {
+func TestCloseUnblocksCall(t *testing.T) {
 	t.Parallel()
 
-	client, received := stalledXXMILaunch(t)
+	client, received := stalledCall(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	launchErr := startStalledLaunch(client, ctx)
-	waitForLaunchRequest(t, received)
+	callErr := startStalledCall(client, ctx)
+	waitForRequest(t, received)
 
 	connected := make(chan bool, 1)
 	go func() { connected <- client.Connected() }()
@@ -237,15 +236,15 @@ func TestCloseUnblocksLaunchXXMI(t *testing.T) {
 			t.Fatalf("Close = %v", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("Close blocked on the launch")
+		t.Fatal("Close blocked on the call")
 	}
 	select {
-	case err := <-launchErr:
+	case err := <-callErr:
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("LaunchXXMI = %v, want context.Canceled", err)
+			t.Fatalf("Call = %v, want context.Canceled", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("LaunchXXMI did not return after Close")
+		t.Fatal("Call did not return after Close")
 	}
 	select {
 	case got := <-connected:
@@ -257,7 +256,7 @@ func TestCloseUnblocksLaunchXXMI(t *testing.T) {
 	}
 }
 
-func stalledXXMILaunch(t *testing.T) (*Client, <-chan struct{}) {
+func stalledCall(t *testing.T) (*Client, <-chan struct{}) {
 	t.Helper()
 	clientConn, serverConn := net.Pipe()
 	t.Cleanup(func() {
@@ -271,7 +270,7 @@ func stalledXXMILaunch(t *testing.T) (*Client, <-chan struct{}) {
 	received := make(chan struct{})
 	go func() {
 		request, err := readMessage(serverConn)
-		if err != nil || request.Operation != operationXXMILaunch {
+		if err != nil || request.Operation != testOperation {
 			return
 		}
 		close(received)
@@ -279,20 +278,20 @@ func stalledXXMILaunch(t *testing.T) (*Client, <-chan struct{}) {
 	return client, received
 }
 
-func startStalledLaunch(client *Client, ctx context.Context) <-chan error {
-	launchErr := make(chan error, 1)
+func startStalledCall(client *Client, ctx context.Context) <-chan error {
+	callErr := make(chan error, 1)
 	go func() {
-		_, err := client.LaunchXXMI(ctx, inject.LaunchSpec{TimeoutSeconds: 600})
-		launchErr <- err
+		_, err := client.Call(ctx, testOperation, nil)
+		callErr <- err
 	}()
-	return launchErr
+	return callErr
 }
 
-func waitForLaunchRequest(t *testing.T, received <-chan struct{}) {
+func waitForRequest(t *testing.T, received <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-received:
 	case <-time.After(2 * time.Second):
-		t.Fatal("helper did not receive the launch request")
+		t.Fatal("helper did not receive the request")
 	}
 }
