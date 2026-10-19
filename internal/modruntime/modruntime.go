@@ -67,8 +67,6 @@ type Spec struct {
 	// owns. An install creates each one that is missing, and the runtime reads
 	// as modified without it; updates never replace them.
 	Seed map[string]func(root, modsRoot string) ([]byte, error)
-	// Legacy lists earlier install locations to move below GroupDir.
-	Legacy []Legacy
 	// Settings are values in Files the user can change, such as hotkeys.
 	Settings []Setting
 }
@@ -92,13 +90,6 @@ type Capabilities struct {
 	// sampler slots (ps-s#, cs-s#).
 	ShaderSamplerSlots bool
 	DX12               bool
-}
-
-// Legacy is an install folder, as a slash path relative to the Mods folder,
-// and the manifest that marks it as installed by this app.
-type Legacy struct {
-	Dir      string
-	Manifest string
 }
 
 type Status struct {
@@ -237,9 +228,6 @@ func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 		status, err := func() (Status, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if err := m.migrate(modsRoot, spec); err != nil {
-				return Status{}, err
-			}
 			return m.inspect(modsRoot, sel)
 		}()
 		if err != nil {
@@ -434,9 +422,6 @@ func (m *Manager) Use(
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.migrate(modsRoot, spec); err != nil {
-		return err
-	}
 	status, err := m.inspect(modsRoot, sel)
 	if err != nil {
 		return err
@@ -526,12 +511,8 @@ func (m *Manager) operate(
 	return status, m.report(sc, operation, err)
 }
 
-// prepared moves a legacy install into place and inspects the runtime.
 func (m *Manager) prepared(sc *scope, modsRoot string, sel selection) (Status, error) {
 	sc.stage = "inspect"
-	if err := m.migrate(modsRoot, sel.runtimeSpec); err != nil {
-		return Status{}, err
-	}
 	status, err := m.inspect(modsRoot, sel)
 	sc.fields["state"], sc.fields["path"] = status.State, status.Path
 	return status, err

@@ -16,9 +16,6 @@ const (
 	profileIndexFile  = "_index.json"
 	profileLoaderFile = "surface/ProfileLoader.ini"
 	modMarkerFile     = ".nahida-liquid.json"
-	// legacyRuntimeManifest marked the runtime installed at
-	// Mods\LiquidGravityProbe\LiquidGravityProbe before runtimes moved to nhd-runtime.
-	legacyRuntimeManifest = ".nahida-liquid-runtime.json"
 	// The loader reads every .ini below Mods, so the backup must not end in .ini.
 	backupSuffix = ".nhd-liquid-orig"
 

@@ -47,7 +47,6 @@ func RuntimeSpec() modruntime.Spec {
 			Dir:      runtimeEnhancedDir,
 		}},
 		Seed:     map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader},
-		Legacy:   []modruntime.Legacy{{Dir: "LiquidGravityProbe/LiquidGravityProbe", Manifest: legacyRuntimeManifest}},
 		Settings: runtimeSettings(),
 	}
 }

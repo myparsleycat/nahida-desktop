@@ -799,41 +799,6 @@ func TestServiceApplyRollsBackFailedWrite(t *testing.T) {
 	}
 }
 
-// Installs from before nhd-runtime keep their emitter profiles: the hooks in
-// character mods still own those slots.
-func TestServiceMovesLegacyRuntimeWithProfiles(t *testing.T) {
-	f := newServiceFixture(t)
-	ctx := context.Background()
-	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
-		t.Fatal(err)
-	}
-	legacy := filepath.Join(f.modsRoot, "LiquidGravityProbe", "LiquidGravityProbe")
-	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(runtimeRootFor(f.modsRoot), legacy); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(
-		filepath.Join(legacy, ".nhd-runtime.json"),
-		filepath.Join(legacy, legacyRuntimeManifest),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	inspection, err := f.service.Inspect(ctx, f.modRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if inspection.Runtime.State != modruntime.StateCurrent || len(inspection.Emitters) != 1 ||
-		inspection.Emitters[0].Anchor.MeshID == "" {
-		t.Fatalf("after moving the legacy runtime = %+v", inspection)
-	}
-	if _, err := os.Stat(filepath.Dir(legacy)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("legacy group left behind (err=%v)", err)
-	}
-}
-
 func runtimeRootFor(modsRoot string) string {
 	return filepath.Join(modsRoot, modruntime.GroupDir, runtimeName)
 }

@@ -94,8 +94,8 @@ func validLook(look Look) bool {
 
 // lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
 // strength offset, custom color flag, tint and absorption depth in meters. A
-// mod without its own look writes no tail, which a runtime from before looks
-// also reads.
+// mod without its own look writes no tail, and the runtime then applies its
+// global settings.
 func lookRecord(look *Look) []float64 {
 	if look == nil || look.StrengthOffset == 0 && !look.CustomColor {
 		return nil

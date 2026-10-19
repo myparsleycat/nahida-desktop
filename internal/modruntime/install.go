@@ -2,7 +2,6 @@ package modruntime
 
 import (
 	"bytes"
-	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,20 +29,14 @@ var (
 )
 
 type manifest struct {
-	Name           string `json:"name,omitempty"`
-	RuntimeVersion string `json:"runtimeVersion"`
-	// Variant is the one installed; installs from before variants carry none
-	// and read as the base one.
-	Variant string            `json:"variant,omitempty"`
-	Files   map[string]string `json:"files"`
+	Name           string            `json:"name,omitempty"`
+	RuntimeVersion string            `json:"runtimeVersion"`
+	Variant        string            `json:"variant"`
+	Files          map[string]string `json:"files"`
 	// PendingShaders are the shaders, by slash path, whose compiled caches an
 	// unfinished install has yet to remove. A retry may find their changed
 	// sources already written and could not tell otherwise.
 	PendingShaders []string `json:"pendingShaders,omitempty"`
-}
-
-func (m manifest) variant() string {
-	return cmp.Or(m.Variant, VariantBase)
 }
 
 func installRoot(modsRoot, name string) string {
@@ -111,7 +104,7 @@ func inspectAt(root string, sel selection) (Status, error) {
 		return status, nil
 	}
 	status.Version = found.RuntimeVersion
-	if found.RuntimeVersion != spec.Version || found.variant() != sel.variant {
+	if found.RuntimeVersion != spec.Version || found.Variant != sel.variant {
 		status.State = StateOutdated
 		return status, nil
 	}
@@ -243,53 +236,6 @@ func physicalPath(name string) string {
 		return resolved
 	}
 	return filepath.Clean(name)
-}
-
-// migrate moves an install from a legacy location below GroupDir, keeping
-// its disabled state and the data its feature stored there. An install
-// already below GroupDir wins; a legacy folder left beside it then reads as
-// a foreign copy for the user to resolve.
-func (m *Manager) migrate(modsRoot string, spec runtimeSpec) error {
-	group := filepath.Join(modsRoot, GroupDir)
-	if _, err := os.Stat(installRoot(modsRoot, spec.Name)); !errors.Is(err, fs.ErrNotExist) ||
-		findDisabled(group, spec.Name, manifestFile) != "" {
-		return nil
-	}
-	for _, legacy := range spec.Legacy {
-		parent := filepath.Join(modsRoot, filepath.FromSlash(path.Dir(legacy.Dir)))
-		base := path.Base(legacy.Dir)
-		from := filepath.Join(parent, base)
-		prefix := ""
-		if _, err := os.Stat(filepath.Join(from, legacy.Manifest)); err != nil {
-			if from = findDisabled(parent, base, legacy.Manifest); from == "" {
-				continue
-			}
-			prefix = disabledPrefixRE.FindString(filepath.Base(from))
-		}
-		to := filepath.Join(group, prefix+spec.Name)
-		fields := map[string]any{"from": from, "to": to}
-		if err := os.MkdirAll(group, 0o755); err != nil {
-			return infra.AnnotateError(err, infra.Diagnostic{Stage: "migrate", Fields: fields})
-		}
-		if err := os.Rename(from, to); err != nil {
-			return infra.AnnotateError(err, infra.Diagnostic{Stage: "migrate", Fields: fields})
-		}
-		// Without the manifest under its new name the moved runtime would
-		// read as a foreign copy, so a failed rename moves the folder back.
-		if err := os.Rename(filepath.Join(to, legacy.Manifest), filepath.Join(to, manifestFile)); err != nil {
-			fields["rollback"] = "restored"
-			if undo := os.Rename(to, from); undo != nil {
-				fields["rollback"] = "failed"
-				err = errors.Join(err, undo)
-			}
-			return infra.AnnotateError(err, infra.Diagnostic{Stage: "migrate-manifest", Fields: fields})
-		}
-		if !platform.SamePathFold(parent, modsRoot) {
-			_ = os.Remove(parent)
-		}
-		return nil
-	}
-	return nil
 }
 
 // installAt writes into root the runtime files, with the stored settings

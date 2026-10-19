@@ -63,7 +63,6 @@ func newTestManager(t *testing.T) (*Manager, string) {
 			Seed: map[string]func(string, string) ([]byte, error){
 				seedFile: func(string, string) ([]byte, error) { return []byte("; seeded"), nil },
 			},
-			Legacy: []Legacy{{Dir: "Probe/Probe", Manifest: ".legacy.json"}},
 			Settings: []Setting{
 				{
 					ID: "toggleKey", Kind: SettingKey, Default: "VK_F1",
@@ -203,44 +202,6 @@ func TestForeignCopyBelowJunction(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(foreign, "Probe.ini")); err != nil {
 		t.Fatalf("second copy was touched: %v", err)
-	}
-}
-
-// A runtime the user disabled at its old location stays disabled, with the
-// data its feature kept there.
-func TestMigratesDisabledLegacyInstall(t *testing.T) {
-	manager, modsRoot := newTestManager(t)
-	legacy := filepath.Join(modsRoot, "Probe", "DISABLED_Probe")
-	if err := os.MkdirAll(filepath.Join(legacy, "Profiles"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, data := range map[string]string{
-		".legacy.json":       `{"runtimeVersion":"1","files":{}}`,
-		"Probe.ini":          "namespace = Probe\r\n",
-		"Profiles/keep.json": "{}",
-	} {
-		if err := os.WriteFile(filepath.Join(legacy, filepath.FromSlash(name)), []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	status := manager.state(t)
-	moved := filepath.Join(modsRoot, GroupDir, "DISABLED_Probe")
-	if status.State != StateDisabled || !strings.EqualFold(status.Path, moved) || status.Version != "1" {
-		t.Fatalf("after moving the legacy install = %+v", status)
-	}
-	if _, err := os.Stat(filepath.Join(moved, "Profiles", "keep.json")); err != nil {
-		t.Fatalf("feature data lost in the move: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(modsRoot, "Probe")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("legacy group left behind (err=%v)", err)
-	}
-
-	if _, err := manager.Remove(context.Background(), "EFMI", "Probe"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(modsRoot, GroupDir)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("runtime group left behind (err=%v)", err)
 	}
 }
 
