@@ -384,7 +384,10 @@ function RuntimeSettings({
           size="sm"
           disabled={!dirty}
           onClickPromise={async () => {
-            if (await onSave(values)) setDraft(null);
+            const submitted = values;
+            // Edits made while the save was pending stay in the draft.
+            if (await onSave(submitted))
+              setDraft((current) => (current === submitted ? null : current));
           }}
         >
           {t("page.setting.xxmi.modRuntimes.settings.save")}
