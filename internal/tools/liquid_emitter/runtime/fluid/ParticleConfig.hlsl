@@ -5,5 +5,7 @@ static const uint PUDDLE_COUNT=2048;
 static const uint SPLASH_COUNT=AIRBORNE_SPLASH_COUNT+PUDDLE_COUNT;
 static const uint EVENT_CAPACITY=1024;
 static const float FLUID_RADIUS=0.0028000000;
+// Seconds a stream particle lives; each bank re-emits its slots once per lifetime.
+static const float PRIMARY_LIFETIME=.48;
 
 static const uint BASE_PRIMARY_COUNT=512; // Reserved second bank never consumes baseline slots.

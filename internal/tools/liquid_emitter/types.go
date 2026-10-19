@@ -9,7 +9,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "4"
+	runtimeVersion    = "9"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"

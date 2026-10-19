@@ -237,7 +237,7 @@ void main(uint3 id:SV_DispatchThreadID){
    // The floor response remains between 20% and 100% of its reduced maximum.
    splashResponse=max(splashResponse,.20*floorWeight);
    velocity*=min(1,limit/max(speed,1e-8))*splashResponse*lerp(1,.70,floorWeight);
-   float scale=1.0; // impact droplets match primary fluid radius
+   float scale=.55+.65*random01(seed,channel+8);
    float jitterAngle=random01(seed,channel+6)*6.2831853;
    float jitterRadius=sqrt(random01(seed,channel+7))*e.normalRadius.w*.15;
    float3 position=e.pointSpeed.xyz+n*(e.normalRadius.w*scale+.0001)+(x*cos(jitterAngle)+y*sin(jitterAngle))*jitterRadius;

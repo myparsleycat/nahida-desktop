@@ -50,34 +50,53 @@ float smootherSlope(float center,float forward,float backward){
  float slope=min(forward>=0?abs(forward-center):1e30,backward>=0?abs(center-backward):1e30);
  return slope<1e29?slope:0;
 }
-// Whether scene geometry at `uv` hides a fluid point with clip `projected`.
+// Scene depth texel under `uv` and the inverse-projection base of that pixel.
 // Upscaled postprocessing targets need a normalized depth lookup instead of
 // a differently sized native DSV on the final color target.
-bool sceneInFront(float2 uv,float4 projected){
- if(IniParams[237].y<=.5)return false;
- uint depthWidth,depthHeight;sceneDepth.GetDimensions(depthWidth,depthHeight);
- if(depthWidth==0||depthHeight==0)return false;
- int2 last=int2(depthWidth-1,depthHeight-1);
- int2 depthPixel=clamp(int2(saturate(uv)*float2(depthWidth,depthHeight)),int2(0,0),last);
- float4 base=(uv.x*2-1)*camera[12]+(1-uv.y*2)*camera[13]+camera[15];
- float scene=sceneViewDistance(depthPixel,last,base);
- if(scene<0)return false;
- float4 fluidView=base+(projected.z/projected.w)*camera[14];
- if(abs(fluidView.w)<=1e-8)return false;
- // The nearest texel of a lower resolution, jittered depth buffer is off by
- // up to one texel of the surface's slope. On a floor seen at a grazing angle
- // that is millimeters, enough to cut a puddle lying on it into rows. The
- // smoother side's slope is used so occluder silhouettes stay tight.
+bool sceneTexelAt(float2 uv,out int2 texel,out int2 last,out float4 base){
+ uint w,h;sceneDepth.GetDimensions(w,h);
+ last=int2(w-1,h-1);
+ texel=clamp(int2(saturate(uv)*float2(w,h)),int2(0,0),last);
+ base=(uv.x*2-1)*camera[12]+(1-uv.y*2)*camera[13]+camera[15];
+ return w>0&&h>0;
+}
+// The nearest texel of a lower resolution, jittered depth buffer is off by
+// up to one texel of the surface's slope. On a floor seen at a grazing angle
+// that is millimeters, enough to cut a puddle lying on it into rows. The
+// smoother side's slope is used so occluder silhouettes stay tight.
+float sceneSlopeAllowance(int2 texel,int2 last,float4 base,float scene){
  float slope=max(
-  smootherSlope(scene,sceneViewDistance(depthPixel+int2(1,0),last,base),sceneViewDistance(depthPixel-int2(1,0),last,base)),
-  smootherSlope(scene,sceneViewDistance(depthPixel+int2(0,1),last,base),sceneViewDistance(depthPixel-int2(0,1),last,base)));
+  smootherSlope(scene,sceneViewDistance(texel+int2(1,0),last,base),sceneViewDistance(texel-int2(1,0),last,base)),
+  smootherSlope(scene,sceneViewDistance(texel+int2(0,1),last,base),sceneViewDistance(texel-int2(0,1),last,base)));
  // An occluder one texel wide, such as a railing, has the background on both
  // sides, and that depth gap is no slope. A floor seen from standing height
  // changes by under 2 percent of its distance per texel out to about 15 m,
  // so the cap keeps puddles whole while thin occluders still hide liquid.
- slope=min(slope,scene*.02);
+ return min(slope,scene*.02);
+}
+float sceneSlopeAllowanceAt(float2 uv){
+ int2 texel,last;float4 base;
+ if(!sceneTexelAt(uv,texel,last,base))return 0;
+ float scene=sceneViewDistance(texel,last,base);
+ return scene<0?0:sceneSlopeAllowance(texel,last,base,scene);
+}
+// How far the point with clip `c` lies behind the scene at `uv`, in view
+// distance; -1e30 where no geometry was drawn.
+float behindScene(float2 uv,float4 c){
+ int2 texel,last;float4 base;
+ if(!sceneTexelAt(uv,texel,last,base))return -1e30;
+ float scene=sceneViewDistance(texel,last,base);
+ float4 view=base+(c.z/c.w)*camera[14];
+ if(scene<0||abs(view.w)<=1e-8)return -1e30;
+ return abs(view.z/view.w)-scene;
+}
+// Whether scene geometry at `uv` hides a fluid point with clip `projected`.
+bool sceneInFront(float2 uv,float4 projected){
+ if(IniParams[237].y<=.5)return false;
+ float gap=behindScene(uv,projected);
+ if(gap<-1e29)return false;
  // A 0.7 mm view-space bias, rather than a depth-buffer bias whose physical
  // size grows rapidly with camera distance.
- return scene+.0007+slope<abs(fluidView.z/fluidView.w);
+ return gap>.0007+sceneSlopeAllowanceAt(uv);
 }
 #endif

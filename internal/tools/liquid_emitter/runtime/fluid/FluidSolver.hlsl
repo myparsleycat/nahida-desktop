@@ -55,7 +55,7 @@ void main(uint3 dispatch:SV_DispatchThreadID){
  FluidParticle p=source[i];
 #ifdef PHASE_PREDICT
  // Stratified, irregular births: fixed timestamps never stretch the age of live fluid.
- float lifetime=.48;
+ float lifetime=PRIMARY_LIFETIME;
  float cycle=floor(STEP.y/lifetime);
  uint emissionSlot=i%BASE_PRIMARY_COUNT;
  bool reserve=i>=BASE_PRIMARY_COUNT;

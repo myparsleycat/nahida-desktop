@@ -72,17 +72,6 @@ bool sceneSurface(float2 uv,out float3 surfacePoint,out float3 normal){
  normal=n/len;if(dot(normal,camera[7].xyz-surfacePoint)<0)normal=-normal;
  return true;
 }
-// How far the point with clip `c` lies behind the scene at `uv`, in view
-// distance; -1e30 where no geometry was drawn.
-float behindScene(float2 uv,float4 c){
- uint w,h;sceneDepth.GetDimensions(w,h);
- int2 last=int2(w-1,h-1),texel=clamp(int2(uv*float2(w,h)),int2(0,0),last);
- float4 base=(uv.x*2-1)*camera[12]+(1-uv.y*2)*camera[13]+camera[15];
- float scene=sceneViewDistance(texel,last,base);
- float4 view=base+(c.z/c.w)*camera[14];
- if(scene<0||abs(view.w)<=1e-8)return -1e30;
- return abs(view.z/view.w)-scene;
-}
 // Screen-space reflection: march the ray through the scene depth with
 // growing steps, then bisect the crossing. Misses keep `fallback`.
 float3 traceReflection(float3 origin,float3 direction,float3 fallback){
@@ -147,12 +136,13 @@ float4 main(ScreenVarying i):SV_Target{
  // The default tint passes red and green almost equally and absorbs blue: a
  // urine yellow rather than amber, which over gray ground turns brown.
  float3 tint=saturate(look.rgb);
- // Thickness is the sum of every overlapping particle's chord, and a floor
- // puddle stacks dozens of flattened discs, so the sum reads several
- // centimeters where the real film is a few millimeters. Saturate it toward
- // FILM_LIMIT so light still passes through like a film.
- const float FILM_LIMIT=.004;
- float film=FILM_LIMIT*(1-exp(-thickness/FILM_LIMIT));
+ // Thickness is the sum of every overlapping particle's chord. A stream
+ // keeps most of its chord, while a puddle stacks the discs of every
+ // particle lying there and would read as centimeters where the real film
+ // is a millimeter or two. Saturate each toward its own limit so the puddle
+ // stays a film the ground shows through and a lone drop stays pale.
+ float filmLimit=lerp(.005,.0015,puddle);
+ float film=filmLimit*(1-exp(-thickness/filmLimit));
  // Beer-Lambert absorption that reaches the body tint at the absorption
  // depth, 15 mm by default. A film that darkens the ground much more reads
  // as oil, not urine.
@@ -176,16 +166,30 @@ float4 main(ScreenVarying i):SV_Target{
  // Approximate a compact key-light lobe; its intensity follows the captured scene, not a constant glow.
  float3 light=normalize(float3(-.4,.8,.2)),halfway=normalize(light+toward);
  float spec=pow(saturate(dot(n,halfway)),96),shoulder=pow(saturate(dot(n,halfway)),24);
- float3 glint=float3(1,.97,.84)*(spec*4.3+shoulder*.30)*illumination;
+ // A narrow bright peak on every bead turns the stream into a string of
+ // pearls; a lower peak over a wider shoulder reads as a wet sheen.
+ float3 glint=float3(1,.97,.84)*(spec*2.2+shoulder*.35)*illumination;
+ // No normal of a vertical stream faces that key light's half vector, so
+ // the stream stayed matte while every drop sparkled. A soft lobe around
+ // the view direction gives the cylinder the lengthwise sheen of a wet
+ // surface without depending on where the game's light is.
+ float3 sheenHalfway=normalize(normalize(toward+float3(0,.5,0))+toward);
+ glint+=float3(1,.97,.84)*pow(saturate(dot(n,sheenHalfway)),32)*.45*illumination;
+ // Both lobes are stand-ins for a light the scene does not provide. On the
+ // curved stream they add a stripe; on a flat puddle every pixel shares one
+ // normal, so from the mirror angle of either lobe the whole film turns
+ // white. A puddle shines by the mirror image it traces instead.
+ glint*=1-puddle;
  // Clear liquid mostly absorbs: the scene behind darkens and takes the tint.
  // A little in-scattering keeps the color readable over dark backgrounds
  // without the liquid glowing like paint.
  float3 scatter=tint*(1-transmit)*shade.w*illumination;
  // A lone droplet spans a few pixels, so its depth normals cover a whole
- // hemisphere and always catch the glint; smoothing leaves it about 1 mm
- // thick. Highlights need a body of liquid behind them, or spray turns into
- // white specks.
- float highlight=smoothstep(.0015,.005,thickness);
+ // hemisphere and always catch the glint. Highlights need the body of the
+ // stream or a large drop behind them, or spray turns into glitter. A
+ // puddle's thickness is the sum of discs a millimeter thick, so its mirror
+ // image is gated where the film exists rather than where discs stack.
+ float highlight=lerp(smoothstep(.003,.008,thickness),smoothstep(.0003,.0012,thickness),puddle);
  // Water filling the ground's pores darkens it under a puddle.
  float wet=puddle*saturate(film/.002);
  background*=lerp(1,shade.x,wet);
@@ -196,8 +200,10 @@ float4 main(ScreenVarying i):SV_Target{
  float reflectionGain=lerp(shade.z,1,puddle);
  float3 color=(background*transmit+scatter)*(1-reflectance)+reflection*reflectance*reflectionGain+glint*highlight;
  // The color already carries the scene behind it, so the interior covers
- // fully; only silhouettes, where smoothing thins the liquid out, fade.
- float alpha=1-exp(-thickness/.0006);
+ // fully; only silhouettes, where smoothing thins the liquid out, fade. A
+ // puddle's thickness is the sum of soft discs, which a threshold turns
+ // into one film with an irregular edge, and lone drops into small dots.
+ float alpha=lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle);
  return float4(color,alpha);
 }
 #endif
