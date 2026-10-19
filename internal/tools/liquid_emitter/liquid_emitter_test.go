@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"io/fs"
 	"math"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -751,4 +753,55 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 			t.Fatalf("Probe.ini lacks %q", line)
 		}
 	}
+}
+
+// Every shader the bundled INI files name must ship in the runtime, or the
+// pass fails only inside the game, as an overlay error nothing here reports.
+// Shader paths are relative to their INI; a variant INI installs at its path
+// below the variant directory.
+func TestRuntimeINIsReferenceBundledShaders(t *testing.T) {
+	var checked int
+	err := fs.WalkDir(runtimeAssets, "runtime", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
+			return err
+		}
+		ini, err := fs.ReadFile(runtimeAssets, name)
+		if err != nil {
+			return err
+		}
+		checked++
+		if missing := missingShaderReferences(name, ini); len(missing) != 0 {
+			t.Errorf("%s references shaders missing from the bundle: %v", name, missing)
+		}
+		return nil
+	})
+	if err != nil || checked < 2 {
+		t.Fatalf("walked %d INI files (err=%v)", checked, err)
+	}
+}
+
+func missingShaderReferences(iniPath string, ini []byte) []string {
+	installedDir := strings.TrimPrefix(path.Dir(iniPath), "runtime")
+	installedDir = strings.TrimPrefix(installedDir, "/"+runtimeEnhancedDir)
+	installedDir = strings.TrimPrefix(installedDir, "/")
+	var missing []string
+	for _, line := range strings.Split(string(ini), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+		if !ok || !strings.HasSuffix(value, ".hlsl") {
+			continue
+		}
+		switch key {
+		case "vs", "ps", "cs", "hs", "ds", "gs":
+		default:
+			continue
+		}
+		shader := path.Join(installedDir, value)
+		_, baseErr := fs.Stat(runtimeAssets, path.Join("runtime", shader))
+		_, variantErr := fs.Stat(runtimeAssets, path.Join("runtime", runtimeEnhancedDir, shader))
+		if baseErr != nil && variantErr != nil {
+			missing = append(missing, value)
+		}
+	}
+	return missing
 }
