@@ -143,6 +143,8 @@ export default function ToggleViewerGenerator() {
   const isDeleting = mode === "delete" || isBatchDeleting;
   const isBusy =
     !!state?.isRunning || isBatchGenerating || isBatchDeleting || isStopping || isEnabledSaving;
+  const isBatchRunning =
+    mode === "generate" || mode === "delete" || isBatchGenerating || isBatchDeleting;
   const statusLabel =
     mode === "generate" || mode === "delete" || mode === "scan"
       ? t(`page.tools.toggle_viewer_generator.status.${mode}`)
@@ -173,7 +175,7 @@ export default function ToggleViewerGenerator() {
           <SectionRow title={t("page.tools.toggle_viewer_generator.hotkey")}>
             <HotkeySettingDialog
               value={hotkey}
-              disabled={isHotkeyPending || isHotkeySaving || isBusy}
+              disabled={isHotkeyPending || isHotkeySaving || isBatchRunning}
               onSave={(next) => setHotkey(next)}
             />
           </SectionRow>
