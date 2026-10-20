@@ -503,8 +503,7 @@ func (s *Service) startWatcherLocked(ctx context.Context, initialScan bool) erro
 		Ops:      watcher.All,
 		Debounce: 500 * time.Millisecond,
 		Filter: func(event watcher.Event) bool {
-			name := filepath.Base(event.Path)
-			return !isArtifactName(name) && !hasPrefixFold(name, tempPrefix)
+			return s.relevantEvent(modsPaths, event)
 		},
 	}, func(watcher.Event) {
 		s.requestScan()
@@ -526,6 +525,46 @@ func (s *Service) startWatcherLocked(ctx context.Context, initialScan bool) erro
 		s.requestScan()
 	}
 	return nil
+}
+
+// relevantEvent reports whether a change under roots can alter what a scan reads. The watcher only
+// delivers the last event of a debounce window, so irrelevant events must be dropped one by one here
+// rather than in the scan callback. Mod assets, temporary files and the directory writes that
+// accompany their creation never change a source; a path that is gone only matters when it held a
+// folder with sources at the last scan, which is unknown before that scan and while a task runs.
+func (s *Service) relevantEvent(roots []string, event watcher.Event) bool {
+	name := filepath.Base(event.Path)
+	if isArtifactName(name) || hasPrefixFold(name, tempPrefix) {
+		return false
+	}
+	for _, root := range roots {
+		if platform.SamePathFold(root, event.Path) {
+			return true
+		}
+		if rel, err := filepath.Rel(root, event.Path); err == nil && platform.SameOrChildPath(root, event.Path) &&
+			slices.ContainsFunc(strings.Split(rel, string(filepath.Separator)), isDisabledName) {
+			return false
+		}
+	}
+	if strings.EqualFold(filepath.Ext(name), ".ini") {
+		return true
+	}
+
+	info, err := os.Lstat(event.Path)
+	if err == nil {
+		return info.IsDir() && event.Op != watcher.Write
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sourceDirs == nil || s.task != nil {
+		return true
+	}
+	return slices.ContainsFunc(s.sourceDirs, func(dir string) bool {
+		return platform.SameOrChildPath(event.Path, dir)
+	})
 }
 
 // watcherCurrentLocked reports whether the running watcher already covers what a restart would watch.
@@ -624,6 +663,13 @@ func (s *Service) scanAll(ctx context.Context) (bool, error) {
 		unreadDirs = append(unreadDirs, unread...)
 	}
 	s.sources = sources
+	sourceDirs := append(make([]string, 0, len(unreadDirs)+len(artifacts)), unreadDirs...)
+	for _, artifact := range artifacts {
+		sourceDirs = append(sourceDirs, filepath.Dir(artifact.toggleINIPath))
+	}
+	s.mu.Lock()
+	s.sourceDirs = sourceDirs
+	s.mu.Unlock()
 	s.writeMu.Lock()
 	deferredDirs, err := s.persistArtifacts(ctx, artifacts, hotkey)
 	deferredDirs = append(deferredDirs, unreadDirs...)

@@ -70,7 +70,9 @@ type Service struct {
 	hotkeyCancel context.CancelFunc
 	closing      bool
 	suspended    bool
-	tasks        sync.WaitGroup
+	// sourceDirs lists the folders with sources at the last scan, nil before the first one.
+	sourceDirs []string
+	tasks      sync.WaitGroup
 	// hotkeyRuns is separate from tasks because a running hotkey retry waits for watchMu, which
 	// importer maintenance holds while it waits for tasks. Only Shutdown waits for both.
 	hotkeyRuns sync.WaitGroup

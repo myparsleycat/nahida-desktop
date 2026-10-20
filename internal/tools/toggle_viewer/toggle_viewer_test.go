@@ -12,6 +12,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/watcher"
 	"nahida.live/desktop/internal/xxmi"
 )
 
@@ -225,6 +226,42 @@ func TestScanRereadsSourceWithNewModTime(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(filepath.Dir(iniPath), artifactTXTName))
 	if err != nil || !strings.Contains(string(content), "Ctrl + J") {
 		t.Fatalf("txt = %q, %v", content, err)
+	}
+}
+
+func TestRelevantEvent(t *testing.T) {
+	mods := filepath.Join(t.TempDir(), "Mods")
+	character := filepath.Join(mods, "Character")
+	writeTestFile(t, filepath.Join(character, "mod.ini"), cycleModINI)
+	writeTestFile(t, filepath.Join(character, "body.dds"), "texture")
+	writeTestFile(t, filepath.Join(mods, "DISABLED Old", "mod.ini"), cycleModINI)
+	roots := []string{mods}
+	known := &Service{sourceDirs: []string{character, filepath.Join(mods, "Removed")}}
+	unknown := &Service{}
+
+	for _, tc := range []struct {
+		name    string
+		service *Service
+		path    string
+		op      watcher.Op
+		want    bool
+	}{
+		{"source ini write", known, filepath.Join(character, "mod.ini"), watcher.Write, true},
+		{"asset write", known, filepath.Join(character, "body.dds"), watcher.Write, false},
+		{"artifact write", known, filepath.Join(character, artifactININame), watcher.Write, false},
+		{"disabled folder ini", known, filepath.Join(mods, "DISABLED Old", "mod.ini"), watcher.Write, false},
+		{"folder write", known, character, watcher.Write, false},
+		{"folder create", known, character, watcher.Create, true},
+		{"root overflow", known, mods, watcher.Write, true},
+		{"removed source folder", known, filepath.Join(mods, "Removed"), watcher.Remove, true},
+		{"removed unrelated", known, filepath.Join(mods, "Other"), watcher.Remove, false},
+		{"removed before first scan", unknown, filepath.Join(mods, "Other"), watcher.Remove, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.service.relevantEvent(roots, watcher.Event{Path: tc.path, Op: tc.op}); got != tc.want {
+				t.Fatalf("relevantEvent = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
