@@ -37,6 +37,19 @@ type treeWatcher struct {
 	roots   []string
 }
 
+type sourceINI struct {
+	path string
+	info fs.FileInfo
+}
+
+// cachedSource is the parse result of a source INI, valid while its size and modification time are
+// unchanged; source is nil when the INI does not qualify.
+type cachedSource struct {
+	size    int64
+	modTime time.Time
+	source  *toggleViewerSource
+}
+
 func (s *Service) Logs() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,6 +86,8 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// A batch rereads every INI, so an edit that kept the size and modification time is still picked up.
+	s.sources = nil
 	deferred, err := s.scanAll(taskCtx)
 	cancelled := taskCtx.Err() != nil
 	s.finishTask(current)
@@ -263,7 +278,7 @@ func forEachMovedArtifact(
 			return err
 		}
 		var paths []string
-		err = walkRegularFiles(ctx, root, nil, func(path string) {
+		err = walkRegularFiles(ctx, root, nil, func(path string, _ fs.DirEntry) {
 			if isArtifactName(filepath.Base(path)) && !containsPathFold(skipDirs, filepath.Dir(path)) {
 				paths = append(paths, path)
 			}
@@ -599,14 +614,16 @@ func (s *Service) scanAll(ctx context.Context) (bool, error) {
 
 	var artifacts []toggleViewerArtifact
 	var unreadDirs []string
+	sources := map[string]cachedSource{}
 	for _, modsPath := range modsPaths {
-		found, unread, err := s.scanRoot(ctx, modsPath, hotkey)
+		found, unread, err := s.scanRoot(ctx, modsPath, hotkey, sources)
 		if err != nil {
 			return false, err
 		}
 		artifacts = append(artifacts, found...)
 		unreadDirs = append(unreadDirs, unread...)
 	}
+	s.sources = sources
 	s.writeMu.Lock()
 	deferredDirs, err := s.persistArtifacts(ctx, artifacts, hotkey)
 	deferredDirs = append(deferredDirs, unreadDirs...)
@@ -634,10 +651,12 @@ func (s *Service) scanAll(ctx context.Context) (bool, error) {
 
 // scanRoot also returns the folders with a source INI that could not be read. Their artifacts are
 // neither rebuilt from the remaining sources nor treated as stale, because the unread source may
-// still qualify; the caller defers them to a later scan.
+// still qualify; the caller defers them to a later scan. An INI whose size and modification time
+// match the previous scan reuses its parsed source, and every INI read is recorded in sources.
 func (s *Service) scanRoot(
 	ctx context.Context,
 	modsPath, hotkey string,
+	sources map[string]cachedSource,
 ) ([]toggleViewerArtifact, []string, error) {
 	release, err := diskio.AcquireDir(ctx, modsPath)
 	if err != nil {
@@ -645,25 +664,36 @@ func (s *Service) scanRoot(
 	}
 	defer release()
 
-	iniPaths, err := scanINIs(ctx, modsPath)
+	inis, err := scanINIs(ctx, modsPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("scan toggle viewer mods %q: %w", modsPath, err)
 	}
 	var dirs, unreadDirs []string
 	sourcesByDir := map[string][]toggleViewerSource{}
-	for _, iniPath := range iniPaths {
-		content, err := os.ReadFile(iniPath)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			s.logError(fmt.Sprintf("Deferred toggle viewer scan of unreadable ini %s: %s", iniPath, err), err)
-			if dir := filepath.Dir(iniPath); !containsPathFold(unreadDirs, dir) {
-				unreadDirs = append(unreadDirs, dir)
+	for _, ini := range inis {
+		iniPath := ini.path
+		cached, ok := s.sources[iniPath]
+		if !ok || ini.info == nil || cached.size != ini.info.Size() || !cached.modTime.Equal(ini.info.ModTime()) {
+			content, err := os.ReadFile(iniPath)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
 			}
-			continue
+			if err != nil {
+				s.logError(fmt.Sprintf("Deferred toggle viewer scan of unreadable ini %s: %s", iniPath, err), err)
+				if dir := filepath.Dir(iniPath); !containsPathFold(unreadDirs, dir) {
+					unreadDirs = append(unreadDirs, dir)
+				}
+				continue
+			}
+			cached = cachedSource{source: parseToggleViewerSource(iniPath, string(content))}
+			if ini.info != nil {
+				cached.size, cached.modTime = ini.info.Size(), ini.info.ModTime()
+			}
 		}
-		source := parseToggleViewerSource(iniPath, string(content))
+		if ini.info != nil {
+			sources[iniPath] = cached
+		}
+		source := cached.source
 		if source == nil {
 			continue
 		}
@@ -736,19 +766,25 @@ func (s *Service) persistArtifacts(
 		iniHash := keptArtifactHash(iniErr, artifact.toggleINIPath, artifact.toggleINIHash)
 		updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		for _, target := range artifact.targetINIPaths {
+			record, exists := previous[target]
+			row := db.ToggleViewerArtifactRow{
+				TargetIniPath: target,
+				ToggleTxtPath: artifact.toggleTXTPath,
+				ToggleIniPath: artifact.toggleINIPath,
+				ToggleTxtHash: cmp.Or(txtHash, record.ToggleTxtHash, artifact.toggleTXTHash),
+				ToggleIniHash: cmp.Or(iniHash, record.ToggleIniHash, artifact.toggleINIHash),
+				UpdatedAt:     updatedAt,
+			}
+			if exists && record.ToggleTxtPath == row.ToggleTxtPath && record.ToggleIniPath == row.ToggleIniPath &&
+				record.ToggleTxtHash == row.ToggleTxtHash && record.ToggleIniHash == row.ToggleIniHash {
+				continue
+			}
 			id, err := newID()
 			if err != nil {
 				return deferred, err
 			}
-			if err := client.ToggleViewerArtifacts.Upsert(recordCtx, db.ToggleViewerArtifactRow{
-				ID:            id,
-				TargetIniPath: target,
-				ToggleTxtPath: artifact.toggleTXTPath,
-				ToggleIniPath: artifact.toggleINIPath,
-				ToggleTxtHash: cmp.Or(txtHash, previous[target].ToggleTxtHash, artifact.toggleTXTHash),
-				ToggleIniHash: cmp.Or(iniHash, previous[target].ToggleIniHash, artifact.toggleINIHash),
-				UpdatedAt:     updatedAt,
-			}); err != nil {
+			row.ID = id
+			if err := client.ToggleViewerArtifacts.Upsert(recordCtx, row); err != nil {
 				return deferred, err
 			}
 		}
@@ -998,19 +1034,29 @@ func (s *Service) addLog(level, message string) {
 
 // scanINIs skips folders and files that 3DMigoto does not load, so disabled mods get no artifacts and
 // the stale cleanup removes the ones they kept from before they were disabled.
-func scanINIs(ctx context.Context, root string) ([]string, error) {
-	var paths []string
-	err := walkRegularFiles(ctx, root, isDisabledName, func(path string) {
-		if isSourceININame(filepath.Base(path)) {
-			paths = append(paths, path)
+func scanINIs(ctx context.Context, root string) ([]sourceINI, error) {
+	var inis []sourceINI
+	err := walkRegularFiles(ctx, root, isDisabledName, func(path string, entry fs.DirEntry) {
+		if !isSourceININame(entry.Name()) {
+			return
 		}
+		ini := sourceINI{path: path}
+		if info, err := entry.Info(); err == nil {
+			ini.info = info
+		}
+		inis = append(inis, ini)
 	})
-	return paths, err
+	return inis, err
 }
 
 // walkRegularFiles visits the regular files under root, skipping the folders below root whose name
 // matches skipDir when it is set.
-func walkRegularFiles(ctx context.Context, root string, skipDir func(name string) bool, visit func(path string)) error {
+func walkRegularFiles(
+	ctx context.Context,
+	root string,
+	skipDir func(name string) bool,
+	visit func(path string, entry fs.DirEntry),
+) error {
 	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -1022,7 +1068,7 @@ func walkRegularFiles(ctx context.Context, root string, skipDir func(name string
 			return fs.SkipDir
 		}
 		if entry.Type().IsRegular() {
-			visit(path)
+			visit(path, entry)
 		}
 		return nil
 	})

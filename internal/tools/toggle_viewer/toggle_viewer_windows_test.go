@@ -150,6 +150,11 @@ func TestUnreadableSourceKeepsArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A source left unchanged reuses its parsed result, so the edit is what makes the scan read it.
+	edited := time.Now().Add(time.Minute)
+	if err := os.Chtimes(filepath.Join(modRoot, "mod.ini"), edited, edited); err != nil {
+		t.Fatal(err)
+	}
 	lockFile(t, filepath.Join(modRoot, "mod.ini"), 0)
 	retry, err := service.scanAll(ctx)
 	if err != nil || !retry {

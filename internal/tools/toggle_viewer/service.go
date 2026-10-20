@@ -57,6 +57,8 @@ type Service struct {
 	writeMu sync.Mutex
 
 	retryDelay time.Duration
+	// sources caches the parsed source INIs of the last scan. Only the running task uses it.
+	sources map[string]cachedSource
 
 	mu           sync.Mutex
 	task         *task

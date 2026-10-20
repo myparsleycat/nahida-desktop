@@ -193,6 +193,41 @@ func TestScanRemovesArtifactsOfMovedFolderBeforeForgettingRecord(t *testing.T) {
 	}
 }
 
+// A scan reuses an INI's parsed source while its size and modification time are unchanged, so an edit
+// that keeps the size must still be picked up through the new modification time.
+func TestScanRereadsSourceWithNewModTime(t *testing.T) {
+	ctx := context.Background()
+	importer := t.TempDir()
+	iniPath := filepath.Join(importer, "Mods", "Character", "mod.ini")
+	writeTestFile(t, iniPath, cycleModINI)
+	modTime := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(iniPath, modTime, modTime); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{
+		Settings:  &fakeSettings{},
+		Importers: fakeImporters{{Key: "GIMI", ImporterFolder: importer}},
+	})
+	service.UseClient(openTestDB(t))
+	t.Cleanup(func() { _ = service.Shutdown() })
+	if err := service.RunBatchGenerate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, iniPath, strings.Replace(cycleModINI, "ctrl H", "ctrl J", 1))
+	modTime = modTime.Add(time.Minute)
+	if err := os.Chtimes(iniPath, modTime, modTime); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.scanAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(filepath.Dir(iniPath), artifactTXTName))
+	if err != nil || !strings.Contains(string(content), "Ctrl + J") {
+		t.Fatalf("txt = %q, %v", content, err)
+	}
+}
+
 // 3DMigoto does not load a disabled folder, so its artifacts are cleaned up instead of regenerated.
 func TestScanSkipsDisabledFolder(t *testing.T) {
 	ctx := context.Background()
@@ -247,7 +282,7 @@ func TestPersistAppliesHotkeyStoredDuringScan(t *testing.T) {
 	service := NewWithOptions(Options{Settings: settings})
 	service.UseClient(client)
 
-	artifacts, _, err := service.scanRoot(ctx, modsPath, "ctrl H")
+	artifacts, _, err := service.scanRoot(ctx, modsPath, "ctrl H", map[string]cachedSource{})
 	if err != nil || len(artifacts) != 1 {
 		t.Fatalf("artifacts = %#v, %v", artifacts, err)
 	}
