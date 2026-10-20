@@ -26,6 +26,23 @@ func (d *Drive) executeUploadPlanWithRecovery(
 	concurrency int,
 	onProgress func(UploadExecutionProgress),
 ) (map[string]string, error) {
+	return d.runUploadPlanWithRecovery(ctx, files, plan, rules, concurrency, onProgress,
+		func(ctx context.Context, files []FinalUploadFile) (UploadPlan, error) {
+			return d.planUploadV2(ctx, destinationID, uuid.NewString(), files, rules, nil)
+		})
+}
+
+// runUploadPlanWithRecovery is executeUploadPlanWithRecovery for any plan
+// route: replan plans the files to recover again.
+func (d *Drive) runUploadPlanWithRecovery(
+	ctx context.Context,
+	files []FinalUploadFile,
+	plan UploadPlan,
+	rules UploadRules,
+	concurrency int,
+	onProgress func(UploadExecutionProgress),
+	replan func(context.Context, []FinalUploadFile) (UploadPlan, error),
+) (map[string]string, error) {
 	rejections := make(map[string]string)
 	var terminal []error
 	for attempt := 0; ; attempt++ {
@@ -54,7 +71,7 @@ func (d *Drive) executeUploadPlanWithRecovery(
 			return rejections, errors.Join(append(terminal, err, waitErr)...)
 		}
 		var planErr error
-		plan, planErr = d.planUploadV2(ctx, destinationID, uuid.NewString(), files, rules, nil)
+		plan, planErr = replan(ctx, files)
 		if planErr != nil {
 			return rejections, errors.Join(append(terminal, planErr)...)
 		}

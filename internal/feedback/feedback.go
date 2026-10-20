@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -115,6 +116,17 @@ type Progress struct {
 // ModFileRule answers whether the server's upload rules admit a mod file.
 type ModFileRule func(name string, size int64) bool
 
+// ModUploader sends the mod files of a report through the akasha upload
+// intents.
+type ModUploader interface {
+	UploadFeedbackMod(
+		ctx context.Context,
+		reportID string,
+		files []drive.FeedbackModFile,
+		onProgress func(bytes int64),
+	) (drive.FeedbackModResult, error)
+}
+
 type Options struct {
 	Remote    *infra.Client
 	Log       *infra.Log
@@ -124,6 +136,7 @@ type Options struct {
 	LogPath func() (string, error)
 	// ModFileRule fetches the upload rules mod attachments are held to.
 	ModFileRule func(context.Context) (ModFileRule, error)
+	Mods        ModUploader
 }
 
 type Service struct {
@@ -132,6 +145,7 @@ type Service struct {
 	emit        func(name string, data ...any)
 	logPath     func() (string, error)
 	modFileRule func(context.Context) (ModFileRule, error)
+	mods        ModUploader
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -144,6 +158,7 @@ func New(options Options) *Service {
 		emit:        options.EventEmit,
 		logPath:     options.LogPath,
 		modFileRule: options.ModFileRule,
+		mods:        options.Mods,
 	}
 }
 
@@ -243,7 +258,7 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 	}
 
 	*stage = "collect"
-	uploads, skipped, err := s.collect(ctx, request)
+	media, mods, skipped, err := s.collect(ctx, request)
 	if err != nil {
 		return Result{}, err
 	}
@@ -251,11 +266,20 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 	if err != nil {
 		return Result{}, err
 	}
+	progress := s.newProgress(media, mods)
+	progress.report(true)
 
 	*stage = "upload"
-	if err := s.upload(ctx, reportID, uploads); err != nil {
+	if err := s.upload(ctx, reportID, media, progress); err != nil {
 		return Result{}, err
 	}
+
+	*stage = "upload-mod"
+	modDeclarations, refused, err := s.uploadMods(ctx, reportID, mods, progress)
+	if err != nil {
+		return Result{}, err
+	}
+	progress.report(true)
 
 	*stage = "log"
 	var log []byte
@@ -273,18 +297,93 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 		Platform:    "windows",
 		Locale:      request.Locale,
 		Environment: environment(),
-		Attachments: declarations(uploads),
+		Attachments: append(declarations(media), modDeclarations...),
 	}, log)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{ID: id, SkippedModFiles: skipped}, nil
+	return Result{ID: id, SkippedModFiles: skipped + refused}, nil
 }
 
-// upload is one file waiting for its presigned PUT.
+// upload is one media file waiting for its presigned PUT.
 type upload struct {
 	declaration fileDeclaration
 	source      string
+}
+
+// modUpload is one mod file the upload rules admit, waiting for the akasha
+// upload intents.
+type modUpload struct {
+	ref    string
+	source modFile
+}
+
+// uploadMods sends the mod files through the akasha upload intents, the way a
+// drive upload sends files, and answers their declarations and how many the
+// server refused by its rules. Those are left out like the files the rules
+// refused before the upload.
+func (s *Service) uploadMods(
+	ctx context.Context,
+	reportID string,
+	mods []modUpload,
+	progress *progress,
+) ([]fileDeclaration, int, error) {
+	if len(mods) == 0 {
+		return nil, 0, nil
+	}
+	if s.mods == nil {
+		return nil, 0, errors.New("the mod uploader is not configured")
+	}
+
+	files := make([]drive.UploadFile, len(mods))
+	for index, mod := range mods {
+		files[index] = drive.UploadFile{
+			FID: mod.ref, Name: filepath.Base(mod.source.path), Size: mod.source.size, FullPath: mod.source.path,
+		}
+	}
+	var modBytes, hashedBytes int64
+	for _, mod := range mods {
+		modBytes += mod.source.size
+	}
+	hashed, err := drive.HashUploadFiles(ctx, files, max(2, runtime.NumCPU()/2), func(completed int) {
+		credited := modBytes * int64(completed) / int64(len(files))
+		progress.add(credited - hashedBytes)
+		hashedBytes = credited
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	planned := make([]drive.FeedbackModFile, len(mods))
+	for index, mod := range mods {
+		planned[index] = drive.FeedbackModFile{
+			Ref:      mod.ref,
+			Path:     mod.source.relative,
+			FullPath: mod.source.path,
+			Size:     mod.source.size,
+			SHA256:   hashed[index].SHA256,
+		}
+	}
+
+	result, err := s.mods.UploadFeedbackMod(ctx, reportID, planned, progress.add)
+	if err != nil {
+		return nil, 0, err
+	}
+	stored := make(map[string]struct{}, len(result.Stored))
+	for _, ref := range result.Stored {
+		stored[ref] = struct{}{}
+	}
+	out := make([]fileDeclaration, 0, len(result.Stored))
+	for _, file := range planned {
+		if _, ok := stored[file.Ref]; ok {
+			out = append(out, fileDeclaration{
+				Ref: file.Ref, Kind: "mod", Path: file.Path, Size: file.Size, SHA256: file.SHA256,
+			})
+		}
+	}
+	if len(out) == 0 {
+		return nil, 0, coded(codeEmptyMod, "")
+	}
+	return out, result.Refused, nil
 }
 
 func declarations(uploads []upload) []fileDeclaration {
@@ -298,16 +397,16 @@ func declarations(uploads []upload) []fileDeclaration {
 // collect turns the picked paths into the files to upload. Mod files the
 // upload rules do not admit are left out and counted, the way a drive upload
 // leaves them out, instead of failing the whole report.
-func (s *Service) collect(ctx context.Context, request Request) ([]upload, int, error) {
+func (s *Service) collect(ctx context.Context, request Request) ([]upload, []modUpload, int, error) {
 	uploads := make([]upload, 0, len(request.Files))
 	var mediaBytes int64
 	for _, path := range request.Files {
 		info, err := os.Stat(path)
 		if err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		if info.IsDir() || mediaKind(path) == KindUnsupported || info.Size() == 0 {
-			return nil, 0, coded(codeUnsupportedFile, filepath.Base(path))
+			return nil, nil, 0, coded(codeUnsupportedFile, filepath.Base(path))
 		}
 		mediaBytes += info.Size()
 		uploads = append(uploads, upload{
@@ -318,51 +417,46 @@ func (s *Service) collect(ctx context.Context, request Request) ([]upload, int, 
 		})
 	}
 	if len(uploads) > MaxMediaFiles {
-		return nil, 0, coded(codeTooManyMedia, "")
+		return nil, nil, 0, coded(codeTooManyMedia, "")
 	}
 	if mediaBytes > MaxMediaBytes {
-		return nil, 0, coded(codeMediaTooLarge, "")
+		return nil, nil, 0, coded(codeMediaTooLarge, "")
 	}
 	if len(request.ModDirs) == 0 {
-		return uploads, 0, nil
+		return uploads, nil, 0, nil
 	}
 
 	if s.modFileRule == nil {
-		return nil, 0, errors.New("the upload rules are not configured")
+		return nil, nil, 0, errors.New("the upload rules are not configured")
 	}
 	permitted, err := s.modFileRule(ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
-	skipped, modFiles := 0, 0
+	skipped := 0
+	var mods []modUpload
 	for _, dir := range request.ModDirs {
 		files, err := walkMod(ctx, dir)
 		if err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		for _, file := range files {
-			// An empty file cannot be signed for: the declared size is part of
-			// the upload URL and has to be positive.
+			// The server keys content by a positive size, so an empty file has
+			// nothing to upload.
 			if file.size == 0 || !permitted(filepath.Base(file.path), file.size) {
 				skipped++
 				continue
 			}
-			uploads = append(uploads, upload{
-				source: file.path,
-				declaration: fileDeclaration{
-					Ref: fmt.Sprintf("f%d", modFiles), Kind: "mod", Path: file.relative, Size: file.size,
-				},
-			})
-			modFiles++
+			mods = append(mods, modUpload{ref: fmt.Sprintf("f%d", len(mods)), source: file})
 		}
 	}
-	if modFiles == 0 {
-		return nil, 0, coded(codeEmptyMod, "")
+	if len(mods) == 0 {
+		return nil, nil, 0, coded(codeEmptyMod, "")
 	}
-	if modFiles > MaxModFiles {
-		return nil, 0, coded(codeTooManyModFiles, "")
+	if len(mods) > MaxModFiles {
+		return nil, nil, 0, coded(codeTooManyModFiles, "")
 	}
-	return uploads, skipped, nil
+	return uploads, mods, skipped, nil
 }
 
 type modFile struct {

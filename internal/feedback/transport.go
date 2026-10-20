@@ -29,9 +29,7 @@ const (
 	bucketHost  = "user-feedback-attachments." + storageHost
 
 	// planBatch is how many files one plan request may declare.
-	planBatch = 500
-	// uploadWorkers keeps a mod of many small files from being sent one
-	// round trip at a time.
+	planBatch     = 500
 	uploadWorkers = 4
 	// maxResponseBytes bounds how much of a backend answer is read back. A full
 	// plan answer carries one signed URL per file.
@@ -41,14 +39,16 @@ const (
 )
 
 // fileDeclaration is one attachment as both the plan and the report declare
-// it. The backend derives the object key from these fields, so the two
-// requests have to send them unchanged.
+// it. The backend derives the object key of a media file, and finds the stored
+// content of a mod file, from these fields, so the two requests have to send
+// them unchanged.
 type fileDeclaration struct {
-	Ref  string `json:"ref"`
-	Kind string `json:"kind"`
-	Name string `json:"name,omitempty"`
-	Path string `json:"path,omitempty"`
-	Size int64  `json:"size"`
+	Ref    string `json:"ref"`
+	Kind   string `json:"kind"`
+	Name   string `json:"name,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 type planRequest struct {
@@ -74,11 +74,9 @@ type reportPayload struct {
 	Attachments []fileDeclaration `json:"attachments"`
 }
 
-// upload plans the files in batches and PUTs each batch before asking for the
-// next, so a signed URL is used soon after it was issued.
-func (s *Service) upload(ctx context.Context, reportID string, uploads []upload) error {
-	progress := s.newProgress(uploads)
-	progress.report(true)
+// upload plans the media files in batches and PUTs each batch before asking for
+// the next, so a signed URL is used soon after it was issued.
+func (s *Service) upload(ctx context.Context, reportID string, uploads []upload, progress *progress) error {
 	for start := 0; start < len(uploads); start += planBatch {
 		batch := uploads[start:min(start+planBatch, len(uploads))]
 		objects, err := s.plan(ctx, reportID, batch)
@@ -104,7 +102,6 @@ func (s *Service) upload(ctx context.Context, reportID string, uploads []upload)
 			return err
 		}
 	}
-	progress.report(true)
 	return nil
 }
 
@@ -276,10 +273,14 @@ type progress struct {
 	last time.Time
 }
 
-func (s *Service) newProgress(uploads []upload) *progress {
+func (s *Service) newProgress(media []upload, mods []modUpload) *progress {
 	state := &progress{emit: s.emit}
-	for _, item := range uploads {
+	for _, item := range media {
 		state.total += item.declaration.Size
+	}
+	// Hashing reads a mod file once before it is sent, so its bytes count twice.
+	for _, item := range mods {
+		state.total += 2 * item.source.size
 	}
 	return state
 }

@@ -352,6 +352,7 @@ func newRuntime() *runtime {
 				return ok && size <= maxSize
 			}, nil
 		},
+		Mods: rt.drive,
 	})
 	rt.backup = backup.New(backup.Options{
 		Remote:    rt.drive,

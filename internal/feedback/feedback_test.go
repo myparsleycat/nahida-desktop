@@ -3,6 +3,8 @@ package feedback
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"mime"
@@ -14,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -86,6 +89,33 @@ func (b *backend) RoundTrip(request *http.Request) (*http.Response, error) {
 	return answer(http.StatusNotFound, `{"error":"not found"}`), nil
 }
 
+// mods stands in for the akasha upload intents. It stores every file but the
+// refused ones.
+type mods struct {
+	reportID string
+	files    []drive.FeedbackModFile
+	refuse   map[string]bool
+}
+
+func (m *mods) UploadFeedbackMod(
+	_ context.Context,
+	reportID string,
+	files []drive.FeedbackModFile,
+	onProgress func(int64),
+) (drive.FeedbackModResult, error) {
+	m.reportID, m.files = reportID, files
+	var result drive.FeedbackModResult
+	for _, file := range files {
+		if m.refuse[file.Ref] {
+			result.Refused++
+			continue
+		}
+		onProgress(file.Size)
+		result.Stored = append(result.Stored, file.Ref)
+	}
+	return result, nil
+}
+
 func answer(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
@@ -109,6 +139,12 @@ func writeFile(t *testing.T, path, content string) string {
 func newService(t *testing.T, remote *backend, logPath string) *Service {
 	t.Helper()
 
+	return newServiceWithMods(t, remote, logPath, &mods{})
+}
+
+func newServiceWithMods(t *testing.T, remote *backend, logPath string, uploader ModUploader) *Service {
+	t.Helper()
+
 	retries := 0
 	return New(Options{
 		Remote: infra.NewClientWithOptions(infra.ClientOptions{
@@ -121,6 +157,7 @@ func newService(t *testing.T, remote *backend, logPath string) *Service {
 		ModFileRule: func(context.Context) (ModFileRule, error) {
 			return func(name string, _ int64) bool { return strings.HasSuffix(name, ".ini") }, nil
 		},
+		Mods: uploader,
 	})
 }
 
@@ -135,38 +172,48 @@ func TestSubmitUploadsWhatItDeclares(t *testing.T) {
 	logPath := writeFile(t, filepath.Join(dir, "desktop.log"), "2026-10-12 ERROR Authorization: Bearer secret-token\n")
 
 	remote := &backend{puts: make(map[string]string)}
-	result, err := newService(t, remote, logPath).Submit(t.Context(), Request{
+	uploader := &mods{refuse: map[string]bool{"f1": true}}
+	result, err := newServiceWithMods(t, remote, logPath, uploader).Submit(t.Context(), Request{
 		Category: "desktop", Body: "it broke", IncludeLog: true,
 		Files: []string{image}, ModDirs: []string{mod}, Locale: "ko",
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	if result.ID != "stored-id" || result.SkippedModFiles != 2 {
+	// Two files the rules refuse before the upload and one the server refuses.
+	if result.ID != "stored-id" || result.SkippedModFiles != 3 {
 		t.Fatalf("result = %+v", result)
 	}
 
-	// The report has to repeat the plan's declarations unchanged: the backend
-	// derives the object keys from them and verifies the objects under those.
-	if len(remote.planned) != 3 || len(remote.payload.Attachments) != 3 {
+	// Only the media go to the feedback bucket, and the report has to repeat
+	// their declarations unchanged: the backend derives the object keys from
+	// them and verifies the objects under those.
+	if len(remote.planned) != 1 || len(remote.payload.Attachments) != 2 {
 		t.Fatalf("planned = %+v, submitted = %+v", remote.planned, remote.payload.Attachments)
 	}
-	for index, declared := range remote.planned {
-		if remote.payload.Attachments[index] != declared {
-			t.Errorf("attachment %d = %+v, planned %+v", index, remote.payload.Attachments[index], declared)
-		}
+	if remote.payload.Attachments[0] != remote.planned[0] {
+		t.Errorf("media attachment = %+v, planned %+v", remote.payload.Attachments[0], remote.planned[0])
 	}
-	paths := []string{remote.planned[1].Path, remote.planned[2].Path}
+	prefix := "/" + remote.payload.ReportID + "/"
+	if got := remote.puts[prefix+"m0"]; got != "application/x-test|png-bytes" || len(remote.puts) != 1 {
+		t.Errorf("bucket objects = %q", remote.puts)
+	}
+
+	if uploader.reportID != remote.payload.ReportID || len(uploader.files) != 2 {
+		t.Fatalf("mod upload = %s %+v", uploader.reportID, uploader.files)
+	}
+	paths := []string{uploader.files[0].Path, uploader.files[1].Path}
 	if paths[0] != "My Mod/merged.ini" || paths[1] != "My Mod/sub/extra.ini" {
 		t.Errorf("mod paths = %q", paths)
 	}
-
-	prefix := "/" + remote.payload.ReportID + "/"
-	if got := remote.puts[prefix+"m0"]; got != "application/x-test|png-bytes" {
-		t.Errorf("media object = %q", got)
+	// The backend finds the stored content of a mod file by its hash, so the
+	// report declares the one the upload planned.
+	sum := sha256.Sum256([]byte("[TextureOverride]"))
+	want := fileDeclaration{
+		Ref: "f0", Kind: "mod", Path: "My Mod/merged.ini", Size: 17, SHA256: hex.EncodeToString(sum[:]),
 	}
-	if got := remote.puts[prefix+"f0"]; got != "application/x-test|[TextureOverride]" {
-		t.Errorf("mod object = %q", got)
+	if got := remote.payload.Attachments[1]; got != want || uploader.files[0].SHA256 != want.SHA256 {
+		t.Errorf("mod attachment = %+v, planned %+v, want %+v", got, uploader.files[0], want)
 	}
 	if remote.payload.Source != "desktop" || remote.payload.Category != "desktop" || remote.payload.Body != "it broke" {
 		t.Errorf("payload = %+v", remote.payload)
