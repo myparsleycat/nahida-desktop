@@ -43,7 +43,7 @@ float peripheralSpray(float baseline,float drive){
  return lerp(baseline,.5,1-smoothstep(.28,1.69,drive));
 }
 bool adhesionEvent(CollisionEvent e){
- return random01((uint)e.incoming.w&0xffffu,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz);
+ return random01((uint)e.incoming.w&0xffffu,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz,slotViscosity((uint)e.slot.x));
 }
 void beginFloorPuddle(inout FluidParticle p,float3 normal){
  p.velocityAlive.xyz-=normal*dot(p.velocityAlive.xyz,normal);
@@ -59,7 +59,7 @@ bool puddleDepthUnavailableAtBorder(uint s,float3 relativePosition){
  return abs(c.x)>=c.w*.996 || abs(c.y)>=c.w*.996;
 }
 uint childCount(CollisionEvent e){
- float expected=lerp(.25,2,impactCoherence(e))*lowStrengthFloorSplash(e);
+ float expected=lerp(.25,2,impactCoherence(e))*lowStrengthFloorSplash(e)*slotSplash((uint)e.slot.x);
  uint whole=(uint)floor(expected);
  return max((adhesionEvent(e)||e.normalRadius.y>=PUDDLE_MIN_UP)?1u:0u,whole+(random01((uint)e.incoming.w&0xffffu,101)<frac(expected)?1u:0u));
 }
@@ -80,7 +80,7 @@ void main(uint3 id:SV_DispatchThreadID){
    if(puddle){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
     float oldHeight=puddleHalfHeight(radius,p.densityBirth.x);
-    advanceAdhesion(velocity,oldNormal,dt,velocity,displacement);
+    advanceAdhesion(velocity,oldNormal,dt,slotViscosity(owner),velocity,displacement);
     float targetSpread=1-smoothstep(.03,PUDDLE_ENTRY_SPEED,length(velocity));
     p.densityBirth.x=lerp(p.densityBirth.x,max(p.densityBirth.x,targetSpread),1-exp(-5*dt));
     float height=puddleHalfHeight(radius,p.densityBirth.x);
@@ -129,7 +129,7 @@ void main(uint3 id:SV_DispatchThreadID){
       }
      }
     }
-    advanceAdhesion(velocity,oldNormal,dt,velocity,displacement);
+    advanceAdhesion(velocity,oldNormal,dt,slotViscosity(owner),velocity,displacement);
     to=from+displacement;
     float3 surfacePoint,normal;
     bool found=screenSurface(owner,to,surfacePoint,normal);
@@ -159,7 +159,7 @@ void main(uint3 id:SV_DispatchThreadID){
       velocity=bounced-normal*dot(bounced,normal);
       p.velocityAlive.xyz=velocity;beginFloorPuddle(p,normal);
       puddle=true;attached=true;
-     }else if(random01(seed,213)<adhesionChance(velocity,normal)){
+     }else if(random01(seed,213)<adhesionChance(velocity,normal,slotViscosity(owner))){
       // Preserve incident tangential momentum; viscous drag acts over time.
       velocity-=normal*dot(velocity,normal);
       p.predictedLambda=float4(normal,adhesionContactMode(owner,contactPoint,normal));p.densityBirth.w=4;attached=true;
@@ -247,7 +247,7 @@ void main(uint3 id:SV_DispatchThreadID){
    float floorWeight=smoothstep(.35,.8,e.normalRadius.y);
    float splashResponse=lerp(.25,1,coherence)*lowStrengthFloorSplash(e);
    // The floor response remains between 20% and 100% of its reduced maximum.
-   splashResponse=max(splashResponse,.20*floorWeight);
+   splashResponse=max(splashResponse,.20*floorWeight)*slotSplash(owner);
    velocity*=min(1,limit/max(speed,1e-8))*splashResponse*lerp(1,.70,floorWeight);
    float scale=.55+.65*random01(seed,channel+8);
    float jitterAngle=random01(seed,channel+6)*6.2831853;

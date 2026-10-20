@@ -1849,6 +1849,8 @@
           "strength_hint": "Levels added to the current in-game strength · result stays within 0–7",
           "stream_width": "Stream width",
           "stream_width_hint": "Multiplies the stream's thickness · independent of strength",
+          "viscosity": "Viscosity",
+          "viscosity_hint": "Multiplies how thick the liquid is · higher clings together, runs off slower and splashes less",
           "custom_color": "Use its own color",
           "custom_color_hint": "When off, the color and color depth from the runtime settings are used.",
           "tint": "Liquid color",

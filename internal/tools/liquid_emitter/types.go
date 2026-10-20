@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "15"
+	runtimeVersion    = "16"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -27,6 +27,9 @@ const (
 	// Slots.hlsl slotWidth clamps a look's stream width to the same range.
 	minStreamWidth = 0.5
 	maxStreamWidth = 2
+	// Slots.hlsl slotViscosity clamps a look's viscosity to the same range.
+	minViscosity = 0.1
+	maxViscosity = 10
 
 	ErrorUnsupportedGame = "LIQUID_UNSUPPORTED_GAME"
 	ErrorRuntimeForeign  = "LIQUID_RUNTIME_FOREIGN"
@@ -97,6 +100,9 @@ type Look struct {
 	// StreamWidth scales the stream's cross-section; 1 keeps the runtime's.
 	// A profile saved before the setting reads as 1.
 	StreamWidth float64 `json:"streamWidth"`
+	// Viscosity scales how thick the liquid is over the runtime's water-like
+	// one; 1 keeps the runtime's. A profile saved before the setting reads as 1.
+	Viscosity float64 `json:"viscosity"`
 }
 
 type Inspection struct {

@@ -1847,6 +1847,8 @@
           "strength_hint": "在游戏内当前强度上增加的级数 · 结果保持在 0~7",
           "stream_width": "水流粗细",
           "stream_width_hint": "水流粗细的倍率 · 与强度分开生效",
+          "viscosity": "粘度",
+          "viscosity_hint": "液体黏稠度的倍率 · 越高越聚拢、流下越慢、越不易飞溅",
           "custom_color": "使用专属颜色",
           "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
           "tint": "液体颜色",

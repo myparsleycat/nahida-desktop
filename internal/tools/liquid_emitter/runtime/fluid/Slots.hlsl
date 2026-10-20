@@ -19,7 +19,7 @@ static const uint SLOT_PREVIOUS_ROOT=11;
 // level offset, y 1 for a custom color, z its absorption depth in meters,
 // w the stream width scale. All zero keeps the global settings.
 static const uint SLOT_LOOK=12;
-// rgb the custom tint.
+// rgb the custom tint, w the viscosity scale.
 static const uint SLOT_TINT=13;
 #ifdef SLOT_STATE_WRITER
 RWStructuredBuffer<float4> slots:register(u0);
@@ -43,6 +43,19 @@ float slotDrive(uint s){
 float slotWidth(uint s){
  float width=slots[s*SLOT_ROWS+SLOT_LOOK].w;
  return width>0?clamp(width,.5,2):1;
+}
+// The character's viscosity over the runtime's water-like liquid; zero, as in
+// a profile from before the setting, means 1. Every effect derived from it
+// keeps its former constant at 1.
+float slotViscosity(uint s){
+ float viscosity=slots[s*SLOT_ROWS+SLOT_TINT].w;
+ return viscosity>0?clamp(viscosity,.1,10):1;
+}
+// Thicker liquid splashes less on impact, thinner a little more. rsqrt is an
+// approximation, so the runtime's own viscosity skips it to stay exact.
+float slotSplash(uint s){
+ float viscosity=slotViscosity(s);
+ return viscosity==1?1:clamp(rsqrt(viscosity),.3,1.3);
 }
 // rgb the Beer-Lambert absorption per meter that reaches the tint at the
 // absorption depth, w that depth in meters: the character's custom color or

@@ -26,7 +26,7 @@ import { cn } from "@renderer/lib/utils";
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { isEqual } from "es-toolkit";
+import { isEqual, round } from "es-toolkit";
 import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
@@ -78,6 +78,10 @@ const DEFAULT_ABSORPTION_MM = 15;
 const MIN_STREAM_WIDTH = 0.5;
 const MAX_STREAM_WIDTH = 2;
 const DEFAULT_STREAM_WIDTH = 1;
+// Slots.hlsl slotViscosity and the backend accept viscosities from 0.1 to 10;
+// the slider moves on its base-10 logarithm so that 1 sits in the middle.
+const MAX_VISCOSITY_LOG = 1;
+const DEFAULT_VISCOSITY = 1;
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
 
@@ -929,7 +933,10 @@ function LookSection({
   const update = (change: Partial<Look>) => setDraft({ ...look, ...change });
   const offset = look.strengthOffset;
   const followsRuntime =
-    offset === 0 && !look.customColor && look.streamWidth === DEFAULT_STREAM_WIDTH;
+    offset === 0 &&
+    !look.customColor &&
+    look.streamWidth === DEFAULT_STREAM_WIDTH &&
+    look.viscosity === DEFAULT_VISCOSITY;
 
   return (
     <InspectorSection
@@ -984,6 +991,22 @@ function LookSection({
           {t("page.tools.liquid_emitter.look.stream_width_hint")}
         </p>
       </div>
+      <div className="space-y-1">
+        <RangeField
+          label={t("page.tools.liquid_emitter.look.viscosity")}
+          value={Math.log10(look.viscosity)}
+          defaultValue={0}
+          min={-MAX_VISCOSITY_LOG}
+          max={MAX_VISCOSITY_LOG}
+          step={0.05}
+          display={`×${look.viscosity.toFixed(2)}`}
+          disabled={locked}
+          onChange={(value) => update({ viscosity: round(10 ** value, 2) })}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("page.tools.liquid_emitter.look.viscosity_hint")}
+        </p>
+      </div>
       <label className="flex items-start gap-2 text-sm">
         <Checkbox
           checked={look.customColor}
@@ -1034,7 +1057,12 @@ function LookSection({
           className="flex-1"
           disabled={locked || followsRuntime}
           onClick={() =>
-            update({ strengthOffset: 0, customColor: false, streamWidth: DEFAULT_STREAM_WIDTH })
+            update({
+              strengthOffset: 0,
+              customColor: false,
+              streamWidth: DEFAULT_STREAM_WIDTH,
+              viscosity: DEFAULT_VISCOSITY,
+            })
           }
         >
           {t("page.tools.liquid_emitter.look.reset")}

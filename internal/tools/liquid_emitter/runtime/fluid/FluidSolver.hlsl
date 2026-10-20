@@ -395,13 +395,16 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  }
  if(alive){
   if(coupled){
-  float3 velocitySmoothing=smoothVelocity*.01;
+  // The XSPH weights sum to about 1, so the smoothing is a blend toward the
+  // neighbors' velocity that stays stable at the thickest viscosity.
+  float viscosity=slotViscosity(slot);
+  float3 velocitySmoothing=smoothVelocity*(.01*viscosity);
   if(frozenSheet.w>.001){
    // Do not erase the emerging fan's opposite transverse velocities immediately.
    float emergence=(1-smoothstep(.045,.085,p.positionAge.w))*frozenSheet.w;
    velocitySmoothing-=frozenSheet.xyz*dot(velocitySmoothing,frozenSheet.xyz)*emergence;
   }
-  velocity+=(DT*(viscous+cohesion*1.2)+velocitySmoothing)*coupling;
+  velocity+=(DT*(viscous*viscosity+cohesion*1.2)+velocitySmoothing)*coupling;
   float segmentLength=length(p.predictedLambda.xyz-p.positionAge.xyz);
   float oldTravel=max(p.densityBirth.z,0),travel=oldTravel+segmentLength;
   if(coupling>0 && travel<focusDistance && sheetWeight>.0001 && frozenSheet.w>.001){
@@ -427,7 +430,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float3 contact,normal;
   if(collideFluid(slot,p.positionAge.xyz,p.predictedLambda.xyz,velocity,FLUID_RADIUS,contact,normal)){
    float impact=max(0,-dot(velocity,normal));
-   if(impact>.15 || adhesionChance(velocity,normal)>.001){
+   if(impact>.15 || adhesionChance(velocity,normal,slotViscosity(slot))>.001){
     // Impact coherence comes from nearby parcels on the same moving path,
     // not from the selected strength. Dispersed rain therefore splashes less.
     float alignedSupport=0;

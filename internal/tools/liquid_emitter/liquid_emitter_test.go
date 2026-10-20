@@ -501,7 +501,7 @@ func TestServiceScalesOffsetToMeters(t *testing.T) {
 	}
 }
 
-// LoadProfilesJSON reads a mod's look as seven numbers after an emitter's 16,
+// LoadProfilesJSON reads a mod's look as eight numbers after an emitter's 16,
 // in this order, and a runtime from before looks rejects any record that is
 // not 16 long; a mod that keeps the global settings must still write 16.
 func TestServiceLookExtendsGPURecords(t *testing.T) {
@@ -513,6 +513,7 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		Tint:           [3]float64{0.2, 0.4, 1},
 		AbsorptionMM:   30,
 		StreamWidth:    1.5,
+		Viscosity:      4,
 	}
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); !hasCode(err, ErrorNoEmitters) {
 		t.Fatalf("look without emitters = %v", err)
@@ -523,6 +524,7 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	for _, change := range []func(*Look){
 		func(l *Look) { l.StrengthOffset = 8 },
 		func(l *Look) { l.StreamWidth = 3 },
+		func(l *Look) { l.Viscosity = 20 },
 	} {
 		invalid := look
 		change(&invalid)
@@ -553,20 +555,27 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		t.Fatalf("inspection look = %+v", inspection.Look)
 	}
 	got := records()
-	if len(got) != 1 || len(got[0]) != 23 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5}) {
+	if len(got) != 1 || len(got[0]) != 24 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5, 4}) {
 		t.Fatalf("GPU records with a look = %v", got)
 	}
 
-	// A width alone is a look of the mod's own.
-	look.StrengthOffset, look.CustomColor, look.StreamWidth = 0, false, 0.75
+	// A width or a viscosity alone is a look of the mod's own.
+	look.StrengthOffset, look.CustomColor, look.StreamWidth, look.Viscosity = 0, false, 0.75, 1
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(); len(got) != 1 || len(got[0]) != 23 || got[0][22] != 0.75 {
+	if got := records(); len(got) != 1 || len(got[0]) != 24 || got[0][22] != 0.75 || got[0][23] != 1 {
 		t.Fatalf("GPU records with a width = %v", got)
 	}
+	look.StreamWidth, look.Viscosity = 1, 0.25
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got) != 1 || len(got[0]) != 24 || got[0][22] != 1 || got[0][23] != 0.25 {
+		t.Fatalf("GPU records with a viscosity = %v", got)
+	}
 
-	look.StreamWidth = 1
+	look.Viscosity = 1
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
 		t.Fatal(err)
 	}
@@ -574,7 +583,7 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		t.Fatalf("GPU records with the global look = %v", got)
 	}
 
-	// A look saved before the width setting keeps the runtime's width.
+	// A look saved before the width and viscosity settings keeps the runtime's.
 	profile := filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json")
 	var raw map[string]any
 	if _, err := readJSON(profile, &raw); err != nil {
@@ -585,6 +594,7 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		t.Fatalf("profile look = %v", raw["look"])
 	}
 	delete(legacyLook, "streamWidth")
+	delete(legacyLook, "viscosity")
 	legacyLook["strengthOffset"] = 1
 	data, err := encodeJSON(raw)
 	if err != nil {
@@ -596,7 +606,7 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	if inspection, err = f.service.Inspect(ctx, f.modRoot); err != nil {
 		t.Fatal(err)
 	}
-	if inspection.Look.StrengthOffset != 1 || inspection.Look.StreamWidth != 1 {
+	if inspection.Look.StrengthOffset != 1 || inspection.Look.StreamWidth != 1 || inspection.Look.Viscosity != 1 {
 		t.Fatalf("legacy look = %+v", inspection.Look)
 	}
 }
