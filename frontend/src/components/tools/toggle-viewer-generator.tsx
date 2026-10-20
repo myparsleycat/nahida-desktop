@@ -70,15 +70,20 @@ export default function ToggleViewerGenerator() {
   const { data: state } = useQuery({
     queryKey: stateQueryKey,
     queryFn: () => Tools.ToggleViewerGetState(),
-    refetchInterval: 800,
   });
 
   useEffect(() => {
-    const off = Events.On("tools:toggle-viewer-logs", (event) => {
+    const offLogs = Events.On("tools:toggle-viewer-logs", (event) => {
       queryClient.setQueryData(logsQueryKey, event.data);
     });
+    const offState = Events.On("tools:toggle-viewer-state", (event) => {
+      queryClient.setQueryData(stateQueryKey, event.data);
+    });
 
-    return off;
+    return () => {
+      offLogs();
+      offState();
+    };
   }, [queryClient]);
 
   const invalidateState = () => queryClient.invalidateQueries({ queryKey: stateQueryKey });

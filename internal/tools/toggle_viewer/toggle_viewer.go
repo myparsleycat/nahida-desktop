@@ -624,6 +624,7 @@ func (s *Service) requestScan() {
 		return
 	}
 	s.mu.Unlock()
+	s.emitState()
 	go func() {
 		defer s.finishTask(current)
 		deferred, err := s.scanAll(ctx)
@@ -939,8 +940,12 @@ func (s *Service) enabledModsPaths(ctx context.Context) ([]string, error) {
 
 func (s *Service) beginTask(parent context.Context, mode string) (*task, context.Context, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.beginTaskLocked(parent, mode)
+	current, ctx, err := s.beginTaskLocked(parent, mode)
+	s.mu.Unlock()
+	if err == nil {
+		s.emitState()
+	}
+	return current, ctx, err
 }
 
 func (s *Service) beginTaskLocked(parent context.Context, mode string) (*task, context.Context, error) {
@@ -969,10 +974,22 @@ func (s *Service) finishTask(current *task) {
 	pending := s.pending && s.watcher != nil && !s.closing && !s.suspended
 	s.pending = false
 	s.mu.Unlock()
+	s.emitState()
 	s.tasks.Done()
 	if pending {
 		s.requestScan()
 	}
+}
+
+// emitState reads the state under stateMu, so the last event delivered always carries the latest state
+// even when tasks begin and finish concurrently.
+func (s *Service) emitState() {
+	if s.emit == nil {
+		return
+	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.emit(stateEvent, s.State())
 }
 
 // scheduleRetry rescans once the delay passes while the watcher runs, because nothing else notices

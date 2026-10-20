@@ -13,7 +13,10 @@ import (
 	"nahida.live/desktop/internal/xxmi"
 )
 
-const logsEvent = "tools:toggle-viewer-logs"
+const (
+	logsEvent  = "tools:toggle-viewer-logs"
+	stateEvent = "tools:toggle-viewer-state"
+)
 
 type Settings interface {
 	GetToggleViewerAutoGenerate(context.Context) (bool, error)
@@ -55,6 +58,9 @@ type Service struct {
 	// writeMu serializes artifact writes of scans with hotkey application so the stored hotkey is
 	// the last one written. Tasks take it without watchMu, so it is always acquired after watchMu.
 	writeMu sync.Mutex
+
+	// stateMu orders state events. It is acquired before mu, never while mu is held.
+	stateMu sync.Mutex
 
 	retryDelay time.Duration
 	// sources caches the parsed source INIs of the last scan. Only the running task uses it.
