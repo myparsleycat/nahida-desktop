@@ -32,6 +32,8 @@ struct Varying{
  // The owner's liquid (Slots.hlsl slotLiquid): absorption per meter and
  // absorption depth in meters.
  nointerpolation float4 liquid:TEXCOORD5;
+ // The depth tag (SSFRCommon.hlsl encodeFluidDepth).
+ nointerpolation uint tag:TEXCOORD6;
 };
 // Keeps the color weight of a covered pixel above what half floats flush to
 // zero, however thin the film there.
@@ -120,6 +122,11 @@ Varying main(uint id:SV_VertexID){
  o.world=world;o.center=center;o.axisScale=axisScale;o.radiusFade=float2(radius,fade);
  o.mode=valid?(puddle?MODE_DISC:MODE_ELLIPSOID):MODE_NONE;
  o.liquid=slotLiquid(owner);
+ // Airborne splashes and a stream that has broken up stay separate drops,
+ // which FluidSmooth leaves nearly unfiltered.
+ o.tag=owner;
+ if(puddle)o.tag|=TAG_PUDDLE;
+ else if(!primary||renderGuides[poolIndex].longLane.w<-2)o.tag|=TAG_SPRAY;
  return o;
 }
 #endif
@@ -158,7 +165,7 @@ Surface main(Varying i){
    if(gap<-1e29||abs(gap)>.004+sceneSlopeAllowanceAt(uv))clip(-1);
   }
   float coverage=1-r*r/(radius*radius);
-  o.depth=projected.w;o.thickness=PUDDLE_SPLAT_FILM*coverage*coverage*i.radiusFade.y;
+  o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=PUDDLE_SPLAT_FILM*coverage*coverage*i.radiusFade.y;
   weighLiquid(o,i.liquid);
   return o;
  }
@@ -178,7 +185,7 @@ Surface main(Varying i){
  float4 projected=project(hit);
  clip(projected.w-.05);
  if(sceneInFront(screenUV(projected),projected))clip(-1);
- o.depth=projected.w;o.thickness=(exit-entry)*i.radiusFade.y;
+ o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=(exit-entry)*i.radiusFade.y;
  weighLiquid(o,i.liquid);
  return o;
 }

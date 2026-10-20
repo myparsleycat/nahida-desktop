@@ -10,6 +10,8 @@ Texture2D<float4> fluidColor:register(t102);
 Texture2D<float> fluidAbsorptionDepth:register(t103);
 Texture2D<float4> sceneLighting:register(t104);
 struct ScreenVarying{float4 position:SV_Position;};
+// Share of the offset lookup in the reflection a missed puddle ray keeps.
+static const float REFLECTION_MISS_LOCAL=.3;
 #ifdef VERTEX_SHADER
 ScreenVarying main(uint id:SV_VertexID){ScreenVarying o;o.position=screenTriangle(id);return o;}
 #endif
@@ -41,7 +43,12 @@ float3 hdrBilinear(float2 uv){
  return lerp(top,bottom,fraction.y);
 }
 #endif
-float depthAt(int2 pixel,int2 last){return fluidDepth.Load(int3(clamp(pixel,int2(0,0),last),0));}
+// Liquid of another character reads as empty, so its edge against this one
+// is a silhouette rather than a slope.
+float bodyDepthAt(int2 pixel,int2 last,uint tag){
+ float raw=fluidDepth.Load(int3(clamp(pixel,int2(0,0),last),0));
+ return noFluid(raw)||!sameFluidBody(tag,fluidDepthTag(raw))?NO_FLUID:fluidDepthValue(raw);
+}
 // Surface tangent along one screen axis, differencing toward the neighbor
 // closer in depth so silhouettes keep the normal of the surface they belong to.
 float3 tangent(float3 position,float2 uv,float depth,float2 step,float forward,float backward){
@@ -108,14 +115,16 @@ float3 traceReflection(float3 origin,float3 direction,float3 fallback){
 float4 main(ScreenVarying i):SV_Target{
  uint width,height;fluidDepth.GetDimensions(width,height);
  int2 pixel=int2(i.position.xy),last=int2(width-1,height-1);
- float depth=depthAt(pixel,last);
- clip(NO_FLUID*.5-depth);
+ float raw=fluidDepth.Load(int3(pixel,0));
+ clip(NO_FLUID*.5-raw);
+ float depth=fluidDepthValue(raw);
+ uint tag=fluidDepthTag(raw);
  float2 dims=float2(width,height),uv=(pixel+.5)/dims;
  float thickness=max(fluidThickness.Load(int3(pixel,0)),0);
 
  float3 position=worldAt(uv,depth);
- float3 dx=tangent(position,uv,depth,float2(1/dims.x,0),depthAt(pixel+int2(1,0),last),depthAt(pixel-int2(1,0),last));
- float3 dy=tangent(position,uv,depth,float2(0,1/dims.y),depthAt(pixel+int2(0,1),last),depthAt(pixel-int2(0,1),last));
+ float3 dx=tangent(position,uv,depth,float2(1/dims.x,0),bodyDepthAt(pixel+int2(1,0),last,tag),bodyDepthAt(pixel-int2(1,0),last,tag));
+ float3 dy=tangent(position,uv,depth,float2(0,1/dims.y),bodyDepthAt(pixel+int2(0,1),last,tag),bodyDepthAt(pixel-int2(0,1),last,tag));
  float3 eye=eyePosition(),toward=normalize(eye-position);
  float3 n=cross(dx,dy);
  n=length(n)>1e-12?normalize(n):toward;
@@ -167,7 +176,8 @@ float4 main(ScreenVarying i):SV_Target{
  float3 background=hdrBilinear(refractionUV);
  float3 ambient=(hdrAt(uv+float2(.04,0))+hdrAt(uv-float2(.04,0))+hdrAt(uv+float2(0,.04))+hdrAt(uv-float2(0,.04)))*.25;
  // Broad scene probes avoid treating dark clothing immediately behind the jet as the entire environment.
- float3 broad=(hdrAt(float2(.15,.15))+hdrAt(float2(.85,.15))+hdrAt(float2(.2,.55))+hdrAt(float2(.8,.55)))*.25;
+ float3 upperBroad=(hdrAt(float2(.15,.15))+hdrAt(float2(.85,.15)))*.5;
+ float3 broad=(upperBroad*2+hdrAt(float2(.2,.55))+hdrAt(float2(.8,.55)))*.25;
  ambient=ambient*.6+broad*.4;
  float luminance=dot(ambient,float3(.2126,.7152,.0722));
  float illumination=saturate(luminance/(luminance+.18));
@@ -177,7 +187,13 @@ float4 main(ScreenVarying i):SV_Target{
  float3 reflection=hdrBilinear(reflectionUV)*.6+hdrBilinear(reflectionUV+float2(.004,0))*.2+hdrBilinear(reflectionUV-float2(.004,0))*.2;
  // The offset lookup above suits the curved stream; a flat puddle mirrors
  // what stands on it, which needs a traced ray.
- [branch]if(puddle>.01)reflection=lerp(reflection,traceReflection(position,reflected,ambient),puddle);
+ // A traced ray that leaves the screen finds nothing to mirror. The upper
+ // screen stands in for what lies above, and the offset lookup keeps some of
+ // the local color, so the film does not turn flat gray toward the edges.
+ [branch]if(puddle>.01){
+  float3 missed=lerp(lerp(ambient,upperBroad,saturate(reflected.y)),reflection,REFLECTION_MISS_LOCAL);
+  reflection=lerp(reflection,traceReflection(position,reflected,missed),puddle);
+ }
  // Approximate a compact key-light lobe; its intensity follows the captured scene, not a constant glow.
  float3 light=normalize(float3(-.4,.8,.2)),halfway=normalize(light+toward);
  float spec=pow(saturate(dot(n,halfway)),96),shoulder=pow(saturate(dot(n,halfway)),24);

@@ -17,6 +17,19 @@ float4 project(float3 p){return p.x*camera[16]+p.y*camera[17]+p.z*camera[18]+cam
 float2 screenUV(float4 p){return float2(p.x/p.w*.5+.5,.5-p.y/p.w*.5);}
 float3 eyePosition(){return camera[7].xyz;}
 bool noFluid(float depth){return depth>=NO_FLUID*.5;}
+// FluidSurface keeps the nearest particle's tag in the low mantissa bits of
+// its view depth: bits 0-2 the owner slot, 3 a floor puddle disc, 4 spray.
+// Positive floats order like their bits, so min blending still keeps the
+// nearest particle, now with its tag; the bits move the depth by under 4e-6
+// of itself. A pass that writes a filtered depth must tag it again.
+static const uint DEPTH_TAG_MASK=31;
+static const uint TAG_SLOT_MASK=7,TAG_PUDDLE=8,TAG_SPRAY=16;
+float encodeFluidDepth(float depth,uint tag){return asfloat((asuint(depth)&~DEPTH_TAG_MASK)|tag);}
+float fluidDepthValue(float raw){return asfloat(asuint(raw)&~DEPTH_TAG_MASK);}
+uint fluidDepthTag(float raw){return asuint(raw)&DEPTH_TAG_MASK;}
+// Puddles of different characters lie in one film on the floor; any other
+// liquid joins only the liquid of its own character.
+bool sameFluidBody(uint a,uint b){return (a&b&TAG_PUDDLE)!=0||((a^b)&TAG_SLOT_MASK)==0;}
 float4 screenTriangle(uint id){return float4(id==1?3:-1,id==2?3:-1,0,1);}
 // World position whose projection has clip w `depth` at screen `uv`. Solves
 // the x, y and w rows of the projection for the eye-relative offset, which
