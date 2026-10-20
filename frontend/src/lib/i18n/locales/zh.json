@@ -2622,12 +2622,12 @@
           "resourceTier": "资源品质",
           "resourceTierDescription": "必须与游戏已下载的资源一致，否则会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。",
           "d3dx": {
-            "applyNotice": "仅列出此导入器的 d3dx.ini 中已有的选项。更改会在下次从这里启动游戏时写入文件。",
+            "applyNotice": "仅列出此导入器的 d3dx.ini 中已有的选项。更改会在保存时以及每次从这里启动游戏时写入文件。",
             "empty": "尚无 d3dx.ini。请先安装导入器包。",
             "loadFailed": "无法读取 d3dx.ini。",
-            "managedHint": "由其他导入器设置决定，每次启动都会覆盖。",
+            "managedHint": "由其他导入器设置决定，每次保存或启动都会覆盖。",
             "managedRenderingHint": "高级选项卡中的“强制渲染设置”开启时，会保持为此导入器所需的值。",
-            "overrideHint": "每次启动都会将此值应用到 d3dx.ini。",
+            "overrideHint": "每次保存或启动都会将此值应用到 d3dx.ini。",
             "clearOverride": "取消"
           }
         },

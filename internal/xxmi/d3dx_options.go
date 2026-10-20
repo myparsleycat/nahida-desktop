@@ -17,9 +17,9 @@ type D3DXOptionManaged string
 
 const (
 	D3DXOptionUnmanaged D3DXOptionManaged = ""
-	// D3DXOptionManagedLaunch marks an option every launch writes from the importer settings.
+	// D3DXOptionManagedLaunch marks an option every save and launch writes from the importer settings.
 	D3DXOptionManagedLaunch D3DXOptionManaged = "launch"
-	// D3DXOptionManagedRendering marks an option a launch writes only while rendering is enforced.
+	// D3DXOptionManagedRendering marks an option a save or launch writes only while rendering is enforced.
 	D3DXOptionManagedRendering D3DXOptionManaged = "rendering"
 )
 
@@ -27,13 +27,13 @@ const (
 type D3DXOption struct {
 	Section string `json:"section"`
 	Key     string `json:"key"`
-	// Value is what the file holds now; a saved override replaces it on the next launch.
+	// Value is what the file holds now; saving the importer settings and every launch write their overrides.
 	Value   string            `json:"value"`
 	Managed D3DXOptionManaged `json:"managed"`
 }
 
-// d3dxLaunchOptions lists, as lowercase override keys, the options updateLaunchINI and applyMigotoINI write from
-// the importer settings on every launch.
+// d3dxLaunchOptions lists, as lowercase override keys, the options applySettingsINI writes from the importer
+// settings on every save and launch.
 var d3dxLaunchOptions = []string{
 	"hunting.hunting", "hunting.marking_actions",
 	"system.screen_width", "system.screen_height", "system.dll_initialization_delay",

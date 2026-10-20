@@ -21,7 +21,14 @@ type InstallImporterPackageInput struct {
 }
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) error {
-	return x.installImporterPackage(ctx, input, nil)
+	if err := x.installImporterPackage(ctx, input, nil); err != nil {
+		return err
+	}
+	if input.Config != nil {
+		// The package install saves the config without SaveImporterConfig, and its d3dx.ini may be a fresh one.
+		x.syncSettingsINI(ctx, strings.ToUpper(strings.TrimSpace(input.Importer)), "XXMI.InstallImporterPackage")
+	}
+	return nil
 }
 
 func (x *XXMI) installImporterPackage(

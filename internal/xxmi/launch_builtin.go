@@ -594,30 +594,7 @@ func (x *XXMI) updateLaunchINI(
 		doc.RemoveOption("Loader", "loader")
 	}
 
-	// The options the launch decides are written after these, so they win over a stale override.
-	applyD3DXOverrides(doc, cfg.D3DXOverrides)
-	systemOptions, logLevel := migotoINISupport(cfg)
-	if systemOptions {
-		doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
-		user32 := syscall.NewLazyDLL("user32.dll")
-		metric := user32.NewProc("GetSystemMetrics")
-		width, _, _ := metric.Call(0)
-		height, _, _ := metric.Call(1)
-		doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
-		doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
-	}
-
-	// Where the file has no hotkey the launch writes one, so a saved override takes the place of the default.
-	migoto := cfg.Migoto
-	if value, ok := lookupD3DXOverride(cfg.D3DXOverrides, "Input", "toggle_input"); ok && validD3DXValue(value) {
-		migoto.ToggleInput = value
-	}
-	applyMigotoINI(doc, key, migoto, logLevel)
-
-	// The provider's d3dx.ini always sets a hotkey, which must not pass for one the file chose.
-	if logLevel && !hadToggleInput && migoto.ToggleInput != "" {
-		doc.SetOption("Input", "toggle_input", migoto.ToggleInput, true)
-	}
+	applySettingsINI(doc, key, cfg, hadToggleInput)
 	if !doc.Changed() && !rebuilt {
 		return nil
 	}
@@ -636,6 +613,103 @@ func (x *XXMI) updateLaunchINI(
 		}
 	}
 	return err
+}
+
+// applySettingsINI writes the options the importer settings decide. hadToggleInput is whether the file had a
+// hotkey before a rebuild from the provider's d3dx.ini.
+func applySettingsINI(doc *iniDocument, key string, cfg ImporterConfig, hadToggleInput bool) {
+	// The options the settings decide are written after these, so they win over a stale override.
+	applyD3DXOverrides(doc, cfg.D3DXOverrides)
+	systemOptions, logLevel := migotoINISupport(cfg)
+	if systemOptions {
+		doc.SetOption("System", "dll_initialization_delay", strconv.Itoa(cfg.XXMIDLLInitDelay), true)
+		user32 := syscall.NewLazyDLL("user32.dll")
+		metric := user32.NewProc("GetSystemMetrics")
+		width, _, _ := metric.Call(0)
+		height, _, _ := metric.Call(1)
+		doc.SetOption("System", "screen_width", strconv.FormatUint(uint64(width), 10), true)
+		doc.SetOption("System", "screen_height", strconv.FormatUint(uint64(height), 10), true)
+	}
+
+	// Where the file has no hotkey a default is written, so a saved override takes the place of the default.
+	migoto := cfg.Migoto
+	if value, ok := lookupD3DXOverride(cfg.D3DXOverrides, "Input", "toggle_input"); ok && validD3DXValue(value) {
+		migoto.ToggleInput = value
+	}
+	applyMigotoINI(doc, key, migoto, logLevel)
+
+	// The provider's d3dx.ini always sets a hotkey, which must not pass for one the file chose.
+	if logLevel && !hadToggleInput && migoto.ToggleInput != "" {
+		doc.SetOption("Input", "toggle_input", migoto.ToggleInput, true)
+	}
+}
+
+// writeSettingsINI writes the options the saved settings decide into the importer's d3dx.ini in place, so the
+// file follows a save before the next launch. Rebuilding from the provider's d3dx.ini and the [Loader] options
+// are left to the launch, which also deploys the libraries they depend on.
+func writeSettingsINI(ctx context.Context, key string, cfg ImporterConfig) error {
+	// An importer folder or d3dx.ini that is not there yet gets the settings from the next launch.
+	root, err := openInstallRoot(cfg.ImporterFolder)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	iniRoot, iniName, err := root.resolveUserFile("d3dx.ini")
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if iniRoot == nil {
+		iniRoot = root
+	} else {
+		defer func() { _ = iniRoot.Close() }()
+	}
+	data, info, err := iniRoot.readFile(iniName)
+	if err != nil {
+		return err
+	}
+
+	doc := parseINI(data)
+	applySettingsINI(doc, key, cfg, true)
+	if !doc.Changed() {
+		return nil
+	}
+	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+}
+
+// syncSettingsINI writes the latest saved settings into d3dx.ini unless another operation holds the importer: a
+// running launch writes them itself. A failure leaves the saved config in place for the next launch to write.
+func (x *XXMI) syncSettingsINI(ctx context.Context, key, action string) {
+	// The config is read under the lock rather than passed in, so a save that reaches here late cannot write
+	// over a newer save that already wrote d3dx.ini.
+	x.settingsINIMu.Lock()
+	defer x.settingsINIMu.Unlock()
+	if !x.acquireImporter(key) {
+		return
+	}
+	defer x.releaseImporter(key)
+
+	stage := "read-config"
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err == nil {
+		if !cfg.Enabled {
+			return
+		}
+		stage = "write-ini"
+		err = writeSettingsINI(ctx, key, cfg)
+	}
+	if err == nil || infra.IsCancellationError(err) {
+		return
+	}
+	_ = infra.ReportError(x.log, err, action, infra.Diagnostic{
+		Operation: "write-d3dx-settings", Stage: stage,
+		Fields: map[string]any{"importer": key, "importerFolder": cfg.ImporterFolder},
+	})
 }
 
 // backupLaunchINI keeps the d3dx.ini a rebuild is about to drop lines of.

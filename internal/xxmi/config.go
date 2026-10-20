@@ -363,6 +363,7 @@ func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	if changes.dll {
 		x.notifyDLLChanged(ctx, key)
 	}
+	x.syncSettingsINI(ctx, key, "XXMI.SaveImporterConfig")
 	return nil
 }
 

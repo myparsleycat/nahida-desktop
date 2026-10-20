@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -231,6 +232,82 @@ func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
 	}
 	if _, ok := got["hash"]; ok {
 		t.Fatalf("a command section line was listed: %v", got)
+	}
+}
+
+func TestSaveImporterConfigWritesSettingsToD3DXINI(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "d3dx.ini"),
+		[]byte("[Hunting]\nhunting = 0\n[Rendering]\ncache_shaders = 0\n"))
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+	cfg.Migoto.EnableHunting = true
+	cfg.D3DXOverrides = map[string]string{"Rendering.cache_shaders": "1"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	options, err := service.GetD3DXOptions(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{}
+	for _, option := range options {
+		values[option.Key] = option.Value
+	}
+	if values["hunting"] != "2" || values["cache_shaders"] != "1" {
+		t.Fatalf("options after saving = %v, want the saved settings without a launch", values)
+	}
+}
+
+func TestSaveImporterConfigLateINIWriteKeepsNewerSave(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	writeTestFile(t, path, []byte("[Hunting]\nhunting = 0\n"))
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+
+	// The first save enables the importer, so it stops in the change notice after committing and before its
+	// d3dx.ini write, while a second save commits and writes in full.
+	reached, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	service.UseImportersChanged(func(context.Context) {
+		once.Do(func() {
+			close(reached)
+			<-release
+		})
+	})
+	older := cfg
+	older.Migoto.EnableHunting = true
+	done := make(chan error, 1)
+	go func() { done <- service.SaveImporterConfig(ctx, "GIMI", older) }()
+	<-reached
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	saved, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Migoto.EnableHunting || !strings.Contains(string(data), "hunting = 0") {
+		t.Fatalf("saved hunting = %t, d3dx.ini = %q; want the newer save in both", saved.Migoto.EnableHunting, data)
 	}
 }
 

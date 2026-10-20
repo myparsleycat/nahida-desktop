@@ -130,6 +130,8 @@ type XXMI struct {
 	customDLLMu sync.Mutex
 	// libsProviderMu keeps shared provider selections in the order they were made.
 	libsProviderMu sync.Mutex
+	// settingsINIMu orders the d3dx.ini writes that follow saved configs, so the last one writes the latest config.
+	settingsINIMu sync.Mutex
 	// launcherScanMu guards the remembered result of the drive-wide search for an external launcher.
 	launcherScanMu  sync.Mutex
 	launcherScanned bool
