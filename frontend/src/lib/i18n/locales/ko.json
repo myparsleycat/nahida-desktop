@@ -1819,7 +1819,7 @@
         },
         "direction": {
           "title": "분사 방향",
-          "down": "기본 아래쪽 방향",
+          "down": "바로 아래로 향하기",
           "summary_down": "아래쪽",
           "summary_custom": "사용자 지정"
         },

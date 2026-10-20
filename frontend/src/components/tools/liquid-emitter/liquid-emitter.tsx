@@ -278,12 +278,13 @@ export function LiquidEmitterTool({
   const anchorMesh = anchor ? meshes?.find((mesh) => mesh.id === anchor.meshId) : undefined;
   const meshLabel = anchorMesh ? partLabel(anchorMesh, meshes) : (anchor?.meshId ?? "");
   const anchorForm = anchorMesh?.form;
+  const anchorInForm = form === ALL_FORMS || !anchorForm || anchorForm === form;
   // A toggle can swap the selected part for another drawn in the same place,
   // so the marker would otherwise point at a part the game is not drawing.
+  // Another form tab hides the part on purpose and needs no warning.
   const anchorHidden =
-    anchor !== null && visibleMeshes !== null && !visibleMeshes.has(anchor.meshId);
-  const anchorShown =
-    anchor !== null && !anchorHidden && (form === ALL_FORMS || !anchorForm || anchorForm === form);
+    anchor !== null && anchorInForm && visibleMeshes !== null && !visibleMeshes.has(anchor.meshId);
+  const anchorShown = anchor !== null && anchorInForm && !anchorHidden;
   const position = anchor
     ? (anchor.point.map((value, axis) => value + anchor.offset[axis]) as Vec3)
     : undefined;
