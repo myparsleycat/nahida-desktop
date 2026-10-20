@@ -20,12 +20,11 @@ import {
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useFeedbackSubmit } from "@renderer/hooks/use-feedback-submit";
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { formatSize, toErrorMessage } from "@shared/utils";
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Events } from "@wailsio/runtime";
 import {
   FileArchiveIcon,
   FileTextIcon,
@@ -38,7 +37,7 @@ import {
   type LucideIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -48,14 +47,6 @@ export const Route = createFileRoute("/setting/feedback")({
 
 // The website category is offered on the website itself, not here.
 const CATEGORIES = ["desktop", "service", "xxmi-libs"] as const;
-const ERROR_CODES = [
-  "FEEDBACK_UNSUPPORTED_FILE",
-  "FEEDBACK_MEDIA_TOO_LARGE",
-  "FEEDBACK_TOO_MANY_MEDIA",
-  "FEEDBACK_TOO_MANY_MOD_FILES",
-  "FEEDBACK_EMPTY_MOD",
-  "FEEDBACK_BUSY",
-] as const;
 
 type Category = (typeof CATEGORIES)[number];
 
@@ -69,34 +60,21 @@ const kindIcons: Partial<Record<string, LucideIcon>> = {
 };
 
 function RouteComponent() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const logCheckboxId = useId();
   const [category, setCategory] = useState<Category>("desktop");
   const [body, setBody] = useState("");
   const [includeLog, setIncludeLog] = useState(true);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [progress, setProgress] = useState<number | null>(null);
-  const sending = progress !== null;
-  const cancelled = useRef(false);
-  const rulesQuery = useQuery({
-    queryKey: ["feedback", "rules"],
-    queryFn: () => Feedback.Rules(),
-  });
-  const rules = rulesQuery.data;
-
-  useEffect(() => {
-    return Events.On("feedback:progress", (event) => {
-      const data = event.data as { uploadedBytes: number; totalBytes: number };
-      setProgress((current) =>
-        current === null
-          ? current
-          : data.totalBytes > 0
-            ? (data.uploadedBytes / data.totalBytes) * 100
-            : 100,
-      );
-    });
-  }, []);
+  const {
+    rules,
+    progress,
+    sending,
+    problem: reportProblem,
+    submit: send,
+    cancel,
+  } = useFeedbackSubmit();
 
   const categoryOptions = useMemo(
     () =>
@@ -109,21 +87,7 @@ function RouteComponent() {
   const media = attachments.filter((item) => item.kind !== Kind.KindMod);
   const mods = attachments.filter((item) => item.kind === Kind.KindMod);
   const mediaBytes = media.reduce((sum, item) => sum + item.size, 0);
-  const problem = !rules
-    ? rulesQuery.isError
-      ? t("page.setting.feedback.error.rules_unavailable")
-      : null
-    : body.length > rules.maxBodyLength
-      ? t("page.setting.feedback.error.body_too_long", {
-          max: rules.maxBodyLength.toLocaleString(),
-        })
-      : media.length > rules.maxMediaFiles
-        ? t("page.setting.feedback.error.FEEDBACK_TOO_MANY_MEDIA", { count: rules.maxMediaFiles })
-        : mediaBytes > rules.maxMediaBytes
-          ? t("page.setting.feedback.error.FEEDBACK_MEDIA_TOO_LARGE", {
-              size: formatSize(rules.maxMediaBytes),
-            })
-          : null;
+  const problem = reportProblem({ body, mediaFiles: media.length, mediaBytes });
 
   const addPaths = async (pick: () => Promise<string[]>) => {
     try {
@@ -187,42 +151,16 @@ function RouteComponent() {
   };
 
   const submit = async () => {
-    if (!rules) return;
-    cancelled.current = false;
-    setProgress(0);
-    try {
-      const result = await Feedback.Submit({
-        category,
-        body,
-        includeLog,
-        files: media.map((item) => item.path),
-        modDirs: mods.map((item) => item.path),
-        locale: i18n.language,
-      });
-      toast.success(t("page.setting.feedback.sent"), {
-        description:
-          result.skippedModFiles > 0
-            ? t("page.setting.feedback.skipped_mod_files", { count: result.skippedModFiles })
-            : undefined,
-      });
-      setBody("");
-      setAttachments([]);
-    } catch (error) {
-      if (cancelled.current) return;
-      const message = toErrorMessage(error);
-      const code = ERROR_CODES.find((item) => message.startsWith(`${item}:`));
-      toast.error(t("page.setting.feedback.failed"), {
-        description: code
-          ? t(`page.setting.feedback.error.${code}`, {
-              name: message.slice(code.length + 1),
-              count: code === "FEEDBACK_TOO_MANY_MEDIA" ? rules.maxMediaFiles : rules.maxModFiles,
-              size: formatSize(rules.maxMediaBytes),
-            })
-          : message,
-      });
-    } finally {
-      setProgress(null);
-    }
+    const result = await send({
+      category,
+      body,
+      includeLog,
+      files: media.map((item) => item.path),
+      modDirs: mods.map((item) => item.path),
+    });
+    if (!result) return;
+    setBody("");
+    setAttachments([]);
   };
 
   return (
@@ -385,13 +323,7 @@ function RouteComponent() {
 
           <div className="flex justify-end gap-2">
             {sending && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  cancelled.current = true;
-                  void Feedback.Cancel();
-                }}
-              >
+              <Button variant="outline" onClick={cancel}>
                 {t("page.setting.feedback.cancel")}
               </Button>
             )}
