@@ -22,6 +22,7 @@ var games = []game{
 	{importer: "EFMI", dir: "efmi", meshUnit: 1},
 	{importer: "GIMI", dir: "gimi", meshUnit: 1},
 	{importer: "WWMI", dir: "wwmi", meshUnit: .01},
+	{importer: "ZZMI", dir: "zzmi", meshUnit: 1},
 }
 
 func gameFor(importer string) (game, bool) {
