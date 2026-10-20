@@ -263,7 +263,7 @@ func forEachMovedArtifact(
 			return err
 		}
 		var paths []string
-		err = walkRegularFiles(ctx, root, func(path string) {
+		err = walkRegularFiles(ctx, root, nil, func(path string) {
 			if isArtifactName(filepath.Base(path)) && !containsPathFold(skipDirs, filepath.Dir(path)) {
 				paths = append(paths, path)
 			}
@@ -996,18 +996,21 @@ func (s *Service) addLog(level, message string) {
 	}
 }
 
+// scanINIs skips folders and files that 3DMigoto does not load, so disabled mods get no artifacts and
+// the stale cleanup removes the ones they kept from before they were disabled.
 func scanINIs(ctx context.Context, root string) ([]string, error) {
 	var paths []string
-	err := walkRegularFiles(ctx, root, func(path string) {
-		name := strings.ToLower(filepath.Base(path))
-		if filepath.Ext(name) == ".ini" && !isArtifactName(name) && !strings.HasPrefix(name, "disabled") {
+	err := walkRegularFiles(ctx, root, isDisabledName, func(path string) {
+		if isSourceININame(filepath.Base(path)) {
 			paths = append(paths, path)
 		}
 	})
 	return paths, err
 }
 
-func walkRegularFiles(ctx context.Context, root string, visit func(path string)) error {
+// walkRegularFiles visits the regular files under root, skipping the folders below root whose name
+// matches skipDir when it is set.
+func walkRegularFiles(ctx context.Context, root string, skipDir func(name string) bool, visit func(path string)) error {
 	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -1015,11 +1018,22 @@ func walkRegularFiles(ctx context.Context, root string, visit func(path string))
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if entry.IsDir() && skipDir != nil && path != root && skipDir(entry.Name()) {
+			return fs.SkipDir
+		}
 		if entry.Type().IsRegular() {
 			visit(path)
 		}
 		return nil
 	})
+}
+
+func isSourceININame(name string) bool {
+	return strings.EqualFold(filepath.Ext(name), ".ini") && !isArtifactName(name) && !isDisabledName(name)
+}
+
+func isDisabledName(name string) bool {
+	return hasPrefixFold(name, "disabled")
 }
 
 // keptArtifactHash returns the hash to record for an artifact file: the written content's, or after a

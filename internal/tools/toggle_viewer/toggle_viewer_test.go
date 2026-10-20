@@ -193,6 +193,24 @@ func TestScanRemovesArtifactsOfMovedFolderBeforeForgettingRecord(t *testing.T) {
 	}
 }
 
+// 3DMigoto does not load a disabled folder, so its artifacts are cleaned up instead of regenerated.
+func TestScanSkipsDisabledFolder(t *testing.T) {
+	ctx := context.Background()
+	service, client, moved := generateAndMoveMod(t)
+
+	if err := service.RunBatchGenerate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{artifactININame, artifactTXTName} {
+		if _, err := os.Stat(filepath.Join(moved, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s remains in disabled folder: %v", name, err)
+		}
+	}
+	if records, err := client.ToggleViewerArtifacts.List(ctx); err != nil || len(records) != 0 {
+		t.Fatalf("records = %#v, %v", records, err)
+	}
+}
+
 // generateAndMoveMod batch generates one mod with auto generation off and then disables its folder,
 // returning the moved folder.
 func generateAndMoveMod(t *testing.T) (*Service, *db.Client, string) {
