@@ -42,7 +42,7 @@ float slotDrive(uint s){
 // before the setting, means 1.
 float slotWidth(uint s){
  float width=slots[s*SLOT_ROWS+SLOT_LOOK].w;
- return width>0?clamp(width,.5,2):1;
+ return width>0?clamp(width,.05,2):1;
 }
 // The character's viscosity over the runtime's water-like liquid; zero, as in
 // a profile from before the setting, means 1. Every effect derived from it

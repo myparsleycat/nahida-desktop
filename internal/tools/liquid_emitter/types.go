@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "16"
+	runtimeVersion    = "17"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -25,7 +25,7 @@ const (
 	// LoadProfilesJSON rejects a whole profile file when any offset axis exceeds 25 cm.
 	maxOffsetMeters = 0.25
 	// Slots.hlsl slotWidth clamps a look's stream width to the same range.
-	minStreamWidth = 0.5
+	minStreamWidth = 0.05
 	maxStreamWidth = 2
 	// Slots.hlsl slotViscosity clamps a look's viscosity to the same range.
 	minViscosity = 0.1

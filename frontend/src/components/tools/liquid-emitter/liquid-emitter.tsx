@@ -74,8 +74,8 @@ const DOWN: Vec3 = [0, 0, -1];
 // The runtime's strength levels run from 0 to 7.
 const MAX_STRENGTH_OFFSET = 7;
 const DEFAULT_ABSORPTION_MM = 15;
-// Slots.hlsl slotWidth and the backend accept stream widths from 0.5 to 2.
-const MIN_STREAM_WIDTH = 0.5;
+// Slots.hlsl slotWidth and the backend accept stream widths from 0.05 to 2.
+const MIN_STREAM_WIDTH = 0.05;
 const MAX_STREAM_WIDTH = 2;
 const DEFAULT_STREAM_WIDTH = 1;
 // Slots.hlsl slotViscosity and the backend accept viscosities from 0.1 to 10;
