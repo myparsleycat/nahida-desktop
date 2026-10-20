@@ -113,9 +113,6 @@ func runtimeSettingHooks(
 			if toolsService == nil {
 				return
 			}
-			if !enabled {
-				toolsService.ToggleViewerCancelCurrentWork()
-			}
 			if err := toolsService.StartToggleViewerWatcher(context.Background()); err != nil {
 				_ = infra.ReportError(
 					log,
