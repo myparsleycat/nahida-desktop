@@ -75,6 +75,7 @@ func defaultLook() Look {
 		}
 	}
 	look.AbsorptionMM, _ = strconv.ParseFloat(runtimeSetting(settingAbsorption).Default, 64)
+	look.StreamWidth = 1
 	return look
 }
 
@@ -88,16 +89,19 @@ func validLook(look Look) bool {
 			return false
 		}
 	}
+	if !(look.StreamWidth >= minStreamWidth && look.StreamWidth <= maxStreamWidth) {
+		return false
+	}
 	absorption := runtimeSetting(settingAbsorption)
 	return look.AbsorptionMM >= absorption.Min && look.AbsorptionMM <= absorption.Max
 }
 
 // lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
-// strength offset, custom color flag, tint and absorption depth in meters. A
-// mod without its own look writes no tail, and the runtime then applies its
-// global settings.
+// strength offset, custom color flag, tint, absorption depth in meters and
+// stream width. A mod without its own look writes no tail, and the runtime
+// then applies its global settings.
 func lookRecord(look *Look) []float64 {
-	if look == nil || look.StrengthOffset == 0 && !look.CustomColor {
+	if look == nil || look.StrengthOffset == 0 && !look.CustomColor && look.StreamWidth == 1 {
 		return nil
 	}
 	custom := 0.0
@@ -108,6 +112,7 @@ func lookRecord(look *Look) []float64 {
 		float64(look.StrengthOffset), custom,
 		look.Tint[0], look.Tint[1], look.Tint[2],
 		look.AbsorptionMM / 1000,
+		look.StreamWidth,
 	}
 }
 
@@ -278,6 +283,9 @@ func (i profileIndex) ownerOf(pid int) string {
 func readProfile(layout runtimeLayout, key string) (profileDocument, error) {
 	doc := profileDocument{SchemaVersion: 1, Enabled: true}
 	_, err := readJSON(layout.profilePath(key), &doc)
+	if doc.Look != nil && doc.Look.StreamWidth == 0 {
+		doc.Look.StreamWidth = 1
+	}
 	return doc, err
 }
 

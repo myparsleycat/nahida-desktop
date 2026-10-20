@@ -73,6 +73,10 @@ const DOWN: Vec3 = [0, 0, -1];
 // The runtime's strength levels run from 0 to 7.
 const MAX_STRENGTH_OFFSET = 7;
 const DEFAULT_ABSORPTION_MM = 15;
+// Slots.hlsl slotWidth and the backend accept stream widths from 0.5 to 2.
+const MIN_STREAM_WIDTH = 0.5;
+const MAX_STREAM_WIDTH = 2;
+const DEFAULT_STREAM_WIDTH = 1;
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
 
@@ -876,6 +880,22 @@ function LookSection({
           {t("page.tools.liquid_emitter.look.strength_hint")}
         </p>
       </div>
+      <div className="space-y-1">
+        <RangeField
+          label={t("page.tools.liquid_emitter.look.stream_width")}
+          value={look.streamWidth}
+          defaultValue={DEFAULT_STREAM_WIDTH}
+          min={MIN_STREAM_WIDTH}
+          max={MAX_STREAM_WIDTH}
+          step={0.05}
+          display={`×${look.streamWidth.toFixed(2)}`}
+          disabled={locked}
+          onChange={(value) => update({ streamWidth: value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("page.tools.liquid_emitter.look.stream_width_hint")}
+        </p>
+      </div>
       <label className="flex items-start gap-2 text-sm">
         <Checkbox
           checked={look.customColor}
@@ -924,8 +944,13 @@ function LookSection({
           size="sm"
           variant="outline"
           className="flex-1"
-          disabled={locked || (offset === 0 && !look.customColor)}
-          onClick={() => update({ strengthOffset: 0, customColor: false })}
+          disabled={
+            locked ||
+            (offset === 0 && !look.customColor && look.streamWidth === DEFAULT_STREAM_WIDTH)
+          }
+          onClick={() =>
+            update({ strengthOffset: 0, customColor: false, streamWidth: DEFAULT_STREAM_WIDTH })
+          }
         >
           {t("page.tools.liquid_emitter.look.reset")}
         </Button>

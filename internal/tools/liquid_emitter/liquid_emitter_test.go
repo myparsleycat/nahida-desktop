@@ -501,23 +501,35 @@ func TestServiceScalesOffsetToMeters(t *testing.T) {
 	}
 }
 
-// LoadProfilesJSON reads a mod's look as six numbers after an emitter's 16,
+// LoadProfilesJSON reads a mod's look as seven numbers after an emitter's 16,
 // in this order, and a runtime from before looks rejects any record that is
 // not 16 long; a mod that keeps the global settings must still write 16.
 func TestServiceLookExtendsGPURecords(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := context.Background()
-	look := Look{StrengthOffset: -2, CustomColor: true, Tint: [3]float64{0.2, 0.4, 1}, AbsorptionMM: 30}
+	look := Look{
+		StrengthOffset: -2,
+		CustomColor:    true,
+		Tint:           [3]float64{0.2, 0.4, 1},
+		AbsorptionMM:   30,
+		StreamWidth:    1.5,
+	}
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); !hasCode(err, ErrorNoEmitters) {
 		t.Fatalf("look without emitters = %v", err)
 	}
 	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
 		t.Fatal(err)
 	}
-	invalid := look
-	invalid.StrengthOffset = 8
-	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: invalid}); !hasCode(err, ErrorInvalidLook) {
-		t.Fatalf("out of range look = %v", err)
+	for _, change := range []func(*Look){
+		func(l *Look) { l.StrengthOffset = 8 },
+		func(l *Look) { l.StreamWidth = 3 },
+	} {
+		invalid := look
+		change(&invalid)
+		_, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: invalid})
+		if !hasCode(err, ErrorInvalidLook) {
+			t.Fatalf("out of range look %+v = %v", invalid, err)
+		}
 	}
 
 	key, _ := readModMarker(f.modRoot)
@@ -541,16 +553,51 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		t.Fatalf("inspection look = %+v", inspection.Look)
 	}
 	got := records()
-	if len(got) != 1 || len(got[0]) != 22 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03}) {
+	if len(got) != 1 || len(got[0]) != 23 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5}) {
 		t.Fatalf("GPU records with a look = %v", got)
 	}
 
-	look.StrengthOffset, look.CustomColor = 0, false
+	// A width alone is a look of the mod's own.
+	look.StrengthOffset, look.CustomColor, look.StreamWidth = 0, false, 0.75
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got) != 1 || len(got[0]) != 23 || got[0][22] != 0.75 {
+		t.Fatalf("GPU records with a width = %v", got)
+	}
+
+	look.StreamWidth = 1
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
 		t.Fatal(err)
 	}
 	if got := records(); len(got) != 1 || len(got[0]) != 16 {
 		t.Fatalf("GPU records with the global look = %v", got)
+	}
+
+	// A look saved before the width setting keeps the runtime's width.
+	profile := filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json")
+	var raw map[string]any
+	if _, err := readJSON(profile, &raw); err != nil {
+		t.Fatal(err)
+	}
+	legacyLook, ok := raw["look"].(map[string]any)
+	if !ok {
+		t.Fatalf("profile look = %v", raw["look"])
+	}
+	delete(legacyLook, "streamWidth")
+	legacyLook["strengthOffset"] = 1
+	data, err := encodeJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profile, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if inspection, err = f.service.Inspect(ctx, f.modRoot); err != nil {
+		t.Fatal(err)
+	}
+	if inspection.Look.StrengthOffset != 1 || inspection.Look.StreamWidth != 1 {
+		t.Fatalf("legacy look = %+v", inspection.Look)
 	}
 }
 

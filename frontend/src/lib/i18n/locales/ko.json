@@ -1833,6 +1833,8 @@
           "needs_emitter": "분사 지점을 먼저 적용해야 이 캐릭터의 액체를 따로 설정할 수 있습니다.",
           "strength": "세기 보정",
           "strength_hint": "게임 안 현재 세기에 더할 단계 · 결과는 0~7 범위",
+          "stream_width": "물줄기 굵기",
+          "stream_width_hint": "물줄기 굵기에 곱할 배율 · 세기와 따로 적용",
           "custom_color": "전용 색 사용",
           "custom_color_hint": "끄면 런타임 설정의 액체 색과 색 진하기를 씁니다.",
           "tint": "액체 색",

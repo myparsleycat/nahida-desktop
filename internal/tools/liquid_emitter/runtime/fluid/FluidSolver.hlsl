@@ -140,7 +140,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float3 socketOrigin=origin-forward*.001-up*.004;
   float angle=hash1(i+t*17)*2*PI,r=sqrt(hash1(i*7+t*13));
   float rim=1+.10*sin(angle*3+1.1)+.05*cos(angle*5-.4);
-  origin+=(right*cos(angle)*nozzle.halfGap+slitLong*sin(angle)*nozzle.halfLength)*r*rim-forward*.001-up*.004;
+  origin+=(right*cos(angle)*nozzle.halfGap+slitLong*sin(angle)*nozzle.halfLength)*slotWidth(slot)*r*rim-forward*.001-up*.004;
   float azimuth=hash1(i*11+t*37)*2*PI;
   float radial=sqrt(hash1(i*19+t*23));
   float sideSlope=cos(azimuth)*radial*nozzle.lateralFan+nozzle.lateralBias;

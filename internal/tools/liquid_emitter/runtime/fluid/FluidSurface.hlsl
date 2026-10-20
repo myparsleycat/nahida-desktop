@@ -55,7 +55,8 @@ Varying main(uint id:SV_VertexID){
  FluidParticle p;if(primary)p=particles[poolIndex];else p=splashes[poolIndex];
  uint owner=primary?primarySlot(poolIndex):splashSlot(p.velocityAlive.w);
  float visualScale=lerp(.75,1,smoothstep(.28,1.69,slotDrive(owner)));
- float radius=SURFACE_RADIUS*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
+ float width=primary?slotWidth(owner):1;
+ float radius=SURFACE_RADIUS*width*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
  bool puddle=!primary&&floorPuddle(p.densityBirth.w);
  if(puddle)radius=SURFACE_RADIUS*max(p.densityBirth.z,.1)*puddleWidth(p.densityBirth.x)*PUDDLE_SPLAT_SCALE;
  float3 root=slotRoot(owner),center=root+p.positionAge.xyz;
@@ -111,7 +112,9 @@ Varying main(uint id:SV_VertexID){
  }
  valid=valid&&fade>.01;
  float bound=radius*max(axisScale.w,1)*1.1;
- valid=valid&&abs(camera[8].x*bound/max(projected.w,.05))<.06;
+ // The limit scales with the stream width, so the camera distance a stream
+ // particle is culled at stays the same however wide the stream.
+ valid=valid&&abs(camera[8].x*bound/max(projected.w,.05))<.06*width;
 
  const float2 corners[6]={float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
  float2 uv=corners[id%6];

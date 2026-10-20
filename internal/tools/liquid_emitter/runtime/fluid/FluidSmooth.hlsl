@@ -5,6 +5,7 @@
 // does not bleed into it; nearer ones are skipped as a separate body.
 // SMOOTH_STEP selects the direction.
 #include "SSFRCommon.hlsl"
+#include "Slots.hlsl"
 Texture2D<float> fluidDepth:register(t100);
 Texture2D<float> fluidThickness:register(t101);
 struct ScreenVarying{float4 position:SV_Position;};
@@ -25,7 +26,9 @@ Smoothed main(ScreenVarying i){
  float center=fluidDepthValue(raw);
  uint tag=fluidDepthTag(raw);
 
- float worldRadius=SURFACE_RADIUS*2;
+ // Puddles of several characters share one film, so only a stream's own
+ // width widens its filter.
+ float worldRadius=SURFACE_RADIUS*2*((tag&TAG_PUDDLE)!=0?1:slotWidth(tag&TAG_SLOT_MASK));
  float maxRadius=(tag&TAG_SPRAY)!=0?SPRAY_SMOOTH_RADIUS:SMOOTH_MAX_RADIUS;
  float radiusPixels=clamp(worldRadius*pixelsPerMeter(center,float2(width,height)),1,maxRadius);
  int taps=(int)ceil(radiusPixels);

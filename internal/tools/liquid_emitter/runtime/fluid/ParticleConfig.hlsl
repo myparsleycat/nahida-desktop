@@ -10,8 +10,8 @@ static const uint PRIMARY_COUNT=SLOT_COUNT*PRIMARY_PER_SLOT;
 static const uint CANDIDATE_CAPACITY=16;
 static const uint CANDIDATE_ROWS=9;
 // SurfaceProfiles rows per emitter id: priority and barycentric, forward,
-// up, then the mod's look (strength offset, custom color, absorption depth)
-// and its tint, which LoadProfilesJSON.hlsl writes and AssignSlots copies.
+// up, then the mod's look (strength offset, custom color, absorption depth,
+// stream width) and its tint, which LoadProfilesJSON.hlsl writes and AssignSlots copies.
 static const uint PROFILE_ROWS=5;
 static const uint AIRBORNE_SPLASH_COUNT=2048;
 static const uint PUDDLE_COUNT=4096;

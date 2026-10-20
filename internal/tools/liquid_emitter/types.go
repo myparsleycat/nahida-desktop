@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "14"
+	runtimeVersion    = "15"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -24,6 +24,9 @@ const (
 	maxProfiles = 4096
 	// LoadProfilesJSON rejects a whole profile file when any offset axis exceeds 25 cm.
 	maxOffsetMeters = 0.25
+	// Slots.hlsl slotWidth clamps a look's stream width to the same range.
+	minStreamWidth = 0.5
+	maxStreamWidth = 2
 
 	ErrorUnsupportedGame = "LIQUID_UNSUPPORTED_GAME"
 	ErrorRuntimeForeign  = "LIQUID_RUNTIME_FOREIGN"
@@ -91,6 +94,9 @@ type Look struct {
 	CustomColor  bool       `json:"customColor"`
 	Tint         [3]float64 `json:"tint"`
 	AbsorptionMM float64    `json:"absorptionMm"`
+	// StreamWidth scales the stream's cross-section; 1 keeps the runtime's.
+	// A profile saved before the setting reads as 1.
+	StreamWidth float64 `json:"streamWidth"`
 }
 
 type Inspection struct {
