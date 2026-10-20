@@ -273,17 +273,19 @@ func replaceToggleViewerHotkey(content, hotkey string) string {
 	return content
 }
 
-func parseToggleViewerSource(iniPath, content string) *toggleViewerSource {
+// parseToggleViewerSource returns nil when the INI does not qualify, reporting whether that is only
+// because no position hash was found for its toggle keys.
+func parseToggleViewerSource(iniPath, content string) (*toggleViewerSource, bool) {
 	sections := parseToggleINI(content)
 	keys := findToggleKeySections(sections)
 	if len(keys) == 0 {
-		return nil
+		return nil, false
 	}
 	hash := resolveTogglePositionHash(sections)
 	if hash == "" {
-		return nil
+		return nil, true
 	}
-	return &toggleViewerSource{iniPath: iniPath, keys: keys, hash: hash}
+	return &toggleViewerSource{iniPath: iniPath, keys: keys, hash: hash}, false
 }
 
 // buildToggleViewerArtifact expects sources from one folder in a stable order.

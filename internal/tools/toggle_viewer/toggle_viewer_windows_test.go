@@ -54,11 +54,11 @@ func TestScanRetriesStaleCleanupWhileArtifactIsLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	openWithoutDeleteSharing(t, filepath.Join(modRoot, artifactININame))
-	retry, err := service.scanAll(ctx)
+	result, err := service.scanAll(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !retry {
+	if !result.retry {
 		t.Fatal("locked stale artifact did not request a retry")
 	}
 	if records, err := client.ToggleViewerArtifacts.List(ctx); err != nil || len(records) != 1 {
@@ -118,9 +118,9 @@ func TestDeferredRenameKeepsArtifactsTracked(t *testing.T) {
 	if err := os.Rename(filepath.Join(modRoot, "mod.ini"), filepath.Join(modRoot, "renamed.ini")); err != nil {
 		t.Fatal(err)
 	}
-	retry, err := service.scanAll(ctx)
-	if err != nil || !retry {
-		t.Fatalf("deferred scan = %v, %v", retry, err)
+	result, err := service.scanAll(ctx)
+	if err != nil || !result.retry {
+		t.Fatalf("deferred scan = %v, %v", result.retry, err)
 	}
 	unlock()
 
@@ -156,9 +156,9 @@ func TestUnreadableSourceKeepsArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockFile(t, filepath.Join(modRoot, "mod.ini"), 0)
-	retry, err := service.scanAll(ctx)
-	if err != nil || !retry {
-		t.Fatalf("scan with unreadable source = %v, %v", retry, err)
+	result, err := service.scanAll(ctx)
+	if err != nil || !result.retry {
+		t.Fatalf("scan with unreadable source = %v, %v", result.retry, err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
 		if _, err := os.Stat(filepath.Join(modRoot, name)); err != nil {
@@ -184,9 +184,9 @@ func TestPartialArtifactWriteIsTracked(t *testing.T) {
 	t.Cleanup(func() { _ = service.Shutdown() })
 
 	unlock := openWithoutDeleteSharing(t, filepath.Join(modRoot, artifactTXTName))
-	retry, err := service.scanAll(ctx)
-	if err != nil || !retry {
-		t.Fatalf("scan with locked TXT = %v, %v", retry, err)
+	result, err := service.scanAll(ctx)
+	if err != nil || !result.retry {
+		t.Fatalf("scan with locked TXT = %v, %v", result.retry, err)
 	}
 	if _, err := os.Stat(filepath.Join(modRoot, artifactININame)); err != nil {
 		t.Fatalf("INI beside the locked TXT was not written: %v", err)
@@ -222,9 +222,9 @@ func TestBatchDeleteRemovesKeptArtifactOfMovedFolder(t *testing.T) {
 
 	writeTestFile(t, filepath.Join(modRoot, "mod.ini"), strings.Replace(cycleModINI, "ctrl H", "alt K", 1))
 	unlock := openWithoutDeleteSharing(t, filepath.Join(modRoot, artifactTXTName))
-	retry, err := service.scanAll(ctx)
-	if err != nil || !retry {
-		t.Fatalf("scan with locked TXT = %v, %v", retry, err)
+	result, err := service.scanAll(ctx)
+	if err != nil || !result.retry {
+		t.Fatalf("scan with locked TXT = %v, %v", result.retry, err)
 	}
 	unlock()
 

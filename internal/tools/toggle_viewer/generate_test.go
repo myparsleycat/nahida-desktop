@@ -37,12 +37,16 @@ func TestGenerateToggleViewerArtifactRequiresCycleAndPositionHash(t *testing.T) 
 	); artifact != nil {
 		t.Fatal("non-cycle key generated an artifact")
 	}
-	if artifact := generateArtifact(
+	// Only the missing hash is reported, because the scan lists those INIs as skipped.
+	if source, missingHash := parseToggleViewerSource(
 		"mod.ini",
 		"[Key]\ntype = cycle\nkey = H\n$x = 0,1",
-		"H",
-	); artifact != nil {
-		t.Fatal("missing position hash generated an artifact")
+	); source != nil ||
+		!missingHash {
+		t.Fatalf("missing position hash = %#v, %v", source, missingHash)
+	}
+	if _, missingHash := parseToggleViewerSource("mod.ini", "[Key]\ntype = hold\nkey = H\n$x = 0,1"); missingHash {
+		t.Fatal("INI without toggle keys reported a missing position hash")
 	}
 }
 
@@ -102,11 +106,11 @@ func TestParseToggleINIPreservesSemicolonKeyValues(t *testing.T) {
 
 func TestBuildToggleViewerArtifactMergesFolderSources(t *testing.T) {
 	dir := filepath.Join(`C:\Mods`, "Character")
-	first := parseToggleViewerSource(
+	first, _ := parseToggleViewerSource(
 		filepath.Join(dir, "a.ini"),
 		"[KeyA]\ntype = cycle\nkey = A\n$a = 0,1\n[TextureOverrideBodyPosition]\nhash = 11111111",
 	)
-	second := parseToggleViewerSource(
+	second, _ := parseToggleViewerSource(
 		filepath.Join(dir, "b.ini"),
 		"[KeyB]\ntype = cycle\nkey = B\n$b = 0,1\n[TextureOverrideBodyPosition]\nhash = 22222222",
 	)
@@ -131,7 +135,7 @@ func TestBuildToggleViewerArtifactMergesFolderSources(t *testing.T) {
 }
 
 func generateArtifact(iniPath, content, hotkey string) *toggleViewerArtifact {
-	source := parseToggleViewerSource(iniPath, content)
+	source, _ := parseToggleViewerSource(iniPath, content)
 	if source == nil {
 		return nil
 	}

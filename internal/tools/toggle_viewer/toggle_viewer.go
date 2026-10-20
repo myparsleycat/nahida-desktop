@@ -45,9 +45,10 @@ type sourceINI struct {
 // cachedSource is the parse result of a source INI, valid while its size and modification time are
 // unchanged; source is nil when the INI does not qualify.
 type cachedSource struct {
-	size    int64
-	modTime time.Time
-	source  *toggleViewerSource
+	size        int64
+	modTime     time.Time
+	source      *toggleViewerSource
+	missingHash bool
 }
 
 func (s *Service) Logs() []string {
@@ -88,7 +89,7 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 	}
 	// A batch rereads every INI, so an edit that kept the size and modification time is still picked up.
 	s.sources = nil
-	deferred, err := s.scanAll(taskCtx)
+	result, err := s.scanAll(taskCtx)
 	cancelled := taskCtx.Err() != nil
 	s.finishTask(current)
 	if cancelled {
@@ -97,6 +98,9 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 	}
 	if err != nil {
 		return s.reportError(err, "batch-generate")
+	}
+	if len(result.skipped) > 0 {
+		s.logInfo(skippedSummary(result.skipped))
 	}
 
 	// The batch scan already covered every importer, so the watcher starts without another one. A
@@ -113,10 +117,24 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 			return err
 		}
 	}
-	if deferred {
+	if result.retry {
 		s.scheduleRetry()
 	}
 	return nil
+}
+
+// skippedSummary names a few skipped INIs by folder and file, because the UI log keeps few entries.
+func skippedSummary(skipped []string) string {
+	const shown = 5
+	names := make([]string, 0, min(len(skipped), shown))
+	for _, path := range skipped[:min(len(skipped), shown)] {
+		names = append(names, filepath.Join(filepath.Base(filepath.Dir(path)), filepath.Base(path)))
+	}
+	summary := "Skipped INIs with toggle keys but no position hash: " + strings.Join(names, ", ")
+	if len(skipped) > shown {
+		summary += fmt.Sprintf(" and %d more", len(skipped)-shown)
+	}
+	return summary
 }
 
 func (s *Service) RunBatchDelete(ctx context.Context) error {
@@ -627,8 +645,8 @@ func (s *Service) requestScan() {
 	s.emitState()
 	go func() {
 		defer s.finishTask(current)
-		deferred, err := s.scanAll(ctx)
-		if deferred {
+		result, err := s.scanAll(ctx)
+		if result.retry {
 			s.scheduleRetry()
 		}
 		if ctx.Err() == nil {
@@ -639,29 +657,43 @@ func (s *Service) requestScan() {
 	}()
 }
 
-// scanAll regenerates every artifact and reports whether a write or a cleanup was deferred because
-// an artifact could not be replaced or removed yet.
-func (s *Service) scanAll(ctx context.Context) (bool, error) {
+// scanResult reports a scan. retry is set when a write or a cleanup was deferred because an artifact
+// could not be replaced or removed yet; skipped lists the INIs with toggle keys but no position hash.
+type scanResult struct {
+	retry   bool
+	folders int
+	skipped []string
+}
+
+// rootScan is what scanRoot found under one Mods folder; see scanRoot for unreadDirs.
+type rootScan struct {
+	artifacts  []toggleViewerArtifact
+	unreadDirs []string
+	skipped    []string
+}
+
+func (s *Service) scanAll(ctx context.Context) (scanResult, error) {
 	modsPaths, err := s.enabledModsPaths(ctx)
 	if err != nil {
-		return false, err
+		return scanResult{}, err
 	}
 	if len(modsPaths) == 0 {
 		s.logInfo("Toggle viewer scan skipped: no enabled importer mods folder")
-		return false, nil
+		return scanResult{}, nil
 	}
 	hotkey := s.resolveHotkey(ctx, "")
 
 	var artifacts []toggleViewerArtifact
-	var unreadDirs []string
+	var unreadDirs, skipped []string
 	sources := map[string]cachedSource{}
 	for _, modsPath := range modsPaths {
-		found, unread, err := s.scanRoot(ctx, modsPath, hotkey, sources)
+		scan, err := s.scanRoot(ctx, modsPath, hotkey, sources)
 		if err != nil {
-			return false, err
+			return scanResult{}, err
 		}
-		artifacts = append(artifacts, found...)
-		unreadDirs = append(unreadDirs, unread...)
+		artifacts = append(artifacts, scan.artifacts...)
+		unreadDirs = append(unreadDirs, scan.unreadDirs...)
+		skipped = append(skipped, scan.skipped...)
 	}
 	s.sources = sources
 	sourceDirs := append(make([]string, 0, len(unreadDirs)+len(artifacts)), unreadDirs...)
@@ -676,13 +708,17 @@ func (s *Service) scanAll(ctx context.Context) (bool, error) {
 	deferredDirs = append(deferredDirs, unreadDirs...)
 	if err != nil {
 		s.writeMu.Unlock()
-		return len(deferredDirs) > 0, err
+		return scanResult{retry: len(deferredDirs) > 0}, err
 	}
 	pendingCleanups, err := s.deleteStaleRecords(ctx, modsPaths, artifacts, deferredDirs)
 	s.writeMu.Unlock()
-	retry := len(deferredDirs) > 0 || pendingCleanups > 0
+	result := scanResult{
+		retry:   len(deferredDirs) > 0 || pendingCleanups > 0,
+		folders: len(artifacts),
+		skipped: skipped,
+	}
 	if err != nil {
-		return retry, err
+		return result, err
 	}
 
 	matched := 0
@@ -690,10 +726,10 @@ func (s *Service) scanAll(ctx context.Context) (bool, error) {
 		matched += len(artifact.targetINIPaths)
 	}
 	s.logInfo(fmt.Sprintf(
-		"Scan complete. matched=%d, folders=%d, deferred=%d, pendingCleanups=%d, importers=%d",
-		matched, len(artifacts), len(deferredDirs), pendingCleanups, len(modsPaths),
+		"Scan complete. matched=%d, folders=%d, noPositionHash=%d, deferred=%d, pendingCleanups=%d, importers=%d",
+		matched, len(artifacts), len(skipped), len(deferredDirs), pendingCleanups, len(modsPaths),
 	))
-	return retry, nil
+	return result, nil
 }
 
 // scanRoot also returns the folders with a source INI that could not be read. Their artifacts are
@@ -704,18 +740,18 @@ func (s *Service) scanRoot(
 	ctx context.Context,
 	modsPath, hotkey string,
 	sources map[string]cachedSource,
-) ([]toggleViewerArtifact, []string, error) {
+) (rootScan, error) {
 	release, err := diskio.AcquireDir(ctx, modsPath)
 	if err != nil {
-		return nil, nil, err
+		return rootScan{}, err
 	}
 	defer release()
 
 	inis, err := scanINIs(ctx, modsPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scan toggle viewer mods %q: %w", modsPath, err)
+		return rootScan{}, fmt.Errorf("scan toggle viewer mods %q: %w", modsPath, err)
 	}
-	var dirs, unreadDirs []string
+	var dirs, unreadDirs, skipped []string
 	sourcesByDir := map[string][]toggleViewerSource{}
 	for _, ini := range inis {
 		iniPath := ini.path
@@ -732,13 +768,17 @@ func (s *Service) scanRoot(
 				}
 				continue
 			}
-			cached = cachedSource{source: parseToggleViewerSource(iniPath, string(content))}
+			source, missingHash := parseToggleViewerSource(iniPath, string(content))
+			cached = cachedSource{source: source, missingHash: missingHash}
 			if ini.info != nil {
 				cached.size, cached.modTime = ini.info.Size(), ini.info.ModTime()
 			}
 		}
 		if ini.info != nil {
 			sources[iniPath] = cached
+		}
+		if cached.missingHash {
+			skipped = append(skipped, iniPath)
 		}
 		source := cached.source
 		if source == nil {
@@ -758,7 +798,7 @@ func (s *Service) scanRoot(
 		}
 		artifacts = append(artifacts, buildToggleViewerArtifact(sourcesByDir[dir], hotkey))
 	}
-	return artifacts, unreadDirs, nil
+	return rootScan{artifacts: artifacts, unreadDirs: unreadDirs, skipped: skipped}, nil
 }
 
 // persistArtifacts returns the folders that kept some of their previous artifact files because they

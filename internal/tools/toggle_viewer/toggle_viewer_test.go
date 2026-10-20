@@ -319,7 +319,8 @@ func TestPersistAppliesHotkeyStoredDuringScan(t *testing.T) {
 	service := NewWithOptions(Options{Settings: settings})
 	service.UseClient(client)
 
-	artifacts, _, err := service.scanRoot(ctx, modsPath, "ctrl H", map[string]cachedSource{})
+	scan, err := service.scanRoot(ctx, modsPath, "ctrl H", map[string]cachedSource{})
+	artifacts := scan.artifacts
 	if err != nil || len(artifacts) != 1 {
 		t.Fatalf("artifacts = %#v, %v", artifacts, err)
 	}
