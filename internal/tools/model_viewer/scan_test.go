@@ -136,6 +136,104 @@ drawindexed = 3, 0, 3
 	}
 }
 
+// Frame-swap animation mods bind vb0 only from another hash's command list,
+// so the scan finds no mesh and the legacy build must still name the draw.
+func TestModelViewerLegacyMeshKeepsDrawSource(t *testing.T) {
+	dir := t.TempDir()
+	const vertexCount = 6
+	position := make([]byte, vertexCount*40)
+	for vertex := range vertexCount {
+		for axis := range 3 {
+			binary.LittleEndian.PutUint32(position[vertex*40+axis*4:], math.Float32bits(float32(vertex)))
+		}
+	}
+	for name, data := range map[string][]byte{
+		"BodyPosition.buf": position,
+		"BodyBlend.buf":    make([]byte, vertexCount*32),
+		"BodyTexcoord.buf": make([]byte, vertexCount*24),
+		"BodyA.ib":         modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	iniPath := filepath.Join(dir, "Animation.ini")
+	sections := parseModINI(`[Constants]
+global $swapvar = 0
+[TextureOverrideBodyBlend]
+hash = 11111111
+run = CommandListBodyBlend
+[TextureOverrideBodyTexcoord]
+hash = 33333333
+vb1 = ResourceBodyTexcoord.0
+[TextureOverrideBodyA]
+hash = 22222222
+match_first_index = 0
+handling = skip
+ib = ResourceBodyAIB.0
+drawindexed = 3, 3, 0
+[CommandListBodyBlend]
+if $swapvar == 0
+handling = skip
+if DRAW_TYPE == 2 || DRAW_TYPE == 4
+vb1 = ResourceBodyTexcoord.0
+vb2 = ResourceBodyBlend.0
+checktextureoverride = ib
+elif DRAW_TYPE == 1
+vb0 = ResourceBodyPosition.0
+vb2 = ResourceBodyBlend.0
+Draw = 6, 0
+endif
+endif
+[ResourceBodyPosition.0]
+type = Buffer
+stride = 40
+filename = BodyPosition.buf
+[ResourceBodyBlend.0]
+type = Buffer
+stride = 32
+filename = BodyBlend.buf
+[ResourceBodyTexcoord.0]
+type = Buffer
+stride = 24
+filename = BodyTexcoord.buf
+[ResourceBodyAIB.0]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = BodyA.ib
+`)
+	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+
+	scanned, err := buildModelViewerDirectScannedMeshesPrepared(
+		iniPath, dir, sections, collectModelViewerDefaultVariables(sections), resources, cache, nil,
+	)
+	if err != nil || len(scanned) != 0 {
+		t.Fatalf("fixture must take the legacy build: scanned=%d err=%v", len(scanned), err)
+	}
+	meshes, _, _, _, err := buildModelViewerDirectMeshesPrepared(iniPath, dir, "", sections, resources, cache, nil)
+	if err != nil || len(meshes) != 1 {
+		t.Fatalf("meshes=%d err=%v", len(meshes), err)
+	}
+
+	mesh := meshes[0]
+	source := mesh.drawSource
+	if source == nil || source.INIPath != iniPath || source.Section != "BodyA" ||
+		!source.MatchesIB("ResourceBodyAIB.0") || source.StartIndex != 3 || source.IndexCount != 3 {
+		t.Fatalf("draw source = %+v", source)
+	}
+	// The viewer picks faces as source vertices; the hook reads them back.
+	picked := [3]uint32{}
+	for corner := range picked {
+		picked[corner] = mesh.geometry.SourceIndices[mesh.geometry.Indices[corner]]
+	}
+	vertices, err := source.TriangleVertices(0)
+	if err != nil || vertices != picked || picked != [3]uint32{3, 4, 5} {
+		t.Fatalf("triangle=%v picked=%v err=%v", vertices, picked, err)
+	}
+}
+
 func TestModelViewerSharedGeometryDistinguishesResourceFormats(t *testing.T) {
 	dir := t.TempDir()
 	writeViewerGeometry(t, dir)
