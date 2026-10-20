@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxModelViewerINIFiles = 10
+	maxModelViewerINIFiles = 32
 	maxModelViewerINIDepth = 2
 )
 
@@ -26,8 +26,9 @@ type modelViewerINILine struct {
 }
 
 type modelViewerParsedINI struct {
-	Sections []modINISection
-	Lines    map[string][]modelViewerINILine
+	Sections  []modINISection
+	Lines     map[string][]modelViewerINILine
+	Namespace string
 }
 
 type modelViewerVariableName struct {
@@ -50,7 +51,17 @@ var (
 	modelViewerRabbitFXRE = regexp.MustCompile(
 		`(?i)(?:Resource\\RabbitFX\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|run\s*=\s*CommandList\\RabbitFX\\SetTextures\b)`,
 	)
+	modelViewerScopeTokenRE = regexp.MustCompile(`^` + modelViewerScopeTokenPrefix + `\d+`)
 )
+
+const modelViewerScopeTokenPrefix = "mvscope"
+
+// unscopedModelViewerVariable returns the INI name behind a normalized
+// variable that scopeModelViewerSections renamed, for checks that look for a
+// variable by the name the INI gives it.
+func unscopedModelViewerVariable(name string) string {
+	return modelViewerScopeTokenRE.ReplaceAllString(name, "")
+}
 
 func detectModelViewerMaterialProfile(sections []modINISection) string {
 	wwmi, rabbitFX, zzmi := false, false, false
@@ -113,6 +124,10 @@ func parseModelViewerINI(text, iniPath string) modelViewerParsedINI {
 			continue
 		}
 		if current == "" {
+			if lhs == "namespace" {
+				_, value, _ := strings.Cut(line, "=")
+				parsed.Namespace = strings.TrimSpace(value)
+			}
 			continue
 		}
 		sectionIndex := sectionIndexes[current]
@@ -289,7 +304,7 @@ func scopeModelViewerSections(
 	internalByLower := make(map[string]string, len(canonical))
 	publicByInternal := make(map[string]modelViewerVariableName, len(canonical))
 	for lower, name := range canonical {
-		internal := "mvscope" + modelViewerString(scopeIndex) + modelViewerNormalizeKey(name)
+		internal := modelViewerScopeToken(scopeIndex, name)
 		internalByLower[lower] = internal
 		publicByInternal[modelViewerNormalizeKey(internal)] = modelViewerVariableName{
 			PublicID: publicPrefix + name,
@@ -299,24 +314,37 @@ func scopeModelViewerSections(
 	}
 	output := make([]modINISection, len(sections))
 	for index, section := range sections {
-		output[index] = modINISection{Header: section.Header, Name: section.Name, Values: make(map[string]string)}
+		output[index] = modINISection{Header: section.Header, Name: section.Name}
+		lines := make([]string, 0, len(section.Lines))
 		for _, line := range section.Lines {
-			rewritten := modelViewerVariableUseRE.ReplaceAllStringFunc(line, func(token string) string {
+			lines = append(lines, modelViewerVariableUseRE.ReplaceAllStringFunc(line, func(token string) string {
 				name := strings.TrimPrefix(token, "$")
 				if internal := internalByLower[strings.ToLower(name)]; internal != "" {
 					return "$" + internal
 				}
 				return token
-			})
-			output[index].Lines = append(output[index].Lines, rewritten)
-			if eq := strings.Index(rewritten, "="); eq >= 0 {
-				key := strings.TrimSpace(rewritten[:eq])
-				value := stripModelViewerQuotes(strings.TrimSpace(rewritten[eq+1:]))
-				output[index].Values[key] = value
-			}
+			}))
 		}
+		setModelViewerSectionLines(&output[index], lines)
 	}
 	return output, publicByInternal
+}
+
+func modelViewerScopeToken(scopeIndex int, name string) string {
+	return modelViewerScopeTokenPrefix + modelViewerString(scopeIndex) + modelViewerNormalizeKey(name)
+}
+
+// setModelViewerSectionLines replaces the lines of a section and rebuilds its
+// values from them, as parseModelViewerINI derives them.
+func setModelViewerSectionLines(section *modINISection, lines []string) {
+	section.Lines = lines
+	section.Values = make(map[string]string, len(lines))
+	for _, line := range lines {
+		if eq := strings.Index(line, "="); eq >= 0 {
+			key := strings.TrimSpace(line[:eq])
+			section.Values[key] = stripModelViewerQuotes(strings.TrimSpace(line[eq+1:]))
+		}
+	}
 }
 
 func rebaseModelViewerResources(sections []modINISection, iniPath, folder string) {

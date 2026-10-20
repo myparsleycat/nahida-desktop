@@ -514,7 +514,10 @@ func effectiveModelViewerSymbolicAssignments(input []modelViewerSymbolicAssignme
 	for index := len(input) - 1; index >= 0; index-- {
 		assignment := input[index]
 		conditions := modelViewerDNFAnd(assignment.conditions, modelViewerDNFNot(covered))
-		covered = modelViewerDNFOr(covered, assignment.conditions)
+		// Without absorption the coverage of a long branch chain outgrows what
+		// negation can expand, and an overflowing negation keeps every earlier
+		// assignment alive.
+		covered = absorbModelViewerDNF(modelViewerDNFOr(covered, assignment.conditions))
 		if len(conditions) == 0 {
 			continue
 		}

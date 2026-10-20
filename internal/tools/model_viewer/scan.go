@@ -1004,11 +1004,21 @@ func isModelViewerPreviewSkippedOverride(name string) bool {
 func keepModelViewerPreviewLODRecords(records []modelViewerDirectDrawRecord) []modelViewerDirectDrawRecord {
 	kept := make([]modelViewerDirectDrawRecord, 0, len(records))
 	for _, record := range records {
-		if modelViewerDNFIntersects(record.conditions, modelViewerPreviewLOD) {
+		if modelViewerDNFIntersects(unscopedModelViewerDNF(record.conditions), modelViewerPreviewLOD) {
 			kept = append(kept, record)
 		}
 	}
 	return kept
+}
+
+func unscopedModelViewerDNF(dnf ModelViewerDNF) ModelViewerDNF {
+	output := cloneModelViewerDNF(dnf)
+	for _, group := range output {
+		for index := range group {
+			group[index].Var = unscopedModelViewerVariable(group[index].Var)
+		}
+	}
+	return output
 }
 
 var (

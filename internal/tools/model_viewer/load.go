@@ -399,8 +399,8 @@ func (t *Service) prepareModelViewerGeometry(
 		}
 	}()
 	var stageStartedAt time.Time
-	multi := len(iniPaths) > 1
 	scopes := modelViewerINIScopes(iniPaths, folder)
+	parsedINIs := make([]modelViewerParsedINI, len(iniPaths))
 	for iniIndex, iniPath := range iniPaths {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -410,13 +410,33 @@ func (t *Service) prepareModelViewerGeometry(
 		if readErr != nil {
 			return nil, readErr
 		}
-		scope := scopes[iniIndex]
-		prepared.inis = append(prepared.inis, ModelViewerINI{Path: iniPath, Prefix: scope.prefix})
-		sections, scopedNames := scopeModelViewerSections(parsed.Sections, iniIndex, scope.prefix, scope.form)
-		for key, value := range scopedNames {
+		parsedINIs[iniIndex] = parsed
+		prepared.inis = append(prepared.inis, ModelViewerINI{Path: iniPath, Prefix: scopes[iniIndex].prefix})
+		prepared.parseMs += time.Since(parseStartedAt).Milliseconds()
+	}
+
+	units := groupModelViewerINIUnits(parsedINIs)
+	unitByNamespace := make(map[string]int, len(units))
+	for unitIndex, unit := range units {
+		if unit.namespace != "" {
+			unitByNamespace[strings.ToLower(unit.namespace)] = unitIndex
+		}
+	}
+	type builtUnit struct {
+		scoped    modelViewerScopedUnit
+		resources []modelViewerResource
+	}
+	built := make([]builtUnit, len(units))
+	for unitIndex, unit := range units {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		parseStartedAt := time.Now()
+		scoped := scopeModelViewerUnit(unit, unitIndex, parsedINIs, iniPaths, scopes, unitByNamespace, folder)
+		sections := scoped.sections
+		for key, value := range scoped.names {
 			prepared.variableNames[key] = value
 		}
-		rebaseModelViewerResources(sections, iniPath, folder)
 		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder) {
 			if t.log != nil {
 				t.log.Warn(
@@ -442,23 +462,35 @@ func (t *Service) prepareModelViewerGeometry(
 		prepared.validateMs += time.Since(stageStartedAt).Milliseconds()
 		prepared.sections = append(prepared.sections, sections...)
 		prepared.parseMs += time.Since(parseStartedAt).Milliseconds()
+		built[unitIndex] = builtUnit{scoped: scoped, resources: resources}
+	}
+
+	domains := collectModelViewerBindingDomains(prepared.sections)
+	for unitIndex, unit := range units {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		iniPath := iniPaths[unit.primary]
+		sections := built[unitIndex].scoped.sections
 		stageStartedAt = time.Now()
 		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesPrepared(
 			iniPath,
 			folder,
 			"",
 			sections,
-			resources,
+			built[unitIndex].resources,
+			domains,
 			prepared.cache,
 			prepared.timing,
 		)
 		if buildErr != nil {
 			return nil, buildErr
 		}
-		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scope, folder)
+		attributeModelViewerDrawSources(meshes, built[unitIndex].scoped, iniPaths)
+		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], folder)
 		computeScopeID := ""
-		if multi {
-			computeScopeID = modelViewerString(iniIndex)
+		if len(units) > 1 {
+			computeScopeID = modelViewerString(unitIndex)
 		}
 		if deformer, clips := detectModelViewerComputeAnimation(
 			folder,
@@ -467,7 +499,7 @@ func (t *Service) prepareModelViewerGeometry(
 			sections,
 			resources,
 			meshes,
-			scopedNames,
+			built[unitIndex].scoped.names,
 			func(message string) {
 				if t.log != nil {
 					t.log.Warn(fmt.Sprintf("INI=%q %s", iniPath, message), "StaticGlb.loadForViewer")

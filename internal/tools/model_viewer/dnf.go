@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -117,6 +118,43 @@ func modelViewerDNFOr(left, right ModelViewerDNF) ModelViewerDNF {
 		return modelViewerDNFTrue()
 	}
 	return output
+}
+
+// absorbModelViewerDNF drops each group that another group of the expression
+// already implies: A || (A && B) selects the same states as A.
+func absorbModelViewerDNF(input ModelViewerDNF) ModelViewerDNF {
+	output := make(ModelViewerDNF, 0, len(input))
+	for index, group := range input {
+		absorbed := false
+		for other, candidate := range input {
+			if other == index || !modelViewerDNFGroupImplies(group, candidate) {
+				continue
+			}
+			// Of two equal groups, the first one stays.
+			if len(candidate) < len(group) || other < index {
+				absorbed = true
+				break
+			}
+		}
+		if !absorbed {
+			output = append(output, group)
+		}
+	}
+	return output
+}
+
+// modelViewerDNFGroupImplies reports whether group holds every clause of
+// candidate, so each state group selects candidate selects too.
+func modelViewerDNFGroupImplies(group, candidate []ModelViewerDNFClause) bool {
+	for _, wanted := range candidate {
+		if !slices.ContainsFunc(group, func(clause ModelViewerDNFClause) bool {
+			return clause.Negate == wanted.Negate && clause.Value == wanted.Value &&
+				modelViewerNormalizeKey(clause.Var) == modelViewerNormalizeKey(wanted.Var)
+		}) {
+			return false
+		}
+	}
+	return true
 }
 
 func modelViewerDNFNot(input ModelViewerDNF) ModelViewerDNF {

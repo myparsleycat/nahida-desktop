@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -104,17 +105,21 @@ func buildModelViewerDirectMeshesAt(
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
 	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
-	return buildModelViewerDirectMeshesPrepared(iniPath, modDir, assetPath, sections, resources, cache, timing)
+	return buildModelViewerDirectMeshesPrepared(iniPath, modDir, assetPath, sections, resources, nil, cache, timing)
 }
 
 func buildModelViewerDirectMeshesPrepared(
 	iniPath, modDir, assetPath string,
 	sections []modINISection,
 	resources []modelViewerResource,
+	domains map[string]any,
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
 	variables := collectModelViewerDefaultVariables(sections)
+	// Domains go in as defaults: condition parsing extends them with the unit's
+	// own bindings instead of replacing them.
+	maps.Copy(variables, domains)
 	textures := collectModelViewerTextureBindings(sections, variables)
 	scanned, scanErr := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath,

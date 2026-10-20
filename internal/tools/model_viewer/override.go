@@ -35,24 +35,34 @@ type modelViewerBranchFrame struct {
 
 var modelViewerDefaultVariableRE = regexp.MustCompile(`(?i)^(?:global\s+)?(?:persist\s+)?(\$\w+)\s*=\s*([^,]+)$`)
 
+// collectModelViewerDefaultVariables takes the first value assigned to each
+// variable. A global declaration holds the value the variable starts with, so
+// it wins over an assignment a command list makes at runtime, even one that a
+// merged INI places earlier.
 func collectModelViewerDefaultVariables(sections []modINISection) map[string]any {
 	variables := make(map[string]any)
-	for _, section := range sections {
-		for _, line := range section.Lines {
-			match := modelViewerDefaultVariableRE.FindStringSubmatch(strings.TrimSpace(line))
-			if match == nil {
-				continue
+	for _, declarations := range []bool{true, false} {
+		for _, section := range sections {
+			for _, line := range section.Lines {
+				line = strings.TrimSpace(line)
+				if declarations && !modelViewerVariableDeclRE.MatchString(line) {
+					continue
+				}
+				match := modelViewerDefaultVariableRE.FindStringSubmatch(line)
+				if match == nil {
+					continue
+				}
+				key := modelViewerNormalizeKey(match[1])
+				if _, exists := variables[key]; exists {
+					continue
+				}
+				valueText := strings.TrimSpace(match[2])
+				value := any(valueText)
+				if parsed, err := strconv.ParseFloat(valueText, 64); err == nil {
+					value = parsed
+				}
+				variables[key] = value
 			}
-			key := modelViewerNormalizeKey(match[1])
-			if _, exists := variables[key]; exists {
-				continue
-			}
-			valueText := strings.TrimSpace(match[2])
-			value := any(valueText)
-			if parsed, err := strconv.ParseFloat(valueText, 64); err == nil {
-				value = parsed
-			}
-			variables[key] = value
 		}
 	}
 	return variables

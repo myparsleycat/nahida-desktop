@@ -52,8 +52,8 @@ func TestDiscoverModelViewerINIsMatchesElectronOrderDepthAndLimit(t *testing.T) 
 	writeINI("b.ini")
 	writeINI("a.ini")
 	writeINI("DISABLEDskip.ini")
-	for _, name := range []string{"c.ini", "d.ini", "e.ini", "f.ini", "g.ini", "h.ini", "i.ini", "j.ini", "k.ini"} {
-		writeINI(filepath.Join("one", name))
+	for index := range maxModelViewerINIFiles {
+		writeINI(filepath.Join("one", fmt.Sprintf("c%02d.ini", index)))
 	}
 	writeINI(filepath.Join("one", "two", "kept.ini"))
 	writeINI(filepath.Join("one", "two", "three", "ignored.ini"))
@@ -64,7 +64,9 @@ func TestDiscoverModelViewerINIsMatchesElectronOrderDepthAndLimit(t *testing.T) 
 	if len(paths) != maxModelViewerINIFiles {
 		t.Fatalf("paths = %#v", paths)
 	}
-	if filepath.Base(paths[0]) != "a.ini" || filepath.Base(paths[1]) != "b.ini" || filepath.Base(paths[9]) != "j.ini" {
+	last := fmt.Sprintf("c%02d.ini", maxModelViewerINIFiles-3)
+	if filepath.Base(paths[0]) != "a.ini" || filepath.Base(paths[1]) != "b.ini" ||
+		filepath.Base(paths[maxModelViewerINIFiles-1]) != last {
 		t.Fatalf("order = %#v", paths)
 	}
 	for _, path := range paths {
@@ -138,6 +140,98 @@ filename = diffuse.png
 	}
 	if len(fixture.result.Textures) != 2 || texKey(fixture.result.Meshes[0]) == texKey(fixture.result.Meshes[1]) {
 		t.Fatalf("textures = %#v meshes = %#v", fixture.result.Textures, fixture.result.Meshes)
+	}
+}
+
+// A namespace spreads one mod over INIs that reach each other's command lists,
+// resources and variables by plain name, while a UI in another namespace
+// cycles those variables through $\Namespace\name. Assignments that INIs found
+// before the declaring one make at runtime leave the declared default alone.
+func TestLoadModViewerMergesINIsSharingANamespace(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"aui.ini": `namespace = LibUI
+[KeyOutfit]
+key = 1
+type = cycle
+$\Lib\outfit = 0, 1, 2
+[CommandListReset]
+$\Lib\outfit = 0
+`,
+		"mod.ini": `namespace = Lib
+[TextureOverrideBody]
+hash = 12345678
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+run = CommandList\Lib\Body
+[CommandListWear]
+$outfit = 2
+`,
+		"Main/draw.ini": `namespace = Lib
+[CommandListBody]
+Resource\KatFX\Diffuse = ref ResourceSkin
+if $outfit >= 2
+drawindexed = 3, 0, 0
+endif
+[TextureOverrideHead]
+hash = 87654321
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+`,
+		"Main/res.ini": `namespace = Lib
+[ResourcePos]
+filename = ../pos.buf
+stride = 40
+[ResourceTc]
+filename = ../tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = ../body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceSkin]
+filename = skin.png
+`,
+		"Main/const.ini": `namespace = Lib
+[Constants]
+global persist $outfit = 1
+`,
+	}
+	for name, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeViewerGeometry(t, root)
+	writeModelViewerTestPNG(t, filepath.Join(root, "Main", "skin.png"), color.NRGBA{R: 255, A: 255})
+
+	fixture := loadViewerDir(t, root)
+	result := fixture.result
+	if len(result.Meshes) != 2 || result.Meshes[0].Component != "Body" ||
+		!strings.Contains(texKey(result.Meshes[0]), "skin.png") {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	variable := findViewerVariable(result, "const::outfit")
+	if variable == nil || len(variable.Values) != 3 || result.DefaultState["const::outfit"] != "1" {
+		t.Fatalf("variables = %#v defaultState = %#v", result.Variables, result.DefaultState)
+	}
+	if evaluateViewerTransport(result, nil).Meshes[0].Visible {
+		t.Fatalf("mesh drawn only when outfit >= 2 is visible at outfit 1: %#v", result.Meshes[0].Conditions)
+	}
+
+	// A tool hooking a draw edits the INI declaring its TextureOverride.
+	for _, mesh := range result.Meshes {
+		want := map[string]string{"Body": "mod.ini", "Head": "draw.ini"}[mesh.Component]
+		source, ok := fixture.service.DrawSource(result.MemorySessionID, mesh.ID)
+		if !ok || filepath.Base(source.INIPath) != want {
+			t.Fatalf("draw source of %s = %#v", mesh.Component, source)
+		}
 	}
 }
 

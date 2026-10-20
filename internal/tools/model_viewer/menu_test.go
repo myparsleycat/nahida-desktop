@@ -18,6 +18,40 @@ $dress = 0, 1, 2`)
 	}
 }
 
+// An on-screen button steps its variable and wraps it back to zero; the bound
+// may be a literal or another variable's default.
+func TestModelViewerSlotBindingsFindIncrementWrap(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persist $bra = 2
+global persist $skin = 0
+global persist $max_skin = 3
+global $counter = 0
+
+[CommandListDrawButtons]
+if $clicked == 1
+    $bra = $bra + 1
+    if $bra > 2
+        $bra = 0
+    endif
+endif
+$skin = $skin + 1
+if $skin > $max_skin
+    $skin = 0
+endif
+$counter = $counter + 1`)
+	got := make(map[string][]any)
+	for _, binding := range collectModelViewerSlotBindings(sections, collectModelViewerDefaultVariables(sections)) {
+		got[binding.Variable] = binding.Values
+	}
+	want := map[string][]any{
+		"bra":  {float64(0), float64(1), float64(2)},
+		"skin": {float64(0), float64(1), float64(2), float64(3)},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("bindings = %v, want %v", got, want)
+	}
+}
+
 func TestModelViewerMenuParsesCaseInsensitiveIncrementCycles(t *testing.T) {
 	tests := []struct {
 		name, body string

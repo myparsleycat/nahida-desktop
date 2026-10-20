@@ -117,9 +117,110 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 		}
 	}
 	bindings = append(bindings, collectModelViewerArrowBindings(sections)...)
+	bindings = append(bindings, collectModelViewerWrapBindings(sections, defaults, bindings)...)
 	return lo.UniqBy(bindings, func(binding modelViewerSlotBinding) string {
 		return strconv.Itoa(binding.Slot) + ":" + binding.Variable
 	})
+}
+
+// collectModelViewerWrapBindings reads the values of a variable a command list
+// steps through and wraps back to zero, as an on-screen button does on click:
+//
+//	$x = $x + 1
+//	if $x > 2
+//	    $x = 0
+//	endif
+//
+// The bound is a literal or a variable with an integer default. Variables that
+// already have a binding keep it.
+func collectModelViewerWrapBindings(
+	sections []modINISection,
+	defaults map[string]any,
+	existing []modelViewerSlotBinding,
+) []modelViewerSlotBinding {
+	seen := make(map[string]bool, len(existing))
+	for _, binding := range existing {
+		seen[binding.Variable] = true
+	}
+	var output []modelViewerSlotBinding
+	for _, section := range sections {
+		if !strings.EqualFold(section.Header, "CommandList") {
+			continue
+		}
+		lines := make([]string, len(section.Lines))
+		for index, line := range section.Lines {
+			lines[index] = strings.TrimSpace(strings.SplitN(line, ";", 2)[0])
+		}
+		for index, line := range lines {
+			assignment := modelViewerMenuAssignRE.FindStringSubmatch(line)
+			if assignment == nil {
+				continue
+			}
+			step := modelViewerMenuIncrRE.FindStringSubmatch(strings.TrimSpace(assignment[2]))
+			variable := modelViewerNormalizeKey(assignment[1])
+			if step == nil || modelViewerNormalizeKey(step[1]) != variable || seen[variable] {
+				continue
+			}
+			maximum, ok := parseModelViewerWrapBound(lines[index+1:], variable, defaults)
+			if !ok || maximum < 1 || maximum >= maxModelViewerMenuValues {
+				continue
+			}
+			values := make([]any, 0, maximum+1)
+			for value := range maximum + 1 {
+				values = append(values, float64(value))
+			}
+			seen[variable] = true
+			output = append(output, modelViewerSlotBinding{Variable: variable, Values: values})
+		}
+	}
+	return output
+}
+
+var modelViewerWrapGuardRE = regexp.MustCompile(`(?i)^if\s+\$(\w+)\s*(>=|>)\s*(\$?\w+)$`)
+
+// parseModelViewerWrapBound returns the largest value variable keeps when the
+// lines after its increment start with the guard that resets it to zero.
+func parseModelViewerWrapBound(lines []string, variable string, defaults map[string]any) (int, bool) {
+	if len(lines) == 0 {
+		return 0, false
+	}
+	guard := modelViewerWrapGuardRE.FindStringSubmatch(lines[0])
+	if guard == nil || modelViewerNormalizeKey(guard[1]) != variable {
+		return 0, false
+	}
+	var bound any = guard[3]
+	if strings.HasPrefix(guard[3], "$") {
+		bound = defaults[modelViewerNormalizeKey(guard[3])]
+	}
+	number, err := modelViewerNumber(bound)
+	if err != nil || number != float64(int(number)) {
+		return 0, false
+	}
+	maximum := int(number)
+	if guard[2] == ">=" {
+		maximum--
+	}
+
+	depth := 0
+	for _, line := range lines[1:] {
+		lower := strings.ToLower(line)
+		switch {
+		case strings.HasPrefix(lower, "if "):
+			depth++
+		case lower == "endif":
+			if depth == 0 {
+				return 0, false
+			}
+			depth--
+		case depth == 0:
+			assignment := modelViewerMenuAssignRE.FindStringSubmatch(line)
+			if assignment != nil && modelViewerNormalizeKey(assignment[1]) == variable &&
+				strings.TrimSpace(assignment[2]) == "0" {
+				return maximum, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func splitModelViewerMenuSlotBranches(lines []string) []modelViewerMenuSlotBranch {

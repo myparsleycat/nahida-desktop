@@ -14,7 +14,11 @@ type modelViewerResourceAliases struct {
 	descriptors map[string][]string
 	defaultUAV  map[string][]string
 	outputs     map[string][]string
-	resources   map[string]modelViewerResource
+	// Copies into a texture the INI declares without a file, such as a UAV a
+	// shader blends into; the preview shows the copied source unblended.
+	defaultCopies map[string][]string
+	copies        map[string][]string
+	resources     map[string]modelViewerResource
 }
 
 type modelViewerResourceResolution uint8
@@ -37,7 +41,7 @@ func resolveModelViewerEffectiveResources(
 			continue
 		}
 		resolved, ok := aliases.resolve(resource.Name)
-		if !ok || resolved.Filename == "" || resolved.Stride < 12 {
+		if !ok || resolved.Filename == "" || resolved.Stride < 12 && !modelViewerResourceIsTexture(resource) {
 			continue
 		}
 		output[index].Filename = resolved.Filename
@@ -75,10 +79,12 @@ func collectModelViewerResourceAliases(
 	resources []modelViewerResource,
 ) modelViewerResourceAliases {
 	aliases := modelViewerResourceAliases{
-		descriptors: make(map[string][]string),
-		defaultUAV:  make(map[string][]string),
-		outputs:     make(map[string][]string),
-		resources:   make(map[string]modelViewerResource, len(resources)),
+		descriptors:   make(map[string][]string),
+		defaultUAV:    make(map[string][]string),
+		outputs:       make(map[string][]string),
+		defaultCopies: make(map[string][]string),
+		copies:        make(map[string][]string),
+		resources:     make(map[string]modelViewerResource, len(resources)),
 	}
 	for _, resource := range resources {
 		aliases.resources[modelViewerNormalizeKey(resource.Name)] = resource
@@ -161,6 +167,15 @@ func collectModelViewerResourceAliases(
 				continue
 			}
 			target := modelViewerResourceToken(plainLeft)
+			if strings.HasPrefix(strings.ToLower(right), "copy ") &&
+				modelViewerResourceIsTexture(aliases.resources[modelViewerNormalizeKey(target)]) {
+				source := modelViewerResourceToken(right)
+				aliases.add(aliases.copies, target, source)
+				if defaultActive {
+					aliases.add(aliases.defaultCopies, target, source)
+				}
+				continue
+			}
 			slot := modelViewerUAVReference(right)
 			if target != "" && slot != "" {
 				aliases.add(aliases.outputs, target, uav[slot])
@@ -223,7 +238,30 @@ func (a modelViewerResourceAliases) resolveAt(
 	); status != modelViewerResourceUnresolved {
 		return resolved, status
 	}
-	return a.resolveUnique(a.outputs[key], visiting, depth+1)
+	if resolved, status := a.resolveUnique(
+		a.outputs[key],
+		visiting,
+		depth+1,
+	); status != modelViewerResourceUnresolved {
+		return resolved, status
+	}
+	if resolved, status := a.resolveUnique(
+		a.defaultCopies[key],
+		visiting,
+		depth+1,
+	); status != modelViewerResourceUnresolved {
+		return resolved, status
+	}
+	return a.resolveUnique(a.copies[key], visiting, depth+1)
+}
+
+func modelViewerResourceIsTexture(resource modelViewerResource) bool {
+	for key, value := range resource.Values {
+		if strings.EqualFold(key, "type") {
+			return strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), "texture")
+		}
+	}
+	return false
 }
 
 func (a modelViewerResourceAliases) resolveUnique(

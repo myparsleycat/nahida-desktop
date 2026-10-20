@@ -212,7 +212,7 @@ filename = BodyA.ib
 	if err != nil || len(scanned) != 0 {
 		t.Fatalf("fixture must take the legacy build: scanned=%d err=%v", len(scanned), err)
 	}
-	meshes, _, _, _, err := buildModelViewerDirectMeshesPrepared(iniPath, dir, "", sections, resources, cache, nil)
+	meshes, _, _, _, err := buildModelViewerDirectMeshesPrepared(iniPath, dir, "", sections, resources, nil, cache, nil)
 	if err != nil || len(meshes) != 1 {
 		t.Fatalf("meshes=%d err=%v", len(meshes), err)
 	}

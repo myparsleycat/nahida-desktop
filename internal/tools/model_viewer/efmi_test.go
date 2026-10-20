@@ -436,6 +436,10 @@ filename = Meshes/Component0_VB0.buf
 type = Buffer
 stride = 12
 filename = Meshes/Component0_VB1.buf
+[Resource_Component0_VB1_LOD1]
+type = Buffer
+stride = 12
+filename = Meshes/Component0_VB1.buf
 [Resource_Component0_VB2]
 type = Buffer
 stride = 12

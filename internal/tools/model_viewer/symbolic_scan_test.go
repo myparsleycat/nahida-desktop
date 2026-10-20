@@ -67,6 +67,31 @@ drawindexed = 3, 0, 0`)
 	}
 }
 
+// A material set inside an enclosing branch replaces every material set before
+// it, however long the chain of per-value variants it follows.
+func TestModelViewerSymbolicTextureReplacementSurvivesLongBranchChain(t *testing.T) {
+	var chain strings.Builder
+	for value := 1; value <= 8; value++ {
+		fmt.Fprintf(&chain, "if $color == %d\nResource\\Lib\\Diffuse = ref ResourceOld%d\nendif\n", value, value)
+	}
+	sections := parseModINI(`[TextureOverrideBody]
+vb0 = ResourcePos
+ib = ResourceIB
+if $enabled == 1
+Resource\Lib\Diffuse = ref ResourceOld
+` + chain.String() + `Resource\Lib\Diffuse = ref ResourceNew
+drawindexed = 3, 0, 0
+endif`)
+	records, err := collectModelViewerDirectDrawRecords(sections, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || len(records[0].textureHistory) != 1 ||
+		!strings.HasSuffix(records[0].textureHistory[0].resource, "New") {
+		t.Fatalf("records = %#v", records)
+	}
+}
+
 func TestModelViewerSymbolicResourceScanPreservesHistories(t *testing.T) {
 	sections := parseModINI(`[CommandListRoot]
 ib = ResourceA

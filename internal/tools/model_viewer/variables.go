@@ -143,14 +143,7 @@ func modelViewerDirectVariableMetadata(
 func modelViewerDirectConditionVariables(sections []modINISection, defaults map[string]any) map[string]any {
 	output := cloneModelViewerState(defaults)
 	bindings := collectModelViewerSlotBindings(sections, defaults)
-	for _, binding := range bindings {
-		key := "__domain:" + modelViewerNormalizeKey(binding.Variable)
-		current, _ := output[key].([]any)
-		for _, value := range binding.Values {
-			current = appendUniqueModelViewerValue(current, value)
-		}
-		output[key] = current
-	}
+	addModelViewerBindingDomains(output, bindings)
 	for _, clip := range detectModelViewerPresentAnimations(sections, defaults, bindings) {
 		for _, variable := range clip.VariableIDs {
 			key := "__domain:" + modelViewerNormalizeKey(variable)
@@ -163,4 +156,27 @@ func modelViewerDirectConditionVariables(sections []modINISection, defaults map[
 	}
 	output["__aliases"] = buildModelViewerBoolAliases(sections, output)
 	return output
+}
+
+func addModelViewerBindingDomains(output map[string]any, bindings []modelViewerSlotBinding) {
+	for _, binding := range bindings {
+		key := "__domain:" + modelViewerNormalizeKey(binding.Variable)
+		current, _ := output[key].([]any)
+		for _, value := range binding.Values {
+			current = appendUniqueModelViewerValue(current, value)
+		}
+		output[key] = current
+	}
+}
+
+// collectModelViewerBindingDomains returns the value domains the bindings of
+// every loaded INI give their variables. A unit is built from its own sections
+// alone, so a domain another unit's toggles define must be handed to it.
+func collectModelViewerBindingDomains(sections []modINISection) map[string]any {
+	domains := make(map[string]any)
+	addModelViewerBindingDomains(
+		domains,
+		collectModelViewerSlotBindings(sections, collectModelViewerDefaultVariables(sections)),
+	)
+	return domains
 }
