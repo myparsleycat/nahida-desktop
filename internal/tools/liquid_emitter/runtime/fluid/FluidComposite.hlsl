@@ -14,6 +14,19 @@ StructuredBuffer<float4> fluidAmbient:register(t105);
 struct ScreenVarying{float4 position:SV_Position;};
 // Share of the offset lookup in the reflection a missed puddle ray keeps.
 static const float REFLECTION_MISS_LOCAL=.3;
+// Drops clinging to the body and their trails (TAG_FILM) are a film on it,
+// facing whatever way it does: the thickness they saturate toward, how far
+// their normals bend onto the body, how much of the key-light glint they
+// lose, and their wet darkening as a share of a puddle's.
+static const float FILM_LIMIT=.0018,FILM_NORMAL_PULL=.7,FILM_GLINT_CUT=.5,FILM_WET=.35;
+// The film carries its liquid by color and a broad sheen along the body
+// rather than by darkening: the sheen lobe is wide enough to catch the
+// curve of a limb, and the drops on it scatter less so they do not stand
+// out as bright beads against the trail.
+static const float FILM_SHEEN=.3,FILM_SCATTER=.5;
+// Film at which a trail fully shows: its coverage, sheen and darkening. A
+// trail segment adds 1.2 mm on its center line, which smoothing spreads.
+static const float FILM_SHOWN=.0008;
 #ifdef VERTEX_SHADER
 ScreenVarying main(uint id:SV_VertexID){ScreenVarying o;o.position=screenTriangle(id);return o;}
 #endif
@@ -136,12 +149,16 @@ float4 main(ScreenVarying i):SV_Target{
  // Liquid lying within a few millimeters of upward-facing ground is a
  // puddle. Its depth normals still carry the bumps of the individual discs,
  // so they are pulled onto the ground plane to read as one flat film.
- float puddle=0;
+ // A clinging film is pulled less, so a rivulet keeps some relief while its
+ // drops stop catching a highlight each, as domes of their own would.
+ float puddle=0,surfaceFilm=0;
  float3 groundPoint,groundNormal;
  if(sceneSurface(uv,groundPoint,groundNormal)){
   float height=abs(dot(position-groundPoint,groundNormal));
-  puddle=smoothstep(.6,.8,groundNormal.y)*(1-smoothstep(.006,.012,height));
-  n=normalize(lerp(n,groundNormal,puddle*.9));
+  float contact=1-smoothstep(.006,.012,height);
+  puddle=smoothstep(.6,.8,groundNormal.y)*contact;
+  surfaceFilm=(tag&TAG_FILM)!=0?(1-puddle)*contact:0;
+  n=normalize(lerp(n,groundNormal,puddle*.9+surfaceFilm*FILM_NORMAL_PULL));
  }
 
  float3 right=normalize(camera[4].xyz),up=normalize(camera[5].xyz);
@@ -170,8 +187,9 @@ float4 main(ScreenVarying i):SV_Target{
  // keeps most of its chord, while a puddle stacks the discs of every
  // particle lying there and would read as centimeters where the real film
  // is a millimeter or two. Saturate each toward its own limit so the puddle
- // stays a film the ground shows through and a lone drop stays pale.
- float filmLimit=lerp(.005,.0015,puddle);
+ // stays a film the ground shows through and a lone drop stays pale. Drops
+ // gathered on the body would otherwise add up into a dark stain.
+ float filmLimit=lerp(lerp(.005,.0015,puddle),FILM_LIMIT,surfaceFilm);
  float film=filmLimit*(1-exp(-thickness/filmLimit));
  float3 transmit=exp(-film*absorb);
  float2 refractionUV=uv+float2(dot(n,right),-dot(n,up))*IniParams[253].x*saturate(film/.004);
@@ -212,18 +230,22 @@ float4 main(ScreenVarying i):SV_Target{
  // normal, so from the mirror angle of either lobe the whole film turns
  // white. A puddle shines by the mirror image it traces instead.
  glint*=1-puddle;
+ glint*=1-surfaceFilm*FILM_GLINT_CUT;
+ glint+=float3(1,.97,.84)*pow(saturate(dot(n,sheenHalfway)),8)*FILM_SHEEN*illumination*surfaceFilm;
  // Clear liquid mostly absorbs: the scene behind darkens and takes the tint.
  // A little in-scattering keeps the color readable over dark backgrounds
  // without the liquid glowing like paint.
- float3 scatter=tint*(1-transmit)*shade.w*illumination;
+ float3 scatter=tint*(1-transmit)*shade.w*illumination*(1-surfaceFilm*FILM_SCATTER);
  // A lone droplet spans a few pixels, so its depth normals cover a whole
  // hemisphere and always catch the glint. Highlights need the body of the
  // stream or a large drop behind them, or spray turns into glitter. A
  // puddle's thickness is the sum of discs a millimeter thick, so its mirror
  // image is gated where the film exists rather than where discs stack.
- float highlight=lerp(smoothstep(.003,.008,thickness),smoothstep(.0003,.0012,thickness),puddle);
- // Water filling the ground's pores darkens it under a puddle.
- float wet=puddle*saturate(film/.002);
+ // A trail is thinner still and shines wherever it lies.
+ float highlight=lerp(lerp(smoothstep(.003,.008,thickness),smoothstep(.0003,.0012,thickness),puddle),smoothstep(.0001,FILM_SHOWN,thickness),surfaceFilm);
+ // Water filling the ground's pores darkens it under a puddle. Wet skin or
+ // cloth darkens less, or the trail reads as a stain.
+ float wet=puddle*saturate(film/.002)+FILM_WET*surfaceFilm*saturate(film/FILM_SHOWN);
  background*=lerp(1,shade.x,wet);
  // From standing height Fresnel alone gives a puddle about 6 percent
  // reflectance, which disappears into the film; a puddle reads as liquid by
@@ -235,7 +257,7 @@ float4 main(ScreenVarying i):SV_Target{
  // fully; only silhouettes, where smoothing thins the liquid out, fade. A
  // puddle's thickness is the sum of soft discs, which a threshold turns
  // into one film with an irregular edge, and lone drops into small dots.
- float alpha=lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle);
+ float alpha=lerp(lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle),smoothstep(.00005,FILM_SHOWN,thickness),surfaceFilm);
  return float4(color,alpha);
 }
 #endif

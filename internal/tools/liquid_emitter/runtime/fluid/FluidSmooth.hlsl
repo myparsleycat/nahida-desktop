@@ -26,9 +26,10 @@ Smoothed main(ScreenVarying i){
  float center=fluidDepthValue(raw);
  uint tag=fluidDepthTag(raw);
 
- // Puddles of several characters share one film, so only a stream's own
- // width widens its filter.
- float worldRadius=SURFACE_RADIUS*2*((tag&TAG_PUDDLE)!=0?1:slotWidth(tag&TAG_SLOT_MASK));
+ // Puddles of several characters share one film, and clinging drops and
+ // their trails are drawn at full width whatever the stream's, so only a
+ // stream's own width widens its filter.
+ float worldRadius=SURFACE_RADIUS*2*((tag&(TAG_PUDDLE|TAG_FILM))!=0?1:slotWidth(tag&TAG_SLOT_MASK));
  float maxRadius=(tag&TAG_SPRAY)!=0?SPRAY_SMOOTH_RADIUS:SMOOTH_MAX_RADIUS;
  float radiusPixels=clamp(worldRadius*pixelsPerMeter(center,float2(width,height)),1,maxRadius);
  int taps=(int)ceil(radiusPixels);

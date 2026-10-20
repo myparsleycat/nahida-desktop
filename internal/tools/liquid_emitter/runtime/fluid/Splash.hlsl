@@ -13,11 +13,14 @@ RWStructuredBuffer<FluidParticle> target:register(u0);
 StructuredBuffer<CollisionEvent> events:register(t108);
 Buffer<uint> eventCounter:register(t107);
 RWBuffer<uint> freeCounter:register(u4);
-// [0] incoming puddles, [1] free-slot cursor, [2] free floor slots after Update.
+// Incoming puddles and trail segments, free and live reserved slots
+// (ParticleConfig.hlsl TRANSFER_COUNTER_SIZE).
 RWBuffer<uint> puddleTransferCounter:register(u6);
 // Airborne indices of the incoming puddles, in the order Update counted them,
 // so a receiving floor slot reads its puddle instead of searching for it.
 RWBuffer<uint> puddleTransferList:register(u7);
+// The trail segments Update left, in the order it counted them.
+RWStructuredBuffer<FluidParticle> trailTransfer:register(u3);
 uint mixBits(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float random01(uint seed,uint channel){return float(mixBits(seed+channel*0x9e3779b9u)>>8)*(1.0/16777216.0);}
 // Floor splashes weaken progressively below the default strength.
@@ -41,6 +44,79 @@ float3 peripheralVelocity(uint seed,float3 up,float3 right,float3 forward,float 
 float peripheralSpray(float baseline,float drive){
  if(drive>=1.689)return lerp(baseline,.5,smoothstep(1.69,3.94,drive));
  return lerp(baseline,.5,1-smoothstep(.28,1.69,drive));
+}
+// Below this size a drop first sticks where it landed, then slides.
+static const float PIN_MAX_SCALE=.7;
+// Sideways drift of a clinging drop as a fraction of its downhill speed:
+// smooth in age, with a centimeter cell of the surface shifting it so that
+// neighbors do not sway in step. Relaxation toward it (advanceAdhesionDrop)
+// rounds the steps between cells into bends.
+float adhesionDrift(uint seed,float age,float3 position){
+ float k=age*2.5+8*random01(seed,43);
+ uint step=(uint)floor(k);
+ float u=smoothstep(0,1,frac(k));
+ float swing=lerp(random01(seed,50+step),random01(seed,51+step),u);
+ int3 cell=(int3)floor(position*100);
+ float offset=random01(mixBits(seed^(asuint(cell.x)*3u+asuint(cell.y)*7u+asuint(cell.z)*11u)),44);
+ return .3*(2*swing-1)+.15*(2*offset-1);
+}
+// Larger drops run faster, and each drop has its own pace, so a sheet of
+// drops that landed together breaks into rivulets of different speeds.
+float adhesionPace(uint seed,float scale){
+ return lerp(.6,1.4,saturate((scale-.5)/.7))*(.6+.8*random01(seed,41));
+}
+// Stick-slip: a small drop that has slowed down stays put until its own
+// release age, then slides. A drop that arrives after that age never sticks.
+bool adhesionPinned(uint seed,float scale,float age,float3 velocity){
+ return scale<PIN_MAX_SCALE && age<.3+.7*random01(seed,42) && dot(velocity,velocity)<.15*.15;
+}
+// A drop running on the body leaves a trail segment each TRAIL_SPACING of
+// its slide: positionAge.xyz its end on the surface, velocityAlive.xyz from
+// its start to its end, predictedLambda the surface normal and contact mode,
+// densityBirth.z the drop's size. Each segment takes TRAIL_DRAIN of the
+// drop's size, and a drop below TRAIL_STOP_SCALE stops as the last bead.
+// Capacity: a drop of the largest size, 1.2, leaves at most
+// ln(.45/1.2)/-ln(1-.025) = 39 segments before it stops. At its fastest
+// creep (pace 1.96 x .19 m/s on a vertical surface) those 23 cm take .63 s,
+// less than TRAIL_LIFETIME, so all 39 can be alive at once. PUDDLE_COUNT 4096
+// then holds the whole trails of about 100 drops running at the same time,
+// less what floor puddles take; past that the oldest segments make room.
+static const float TRAIL_SPACING=.006,TRAIL_DRAIN=.025,TRAIL_STOP_SCALE=.45;
+// A drop creeping slower than this, or standing, leaves no trail.
+static const float TRAIL_MIN_SPEED=.03;
+// One frame's slide becomes one segment however long; this bounds a jump.
+static const float TRAIL_MAX_LENGTH=.03;
+// predictedLambda.w of a clinging drop is its contact mode (1 world-fixed, 2
+// body-following) plus up to TRAIL_PROGRESS_SPAN for how far it slid since
+// its last segment, so the mode tests (> .5, > 1.5) still hold.
+static const float TRAIL_PROGRESS_SPAN=.4;
+uint adhesionMode(float encoded){return encoded>1.5?2u:1u;}
+bool reservedContact(float marker){return floorPuddle(marker)||trailSegment(marker);}
+uint trailAgeBucket(float age){return (uint)clamp(age/TRAIL_LIFETIME*TRAIL_AGE_BUCKETS,0,TRAIL_AGE_BUCKETS-1);}
+// The segment runs back along this frame's slide, which over a few
+// millimeters is the path from where the last one ended. Floors keep their
+// puddles instead.
+void leaveTrail(inout FluidParticle p,float3 from,float3 to,float3 velocity,float3 normal,float radius){
+ uint mode=adhesionMode(p.predictedLambda.w);
+ float run=(p.predictedLambda.w-float(mode))/TRAIL_PROGRESS_SPAN*TRAIL_SPACING;
+ float3 moved=to-from;moved-=normal*dot(moved,normal);
+ float slide=length(moved);
+ bool running=dot(velocity,velocity)>=TRAIL_MIN_SPEED*TRAIL_MIN_SPEED && normal.y<PUDDLE_MIN_UP && p.densityBirth.z>=TRAIL_STOP_SCALE;
+ run=running?run+slide:0;
+ if(run>=TRAIL_SPACING && slide>1e-6){
+  uint rank;InterlockedAdd(puddleTransferCounter[TRANSFER_TRAIL_INCOMING],1,rank);
+  if(rank<TRAIL_TRANSFER_CAPACITY){
+   FluidParticle t;
+   t.positionAge=float4(to-normal*(radius+.0001-TRAIL_LIFT),0);
+   t.velocityAlive=float4(moved/slide*min(run,TRAIL_MAX_LENGTH),p.velocityAlive.w);
+   t.predictedLambda=float4(normal,mode);
+   t.densityBirth=float4(0,IniParams[239].y,p.densityBirth.z,TRAIL_MARKER);
+   trailTransfer[rank]=t;
+  }
+  p.densityBirth.z*=1-TRAIL_DRAIN;
+  run=0;
+ }
+ p.predictedLambda.w=mode+TRAIL_PROGRESS_SPAN*saturate(run/TRAIL_SPACING);
 }
 bool adhesionEvent(CollisionEvent e){
  return random01((uint)e.incoming.w&0xffffu,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz,slotViscosity((uint)e.slot.x));
@@ -74,7 +150,7 @@ void main(uint3 id:SV_DispatchThreadID){
   if(length(shift)>1.5||!slotLive(owner)){p.velocityAlive.w=0;}else{
    float3 from=p.positionAge.xyz+shift;
    float radius=FLUID_RADIUS*p.densityBirth.z;
-   bool puddle=floorPuddle(p.densityBirth.w);
+   bool puddle=floorPuddle(p.densityBirth.w),trail=trailSegment(p.densityBirth.w);
    bool attached=p.predictedLambda.w>.5;
    float3 velocity=p.velocityAlive.xyz,to=from;
    if(puddle){
@@ -107,6 +183,31 @@ void main(uint3 id:SV_DispatchThreadID){
      puddle=false;attached=false;p.predictedLambda=0;
      p.densityBirth.x=0;p.densityBirth.w=4;
     }
+   }else if(trail){
+    // A segment rides the body frame as a clinging drop does, and lasts only
+    // while the visible surface under its end still continues it.
+    float3 normal=p.predictedLambda.xyz,segment=velocity;
+    if(p.predictedLambda.w>1.5 && liveAdhesionFrame(owner)){
+     AdhesionFrame previous=adhesionFrames[i];
+     if(previous.origin.w>.5 && previous.right.w==slotAnchor(owner,4).y){
+      float3 oldWorld=p.positionAge.xyz+frameState[fs].xyz;
+      to=slotAnchor(owner,3).xyz+carryAdhesionVector(owner,oldWorld-previous.origin.xyz,previous)-collisionRoot(owner);
+      segment=carryAdhesionVector(owner,segment,previous);
+      normal=normalize(carryAdhesionVector(owner,normal,previous));
+     }
+    }
+    float3 surfacePoint,surfaceNormal;
+    bool found=screenSurface(owner,to,surfacePoint,surfaceNormal);
+    float gap=dot(to-surfacePoint,surfaceNormal);
+    if(found && length(to-from)<.15 && dot(normal,surfaceNormal)>.55 && abs(gap)<.008 && length(to-surfacePoint)<.02){
+     // Half toward each new depth normal settles the pixel noise in it.
+     normal=normalize(normal+surfaceNormal);
+     to+=surfaceNormal*(TRAIL_LIFT-gap);
+     velocity=segment-normal*dot(segment,normal);
+     p.predictedLambda.xyz=normal;
+    }else{
+     p.velocityAlive.w=0;
+    }
    }else if(attached){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
     if(p.predictedLambda.w>1.5 && liveAdhesionFrame(owner)){
@@ -129,7 +230,12 @@ void main(uint3 id:SV_DispatchThreadID){
       }
      }
     }
-    advanceAdhesion(velocity,oldNormal,dt,slotViscosity(owner),velocity,displacement);
+    uint seed=asuint(p.densityBirth.y)^(i*747796405u);
+    if(p.densityBirth.z<TRAIL_STOP_SCALE||adhesionPinned(seed,p.densityBirth.z,p.positionAge.w,velocity)){
+     velocity=0;displacement=0;
+    }else{
+     advanceAdhesionDrop(velocity,oldNormal,dt,slotViscosity(owner),adhesionPace(seed,p.densityBirth.z),adhesionDrift(seed,p.positionAge.w,from),velocity,displacement);
+    }
     to=from+displacement;
     float3 surfacePoint,normal;
     bool found=screenSurface(owner,to,surfacePoint,normal);
@@ -143,6 +249,8 @@ void main(uint3 id:SV_DispatchThreadID){
      p.predictedLambda=float4(normal,p.predictedLambda.w);
      if(slowFloorContact(velocity,normal)){
       p.velocityAlive.xyz=velocity;beginFloorPuddle(p,normal);puddle=true;
+     }else{
+      leaveTrail(p,from,to,velocity,normal,radius);
      }
     }else{
      attached=false;p.predictedLambda=0;
@@ -179,7 +287,7 @@ void main(uint3 id:SV_DispatchThreadID){
    p.positionAge=float4(to,p.positionAge.w+dt);p.velocityAlive.xyz=velocity;
    // Retained droplets must survive slow creep; detached ones keep the usual rules.
    bool retained=p.densityBirth.w>3.5;
-   float lifetime=puddle?PUDDLE_LIFETIME:(retained?ADHESION_LIFETIME:.42);
+   float lifetime=puddle?PUDDLE_LIFETIME:(trail?TRAIL_LIFETIME:(retained?ADHESION_LIFETIME:.42));
    if(p.positionAge.w>lifetime||(!attached&&(p.densityBirth.x>2||(!retained&&length(velocity)<.12)))||length(to)>2.5||to.y< -1.5||!all(isfinite(to))||!all(isfinite(velocity)))p.velocityAlive.w=0;
   }
  }
@@ -188,24 +296,41 @@ void main(uint3 id:SV_DispatchThreadID){
  if(i>=AIRBORNE_SPLASH_COUNT){
   // Each reserved worker writes only its own destination slot. Transfers read
   // the completed update snapshot, so there are no cross-thread write races.
-  if(puddleTransferCounter[0]>0){
-   uint rank=puddleTransferCounter[0];
+  // Incoming puddles take the first ranks and new trail segments the next.
+  // Free slots rank first, then live segments oldest first, then live
+  // puddles oldest first: a puddle may replace a segment, never the reverse.
+  uint puddles=puddleTransferCounter[0];
+  uint incoming=puddles+min(puddleTransferCounter[TRANSFER_TRAIL_INCOMING],TRAIL_TRANSFER_CAPACITY);
+  if(incoming>0){
    uint freeSlots=puddleTransferCounter[2];
+   uint segmentSlots=freeSlots+puddleTransferCounter[TRANSFER_TRAIL_LIVE];
+   uint rank=incoming;
    if(p.velocityAlive.w<.5){
     InterlockedAdd(puddleTransferCounter[1],1,rank);
-   }else if(puddleTransferCounter[0]>freeSlots){
+   }else if(incoming>freeSlots && trailSegment(p.densityBirth.w)){
+    // Age buckets order the segments to within TRAIL_LIFETIME/TRAIL_AGE_BUCKETS
+    // (47 ms) without the scan below, which a long rivulet would otherwise
+    // pay every frame for each of thousands of segments.
+    uint bucket=trailAgeBucket(p.positionAge.w),older=0,within;
+    [loop]for(uint b=bucket+1;b<TRAIL_AGE_BUCKETS;b++)older+=puddleTransferCounter[TRANSFER_TRAIL_AGES+b];
+    InterlockedAdd(puddleTransferCounter[TRANSFER_TRAIL_CURSORS+bucket],1,within);
+    rank=freeSlots+older+within;
+   }else if(puddles>segmentSlots){
     // Only overflow scans the stable snapshot. Largest contact age is oldest;
     // equal-age contacts use their slot index as a deterministic tie break.
     uint older=0;
     [loop]for(uint j=AIRBORNE_SPLASH_COUNT;j<SPLASH_COUNT;j++){
      FluidParticle other=source[j];
-     if(other.velocityAlive.w>.5 && (other.positionAge.w>p.positionAge.w
+     if(other.velocityAlive.w>.5 && floorPuddle(other.densityBirth.w) && (other.positionAge.w>p.positionAge.w
         || (other.positionAge.w==p.positionAge.w && j<i)))older++;
     }
-    rank=freeSlots+older;
+    rank=segmentSlots+older;
    }
-   if(rank<puddleTransferCounter[0])p=source[puddleTransferList[rank]];
+   if(rank<puddles)p=source[puddleTransferList[rank]];
+   else if(rank<min(incoming,segmentSlots))p=trailTransfer[rank-puddles];
   }
+  // Update carries a segment from the frame saved with it.
+  if(p.velocityAlive.w>.5 && trailSegment(p.densityBirth.w))saveAdhesionFrame(splashSlot(p.velocityAlive.w),i);
   target[i]=p;return;
  }
  // Return transferred slots to the airborne emitter immediately. Overflow
@@ -305,8 +430,8 @@ void main(uint3 id:SV_DispatchThreadID){
   }
  }
 #endif
- // Reserved floor slots never become an extra airborne bank at contact edges.
- if(i>=AIRBORNE_SPLASH_COUNT && !floorPuddle(p.densityBirth.w))p.velocityAlive.w=0;
+ // Reserved slots never become an extra airborne bank at contact edges.
+ if(i>=AIRBORNE_SPLASH_COUNT && !reservedContact(p.densityBirth.w))p.velocityAlive.w=0;
 #ifdef SPLASH_UPDATE
  if(i<AIRBORNE_SPLASH_COUNT && p.velocityAlive.w>.5 && floorPuddle(p.densityBirth.w)){
   uint rank;InterlockedAdd(puddleTransferCounter[0],1,rank);
@@ -314,6 +439,11 @@ void main(uint3 id:SV_DispatchThreadID){
  }
  if(i>=AIRBORNE_SPLASH_COUNT && p.velocityAlive.w<.5){
   uint ignored;InterlockedAdd(puddleTransferCounter[2],1,ignored);
+ }
+ if(i>=AIRBORNE_SPLASH_COUNT && p.velocityAlive.w>.5 && trailSegment(p.densityBirth.w)){
+  uint ignored;
+  InterlockedAdd(puddleTransferCounter[TRANSFER_TRAIL_LIVE],1,ignored);
+  InterlockedAdd(puddleTransferCounter[TRANSFER_TRAIL_AGES+trailAgeBucket(p.positionAge.w)],1,ignored);
  }
 #endif
  if(p.velocityAlive.w>.5 && p.predictedLambda.w>.5 && !floorPuddle(p.densityBirth.w))saveAdhesionFrame(splashSlot(p.velocityAlive.w),i);

@@ -18,12 +18,13 @@ float2 screenUV(float4 p){return float2(p.x/p.w*.5+.5,.5-p.y/p.w*.5);}
 float3 eyePosition(){return camera[7].xyz;}
 bool noFluid(float depth){return depth>=NO_FLUID*.5;}
 // FluidSurface keeps the nearest particle's tag in the low mantissa bits of
-// its view depth: bits 0-2 the owner slot, 3 a floor puddle disc, 4 spray.
-// Positive floats order like their bits, so min blending still keeps the
-// nearest particle, now with its tag; the bits move the depth by under 4e-6
+// its view depth: bits 0-2 the owner slot, 3 a floor puddle disc, 4 spray,
+// 5 a film of drops clinging to the body. Positive floats order like their
+// bits, so min blending still keeps the nearest particle, now with its tag;
+// the six bits move the depth by at most 63 ulp, under 7.6e-6 (below 1e-5)
 // of itself. A pass that writes a filtered depth must tag it again.
-static const uint DEPTH_TAG_MASK=31;
-static const uint TAG_SLOT_MASK=7,TAG_PUDDLE=8,TAG_SPRAY=16;
+static const uint DEPTH_TAG_MASK=63;
+static const uint TAG_SLOT_MASK=7,TAG_PUDDLE=8,TAG_SPRAY=16,TAG_FILM=32;
 float encodeFluidDepth(float depth,uint tag){return asfloat((asuint(depth)&~DEPTH_TAG_MASK)|tag);}
 float fluidDepthValue(float raw){return asfloat(asuint(raw)&~DEPTH_TAG_MASK);}
 uint fluidDepthTag(float raw){return asuint(raw)&DEPTH_TAG_MASK;}
