@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -143,6 +144,8 @@ func (t *Service) loadModViewer(
 		UIAssets:         ModelViewerUIAssets{},
 		Animations:       []ModelViewerAnimationClip{},
 		ComputeDeformers: []ModelViewerComputeDeformerTransport{},
+		Forms:            []ModelViewerForm{},
+		INIs:             []ModelViewerINI{},
 	}
 	if requestedPath == "" {
 		transport.Name = ""
@@ -256,6 +259,8 @@ func (t *Service) loadModViewer(
 	stage = "configure-state"
 	stageStartedAt = time.Now()
 	transport.ComputeDeformers = prepared.computeDeformers
+	transport.Forms = prepared.forms
+	transport.INIs = prepared.inis
 	configureModelViewerState(
 		&transport,
 		prepared.sections,
@@ -367,6 +372,8 @@ type modelViewerPreparedGeometry struct {
 	computeDeformers                           []ModelViewerComputeDeformerTransport
 	computeAnimations                          []modelViewerPreparedAnimationClip
 	drawSources                                map[string]DrawSource
+	forms                                      []ModelViewerForm
+	inis                                       []ModelViewerINI
 	parseMs, validateMs, referencedMs, buildMs int64
 	timing                                     *modelViewerMeshBuildTiming
 }
@@ -383,6 +390,7 @@ func (t *Service) prepareModelViewerGeometry(
 		timing:            &modelViewerMeshBuildTiming{},
 		computeDeformers:  []ModelViewerComputeDeformerTransport{},
 		computeAnimations: []modelViewerPreparedAnimationClip{},
+		inis:              make([]ModelViewerINI, 0, len(iniPaths)),
 	}
 	keep := false
 	defer func() {
@@ -392,6 +400,7 @@ func (t *Service) prepareModelViewerGeometry(
 	}()
 	var stageStartedAt time.Time
 	multi := len(iniPaths) > 1
+	scopes := modelViewerINIScopes(iniPaths, folder)
 	for iniIndex, iniPath := range iniPaths {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -401,8 +410,9 @@ func (t *Service) prepareModelViewerGeometry(
 		if readErr != nil {
 			return nil, readErr
 		}
-		prefix, _ := modelViewerINIScope(iniPath, folder, multi)
-		sections, scopedNames := scopeModelViewerSections(parsed.Sections, iniIndex, prefix)
+		scope := scopes[iniIndex]
+		prepared.inis = append(prepared.inis, ModelViewerINI{Path: iniPath, Prefix: scope.prefix})
+		sections, scopedNames := scopeModelViewerSections(parsed.Sections, iniIndex, scope.prefix, scope.form)
 		for key, value := range scopedNames {
 			prepared.variableNames[key] = value
 		}
@@ -445,6 +455,7 @@ func (t *Service) prepareModelViewerGeometry(
 		if buildErr != nil {
 			return nil, buildErr
 		}
+		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scope, folder)
 		computeScopeID := ""
 		if multi {
 			computeScopeID = modelViewerString(iniIndex)
@@ -478,6 +489,52 @@ func (t *Service) prepareModelViewerGeometry(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if len(prepared.forms) < 2 {
+		prepared.dropForms()
+	}
 	keep = true
 	return prepared, nil
+}
+
+// scopeMeshes gives the meshes of one INI the IDs and form of its scope. The
+// mesh builders start IDs with the INI's file name, which only identifies the
+// INI where no other loaded INI shares it.
+func (p *modelViewerPreparedGeometry) scopeMeshes(
+	meshes []modelViewerDirectMesh,
+	fileName string,
+	scope modelViewerINIScope,
+	folder string,
+) {
+	if len(meshes) == 0 || scope.form == "" {
+		return
+	}
+	defaultKey := modelViewerNormalizeKey(fileName)
+	for index := range meshes {
+		mesh := &meshes[index]
+		mesh.id = scope.meshKey + strings.TrimPrefix(mesh.id, defaultKey)
+		mesh.form = scope.form
+	}
+	if slices.ContainsFunc(p.forms, func(form ModelViewerForm) bool { return form.ID == scope.form }) {
+		return
+	}
+	label := scope.form
+	if label == "." {
+		label = filepath.Base(folder)
+	}
+	p.forms = append(p.forms, ModelViewerForm{ID: scope.form, Label: label})
+}
+
+// dropForms leaves a folder whose meshes all come from one place without
+// forms to choose between.
+func (p *modelViewerPreparedGeometry) dropForms() {
+	p.forms = nil
+	for _, work := range p.textures {
+		for index := range work.meshes {
+			work.meshes[index].form = ""
+		}
+	}
+	for key, name := range p.variableNames {
+		name.Form = ""
+		p.variableNames[key] = name
+	}
 }

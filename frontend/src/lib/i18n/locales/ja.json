@@ -1411,6 +1411,10 @@
       },
       "model_viewer": {
         "title": "モデルビューアー",
+        "forms": {
+          "label": "フォーム",
+          "all": "すべて"
+        },
         "toggle_viewer": "トグルビューアー",
         "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",
         "ineffective_suggestion": "この値を使用するには以下の変数を変更してください:",

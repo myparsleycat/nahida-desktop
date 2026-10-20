@@ -110,6 +110,8 @@ export type ModelViewerSurfaceProps = {
     src?: string;
     payloadTransport?: ModViewerTransport;
     payloadEval?: EvaluatedViewerState;
+    /** The form payloadEval was evaluated for; animation frames keep it. */
+    form?: string;
     variantState?: Record<string, ModelViewerVariantStateValue>;
     shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;

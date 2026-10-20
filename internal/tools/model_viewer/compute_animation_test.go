@@ -141,7 +141,7 @@ filename = blend.buf
 stride = 56
 filename = pose.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -381,7 +381,7 @@ filename = blend.buf
 stride = 48
 filename = pose.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -465,7 +465,7 @@ filename = pose.buf
 		t.Run(test.name, func(t *testing.T) {
 			text := strings.Replace(ini, "copy_desc ResourcePosition.1", "copy_desc Resource"+test.output, 1)
 			text += "\n[ResourceUnmatched]\nstride = 20\nfilename = unmatched.buf\n"
-			sections, names := scopeModelViewerSections(parseModINI(text), 0, "")
+			sections, names := scopeModelViewerSections(parseModINI(text), 0, "", "")
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 			meshes := []modelViewerDirectMesh{
 				{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -640,7 +640,7 @@ filename = Kimono3.buf
 stride = 20
 filename = Kimono4.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "Kimono1.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -724,7 +724,7 @@ filename = base.buf
 stride = 20
 filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -791,7 +791,7 @@ filename = base.buf
 stride = 20
 filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -840,7 +840,7 @@ filename = base.buf
 stride = 20
 filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -889,7 +889,7 @@ filename = base.buf
 stride = 20
 filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},
@@ -1033,7 +1033,7 @@ filename = base.buf
 stride = 20
 filename = key.buf
 `, filepath.Join(dir, "mod.ini"))
-	sections, names := scopeModelViewerSections(parsed.Sections, 0, "")
+	sections, names := scopeModelViewerSections(parsed.Sections, 0, "", "")
 	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
 	meshes := []modelViewerDirectMesh{
 		{id: "mesh", positionFile: "base.buf", geometry: &modelViewerGeometry{VertexCount: 3}},

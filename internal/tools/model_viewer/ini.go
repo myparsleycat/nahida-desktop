@@ -1,7 +1,10 @@
 package modelviewer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -30,6 +33,7 @@ type modelViewerParsedINI struct {
 type modelViewerVariableName struct {
 	PublicID string
 	Label    string
+	Form     string
 }
 
 var (
@@ -201,20 +205,48 @@ func activeModelViewerINIs(folder string, less func(string, string) bool, report
 	return paths
 }
 
-func modelViewerINIScope(iniPath, folder string, multi bool) (string, string) {
-	if !multi {
-		return "", ""
+// modelViewerINIScope names what one INI of a folder contributes: prefix
+// scopes its variables' public IDs, meshKey starts its meshes' IDs and form is
+// the folder holding it, relative to the mod folder.
+type modelViewerINIScope struct {
+	prefix, meshKey, form string
+}
+
+// modelViewerINIScopes keeps the names an INI's file name gives wherever that
+// name is unique, and adds its folder where several share it, as a bundle of
+// a character's forms does with one INI name in each form's folder.
+func modelViewerINIScopes(iniPaths []string, folder string) []modelViewerINIScope {
+	scopes := make([]modelViewerINIScope, len(iniPaths))
+	stems := make(map[string]int, len(iniPaths))
+	for _, iniPath := range iniPaths {
+		stems[strings.ToLower(modelViewerINIStem(iniPath))]++
 	}
-	parent := filepath.Clean(filepath.Dir(iniPath))
-	root := filepath.Clean(folder)
-	source := strings.TrimSuffix(filepath.Base(iniPath), filepath.Ext(iniPath))
-	if !strings.EqualFold(parent, root) {
-		if relative, err := filepath.Rel(root, parent); err == nil {
-			source = filepath.ToSlash(relative)
+	for index, iniPath := range iniPaths {
+		scope := &scopes[index]
+		scope.meshKey = modelViewerNormalizeKey(filepath.Base(iniPath))
+		if len(iniPaths) == 1 {
+			continue
 		}
+		scope.form = "."
+		if relative, err := filepath.Rel(folder, filepath.Dir(iniPath)); err == nil {
+			scope.form = filepath.ToSlash(relative)
+		}
+		stem := modelViewerINIStem(iniPath)
+		if stems[strings.ToLower(stem)] == 1 {
+			scope.prefix = stem + "::"
+			continue
+		}
+		scope.prefix = path.Join(scope.form, stem) + "::"
+		// Normalized keys drop every character outside a-z and 0-9, which may
+		// be the whole folder name.
+		sum := sha256.Sum256([]byte(strings.ToLower(scope.form)))
+		scope.meshKey += hex.EncodeToString(sum[:4])
 	}
-	identity := strings.TrimSuffix(filepath.Base(iniPath), filepath.Ext(iniPath))
-	return identity + "::", source
+	return scopes
+}
+
+func modelViewerINIStem(iniPath string) string {
+	return strings.TrimSuffix(filepath.Base(iniPath), filepath.Ext(iniPath))
 }
 
 func canonicalModelViewerVariables(sections []modINISection) map[string]string {
@@ -251,7 +283,7 @@ func canonicalModelViewerVariables(sections []modINISection) map[string]string {
 func scopeModelViewerSections(
 	sections []modINISection,
 	scopeIndex int,
-	publicPrefix string,
+	publicPrefix, form string,
 ) ([]modINISection, map[string]modelViewerVariableName) {
 	canonical := canonicalModelViewerVariables(sections)
 	internalByLower := make(map[string]string, len(canonical))
@@ -262,6 +294,7 @@ func scopeModelViewerSections(
 		publicByInternal[modelViewerNormalizeKey(internal)] = modelViewerVariableName{
 			PublicID: publicPrefix + name,
 			Label:    name,
+			Form:     form,
 		}
 	}
 	output := make([]modINISection, len(sections))

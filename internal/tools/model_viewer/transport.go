@@ -35,6 +35,7 @@ type ModelViewerBounds struct {
 type ModelViewerMeshTransport struct {
 	ID                  string                       `json:"id"`
 	Component           string                       `json:"component"`
+	Form                string                       `json:"form,omitempty"`
 	GeometryURL         string                       `json:"geometryUrl"`
 	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
 	Bounds              *ModelViewerBounds           `json:"bounds,omitempty"`
@@ -91,6 +92,7 @@ type ModelViewerVariable struct {
 	ControlType   string                     `json:"controlType,omitempty"`
 	Slider        *ModelViewerSlider         `json:"slider,omitempty"`
 	Effects       []ModelViewerMenuEffect    `json:"effects,omitempty"`
+	Form          string                     `json:"form,omitempty"`
 	alwaysVisible bool
 }
 
@@ -186,6 +188,26 @@ type ModelViewerTransport struct {
 	UIAssets         ModelViewerUIAssets                    `json:"uiAssets"`
 	Animations       []ModelViewerAnimationClip             `json:"animations"`
 	ComputeDeformers []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
+	// Forms lists the folders of a mod bundling several, such as a character's
+	// forms with one INI each, when its meshes come from more than one.
+	Forms []ModelViewerForm `json:"forms"`
+	INIs  []ModelViewerINI  `json:"inis"`
+}
+
+// ModelViewerINI is one loaded INI. Prefix starts the public ID of every
+// variable it declares, ahead of the name the INI gives it; it is empty when
+// the mod has a single INI.
+type ModelViewerINI struct {
+	Path   string `json:"path"`
+	Prefix string `json:"prefix"`
+}
+
+// ModelViewerForm is one folder of a bundled mod. ID is its path relative to
+// the mod folder, "." for the mod folder itself, and the Form of its meshes
+// and variables.
+type ModelViewerForm struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tracked map[string]bool) {

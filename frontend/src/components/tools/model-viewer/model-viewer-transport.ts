@@ -133,6 +133,7 @@ export function normalizeModelViewerTransport(
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,
             component: mesh.component,
+            form: mesh.form || undefined,
             geometryUrl: mesh.geometryUrl,
             sourceIndicesUrl: mesh.sourceIndicesUrl,
             bounds: mesh.bounds ?? undefined,
@@ -190,6 +191,7 @@ export function normalizeModelViewerTransport(
                 var: effect.var,
                 value: effect.value,
             })),
+            form: variable.form || undefined,
         })),
         defaultState: normalizeState(value.defaultState),
         stateRules: (value.stateRules ?? []).map((rule) => ({
@@ -268,5 +270,7 @@ export function normalizeModelViewerTransport(
                 },
             ];
         }),
+        forms: (value.forms ?? []).map((form) => ({ id: form.id, label: form.label })),
+        inis: (value.inis ?? []).map((ini) => ({ path: ini.path, prefix: ini.prefix })),
     };
 }

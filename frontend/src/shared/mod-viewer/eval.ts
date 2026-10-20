@@ -93,9 +93,11 @@ export function applyVariableSelection(
     return next;
 }
 
+/** A `form` other than "" hides the meshes of every other form. */
 export function evaluateViewerState(
     payload: ViewerEvalInput,
     state: Record<string, ViewerStateValue> = {},
+    form = "",
 ): EvaluatedViewerState {
     const resolved = applyStateRules({ ...payload.defaultState, ...state }, payload.stateRules);
     return {
@@ -108,6 +110,7 @@ export function evaluateViewerState(
             return {
                 id: mesh.id,
                 visible:
+                    (!form || !mesh.form || mesh.form === form) &&
                     dnfSatisfied(mesh.conditions, resolved) &&
                     (!mesh.positionVariants?.length || positionVariantIndex !== null),
                 texKey: resolveTextureVariant(mesh.textureVariants, mesh.texKey, resolved),

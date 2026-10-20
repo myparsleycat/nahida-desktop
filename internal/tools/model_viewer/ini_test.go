@@ -141,6 +141,69 @@ filename = diffuse.png
 	}
 }
 
+// A character bundle keeps each form in a folder of its own, with INIs that
+// often share a file name and variable names.
+func TestLoadModViewerSeparatesFormsWithSameININame(t *testing.T) {
+	root := t.TempDir()
+	forms := []string{"Hsin Part 2", "Hsin-ULT Part 2"}
+	for _, form := range forms {
+		dir := filepath.Join(root, form)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		ini := `[Constants]
+global persist $swapvar = 0
+[KeyToggle]
+type = cycle
+$swapvar = 0, 1
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $swapvar == 0
+drawindexed = 3, 0, 0
+endif
+` + viewerBodyResources
+		if err := os.WriteFile(filepath.Join(dir, "SlapMod.ini"), []byte(ini), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		writeViewerGeometry(t, dir)
+	}
+
+	fixture := loadViewerDir(t, root)
+	result := fixture.result
+	if len(result.Forms) != 2 || result.Forms[0].ID != forms[0] || result.Forms[1].ID != forms[1] {
+		t.Fatalf("forms = %#v", result.Forms)
+	}
+	if len(result.Meshes) != 2 || result.Meshes[0].ID == result.Meshes[1].ID {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range result.Meshes {
+		source, ok := fixture.service.DrawSource(result.MemorySessionID, mesh.ID)
+		if !ok || filepath.Base(filepath.Dir(source.INIPath)) != mesh.Form {
+			t.Fatalf("mesh %s of form %q draws from %#v", mesh.ID, mesh.Form, source)
+		}
+	}
+	for _, form := range forms {
+		variable := findViewerVariable(result, form+"/SlapMod::swapvar")
+		if variable == nil || variable.Form != form {
+			t.Fatalf("variables = %#v", result.Variables)
+		}
+	}
+
+	// Saving toggles splits the state by these prefixes and writes each
+	// remainder to the INI as its own variable name.
+	if len(result.INIs) != len(forms) {
+		t.Fatalf("inis = %#v", result.INIs)
+	}
+	for _, ini := range result.INIs {
+		variable := findViewerVariable(result, ini.Prefix+"swapvar")
+		if variable == nil || filepath.Base(filepath.Dir(ini.Path)) != variable.Form {
+			t.Fatalf("ini %#v does not declare a variable of its form: %#v", ini, result.Variables)
+		}
+	}
+}
+
 func TestModelViewerUnusedResourceDoesNotConsumeLoadBudget(t *testing.T) {
 	root := t.TempDir()
 	budget, err := newModelViewerLoadBudget(root)

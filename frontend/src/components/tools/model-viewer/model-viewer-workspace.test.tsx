@@ -2,6 +2,7 @@
 import { Mod } from "@bindings/mod";
 import { Tools } from "@bindings/tools";
 import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
+import type { ModViewerTransport } from "@shared/mod-viewer/types";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useImperativeHandle, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -210,6 +211,43 @@ it("preserves double-sided rendering when the dialog body unmounts and reopens",
   expect(handle.setDoubleSided).toHaveBeenLastCalledWith(false);
 });
 
+it("saves each toggle under its own name to the INI that declares it", async () => {
+  const forms = ["Hsin Part 2", "Hsin-ULT Part 2"];
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: normalizeModelViewerTransport({
+          ...payload,
+          iniPath: `C:/mod/${forms[0]}/SlapMod.ini`,
+          defaultState: {
+            [`${forms[0]}/SlapMod::swapvar`]: 1,
+            [`${forms[1]}/SlapMod::swapvar`]: 2,
+          },
+          inis: forms.map((form) => ({
+            path: `C:/mod/${form}/SlapMod.ini`,
+            prefix: `${form}/SlapMod::`,
+          })),
+        }),
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Load viewer" });
+
+  await act(async () => {
+    vi.mocked(ModelViewerMenuBar).mock.lastCall![0].onSaveTogglesToIni();
+  });
+  expect(vi.mocked(Tools.PersistModelViewerToggleState).mock.calls).toEqual([
+    [`C:/mod/${forms[0]}/SlapMod.ini`, { swapvar: 1 }],
+    [`C:/mod/${forms[1]}/SlapMod.ini`, { swapvar: 2 }],
+  ]);
+});
+
 it.each(["dialog", "window"])(
   "shares rendering, animation, INI save and overwrite capture in the %s",
   async (host) => {
@@ -284,3 +322,51 @@ it.each(["dialog", "window"])(
     }
   },
 );
+
+it("keeps the selected form for the frames the viewer evaluates", async () => {
+  const mesh = (id: string, form: string): ModViewerTransport["meshes"][number] => ({
+    id,
+    component: id,
+    form,
+    geometryUrl: id,
+    conditions: [[]],
+    texKey: null,
+    textureVariants: [],
+    normalMapKey: null,
+    normalMapVariants: [],
+    lightMapKey: null,
+    lightMapVariants: [],
+    materialMapKey: null,
+    materialMapVariants: [],
+    shapeTargets: [],
+    positionVariants: [],
+  });
+  const transport: ModViewerTransport = {
+    ...normalizeModelViewerTransport(payload),
+    meshes: [mesh("base", "Base"), mesh("ult", "Ult")],
+    forms: [
+      { id: "Base", label: "Base" },
+      { id: "Ult", label: "Ult" },
+    ],
+  };
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport,
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  fireEvent.click(await screen.findByRole("tab", { name: "Ult" }));
+  await waitFor(() => expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult"));
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
+    { id: "base", visible: false },
+    { id: "ult", visible: true },
+  ]);
+});

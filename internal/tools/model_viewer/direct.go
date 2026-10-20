@@ -20,17 +20,20 @@ import (
 
 type modelViewerDirectMesh struct {
 	id, component, sectionName, ibName string
-	positionFile                       string
-	geometry                           *modelViewerGeometry
-	conditions                         ModelViewerDNF
-	textureAssignments                 []modelViewerDirectTextureAssignment
-	positionAssignments                []modelViewerDirectPositionAssignment
-	textureAuthored                    bool
-	textureDefaultFile                 string
-	nonDiffuseTextureFiles             []string
-	slotTextureCandidates              []modelViewerDirectTextureAssignment
-	indexCount                         int
-	drawSource                         *DrawSource
+	// form is the folder of the INI drawing the mesh when the folder holds
+	// several forms; see ModelViewerForm.
+	form                   string
+	positionFile           string
+	geometry               *modelViewerGeometry
+	conditions             ModelViewerDNF
+	textureAssignments     []modelViewerDirectTextureAssignment
+	positionAssignments    []modelViewerDirectPositionAssignment
+	textureAuthored        bool
+	textureDefaultFile     string
+	nonDiffuseTextureFiles []string
+	slotTextureCandidates  []modelViewerDirectTextureAssignment
+	indexCount             int
+	drawSource             *DrawSource
 }
 
 type modelViewerDirectTextureAssignment struct {
@@ -627,6 +630,7 @@ func buildModelViewerDirectMeshPayload(
 	item := ModelViewerMeshTransport{
 		ID:                  mesh.id,
 		Component:           mesh.component,
+		Form:                mesh.form,
 		Conditions:          mesh.conditions,
 		TextureVariants:     []ModelViewerTextureVariant{},
 		NormalMapVariants:   []ModelViewerTextureVariant{},

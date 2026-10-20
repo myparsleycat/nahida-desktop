@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -29,6 +30,7 @@ import { Logger } from "@renderer/lib/logger";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
+import type { ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { CheckIcon, Loader2Icon } from "lucide-react";
 import {
@@ -75,6 +77,9 @@ export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
 
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
 
+/** The form selection that shows every form of a bundled mod at once. */
+export const ALL_FORMS = "";
+
 function getInitialActiveState(
   source: ModelViewerDialogSource | null,
 ): Record<string, VariableStateValue> {
@@ -95,6 +100,8 @@ export function ModelViewerWorkspace({
   onSurfacePick,
   overlay,
   inspector,
+  form,
+  onFormChange,
 }: {
   open: boolean;
   source: ModelViewerDialogSource | null;
@@ -106,6 +113,12 @@ export function ModelViewerWorkspace({
   overlay?: ReactNode;
   /** A tool panel shown above the toggles in the side column. */
   inspector?: ReactNode;
+  /**
+   * The form of a bundled mod to show, or ALL_FORMS. The workspace keeps its
+   * own selection when this is undefined.
+   */
+  form?: string;
+  onFormChange?: (form: string) => void;
 }) {
   const { t } = useTranslation();
   const [prevOpen, setPrevOpen] = useState(open);
@@ -128,6 +141,7 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
+  const [ownForm, setOwnForm] = useState(ALL_FORMS);
   const [viewerStatus, setViewerStatus] = useState<ViewerStatus>(source ? "loading" : "idle");
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
@@ -158,6 +172,7 @@ export function ModelViewerWorkspace({
     }
 
     setActiveState(source?.transport.defaultState ?? {});
+    setOwnForm(ALL_FORMS);
     setActiveAnimationId(source?.transport.animations[0]?.id ?? null);
     setAnimationPlaying(false);
     setFpsOverride(null);
@@ -316,10 +331,25 @@ export function ModelViewerWorkspace({
       return;
     }
 
-    try {
-      const result = await Tools.PersistModelViewerToggleState(iniPath, activeState);
+    const inis = source.transport.inis?.length
+      ? source.transport.inis
+      : [{ path: iniPath, prefix: "" }];
 
-      if ((result.updatedVariables ?? []).length > 0) {
+    try {
+      const results = await Promise.all(
+        inis.map((ini) =>
+          Tools.PersistModelViewerToggleState(
+            ini.path,
+            Object.fromEntries(
+              Object.entries(activeState).flatMap(([id, value]) =>
+                id.startsWith(ini.prefix) ? [[id.slice(ini.prefix.length), value]] : [],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if (results.some((result) => (result.updatedVariables ?? []).length > 0)) {
         toast.success(t("page.tools.model_viewer.toast.save_to_ini_success"));
         return;
       }
@@ -358,10 +388,21 @@ export function ModelViewerWorkspace({
     setPreviewState(null);
   };
 
+  const forms = payloadTransport?.forms ?? [];
+  const requestedForm = form ?? ownForm;
+  const activeForm = forms.some((entry) => entry.id === requestedForm) ? requestedForm : ALL_FORMS;
+  const selectForm = (next: string) => {
+    setOwnForm(next);
+    onFormChange?.(next);
+  };
+  const inActiveForm = (entry: { form?: string }) =>
+    activeForm === ALL_FORMS || !entry.form || entry.form === activeForm;
+
   const effectiveState = previewState ?? activeState;
   const payloadEval = useMemo(
-    () => (payloadTransport ? evaluateViewerState(payloadTransport, effectiveState) : null),
-    [effectiveState, payloadTransport],
+    () =>
+      payloadTransport ? evaluateViewerState(payloadTransport, effectiveState, activeForm) : null,
+    [activeForm, effectiveState, payloadTransport],
   );
   const ineffectiveMap = useModelViewerIneffectiveValues(
     open && payloadTransport?.variables.length ? payloadTransport.memorySessionId : undefined,
@@ -372,7 +413,8 @@ export function ModelViewerWorkspace({
   const visibleVariables = variables.filter(
     (variable) =>
       (variable.values.length > 0 || variable.controlType === "slider") &&
-      !animationVariableIds.has(variable.id),
+      !animationVariableIds.has(variable.id) &&
+      inActiveForm(variable),
   );
   const tileVariables = visibleVariables.filter((variable) => variable.controlType !== "slider");
   const sliderVariables = visibleVariables.filter((variable) => variable.controlType === "slider");
@@ -486,6 +528,143 @@ export function ModelViewerWorkspace({
     }
   };
 
+  const renderTileVariable = (variable: ViewerVariable) => (
+    <div key={variable.id} className="border-l-4 border-l-primary/40 pl-3">
+      <div className="mb-2 text-sm font-medium">{variable.label}</div>
+      <Select
+        value={String(activeState[variable.id] ?? variable.defaultValue)}
+        onValueChange={(value) => {
+          if (value === null) return;
+          const entry = variable.values.find((e) => String(e.value) === value);
+          if (entry) void handleSelectValue(variable.id, entry.value);
+        }}
+        onOpenChange={(open) => {
+          if (!open) setPreviewState(null);
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {variable.values.map((entry) => {
+              const ineffectiveEntry = ineffectiveMap.get(variable.id)?.get(String(entry.value));
+              const isIneffective = Boolean(ineffectiveEntry);
+              if (!isIneffective || !ineffectiveEntry)
+                return (
+                  <SelectItem
+                    key={String(entry.value)}
+                    value={String(entry.value)}
+                    onMouseEnter={() => {
+                      setPreviewState({
+                        ...activeState,
+                        [variable.id]: entry.value,
+                      });
+                    }}
+                    onMouseLeave={() => setPreviewState(null)}
+                  >
+                    {entry.label}
+                  </SelectItem>
+                );
+              return (
+                <div
+                  key={String(entry.value)}
+                  className="group flex w-full items-center justify-between"
+                >
+                  <Tooltip>
+                    <TooltipTrigger
+                      closeOnClick={false}
+                      render={
+                        <SelectItem
+                          value={String(entry.value)}
+                          disabled
+                          style={{ pointerEvents: "auto" }}
+                          onMouseEnter={() => {
+                            setPreviewState({
+                              ...activeState,
+                              [variable.id]: entry.value,
+                            });
+                          }}
+                          onMouseLeave={() => setPreviewState(null)}
+                        />
+                      }
+                    >
+                      {entry.label}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-1 text-left">
+                        <div>
+                          {t("page.tools.model_viewer.ineffective_blocked_by", {
+                            variables: ineffectiveEntry.blockingVars
+                              .map((v) => `${v.label}=${v.value}`)
+                              .join(", "),
+                          })}
+                        </div>
+                        {ineffectiveEntry.suggestions.length > 0 && (
+                          <div>
+                            {t("page.tools.model_viewer.ineffective_suggestion")}
+                            <ul className="ml-3 list-disc">
+                              {ineffectiveEntry.suggestions.map((suggestion) => (
+                                <li key={suggestion.display}>{suggestion.display}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                  {ineffectiveEntry.suggestions.length > 0 && (
+                    <div className="w-0 overflow-hidden transition-all group-hover:w-8 focus-within:w-8">
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onMouseEnter={() => {
+                                if (!source) {
+                                  return;
+                                }
+                                let next = { ...activeState };
+                                for (const change of ineffectiveEntry.suggestions[0].changes) {
+                                  const v = source.transport.variables.find(
+                                    (entry) => entry.id === change.varId,
+                                  ) ?? { id: change.varId };
+                                  next = applyVariableSelection(next, v, change.toValue);
+                                }
+                                setPreviewState(next);
+                              }}
+                              onMouseLeave={() => setPreviewState(null)}
+                              onClick={() => handleApplyResolution(ineffectiveEntry.suggestions[0])}
+                            />
+                          }
+                        >
+                          <CheckIcon className="size-4" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="space-y-1 text-left">
+                            <div>{t("page.tools.model_viewer.ineffective_apply")}</div>
+                            <ul className="ml-3 list-disc">
+                              {ineffectiveEntry.suggestions[0].changes.map((change) => (
+                                <li key={`${change.varId}-${change.toValue}`}>
+                                  {change.varLabel}: {change.fromValue} → {change.toValue}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -526,6 +705,7 @@ export function ModelViewerWorkspace({
                   className="absolute inset-0 h-full w-full"
                   payloadTransport={payloadTransport}
                   payloadEval={payloadEval ?? undefined}
+                  form={activeForm}
                   orientation={modelOrientation}
                   animationClip={effectiveAnimation ?? undefined}
                   threeToneMapping={threeToneMapping}
@@ -537,6 +717,9 @@ export function ModelViewerWorkspace({
                   onSurfacePick={onSurfacePick}
                   overlay={overlay}
                 />
+                {forms.length > 1 ? (
+                  <FormSwitcher forms={forms} value={activeForm} onChange={selectForm} />
+                ) : null}
                 {viewerStatus === "loading" ? (
                   <div
                     role="status"
@@ -602,180 +785,18 @@ export function ModelViewerWorkspace({
 
                       <TooltipProvider>
                         <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            {tileVariables.map((variable) => (
-                              <div
-                                key={variable.id}
-                                className="border-l-4 border-l-primary/40 pl-3"
-                              >
-                                <div className="mb-2 text-sm font-medium">{variable.label}</div>
-                                <Select
-                                  value={String(activeState[variable.id] ?? variable.defaultValue)}
-                                  onValueChange={(value) => {
-                                    if (value === null) return;
-                                    const entry = variable.values.find(
-                                      (e) => String(e.value) === value,
-                                    );
-                                    if (entry) void handleSelectValue(variable.id, entry.value);
-                                  }}
-                                  onOpenChange={(open) => {
-                                    if (!open) setPreviewState(null);
-                                  }}
-                                >
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      {variable.values.map((entry) => {
-                                        const ineffectiveEntry = ineffectiveMap
-                                          .get(variable.id)
-                                          ?.get(String(entry.value));
-                                        const isIneffective = Boolean(ineffectiveEntry);
-                                        if (!isIneffective || !ineffectiveEntry)
-                                          return (
-                                            <SelectItem
-                                              key={String(entry.value)}
-                                              value={String(entry.value)}
-                                              onMouseEnter={() => {
-                                                setPreviewState({
-                                                  ...activeState,
-                                                  [variable.id]: entry.value,
-                                                });
-                                              }}
-                                              onMouseLeave={() => setPreviewState(null)}
-                                            >
-                                              {entry.label}
-                                            </SelectItem>
-                                          );
-                                        return (
-                                          <div
-                                            key={String(entry.value)}
-                                            className="group flex w-full items-center justify-between"
-                                          >
-                                            <Tooltip>
-                                              <TooltipTrigger
-                                                closeOnClick={false}
-                                                render={
-                                                  <SelectItem
-                                                    value={String(entry.value)}
-                                                    disabled
-                                                    style={{ pointerEvents: "auto" }}
-                                                    onMouseEnter={() => {
-                                                      setPreviewState({
-                                                        ...activeState,
-                                                        [variable.id]: entry.value,
-                                                      });
-                                                    }}
-                                                    onMouseLeave={() => setPreviewState(null)}
-                                                  />
-                                                }
-                                              >
-                                                {entry.label}
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <div className="space-y-1 text-left">
-                                                  <div>
-                                                    {t(
-                                                      "page.tools.model_viewer.ineffective_blocked_by",
-                                                      {
-                                                        variables: ineffectiveEntry.blockingVars
-                                                          .map((v) => `${v.label}=${v.value}`)
-                                                          .join(", "),
-                                                      },
-                                                    )}
-                                                  </div>
-                                                  {ineffectiveEntry.suggestions.length > 0 && (
-                                                    <div>
-                                                      {t(
-                                                        "page.tools.model_viewer.ineffective_suggestion",
-                                                      )}
-                                                      <ul className="ml-3 list-disc">
-                                                        {ineffectiveEntry.suggestions.map(
-                                                          (suggestion) => (
-                                                            <li key={suggestion.display}>
-                                                              {suggestion.display}
-                                                            </li>
-                                                          ),
-                                                        )}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            {ineffectiveEntry.suggestions.length > 0 && (
-                                              <div className="w-0 overflow-hidden transition-all group-hover:w-8 focus-within:w-8">
-                                                <Tooltip>
-                                                  <TooltipTrigger
-                                                    render={
-                                                      <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        onMouseEnter={() => {
-                                                          if (!source) {
-                                                            return;
-                                                          }
-                                                          let next = { ...activeState };
-                                                          for (const change of ineffectiveEntry
-                                                            .suggestions[0].changes) {
-                                                            const v =
-                                                              source.transport.variables.find(
-                                                                (entry) =>
-                                                                  entry.id === change.varId,
-                                                              ) ?? { id: change.varId };
-                                                            next = applyVariableSelection(
-                                                              next,
-                                                              v,
-                                                              change.toValue,
-                                                            );
-                                                          }
-                                                          setPreviewState(next);
-                                                        }}
-                                                        onMouseLeave={() => setPreviewState(null)}
-                                                        onClick={() =>
-                                                          handleApplyResolution(
-                                                            ineffectiveEntry.suggestions[0],
-                                                          )
-                                                        }
-                                                      />
-                                                    }
-                                                  >
-                                                    <CheckIcon className="size-4" />
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                    <div className="space-y-1 text-left">
-                                                      <div>
-                                                        {t(
-                                                          "page.tools.model_viewer.ineffective_apply",
-                                                        )}
-                                                      </div>
-                                                      <ul className="ml-3 list-disc">
-                                                        {ineffectiveEntry.suggestions[0].changes.map(
-                                                          (change) => (
-                                                            <li
-                                                              key={`${change.varId}-${change.toValue}`}
-                                                            >
-                                                              {change.varLabel}: {change.fromValue}{" "}
-                                                              → {change.toValue}
-                                                            </li>
-                                                          ),
-                                                        )}
-                                                      </ul>
-                                                    </div>
-                                                  </TooltipContent>
-                                                </Tooltip>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
+                          {groupVariablesByForm(tileVariables, forms).map((group) => (
+                            <div key={group.form ?? ""} className="space-y-2">
+                              {group.label ? (
+                                <div className="truncate text-xs font-medium text-muted-foreground">
+                                  {group.label}
+                                </div>
+                              ) : null}
+                              <div className="grid grid-cols-2 gap-3">
+                                {group.variables.map(renderTileVariable)}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          ))}
                           {sliderVariables.map((variable) => (
                             // Remounting on reset cancels a queued slider commit
                             // that would otherwise reapply the pre-reset value.
@@ -835,4 +856,62 @@ export function ModelViewerWorkspace({
       </AlertDialog>
     </>
   );
+}
+
+function FormSwitcher({
+  forms,
+  value,
+  onChange,
+}: {
+  forms: Array<{ id: string; label: string }>;
+  value: string;
+  onChange: (form: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => onChange(String(next))}
+      className="absolute top-3 left-3 z-[5] max-w-[calc(100%-1.5rem)]"
+    >
+      <TabsList
+        aria-label={t("page.tools.model_viewer.forms.label")}
+        className="max-w-full justify-start overflow-x-auto bg-background/75 shadow-sm ring-1 ring-border/60 backdrop-blur-md"
+      >
+        <TabsTrigger value={ALL_FORMS} className="flex-none px-2.5">
+          {t("page.tools.model_viewer.forms.all")}
+        </TabsTrigger>
+        {forms.map((form) => (
+          <TabsTrigger
+            key={form.id}
+            value={form.id}
+            title={form.label}
+            className="max-w-44 min-w-0 flex-none px-2.5"
+          >
+            <span className="truncate">{form.label}</span>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+}
+
+/**
+ * Splits the toggles of a bundled mod by the form declaring them, keeping
+ * those of no form first and unlabeled, so equally named toggles of two forms
+ * stay apart.
+ */
+function groupVariablesByForm(
+  variables: ViewerVariable[],
+  forms: Array<{ id: string; label: string }>,
+) {
+  const groups = [
+    { form: undefined as string | undefined, label: "", variables: [] as ViewerVariable[] },
+  ];
+  for (const form of forms) groups.push({ form: form.id, label: form.label, variables: [] });
+  for (const variable of variables) {
+    (groups.find((group) => group.form === variable.form) ?? groups[0]).variables.push(variable);
+  }
+  const used = groups.filter((group) => group.variables.length > 0);
+  return used.length === 1 ? [{ ...used[0], label: "" }] : used;
 }

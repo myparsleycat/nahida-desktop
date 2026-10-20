@@ -131,6 +131,7 @@ export const ThreeModelViewer = memo(
       pixelRatio = window.devicePixelRatio,
       payloadEval,
       payloadTransport,
+      form,
       shapeKeys,
       src,
       threeEnvironment = "studio",
@@ -210,6 +211,7 @@ export const ThreeModelViewer = memo(
             onLoad={onLoad}
             payloadEval={payloadEval}
             payloadTransport={payloadTransport}
+            form={form}
             variantState={variantState}
             onSurfacePick={onSurfacePick}
             overlay={overlay}
@@ -230,6 +232,7 @@ function ThreeModelScene({
   orientation,
   payloadEval,
   payloadTransport,
+  form,
   shapeKeys,
   src,
   threeEnvironment = "studio",
@@ -254,6 +257,7 @@ function ThreeModelScene({
   const onErrorRef = useRef(onError);
   const payloadEvalRef = useRef(payloadEval);
   const payloadTransportRef = useRef(payloadTransport);
+  const formRef = useRef(form);
   const toonShadowsRef = useRef(toonShadows);
   const animationClipRef = useRef(animationClip);
   const animationValuesRef = useRef<Record<string, string | number>>({});
@@ -390,7 +394,8 @@ function ThreeModelScene({
 
   useEffect(() => {
     payloadEvalRef.current = payloadEval;
-  }, [payloadEval]);
+    formRef.current = form;
+  }, [form, payloadEval]);
 
   useEffect(() => {
     payloadTransportRef.current = payloadTransport;
@@ -415,7 +420,11 @@ function ThreeModelScene({
       const interactive = options?.interactive ?? false;
       const animationValues = animationValuesRef.current;
       const evalResult = Object.keys(animationValues).length
-        ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
+        ? evaluateViewerState(
+            transport,
+            { ...toggleEval.state, ...animationValues },
+            formRef.current,
+          )
         : toggleEval;
       const loader = positionLoaderRef.current;
       if (!loader) {
@@ -912,10 +921,11 @@ function ThreeModelScene({
       if (!frame) {
         return [];
       }
-      const evaluated = evaluateViewerState(transport, {
-        ...toggleEval.state,
-        ...frame.values,
-      });
+      const evaluated = evaluateViewerState(
+        transport,
+        { ...toggleEval.state, ...frame.values },
+        formRef.current,
+      );
       return [{ evaluated, signature: payloadEvalSignature(evaluated) }];
     });
     const seen = new Set<string>();

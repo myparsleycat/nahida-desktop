@@ -104,6 +104,19 @@ export type ViewerVariable = {
         step: number;
     };
     effects?: ViewerMenuEffect[];
+    /** The form whose INI declares the variable; see ModViewerTransport.forms. */
+    form?: string;
+};
+
+export type ViewerINI = {
+    path: string;
+    prefix: string;
+};
+
+/** One folder of a mod bundling several, such as a character's forms with one INI each. */
+export type ViewerForm = {
+    id: string;
+    label: string;
 };
 
 export type ViewerStateRule = {
@@ -225,6 +238,8 @@ export type EvaluatedViewerState = {
 
 export type ViewerEvalMesh = {
     id: string;
+    /** The form whose INI draws the mesh; see ModViewerTransport.forms. */
+    form?: string;
     conditions: Dnf;
     texKey: string | null;
     textureVariants: TextureVariant[];
@@ -286,4 +301,8 @@ export type ModViewerTransport = {
     uiAssets: ViewerUiAssets;
     animations: ViewerAnimationClip[];
     computeDeformers: ViewerComputeDeformer[];
+    /** Present with two or more entries when the mod's meshes come from several folders. */
+    forms: ViewerForm[];
+    /** The loaded INIs; a variable ID is the prefix of the INI declaring it followed by its INI name. */
+    inis?: ViewerINI[];
 };

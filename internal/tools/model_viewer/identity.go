@@ -44,6 +44,7 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 		oldID := variable.ID
 		if name, ok := names[modelViewerNormalizeKey(oldID)]; ok {
 			variable.ID = name.PublicID
+			variable.Form = name.Form
 			if strings.EqualFold(variable.Label, humanizeModelViewerLabel(oldID)) || variable.Label == oldID {
 				variable.Label = name.Label
 			}
