@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +26,44 @@ const (
 	// maxFilePayloadSize leaves room in a protocol message for the envelope around the operations.
 	maxFilePayloadSize = maxMessageSize - 1024
 )
+
+// FileHandler serves OperationFiles. A reset-access hands its target to the verified parent user.
+func FileHandler() Handler {
+	return Handler{
+		Timeout: fileOpsTimeout,
+		Run: func(ctx context.Context, peer Peer, payload json.RawMessage) (json.RawMessage, error) {
+			var ops []FileOp
+			if err := json.Unmarshal(payload, &ops); err != nil {
+				return nil, errors.New("invalid file request")
+			}
+			return nil, applyFileOps(ctx, ops, peer.UserSID)
+		},
+	}
+}
+
+// ApplyFiles has the helper run ops in order with administrator rights. They are not a
+// transaction: a failure leaves the earlier operations applied.
+func (c *Client) ApplyFiles(ctx context.Context, ops []FileOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(ops)
+	if err != nil {
+		return err
+	}
+
+	// An oversized request is refused here because a failed pipe write tears the helper down.
+	if len(payload) > maxFilePayloadSize {
+		return fmt.Errorf("elevated file request is too large: %d operations", len(ops))
+	}
+	callCtx, cancel := context.WithTimeout(ctx, fileOpsTimeout+10*time.Second)
+	defer cancel()
+	_, err = c.Call(callCtx, OperationFiles, payload)
+	return err
+}
 
 // applyFileOps runs ops in order with the helper's administrator rights. Every operation is
 // validated before the first one runs, but they are not a transaction: a failure leaves the

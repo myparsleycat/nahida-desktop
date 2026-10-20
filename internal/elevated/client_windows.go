@@ -27,7 +27,6 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
-	"nahida.live/desktop/internal/xxmi/inject"
 )
 
 var (
@@ -399,86 +398,22 @@ func (c *Client) Ping(ctx context.Context) error {
 	return err
 }
 
-func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (platform.KeyResult, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn == nil {
-		return platform.KeyResult{}, fmt.Errorf(
-			"%w: elevated helper is not running",
-			platform.ErrElevatedHelperRequired,
-		)
-	}
-	payload, err := json.Marshal(request)
-	if err != nil {
-		return platform.KeyResult{}, err
-	}
-	response, err := c.callLocked(ctx, operationKeys, payload)
-	if err != nil {
-		return platform.KeyResult{}, err
-	}
-	var result platform.KeyResult
-	if err := json.Unmarshal(response, &result); err != nil {
-		return platform.KeyResult{}, fmt.Errorf("decode elevated input result: %w", err)
-	}
-	return result, nil
+// Caller sends one operation to the helper and returns its result payload.
+type Caller interface {
+	Call(ctx context.Context, operation string, payload json.RawMessage) (json.RawMessage, error)
 }
 
-func (c *Client) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
-	if err := ctx.Err(); err != nil {
-		return inject.LaunchResult{}, err
-	}
-	callCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutSeconds+60)*time.Second)
-	defer cancel()
+var _ Caller = (*Client)(nil)
+
+// Call runs operation on the live helper connection. It holds the connection for the whole
+// exchange, so calls from different features run one after another.
+func (c *Client) Call(ctx context.Context, operation string, payload json.RawMessage) (json.RawMessage, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil {
-		return inject.LaunchResult{}, fmt.Errorf(
-			"%w: elevated helper is not running",
-			platform.ErrElevatedHelperRequired,
-		)
+		return nil, fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
 	}
-	payload, err := json.Marshal(spec)
-	if err != nil {
-		return inject.LaunchResult{}, err
-	}
-	response, err := c.callLocked(callCtx, operationXXMILaunch, payload)
-	if err != nil {
-		return inject.LaunchResult{}, err
-	}
-	var result inject.LaunchResult
-	if err := json.Unmarshal(response, &result); err != nil {
-		return inject.LaunchResult{}, fmt.Errorf("decode XXMI launch result: %w", err)
-	}
-	return result, nil
-}
-
-// ApplyFiles has the helper run ops in order with administrator rights. They are not a
-// transaction: a failure leaves the earlier operations applied.
-func (c *Client) ApplyFiles(ctx context.Context, ops []FileOp) error {
-	if len(ops) == 0 {
-		return nil
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	payload, err := json.Marshal(ops)
-	if err != nil {
-		return err
-	}
-
-	// An oversized request is refused here because a failed pipe write tears the helper down.
-	if len(payload) > maxFilePayloadSize {
-		return fmt.Errorf("elevated file request is too large: %d operations", len(ops))
-	}
-	callCtx, cancel := context.WithTimeout(ctx, fileOpsTimeout+10*time.Second)
-	defer cancel()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn == nil {
-		return fmt.Errorf("%w: elevated helper is not running", platform.ErrElevatedHelperRequired)
-	}
-	_, err = c.callLocked(callCtx, operationFiles, payload)
-	return err
+	return c.callLocked(ctx, operation, payload)
 }
 
 func (c *Client) HelperImageName() string {
@@ -490,9 +425,9 @@ func (c *Client) HelperImageName() string {
 }
 
 func (c *Client) Close() error {
-	// Cancel before taking mu. LaunchXXMI holds mu for the whole helper read,
-	// and that read only ends when this session is cancelled or the deadline
-	// fires. Waiting for the lock first would stall shutdown for the launch.
+	// Cancel before taking mu. Call holds mu for the whole helper read, and a
+	// read such as an XXMI launch only ends when this session is cancelled or
+	// the deadline fires. Waiting for the lock first would stall shutdown.
 	if session := c.session.Load(); session != nil {
 		session.cancel()
 	}
@@ -579,17 +514,21 @@ func (c *Client) callLocked(ctx context.Context, operation string, payload json.
 	return response.Payload, nil
 }
 
-// elevatedHelperError rebuilds the stable classification code the server sent
-// so errors.Is still resolves and the UPPER_SNAKE prefix stays first, matching
-// a local input failure.
-func elevatedHelperError(response message) error {
-	if response.ErrorCode != "" {
-		if sentinel, ok := platform.InputErrorFromCode(response.ErrorCode); ok {
-			return fmt.Errorf("%w: elevated helper: %s", sentinel, response.Error)
-		}
-		return fmt.Errorf("%s: elevated helper: %s", response.ErrorCode, response.Error)
+// remoteError is a failure the helper reported. Its text keeps the stable UPPER_SNAKE code first.
+type remoteError struct {
+	code    string
+	message string
+}
+
+func (e *remoteError) Error() string {
+	if e.code == "" {
+		return "elevated helper: " + e.message
 	}
-	return fmt.Errorf("elevated helper: %s", response.Error)
+	return e.code + ": elevated helper: " + e.message
+}
+
+func elevatedHelperError(response message) error {
+	return &remoteError{code: response.ErrorCode, message: response.Error}
 }
 
 func (c *Client) closeLocked() error {

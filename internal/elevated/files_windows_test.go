@@ -391,8 +391,8 @@ func TestClientAppliesFilesThroughHelper(t *testing.T) {
 	})
 	serverDone := make(chan error, 1)
 	go func() {
-		serverDone <- serveHelperConnection(t.Context(), serverConn, "secret", serverOperations{
-			applyFiles: func(ctx context.Context, ops []FileOp) error { return applyFileOps(ctx, ops, nil) },
+		serverDone <- serveHelperConnection(t.Context(), serverConn, "secret", Peer{}, map[string]Handler{
+			OperationFiles: FileHandler(),
 		})
 	}()
 	client := NewClient()
