@@ -1267,6 +1267,11 @@
         "hotkey": "Toggle Viewer Key",
         "batch_generate": "Batch Generate",
         "batch_delete": "Batch Delete",
+        "batch_generate_done_one": "Generated toggle viewer for {{count}} mod folder",
+        "batch_generate_done_other": "Generated toggle viewer for {{count}} mod folders",
+        "batch_delete_done_one": "Deleted {{count}} toggle viewer file",
+        "batch_delete_done_other": "Deleted {{count}} toggle viewer files",
+        "batch_cancelled": "Toggle viewer task was cancelled",
         "stop": "Stop",
         "status": {
           "idle": "Idle",

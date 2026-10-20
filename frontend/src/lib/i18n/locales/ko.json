@@ -1267,6 +1267,9 @@
         "hotkey": "Toggle Viewer 단축키",
         "batch_generate": "일괄 생성",
         "batch_delete": "일괄 삭제",
+        "batch_generate_done_other": "모드 폴더 {{count}}개에 Toggle Viewer를 생성했습니다",
+        "batch_delete_done_other": "Toggle Viewer 파일 {{count}}개를 삭제했습니다",
+        "batch_cancelled": "Toggle Viewer 작업이 취소되었습니다",
         "stop": "중지",
         "status": {
           "idle": "대기 중",

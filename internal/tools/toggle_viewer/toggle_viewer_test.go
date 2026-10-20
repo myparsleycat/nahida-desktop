@@ -75,8 +75,8 @@ func TestBatchGenerateHotkeyAndDelete(t *testing.T) {
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
 
-	if err := service.RunBatchGenerate(ctx); err != nil {
-		t.Fatal(err)
+	if result, err := service.RunBatchGenerate(ctx); err != nil || result != (BatchResult{Count: 1}) {
+		t.Fatalf("batch generate = %#v, %v", result, err)
 	}
 	finalModRoot := finalPath(t, modRoot)
 	toggleINIPath := filepath.Join(finalModRoot, artifactININame)
@@ -104,8 +104,8 @@ func TestBatchGenerateHotkeyAndDelete(t *testing.T) {
 		t.Fatalf("updated ini = %q, %v", updated, err)
 	}
 
-	if err := service.RunBatchDelete(ctx); err != nil {
-		t.Fatal(err)
+	if result, err := service.RunBatchDelete(ctx); err != nil || result != (BatchResult{Count: 2}) {
+		t.Fatalf("batch delete = %#v, %v", result, err)
 	}
 	if enabled, _ := settings.GetToggleViewerAutoGenerate(ctx); enabled {
 		t.Fatal("batch delete left auto generation enabled")
@@ -132,7 +132,7 @@ func TestBatchDeleteRemovesArtifactsOfMovedFolder(t *testing.T) {
 	userAtOldPath := filepath.Join(filepath.Dir(moved), "Character", artifactTXTName)
 	writeTestFile(t, userAtOldPath, "user notes")
 
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(moved, artifactININame)); !os.IsNotExist(err) {
@@ -161,7 +161,7 @@ func TestApplyHotkeyRewritesArtifactsOfMovedFolder(t *testing.T) {
 	}
 
 	// The rewritten artifact must still be recognised as generated.
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(moved, artifactININame)); !os.IsNotExist(err) {
@@ -181,7 +181,7 @@ func TestScanRemovesArtifactsOfMovedFolderBeforeForgettingRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -211,7 +211,7 @@ func TestScanRereadsSourceWithNewModTime(t *testing.T) {
 	})
 	service.UseClient(openTestDB(t))
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,7 +270,7 @@ func TestScanSkipsDisabledFolder(t *testing.T) {
 	ctx := context.Background()
 	service, client, moved := generateAndMoveMod(t)
 
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -297,7 +297,7 @@ func generateAndMoveMod(t *testing.T) (*Service, *db.Client, string) {
 	})
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(context.Background()); err != nil {
+	if _, err := service.RunBatchGenerate(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -384,7 +384,7 @@ func TestScanKeepsArtifactsOfHiddenImporter(t *testing.T) {
 	})
 	both.UseClient(client)
 	t.Cleanup(func() { _ = both.Shutdown() })
-	if err := both.RunBatchGenerate(ctx); err != nil {
+	if _, err := both.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -417,14 +417,14 @@ func TestScanKeepsArtifactsAfterSourceRename(t *testing.T) {
 	})
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := os.Rename(filepath.Join(modRoot, "mod.ini"), filepath.Join(modRoot, "renamed.ini")); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -468,7 +468,10 @@ func TestBatchGenerateKeepsRescanForChangeDuringBatch(t *testing.T) {
 	}
 	settings.mu.Unlock()
 	done := make(chan error, 1)
-	go func() { done <- service.RunBatchGenerate(ctx) }()
+	go func() {
+		_, err := service.RunBatchGenerate(ctx)
+		done <- err
+	}()
 	<-sourcesRead
 
 	second := filepath.Join(importer, "Mods", "Second")
@@ -506,7 +509,7 @@ func TestSuspendImporterWatcherReleasesImporterFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RunBatchGenerate(ctx); err == nil {
+	if _, err := service.RunBatchGenerate(ctx); err == nil {
 		t.Fatal("batch generate ran during importer maintenance")
 	}
 	// A watch handle below the importer blocks renaming the importer folder itself.

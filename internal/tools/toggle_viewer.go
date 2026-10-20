@@ -6,7 +6,10 @@ import (
 	toggleviewer "nahida.live/desktop/internal/tools/toggle_viewer"
 )
 
-type ToggleViewerState = toggleviewer.State
+type (
+	ToggleViewerState       = toggleviewer.State
+	ToggleViewerBatchResult = toggleviewer.BatchResult
+)
 
 func (t *Tools) ToggleViewerGetLogs() []string {
 	return t.toggleViewer.Logs()
@@ -20,11 +23,11 @@ func (t *Tools) ToggleViewerCancelCurrentWork() bool {
 	return t.toggleViewer.CancelCurrentWork()
 }
 
-func (t *Tools) ToggleViewerRunBatchGenerate(ctx context.Context) error {
+func (t *Tools) ToggleViewerRunBatchGenerate(ctx context.Context) (ToggleViewerBatchResult, error) {
 	return t.toggleViewer.RunBatchGenerate(ctx)
 }
 
-func (t *Tools) ToggleViewerRunBatchDelete(ctx context.Context) error {
+func (t *Tools) ToggleViewerRunBatchDelete(ctx context.Context) (ToggleViewerBatchResult, error) {
 	return t.toggleViewer.RunBatchDelete(ctx)
 }
 

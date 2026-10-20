@@ -40,6 +40,13 @@ type State struct {
 	Mode      *string `json:"mode"`
 }
 
+// BatchResult reports a finished batch. Count is the number of mod folders given artifacts by a
+// generate, or the number of artifact files removed by a delete.
+type BatchResult struct {
+	Cancelled bool `json:"cancelled"`
+	Count     int  `json:"count"`
+}
+
 type task struct {
 	mode   string
 	cancel context.CancelFunc

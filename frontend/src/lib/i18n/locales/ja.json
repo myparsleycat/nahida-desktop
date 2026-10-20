@@ -1267,6 +1267,9 @@
         "hotkey": "Toggle Viewer ホットキー",
         "batch_generate": "一括生成",
         "batch_delete": "一括削除",
+        "batch_generate_done_other": "{{count}} 個の Mod フォルダーに Toggle Viewer を生成しました",
+        "batch_delete_done_other": "Toggle Viewer ファイルを {{count}} 個削除しました",
+        "batch_cancelled": "Toggle Viewer の処理がキャンセルされました",
         "stop": "停止",
         "status": {
           "idle": "待機中",

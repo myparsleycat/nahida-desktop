@@ -82,10 +82,10 @@ func (s *Service) CancelCurrentWork() bool {
 	return true
 }
 
-func (s *Service) RunBatchGenerate(ctx context.Context) error {
+func (s *Service) RunBatchGenerate(ctx context.Context) (BatchResult, error) {
 	current, taskCtx, err := s.beginTask(ctx, modeGenerate)
 	if err != nil {
-		return err
+		return BatchResult{}, err
 	}
 	// A batch rereads every INI, so an edit that kept the size and modification time is still picked up.
 	s.sources = nil
@@ -94,10 +94,10 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 	s.finishTask(current)
 	if cancelled {
 		s.logInfo("Batch generate cancelled")
-		return nil
+		return BatchResult{Cancelled: true}, nil
 	}
 	if err != nil {
-		return s.reportError(err, "batch-generate")
+		return BatchResult{}, s.reportError(err, "batch-generate")
 	}
 	if len(result.skipped) > 0 {
 		s.logInfo(skippedSummary(result.skipped))
@@ -110,17 +110,17 @@ func (s *Service) RunBatchGenerate(ctx context.Context) error {
 	defer s.watchMu.Unlock()
 	watching, err := s.watcherCurrentLocked(ctx)
 	if err != nil {
-		return err
+		return BatchResult{}, err
 	}
 	if !watching {
 		if err := s.startWatcherLocked(ctx, false); err != nil {
-			return err
+			return BatchResult{}, err
 		}
 	}
 	if result.retry {
 		s.scheduleRetry()
 	}
-	return nil
+	return BatchResult{Count: result.folders}, nil
 }
 
 // skippedSummary names a few skipped INIs by folder and file, because the UI log keeps few entries.
@@ -137,18 +137,18 @@ func skippedSummary(skipped []string) string {
 	return summary
 }
 
-func (s *Service) RunBatchDelete(ctx context.Context) error {
+func (s *Service) RunBatchDelete(ctx context.Context) (BatchResult, error) {
 	if s.State().IsRunning {
-		return infra.ContractError("Toggle viewer task is already running")
+		return BatchResult{}, infra.ContractError("Toggle viewer task is already running")
 	}
 	if s.settings != nil {
 		enabled, err := s.settings.GetToggleViewerAutoGenerate(ctx)
 		if err != nil {
-			return err
+			return BatchResult{}, err
 		}
 		if enabled {
 			if err := s.settings.SetToggleViewerAutoGenerate(ctx, false); err != nil {
-				return err
+				return BatchResult{}, err
 			}
 		}
 	}
@@ -156,53 +156,55 @@ func (s *Service) RunBatchDelete(ctx context.Context) error {
 	// Close the watcher before taking the task: importer maintenance holds watchMu while it
 	// waits for tasks, so a task must never wait for watchMu.
 	if err := s.StopWatcher(); err != nil {
-		return s.reportError(err, "batch-delete")
+		return BatchResult{}, s.reportError(err, "batch-delete")
 	}
 	current, taskCtx, err := s.beginTask(ctx, modeDelete)
 	if err != nil {
-		return err
+		return BatchResult{}, err
 	}
 	defer s.finishTask(current)
-	if err := s.deleteAll(taskCtx); err != nil {
+	removed, err := s.deleteAll(taskCtx)
+	if err != nil {
 		if taskCtx.Err() != nil {
 			s.logInfo("Batch delete cancelled")
-			return nil
+			return BatchResult{Cancelled: true}, nil
 		}
-		return s.reportError(err, "batch-delete")
+		return BatchResult{}, s.reportError(err, "batch-delete")
 	}
-	return nil
+	return BatchResult{Count: removed}, nil
 }
 
-func (s *Service) deleteAll(ctx context.Context) error {
+// deleteAll returns how many artifact files it removed.
+func (s *Service) deleteAll(ctx context.Context) (int, error) {
 	modsPaths, err := s.enabledModsPaths(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(modsPaths) == 0 {
 		s.logInfo("Batch delete skipped: no enabled importer mods folder")
-		return nil
+		return 0, nil
 	}
 	client, err := s.requireClient()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	records, err := client.ToggleViewerArtifacts.List(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Folders renamed or moved after generation, such as a mod disabled while auto generation was off,
 	// keep records pointing at the old location, where the user may since have put files of their own.
 	cleanup := s.newArtifactCleanup(records)
 	if err := forEachMovedArtifact(ctx, modsPaths, recordedDirs(records), cleanup.remove); err != nil {
-		return err
+		return 0, err
 	}
 	var targets []db.ToggleViewerArtifactRow
 	for _, record := range records {
 		if err := ctx.Err(); err != nil {
-			return err
+			return 0, err
 		}
 		if !pathInAnyRoot(record.TargetIniPath, modsPaths) {
 			continue
@@ -220,7 +222,7 @@ func (s *Service) deleteAll(ctx context.Context) error {
 			continue
 		}
 		if err := client.ToggleViewerArtifacts.Delete(ctx, record.ID, record.TargetIniPath); err != nil {
-			return err
+			return 0, err
 		}
 		deletedRecords++
 	}
@@ -228,7 +230,7 @@ func (s *Service) deleteAll(ctx context.Context) error {
 		"Batch delete completed. deletedFiles=%d, deletedRecords=%d, targetRecords=%d",
 		cleanup.removed, deletedRecords, len(targets),
 	))
-	return nil
+	return cleanup.removed, nil
 }
 
 // artifactCleanup removes only artifact files whose content one of its records holds, so a file the

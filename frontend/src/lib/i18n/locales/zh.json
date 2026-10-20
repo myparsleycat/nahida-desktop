@@ -1267,6 +1267,9 @@
         "hotkey": "Toggle Viewer 快捷键",
         "batch_generate": "批量生成",
         "batch_delete": "批量删除",
+        "batch_generate_done_other": "已为 {{count}} 个 Mod 文件夹生成 Toggle Viewer",
+        "batch_delete_done_other": "已删除 {{count}} 个 Toggle Viewer 文件",
+        "batch_cancelled": "Toggle Viewer 任务已取消",
         "stop": "停止",
         "status": {
           "idle": "空闲",

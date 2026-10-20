@@ -46,7 +46,7 @@ func TestScanRetriesStaleCleanupWhileArtifactIsLocked(t *testing.T) {
 	})
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +74,7 @@ func TestBatchDeleteKeepsRecordsWhileMovedArtifactIsUnreadable(t *testing.T) {
 		unlocks = append(unlocks, lockFile(t, filepath.Join(moved, name), 0))
 	}
 
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if records, err := client.ToggleViewerArtifacts.List(ctx); err != nil || len(records) != 1 {
@@ -84,7 +84,7 @@ func TestBatchDeleteKeepsRecordsWhileMovedArtifactIsUnreadable(t *testing.T) {
 	for _, unlock := range unlocks {
 		unlock()
 	}
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -109,7 +109,7 @@ func TestDeferredRenameKeepsArtifactsTracked(t *testing.T) {
 	})
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestDeferredRenameKeepsArtifactsTracked(t *testing.T) {
 	}
 	unlock()
 
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -146,7 +146,7 @@ func TestUnreadableSourceKeepsArtifacts(t *testing.T) {
 	})
 	service.UseClient(client)
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,7 +193,7 @@ func TestPartialArtifactWriteIsTracked(t *testing.T) {
 	}
 	unlock()
 
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -216,7 +216,7 @@ func TestBatchDeleteRemovesKeptArtifactOfMovedFolder(t *testing.T) {
 	})
 	service.UseClient(openTestDB(t))
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +232,7 @@ func TestBatchDeleteRemovesKeptArtifactOfMovedFolder(t *testing.T) {
 	if err := os.Rename(modRoot, moved); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RunBatchDelete(ctx); err != nil {
+	if _, err := service.RunBatchDelete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{artifactININame, artifactTXTName} {
@@ -264,7 +264,7 @@ func TestApplyHotkeyKeepsLockedTwinOfMovedFolderTracked(t *testing.T) {
 			})
 			service.UseClient(client)
 			t.Cleanup(func() { _ = service.Shutdown() })
-			if err := service.RunBatchGenerate(ctx); err != nil {
+			if _, err := service.RunBatchGenerate(ctx); err != nil {
 				t.Fatal(err)
 			}
 			for _, name := range []string{"A", "B"} {
@@ -286,7 +286,7 @@ func TestApplyHotkeyKeepsLockedTwinOfMovedFolderTracked(t *testing.T) {
 				t.Fatalf("released twin = %q, %v", content, err)
 			}
 
-			if err := service.RunBatchDelete(ctx); err != nil {
+			if _, err := service.RunBatchDelete(ctx); err != nil {
 				t.Fatal(err)
 			}
 			for _, name := range []string{"A", "B"} {
@@ -314,7 +314,7 @@ func TestHotkeyRetriesLockedArtifactWithoutWatcher(t *testing.T) {
 	service.retryDelay = 10 * time.Millisecond
 	service.UseClient(openTestDB(t))
 	t.Cleanup(func() { _ = service.Shutdown() })
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -355,7 +355,7 @@ func TestBatchGenerateFollowsLinkedModsFolder(t *testing.T) {
 	service.UseClient(openTestDB(t))
 	t.Cleanup(func() { _ = service.Shutdown() })
 
-	if err := service.RunBatchGenerate(ctx); err != nil {
+	if _, err := service.RunBatchGenerate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(library, "Character", artifactININame)); err != nil {

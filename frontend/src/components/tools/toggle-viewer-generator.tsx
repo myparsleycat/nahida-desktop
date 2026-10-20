@@ -101,12 +101,24 @@ export default function ToggleViewerGenerator() {
 
   const { mutate: runBatchGenerate, isPending: isBatchGenerating } = useMutation({
     mutationFn: () => Tools.ToggleViewerRunBatchGenerate(),
+    onSuccess: (result) =>
+      result.cancelled
+        ? toast.info(t("page.tools.toggle_viewer_generator.batch_cancelled"))
+        : toast.success(
+            t("page.tools.toggle_viewer_generator.batch_generate_done", { count: result.count }),
+          ),
     onError: (err) => toast.error(err.message),
     onSettled: invalidateState,
   });
 
   const { mutate: runBatchDelete, isPending: isBatchDeleting } = useMutation({
     mutationFn: () => Tools.ToggleViewerRunBatchDelete(),
+    onSuccess: (result) =>
+      result.cancelled
+        ? toast.info(t("page.tools.toggle_viewer_generator.batch_cancelled"))
+        : toast.success(
+            t("page.tools.toggle_viewer_generator.batch_delete_done", { count: result.count }),
+          ),
     onError: (err) => toast.error(err.message),
     onSettled: invalidateState,
   });
