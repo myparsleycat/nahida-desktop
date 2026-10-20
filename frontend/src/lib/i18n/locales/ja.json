@@ -975,8 +975,6 @@
         "checking_description": "保存されたログイン Cookie を検証します。",
         "required_title": "GameBanana へのログインが必要です",
         "required_description": "この操作には GameBanana アカウントが必要です。ログインしなくても閲覧とダウンロードは利用できます。",
-        "cancelled_title": "GameBanana ログインがキャンセルされました",
-        "cancelled_description": "ログインしなくても閲覧とダウンロードは続けられます。",
         "sign_in": "ログイン",
         "signed_in_as": "{{name}} としてログイン中",
         "guest_notice": "ログインしなくても閲覧と、ログインが不要な MOD のダウンロードができます。いいねするにはログインしてください。",

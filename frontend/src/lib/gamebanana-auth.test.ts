@@ -103,7 +103,6 @@ describe("runGameBananaEnsureSession", () => {
 describe("gameBananaAuthCopyKey", () => {
     it("maps each auth error to distinct copy", () => {
         expect(gameBananaAuthCopyKey("GAMEBANANA_AUTH_REQUIRED").title).toContain("required");
-        expect(gameBananaAuthCopyKey("GAMEBANANA_LOGIN_CANCELLED").title).toContain("cancelled");
         expect(gameBananaAuthCopyKey("GAMEBANANA_AUTO_LOGIN_UNSUPPORTED").title).toContain(
             "unsupported",
         );

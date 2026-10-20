@@ -975,8 +975,6 @@
         "checking_description": "Verifying the saved login cookie.",
         "required_title": "Sign in to GameBanana",
         "required_description": "This action needs a GameBanana account. You can keep browsing and downloading without signing in.",
-        "cancelled_title": "GameBanana login was cancelled",
-        "cancelled_description": "You can keep browsing and downloading without signing in.",
         "sign_in": "Sign in",
         "signed_in_as": "Signed in as {{name}}",
         "guest_notice": "Browsing and downloads for mods that do not require sign-in work without signing in. Sign in to like mods.",

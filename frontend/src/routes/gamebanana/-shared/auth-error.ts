@@ -12,6 +12,8 @@ export {
 } from "@renderer/lib/gamebanana-auth";
 
 export function showGameBananaAuthFailureToast(t: TFunction, code: GameBananaAuthErrorCode) {
+    // The user closed the login window or a logout won the race; neither is a failure.
+    if (code === "GAMEBANANA_LOGIN_CANCELLED") return;
     const copy = gameBananaAuthCopyKey(code);
     toast.error(t(copy.title), { description: t(copy.description) });
 }
@@ -44,11 +46,6 @@ export function gameBananaAuthCopyKey(code: string | null): {
             return {
                 title: "page.gamebanana.auth.check_failed_title",
                 description: "page.gamebanana.auth.check_failed_description",
-            };
-        case "GAMEBANANA_LOGIN_CANCELLED":
-            return {
-                title: "page.gamebanana.auth.cancelled_title",
-                description: "page.gamebanana.auth.cancelled_description",
             };
         case "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED":
             return {

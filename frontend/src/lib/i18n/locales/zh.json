@@ -975,8 +975,6 @@
         "checking_description": "正在验证已保存的登录 Cookie。",
         "required_title": "需要登录 GameBanana",
         "required_description": "此操作需要 GameBanana 账号。不登录也可以继续浏览和下载。",
-        "cancelled_title": "已取消 GameBanana 登录",
-        "cancelled_description": "不登录也可以继续浏览和下载。",
         "sign_in": "登录",
         "signed_in_as": "已登录：{{name}}",
         "guest_notice": "不登录也可以浏览和下载不需要登录的模组。点赞需要先登录。",

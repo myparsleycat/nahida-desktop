@@ -128,7 +128,7 @@ describe("GameBanana route session handling", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("reports a cancelled sign-in as a toast and keeps the page", async () => {
+  it("keeps the page without a toast when the sign-in is cancelled", async () => {
     backend.EnsureSession.mockRejectedValue(new Error("GAMEBANANA_LOGIN_CANCELLED"));
     await renderLoadedRoute();
 
@@ -136,11 +136,8 @@ describe("GameBanana route session handling", () => {
       fireEvent.click(screen.getByText("page.gamebanana.auth.sign_in"));
     });
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("page.gamebanana.auth.cancelled_title", {
-        description: "page.gamebanana.auth.cancelled_description",
-      }),
-    );
+    await waitFor(() => expect(backend.EnsureSession).toHaveBeenCalledTimes(1));
+    expect(toast.error).not.toHaveBeenCalled();
     expect(screen.getByText("gamebanana-content")).toBeTruthy();
   });
 

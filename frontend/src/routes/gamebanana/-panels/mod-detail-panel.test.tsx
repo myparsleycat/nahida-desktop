@@ -100,9 +100,7 @@ describe("ModDetailPanel like without a session", () => {
 
     await waitFor(() => expect(backend.EnsureSession).toHaveBeenCalledTimes(1));
     expect(backend.ToggleModLike).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith("page.gamebanana.auth.cancelled_title", {
-      description: "page.gamebanana.auth.cancelled_description",
-    });
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("keeps the button disabled for a signed-in member without like permission", async () => {

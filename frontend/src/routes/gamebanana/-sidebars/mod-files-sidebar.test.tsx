@@ -91,23 +91,16 @@ describe("ModFilesSidebar download authentication", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("stops after a cancelled sign-in and reports it", async () => {
+  it("stops quietly after a cancelled sign-in", async () => {
     mod.DownloadGameBananaFile.mockRejectedValue(new Error("GAMEBANANA_AUTH_REQUIRED"));
     gameBanana.EnsureSession.mockRejectedValue(new Error("GAMEBANANA_LOGIN_CANCELLED"));
     renderSidebar(buildQuery());
 
     fireEvent.click(await screen.findByText("mod.zip"));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("page.gamebanana.auth.cancelled_title", {
-        description: "page.gamebanana.auth.cancelled_description",
-      }),
-    );
+    await waitFor(() => expect(gameBanana.EnsureSession).toHaveBeenCalledTimes(1));
     expect(mod.DownloadGameBananaFile).toHaveBeenCalledTimes(1);
-    expect(toast.error).not.toHaveBeenCalledWith(
-      "page.gamebanana.download_failed",
-      expect.anything(),
-    );
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("keeps the plain failure toast for other download errors", async () => {
