@@ -477,6 +477,16 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if usesPlatform {
 		platform.apply(&launchSpec, cfg)
 	}
+	if migotoDLLUsed {
+		gameDir := ""
+		if gameExe != "" {
+			gameDir = filepath.Dir(gameExe)
+		}
+		err := x.recordDiagnosticsLaunch(ctx, key, launchSpec.WorkDir, gameDir, cfg.GameFolder, cfg.ImporterFolder)
+		if err != nil {
+			warn("Logging session launch was not recorded: " + err.Error())
+		}
+	}
 	progress("inject-launch")
 	var result inject.LaunchResult
 	if cfg.GameLaunch == "Epic" {
@@ -618,6 +628,14 @@ func (x *XXMI) updateLaunchINI(
 	}
 
 	applySettingsINI(doc, key, cfg, hadToggleInput)
+	diagnostics, err := x.armedDiagnostics(ctx, key, cfg.ImporterFolder)
+	if err != nil {
+		return err
+	}
+	if diagnostics != nil {
+		_, logLevel := migotoINISupport(cfg)
+		applyDiagnosticsINI(doc, *diagnostics, logLevel)
+	}
 	if !doc.Changed() && !rebuilt {
 		return nil
 	}
@@ -669,40 +687,22 @@ func applySettingsINI(doc *iniDocument, key string, cfg ImporterConfig, hadToggl
 
 // writeSettingsINI writes the options the saved settings decide into the importer's d3dx.ini in place, so the
 // file follows a save before the next launch. Rebuilding from the provider's d3dx.ini and the [Loader] options
-// are left to the launch, which also deploys the libraries they depend on.
-func writeSettingsINI(ctx context.Context, key string, cfg ImporterConfig) error {
+// are left to the launch, which also deploys the libraries they depend on. The options of a logging session,
+// when there is one, stay on top of the settings.
+func writeSettingsINI(ctx context.Context, key string, cfg ImporterConfig, diagnostics *diagnosticsRecord) error {
+	_, err := editImporterINI(ctx, cfg.ImporterFolder, func(doc *iniDocument) error {
+		applySettingsINI(doc, key, cfg, true)
+		if diagnostics != nil {
+			_, logLevel := migotoINISupport(cfg)
+			applyDiagnosticsINI(doc, *diagnostics, logLevel)
+		}
+		return nil
+	})
 	// An importer folder or d3dx.ini that is not there yet gets the settings from the next launch.
-	root, err := openInstallRoot(cfg.ImporterFolder)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	if err != nil {
-		return err
-	}
-	defer func() { _ = root.Close() }()
-	iniRoot, iniName, err := root.resolveUserFile("d3dx.ini")
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if iniRoot == nil {
-		iniRoot = root
-	} else {
-		defer func() { _ = iniRoot.Close() }()
-	}
-	data, info, err := iniRoot.readFile(iniName)
-	if err != nil {
-		return err
-	}
-
-	doc := parseINI(data)
-	applySettingsINI(doc, key, cfg, true)
-	if !doc.Changed() {
-		return nil
-	}
-	return iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+	return err
 }
 
 // syncSettingsINI writes the latest saved settings into d3dx.ini unless another operation holds the importer: a
@@ -720,11 +720,20 @@ func (x *XXMI) syncSettingsINI(ctx context.Context, key, action string) {
 	stage := "read-config"
 	cfg, err := x.GetImporterConfig(ctx, key)
 	if err == nil {
+		stage = "end-moved-diagnostics"
+		err = x.endMovedDiagnostics(ctx, key, cfg)
+	}
+	if err == nil {
 		if !cfg.Enabled {
 			return
 		}
-		stage = "write-ini"
-		err = writeSettingsINI(ctx, key, cfg)
+		stage = "read-diagnostics"
+		var diagnostics *diagnosticsRecord
+		diagnostics, err = x.armedDiagnostics(ctx, key, cfg.ImporterFolder)
+		if err == nil {
+			stage = "write-ini"
+			err = writeSettingsINI(ctx, key, cfg, diagnostics)
+		}
 	}
 	if err == nil || infra.IsCancellationError(err) {
 		return

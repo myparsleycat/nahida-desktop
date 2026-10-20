@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
@@ -132,6 +133,8 @@ type XXMI struct {
 	libsProviderMu sync.Mutex
 	// settingsINIMu orders the d3dx.ini writes that follow saved configs, so the last one writes the latest config.
 	settingsINIMu sync.Mutex
+	// diagnosticsMu orders the reads and writes of the stored logging sessions.
+	diagnosticsMu sync.Mutex
 	// launcherScanMu guards the remembered result of the drive-wide search for an external launcher.
 	launcherScanMu  sync.Mutex
 	launcherScanned bool
@@ -161,6 +164,9 @@ type XXMI struct {
 	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
+	// crashEvents reads the Windows crash records of the game since a session started; tests replace it so
+	// the host event log is not read.
+	crashEvents func(ctx context.Context, since time.Time, executables []string) (string, int, error)
 	// killExecutableProcess returns a terminator for processes running from one executable; tests
 	// replace it so no host process is opened or terminated.
 	killExecutableProcess func(executable string) func(pid int) error
@@ -206,6 +212,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
+	x.crashEvents = queryCrashEvents
 	x.killExecutableProcess = killProcessForExecutable
 	x.launchSettings = x
 	x.renameUserData = os.Rename

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -186,12 +187,13 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 // and neither are the provider DLL hashes: they vouch for package cache entries, which a reset keeps.
 var builtinSettingKeys = []string{
 	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
-	sharedLibsProviderKey,
+	sharedLibsProviderKey, diagnosticsSessionsKey,
 }
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,
-// package update state, and the root and update preferences. Files stay on disk: importer folders hold user
-// mods and may still belong to an external XXMI Launcher, and the shared package caches remain reusable.
+// package update state, logging sessions, and the root and update preferences. Files stay on disk: importer
+// folders hold user mods and may still belong to an external XXMI Launcher, and the shared package caches
+// remain reusable. Only the logging sessions' own changes to d3dx.ini and their bundles are undone.
 func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 	stage := "acquire"
 	defer func() {
@@ -221,9 +223,36 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		acquired = append(acquired, key)
 	}
 
+	// No session is left after the reset to take its options out of d3dx.ini, so a running one gives the file
+	// its values back first.
+	stage = "end-diagnostics"
+	x.diagnosticsMu.Lock()
+	defer x.diagnosticsMu.Unlock()
+	sessions, err := x.loadDiagnostics(ctx)
+	if err != nil {
+		return err
+	}
+	for key, record := range sessions {
+		if record.State != DiagnosticsArmed {
+			continue
+		}
+		cfg, err := x.GetImporterConfig(ctx, key)
+		if err != nil {
+			return err
+		}
+		err = restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+
 	stage = "delete-state"
 	if err := client.XXMIImporters.Reset(ctx, builtinSettingKeys); err != nil {
 		return err
+	}
+	for key, record := range sessions {
+		x.removeDiagnosticsBundle(record)
+		x.emitDiagnosticsChanged(key)
 	}
 	if x.log != nil {
 		x.log.Info("Reset built-in XXMI runtime state", "XXMI.resetBuiltinRuntime")

@@ -2771,6 +2771,80 @@
               }
             }
           }
+        },
+        "diagnostics": {
+          "title": "日志模式",
+          "description": "收集 XXMI 库的日志和崩溃转储用于问题反馈。开启后在游戏中重现问题，然后发送收集的内容。",
+          "unsupported": {
+            "external-launcher": "日志模式仅适用于内置启动器。",
+            "not-configured": "请先设置此导入器再使用日志模式。",
+            "runtime": "日志模式需要 XXMI 运行时。",
+            "dll-bypassed": "日志模式需要 XXMI DLL，但 Bypass 注入模式在启动时不会加载该 DLL。",
+            "custom-dll": "使用自定义 d3d11.dll 时无法使用日志模式。",
+            "provider": "此游戏使用 myparsleycat 库时才能使用日志模式。",
+            "provider-unresolved": "无法确认此游戏使用的库。请在下次启动后重试。",
+            "not-installed": "请先安装导入器包再使用日志模式。"
+          },
+          "noticeArmed": "此游戏的日志模式已开启",
+          "noticeCollected": "收集的日志正在等待发送",
+          "noticeOpen": "打开日志模式",
+          "armedTitle": "日志模式已开启（{{level}}）",
+          "armedReady": "启动游戏并重现问题，然后关闭游戏。如果游戏崩溃，会自行关闭。",
+          "armedRunning": "游戏正在运行。重现问题后请关闭游戏。",
+          "armedRelaunch": "游戏在开启日志模式之前就已启动，因此不会记录日志。请关闭游戏后重新启动。",
+          "armedLaunched": "如果问题已重现，请收集日志并发送。否则请再次启动游戏。",
+          "hangHint": "如果游戏没有崩溃而是卡住，按住 Ctrl+Alt+F11 直到听到提示音即可保存转储。",
+          "lastLaunchHint": "日志只保留最后一次启动的内容，请在出现问题的那次启动后立即收集。",
+          "collectedTitle": "日志已收集",
+          "collectedDescription": "日志记录已重新关闭。请发送反馈，或丢弃收集的日志。",
+          "start": "开启日志模式",
+          "startAndLaunch": "开启并启动游戏",
+          "apply": "应用",
+          "launch": "启动游戏",
+          "collect": "收集日志并反馈",
+          "changeOptions": "更改选项",
+          "report": "发送反馈",
+          "restart": "重新开启",
+          "end": "关闭日志模式",
+          "discard": "丢弃日志",
+          "collectWhenClosed": "关闭游戏后即可收集日志。",
+          "started": "已开启日志模式。",
+          "ended": "已关闭日志模式。",
+          "startTitle": "开启日志模式",
+          "startDescription": "日志选项会写入此游戏的 d3dx.ini，并在收集日志或关闭日志模式时恢复原样。",
+          "level": {
+            "info": {
+              "label": "标准",
+              "description": "记录库调用，并在游戏崩溃时保存转储。对性能影响小，适合大多数问题。"
+            },
+            "debug": {
+              "label": "详细",
+              "description": "详细记录所有内容。游戏可能明显变慢，日志可能增大到数百 MB。仅在被要求时使用。"
+            }
+          },
+          "recommended": "推荐",
+          "debugLocks": "卡死诊断",
+          "debugLocksDescription": "在游戏未崩溃但卡住时检测死锁。游戏可能稍微变慢。",
+          "alwaysOn": "日志模式下始终开启无缓冲日志和崩溃转储。",
+          "reportTitle": "反馈库问题",
+          "reportDescription": "收集的日志会随 XXMI 库分类的反馈一起发送。日志中的电脑用户名会被匿名化。",
+          "collecting": "正在收集日志…",
+          "openFolder": "打开文件夹",
+          "bundleSummary": "日志 {{log}} · 崩溃转储 {{dumps}} 个 · Windows 崩溃记录 {{events}} 条",
+          "logTruncated": "日志过大，只包含了开头和结尾部分。",
+          "bodyPlaceholder": "请描述问题：看到了什么，画面中有哪个角色或模组，以及如何再次触发。",
+          "mods": "要附加的模组",
+          "modsDescription": "请选择与问题相关的模组，它们会随反馈一起发送。",
+          "modDisabled": "已禁用",
+          "noMods": "此游戏的 Mods 文件夹中没有模组。",
+          "errors": {
+            "XXMI_DIAGNOSTICS_UNSUPPORTED": "此游戏无法使用日志模式。",
+            "XXMI_DIAGNOSTICS_NOT_STARTED": "此游戏的日志模式未开启。",
+            "XXMI_DIAGNOSTICS_EMPTY": "开启日志模式后没有写入日志或崩溃转储。请先启动游戏并重现问题。",
+            "XXMI_DIAGNOSTICS_TOO_LARGE": "收集的日志即使缩减后仍然过大，无法发送。",
+            "XXMI_GAME_RUNNING": "请先关闭游戏。",
+            "XXMI_BUSY": "其他操作正在使用此游戏，请稍后重试。"
+          }
         }
       },
       "acc": {
@@ -2818,6 +2892,7 @@
         "sent": "已收到您的反馈，谢谢。",
         "failed": "反馈发送失败。",
         "skipped_mod_files": "已排除 {{count}} 个不支持类型的模组文件。",
+        "retry_rules": "重试",
         "error": {
           "body_too_long": "内容不能超过 {{max}} 个字符。",
           "FEEDBACK_UNSUPPORTED_FILE": "无法附加此文件：{{name}}",

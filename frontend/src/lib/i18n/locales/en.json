@@ -2823,6 +2823,80 @@
               }
             }
           }
+        },
+        "diagnostics": {
+          "title": "Logging mode",
+          "description": "Collects logs and crash dumps of the XXMI libraries for a problem report. Turn it on, reproduce the problem in the game, and send what was collected.",
+          "unsupported": {
+            "external-launcher": "Logging mode works with the built-in launcher only.",
+            "not-configured": "Set up this importer first to use logging mode.",
+            "runtime": "Logging mode needs the XXMI runtime.",
+            "dll-bypassed": "Logging mode needs the XXMI DLL, which the Bypass inject mode leaves out of the launch.",
+            "custom-dll": "Logging mode is not available while a custom d3d11.dll is in use.",
+            "provider": "Logging mode is available while this game uses the myparsleycat libraries.",
+            "provider-unresolved": "The libraries this game uses could not be checked. Try again after the next launch.",
+            "not-installed": "Install the importer package first to use logging mode."
+          },
+          "noticeArmed": "Logging mode is on for this game",
+          "noticeCollected": "Collected logs are waiting to be sent",
+          "noticeOpen": "Open logging mode",
+          "armedTitle": "Logging mode is on ({{level}})",
+          "armedReady": "Launch the game and reproduce the problem, then close the game. If it crashes, it closes by itself.",
+          "armedRunning": "The game is running. Reproduce the problem, then close the game.",
+          "armedRelaunch": "The game was already running when logging mode started, so it is not logging. Close the game and launch it again.",
+          "armedLaunched": "If the problem happened, collect the logs and send them. Otherwise launch the game again.",
+          "hangHint": "If the game freezes instead of crashing, hold Ctrl+Alt+F11 until you hear beeps to save a dump.",
+          "lastLaunchHint": "Only the log of the last launch is kept, so collect right after the launch where the problem happened.",
+          "collectedTitle": "Logs collected",
+          "collectedDescription": "Logging is off again. Send the report, or discard the collected logs.",
+          "start": "Start logging mode",
+          "startAndLaunch": "Start and launch the game",
+          "apply": "Apply",
+          "launch": "Launch the game",
+          "collect": "Collect logs and report",
+          "changeOptions": "Change options",
+          "report": "Send report",
+          "restart": "Start again",
+          "end": "Turn off logging mode",
+          "discard": "Discard logs",
+          "collectWhenClosed": "Logs can be collected after the game is closed.",
+          "started": "Logging mode is on.",
+          "ended": "Logging mode is off.",
+          "startTitle": "Start logging mode",
+          "startDescription": "Logging options are written to this game's d3dx.ini and taken out again when the logs are collected or logging mode is turned off.",
+          "level": {
+            "info": {
+              "label": "Standard",
+              "description": "Records library calls and writes a dump when the game crashes. Little impact on performance. Fits most problems."
+            },
+            "debug": {
+              "label": "Detailed",
+              "description": "Records everything in detail. The game can slow down a lot and the log can grow to hundreds of MB. Use it only when asked to."
+            }
+          },
+          "recommended": "Recommended",
+          "debugLocks": "Diagnose freezes",
+          "debugLocksDescription": "Detects deadlocks when the game freezes without crashing. The game may run slightly slower.",
+          "alwaysOn": "Unbuffered logging and crash dumps are always on in logging mode.",
+          "reportTitle": "Report a libraries problem",
+          "reportDescription": "The collected logs are sent with the report in the XXMI libraries category. Your PC user name is anonymized in logs.",
+          "collecting": "Collecting logs…",
+          "openFolder": "Open folder",
+          "bundleSummary": "Log {{log}} · crash dumps {{dumps}} · Windows crash records {{events}}",
+          "logTruncated": "The log was too large, so only its start and end are included.",
+          "bodyPlaceholder": "Describe the problem: what you saw, which character or mod was on screen, and how to make it happen again.",
+          "mods": "Mods to attach",
+          "modsDescription": "Check the mods involved in the problem. They are sent with the report.",
+          "modDisabled": "Disabled",
+          "noMods": "No mods found in this game's Mods folder.",
+          "errors": {
+            "XXMI_DIAGNOSTICS_UNSUPPORTED": "Logging mode is not available for this game.",
+            "XXMI_DIAGNOSTICS_NOT_STARTED": "Logging mode is not on for this game.",
+            "XXMI_DIAGNOSTICS_EMPTY": "No logs or crash dumps were written since logging mode started. Launch the game and reproduce the problem first.",
+            "XXMI_DIAGNOSTICS_TOO_LARGE": "The collected logs are too large to send even after trimming.",
+            "XXMI_GAME_RUNNING": "Close the game first.",
+            "XXMI_BUSY": "Another operation is using this game. Try again shortly."
+          }
         }
       },
       "acc": {
@@ -2870,6 +2944,7 @@
         "sent": "Your report was received. Thank you.",
         "failed": "The report could not be sent.",
         "skipped_mod_files": "{{count}} mod files of an unsupported type were left out.",
+        "retry_rules": "Retry",
         "error": {
           "body_too_long": "Details cannot exceed {{max}} characters.",
           "FEEDBACK_UNSUPPORTED_FILE": "This file cannot be attached: {{name}}",

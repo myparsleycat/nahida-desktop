@@ -114,7 +114,9 @@ vi.mock("@tanstack/react-query", () => ({
                   ? { path: "C:\\XXMI\\GIMI\\Mods", linkTarget: "", targetMissing: false }
                   : queryKey[0] === "mod-runtime"
                     ? { modsRoot: "", runtimes: [] }
-                    : [],
+                    : queryKey[0] === "xxmi:diagnostics"
+                      ? null
+                      : [],
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));

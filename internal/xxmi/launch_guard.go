@@ -417,6 +417,12 @@ func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external boo
 	if err != nil || !used {
 		return false, err
 	}
+	// A logging session writes its own log level over the settings, so turning logging off in the settings
+	// would not reach the game; the session is ended from its own panel instead.
+	diagnostics, err := x.armedDiagnostics(ctx, importer, cfg.ImporterFolder)
+	if err != nil || diagnostics != nil {
+		return false, err
+	}
 	_, statErr := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini"))
 	return statErr == nil && validateInstalledImporterPackage(importer, cfg) == nil, nil
 }
