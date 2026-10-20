@@ -1,4 +1,5 @@
 import type { Emitter, Inspection, Look } from "@bindings/tools/liquid_emitter";
+import { InspectorSection } from "@renderer/components/tools/inspector-section";
 import type { ModelViewerSurfacePick } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import {
   ALL_FORMS,
@@ -100,6 +101,7 @@ export function LiquidEmitterTool({
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState(ALL_FORMS);
+  const [visibleMeshes, setVisibleMeshes] = useState<ReadonlySet<string> | null>(null);
 
   const inspection = session.inspection.data;
   const emitters = inspection?.emitters ?? [];
@@ -273,11 +275,15 @@ export function LiquidEmitterTool({
     );
   }
 
-  const meshLabel = anchor
-    ? (meshes?.find((mesh) => mesh.id === anchor.meshId)?.component ?? anchor.meshId)
-    : "";
-  const anchorForm = anchor ? formOfMesh(anchor.meshId) : undefined;
-  const anchorShown = anchor !== null && (form === ALL_FORMS || !anchorForm || anchorForm === form);
+  const anchorMesh = anchor ? meshes?.find((mesh) => mesh.id === anchor.meshId) : undefined;
+  const meshLabel = anchorMesh ? partLabel(anchorMesh, meshes) : (anchor?.meshId ?? "");
+  const anchorForm = anchorMesh?.form;
+  // A toggle can swap the selected part for another drawn in the same place,
+  // so the marker would otherwise point at a part the game is not drawing.
+  const anchorHidden =
+    anchor !== null && visibleMeshes !== null && !visibleMeshes.has(anchor.meshId);
+  const anchorShown =
+    anchor !== null && !anchorHidden && (form === ALL_FORMS || !anchorForm || anchorForm === form);
   const position = anchor
     ? (anchor.point.map((value, axis) => value + anchor.offset[axis]) as Vec3)
     : undefined;
@@ -298,97 +304,85 @@ export function LiquidEmitterTool({
         </Button>
       </div>
 
-      <div className="space-y-5 p-4">
-        <RuntimeSection
-          inspection={inspection}
-          error={session.inspection.error}
-          busy={busy}
-          installing={session.install.isPending}
-          onInstall={handleInstall}
-        />
+      <div className="divide-y">
+        <div className="space-y-4 p-4">
+          <RuntimeSection
+            inspection={inspection}
+            error={session.inspection.error}
+            busy={busy}
+            installing={session.install.isPending}
+            onInstall={handleInstall}
+          />
 
-        <section className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">
-              {t("page.tools.liquid_emitter.selection.title")}
-            </h3>
-            <div className="flex gap-1">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                disabled={!editable || history.index === 0}
-                aria-label={t("page.tools.liquid_emitter.history.undo")}
-                title={t("page.tools.liquid_emitter.history.undo")}
-                onClick={() => step(-1)}
-              >
-                <Undo2Icon />
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                disabled={!editable || history.index >= history.entries.length - 1}
-                aria-label={t("page.tools.liquid_emitter.history.redo")}
-                title={t("page.tools.liquid_emitter.history.redo")}
-                onClick={() => step(1)}
-              >
-                <Redo2Icon />
-              </Button>
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">
+                {t("page.tools.liquid_emitter.selection.title")}
+              </h3>
+              <div className="flex gap-1">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={!editable || history.index === 0}
+                  aria-label={t("page.tools.liquid_emitter.history.undo")}
+                  title={t("page.tools.liquid_emitter.history.undo")}
+                  onClick={() => step(-1)}
+                >
+                  <Undo2Icon />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={!editable || history.index >= history.entries.length - 1}
+                  aria-label={t("page.tools.liquid_emitter.history.redo")}
+                  title={t("page.tools.liquid_emitter.history.redo")}
+                  onClick={() => step(1)}
+                >
+                  <Redo2Icon />
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="rounded-md border bg-background/40 px-3 py-2 text-sm">
-            {anchor ? (
-              <>
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-medium" title={meshLabel}>
-                    {meshLabel}
-                  </span>
-                  <FormBadge forms={forms} form={anchorForm} />
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("page.tools.liquid_emitter.selection.triangle", { index: anchor.faceIndex })}
-                </div>
-              </>
-            ) : (
-              <span className="text-muted-foreground">
-                {t("page.tools.liquid_emitter.selection.empty")}
-              </span>
-            )}
-          </div>
-          {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
-        </section>
+            <div className="rounded-md border bg-background/40 px-3 py-2 text-sm">
+              {anchor ? (
+                <>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium" title={meshLabel}>
+                      {meshLabel}
+                    </span>
+                    <FormBadge forms={forms} form={anchorForm} />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("page.tools.liquid_emitter.selection.triangle", { index: anchor.faceIndex })}
+                  </div>
+                  {anchorHidden ? (
+                    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+                      <TriangleAlertIcon className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                      {t("page.tools.liquid_emitter.selection.hidden")}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  {t("page.tools.liquid_emitter.selection.empty")}
+                </span>
+              )}
+            </div>
+            {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
+          </section>
+        </div>
 
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.position.title")}</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {AXES.map((label, axis) => (
-              <label key={label} className="space-y-1 text-xs text-muted-foreground">
-                {label}
-                <Input
-                  type="number"
-                  step={0.001}
-                  disabled={locked}
-                  value={position ? Number(position[axis].toFixed(4)) : ""}
-                  onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    if (anchor && Number.isFinite(value)) {
-                      setOffsetAxis(
-                        axis,
-                        (value - anchor.point[axis]) * meshUnit,
-                        `position-${axis}`,
-                      );
-                    }
-                  }}
-                />
-              </label>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t("page.tools.liquid_emitter.position.hint")}
-          </p>
-        </section>
-
-        <section className="space-y-3">
-          <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.offset.title")}</h3>
+        <InspectorSection
+          id="liquid-emitter:offset"
+          title={t("page.tools.liquid_emitter.offset.title")}
+          summary={
+            anchor
+              ? anchor.offset.map((value) => (value * meshUnit * 1000).toFixed(1)).join(" · ")
+              : undefined
+          }
+          defaultOpen
+          className="px-4 py-3"
+          panelClassName="space-y-3 pt-3"
+        >
           {AXES.map((label, axis) => {
             const millimeters = (anchor?.offset[axis] ?? 0) * meshUnit * 1000;
             return (
@@ -415,10 +409,23 @@ export function LiquidEmitterTool({
           >
             {t("page.tools.liquid_emitter.offset.reset")}
           </Button>
-        </section>
+        </InspectorSection>
 
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.direction.title")}</h3>
+        <InspectorSection
+          id="liquid-emitter:direction"
+          title={t("page.tools.liquid_emitter.direction.title")}
+          summary={
+            anchor
+              ? t(
+                  isEqual(anchor.direction, DOWN)
+                    ? "page.tools.liquid_emitter.direction.summary_down"
+                    : "page.tools.liquid_emitter.direction.summary_custom",
+                )
+              : undefined
+          }
+          className="px-4 py-3"
+          panelClassName="space-y-2 pt-3"
+        >
           <div className="grid grid-cols-3 gap-2">
             {AXES.map((label, axis) => (
               <label key={label} className="space-y-1 text-xs text-muted-foreground">
@@ -454,7 +461,41 @@ export function LiquidEmitterTool({
               </span>
             </span>
           </label>
-        </section>
+        </InspectorSection>
+
+        <InspectorSection
+          id="liquid-emitter:position"
+          title={t("page.tools.liquid_emitter.position.title")}
+          className="px-4 py-3"
+          panelClassName="space-y-2 pt-3"
+        >
+          <div className="grid grid-cols-3 gap-2">
+            {AXES.map((label, axis) => (
+              <label key={label} className="space-y-1 text-xs text-muted-foreground">
+                {label}
+                <Input
+                  type="number"
+                  step={0.001}
+                  disabled={locked}
+                  value={position ? Number(position[axis].toFixed(4)) : ""}
+                  onChange={(event) => {
+                    const value = Number(event.currentTarget.value);
+                    if (anchor && Number.isFinite(value)) {
+                      setOffsetAxis(
+                        axis,
+                        (value - anchor.point[axis]) * meshUnit,
+                        `position-${axis}`,
+                      );
+                    }
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("page.tools.liquid_emitter.position.hint")}
+          </p>
+        </InspectorSection>
 
         <ApplyModeSection
           inspection={inspection}
@@ -464,32 +505,6 @@ export function LiquidEmitterTool({
           onModeChange={setMode}
           onRestore={() => setConfirmRestore(true)}
         />
-
-        <section className="space-y-2">
-          <Button
-            className="w-full"
-            disabled={locked || busy}
-            isLoading={session.apply.isPending}
-            onClick={handleApply}
-          >
-            {t(
-              applyMode === NEW_MOD
-                ? "page.tools.liquid_emitter.mode.new_mod"
-                : "page.tools.liquid_emitter.apply",
-            )}
-          </Button>
-          {current ? (
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={busy}
-              onClick={() => handleRemove([current.pid])}
-            >
-              {t("page.tools.liquid_emitter.remove")}
-            </Button>
-          ) : null}
-          <p className="text-xs text-muted-foreground">{t("page.tools.liquid_emitter.f10_hint")}</p>
-        </section>
 
         <EmitterList
           emitters={emitters}
@@ -519,6 +534,34 @@ export function LiquidEmitterTool({
     </div>
   );
 
+  const inspectorFooter = (
+    <div className="space-y-2 rounded-md bg-muted/30 p-3">
+      <Button
+        className="w-full"
+        disabled={locked || busy}
+        isLoading={session.apply.isPending}
+        onClick={handleApply}
+      >
+        {t(
+          applyMode === NEW_MOD
+            ? "page.tools.liquid_emitter.mode.new_mod"
+            : "page.tools.liquid_emitter.apply",
+        )}
+      </Button>
+      {current ? (
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={busy}
+          onClick={() => handleRemove([current.pid])}
+        >
+          {t("page.tools.liquid_emitter.remove")}
+        </Button>
+      ) : null}
+      <p className="text-xs text-muted-foreground">{t("page.tools.liquid_emitter.f10_hint")}</p>
+    </div>
+  );
+
   return (
     <>
       <ModelViewerWorkspace
@@ -541,6 +584,8 @@ export function LiquidEmitterTool({
           ) : null
         }
         inspector={inspector}
+        inspectorFooter={inspectorFooter}
+        onVisibleMeshesChange={setVisibleMeshes}
       />
 
       <AlertDialog open={confirmRemoveAll} onOpenChange={setConfirmRemoveAll}>
@@ -611,23 +656,37 @@ function ApplyModeSection({
   const { t } = useTranslation();
   if (!inspection) return null;
 
+  // A generated mod has no mode to choose but must keep its way back visible.
   if (inspection.sourcePath) {
     return (
-      <section className="space-y-2 rounded-md border bg-background/40 px-3 py-2">
-        <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.generated.title")}</h3>
-        <p className="text-xs break-all text-muted-foreground">
-          {t("page.tools.liquid_emitter.generated.description", { path: inspection.sourcePath })}
-        </p>
-        <Button size="sm" variant="outline" className="w-full" disabled={busy} onClick={onRestore}>
-          {t("page.tools.liquid_emitter.generated.restore")}
-        </Button>
-      </section>
+      <div className="p-4">
+        <section className="space-y-2 rounded-md border bg-background/40 px-3 py-2">
+          <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.generated.title")}</h3>
+          <p className="text-xs break-all text-muted-foreground">
+            {t("page.tools.liquid_emitter.generated.description", { path: inspection.sourcePath })}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={onRestore}
+          >
+            {t("page.tools.liquid_emitter.generated.restore")}
+          </Button>
+        </section>
+      </div>
     );
   }
 
   return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.mode.title")}</h3>
+    <InspectorSection
+      id="liquid-emitter:mode"
+      title={t("page.tools.liquid_emitter.mode.title")}
+      summary={t(`page.tools.liquid_emitter.mode.${mode}`)}
+      className="px-4 py-3"
+      panelClassName="space-y-2 pt-3"
+    >
       <ButtonGroup className="w-full">
         {([IN_PLACE, NEW_MOD] as const).map((value) => (
           <Button
@@ -646,7 +705,7 @@ function ApplyModeSection({
       <p className="text-xs text-muted-foreground">
         {t(`page.tools.liquid_emitter.mode.${mode}_hint`)}
       </p>
-    </section>
+    </InspectorSection>
   );
 }
 
@@ -747,17 +806,20 @@ function EmitterList({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">
-          {t("page.tools.liquid_emitter.emitters.title", { count: emitters.length })}
-        </h3>
-        {emitters.length > 0 ? (
+    <InspectorSection
+      id="liquid-emitter:emitters"
+      title={t("page.tools.liquid_emitter.emitters.title", { count: emitters.length })}
+      actions={
+        emitters.length > 0 ? (
           <Button size="xs" variant="ghost" disabled={busy} onClick={onRemoveAll}>
             {t("page.tools.liquid_emitter.remove_all.button")}
           </Button>
-        ) : null}
-      </div>
+        ) : null
+      }
+      defaultOpen
+      className="px-4 py-3"
+      panelClassName="pt-2"
+    >
       {emitters.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           {t("page.tools.liquid_emitter.emitters.empty")}
@@ -782,7 +844,9 @@ function EmitterList({
                   onClick={() => onSelect(emitter)}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">{mesh?.component ?? emitter.section}</span>
+                    <span className="truncate">
+                      {mesh ? partLabel(mesh, meshes) : emitter.section}
+                    </span>
                     <FormBadge forms={forms} form={mesh?.form ?? iniFolder(emitter.iniPath)} />
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
@@ -809,7 +873,7 @@ function EmitterList({
           })}
         </ul>
       )}
-    </section>
+    </InspectorSection>
   );
 }
 
@@ -822,6 +886,18 @@ function FormBadge({ forms, form }: { forms: ViewerForm[]; form: string | undefi
       <span className="truncate">{label}</span>
     </Badge>
   );
+}
+
+// One override section can draw several parts, which then share its name;
+// the draw number that ends the mesh ID tells them apart.
+function partLabel(mesh: ViewerMeshTransport, meshes: ViewerMeshTransport[] | undefined) {
+  const shared = meshes?.some(
+    (other) =>
+      other.id !== mesh.id && other.component === mesh.component && other.form === mesh.form,
+  );
+  return shared
+    ? `${mesh.component} #${mesh.id.slice(mesh.id.lastIndexOf(":") + 1)}`
+    : mesh.component;
 }
 
 // The folder of a mod-relative INI path, as the viewer names forms.
@@ -851,19 +927,30 @@ function LookSection({
   const dirty = draft !== null && !isEqual(draft, inspection.look);
   const update = (change: Partial<Look>) => setDraft({ ...look, ...change });
   const offset = look.strengthOffset;
+  const followsRuntime =
+    offset === 0 && !look.customColor && look.streamWidth === DEFAULT_STREAM_WIDTH;
 
   return (
-    <section className="space-y-3">
-      <div className="space-y-1">
-        <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.look.title")}</h3>
-        <p className="text-xs text-muted-foreground">
-          {t(
-            hasEmitters
-              ? "page.tools.liquid_emitter.look.hint"
-              : "page.tools.liquid_emitter.look.needs_emitter",
-          )}
-        </p>
-      </div>
+    <InspectorSection
+      id="liquid-emitter:look"
+      title={t("page.tools.liquid_emitter.look.title")}
+      summary={t(
+        dirty
+          ? "page.tools.liquid_emitter.look.summary.unsaved"
+          : followsRuntime
+            ? "page.tools.liquid_emitter.look.summary.runtime"
+            : "page.tools.liquid_emitter.look.summary.custom",
+      )}
+      className="px-4 py-3"
+      panelClassName="space-y-3 pt-3"
+    >
+      <p className="text-xs text-muted-foreground">
+        {t(
+          hasEmitters
+            ? "page.tools.liquid_emitter.look.hint"
+            : "page.tools.liquid_emitter.look.needs_emitter",
+        )}
+      </p>
       <div className="space-y-1">
         <RangeField
           label={t("page.tools.liquid_emitter.look.strength")}
@@ -944,10 +1031,7 @@ function LookSection({
           size="sm"
           variant="outline"
           className="flex-1"
-          disabled={
-            locked ||
-            (offset === 0 && !look.customColor && look.streamWidth === DEFAULT_STREAM_WIDTH)
-          }
+          disabled={locked || followsRuntime}
           onClick={() =>
             update({ strengthOffset: 0, customColor: false, streamWidth: DEFAULT_STREAM_WIDTH })
           }
@@ -965,7 +1049,7 @@ function LookSection({
           {t("page.tools.liquid_emitter.look.save")}
         </Button>
       </div>
-    </section>
+    </InspectorSection>
   );
 }
 

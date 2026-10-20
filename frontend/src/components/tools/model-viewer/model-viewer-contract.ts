@@ -124,6 +124,11 @@ export type ModelViewerSurfaceProps = {
     toonShadows?: boolean;
     /** Called for a left click without drag; null when the click hit no visible mesh. */
     onSurfacePick?: (pick: ModelViewerSurfacePick | null) => void;
+    /**
+     * Called with the IDs of the payload meshes drawn, after toggles, form and
+     * the current animation frame are applied; only when that set changes.
+     */
+    onVisibleMeshesChange?: (meshIds: ReadonlySet<string>) => void;
     /** Rendered in the model's space, so it can use the coordinates of a surface pick. */
     overlay?: ReactNode;
     onError?: (error: unknown) => void;

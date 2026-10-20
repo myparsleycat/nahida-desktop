@@ -140,6 +140,7 @@ export const ThreeModelViewer = memo(
       toonShadows = false,
       variantState,
       onSurfacePick,
+      onVisibleMeshesChange,
       overlay,
     },
     ref,
@@ -214,6 +215,7 @@ export const ThreeModelViewer = memo(
             form={form}
             variantState={variantState}
             onSurfacePick={onSurfacePick}
+            onVisibleMeshesChange={onVisibleMeshesChange}
             overlay={overlay}
           />
         </Canvas>
@@ -241,6 +243,7 @@ function ThreeModelScene({
   toonShadows = false,
   variantState,
   onSurfacePick,
+  onVisibleMeshesChange,
   overlay,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
@@ -342,6 +345,13 @@ function ThreeModelScene({
   useEffect(() => {
     onSurfacePickRef.current = onSurfacePick;
   }, [onSurfacePick]);
+
+  const onVisibleMeshesChangeRef = useRef(onVisibleMeshesChange);
+  useEffect(() => {
+    onVisibleMeshesChangeRef.current = onVisibleMeshesChange;
+  }, [onVisibleMeshesChange]);
+  // Animation frames commit at playback rate, so only a changed set reports.
+  const reportedVisibleMeshesRef = useRef<string | null>(null);
 
   const pickEnabled = !!onSurfacePick;
   useEffect(() => {
@@ -458,6 +468,16 @@ function ThreeModelScene({
         }
         window.clearTimeout(geometryFinalizeTimerRef.current);
         commitPayloadEval(root, prepared, { deferGeometryUpdates });
+        if (onVisibleMeshesChangeRef.current) {
+          const visible = prepared.evalResult.meshes
+            .filter((mesh) => mesh.visible)
+            .map((mesh) => mesh.id);
+          const signature = visible.join("\n");
+          if (signature !== reportedVisibleMeshesRef.current) {
+            reportedVisibleMeshesRef.current = signature;
+            onVisibleMeshesChangeRef.current(new Set(visible));
+          }
+        }
         if (deferGeometryUpdates) {
           geometryFinalizeTimerRef.current = window.setTimeout(() => {
             if (root === modelRootRef.current && finalizePayloadGeometry(root)) {
@@ -506,6 +526,7 @@ function ThreeModelScene({
     payloadEvalAbortRef.current = null;
     window.clearTimeout(geometryFinalizeTimerRef.current);
     preparedAnimationRingRef.current = [];
+    reportedVisibleMeshesRef.current = null;
     positionLoaderRef.current?.dispose();
     positionLoaderRef.current = null;
     computeControllerRef.current?.dispose(false);

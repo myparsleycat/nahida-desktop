@@ -1804,7 +1804,8 @@
         "selection": {
           "title": "Emitter point",
           "empty": "Click the model surface to place the emitter.",
-          "triangle": "Triangle {{index}} · follows the surface"
+          "triangle": "Triangle {{index}} · follows the surface",
+          "hidden": "This part is not drawn in the current view. If you changed a toggle, pick the visible surface again."
         },
         "history": {
           "undo": "Undo",
@@ -1820,7 +1821,9 @@
         },
         "direction": {
           "title": "Spray direction",
-          "down": "Point straight down"
+          "down": "Point straight down",
+          "summary_down": "Down",
+          "summary_custom": "Custom"
         },
         "trajectory": {
           "label": "Preview default-strength path",
@@ -1853,7 +1856,12 @@
           "absorption_hint": "Millimeters of liquid it takes to reach the full color · lower is deeper",
           "reset": "Follow runtime settings",
           "save": "Save liquid",
-          "saved": "Saved this character's liquid. Press F10 in game to reload mods."
+          "saved": "Saved this character's liquid. Press F10 in game to reload mods.",
+          "summary": {
+            "runtime": "Runtime settings",
+            "custom": "Custom",
+            "unsaved": "Unsaved"
+          }
         },
         "error": {
           "unsupported_game": "This tool does not support mods for this game yet.",
