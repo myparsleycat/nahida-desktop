@@ -20,6 +20,8 @@ import (
 const (
 	crashEventsTimeout = 15 * time.Second
 	crashEventsLimit   = 50
+	// crashEventsScan bounds the records read before filtering, since other applications' crashes count toward it.
+	crashEventsScan = 1000
 )
 
 // queryCrashEvents returns the Application log records of crashes and hangs since the session started that
@@ -39,7 +41,7 @@ func queryCrashEvents(ctx context.Context, since time.Time, executables []string
 	// Unicode output keeps the localized event text readable regardless of the console code page.
 	command := exec.CommandContext(
 		ctx, filepath.Join(systemRoot, "System32", "wevtutil.exe"),
-		"qe", "Application", "/q:"+query, "/f:text", "/rd:true", fmt.Sprintf("/c:%d", crashEventsLimit), "/uni:true",
+		"qe", "Application", "/q:"+query, "/f:text", "/rd:true", fmt.Sprintf("/c:%d", crashEventsScan), "/uni:true",
 	)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 	output, err := command.Output()
@@ -64,11 +66,16 @@ func decodeUTF16Output(data []byte) string {
 	return string(utf16.Decode(units))
 }
 
-// filterCrashEvents keeps the records of wevtutil text output that name one of the executables.
+// filterCrashEvents keeps the first crashEventsLimit records of wevtutil text output that name one of the
+// executables; the query reads newest first, so those are the latest.
 func filterCrashEvents(text string, executables []string) (string, int) {
 	var kept []string
 	var record strings.Builder
 	flush := func() {
+		defer record.Reset()
+		if len(kept) >= crashEventsLimit {
+			return
+		}
 		lower := strings.ToLower(record.String())
 		for _, executable := range executables {
 			if executable != "" && strings.Contains(lower, strings.ToLower(executable)) {
@@ -76,7 +83,6 @@ func filterCrashEvents(text string, executables []string) (string, int) {
 				break
 			}
 		}
-		record.Reset()
 	}
 	for line := range strings.Lines(text) {
 		if strings.HasPrefix(line, "Event[") && record.Len() > 0 {

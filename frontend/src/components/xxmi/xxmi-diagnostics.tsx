@@ -167,7 +167,7 @@ export function XXMIDiagnostics({
         <SectionDescription>{t("page.setting.xxmi.diagnostics.description")}</SectionDescription>
       </SectionHeader>
       <SectionContent layout="flow" className="gap-3">
-        {!session && !supported ? (
+        {!session && support && !supported ? (
           <Alert>
             <TriangleAlertIcon />
             <AlertDescription>
