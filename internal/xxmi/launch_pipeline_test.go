@@ -179,6 +179,11 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	service.findProcess = noGameProcess
 	service.gryphlinkFolders = func() []string { return nil }
 	useBuiltinLauncher(t, service)
+	var runtimeUpdates []string
+	service.UseModRuntimeUpdate(func(_ context.Context, importer string) error {
+		runtimeUpdates = append(runtimeUpdates, importer)
+		return errors.New("fixture mod runtime update failed")
+	})
 	if err := service.SaveImporterConfig(ctx, "EFMI", cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -190,13 +195,17 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 		t.Fatal(err)
 	}
 	want := []string{"pre-launch", "resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch",
-		"ensure-runtime", "deploy-runtime", "validate-runtime", "update-ini", "ini-optimizer", "ini-optimizer",
-		"game-tweaks", "elevate", "inject-launch", "inject-launch", "post-load", "finish"}
+		"ensure-runtime", "deploy-runtime", "validate-runtime", "update-ini", "mod-runtimes", "mod-runtimes",
+		"ini-optimizer", "ini-optimizer", "game-tweaks", "elevate", "inject-launch", "inject-launch", "post-load",
+		"finish"}
 	if restore == "failed" {
-		want = slices.Insert(want, 11, "ini-optimizer")
+		want = slices.Insert(want, 13, "ini-optimizer")
 	}
 	if !slices.Equal(stages, want) {
 		t.Fatalf("launch stages = %v; want %v", stages, want)
+	}
+	if !slices.Equal(runtimeUpdates, []string{"EFMI"}) {
+		t.Fatalf("mod runtime updates = %v, want one for EFMI that does not stop the launch", runtimeUpdates)
 	}
 	if restore == "failed" {
 		if len(warnings) != 2 || !strings.Contains(warnings[0], locked) || warnings[1] != helper.warnings[0] {

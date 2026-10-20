@@ -2742,6 +2742,9 @@
           "noModsFolder": "No game uses this importer yet, so there is no Mods folder to install runtimes into.",
           "versions": "Installed {{installed}} · bundled {{bundled}}",
           "bundled": "Bundled {{bundled}}",
+          "autoUpdate": "Auto update on game launch",
+          "autoUpdateDescription": "When the game launches, installed runtimes older than the version bundled with the app are updated. Disabled or modified runtimes are left as they are.",
+          "autoUpdateFailed": "{{importer}} runtime auto update failed; continuing the launch with the current files",
           "state": {
             "missing": "Not installed",
             "current": "Installed",

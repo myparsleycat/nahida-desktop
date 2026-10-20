@@ -186,6 +186,11 @@ export function useGlobalEvents(
             if (stage === "auto-update" && typeof detail === "string") {
                 toast.warning(i18n.t("page.setting.xxmi.builtin.autoUpdateFailed", { importer }));
             }
+            if (stage === "mod-runtimes" && typeof detail === "string") {
+                toast.warning(
+                    i18n.t("page.setting.xxmi.modRuntimes.autoUpdateFailed", { importer }),
+                );
+            }
             if (stage === "ini-optimizer" && typeof optimized === "number" && optimized > 0) {
                 toast.success(i18n.t("page.setting.xxmi.builtin.optimized", { count: optimized }));
             }
@@ -194,12 +199,19 @@ export function useGlobalEvents(
                 void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
                 // A launch rewrites d3dx.ini, and one that fails later has usually done so already.
                 void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
+                void queryClient.invalidateQueries({ queryKey: ["mod-runtime", importer] });
                 return;
             }
             const status =
                 stage === "ensure-runtime"
                     ? "launchDownloading"
-                    : ["update-ini", "game-tweaks", "ini-optimizer", "pre-launch"].includes(stage)
+                    : [
+                            "update-ini",
+                            "mod-runtimes",
+                            "game-tweaks",
+                            "ini-optimizer",
+                            "pre-launch",
+                        ].includes(stage)
                       ? "launchConfiguring"
                       : ["elevate", "inject-launch", "post-load"].includes(stage)
                         ? "launchStarting"

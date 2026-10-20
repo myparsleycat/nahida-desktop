@@ -130,6 +130,61 @@ func inspectAt(root string, sel selection) (Status, error) {
 	return status, nil
 }
 
+// userChanged reports whether a file the install under root lists, or one an
+// update to sel writes, holds neither what that install wrote nor what the
+// update writes, so the update would replace a change the user made, such as
+// a file the user added where a new version adds one. An interrupted update
+// leaves files of either version, and a missing file loses nothing.
+func userChanged(root string, sel selection) (bool, error) {
+	found, err := readManifest(filepath.Join(root, manifestFile))
+	if err != nil || found == nil {
+		return false, err
+	}
+	values, err := settingValues(root, sel.runtimeSpec)
+	if err != nil {
+		return false, err
+	}
+	files, err := variantFiles(sel)
+	if err != nil {
+		return false, err
+	}
+	names := make(map[string]bool, len(found.Files)+len(files))
+	for name := range found.Files {
+		names[name] = true
+	}
+	for name := range files {
+		names[name] = true
+	}
+	for name := range names {
+		target, ok := installedPath(root, name)
+		if !ok {
+			continue
+		}
+		data, err := os.ReadFile(target)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		installed := digest(data)
+		if hash, listed := found.Files[name]; listed && installed == hash {
+			continue
+		}
+		bundled, kept := files[name]
+		if !kept {
+			return true, nil
+		}
+		if bundled, err = renderSettings(name, bundled, sel.runtimeSpec, values); err != nil {
+			return false, err
+		}
+		if installed != digest(bundled) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func readManifest(name string) (*manifest, error) {
 	data, err := os.ReadFile(name)
 	if errors.Is(err, fs.ErrNotExist) {

@@ -51,7 +51,15 @@ export function modRuntimesQueryKey(importer: string) {
   return ["mod-runtime", importer] as const;
 }
 
-export function XXMIModRuntimes({ importer }: { importer: string }) {
+export function XXMIModRuntimes({
+  importer,
+  autoUpdate,
+  onAutoUpdateChange,
+}: {
+  importer: string;
+  autoUpdate: boolean;
+  onAutoUpdateChange: (autoUpdate: boolean) => void;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data: listing } = useQuery({
@@ -101,6 +109,12 @@ export function XXMIModRuntimes({ importer }: { importer: string }) {
         </SectionDescription>
       </SectionHeader>
       <SectionContent>
+        <ToggleRow
+          label={t("page.setting.xxmi.modRuntimes.autoUpdate")}
+          description={t("page.setting.xxmi.modRuntimes.autoUpdateDescription")}
+          checked={autoUpdate}
+          onCheckedChange={onAutoUpdateChange}
+        />
         {!listing.modsRoot ? (
           <Alert>
             <TriangleAlertIcon />

@@ -2690,6 +2690,9 @@
           "noModsFolder": "还没有游戏使用此导入器，因此没有可安装运行时的 Mods 文件夹。",
           "versions": "已安装 {{installed}} · 内置 {{bundled}}",
           "bundled": "内置 {{bundled}}",
+          "autoUpdate": "启动游戏时自动更新",
+          "autoUpdateDescription": "启动游戏时，如果已安装的运行时比应用内置的版本旧，则进行更新。已禁用或文件已更改的运行时保持不变。",
+          "autoUpdateFailed": "{{importer}} 运行时自动更新失败，将使用当前文件继续启动",
           "state": {
             "missing": "未安装",
             "current": "已安装",

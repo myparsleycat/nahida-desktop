@@ -1469,7 +1469,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               </TabsContent>
 
               <TabsContent value="runtimes" className="flex flex-col gap-6">
-                <XXMIModRuntimes importer={importer} />
+                <XXMIModRuntimes
+                  importer={importer}
+                  autoUpdate={config.autoUpdateModRuntimes}
+                  onAutoUpdateChange={(autoUpdateModRuntimes) =>
+                    setConfig({ ...config, autoUpdateModRuntimes })
+                  }
+                />
               </TabsContent>
             </div>
           </div>

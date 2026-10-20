@@ -308,6 +308,81 @@ func TestSettingsSurviveUpdate(t *testing.T) {
 	}
 }
 
+// An update nobody asked for must not replace files the user edited or added,
+// yet must finish one an earlier update left half written.
+func TestRefreshKeepsUserChanges(t *testing.T) {
+	manager, modsRoot := newTestManager(t)
+	ctx := context.Background()
+	root := installRoot(modsRoot, "Probe")
+	caps := Capabilities{}
+	manager.capabilities = func(context.Context, string) (Capabilities, error) { return caps, nil }
+	if _, err := manager.Install(ctx, "EFMI", "Probe"); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(root, manifestFile)
+	rewriteManifest := func(edit func(*manifest)) {
+		t.Helper()
+		found, err := readManifest(manifestPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit(found)
+		encoded, err := encodeJSON(found)
+		if err == nil {
+			err = os.WriteFile(manifestPath, encoded, 0o644)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	shader := filepath.Join(root, "shaders", "a.hlsl")
+	if err := os.WriteFile(shader, []byte("// user edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteManifest(func(found *manifest) { found.RuntimeVersion = "1" })
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(shader); string(data) != "// user edit" {
+		t.Fatalf("refresh replaced the user's shader: %q", data)
+	}
+	if got := manager.state(t).State; got != StateOutdated {
+		t.Fatalf("edited runtime after a refresh = %s", got)
+	}
+
+	// The bundled file under an old hash is what an interrupted update wrote.
+	if err := os.WriteFile(shader, []byte("// a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteManifest(func(found *manifest) { found.Files["shaders/a.hlsl"] = digest([]byte("// old a")) })
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.state(t).State; got != StateCurrent {
+		t.Fatalf("interrupted update after a refresh = %s", got)
+	}
+
+	// A file the user added where the enhanced variant puts one of its own.
+	extra := filepath.Join(root, "extra", "Extra.ini")
+	if err := os.MkdirAll(filepath.Dir(extra), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(extra, []byte("; user file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	caps.ShaderSamplerSlots = true
+	if err := manager.Refresh(ctx, "EFMI"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(extra); string(data) != "; user file" {
+		t.Fatalf("refresh replaced the user's file: %q", data)
+	}
+	if got := manager.state(t).State; got != StateOutdated {
+		t.Fatalf("runtime under the user's file after a refresh = %s", got)
+	}
+}
+
 // A d3d11.dll without a variant's capabilities must never get its files, and
 // a DLL change must swap the files of the last install for the new ones.
 func TestVariantFollowsCapabilities(t *testing.T) {

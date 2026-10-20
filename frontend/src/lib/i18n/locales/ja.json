@@ -2690,6 +2690,9 @@
           "noModsFolder": "このインポーターを使うゲームがまだないため、ランタイムをインストールする Mods フォルダーがありません。",
           "versions": "インストール済み {{installed}} · 同梱 {{bundled}}",
           "bundled": "同梱 {{bundled}}",
+          "autoUpdate": "ゲーム起動時に自動更新",
+          "autoUpdateDescription": "ゲームを起動するとき、インストール済みのランタイムがアプリに同梱されたバージョンより古ければ更新します。無効化または変更したランタイムはそのままにします。",
+          "autoUpdateFailed": "{{importer}} のランタイム自動更新に失敗しました。現在のファイルで起動を続けます",
           "state": {
             "missing": "未インストール",
             "current": "インストール済み",

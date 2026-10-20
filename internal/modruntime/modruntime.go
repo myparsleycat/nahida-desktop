@@ -385,8 +385,10 @@ func (m *Manager) Remove(ctx context.Context, importer, name string) (Status, er
 }
 
 // Refresh updates the importer's installed runtimes that read as outdated,
-// such as after its d3d11.dll changed which variant they get. Disabled and
-// foreign copies are left as they are.
+// such as after its d3d11.dll changed which variant they get or before a game
+// launch. Nobody asked for the update, so disabled and foreign copies and an
+// install whose files the user changed are left as they are; the user updates
+// those from the runtime list.
 //
 //wails:ignore
 func (m *Manager) Refresh(ctx context.Context, importer string) error {
@@ -395,13 +397,59 @@ func (m *Manager) Refresh(ctx context.Context, importer string) error {
 		return err
 	}
 	var errs []error
+	updated := false
 	for _, status := range listing.Runtimes {
 		if status.State != StateOutdated {
 			continue
 		}
-		if _, err := m.Install(ctx, importer, status.Name); err != nil {
+		_, err := m.operate(
+			ctx,
+			"refresh",
+			importer,
+			status.Name,
+			func(sc *scope, modsRoot string, sel selection) (Status, error) {
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				status, err := m.prepared(sc, modsRoot, sel)
+				if err != nil || status.State != StateOutdated {
+					return status, err
+				}
+
+				sc.stage = "check-changes"
+				root := installRoot(modsRoot, sel.Name)
+				changed, err := userChanged(root, sel)
+				if err != nil {
+					return status, err
+				}
+				if changed {
+					if m.log != nil {
+						m.log.Info(map[string]any{
+							"importer": importer, "runtime": sel.Name, "path": root,
+							"message": "Left an outdated runtime with changed files for a manual update",
+						}, diagnosticWhere)
+					}
+					return status, nil
+				}
+
+				sc.stage = "install"
+				release, err := diskio.AcquireDir(ctx, modsRoot)
+				if err != nil {
+					return status, err
+				}
+				defer release()
+				if err := m.installAt(root, modsRoot, sel); err != nil {
+					return status, err
+				}
+				updated = true
+				return m.inspect(modsRoot, sel)
+			},
+		)
+		if err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if updated {
+		m.invalidateLibraries()
 	}
 	return errors.Join(errs...)
 }

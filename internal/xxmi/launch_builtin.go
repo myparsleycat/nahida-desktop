@@ -329,6 +329,29 @@ func (x *XXMI) launchBuiltinGameLocked(
 		if err := x.updateLaunchINI(ctx, key, cfg, processName, providerINI); err != nil {
 			return err
 		}
+
+		// The runtimes are updated after the d3d11.dll that picks their variant is deployed, and before the
+		// optimizer reads the Mods folder. A failure leaves the installed files for this launch.
+		x.mu.RLock()
+		updateModRuntimes := x.modRuntimeUpdate
+		x.mu.RUnlock()
+		if updateModRuntimes != nil && cfg.AutoUpdateModRuntimes {
+			progress("mod-runtimes")
+			if err := updateModRuntimes(ctx, key); err != nil {
+				if infra.IsCancellationError(err) {
+					return err
+				}
+				_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
+					Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
+					Fields: map[string]any{"importer": key},
+				})
+				if x.eventEmit != nil {
+					x.eventEmit("xxmi:launch-progress", map[string]any{
+						"importer": key, "stage": stage, "detail": err.Error(),
+					})
+				}
+			}
+		}
 		if cfg.IniOptimizer.Enabled {
 			progress("ini-optimizer")
 			input := OptimizeModsInput{Importer: key, ResetCache: cfg.IniOptimizer.ResetCache}

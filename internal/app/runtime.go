@@ -299,6 +299,7 @@ func newRuntime() *runtime {
 			})
 		}
 	})
+	rt.xxmi.UseModRuntimeUpdate(rt.modRuntime.Refresh)
 	rt.xxmi.UseImporterMaintenance(func(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
 		resumeTools, err := rt.tools.SuspendImporterWatchers(ctx)
 		if err != nil {

@@ -157,6 +157,7 @@ type XXMI struct {
 	processSnapshot     func(context.Context) (map[string]bool, error)
 	importersChanged    func(context.Context)
 	dllChanged          func(context.Context, string)
+	modRuntimeUpdate    func(context.Context, string) error
 	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
@@ -264,6 +265,15 @@ func (x *XXMI) notifyDLLChanged(ctx context.Context, importers ...string) {
 	for _, importer := range importers {
 		notify(ctx, importer)
 	}
+}
+
+// UseModRuntimeUpdate registers what updates an importer's outdated mod runtimes before a launch loads its mods.
+//
+//wails:ignore
+func (x *XXMI) UseModRuntimeUpdate(update func(ctx context.Context, importer string) error) {
+	x.mu.Lock()
+	x.modRuntimeUpdate = update
+	x.mu.Unlock()
 }
 
 // UseImporterMaintenance registers the backend pause/resume boundary for importer filesystem changes.

@@ -165,10 +165,13 @@ type ImporterConfig struct {
 	Migoto            MigotoOptions  `json:"migoto"`
 	// D3DXOverrides holds d3dx.ini values keyed "Section.key". A launch writes them, so they outlive an
 	// importer package update that replaces the file.
-	D3DXOverrides    map[string]string   `json:"d3dxOverrides,omitempty"`
-	IniOptimizer     IniOptimizerOptions `json:"iniOptimizer"`
-	LaunchCount      int                 `json:"launchCount"`
-	WoundedFXDecided bool                `json:"woundedFXDecided"`
+	D3DXOverrides map[string]string   `json:"d3dxOverrides,omitempty"`
+	IniOptimizer  IniOptimizerOptions `json:"iniOptimizer"`
+	// AutoUpdateModRuntimes makes a launch update the importer's installed mod runtimes that are older than the
+	// versions bundled with the app.
+	AutoUpdateModRuntimes bool `json:"autoUpdateModRuntimes"`
+	LaunchCount           int  `json:"launchCount"`
+	WoundedFXDecided      bool `json:"woundedFXDecided"`
 	// D3D11ModeNoticeShown records that the user saw the reminder to turn on DirectX 11 in the
 	// game's own launcher, which an Epic Games launch cannot do for them.
 	D3D11ModeNoticeShown bool `json:"d3d11ModeNoticeShown"`
@@ -222,7 +225,8 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 			LogLevel: "Disabled", EnforceRendering: true, MuteWarnings: true, ClearUnknownSettings: true,
 			Input: true, InputDisableMode: "Mods", ToggleInput: "ctrl alt shift VK_END",
 		},
-		LaunchCount: -1,
+		AutoUpdateModRuntimes: true,
+		LaunchCount:           -1,
 	}
 	if spec.useHook {
 		cfg.XXMIDLLInjectMode = "Hook"
