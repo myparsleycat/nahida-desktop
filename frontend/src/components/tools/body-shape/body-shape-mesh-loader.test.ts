@@ -20,18 +20,23 @@ class FakeWorker {
 
 const input: BodyShapeMeshProcessInput = {
     sessionId: "session",
-    meshId: "mesh",
-    vertexCount: 1,
-    positionsUrl: "/positions",
-    positionsCount: 3,
-    indexCount: 0,
-    blendBytes: 0,
-    blendStride: 32,
+    meshes: [
+        {
+            meshId: "mesh",
+            vertexCount: 1,
+            positionsUrl: "/positions",
+            positionsCount: 3,
+            indexCount: 0,
+            blendBytes: 0,
+            blendStride: 32,
+        },
+    ],
 };
 
 function result(): BodyShapeMeshProcessResult {
     return {
         originalPositions: new Float32Array([1, 2, 3]).buffer,
+        segments: [{ meshId: "mesh", vertexOffset: 0, vertexCount: 1, blendStride: 32 }],
         symmetryMap: new Int32Array([0]).buffer,
         boundingCenter: [1, 2, 3],
     };
@@ -42,7 +47,7 @@ describe("BodyShapeMeshWorkerClient", () => {
         const worker = new FakeWorker();
         const client = new BodyShapeMeshWorkerClient(worker);
         const first = client.process(input);
-        const second = client.process({ ...input, meshId: "mesh-2" });
+        const second = client.process({ ...input, sessionId: "session-2" });
         const firstMessage = worker.messages[0] as { id: number };
         const secondMessage = worker.messages[1] as { id: number };
 

@@ -57,7 +57,7 @@ function transferResult(result: BodyShapeMeshProcessResult): Transferable[] {
     return [
         result.originalPositions,
         result.indices,
-        result.blendBytes,
+        ...result.segments.map((segment) => segment.blendBytes),
         result.adjacencyOffsets,
         result.adjacencyNeighbors,
         result.originalNormals,

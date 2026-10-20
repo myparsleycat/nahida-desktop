@@ -80,10 +80,10 @@ import {
   pushSelectionHistory,
   type SelectionHistoryEntry,
 } from "./selection-history";
-import { useBodyShapeSession, type LoadedMesh } from "./use-body-shape-session";
+import { meshSelectionKey, useBodyShapeSession, type LoadedMesh } from "./use-body-shape-session";
 const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
-type WeightSource = { kind: "bone"; boneId: number };
+type WeightSource = { kind: "bone"; segment: number; boneId: number };
 
 type DeformOperation = "scale" | "inflate" | "translate" | "taper";
 
@@ -124,16 +124,13 @@ function nearestVertexToPoint(
 }
 
 function weightKey(source: WeightSource): string {
-  return `bone:${source.boneId}`;
+  return `bone:${source.segment}:${source.boneId}`;
 }
 
 function parseWeightKey(key: string): WeightSource | null {
-  if (key.startsWith("bone:")) {
-    const boneId = Number(key.slice(5));
-    if (!Number.isInteger(boneId) || boneId < 0) return null;
-    return { kind: "bone", boneId };
-  }
-  return null;
+  const match = /^bone:(\d+):(\d+)$/.exec(key);
+  if (!match) return null;
+  return { kind: "bone", segment: Number(match[1]), boneId: Number(match[2]) };
 }
 
 function getOrCreateWeights(
@@ -148,9 +145,19 @@ function getOrCreateWeights(
   const cached = mesh.weightCache.get(key);
   if (cached) return cached;
 
-  const weights = mesh.blendBytes
-    ? extractBoneWeights(mesh.blendBytes, source.boneId, mesh.vertexCount, mesh.blendStride)
-    : new Float32Array(mesh.vertexCount);
+  const weights = new Float32Array(mesh.vertexCount);
+  const segment = mesh.segments[source.segment];
+  if (segment?.blendBytes) {
+    weights.set(
+      extractBoneWeights(
+        segment.blendBytes,
+        source.boneId,
+        segment.vertexCount,
+        segment.blendStride,
+      ),
+      segment.vertexOffset,
+    );
+  }
 
   mesh.weightCache.set(key, weights);
   return weights;
@@ -231,7 +238,7 @@ export default function BodyShapeTool({
     updateHistoryState();
   };
 
-  const { loaded, selectedMeshId, loading, loadMod, loadMeshById } = useBodyShapeSession(
+  const { loaded, selectedMeshIds, loading, loadMod, loadMeshes } = useBodyShapeSession(
     fixedTargetPath,
     () => {
       setSelectedKeys([]);
@@ -247,20 +254,45 @@ export default function BodyShapeTool({
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
-    return loaded.cache.get(selectedMeshId) ?? null;
-  }, [loaded, selectedMeshId]);
+    return loaded.cache.get(meshSelectionKey(selectedMeshIds)) ?? null;
+  }, [loaded, selectedMeshIds]);
 
-  const useBones = Boolean(selectedMesh && selectedMesh.bones.length > 0);
+  const meshItems = useMemo(
+    () =>
+      (loaded?.meshes ?? []).map((mesh) => ({
+        key: mesh.id,
+        label: `${mesh.name} (${mesh.vertexCount})`,
+        fileKey: mesh.positionFileKey,
+      })),
+    [loaded],
+  );
+  const selectedMeshItems = meshItems.filter((item) => selectedMesh?.meshIds.includes(item.key));
+  const isMeshItemBlocked = (item: (typeof meshItems)[number]) =>
+    selectedMeshItems.some(
+      (selected) => selected.key !== item.key && selected.fileKey === item.fileKey,
+    );
+
+  const boneCount =
+    selectedMesh?.segments.reduce((total, segment) => total + segment.bones.length, 0) ?? 0;
+  const useBones = boneCount > 0;
 
   const selectableItems = useMemo(() => {
     if (!selectedMesh) return [] as { key: string; label: string }[];
-    return selectedMesh.bones.map((bone) => ({
-      key: weightKey({ kind: "bone", boneId: bone.id }),
-      label: t("page.tools.body_shape.bone_label", {
-        id: bone.id,
-        count: bone.vertexCount,
+    const multiple = selectedMesh.segments.length > 1;
+    return selectedMesh.segments.flatMap((segment, index) =>
+      segment.bones.map((bone) => {
+        const label = t("page.tools.body_shape.bone_label", {
+          id: bone.id,
+          count: bone.vertexCount,
+        });
+        return {
+          key: weightKey({ kind: "bone", segment: index, boneId: bone.id }),
+          label: multiple
+            ? t("page.tools.body_shape.segment_bone_label", { mesh: segment.name, bone: label })
+            : label,
+        };
       }),
-    }));
+    );
   }, [selectedMesh, t]);
 
   const hasSelection = useMemo(
@@ -589,20 +621,35 @@ export default function BodyShapeTool({
       const includeWeights = deformOperation === "scale";
       const upload = await Tools.BodyShapeBeginExport({
         sessionId: loaded.sessionId,
-        meshId: selectedMesh.id,
+        meshIds: selectedMesh.meshIds,
         includeWeights,
       });
-      const uploads = await Promise.allSettled([
-        uploadTypedArray(upload.positionsUploadUrl, selectedMesh.previewPositions),
-        ...(includeWeights && upload.weightsUploadUrl
-          ? [
-              uploadTypedArray(
-                upload.weightsUploadUrl,
-                displayWeights ?? new Float32Array(selectedMesh.vertexCount),
-              ),
-            ]
-          : []),
-      ]);
+      const weights = displayWeights ?? new Float32Array(selectedMesh.vertexCount);
+      const uploads = await Promise.allSettled(
+        (upload.meshes ?? []).flatMap((target) => {
+          const segment = selectedMesh.segments.find((entry) => entry.meshId === target.meshId);
+          if (!segment) {
+            return [
+              Promise.reject(new Error(`Body shape export mesh is unknown: ${target.meshId}`)),
+            ];
+          }
+          const end = segment.vertexOffset + segment.vertexCount;
+          return [
+            uploadTypedArray(
+              target.positionsUploadUrl,
+              selectedMesh.previewPositions.subarray(segment.vertexOffset * 3, end * 3),
+            ),
+            ...(includeWeights && target.weightsUploadUrl
+              ? [
+                  uploadTypedArray(
+                    target.weightsUploadUrl,
+                    weights.subarray(segment.vertexOffset, end),
+                  ),
+                ]
+              : []),
+          ];
+        }),
+      );
       const failedUpload = uploads.find(
         (entry): entry is PromiseRejectedResult => entry.status === "rejected",
       );
@@ -634,7 +681,7 @@ export default function BodyShapeTool({
           : result.changeLogPath
             ? t("page.tools.body_shape.toast.exported_with_log")
             : t("page.tools.body_shape.toast.exported_description", {
-                bytes: result.positionBytes,
+                bytes: (result.meshes ?? []).reduce((total, mesh) => total + mesh.positionBytes, 0),
               }),
       });
       onExported?.(result as never);
@@ -766,41 +813,61 @@ export default function BodyShapeTool({
                 <>
                   <Field>
                     <FieldLabel>{t("page.tools.body_shape.mesh")}</FieldLabel>
-                    <Select
-                      value={selectedMesh.id}
-                      items={loaded.meshes.map((mesh) => ({
-                        value: mesh.id,
-                        label: `${mesh.name} (${mesh.vertexCount})`,
-                      }))}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setSelectedKeys([]);
-                          resetSelectionHistory();
-                          previewKeyRef.current = null;
-                          setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
-                          setDeformOperation("scale");
-                          setWeightVersion((v) => v + 1);
-                          void loadMeshById(loaded, value).catch((error) => {
-                            toast.error(t("page.tools.body_shape.toast.load_failed"), {
-                              description: toErrorMessage(error),
-                            });
+                    <Combobox
+                      multiple
+                      items={meshItems}
+                      value={selectedMeshItems}
+                      onValueChange={(next) => {
+                        const ids = (next ?? []).map((item) => item.key);
+                        if (ids.length === 0) return;
+                        setSelectedKeys([]);
+                        resetSelectionHistory();
+                        previewKeyRef.current = null;
+                        setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+                        setDeformOperation("scale");
+                        setWeightVersion((v) => v + 1);
+                        void loadMeshes(loaded, ids).catch((error) => {
+                          toast.error(t("page.tools.body_shape.toast.load_failed"), {
+                            description: toErrorMessage(error),
                           });
-                        }
+                        });
                       }}
+                      itemToStringLabel={(item) => item.label}
+                      isItemEqualToValue={(a, b) => a.key === b.key}
                     >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {loaded.meshes.map((mesh) => (
-                            <SelectItem key={mesh.id} value={mesh.id}>
-                              {mesh.name} ({mesh.vertexCount})
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      <ComboboxChips>
+                        <ComboboxValue>
+                          {(value: typeof meshItems) => (
+                            <>
+                              {value.map((item) => (
+                                <ComboboxChip key={item.key}>{item.label}</ComboboxChip>
+                              ))}
+                              <ComboboxInput
+                                placeholder={
+                                  value.length > 0
+                                    ? ""
+                                    : t("page.tools.body_shape.mesh_placeholder")
+                                }
+                              />
+                            </>
+                          )}
+                        </ComboboxValue>
+                      </ComboboxChips>
+                      <ComboboxContent>
+                        <ComboboxEmpty>{t("page.tools.body_shape.no_meshes")}</ComboboxEmpty>
+                        <ComboboxList>
+                          {(item: (typeof meshItems)[number]) => (
+                            <ComboboxItem
+                              key={item.key}
+                              value={item}
+                              disabled={isMeshItemBlocked(item)}
+                            >
+                              {item.label}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
                   </Field>
 
                   <Field>
@@ -1204,7 +1271,7 @@ export default function BodyShapeTool({
                       </div>
                       {useBones ? (
                         <div>
-                          {t("page.tools.body_shape.metrics.bones")}: {selectedMesh.bones.length}
+                          {t("page.tools.body_shape.metrics.bones")}: {boneCount}
                         </div>
                       ) : null}
                     </div>

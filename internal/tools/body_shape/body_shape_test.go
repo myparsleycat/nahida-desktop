@@ -216,10 +216,8 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	service := NewWithOptions(Options{Mod: disabler})
 	changed := []float32{0, 0, 0, 2, 0, 0}
 	result, err := service.BodyShapeExport(ctx, BodyShapeExportInput{
-		ModRoot:        sourceRoot,
-		PositionPath:   positionPath,
-		PositionStride: 12,
-		Positions:      changed,
+		ModRoot: sourceRoot,
+		Meshes:  []BodyShapeExportMesh{{PositionPath: positionPath, PositionStride: 12, Positions: changed}},
 		ChangeSummary: &BodyShapeChangeSummary{
 			Amount:          .5,
 			AxisScale:       []float64{1, 0, 0},
@@ -265,57 +263,113 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	}
 }
 
-func TestBodyShapeBinaryUploadCommitExportsPositions(t *testing.T) {
-	ctx := context.Background()
+func loadBodyShapeTestMod(t *testing.T, ini string) (*Service, *bodyShapeTestDisabler, BodyShapeSessionDescriptor) {
+	t.Helper()
 	sourceRoot := filepath.Join(t.TempDir(), "Character Mod")
 	meshes := filepath.Join(sourceRoot, "Meshes")
 	if err := os.MkdirAll(meshes, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	original := []float32{0, 0, 0, 1, 0, 0}
-	writeTestPositions(t, filepath.Join(meshes, "Position.buf"), original, 12)
-	ini := "[ResourcePositionBuffer]\nstride = 12\nfilename = Meshes/Position.buf\n"
+	writeTestPositions(t, filepath.Join(meshes, "Body.buf"), []float32{0, 0, 0, 1, 0, 0}, 12)
+	writeTestPositions(t, filepath.Join(meshes, "Dress.buf"), []float32{0, 1, 0}, 12)
 	if err := os.WriteFile(filepath.Join(sourceRoot, "mod.ini"), []byte(ini), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service := NewWithOptions(Options{Mod: &bodyShapeTestDisabler{}})
-	loaded, err := service.BodyShapeLoadMod(ctx, sourceRoot)
-	if err != nil || len(loaded.Meshes) != 1 {
-		t.Fatalf("load = %#v, %v", loaded, err)
-	}
-	upload, err := service.BodyShapeBeginExport(
-		ctx,
-		BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshID: loaded.Meshes[0].ID},
-	)
+	disabler := &bodyShapeTestDisabler{}
+	service := NewWithOptions(Options{Mod: disabler})
+	loaded, err := service.BodyShapeLoadMod(context.Background(), sourceRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed := []float32{0, 0, 0, 2, 0, 0}
-	request := httptest.NewRequest(
-		http.MethodPut,
-		upload.PositionsUploadURL,
-		strings.NewReader(string(modmesh.Float32Bytes(changed))),
-	)
-	request.Header.Set("Content-Type", "application/octet-stream")
-	recorder := httptest.NewRecorder()
-	service.protocol.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("upload = %d %s", recorder.Code, recorder.Body.String())
+	return service, disabler, loaded
+}
+
+func TestBodyShapeBinaryUploadCommitExportsAllSelectedPositions(t *testing.T) {
+	ctx := context.Background()
+	service, disabler, loaded := loadBodyShapeTestMod(t,
+		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n\n"+
+			"[ResourceDressPosition]\nstride = 12\nfilename = Meshes/Dress.buf\n")
+	if len(loaded.Meshes) != 2 {
+		t.Fatalf("meshes = %#v", loaded.Meshes)
+	}
+	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{
+		SessionID: loaded.SessionID,
+		MeshIDs:   []string{loaded.Meshes[0].ID, loaded.Meshes[1].ID},
+	})
+	if err != nil || len(upload.Meshes) != 2 {
+		t.Fatalf("begin = %#v, %v", upload, err)
+	}
+	changed := map[string][]float32{
+		loaded.Meshes[0].ID: {0, 0, 0, 2, 0, 0},
+		loaded.Meshes[1].ID: {0, 3, 0},
+	}
+	for _, mesh := range upload.Meshes {
+		request := httptest.NewRequest(
+			http.MethodPut,
+			mesh.PositionsUploadURL,
+			strings.NewReader(string(modmesh.Float32Bytes(changed[mesh.MeshID]))),
+		)
+		request.Header.Set("Content-Type", "application/octet-stream")
+		recorder := httptest.NewRecorder()
+		service.protocol.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("upload %s = %d %s", mesh.MeshID, recorder.Code, recorder.Body.String())
+		}
 	}
 	result, err := service.BodyShapeCommitExport(
 		ctx,
 		BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID},
 	)
-	if err != nil || result.ModRoot == nil {
+	if err != nil || result.ModRoot == nil || len(result.Meshes) != 2 {
 		t.Fatalf("commit = %#v, %v", result, err)
 	}
-	raw, err := os.ReadFile(filepath.Join(*result.ModRoot, "Meshes", "Position.buf"))
-	if err != nil {
-		t.Fatal(err)
+	if !platform.SamePathFold(disabler.called, loaded.ModRoot) {
+		t.Fatalf("disabled %q, want %q", disabler.called, loaded.ModRoot)
 	}
-	positions, err := modmesh.ExtractPositions(raw, 12)
-	if err != nil || !reflect.DeepEqual(positions, changed) {
-		t.Fatalf("positions = %#v, %v", positions, err)
+	for file, want := range map[string][]float32{
+		"Body.buf":  changed[loaded.Meshes[0].ID],
+		"Dress.buf": changed[loaded.Meshes[1].ID],
+	} {
+		raw, readErr := os.ReadFile(filepath.Join(*result.ModRoot, "Meshes", file))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		positions, extractErr := modmesh.ExtractPositions(raw, 12)
+		if extractErr != nil || !reflect.DeepEqual(positions, want) {
+			t.Fatalf("%s positions = %#v, %v", file, positions, extractErr)
+		}
+	}
+	siblings, err := os.ReadDir(filepath.Dir(*result.ModRoot))
+	if err != nil || len(siblings) != 2 {
+		t.Fatalf("mod folders = %v, %v", siblings, err)
+	}
+}
+
+func TestBodyShapeBeginExportRejectsInvalidSelections(t *testing.T) {
+	service, _, loaded := loadBodyShapeTestMod(t,
+		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n\n"+
+			"[ResourceBodyAliasPosition]\nstride = 12\nfilename = Meshes/Body.buf\n")
+	if len(loaded.Meshes) != 2 {
+		t.Fatalf("meshes = %#v", loaded.Meshes)
+	}
+	body, alias := loaded.Meshes[0].ID, loaded.Meshes[1].ID
+	if loaded.Meshes[0].PositionFileKey != body || loaded.Meshes[1].PositionFileKey != body {
+		t.Fatalf("position file keys = %q, %q, want both %q",
+			loaded.Meshes[0].PositionFileKey, loaded.Meshes[1].PositionFileKey, body)
+	}
+	for name, ids := range map[string][]string{
+		"empty":     nil,
+		"duplicate": {body, body},
+		"unknown":   {body, "missing"},
+		"same file": {body, alias},
+	} {
+		upload, err := service.BodyShapeBeginExport(
+			context.Background(),
+			BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshIDs: ids},
+		)
+		if err == nil {
+			t.Fatalf("%s: begin = %#v, want error", name, upload)
+		}
 	}
 }
 
