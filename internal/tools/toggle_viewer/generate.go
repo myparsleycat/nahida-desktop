@@ -84,14 +84,24 @@ func parseToggleINI(content string) []toggleINISection {
 	return sections
 }
 
+// findToggleKeySections returns the key sections that switch a variable between states: a cycle
+// through at least two values, or a toggle, which flips its single value with the variable's default.
 func findToggleKeySections(sections []toggleINISection) []toggleKeySection {
 	var out []toggleKeySection
 	for _, section := range sections {
-		if !strings.HasPrefix(strings.ToLower(section.name), "key") ||
-			!strings.EqualFold(toggleEntryValue(section, "type"), "cycle") {
+		if !strings.HasPrefix(strings.ToLower(section.name), "key") {
 			continue
 		}
-		hasMultiValue := false
+		minValues := 0
+		switch strings.ToLower(toggleEntryValue(section, "type")) {
+		case "cycle":
+			minValues = 2
+		case "toggle":
+			minValues = 1
+		default:
+			continue
+		}
+		switches := false
 		for _, entry := range section.entries {
 			if !strings.HasPrefix(entry.key, "$") {
 				continue
@@ -102,13 +112,13 @@ func findToggleKeySections(sections []toggleINISection) []toggleKeySection {
 					count++
 				}
 			}
-			if count >= 2 {
-				hasMultiValue = true
+			if count >= minValues {
+				switches = true
 				break
 			}
 		}
 		key := toggleEntryValue(section, "key")
-		if !hasMultiValue || key == "" {
+		if !switches || key == "" {
 			continue
 		}
 		out = append(

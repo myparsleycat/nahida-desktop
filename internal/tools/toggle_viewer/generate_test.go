@@ -50,6 +50,17 @@ func TestGenerateToggleViewerArtifactRequiresCycleAndPositionHash(t *testing.T) 
 	}
 }
 
+func TestGenerateToggleViewerArtifactListsToggleKeys(t *testing.T) {
+	artifact := generateArtifact(
+		"mod.ini",
+		"[KeyHat]\ntype = toggle\nkey = VK_F\n$hat = 1\n[TextureOverrideBodyPosition]\nhash = 1234abcd",
+		"ctrl H",
+	)
+	if artifact == nil || !strings.Contains(artifact.txtContent, "KeyHat:\n    Key: F") {
+		t.Fatalf("toggle key artifact = %#v", artifact)
+	}
+}
+
 func TestGenerateToggleViewerArtifactAfterBOM(t *testing.T) {
 	if artifact := generateArtifact("mod.ini", utf8BOM+cycleModINI, "ctrl H"); artifact == nil {
 		t.Fatal("BOM hid the first key section")
