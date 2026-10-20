@@ -9,6 +9,8 @@ Texture2D<float> fluidThickness:register(t101);
 Texture2D<float4> fluidColor:register(t102);
 Texture2D<float> fluidAbsorptionDepth:register(t103);
 Texture2D<float4> sceneLighting:register(t104);
+// Row 0 the light from above, row 1 the broad surroundings (FluidAmbient.hlsl).
+StructuredBuffer<float4> fluidAmbient:register(t105);
 struct ScreenVarying{float4 position:SV_Position;};
 // Share of the offset lookup in the reflection a missed puddle ray keeps.
 static const float REFLECTION_MISS_LOCAL=.3;
@@ -176,8 +178,7 @@ float4 main(ScreenVarying i):SV_Target{
  float3 background=hdrBilinear(refractionUV);
  float3 ambient=(hdrAt(uv+float2(.04,0))+hdrAt(uv-float2(.04,0))+hdrAt(uv+float2(0,.04))+hdrAt(uv-float2(0,.04)))*.25;
  // Broad scene probes avoid treating dark clothing immediately behind the jet as the entire environment.
- float3 upperBroad=(hdrAt(float2(.15,.15))+hdrAt(float2(.85,.15)))*.5;
- float3 broad=(upperBroad*2+hdrAt(float2(.2,.55))+hdrAt(float2(.8,.55)))*.25;
+ float3 upperBroad=fluidAmbient[0].rgb,broad=fluidAmbient[1].rgb;
  ambient=ambient*.6+broad*.4;
  float luminance=dot(ambient,float3(.2126,.7152,.0722));
  float illumination=saturate(luminance/(luminance+.18));
