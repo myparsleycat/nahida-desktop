@@ -23,9 +23,11 @@ import { useAuth } from "@renderer/hooks/use-auth";
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { formatSize, toErrorMessage } from "@shared/utils";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Events } from "@wailsio/runtime";
 import {
+  FileArchiveIcon,
   FileTextIcon,
   FilmIcon,
   FolderIcon,
@@ -33,6 +35,7 @@ import {
   ImageIcon,
   Loader2Icon,
   PaperclipIcon,
+  type LucideIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -43,30 +46,6 @@ export const Route = createFileRoute("/setting/feedback")({
   component: RouteComponent,
 });
 
-// The backend enforces the same limits; they are repeated here so a report it
-// would refuse is caught before anything is uploaded.
-const MAX_BODY_LENGTH = 10_000;
-const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
-const MAX_MEDIA_FILES = 20;
-const MAX_MOD_FILES = 2000;
-const MEDIA_EXTENSIONS = [
-  "png",
-  "jpg",
-  "jpeg",
-  "webp",
-  "gif",
-  "avif",
-  "bmp",
-  "mp4",
-  "webm",
-  "mov",
-  "mkv",
-  "txt",
-  "log",
-  "md",
-  "json",
-  "ini",
-];
 // The website category is offered on the website itself, not here.
 const CATEGORIES = ["desktop", "service", "xxmi-libs"] as const;
 const ERROR_CODES = [
@@ -80,12 +59,13 @@ const ERROR_CODES = [
 
 type Category = (typeof CATEGORIES)[number];
 
-const kindIcons = {
+// The media kinds are the server's; one it adds later gets the generic icon.
+const kindIcons: Partial<Record<string, LucideIcon>> = {
   [Kind.KindImage]: ImageIcon,
   [Kind.KindVideo]: FilmIcon,
   [Kind.KindText]: FileTextIcon,
   [Kind.KindMod]: FolderIcon,
-  [Kind.KindUnsupported]: FileTextIcon,
+  archive: FileArchiveIcon,
 };
 
 function RouteComponent() {
@@ -99,6 +79,11 @@ function RouteComponent() {
   const [progress, setProgress] = useState<number | null>(null);
   const sending = progress !== null;
   const cancelled = useRef(false);
+  const rulesQuery = useQuery({
+    queryKey: ["feedback", "rules"],
+    queryFn: () => Feedback.Rules(),
+  });
+  const rules = rulesQuery.data;
 
   useEffect(() => {
     return Events.On("feedback:progress", (event) => {
@@ -124,13 +109,20 @@ function RouteComponent() {
   const media = attachments.filter((item) => item.kind !== Kind.KindMod);
   const mods = attachments.filter((item) => item.kind === Kind.KindMod);
   const mediaBytes = media.reduce((sum, item) => sum + item.size, 0);
-  const problem =
-    body.length > MAX_BODY_LENGTH
-      ? t("page.setting.feedback.error.body_too_long")
-      : media.length > MAX_MEDIA_FILES
-        ? t("page.setting.feedback.error.FEEDBACK_TOO_MANY_MEDIA", { count: MAX_MEDIA_FILES })
-        : mediaBytes > MAX_MEDIA_BYTES
-          ? t("page.setting.feedback.error.FEEDBACK_MEDIA_TOO_LARGE")
+  const problem = !rules
+    ? rulesQuery.isError
+      ? t("page.setting.feedback.error.rules_unavailable")
+      : null
+    : body.length > rules.maxBodyLength
+      ? t("page.setting.feedback.error.body_too_long", {
+          max: rules.maxBodyLength.toLocaleString(),
+        })
+      : media.length > rules.maxMediaFiles
+        ? t("page.setting.feedback.error.FEEDBACK_TOO_MANY_MEDIA", { count: rules.maxMediaFiles })
+        : mediaBytes > rules.maxMediaBytes
+          ? t("page.setting.feedback.error.FEEDBACK_MEDIA_TOO_LARGE", {
+              size: formatSize(rules.maxMediaBytes),
+            })
           : null;
 
   const addPaths = async (pick: () => Promise<string[]>) => {
@@ -174,11 +166,15 @@ function RouteComponent() {
   };
 
   const pickFiles = async () => {
+    if (!rules) return [];
     const selected = await Dialog.ShowOpenDialog({
       title: t("page.setting.feedback.attachments.add_files"),
       defaultPath: "",
       filters: [
-        { name: t("page.setting.feedback.attachments.filter"), extensions: MEDIA_EXTENSIONS },
+        {
+          name: t("page.setting.feedback.attachments.filter"),
+          extensions: (rules.mediaExtensions ?? []).map((item) => item.ext.slice(1)),
+        },
       ],
       properties: ["openFile", "multiSelections"],
     });
@@ -191,6 +187,7 @@ function RouteComponent() {
   };
 
   const submit = async () => {
+    if (!rules) return;
     cancelled.current = false;
     setProgress(0);
     try {
@@ -218,7 +215,8 @@ function RouteComponent() {
         description: code
           ? t(`page.setting.feedback.error.${code}`, {
               name: message.slice(code.length + 1),
-              count: code === "FEEDBACK_TOO_MANY_MEDIA" ? MAX_MEDIA_FILES : MAX_MOD_FILES,
+              count: code === "FEEDBACK_TOO_MANY_MEDIA" ? rules.maxMediaFiles : rules.maxModFiles,
+              size: formatSize(rules.maxMediaBytes),
             })
           : message,
       });
@@ -266,16 +264,17 @@ function RouteComponent() {
               <span
                 className={cn(
                   "text-xs text-muted-foreground tabular-nums",
-                  body.length > MAX_BODY_LENGTH && "text-destructive",
+                  rules && body.length > rules.maxBodyLength && "text-destructive",
                 )}
               >
-                {body.length.toLocaleString()} / {MAX_BODY_LENGTH.toLocaleString()}
+                {body.length.toLocaleString()}
+                {rules && ` / ${rules.maxBodyLength.toLocaleString()}`}
               </span>
             </div>
             <Textarea
               value={body}
               disabled={sending}
-              aria-invalid={body.length > MAX_BODY_LENGTH}
+              aria-invalid={rules && body.length > rules.maxBodyLength}
               placeholder={t("page.setting.feedback.body.placeholder")}
               className="max-h-96 min-h-40"
               onChange={(event) => setBody(event.target.value)}
@@ -290,10 +289,11 @@ function RouteComponent() {
               <span
                 className={cn(
                   "text-xs text-muted-foreground tabular-nums",
-                  mediaBytes > MAX_MEDIA_BYTES && "text-destructive",
+                  rules && mediaBytes > rules.maxMediaBytes && "text-destructive",
                 )}
               >
-                {formatSize(mediaBytes)} / {formatSize(MAX_MEDIA_BYTES)}
+                {formatSize(mediaBytes)}
+                {rules && ` / ${formatSize(rules.maxMediaBytes)}`}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -302,7 +302,7 @@ function RouteComponent() {
             {attachments.length > 0 && (
               <ul className="space-y-1">
                 {attachments.map((item) => {
-                  const Icon = kindIcons[item.kind];
+                  const Icon = kindIcons[item.kind] ?? PaperclipIcon;
                   return (
                     <li
                       key={item.path}
@@ -339,7 +339,7 @@ function RouteComponent() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={sending}
+                disabled={sending || !rules}
                 onClick={() => void addPaths(pickFiles)}
               >
                 <PaperclipIcon />
@@ -396,7 +396,7 @@ function RouteComponent() {
               </Button>
             )}
             <Button
-              disabled={sending || body.trim() === "" || problem !== null}
+              disabled={sending || !rules || body.trim() === "" || problem !== null}
               onClick={() => void submit()}
             >
               {sending && <Loader2Icon className="animate-spin" />}

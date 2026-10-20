@@ -2817,14 +2817,15 @@
         "failed": "신고를 보내지 못했습니다.",
         "skipped_mod_files": "지원하지 않는 형식의 모드 파일 {{count}}개는 제외되었습니다.",
         "error": {
-          "body_too_long": "내용은 10,000자를 넘을 수 없습니다.",
+          "body_too_long": "내용은 {{max}}자를 넘을 수 없습니다.",
           "FEEDBACK_UNSUPPORTED_FILE": "첨부할 수 없는 파일입니다: {{name}}",
           "empty_file": "빈 파일은 첨부할 수 없습니다: {{name}}",
-          "FEEDBACK_MEDIA_TOO_LARGE": "이미지·영상·텍스트 첨부는 합쳐서 100MB를 넘을 수 없습니다.",
+          "FEEDBACK_MEDIA_TOO_LARGE": "이미지·영상·텍스트 첨부는 합쳐서 {{size}}를 넘을 수 없습니다.",
           "FEEDBACK_TOO_MANY_MEDIA": "이미지·영상·텍스트 파일은 {{count}}개까지 첨부할 수 있습니다.",
           "FEEDBACK_TOO_MANY_MOD_FILES": "모드 파일은 모두 합쳐 {{count}}개까지 첨부할 수 있습니다.",
           "FEEDBACK_EMPTY_MOD": "첨부할 수 있는 파일이 모드 폴더에 없습니다.",
-          "FEEDBACK_BUSY": "이미 보내는 중인 신고가 있습니다."
+          "FEEDBACK_BUSY": "이미 보내는 중인 신고가 있습니다.",
+          "rules_unavailable": "첨부 규칙을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
         }
       },
       "adv": {

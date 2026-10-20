@@ -7,9 +7,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,14 +27,7 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-// The limits mirror the backend's, so a report it would refuse is refused
-// before anything is uploaded.
 const (
-	MaxBodyLength = 10000
-	MaxMediaBytes = 100 << 20
-	MaxMediaFiles = 20
-	MaxModFiles   = 2000
-
 	// maxLogBytes is how much of the end of desktop.log a report carries.
 	maxLogBytes = 8 << 20
 
@@ -58,7 +53,8 @@ func coded(code, detail string) error {
 	return infra.ContractError(code + ":" + detail)
 }
 
-// Kind is what the renderer shows an attachment as.
+// Kind is what the renderer shows an attachment as. The media kinds are the
+// server's, so one it adds later reaches the renderer unchanged.
 type Kind string
 
 const (
@@ -69,11 +65,46 @@ const (
 	KindUnsupported Kind = "unsupported"
 )
 
-var mediaTypes = map[string]Kind{
-	".png": KindImage, ".jpg": KindImage, ".jpeg": KindImage, ".webp": KindImage,
-	".gif": KindImage, ".avif": KindImage, ".bmp": KindImage,
-	".mp4": KindVideo, ".webm": KindVideo, ".mov": KindVideo, ".mkv": KindVideo,
-	".txt": KindText, ".log": KindText, ".md": KindText, ".json": KindText, ".ini": KindText,
+// Rules are the server's feedback upload rules: the media allow list and the
+// bounds of one report, checked before anything is uploaded. Mod files follow
+// the akasha upload rules instead.
+type Rules struct {
+	MediaExtensions []MediaExtension `json:"mediaExtensions"`
+	MaxBodyLength   int              `json:"maxBodyLength"`
+	MaxMediaFiles   int              `json:"maxMediaFiles"`
+	MaxMediaBytes   int64            `json:"maxMediaBytes"`
+	MaxModFiles     int              `json:"maxModFiles"`
+	MaxPlanFiles    int              `json:"maxPlanFiles"`
+}
+
+// MediaExtension is one extension the server accepts as a media attachment.
+type MediaExtension struct {
+	Ext  string `json:"ext"`
+	Kind Kind   `json:"kind"`
+}
+
+func (r Rules) usable() bool {
+	if len(r.MediaExtensions) == 0 || r.MaxBodyLength <= 0 || r.MaxMediaFiles <= 0 || r.MaxMediaBytes <= 0 ||
+		r.MaxModFiles <= 0 || r.MaxPlanFiles <= 0 {
+		return false
+	}
+	for _, media := range r.MediaExtensions {
+		if !strings.HasPrefix(media.Ext, ".") || media.Kind == "" || media.Kind == KindMod ||
+			media.Kind == KindUnsupported {
+			return false
+		}
+	}
+	return true
+}
+
+func (r Rules) mediaKind(path string) Kind {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, media := range r.MediaExtensions {
+		if media.Ext == ext {
+			return media.Kind
+		}
+	}
+	return KindUnsupported
 }
 
 var categories = map[string]bool{"service": true, "desktop": true, "xxmi-libs": true}
@@ -162,10 +193,31 @@ func New(options Options) *Service {
 	}
 }
 
+// Rules fetches the server's feedback upload rules, which the renderer checks a
+// report against before sending it.
+func (s *Service) Rules(ctx context.Context) (Rules, error) {
+	if s.remote == nil {
+		return Rules{}, errors.New("the Nahida backend is not configured")
+	}
+	data, err := s.backend(ctx, http.MethodGet, rulesPath, nil, nil)
+	if err != nil {
+		return Rules{}, err
+	}
+	var rules Rules
+	if err := json.Unmarshal(data, &rules); err != nil {
+		return Rules{}, fmt.Errorf("decode the feedback upload rules: %w", err)
+	}
+	if !rules.usable() {
+		return Rules{}, errors.New("the server sent unusable feedback upload rules")
+	}
+	return rules, nil
+}
+
 // Describe classifies the paths the user picked or dropped, so the renderer can
 // list them with their sizes before anything is sent.
 func (s *Service) Describe(ctx context.Context, paths []string) ([]Attachment, error) {
 	attachments := make([]Attachment, 0, len(paths))
+	var rules *Rules
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -173,7 +225,14 @@ func (s *Service) Describe(ctx context.Context, paths []string) ([]Attachment, e
 		}
 		attachment := Attachment{Path: path, Name: filepath.Base(path), Size: info.Size()}
 		if !info.IsDir() {
-			attachment.Kind = mediaKind(path)
+			if rules == nil {
+				fetched, err := s.Rules(ctx)
+				if err != nil {
+					return nil, err
+				}
+				rules = &fetched
+			}
+			attachment.Kind = rules.mediaKind(path)
 			attachments = append(attachments, attachment)
 			continue
 		}
@@ -253,12 +312,18 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 	if strings.TrimSpace(request.Body) == "" {
 		return Result{}, coded(codeEmptyBody, "")
 	}
-	if len(utf16.Encode([]rune(request.Body))) > MaxBodyLength {
+
+	*stage = "rules"
+	rules, err := s.Rules(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(utf16.Encode([]rune(request.Body))) > rules.MaxBodyLength {
 		return Result{}, coded(codeBodyTooLong, "")
 	}
 
 	*stage = "collect"
-	media, mods, skipped, err := s.collect(ctx, request)
+	media, mods, skipped, err := s.collect(ctx, request, rules)
 	if err != nil {
 		return Result{}, err
 	}
@@ -270,7 +335,7 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 	progress.report(true)
 
 	*stage = "upload"
-	if err := s.upload(ctx, reportID, media, progress); err != nil {
+	if err := s.upload(ctx, reportID, media, rules.MaxPlanFiles, progress); err != nil {
 		return Result{}, err
 	}
 
@@ -397,7 +462,7 @@ func declarations(uploads []upload) []fileDeclaration {
 // collect turns the picked paths into the files to upload. Mod files the
 // upload rules do not admit are left out and counted, the way a drive upload
 // leaves them out, instead of failing the whole report.
-func (s *Service) collect(ctx context.Context, request Request) ([]upload, []modUpload, int, error) {
+func (s *Service) collect(ctx context.Context, request Request, rules Rules) ([]upload, []modUpload, int, error) {
 	uploads := make([]upload, 0, len(request.Files))
 	var mediaBytes int64
 	for _, path := range request.Files {
@@ -405,7 +470,7 @@ func (s *Service) collect(ctx context.Context, request Request) ([]upload, []mod
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		if info.IsDir() || mediaKind(path) == KindUnsupported || info.Size() == 0 {
+		if info.IsDir() || rules.mediaKind(path) == KindUnsupported || info.Size() == 0 {
 			return nil, nil, 0, coded(codeUnsupportedFile, filepath.Base(path))
 		}
 		mediaBytes += info.Size()
@@ -416,10 +481,10 @@ func (s *Service) collect(ctx context.Context, request Request) ([]upload, []mod
 			},
 		})
 	}
-	if len(uploads) > MaxMediaFiles {
+	if len(uploads) > rules.MaxMediaFiles {
 		return nil, nil, 0, coded(codeTooManyMedia, "")
 	}
-	if mediaBytes > MaxMediaBytes {
+	if mediaBytes > rules.MaxMediaBytes {
 		return nil, nil, 0, coded(codeMediaTooLarge, "")
 	}
 	if len(request.ModDirs) == 0 {
@@ -453,7 +518,7 @@ func (s *Service) collect(ctx context.Context, request Request) ([]upload, []mod
 	if len(mods) == 0 {
 		return nil, nil, 0, coded(codeEmptyMod, "")
 	}
-	if len(mods) > MaxModFiles {
+	if len(mods) > rules.MaxModFiles {
 		return nil, nil, 0, coded(codeTooManyModFiles, "")
 	}
 	return uploads, mods, skipped, nil
@@ -502,13 +567,6 @@ func walkMod(ctx context.Context, dir string) ([]modFile, error) {
 		return nil
 	})
 	return files, err
-}
-
-func mediaKind(path string) Kind {
-	if kind, ok := mediaTypes[strings.ToLower(filepath.Ext(path))]; ok {
-		return kind
-	}
-	return KindUnsupported
 }
 
 // readLog returns the anonymized end of desktop.log, or nil when there is no

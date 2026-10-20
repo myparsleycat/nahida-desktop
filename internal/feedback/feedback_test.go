@@ -20,6 +20,14 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+// testRules carries a media kind the client has no constant for, the way a
+// kind the server adds later reaches it.
+const testRules = `{"mediaExtensions":[` +
+	`{"ext":".png","kind":"image","contentType":"image/png"},` +
+	`{"ext":".zip","kind":"archive","contentType":"application/zip"}],` +
+	`"maxBodyLength":100,"maxMediaFiles":20,"maxMediaBytes":1048576,` +
+	`"maxModFiles":2000,"maxPlanFiles":500,"maxLogBytes":16777216}`
+
 // backend stands in for the API and the bucket behind one transport, so the
 // test sees exactly what would leave the machine.
 type backend struct {
@@ -34,11 +42,17 @@ func (b *backend) RoundTrip(request *http.Request) (*http.Response, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	body, err := io.ReadAll(request.Body)
-	if err != nil {
-		return nil, err
+	var body []byte
+	if request.Body != nil {
+		read, err := io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		body = read
 	}
 	switch {
+	case request.URL.Path == rulesPath && request.Method == http.MethodGet:
+		return answer(http.StatusOK, testRules), nil
 	case request.URL.Host == bucketHost:
 		if request.ContentLength != int64(len(body)) {
 			return answer(http.StatusForbidden, `{}`), nil
@@ -248,7 +262,7 @@ func TestSubmitRefusesBeforeUploading(t *testing.T) {
 	}{
 		{"website category", Request{Category: "website", Body: "x"}, codeInvalidCategory},
 		{"blank body", Request{Category: "desktop", Body: "  "}, codeEmptyBody},
-		{"long body", Request{Category: "desktop", Body: strings.Repeat("가", MaxBodyLength+1)}, codeBodyTooLong},
+		{"long body", Request{Category: "desktop", Body: strings.Repeat("가", 101)}, codeBodyTooLong},
 		{
 			"unsupported file",
 			Request{Category: "desktop", Body: "x", Files: []string{writeFile(t, filepath.Join(dir, "a.exe"), "x")}},
@@ -266,6 +280,21 @@ func TestSubmitRefusesBeforeUploading(t *testing.T) {
 				t.Fatalf("a refused report reached the backend")
 			}
 		})
+	}
+}
+
+func TestDescribeTakesTheMediaKindsFromTheServer(t *testing.T) {
+	dir := t.TempDir()
+	paths := []string{
+		writeFile(t, filepath.Join(dir, "crash.ZIP"), "x"),
+		writeFile(t, filepath.Join(dir, "notes.txt"), "x"),
+	}
+	described, err := newService(t, &backend{puts: make(map[string]string)}, "").Describe(t.Context(), paths)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if described[0].Kind != "archive" || described[1].Kind != KindUnsupported {
+		t.Fatalf("kinds = %q, %q, want archive, unsupported", described[0].Kind, described[1].Kind)
 	}
 }
 

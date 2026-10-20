@@ -22,14 +22,13 @@ import (
 )
 
 const (
+	rulesPath  = "/feedback/upload-rules"
 	planPath   = "/feedback/uploads"
 	submitPath = "/feedback"
 
 	storageHost = "s3.ap-tokyo-1.megas4.com"
 	bucketHost  = "user-feedback-attachments." + storageHost
 
-	// planBatch is how many files one plan request may declare.
-	planBatch     = 500
 	uploadWorkers = 4
 	// maxResponseBytes bounds how much of a backend answer is read back. A full
 	// plan answer carries one signed URL per file.
@@ -76,9 +75,15 @@ type reportPayload struct {
 
 // upload plans the media files in batches and PUTs each batch before asking for
 // the next, so a signed URL is used soon after it was issued.
-func (s *Service) upload(ctx context.Context, reportID string, uploads []upload, progress *progress) error {
-	for start := 0; start < len(uploads); start += planBatch {
-		batch := uploads[start:min(start+planBatch, len(uploads))]
+func (s *Service) upload(
+	ctx context.Context,
+	reportID string,
+	uploads []upload,
+	batchSize int,
+	progress *progress,
+) error {
+	for start := 0; start < len(uploads); start += batchSize {
+		batch := uploads[start:min(start+batchSize, len(uploads))]
 		objects, err := s.plan(ctx, reportID, batch)
 		if err != nil {
 			return err
@@ -112,7 +117,7 @@ func (s *Service) plan(ctx context.Context, reportID string, batch []upload) (ma
 	}
 	header := make(http.Header)
 	header.Set("Content-Type", "application/json")
-	data, err := s.backend(ctx, planPath, header, body)
+	data, err := s.backend(ctx, http.MethodPost, planPath, header, body)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +196,7 @@ func (s *Service) send(ctx context.Context, payload reportPayload, log []byte) (
 
 	header := make(http.Header)
 	header.Set("Content-Type", writer.FormDataContentType())
-	data, err := s.backend(ctx, submitPath, header, body.Bytes())
+	data, err := s.backend(ctx, http.MethodPost, submitPath, header, body.Bytes())
 	if err != nil {
 		return "", err
 	}
@@ -207,13 +212,22 @@ func (s *Service) send(ctx context.Context, payload reportPayload, log []byte) (
 	return stored.ID, nil
 }
 
-// backend posts one request to the Nahida backend and returns the body of a
+// backend sends one request to the Nahida backend and returns the body of a
 // successful answer. The client adds the session token for the API host.
-func (s *Service) backend(ctx context.Context, path string, header http.Header, body []byte) ([]byte, error) {
+func (s *Service) backend(
+	ctx context.Context,
+	method, path string,
+	header http.Header,
+	body []byte,
+) ([]byte, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
 	response, err := s.remote.Fetch(ctx, strings.TrimRight(s.remote.BackendURL(), "/")+path, infra.FetchOptions{
-		Method:            http.MethodPost,
+		Method:            method,
 		Header:            header,
-		Body:              bytes.NewReader(body),
+		Body:              reader,
 		DisableHTTPErrors: true,
 	})
 	if err != nil {

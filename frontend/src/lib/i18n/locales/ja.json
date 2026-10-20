@@ -2817,14 +2817,15 @@
         "failed": "報告を送信できませんでした。",
         "skipped_mod_files": "対応していない形式の Mod ファイル {{count}} 個は除外されました。",
         "error": {
-          "body_too_long": "内容は 10,000 文字を超えられません。",
+          "body_too_long": "内容は {{max}} 文字を超えられません。",
           "FEEDBACK_UNSUPPORTED_FILE": "添付できないファイルです: {{name}}",
           "empty_file": "空のファイルは添付できません: {{name}}",
-          "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキストの添付は合計 100MB を超えられません。",
+          "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキストの添付は合計 {{size}} を超えられません。",
           "FEEDBACK_TOO_MANY_MEDIA": "画像・動画・テキストファイルは {{count}} 個まで添付できます。",
           "FEEDBACK_TOO_MANY_MOD_FILES": "Mod ファイルは合計 {{count}} 個まで添付できます。",
           "FEEDBACK_EMPTY_MOD": "Mod フォルダーに添付できるファイルがありません。",
-          "FEEDBACK_BUSY": "送信中の報告がすでにあります。"
+          "FEEDBACK_BUSY": "送信中の報告がすでにあります。",
+          "rules_unavailable": "添付ルールを読み込めませんでした。しばらくしてから再度お試しください。"
         }
       },
       "adv": {
