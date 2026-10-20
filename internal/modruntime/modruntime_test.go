@@ -165,6 +165,38 @@ func TestStates(t *testing.T) {
 	}
 }
 
+// A runtime ships one spec per importer under the same name, and each game's
+// Mods folder must get its own files.
+func TestSpecPerImporter(t *testing.T) {
+	efmiRoot, gimiRoot := t.TempDir(), t.TempDir()
+	efmi, gimi := "EFMI", "GIMI"
+	spec := func(importer string) Spec {
+		probe := "namespace = Probe\r\n; " + importer + "\r\n"
+		return Spec{
+			Name: "Probe", Version: "1", Importers: []string{importer}, Namespace: "Probe",
+			Files: fstest.MapFS{"Probe.ini": {Data: []byte(probe)}},
+		}
+	}
+	manager := New(Options{
+		GamePaths: fakeGamePaths{
+			{Game: "endfield", ModFolderPath: efmiRoot, Importer: &efmi},
+			{Game: "genshin", ModFolderPath: gimiRoot, Importer: &gimi},
+		},
+		Mod:   renamingMods{},
+		Specs: []Spec{spec(efmi), spec(gimi)},
+	})
+
+	for importer, modsRoot := range map[string]string{efmi: efmiRoot, gimi: gimiRoot} {
+		if _, err := manager.Install(context.Background(), importer, "Probe"); err != nil {
+			t.Fatalf("install for %s: %v", importer, err)
+		}
+		probe, err := os.ReadFile(filepath.Join(installRoot(modsRoot, "Probe"), "Probe.ini"))
+		if err != nil || !strings.Contains(string(probe), "; "+importer) {
+			t.Fatalf("%s got Probe.ini %q (err=%v)", importer, probe, err)
+		}
+	}
+}
+
 // The Mods folder is often a junction, which filepath.WalkDir does not enter.
 func TestForeignCopyBelowJunction(t *testing.T) {
 	manager, modsRoot := newTestManager(t)

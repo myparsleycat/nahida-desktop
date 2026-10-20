@@ -18,7 +18,6 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -47,9 +46,11 @@ const (
 	operationPrefix = "mod-runtime-"
 )
 
-// Spec describes one runtime bundled with the app.
+// Spec describes one runtime bundled with the app. A runtime whose files
+// differ per game ships one Spec per importer under the same Name.
 type Spec struct {
-	// Name is the install folder below GroupDir and the runtime's identity.
+	// Name is the install folder below GroupDir and, with the importer, the
+	// runtime's identity.
 	Name string
 	// Version moves with any change to Files, so existing installs read as
 	// outdated and are updated.
@@ -185,6 +186,11 @@ func New(opts Options) *Manager {
 				panic(fmt.Sprintf("mod runtime %s: color setting %s needs three targets", spec.Name, setting.ID))
 			}
 		}
+		for _, importer := range spec.Importers {
+			if _, taken := manager.spec(spec.Name, importer); taken {
+				panic(fmt.Sprintf("mod runtime %s: two specs for importer %s", spec.Name, importer))
+			}
+		}
 		manager.specs = append(manager.specs, runtimeSpec{
 			Spec: spec,
 			namespace: regexp.MustCompile(
@@ -243,7 +249,7 @@ func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 func (m *Manager) Install(ctx context.Context, importer, name string) (Status, error) {
 	return m.operate(ctx, "install", importer, name, func(sc *scope, modsRoot string, _ selection) (Status, error) {
 		var installed Status
-		err := m.Use(ctx, modsRoot, name, true, func(_ string, status Status) error {
+		err := m.Use(ctx, importer, modsRoot, name, true, func(_ string, status Status) error {
 			installed = status
 			return nil
 		})
@@ -401,22 +407,23 @@ func (m *Manager) Refresh(ctx context.Context, importer string) error {
 }
 
 // Use runs fn with the folder the runtime keeps its data in, holding off
-// management actions and the disk slot of modsRoot until fn returns. With
-// install, the runtime is enabled and brought up to date first; a foreign
-// copy then fails with ErrorForeign. fn must not take a disk slot.
+// management actions and the disk slot of modsRoot until fn returns. modsRoot
+// is the importer's Mods folder. With install, the runtime is enabled and
+// brought up to date first; a foreign copy then fails with ErrorForeign. fn
+// must not take a disk slot.
 //
 //wails:ignore
 func (m *Manager) Use(
 	ctx context.Context,
-	modsRoot, name string,
+	importer, modsRoot, name string,
 	install bool,
 	fn func(root string, status Status) error,
 ) error {
-	spec, ok := m.spec(name)
+	spec, ok := m.spec(name, importer)
 	if !ok {
 		return infra.ContractError(ErrorUnknown + ":" + name)
 	}
-	sel, err := m.resolve(ctx, m.importerOf(ctx, modsRoot, spec), spec)
+	sel, err := m.resolve(ctx, importer, spec)
 	if err != nil {
 		return err
 	}
@@ -489,9 +496,8 @@ func (m *Manager) operate(
 	action func(sc *scope, modsRoot string, sel selection) (Status, error),
 ) (Status, error) {
 	sc := &scope{stage: "resolve", fields: map[string]any{"importer": importer, "runtime": name}}
-	spec, ok := m.spec(name)
-	if !ok ||
-		!slices.ContainsFunc(spec.Importers, func(item string) bool { return strings.EqualFold(item, importer) }) {
+	spec, ok := m.spec(name, importer)
+	if !ok {
 		return Status{}, infra.ContractError(ErrorUnknown + ":" + name)
 	}
 	modsRoot, err := m.modsRoot(ctx, importer)
@@ -533,33 +539,6 @@ func (m *Manager) resolve(ctx context.Context, importer string, spec runtimeSpec
 	return sel, nil
 }
 
-// importerOf names the importer whose Mods folder is modsRoot among the
-// ones the runtime supports; the first one stands in when no game path says.
-func (m *Manager) importerOf(ctx context.Context, modsRoot string, spec runtimeSpec) string {
-	if len(spec.Importers) == 0 {
-		return ""
-	}
-	if len(spec.Importers) == 1 || m.games == nil {
-		return spec.Importers[0]
-	}
-	rows, err := m.games.List(ctx)
-	if err != nil {
-		return spec.Importers[0]
-	}
-	for _, row := range rows {
-		if row.Importer == nil || !platform.SamePathFold(row.ModFolderPath, modsRoot) {
-			continue
-		}
-		if slices.ContainsFunc(
-			spec.Importers,
-			func(name string) bool { return strings.EqualFold(name, *row.Importer) },
-		) {
-			return *row.Importer
-		}
-	}
-	return spec.Importers[0]
-}
-
 func (m *Manager) report(sc *scope, operation string, err error) error {
 	if err == nil || infra.IsCancellationError(err) {
 		return err
@@ -575,9 +554,10 @@ func (m *Manager) report(sc *scope, operation string, err error) error {
 	})
 }
 
-func (m *Manager) spec(name string) (runtimeSpec, bool) {
+func (m *Manager) spec(name, importer string) (runtimeSpec, bool) {
 	for _, spec := range m.specs {
-		if spec.Name == name {
+		if spec.Name == name &&
+			slices.ContainsFunc(spec.Importers, func(item string) bool { return strings.EqualFold(item, importer) }) {
 			return spec, true
 		}
 	}

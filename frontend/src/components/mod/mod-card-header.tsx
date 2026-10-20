@@ -143,7 +143,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     </DropdownMenuItem>
                   )}
 
-                  {actions.isEfmiGame && (
+                  {actions.supportsLiquidEmitter && (
                     <DropdownMenuItem
                       onClick={(event) => {
                         event.stopPropagation();

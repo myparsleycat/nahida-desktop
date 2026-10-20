@@ -17,7 +17,6 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
-	efmioutline "nahida.live/desktop/internal/tools/efmi_outline"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -42,7 +41,7 @@ type DrawSources interface {
 
 type Options struct {
 	Log       *infra.Log
-	GamePaths efmioutline.GamePaths
+	GamePaths modruntime.GamePaths
 	Mod       ModToggler
 	Viewer    DrawSources
 	FS        *platform.FS
@@ -52,7 +51,7 @@ type Options struct {
 
 type Service struct {
 	log      *infra.Log
-	games    efmioutline.GamePaths
+	games    modruntime.GamePaths
 	mod      ModToggler
 	viewer   DrawSources
 	fs       *platform.FS
@@ -77,7 +76,7 @@ func NewWithOptions(opts Options) *Service {
 	}
 	if service.runtimes == nil {
 		service.runtimes = modruntime.New(modruntime.Options{
-			Log: opts.Log, Mod: opts.Mod, Specs: []modruntime.Spec{RuntimeSpec()},
+			Log: opts.Log, Mod: opts.Mod, Specs: RuntimeSpecs(),
 		})
 	}
 	return service
@@ -92,8 +91,10 @@ func (s *Service) UseClient(client *db.Client) {
 
 type scope struct {
 	root, modsRoot string
-	stage          string
-	fields         map[string]any
+	// importer names the game whose Mods folder holds root.
+	importer string
+	stage    string
+	fields   map[string]any
 	// origin is set while applying to a folder just copied from another mod.
 	origin *modMarker
 }
@@ -191,15 +192,15 @@ func (s *Service) run(
 	if s.games == nil {
 		return Inspection{}, report(errors.New("liquid emitter is not bound to a database"))
 	}
-	root, modsRoot, ok, err := efmioutline.ResolveEFMIMod(ctx, s.games, modPath)
+	location, err := modruntime.ResolveMod(ctx, s.games, modPath)
 	if err != nil {
 		return Inspection{}, report(err)
 	}
-	if !ok {
-		return Inspection{}, infra.ContractError(ErrorNotEFMI + ":" + root)
+	if _, ok := gameFor(location.Importer); !ok {
+		return Inspection{}, infra.ContractError(ErrorUnsupportedGame + ":" + location.Root)
 	}
-	sc.root, sc.modsRoot = root, modsRoot
-	sc.fields["modsRoot"] = modsRoot
+	sc.root, sc.modsRoot, sc.importer = location.Root, location.ModsRoot, location.Importer
+	sc.fields["modsRoot"], sc.fields["importer"] = location.ModsRoot, location.Importer
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -266,12 +267,19 @@ func (s *Service) withRuntime(
 ) (Inspection, error) {
 	sc.stage = stageRuntime
 	var inspection Inspection
-	err := s.runtimes.Use(ctx, sc.modsRoot, runtimeName, install, func(root string, status modruntime.Status) error {
-		sc.fields["runtime"] = status.State
-		var err error
-		inspection, err = action(runtimeState{root: root, status: status})
-		return err
-	})
+	err := s.runtimes.Use(
+		ctx,
+		sc.importer,
+		sc.modsRoot,
+		runtimeName,
+		install,
+		func(root string, status modruntime.Status) error {
+			sc.fields["runtime"] = status.State
+			var err error
+			inspection, err = action(runtimeState{root: root, status: status})
+			return err
+		},
+	)
 	return inspection, runtimeError(err)
 }
 
@@ -620,7 +628,9 @@ func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int
 		// Releasing or reusing a slot here would otherwise reach the hooks
 		// the copies still share.
 		for _, copied := range copies {
-			copyScope := &scope{root: copied, modsRoot: sc.modsRoot, stage: sc.stage, fields: sc.fields}
+			copyScope := &scope{
+				root: copied, modsRoot: sc.modsRoot, importer: sc.importer, stage: sc.stage, fields: sc.fields,
+			}
 			sc.fields["forkedCopy"] = copied
 			_, _, err := s.forkCopy(copyScope, layout, key, doc)
 			sc.stage = copyScope.stage

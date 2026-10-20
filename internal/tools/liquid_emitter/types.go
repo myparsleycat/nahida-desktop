@@ -1,7 +1,8 @@
-// Package liquidemitter attaches LiquidGravityProbe fluid emitters to EFMI
-// character mods. The emitter runtime is one global mod that modruntime
-// installs into the game's mod root; each character draw that emits gets a CaptureSurface hook
-// in its INI and a profile row the runtime reads on F10.
+// Package liquidemitter attaches LiquidGravityProbe fluid emitters to
+// character mods of the games in games.go. The emitter runtime is one global
+// mod that modruntime installs into the game's mod root; each character draw
+// that emits gets a CaptureSurface hook in its INI and a profile row the
+// runtime reads on F10.
 package liquidemitter
 
 import "nahida.live/desktop/internal/modruntime"
@@ -9,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "2"
+	runtimeVersion    = "6"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -24,7 +25,7 @@ const (
 	// LoadProfilesJSON rejects a whole profile file when any offset axis exceeds 25 cm.
 	maxOffsetMeters = 0.25
 
-	ErrorNotEFMI         = "LIQUID_NOT_EFMI"
+	ErrorUnsupportedGame = "LIQUID_UNSUPPORTED_GAME"
 	ErrorRuntimeForeign  = "LIQUID_RUNTIME_FOREIGN"
 	ErrorViewerSession   = "LIQUID_VIEWER_SESSION"
 	ErrorUnsupportedDraw = "LIQUID_UNSUPPORTED_DRAW"

@@ -816,13 +816,13 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 	efmi := "EFMI"
 	manager := modruntime.New(modruntime.Options{
 		GamePaths: fakeGamePaths{{Game: "endfield", ModFolderPath: f.modsRoot, Importer: &efmi}},
-		Specs:     []modruntime.Spec{RuntimeSpec()},
+		Specs:     RuntimeSpecs(),
 	})
 	if _, err := manager.Install(ctx, efmi, runtimeName); err != nil {
 		t.Fatal(err)
 	}
 	probe := filepath.Join(runtimeRootFor(f.modsRoot), "Probe.ini")
-	bundled, _ := fs.ReadFile(RuntimeSpec().Files, probeFile)
+	bundled, _ := fs.ReadFile(RuntimeSpecs()[0].Files, probeFile)
 	if installed, _ := os.ReadFile(probe); !bytes.Equal(installed, bundled) {
 		t.Fatal("default settings changed the bundled Probe.ini")
 	}
@@ -868,29 +868,30 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 	}
 }
 
-// Every shader the bundled INI files name must ship in the runtime, or the
-// pass fails only inside the game, as an overlay error nothing here reports.
-// Shader paths are relative to their INI; a variant INI installs at its path
-// below the variant directory.
+// Every shader the bundled INI files of each game name must ship in its
+// runtime, or the pass fails only inside the game, as an overlay error nothing
+// here reports. Shader paths are relative to their INI; a variant INI installs
+// at its path below the variant directory.
 func TestRuntimeINIsReferenceBundledShaders(t *testing.T) {
-	files := RuntimeSpec().Files
-	var checked int
-	err := fs.WalkDir(files, ".", func(name string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
-			return err
+	for _, spec := range RuntimeSpecs() {
+		var checked int
+		err := fs.WalkDir(spec.Files, ".", func(name string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
+				return err
+			}
+			ini, err := fs.ReadFile(spec.Files, name)
+			if err != nil {
+				return err
+			}
+			checked++
+			if missing := missingShaderReferences(spec.Files, name, ini); len(missing) != 0 {
+				t.Errorf("%v: %s references shaders missing from the bundle: %v", spec.Importers, name, missing)
+			}
+			return nil
+		})
+		if err != nil || checked < 2 {
+			t.Fatalf("%v: walked %d INI files (err=%v)", spec.Importers, checked, err)
 		}
-		ini, err := fs.ReadFile(files, name)
-		if err != nil {
-			return err
-		}
-		checked++
-		if missing := missingShaderReferences(files, name, ini); len(missing) != 0 {
-			t.Errorf("%s references shaders missing from the bundle: %v", name, missing)
-		}
-		return nil
-	})
-	if err != nil || checked < 2 {
-		t.Fatalf("walked %d INI files (err=%v)", checked, err)
 	}
 }
 

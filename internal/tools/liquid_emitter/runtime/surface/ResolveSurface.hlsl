@@ -3,14 +3,16 @@ Texture1D<float4> IniParams:register(t120);
 Texture2D<float4> captured:register(t0);
 StructuredBuffer<float4> profiles:register(t1);
 StructuredBuffer<float4> modelOffsets:register(t2);
-cbuffer Camera:register(b13){float4 camera[96];}
+#include "../camera/Camera.hlsl"
+// A copy of the drawn object's constants; IniParams[242].w names the row
+// holding its world root, with w = 1 when there is one.
+cbuffer Instance:register(b1){float4 instance[4096];}
 RWStructuredBuffer<float4> candidates:register(u0);
 RWStructuredBuffer<float4> stats:register(u1);
-#include "CharacterRoot.hlsl"
 [numthreads(1,1,1)]
 void main(uint3 tid:SV_DispatchThreadID){
  stats[0].x+=1;
- float4 rootRow=characterRoot();
+ float4 rootRow=instance[(uint)IniParams[242].w];
  stats[1]=rootRow;
  // The drawn character's own root, whoever it is: the controlled character,
  // a party member or the character screen model.
@@ -28,8 +30,10 @@ void main(uint3 tid:SV_DispatchThreadID){
  if(profile.x>100||abs(profile.y+profile.z+profile.w-1)>.001||min(profile.y,min(profile.z,profile.w))<-.00001)return;
  float3 p=a.xyz*profile.y+b.xyz*profile.z+c.xyz*profile.w+camera[7].xyz;
  float3 delta=p-root;stats[6]=float4(delta,1);
- // Reject a bad projection or an unrelated render pass instead of moving the emitter.
- if(dot(delta.xz,delta.xz)>1.0 || delta.y<-.5 || delta.y>1.7)return;
+ // Reject a bad projection or an unrelated render pass instead of moving the
+ // emitter. IniParams[242].xy bound the height above the root, which depends
+ // on where the game puts it.
+ if(dot(delta.xz,delta.xz)>1.0 || delta.y<IniParams[242].x || delta.y>IniParams[242].y)return;
  float3 n=cross(b.xyz-a.xyz,c.xyz-a.xyz);
  float area=length(n);stats[7]=float4(area,id,profile.x,1);if(area<1e-9||area>.03)return;
  stats[0].w+=1;

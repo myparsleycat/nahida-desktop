@@ -5,7 +5,7 @@
 #include "ParticleConfig.hlsl"
 #include "Puddle.hlsl"
 Texture1D<float4> IniParams:register(t120);
-cbuffer Camera:register(b13){float4 camera[96];}
+#include "../camera/Camera.hlsl"
 Texture2D<float> sceneDepth:register(t106);
 struct FluidParticle{float4 positionAge;float4 velocityAlive;float4 predictedLambda;float4 densityBirth;};
 // Render radius: particle spacing is about FLUID_RADIUS, so overlapping

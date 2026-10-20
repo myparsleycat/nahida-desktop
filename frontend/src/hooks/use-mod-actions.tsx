@@ -35,7 +35,7 @@ import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup, ModInfo } from "@renderer/types/mod";
 import { isEfmiImporter, isNteImporter, stripDisabledPrefix } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
-import type { QueryClient } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
 import { PackageIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -83,6 +83,7 @@ export interface ModActionApi {
   runner: ReturnType<typeof useModFixRunner>;
   isNteGame: boolean;
   isEfmiGame: boolean;
+  supportsLiquidEmitter: boolean;
   convertingModelPath: string | null;
   /** Runs enable at once, or after the user confirms when enabling a mod with a missing dependency. */
   confirmEnable: (mod: ModInfo, enable: () => void) => void;
@@ -118,6 +119,13 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const selectedImporter = games.find((game) => game.game === selectedGame)?.importer;
   const isNteGame = isNteImporter(selectedImporter);
   const isEfmiGame = isEfmiImporter(selectedImporter);
+  const { data: liquidEmitterImporters = [] } = useQuery({
+    queryKey: ["tools:liquidEmitterImporters"],
+    queryFn: async () => (await Tools.LiquidEmitterImporters()) ?? [],
+    staleTime: Infinity,
+  });
+  const supportsLiquidEmitter =
+    !!selectedImporter && liquidEmitterImporters.includes(selectedImporter);
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [bodyShapeMod, setBodyShapeMod] = useState<ModInfo | null>(null);
@@ -492,6 +500,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     runner,
     isNteGame,
     isEfmiGame,
+    supportsLiquidEmitter,
     convertingModelPath,
     confirmEnable,
     openDeleteMod,

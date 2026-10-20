@@ -21,6 +21,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -242,62 +243,13 @@ func (s *Service) requireEFMIMod(ctx context.Context, modPath string) (string, e
 
 // ResolveEFMIMod returns the absolute mod folder and the mod root of the game
 // holding it. ok is false for any folder that is not a mod inside an EFMI mod
-// folder. Mods folders are often junctions, so roots are compared both as
-// written and as resolved by Windows.
+// folder.
 func ResolveEFMIMod(ctx context.Context, games GamePaths, modPath string) (root, modsRoot string, ok bool, err error) {
-	if strings.TrimSpace(modPath) == "" {
-		return "", "", false, nil
+	location, err := modruntime.ResolveMod(ctx, games, modPath)
+	if err != nil || !strings.EqualFold(location.Importer, efmiImporter) {
+		return location.Root, "", false, err
 	}
-	root, err = filepath.Abs(modPath)
-	if err != nil {
-		return "", "", false, fmt.Errorf("resolve mod path %q: %w", modPath, err)
-	}
-	info, err := os.Stat(root)
-	if err != nil {
-		return root, "", false, fmt.Errorf("open mod folder %q: %w", root, err)
-	}
-	if !info.IsDir() {
-		return root, "", false, nil
-	}
-	physical := finalOr(root)
-
-	rows, err := games.List(ctx)
-	if err != nil {
-		return root, "", false, fmt.Errorf("list game paths: %w", err)
-	}
-	importer, longest := "", -1
-	for _, row := range rows {
-		roots := []string{row.ModFolderPath}
-		if row.LinkedModFolderPath != nil {
-			roots = append(roots, *row.LinkedModFolderPath)
-		}
-		for _, gameRoot := range roots {
-			if strings.TrimSpace(gameRoot) == "" {
-				continue
-			}
-			for _, pair := range [][2]string{{gameRoot, root}, {finalOr(gameRoot), physical}} {
-				if !platform.SameOrChildPath(pair[0], pair[1]) || platform.SamePathFold(pair[0], pair[1]) ||
-					len(pair[0]) <= longest {
-					continue
-				}
-				importer, longest, modsRoot = "", len(pair[0]), row.ModFolderPath
-				if row.Importer != nil {
-					importer = *row.Importer
-				}
-			}
-		}
-	}
-	if !strings.EqualFold(importer, efmiImporter) {
-		return root, "", false, nil
-	}
-	return root, modsRoot, true, nil
-}
-
-func finalOr(path string) string {
-	if resolved, err := platform.FinalPath(path); err == nil {
-		return resolved
-	}
-	return path
+	return location.Root, location.ModsRoot, true, nil
 }
 
 func inspect(root string) (OutlineInspection, error) {

@@ -1839,7 +1839,7 @@
           "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。"
         },
         "error": {
-          "not_efmi": "此工具仅适用于明日方舟:终末地(EFMI)模组。",
+          "unsupported_game": "此工具尚不支持该游戏的模组。",
           "runtime_foreign": "{{detail}} 中已安装另一个 LiquidGravityProbe。请先禁用或删除它。",
           "runtime_disabled": "喷射运行时已禁用。请在模组库中启用。",
           "viewer_session": "模型视图已过期。请关闭并重新打开此工具。",

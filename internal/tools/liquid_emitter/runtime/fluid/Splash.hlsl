@@ -52,7 +52,7 @@ void beginFloorPuddle(inout FluidParticle p,float3 normal){
 }
 bool puddleDepthUnavailableAtBorder(uint s,float3 relativePosition){
  float3 world=relativePosition+collisionRoot(s);
- float4 c=world.x*collisionCamera[16]+world.y*collisionCamera[17]+world.z*collisionCamera[18]+collisionCamera[19];
+ float4 c=world.x*camera[16]+world.y*camera[17]+world.z*camera[18]+camera[19];
  if(!all(isfinite(c)))return false;
  if(c.w<=.05)return true;
  // Match screenSurface's 0.2 percent viewport exclusion margin.

@@ -1839,7 +1839,7 @@
           "saved": "Saved this character's liquid. Press F10 in game to reload mods."
         },
         "error": {
-          "not_efmi": "This tool only works with Arknights: Endfield (EFMI) mods.",
+          "unsupported_game": "This tool does not support mods for this game yet.",
           "runtime_foreign": "Another LiquidGravityProbe is installed at {{detail}}. Disable or remove it first.",
           "runtime_disabled": "The emitter runtime is disabled. Enable it in the mod library.",
           "viewer_session": "The model view is out of date. Close and reopen the tool.",

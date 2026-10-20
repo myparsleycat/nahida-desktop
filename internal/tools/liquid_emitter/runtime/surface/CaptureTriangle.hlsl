@@ -1,5 +1,5 @@
 // Reuse the game's active vertex shader: capture a chosen, already-skinned triangle.
-cbuffer CaptureCamera : register(b13) { float4 camera[96]; }
+#include "../camera/Camera.hlsl"
 struct OriginalVertex { float4 clip : SV_Position; };
 struct CapturedVertex { float4 clip : SV_Position; nointerpolation float4 world : TEXCOORD0; };
 #ifdef GEOMETRY_SHADER

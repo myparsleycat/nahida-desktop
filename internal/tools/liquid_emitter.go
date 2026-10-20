@@ -13,6 +13,10 @@ type (
 	LiquidEmitterLookInput   = liquidemitter.LookInput
 )
 
+func (t *Tools) LiquidEmitterImporters() []string {
+	return liquidemitter.Importers()
+}
+
 func (t *Tools) LiquidEmitterInspect(ctx context.Context, modPath string) (LiquidEmitterInspection, error) {
 	return t.liquidEmitter.Inspect(ctx, modPath)
 }

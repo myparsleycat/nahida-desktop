@@ -282,7 +282,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                   {t("page.tools.efmi_outline.title")}
                 </ContextMenuItem>
               )}
-              {actions.isEfmiGame && (
+              {actions.supportsLiquidEmitter && (
                 <ContextMenuItem onClick={() => actions.openLiquidEmitterDialog(mod)}>
                   <DropletsIcon className="mr-2 size-4" />
                   {t("page.tools.liquid_emitter.title")} ({t("g.beta")})

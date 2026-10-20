@@ -69,7 +69,7 @@ type Options struct {
 
 // ModRuntimes lists the global mods the tools install through modruntime.
 func ModRuntimes() []modruntime.Spec {
-	return []modruntime.Spec{liquidemitter.RuntimeSpec()}
+	return liquidemitter.RuntimeSpecs()
 }
 
 // Tools is the Wails service the renderer calls. Feature behavior lives in the

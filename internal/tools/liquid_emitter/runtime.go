@@ -38,17 +38,18 @@ const (
 	gameTemplateFile = "Probe.game.ini"
 )
 
-// RuntimeSpec is the LiquidGravityProbe global mod the emitter hooks call.
-// Hooks reach it by namespace, so its folder can move without touching them.
-func RuntimeSpec() modruntime.Spec {
-	files, err := runtimeFiles("efmi")
+// runtimeSpec is the LiquidGravityProbe global mod the emitter hooks of one
+// game call. Hooks reach it by namespace, so its folder can move without
+// touching them.
+func runtimeSpec(g game) modruntime.Spec {
+	files, err := runtimeFiles(g.dir)
 	if err != nil {
 		panic(err)
 	}
 	return modruntime.Spec{
 		Name:      runtimeName,
 		Version:   runtimeVersion,
-		Importers: []string{"EFMI"},
+		Importers: []string{g.importer},
 		Namespace: runtimeNamespace,
 		Files:     files,
 		// The forked d3d11.dll's sampler slots let the renderer bind more
@@ -146,15 +147,15 @@ func runtimeSettings() []modruntime.Setting {
 	}
 }
 
-// runtimeFiles lays the adapter in games/<game> over the core runtime. Its
+// runtimeFiles lays the adapter in games/<dir> over the core runtime. Its
 // files install next to the core's and may not replace one, and the
 // templates its Probe.game.ini defines fill in the core Probe.ini.
-func runtimeFiles(game string) (fs.FS, error) {
-	gameDir := path.Join(runtimeGamesDir, game)
+func runtimeFiles(dir string) (fs.FS, error) {
+	gameDir := path.Join(runtimeGamesDir, dir)
 	files := fstest.MapFS{}
 	probe := template.New(probeFile)
-	for _, dir := range []string{runtimeCoreDir, gameDir} {
-		err := fs.WalkDir(runtimeAssets, dir, func(name string, entry fs.DirEntry, err error) error {
+	for _, layer := range []string{runtimeCoreDir, gameDir} {
+		err := fs.WalkDir(runtimeAssets, layer, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() {
 				return err
 			}
@@ -162,11 +163,11 @@ func runtimeFiles(game string) (fs.FS, error) {
 			if err != nil {
 				return err
 			}
-			rel := strings.TrimPrefix(name, dir+"/")
+			rel := strings.TrimPrefix(name, layer+"/")
 			switch {
-			case dir == runtimeCoreDir && rel == probeFile:
+			case layer == runtimeCoreDir && rel == probeFile:
 				_, err = probe.Parse(string(data))
-			case dir == gameDir && rel == gameTemplateFile:
+			case layer == gameDir && rel == gameTemplateFile:
 				_, err = probe.New(gameTemplateFile).Parse(string(data))
 			case files[rel] != nil:
 				err = fmt.Errorf("%s replaces a core runtime file", name)
@@ -176,13 +177,13 @@ func runtimeFiles(game string) (fs.FS, error) {
 			return err
 		})
 		if err != nil {
-			return nil, fmt.Errorf("read liquid emitter runtime %s: %w", dir, err)
+			return nil, fmt.Errorf("read liquid emitter runtime %s: %w", layer, err)
 		}
 	}
 
 	var out bytes.Buffer
 	if err := probe.ExecuteTemplate(&out, probeFile, nil); err != nil {
-		return nil, fmt.Errorf("build %s for %s: %w", probeFile, game, err)
+		return nil, fmt.Errorf("build %s for %s: %w", probeFile, dir, err)
 	}
 	files[probeFile] = &fstest.MapFile{Data: out.Bytes()}
 	return files, nil
