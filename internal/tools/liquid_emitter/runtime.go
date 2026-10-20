@@ -1,19 +1,27 @@
 package liquidemitter
 
 import (
+	"bytes"
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"testing/fstest"
+	"text/template"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 )
 
-//go:embed runtime
+// runtime/ holds the game-independent runtime and games/ one adapter per
+// importer, which runtimeFiles combines into the files a game installs.
+//
+//go:embed runtime games
 var runtimeAssets embed.FS
 
 var disabledPrefixRE = regexp.MustCompile(`(?i)^disabled[\s_-]*`)
@@ -23,12 +31,17 @@ const (
 	// d3d11.dll reads; it is empty until the renderer uses its features.
 	runtimeEnhancedDir     = "enhanced"
 	runtimeVariantEnhanced = "enhanced"
+
+	runtimeCoreDir   = "runtime"
+	runtimeGamesDir  = "games"
+	probeFile        = "Probe.ini"
+	gameTemplateFile = "Probe.game.ini"
 )
 
 // RuntimeSpec is the LiquidGravityProbe global mod the emitter hooks call.
 // Hooks reach it by namespace, so its folder can move without touching them.
 func RuntimeSpec() modruntime.Spec {
-	files, err := fs.Sub(runtimeAssets, "runtime")
+	files, err := runtimeFiles("efmi")
 	if err != nil {
 		panic(err)
 	}
@@ -131,6 +144,48 @@ func runtimeSettings() []modruntime.Setting {
 		number("scattering", "$liquid_scatter", "0.35", 0, 1, 0.05),
 		number("refraction", "$liquid_refraction", "0.02", 0, 0.06, 0.005),
 	}
+}
+
+// runtimeFiles lays the adapter in games/<game> over the core runtime. Its
+// files install next to the core's and may not replace one, and the
+// templates its Probe.game.ini defines fill in the core Probe.ini.
+func runtimeFiles(game string) (fs.FS, error) {
+	gameDir := path.Join(runtimeGamesDir, game)
+	files := fstest.MapFS{}
+	probe := template.New(probeFile)
+	for _, dir := range []string{runtimeCoreDir, gameDir} {
+		err := fs.WalkDir(runtimeAssets, dir, func(name string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			data, err := runtimeAssets.ReadFile(name)
+			if err != nil {
+				return err
+			}
+			rel := strings.TrimPrefix(name, dir+"/")
+			switch {
+			case dir == runtimeCoreDir && rel == probeFile:
+				_, err = probe.Parse(string(data))
+			case dir == gameDir && rel == gameTemplateFile:
+				_, err = probe.New(gameTemplateFile).Parse(string(data))
+			case files[rel] != nil:
+				err = fmt.Errorf("%s replaces a core runtime file", name)
+			default:
+				files[rel] = &fstest.MapFile{Data: data}
+			}
+			return err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("read liquid emitter runtime %s: %w", dir, err)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := probe.ExecuteTemplate(&out, probeFile, nil); err != nil {
+		return nil, fmt.Errorf("build %s for %s: %w", probeFile, game, err)
+	}
+	files[probeFile] = &fstest.MapFile{Data: out.Bytes()}
+	return files, nil
 }
 
 // seedLoader gives an install without one the profile loader its INI

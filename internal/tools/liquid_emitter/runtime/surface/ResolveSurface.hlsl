@@ -4,18 +4,18 @@ Texture2D<float4> captured:register(t0);
 StructuredBuffer<float4> profiles:register(t1);
 StructuredBuffer<float4> modelOffsets:register(t2);
 cbuffer Camera:register(b13){float4 camera[96];}
-cbuffer Instance:register(b1){float4 instance[4096];}
 RWStructuredBuffer<float4> candidates:register(u0);
 RWStructuredBuffer<float4> stats:register(u1);
+#include "CharacterRoot.hlsl"
 [numthreads(1,1,1)]
 void main(uint3 tid:SV_DispatchThreadID){
  stats[0].x+=1;
- uint r=(uint)IniParams[242].w;
- stats[1]=instance[r+3];
+ float4 rootRow=characterRoot();
+ stats[1]=rootRow;
  // The drawn character's own root, whoever it is: the controlled character,
  // a party member or the character screen model.
- if(abs(instance[r+3].w-1)>.01)return;
- float3 root=instance[r+3].xyz;
+ if(abs(rootRow.w-1)>.01)return;
+ float3 root=rootRow.xyz;
  stats[0].y+=1;stats[2]=float4(root,1);
  float4 a=captured.Load(int3(0,0,0)),b=captured.Load(int3(1,0,0)),c=captured.Load(int3(2,0,0));
  stats[3]=a;stats[4]=b;stats[5]=c;

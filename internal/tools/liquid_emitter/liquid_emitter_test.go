@@ -822,7 +822,7 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	probe := filepath.Join(runtimeRootFor(f.modsRoot), "Probe.ini")
-	bundled, _ := runtimeAssets.ReadFile("runtime/Probe.ini")
+	bundled, _ := fs.ReadFile(RuntimeSpec().Files, probeFile)
 	if installed, _ := os.ReadFile(probe); !bytes.Equal(installed, bundled) {
 		t.Fatal("default settings changed the bundled Probe.ini")
 	}
@@ -873,17 +873,18 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 // Shader paths are relative to their INI; a variant INI installs at its path
 // below the variant directory.
 func TestRuntimeINIsReferenceBundledShaders(t *testing.T) {
+	files := RuntimeSpec().Files
 	var checked int
-	err := fs.WalkDir(runtimeAssets, "runtime", func(name string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(files, ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
 			return err
 		}
-		ini, err := fs.ReadFile(runtimeAssets, name)
+		ini, err := fs.ReadFile(files, name)
 		if err != nil {
 			return err
 		}
 		checked++
-		if missing := missingShaderReferences(name, ini); len(missing) != 0 {
+		if missing := missingShaderReferences(files, name, ini); len(missing) != 0 {
 			t.Errorf("%s references shaders missing from the bundle: %v", name, missing)
 		}
 		return nil
@@ -893,9 +894,8 @@ func TestRuntimeINIsReferenceBundledShaders(t *testing.T) {
 	}
 }
 
-func missingShaderReferences(iniPath string, ini []byte) []string {
-	installedDir := strings.TrimPrefix(path.Dir(iniPath), "runtime")
-	installedDir = strings.TrimPrefix(installedDir, "/"+runtimeEnhancedDir)
+func missingShaderReferences(files fs.FS, iniPath string, ini []byte) []string {
+	installedDir := strings.TrimPrefix(path.Dir(iniPath), runtimeEnhancedDir)
 	installedDir = strings.TrimPrefix(installedDir, "/")
 	var missing []string
 	for _, line := range strings.Split(string(ini), "\n") {
@@ -910,8 +910,8 @@ func missingShaderReferences(iniPath string, ini []byte) []string {
 			continue
 		}
 		shader := path.Join(installedDir, value)
-		_, baseErr := fs.Stat(runtimeAssets, path.Join("runtime", shader))
-		_, variantErr := fs.Stat(runtimeAssets, path.Join("runtime", runtimeEnhancedDir, shader))
+		_, baseErr := fs.Stat(files, shader)
+		_, variantErr := fs.Stat(files, path.Join(runtimeEnhancedDir, shader))
 		if baseErr != nil && variantErr != nil {
 			missing = append(missing, value)
 		}
