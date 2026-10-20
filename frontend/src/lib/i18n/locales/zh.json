@@ -1802,7 +1802,8 @@
         "selection": {
           "title": "喷射点",
           "empty": "点击模型表面以放置喷射点。",
-          "triangle": "三角形 {{index}} · 跟随表面"
+          "triangle": "三角形 {{index}} · 跟随表面",
+          "hidden": "当前视图中未绘制此部件。如果切换了开关，请重新选取可见的表面。"
         },
         "history": {
           "undo": "撤销",
@@ -1818,7 +1819,9 @@
         },
         "direction": {
           "title": "喷射方向",
-          "down": "朝正下方"
+          "down": "朝正下方",
+          "summary_down": "正下方",
+          "summary_custom": "自定义"
         },
         "trajectory": {
           "label": "预览默认强度轨迹",
@@ -1851,7 +1854,12 @@
           "absorption_hint": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
           "reset": "跟随运行时设置",
           "save": "保存液体设置",
-          "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。"
+          "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。",
+          "summary": {
+            "runtime": "运行时设置",
+            "custom": "自定义",
+            "unsaved": "未保存"
+          }
         },
         "error": {
           "unsupported_game": "此工具尚不支持该游戏的模组。",

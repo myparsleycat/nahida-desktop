@@ -193,11 +193,13 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		draw    modelViewerDrawInstruction
 	}
 	type legacyPreparedIB struct {
-		ib      modelViewerIbResource
-		group   *modelViewerBufferGroup
-		layout  modelViewerFmtLayout
-		indices []uint32
-		draws   []legacyPreparedDraw
+		ib       modelViewerIbResource
+		ibPath   string
+		ibFormat string
+		group    *modelViewerBufferGroup
+		layout   modelViewerFmtLayout
+		indices  []uint32
+		draws    []legacyPreparedDraw
 	}
 	var prepared []legacyPreparedIB
 	drawTotal := 0
@@ -243,7 +245,8 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		if readErr != nil {
 			continue
 		}
-		indices, decodeErr := cache.decodeIndices(ibPath, lo.CoalesceOrEmpty(ib.Format, layout.IndexFormat), raw)
+		ibFormat := lo.CoalesceOrEmpty(ib.Format, layout.IndexFormat)
+		indices, decodeErr := cache.decodeIndices(ibPath, ibFormat, raw)
 		if decodeErr != nil {
 			continue
 		}
@@ -269,7 +272,15 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		}
 		prepared = append(
 			prepared,
-			legacyPreparedIB{ib: ib, group: group, layout: layout, indices: indices, draws: ibDraws},
+			legacyPreparedIB{
+				ib:       ib,
+				ibPath:   ibPath,
+				ibFormat: ibFormat,
+				group:    group,
+				layout:   layout,
+				indices:  indices,
+				draws:    ibDraws,
+			},
 		)
 	}
 	if timing != nil {
@@ -358,7 +369,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		if len(task.entry.group.SourceFiles) > 0 {
 			positionFile = task.entry.group.SourceFiles[0]
 		}
-		return modelViewerDirectMesh{
+		mesh := modelViewerDirectMesh{
 			id:           id,
 			component:    component,
 			sectionName:  task.draw.section,
@@ -366,7 +377,24 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			positionFile: positionFile,
 			geometry:     geometry,
 			conditions:   conditions,
-		}, true
+		}
+		// A draw without an override section has no INI line to hook, and a
+		// dropped index would shift mesh faces off the draw's triangles.
+		if task.draw.section != "" && len(active) == task.draw.draw.IndexCount {
+			mesh.drawSource = &DrawSource{
+				INIPath:    iniPath,
+				Section:    task.draw.section,
+				IB:         task.entry.ib.Name,
+				IBPath:     task.entry.ibPath,
+				IBFormat:   task.entry.ibFormat,
+				StartIndex: task.draw.draw.StartIndex,
+				IndexCount: task.draw.draw.IndexCount,
+				BaseVertex: task.draw.draw.BaseVertex,
+				Auto:       task.draw.draw.Auto,
+				Reversed:   layoutName == "wwmi",
+			}
+		}
+		return mesh, true
 	}
 	if workers := min(len(tasks), runtime.GOMAXPROCS(0)); workers > 1 {
 		work := make(chan int)

@@ -1,5 +1,6 @@
 import { Mod } from "@bindings/mod";
 import { Tools } from "@bindings/tools";
+import { InspectorSection } from "@renderer/components/tools/inspector-section";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,8 +101,10 @@ export function ModelViewerWorkspace({
   onSurfacePick,
   overlay,
   inspector,
+  inspectorFooter,
   form,
   onFormChange,
+  onVisibleMeshesChange,
 }: {
   open: boolean;
   source: ModelViewerDialogSource | null;
@@ -113,12 +116,16 @@ export function ModelViewerWorkspace({
   overlay?: ReactNode;
   /** A tool panel shown above the toggles in the side column. */
   inspector?: ReactNode;
+  /** Pinned below the side column so the tool's main action never scrolls away. */
+  inspectorFooter?: ReactNode;
   /**
    * The form of a bundled mod to show, or ALL_FORMS. The workspace keeps its
    * own selection when this is undefined.
    */
   form?: string;
   onFormChange?: (form: string) => void;
+  /** Receives the meshes the viewer draws, including the current animation frame. */
+  onVisibleMeshesChange?: (meshIds: ReadonlySet<string>) => void;
 }) {
   const { t } = useTranslation();
   const [prevOpen, setPrevOpen] = useState(open);
@@ -665,6 +672,63 @@ export function ModelViewerWorkspace({
     </div>
   );
 
+  const toggleControls = (
+    <div className="p-4">
+      {hasVariantTileUi ? (
+        <div
+          className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"
+          style={{
+            backgroundImage: tileBackgroundPath
+              ? `url(${modelViewerSourceToUrl(tileBackgroundPath)})`
+              : undefined,
+          }}
+        >
+          <div className="grid grid-cols-3 gap-3 p-4">
+            {tileVariables.map((variable) => (
+              <VariantTile
+                key={variable.id}
+                variable={variable}
+                activeValue={activeState[variable.id]}
+                slotPath={slotPath}
+                slotHoverPath={slotHoverPath}
+                slotActivePath={slotActivePath}
+                onSelect={handleSelectValue}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <TooltipProvider>
+        <div className="space-y-3">
+          {groupVariablesByForm(tileVariables, forms).map((group) => (
+            <div key={group.form ?? ""} className="space-y-2">
+              {group.label ? (
+                <div className="truncate text-xs font-medium text-muted-foreground">
+                  {group.label}
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                {group.variables.map(renderTileVariable)}
+              </div>
+            </div>
+          ))}
+          {sliderVariables.map((variable) => (
+            // Remounting on reset cancels a queued slider commit
+            // that would otherwise reapply the pre-reset value.
+            <VariantSlider
+              key={`${variable.id}:${toggleResetCount}`}
+              variable={variable}
+              activeValue={activeState[variable.id]}
+              realtime
+              onSelect={handleSelectValue}
+            />
+          ))}
+        </div>
+      </TooltipProvider>
+    </div>
+  );
+
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -715,6 +779,7 @@ export function ModelViewerWorkspace({
                   onLoad={handleViewerLoad}
                   onError={handleViewerError}
                   onSurfacePick={onSurfacePick}
+                  onVisibleMeshesChange={onVisibleMeshesChange}
                   overlay={overlay}
                 />
                 {forms.length > 1 ? (
@@ -747,73 +812,34 @@ export function ModelViewerWorkspace({
           </div>
 
           {showToggleViewer || inspector ? (
-            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-              {inspector}
-              {showToggleViewer ? (
-                <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
-                  <div className="border-b px-4 py-3">
-                    <div className="text-sm font-medium">
-                      {t("page.tools.model_viewer.toggle_viewer")}
+            <div className="flex min-h-0 flex-col gap-3">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+                {inspector}
+                {showToggleViewer && inspector ? (
+                  // Below a tool panel the column scrolls, so the toggles keep
+                  // their height and fold away until the tool needs them.
+                  <InspectorSection
+                    id="model-viewer:toggles"
+                    title={t("page.tools.model_viewer.toggle_viewer")}
+                    summary={visibleVariables.length}
+                    className="shrink-0 rounded-md bg-muted/30"
+                    headerClassName="px-4 py-3"
+                    panelClassName="border-t"
+                  >
+                    {toggleControls}
+                  </InspectorSection>
+                ) : showToggleViewer ? (
+                  <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
+                    <div className="border-b px-4 py-3">
+                      <div className="text-sm font-medium">
+                        {t("page.tools.model_viewer.toggle_viewer")}
+                      </div>
                     </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto">{toggleControls}</div>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    <div className="p-4">
-                      {hasVariantTileUi ? (
-                        <div
-                          className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"
-                          style={{
-                            backgroundImage: tileBackgroundPath
-                              ? `url(${modelViewerSourceToUrl(tileBackgroundPath)})`
-                              : undefined,
-                          }}
-                        >
-                          <div className="grid grid-cols-3 gap-3 p-4">
-                            {tileVariables.map((variable) => (
-                              <VariantTile
-                                key={variable.id}
-                                variable={variable}
-                                activeValue={activeState[variable.id]}
-                                slotPath={slotPath}
-                                slotHoverPath={slotHoverPath}
-                                slotActivePath={slotActivePath}
-                                onSelect={handleSelectValue}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <TooltipProvider>
-                        <div className="space-y-3">
-                          {groupVariablesByForm(tileVariables, forms).map((group) => (
-                            <div key={group.form ?? ""} className="space-y-2">
-                              {group.label ? (
-                                <div className="truncate text-xs font-medium text-muted-foreground">
-                                  {group.label}
-                                </div>
-                              ) : null}
-                              <div className="grid grid-cols-2 gap-3">
-                                {group.variables.map(renderTileVariable)}
-                              </div>
-                            </div>
-                          ))}
-                          {sliderVariables.map((variable) => (
-                            // Remounting on reset cancels a queued slider commit
-                            // that would otherwise reapply the pre-reset value.
-                            <VariantSlider
-                              key={`${variable.id}:${toggleResetCount}`}
-                              variable={variable}
-                              activeValue={activeState[variable.id]}
-                              realtime
-                              onSelect={handleSelectValue}
-                            />
-                          ))}
-                        </div>
-                      </TooltipProvider>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
+              {inspectorFooter}
             </div>
           ) : null}
         </div>
