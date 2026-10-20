@@ -1833,6 +1833,8 @@
           "needs_emitter": "请先应用喷射点，才能为该角色单独设置液体。",
           "strength": "强度修正",
           "strength_hint": "在游戏内当前强度上增加的级数 · 结果保持在 0~7",
+          "stream_width": "水流粗细",
+          "stream_width_hint": "水流粗细的倍率 · 与强度分开生效",
           "custom_color": "使用专属颜色",
           "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
           "tint": "液体颜色",

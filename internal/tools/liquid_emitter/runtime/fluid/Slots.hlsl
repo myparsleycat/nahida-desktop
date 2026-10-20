@@ -16,8 +16,8 @@ static const uint SLOT_TRACK=10;
 // extrapolates the character's motion from it.
 static const uint SLOT_PREVIOUS_ROOT=11;
 // The look of the character's mod, copied from its profile: x the strength
-// level offset, y 1 for a custom color, z its absorption depth in meters.
-// All zero keeps the global settings.
+// level offset, y 1 for a custom color, z its absorption depth in meters,
+// w the stream width scale. All zero keeps the global settings.
 static const uint SLOT_LOOK=12;
 // rgb the custom tint.
 static const uint SLOT_TINT=13;
@@ -36,6 +36,13 @@ uint primarySlot(uint i){return i/PRIMARY_PER_SLOT;}
 float slotDrive(uint s){
  float level=clamp(round(IniParams[253].y+slots[s*SLOT_ROWS+SLOT_LOOK].x),0,7);
  return level<.5?.28:.565+(level-1)*.5625;
+}
+// The character's stream width over the runtime's, scaling the nozzle
+// cross-section and the rendered stream together; zero, as in a profile from
+// before the setting, means 1.
+float slotWidth(uint s){
+ float width=slots[s*SLOT_ROWS+SLOT_LOOK].w;
+ return width>0?clamp(width,.5,2):1;
 }
 // rgb the Beer-Lambert absorption per meter that reaches the tint at the
 // absorption depth, w that depth in meters: the character's custom color or
