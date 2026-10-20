@@ -61,6 +61,18 @@ func TestGenerateToggleViewerArtifactListsToggleKeys(t *testing.T) {
 	}
 }
 
+func TestGenerateToggleViewerTXTKeepsPrintableASCII(t *testing.T) {
+	artifact := generateArtifact(filepath.Join(`C:\Mods`, "나히다 Skin", "mod.ini"), cycleModINI, "ctrl H")
+	if artifact == nil || !strings.HasPrefix(artifact.txtContent, "Mod: ??? Skin\n") {
+		t.Fatalf("artifact = %#v", artifact)
+	}
+	for _, r := range artifact.txtContent {
+		if r != '\n' && (r < ' ' || r > '~') {
+			t.Fatalf("txt contains %q: %q", r, artifact.txtContent)
+		}
+	}
+}
+
 func TestGenerateToggleViewerArtifactAfterBOM(t *testing.T) {
 	if artifact := generateArtifact("mod.ini", utf8BOM+cycleModINI, "ctrl H"); artifact == nil {
 		t.Fatal("BOM hid the first key section")

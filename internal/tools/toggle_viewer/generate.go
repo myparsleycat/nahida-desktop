@@ -223,7 +223,14 @@ func buildToggleViewerTXT(sources []toggleViewerSource) string {
 			}
 		}
 	}
-	return strings.Join(lines, "\n") + "\n"
+	// The XXMI text shader draws from a 16x6 glyph atlas covering printable ASCII only, so any other
+	// character would render as an unrelated glyph.
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r >= ' ' && r <= '~' {
+			return r
+		}
+		return '?'
+	}, strings.Join(lines, "\n")+"\n")
 }
 
 func buildToggleViewerINI(sources []toggleViewerSource, hotkey string) string {
