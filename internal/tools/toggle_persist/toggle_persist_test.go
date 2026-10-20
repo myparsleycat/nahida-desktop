@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPersistModelViewerToggleStateOnlyUpdatesConstantsPersistVariables(t *testing.T) {
@@ -104,6 +105,38 @@ func TestTogglePersistIgnoresDuplicateWatcherContent(t *testing.T) {
 	harness.trigger([][2]string{{"Toggle", "1"}})
 	if revision := harness.revision(); revision != 1 {
 		t.Fatalf("revision after repeated content = %d; want 1", revision)
+	}
+}
+
+// 3DMigoto saves d3dx_user.ini to a temporary file and renames it over the original.
+func TestWatchPersistFileObservesAtomicReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "d3dx_user.ini")
+	if err := os.WriteFile(path, []byte("[Constants]\n$toggle = 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	modified := make(chan struct{}, 1)
+	stop, err := watchPersistFile(path, func() {
+		select {
+		case modified <- struct{}{}:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	temp := path + ".tmp"
+	if err := os.WriteFile(temp, []byte("[Constants]\n$toggle = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(temp, path); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-modified:
+	case <-time.After(3 * time.Second):
+		t.Fatal("atomic replacement of d3dx_user.ini was not observed")
 	}
 }
 

@@ -560,12 +560,16 @@ func newContentGate(path string, onError ErrorHandler) *contentGate {
 }
 
 func (g *contentGate) prepare(event *Event) bool {
-	if event.Op != Create && event.Op != Write {
+	if event.Op&(Create|Write|Rename) == 0 {
 		return true
 	}
 
 	hash, err := hashFile(g.path)
 	if err != nil {
+		// A rename event also reports the watched file being moved away.
+		if event.Op == Rename && errors.Is(err, os.ErrNotExist) {
+			return true
+		}
 		if g.onError != nil {
 			g.onError(err)
 		}

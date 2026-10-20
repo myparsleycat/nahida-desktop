@@ -19,6 +19,7 @@ func TestWatchFileSkipsIdenticalContent(t *testing.T) {
 
 	events := make(chan Event, 4)
 	w, err := WatchFile(path, FileConfig{
+		Ops:             Create | Write | Rename,
 		SettleDelay:     100 * time.Millisecond,
 		DistinctContent: true,
 	}, func(event Event) {
@@ -46,6 +47,24 @@ func TestWatchFileSkipsIdenticalContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoEvent(t, events, 350*time.Millisecond)
+
+	replace := func(content string) {
+		t.Helper()
+		temp := path + ".tmp"
+		if err := os.WriteFile(temp, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(temp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	replace("changed")
+	assertNoEvent(t, events, 350*time.Millisecond)
+
+	replace("replaced")
+	if event := waitEvent(t, events); event.Hash == "" {
+		t.Fatal("replaced event hash is empty")
+	}
 }
 
 func TestWatchTreeAddsNewDirectoriesWithinDepth(t *testing.T) {

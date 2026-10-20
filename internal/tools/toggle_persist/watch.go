@@ -697,7 +697,7 @@ func parseD3dxUserINI(content string) parsedD3dx {
 
 func watchPersistFile(path string, onModify func()) (func(), error) {
 	service, err := watcher.WatchFile(path, watcher.FileConfig{
-		Ops:             watcher.Create | watcher.Write,
+		Ops:             watcher.Create | watcher.Write | watcher.Rename,
 		SettleDelay:     200 * time.Millisecond,
 		DistinctContent: true,
 	}, func(watcher.Event) {
