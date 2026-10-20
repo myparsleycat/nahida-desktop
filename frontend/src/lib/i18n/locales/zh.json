@@ -1280,6 +1280,10 @@
           "trigger": "快捷键:",
           "title": "Toggle Viewer 快捷键",
           "description": "按下键盘组合以设置快捷键"
+        },
+        "delete_confirm": {
+          "title": "删除所有 Toggle Viewer 文件?",
+          "description": "将从 Mods 文件夹中删除所有已生成的 toggle-viewer 文件,并关闭自动生成。"
         }
       },
       "texture_resizer": {

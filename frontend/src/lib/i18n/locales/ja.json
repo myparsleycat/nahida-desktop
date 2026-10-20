@@ -1280,6 +1280,10 @@
           "trigger": "ホットキー:",
           "title": "Toggle Viewer ホットキー",
           "description": "設定するキーの組み合わせを押してください"
+        },
+        "delete_confirm": {
+          "title": "Toggle Viewer ファイルをすべて削除しますか?",
+          "description": "Mods フォルダーから生成された toggle-viewer ファイルをすべて削除し、自動生成をオフにします。"
         }
       },
       "texture_resizer": {

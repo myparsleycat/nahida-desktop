@@ -1,6 +1,16 @@
 import { Tools } from "@bindings/tools";
 import { XXMI } from "@bindings/xxmi";
 import { KeyRecorder } from "@renderer/components/mod/key-recorder";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -26,7 +36,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Events } from "@wailsio/runtime";
 import { ArrowRightIcon, FolderSearchIcon } from "lucide-react";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -39,6 +49,7 @@ export default function ToggleViewerGenerator() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const titleId = useId();
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const { data: xxmiData, isPending: isXXMIPending } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
@@ -165,7 +176,11 @@ export default function ToggleViewerGenerator() {
             <Button variant="outline" disabled={isBusy} onClick={() => runBatchGenerate()}>
               {t("page.tools.toggle_viewer_generator.batch_generate")}
             </Button>
-            <Button variant="outline" disabled={isBusy} onClick={() => runBatchDelete()}>
+            <Button
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => setIsDeleteConfirmOpen(true)}
+            >
               {t("page.tools.toggle_viewer_generator.batch_delete")}
             </Button>
             <Button
@@ -188,6 +203,31 @@ export default function ToggleViewerGenerator() {
           <ToolLogList logs={logs} emptyText={t("page.tools.toggle_viewer_generator.no_logs")} />
         </SectionContent>
       </Section>
+
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.tools.toggle_viewer_generator.delete_confirm.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.tools.toggle_viewer_generator.delete_confirm.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setIsDeleteConfirmOpen(false);
+                runBatchDelete();
+              }}
+            >
+              {t("page.tools.toggle_viewer_generator.batch_delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

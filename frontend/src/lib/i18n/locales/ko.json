@@ -1280,6 +1280,10 @@
           "trigger": "단축키:",
           "title": "Toggle Viewer 단축키",
           "description": "설정할 단축키 조합을 누르세요"
+        },
+        "delete_confirm": {
+          "title": "Toggle Viewer 파일을 모두 삭제할까요?",
+          "description": "Mods 폴더에서 생성된 toggle-viewer 파일을 모두 삭제하고 자동 생성을 끕니다."
         }
       },
       "texture_resizer": {

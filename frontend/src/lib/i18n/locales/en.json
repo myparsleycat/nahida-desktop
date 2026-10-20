@@ -1280,6 +1280,10 @@
           "trigger": "Hotkey:",
           "title": "Toggle Viewer Hotkey",
           "description": "Press the key combination to set"
+        },
+        "delete_confirm": {
+          "title": "Delete all toggle viewer files?",
+          "description": "Removes every generated toggle-viewer file from the mods folders and turns off auto generation."
         }
       },
       "texture_resizer": {
