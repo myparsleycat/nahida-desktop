@@ -31,6 +31,10 @@ float3 currentEmitterRelative(uint s){
 }
 // Keep only an 8 mm self-collision exclusion around the nozzle.
 static const float EMITTER_EXCLUSION_RADIUS = .008;
+// How far behind the visible surface liquid still counts as touching it.
+// Deeper liquid is behind another layer, which one depth image cannot tell.
+static const float SURFACE_OVERLAP = .035;
+static const float SWEPT_MAX_SPEED = .5;
 bool collideFluid(uint slot,float3 from,float3 to,float3 velocity,float radius,out float3 contactPoint,out float3 normal){
  contactPoint=to;normal=float3(0,1,0);
  float3 emitter=currentEmitterRelative(slot);
@@ -39,13 +43,26 @@ bool collideFluid(uint slot,float3 from,float3 to,float3 velocity,float radius,o
   if(dot(p-emitter,p-emitter)<EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS)continue;
   if(screenSurface(slot,p,s,n)){
    float gap=dot(p-s,n);
-   if(gap<radius&&gap>-.035&&dot(velocity,n)<-.08&&dot(from-s,n)>-radius*2){contactPoint=p+n*(radius-gap);normal=n;return true;}
+   if(gap<radius&&gap>-SURFACE_OVERLAP&&dot(velocity,n)<-.08&&dot(from-s,n)>-radius*2){contactPoint=p+n*(radius-gap);normal=n;return true;}
   }
  }
  // Off-screen fallback is only a root-height plane, not hidden map geometry.
  float3 fallbackSurface=0,fallbackNormal=float3(0,1,0);bool visibleSurface=screenSurface(slot,to,fallbackSurface,fallbackNormal);
  if(dot(to-emitter,to-emitter)>=EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS && !visibleSurface&&to.y<radius+.0001&&from.y>=radius-.02&&velocity.y<-.08){contactPoint=to;contactPoint.y=radius+.0001;normal=float3(0,1,0);return true;}
  return false;
+}
+// The depth carries no surface velocity, so a moving surface such as a leg
+// sweeps over slow liquid that collideFluid ignores for not moving into it.
+// contactPoint puts such liquid back on the surface, without an impact.
+bool sweptBySurface(uint slot,float3 to,float3 velocity,float radius,out float3 contactPoint,out float3 normal){
+ contactPoint=to;normal=float3(0,1,0);
+ float3 emitter=currentEmitterRelative(slot),s;
+ if(length(velocity)>SWEPT_MAX_SPEED||dot(to-emitter,to-emitter)<EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS)return false;
+ if(!screenSurface(slot,to,s,normal))return false;
+ float gap=dot(to-s,normal);
+ if(gap>=radius||gap<=-SURFACE_OVERLAP||length(to-s)>.04-gap)return false;
+ contactPoint=to+normal*(radius+.0001-gap);
+ return true;
 }
 // Slot carries the owner of the impacting particle to the splashes it spawns.
 struct CollisionEvent{float4 pointSpeed;float4 normalRadius;float4 incoming;float4 slot;};

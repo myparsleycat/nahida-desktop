@@ -119,8 +119,10 @@ void main(uint3 id:SV_DispatchThreadID){
       bool valid=screenSurface(owner,carried,testPoint,testNormal);
       float gap=dot(carried-testPoint,testNormal);
       // Reject teleports, unrelated depth layers and broken contact geometry.
+      // The body frame can carry a droplet into a surface that moves on its
+      // own, such as a leg, which pushes it back out.
       if(valid && length(carried-from)<.15 && dot(carriedNormal,testNormal)>.55
-         && abs(gap-radius)<.018 && length(carried-testPoint)<.05){
+         && gap<radius+.018 && gap>-SURFACE_OVERLAP && length(carried-testPoint)<.05-min(0,gap)){
        from=carried+testNormal*(radius+.0001-gap);
        velocity=carryAdhesionVector(owner,velocity,previous);
        oldNormal=testNormal;
@@ -133,7 +135,9 @@ void main(uint3 id:SV_DispatchThreadID){
     bool found=screenSurface(owner,to,surfacePoint,normal);
     float gap=dot(to-surfacePoint,normal);
     // Follow continuous visible surfaces only; never snap to a distant layer.
-    if(found && dot(oldNormal,normal)>.55 && abs(gap-radius)<.012 && length(to-surfacePoint)<.04){
+    // A surface that moved over the droplet pushes it back out.
+    if(found && dot(oldNormal,normal)>.55 && gap<radius+.012 && gap>-SURFACE_OVERLAP
+       && length(to-surfacePoint)<.04-min(0,gap)){
      to+=normal*(radius+.0001-gap);
      velocity-=normal*dot(velocity,normal);
      p.predictedLambda=float4(normal,p.predictedLambda.w);
@@ -164,6 +168,12 @@ void main(uint3 id:SV_DispatchThreadID){
       p.densityBirth.x+=1;
      }
      to=contactPoint+normal*.0001;
+    }else if(p.densityBirth.w>3.5 && sweptBySurface(owner,to,velocity,radius,contactPoint,normal)){
+     // Only droplets that were on the body: a fresh splash passing just
+     // behind a nearer surface must not be pulled onto its front.
+     velocity-=normal*dot(velocity,normal);
+     p.predictedLambda=float4(normal,adhesionContactMode(owner,contactPoint,normal));attached=true;
+     to=contactPoint;
     }
    }
    p.positionAge=float4(to,p.positionAge.w+dt);p.velocityAlive.xyz=velocity;
