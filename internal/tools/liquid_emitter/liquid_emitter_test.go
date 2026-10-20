@@ -368,6 +368,11 @@ type serviceFixture struct {
 
 func newServiceFixture(t *testing.T) serviceFixture {
 	t.Helper()
+	return newGameServiceFixture(t, "EFMI")
+}
+
+func newGameServiceFixture(t *testing.T, importer string) serviceFixture {
+	t.Helper()
 	modsRoot := t.TempDir()
 	modRoot := filepath.Join(modsRoot, "Chen", "Chen Swimsuit")
 	if err := os.MkdirAll(modRoot, 0o755); err != nil {
@@ -385,9 +390,8 @@ func newServiceFixture(t *testing.T) serviceFixture {
 	if err := os.WriteFile(ibPath, ib, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	efmi := "EFMI"
 	service := NewWithOptions(Options{
-		GamePaths: fakeGamePaths{{Game: "endfield", ModFolderPath: modsRoot, Importer: &efmi}},
+		GamePaths: fakeGamePaths{{Game: strings.ToLower(importer), ModFolderPath: modsRoot, Importer: &importer}},
 		Viewer: fakeViewer{"mod:body:0": {
 			INIPath: iniPath, Section: "Body", IBPath: ibPath, IBFormat: "DXGI_FORMAT_R32_UINT",
 			StartIndex: 3, IndexCount: 6, BaseVertex: 0,
@@ -467,6 +471,33 @@ func TestServiceApplyAndRemoveRestoreMod(t *testing.T) {
 		if _, err := os.Stat(leftover); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s still exists (err=%v)", leftover, err)
 		}
+	}
+}
+
+// Wuthering Waves meshes are in centimeters, while the runtime and its 25 cm
+// offset limit are in meters.
+func TestServiceScalesOffsetToMeters(t *testing.T) {
+	f := newGameServiceFixture(t, "WWMI")
+	input := f.applyInput(0)
+	input.Offset = []float64{0, 0, 20}
+	inspection, err := f.service.Apply(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.MeshUnit != .01 {
+		t.Fatalf("mesh unit = %v", inspection.MeshUnit)
+	}
+	key, err := readModMarker(f.modRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := readProfile(runtimeLayout{root: runtimeRootFor(f.modsRoot)}, key)
+	if err != nil || len(doc.Emitters) != 1 {
+		t.Fatalf("profile = %+v (err=%v)", doc, err)
+	}
+	offset := vec3(doc.Emitters[0].Offset)
+	if length := math.Sqrt(offset.dot(offset)); math.Abs(length-.2) > 1e-9 {
+		t.Fatalf("runtime offset = %v, want 0.2 m", offset)
 	}
 }
 
@@ -864,6 +895,36 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		line = strings.ReplaceAll(line, "\n", eol)
 		if !strings.Contains(string(written), line) {
 			t.Fatalf("Probe.ini lacks %q", line)
+		}
+	}
+}
+
+// Unreal rewrites the view constants WWMI refers to before the injection, so
+// its camera must be built when the main view is seen and not again later;
+// the other games keep building it at the injection.
+func TestRuntimeBuildsWWMICameraAtMainView(t *testing.T) {
+	section := func(ini, name string) string {
+		start := strings.Index(ini, "["+name+"]\n")
+		if start < 0 {
+			return ""
+		}
+		body := ini[start+len(name)+3:]
+		if end := strings.Index(body, "\n["); end >= 0 {
+			body = body[:end]
+		}
+		return body
+	}
+	for _, spec := range RuntimeSpecs() {
+		bundled, err := fs.ReadFile(spec.Files, probeFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ini := strings.ReplaceAll(string(bundled), "\r\n", "\n")
+		atInjection := strings.Contains(section(ini, "CommandListInjectWorld"), "run = CommandListBuildCamera")
+		atMainView := strings.Contains(section(ini, "CommandListMainView"), "run = CommandListBuildCamera")
+		wwmi := slices.Contains(spec.Importers, "WWMI")
+		if atInjection == wwmi || atMainView != wwmi {
+			t.Errorf("%v: camera built at injection %v, at main view %v", spec.Importers, atInjection, atMainView)
 		}
 	}
 }

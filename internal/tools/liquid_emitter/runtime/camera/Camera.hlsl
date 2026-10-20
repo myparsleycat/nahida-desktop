@@ -3,7 +3,9 @@
 // inverse, 8-11 the projection, 12-15 its inverse and 16-19 the
 // view-projection, each matrix as its four columns: row 7 is the eye position
 // and row 8.x the projection's horizontal scale. World space is in meters
-// with Y up, which gravity and the root checks in ResolveSurface.hlsl assume.
+// with Y up, which gravity and the root checks in ResolveSurface.hlsl assume;
+// rows 20-23 map a position the game gives in its own world space, such as a
+// character's root, into it.
 #ifndef LIQUID_CAMERA
 #define LIQUID_CAMERA
 StructuredBuffer<float4> camera:register(t113);

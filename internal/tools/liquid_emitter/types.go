@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "6"
+	runtimeVersion    = "10"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -101,6 +101,9 @@ type Inspection struct {
 	// when ModPath is not such a copy.
 	SourcePath string `json:"sourcePath"`
 	Look       Look   `json:"look"`
+	// MeshUnit is the length in meters of one unit of the mod's meshes, in
+	// which anchors and their offsets are given.
+	MeshUnit float64 `json:"meshUnit"`
 }
 
 // ApplyInput describes a picked face of a model viewer mesh. FaceVertices,

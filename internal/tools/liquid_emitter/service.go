@@ -93,6 +93,7 @@ type scope struct {
 	root, modsRoot string
 	// importer names the game whose Mods folder holds root.
 	importer string
+	game     game
 	stage    string
 	fields   map[string]any
 	// origin is set while applying to a folder just copied from another mod.
@@ -196,10 +197,11 @@ func (s *Service) run(
 	if err != nil {
 		return Inspection{}, report(err)
 	}
-	if _, ok := gameFor(location.Importer); !ok {
+	g, ok := gameFor(location.Importer)
+	if !ok {
 		return Inspection{}, infra.ContractError(ErrorUnsupportedGame + ":" + location.Root)
 	}
-	sc.root, sc.modsRoot, sc.importer = location.Root, location.ModsRoot, location.Importer
+	sc.root, sc.modsRoot, sc.importer, sc.game = location.Root, location.ModsRoot, location.Importer, g
 	sc.fields["modsRoot"], sc.fields["importer"] = location.ModsRoot, location.Importer
 
 	s.mu.Lock()
@@ -285,7 +287,13 @@ func (s *Service) withRuntime(
 
 func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	sc.stage = stageLoad
-	inspection := Inspection{ModPath: sc.root, Runtime: rt.status, Emitters: []Emitter{}, Look: defaultLook()}
+	inspection := Inspection{
+		ModPath:  sc.root,
+		Runtime:  rt.status,
+		Emitters: []Emitter{},
+		Look:     defaultLook(),
+		MeshUnit: sc.game.meshUnit,
+	}
 	marker, err := readMarker(sc.root)
 	if err != nil || marker.ModKey == "" {
 		return inspection, err
@@ -426,7 +434,7 @@ func (s *Service) apply(
 	}
 	direction, _ := toVec3(anchor.Direction)
 	offset, _ := toVec3(anchor.Offset)
-	profile, err := buildSurfaceProfile(triangle, direction, offset, priority-1)
+	profile, err := buildSurfaceProfile(triangle, direction, offset.scale(sc.game.meshUnit), priority-1)
 	if err != nil {
 		return err
 	}
@@ -629,7 +637,12 @@ func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int
 		// the copies still share.
 		for _, copied := range copies {
 			copyScope := &scope{
-				root: copied, modsRoot: sc.modsRoot, importer: sc.importer, stage: sc.stage, fields: sc.fields,
+				root:     copied,
+				modsRoot: sc.modsRoot,
+				importer: sc.importer,
+				game:     sc.game,
+				stage:    sc.stage,
+				fields:   sc.fields,
 			}
 			sc.fields["forkedCopy"] = copied
 			_, _, err := s.forkCopy(copyScope, layout, key, doc)

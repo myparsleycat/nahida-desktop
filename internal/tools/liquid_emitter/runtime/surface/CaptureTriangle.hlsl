@@ -1,6 +1,11 @@
 // Reuse the game's active vertex shader: capture a chosen, already-skinned triangle.
 #include "../camera/Camera.hlsl"
+// A vertex shader whose outputs come before SV_Position needs a geometry
+// shader declaring them all; such a variant defines OriginalVertex with the
+// position in clip and includes this file.
+#ifndef CAPTURE_VERTEX_DEFINED
 struct OriginalVertex { float4 clip : SV_Position; };
+#endif
 struct CapturedVertex { float4 clip : SV_Position; nointerpolation float4 world : TEXCOORD0; };
 #ifdef GEOMETRY_SHADER
 [maxvertexcount(12)]

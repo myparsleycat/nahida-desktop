@@ -1,6 +1,9 @@
 import type { Emitter, Inspection, Look } from "@bindings/tools/liquid_emitter";
 import type { ModelViewerSurfacePick } from "@renderer/components/tools/model-viewer/model-viewer-contract";
-import { ModelViewerWorkspace } from "@renderer/components/tools/model-viewer/model-viewer-workspace";
+import {
+  ALL_FORMS,
+  ModelViewerWorkspace,
+} from "@renderer/components/tools/model-viewer/model-viewer-workspace";
 import { RangeField } from "@renderer/components/tools/range-field";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
@@ -20,6 +23,7 @@ import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
 import { cn } from "@renderer/lib/utils";
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
+import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { isEqual } from "es-toolkit";
 import type { TFunction } from "i18next";
@@ -91,10 +95,15 @@ export function LiquidEmitterTool({
   const [doubleSided, setDoubleSided] = useState(true);
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [form, setForm] = useState(ALL_FORMS);
 
   const inspection = session.inspection.data;
   const emitters = inspection?.emitters ?? [];
+  // Anchors are edited in the mesh's own units, which are not meters in every game.
+  const meshUnit = inspection?.meshUnit || 1;
   const meshes = session.source?.transport.meshes;
+  const forms = session.source?.transport.forms ?? [];
+  const formOfMesh = (meshId: string) => meshes?.find((mesh) => mesh.id === meshId)?.form;
   const anchor = history.entries[history.index];
   const current = anchor
     ? emitters.find((emitter) => emitter.anchor.meshId === anchor.meshId)
@@ -119,6 +128,11 @@ export function LiquidEmitterTool({
       .map(anchorFromEmitter)
       .find((candidate) => candidate && meshes.some((mesh) => mesh.id === candidate.meshId));
     if (saved) setHistory({ entries: [saved], index: 0 });
+    // A bundle of forms opens on the form being edited, or its first, so the
+    // forms drawn over one another do not hide each other's surfaces.
+    setForm(
+      (saved && meshes.find((mesh) => mesh.id === saved.meshId)?.form) ?? forms[0]?.id ?? ALL_FORMS,
+    );
   }
 
   const commit = (next: Anchor | null, key?: string) =>
@@ -162,8 +176,8 @@ export function LiquidEmitterTool({
   const setOffsetAxis = (axis: number, meters: number, key: string) => {
     if (!anchor) return;
     const offset = [...anchor.offset] as Vec3;
-    offset[axis] = meters;
-    update(key, { offset: limitOffset(offset) });
+    offset[axis] = meters / meshUnit;
+    update(key, { offset: limitOffset(offset, MAX_OFFSET_METERS / meshUnit) });
   };
 
   const setDirectionAxis = (axis: number, value: number) => {
@@ -258,6 +272,8 @@ export function LiquidEmitterTool({
   const meshLabel = anchor
     ? (meshes?.find((mesh) => mesh.id === anchor.meshId)?.component ?? anchor.meshId)
     : "";
+  const anchorForm = anchor ? formOfMesh(anchor.meshId) : undefined;
+  const anchorShown = anchor !== null && (form === ALL_FORMS || !anchorForm || anchorForm === form);
   const position = anchor
     ? (anchor.point.map((value, axis) => value + anchor.offset[axis]) as Vec3)
     : undefined;
@@ -318,8 +334,11 @@ export function LiquidEmitterTool({
           <div className="rounded-md border bg-background/40 px-3 py-2 text-sm">
             {anchor ? (
               <>
-                <div className="truncate font-medium" title={meshLabel}>
-                  {meshLabel}
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-medium" title={meshLabel}>
+                    {meshLabel}
+                  </span>
+                  <FormBadge forms={forms} form={anchorForm} />
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {t("page.tools.liquid_emitter.selection.triangle", { index: anchor.faceIndex })}
@@ -348,7 +367,11 @@ export function LiquidEmitterTool({
                   onChange={(event) => {
                     const value = Number(event.currentTarget.value);
                     if (anchor && Number.isFinite(value)) {
-                      setOffsetAxis(axis, value - anchor.point[axis], `position-${axis}`);
+                      setOffsetAxis(
+                        axis,
+                        (value - anchor.point[axis]) * meshUnit,
+                        `position-${axis}`,
+                      );
                     }
                   }}
                 />
@@ -363,7 +386,7 @@ export function LiquidEmitterTool({
         <section className="space-y-3">
           <h3 className="text-sm font-medium">{t("page.tools.liquid_emitter.offset.title")}</h3>
           {AXES.map((label, axis) => {
-            const millimeters = (anchor?.offset[axis] ?? 0) * 1000;
+            const millimeters = (anchor?.offset[axis] ?? 0) * meshUnit * 1000;
             return (
               <RangeField
                 key={label}
@@ -467,11 +490,15 @@ export function LiquidEmitterTool({
         <EmitterList
           emitters={emitters}
           meshes={meshes}
+          forms={forms}
           selectedMeshId={anchor?.meshId}
           busy={busy}
           onSelect={(emitter) => {
             const saved = anchorFromEmitter(emitter);
-            if (saved) commit(saved);
+            if (!saved) return;
+            commit(saved);
+            const savedForm = formOfMesh(saved.meshId);
+            if (savedForm && form !== ALL_FORMS) setForm(savedForm);
           }}
           onRemove={(emitter) => handleRemove([emitter.pid])}
           onRemoveAll={() => setConfirmRemoveAll(true)}
@@ -496,12 +523,15 @@ export function LiquidEmitterTool({
         doubleSidedEnabled={doubleSided}
         onDoubleSidedChange={setDoubleSided}
         onSurfacePick={picks ? handlePick : undefined}
+        form={form}
+        onFormChange={setForm}
         overlay={
-          anchor ? (
+          anchor && anchorShown ? (
             <LiquidEmitterOverlay
               point={anchor.point}
               offset={anchor.offset}
               direction={anchor.direction}
+              meshUnit={meshUnit}
               showTrajectory={showTrajectory}
             />
           ) : null
@@ -695,6 +725,7 @@ function RuntimeSection({
 function EmitterList({
   emitters,
   meshes,
+  forms,
   selectedMeshId,
   busy,
   onSelect,
@@ -702,7 +733,8 @@ function EmitterList({
   onRemoveAll,
 }: {
   emitters: Emitter[];
-  meshes: Array<{ id: string; component: string }> | undefined;
+  meshes: ViewerMeshTransport[] | undefined;
+  forms: ViewerForm[];
   selectedMeshId: string | undefined;
   busy: boolean;
   onSelect: (emitter: Emitter) => void;
@@ -745,7 +777,10 @@ function EmitterList({
                   title={mesh ? undefined : t("page.tools.liquid_emitter.emitters.missing_mesh")}
                   onClick={() => onSelect(emitter)}
                 >
-                  <span className="block truncate">{mesh?.component ?? emitter.section}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{mesh?.component ?? emitter.section}</span>
+                    <FormBadge forms={forms} form={mesh?.form ?? iniFolder(emitter.iniPath)} />
+                  </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {emitter.iniPath} · #{emitter.pid}
                   </span>
@@ -772,6 +807,23 @@ function EmitterList({
       )}
     </section>
   );
+}
+
+/** Names the form of a bundled mod an emitter belongs to; nothing for a single mod. */
+function FormBadge({ forms, form }: { forms: ViewerForm[]; form: string | undefined }) {
+  const label = forms.find((entry) => entry.id === form)?.label;
+  if (forms.length < 2 || !label) return null;
+  return (
+    <Badge variant="secondary" className="max-w-32 shrink-0 font-normal" title={label}>
+      <span className="truncate">{label}</span>
+    </Badge>
+  );
+}
+
+// The folder of a mod-relative INI path, as the viewer names forms.
+function iniFolder(iniPath: string) {
+  const slash = iniPath.lastIndexOf("/");
+  return slash < 0 ? "." : iniPath.slice(0, slash);
 }
 
 function LookSection({
@@ -945,10 +997,10 @@ function hexToTint(hex: string) {
   );
 }
 
-function limitOffset(offset: Vec3): Vec3 {
+function limitOffset(offset: Vec3, limit: number): Vec3 {
   const length = Math.hypot(...offset);
-  if (length <= MAX_OFFSET_METERS) return offset;
-  return offset.map((value) => (value * MAX_OFFSET_METERS) / length) as Vec3;
+  if (length <= limit) return offset;
+  return offset.map((value) => (value * limit) / length) as Vec3;
 }
 
 const errorCodePattern = /LIQUID_([A-Z_]+)(?::([^\n]*))?/;

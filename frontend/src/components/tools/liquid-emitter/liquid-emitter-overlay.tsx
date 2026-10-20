@@ -22,16 +22,27 @@ export function LiquidEmitterOverlay({
   point,
   offset,
   direction,
+  meshUnit,
   showTrajectory,
 }: {
   point: Vec3;
   offset: Vec3;
   direction: Vec3;
+  /** Meters per mesh unit; the overlay and the flow it previews are sized in meters. */
+  meshUnit: number;
   showTrajectory: boolean;
 }) {
+  const [pointMeters, offsetMeters] = useMemo(
+    () => [toMeters(point, meshUnit), toMeters(offset, meshUnit)],
+    [point, offset, meshUnit],
+  );
   const origin = useMemo<Vec3>(
-    () => [point[0] + offset[0], point[1] + offset[1], point[2] + offset[2]],
-    [point, offset],
+    () => [
+      pointMeters[0] + offsetMeters[0],
+      pointMeters[1] + offsetMeters[1],
+      pointMeters[2] + offsetMeters[2],
+    ],
+    [pointMeters, offsetMeters],
   );
   const arrowRotation = useMemo(
     () =>
@@ -43,7 +54,7 @@ export function LiquidEmitterOverlay({
   );
 
   return (
-    <group renderOrder={1000}>
+    <group renderOrder={1000} scale={1 / meshUnit}>
       <mesh position={origin} renderOrder={1000}>
         <sphereGeometry args={[0.006, 16, 12]} />
         <meshBasicMaterial color={ANCHOR_COLOR} {...overlayMaterial} />
@@ -58,9 +69,15 @@ export function LiquidEmitterOverlay({
           <meshBasicMaterial color={ANCHOR_COLOR} {...overlayMaterial} />
         </mesh>
       </group>
-      {showTrajectory ? <FlowPreview point={point} offset={offset} direction={direction} /> : null}
+      {showTrajectory ? (
+        <FlowPreview point={pointMeters} offset={offsetMeters} direction={direction} />
+      ) : null}
     </group>
   );
+}
+
+function toMeters(value: Vec3, meshUnit: number): Vec3 {
+  return [value[0] * meshUnit, value[1] * meshUnit, value[2] * meshUnit];
 }
 
 function FlowPreview({ point, offset, direction }: { point: Vec3; offset: Vec3; direction: Vec3 }) {

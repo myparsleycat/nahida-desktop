@@ -13,11 +13,15 @@ import (
 type game struct {
 	importer string
 	dir      string
+	// meshUnit is the length in meters of one unit of the mods' meshes, in
+	// which the viewer shows them and anchors are edited.
+	meshUnit float64
 }
 
 var games = []game{
-	{importer: "EFMI", dir: "efmi"},
-	{importer: "GIMI", dir: "gimi"},
+	{importer: "EFMI", dir: "efmi", meshUnit: 1},
+	{importer: "GIMI", dir: "gimi", meshUnit: 1},
+	{importer: "WWMI", dir: "wwmi", meshUnit: .01},
 }
 
 func gameFor(importer string) (game, bool) {

@@ -17,7 +17,7 @@ void main(uint3 tid:SV_DispatchThreadID){
  // The drawn character's own root, whoever it is: the controlled character,
  // a party member or the character screen model.
  if(abs(rootRow.w-1)>.01)return;
- float3 root=rootRow.xyz;
+ float3 root=rootRow.x*camera[20].xyz+rootRow.y*camera[21].xyz+rootRow.z*camera[22].xyz+camera[23].xyz;
  stats[0].y+=1;stats[2]=float4(root,1);
  float4 a=captured.Load(int3(0,0,0)),b=captured.Load(int3(1,0,0)),c=captured.Load(int3(2,0,0));
  stats[3]=a;stats[4]=b;stats[5]=c;
