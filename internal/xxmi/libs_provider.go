@@ -63,6 +63,8 @@ type libsProviderSpec struct {
 	// dx12 is whether the provider's d3d11.dll applies mods to a game rendering with DirectX 12. Without it,
 	// mods only load with DirectX 11.
 	dx12 bool
+	// diagnostics is whether the provider's d3d11.dll is one whose logs a logging session collects for reports.
+	diagnostics bool
 	// shaderSamplerSlotsSince is the first provider release whose d3d11.dll binds INI sampler states to the
 	// shader sampler slots (ps-s#, cs-s#); empty when no release does. An older build warns on the overlay
 	// and drops those lines, so the feature counts as present only from this release on.
@@ -146,6 +148,7 @@ var libsProviders = []libsProviderSpec{
 		versionMark:             "-nhd.",
 		smoothMotion:            true,
 		dx12:                    true,
+		diagnostics:             true,
 		shaderSamplerSlotsSince: "1.2.2-nhd.13",
 		legacyCompanions:        []string{"dxcompiler.dll", "dxil.dll"},
 	},

@@ -38,6 +38,11 @@ import { WWMIGraphicsSettings } from "@renderer/components/xxmi/wwmi-graphics-se
 import { CUSTOM_DLL_SOURCE, CustomDLLField } from "@renderer/components/xxmi/xxmi-custom-dll";
 import { XXMID3DXSettings } from "@renderer/components/xxmi/xxmi-d3dx-settings";
 import {
+  diagnosticsSupportQueryKey,
+  XXMIDiagnostics,
+  XXMIDiagnosticsNotice,
+} from "@renderer/components/xxmi/xxmi-diagnostics";
+import {
   FOLLOW_LATEST,
   NumberRow,
   PathField,
@@ -113,6 +118,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     queryFn: () => ModRuntime.List(importer),
   });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
+  const running = !!overview?.importers?.find((entry) => entry.key === importer)?.running;
   const sharedLibsVersion = overview?.sharedLibsVersion;
   const libsProviders = overview?.libsProviders ?? [];
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
@@ -186,6 +192,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     void queryClient.invalidateQueries({ queryKey: ["xxmi:config", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:package-verification", importer] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
+    void queryClient.invalidateQueries({ queryKey: diagnosticsSupportQueryKey(importer) });
     void queryClient.invalidateQueries({ queryKey: modFolderQueryKey(importer) });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:overview"] });
     void queryClient.invalidateQueries({ queryKey: ["xxmi:updates"] });
@@ -330,6 +337,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                 </AlertDescription>
               </Alert>
             )}
+            <XXMIDiagnosticsNotice importer={importer} onOpen={() => setTab("tools")} />
             <TabsList variant="line" className="w-full justify-start">
               <TabsTrigger value="general">{t("page.setting.xxmi.builtin.general")}</TabsTrigger>
               <TabsTrigger value="package">{t("page.setting.xxmi.builtin.packageTab")}</TabsTrigger>
@@ -1466,6 +1474,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     </div>
                   </SectionContent>
                 </Section>
+                <XXMIDiagnostics
+                  importer={importer}
+                  running={running}
+                  launchDisabled={dirty || packageNeedsInstall || isSaving}
+                  onLaunch={() => startImporter(importer)}
+                />
               </TabsContent>
 
               <TabsContent value="runtimes" className="flex flex-col gap-6">
