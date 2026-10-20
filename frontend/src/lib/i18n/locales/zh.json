@@ -1035,6 +1035,10 @@
         "confirm": "打开"
       },
       "logout": "登出",
+      "logout_confirm": {
+        "title": "要登出 GameBanana 吗？",
+        "description": "登出后，点赞模组或访问需要账号的内容时需要重新登录。"
+      },
       "stats": {
         "subscribers": "订阅者",
         "sections": "分区",

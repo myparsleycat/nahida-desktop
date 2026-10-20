@@ -1035,6 +1035,10 @@
         "confirm": "열기"
       },
       "logout": "로그아웃",
+      "logout_confirm": {
+        "title": "GameBanana에서 로그아웃할까요?",
+        "description": "모드 좋아요나 계정이 필요한 콘텐츠를 이용하려면 다시 로그인해야 합니다."
+      },
       "stats": {
         "subscribers": "구독자",
         "sections": "섹션",

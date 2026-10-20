@@ -1,6 +1,16 @@
 import { GameBanana } from "@bindings/gamebanana";
 import type { GameRegistration } from "@bindings/gamebanana/models";
 import { Shell } from "@bindings/platform";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -92,6 +102,7 @@ function RouteComponent() {
   const queryClient = useQueryClient();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isManualRmcDialogOpen, setIsManualRmcDialogOpen] = useState(false);
   const [manualRmcValue, setManualRmcValue] = useState("");
   const [manualRmcError, setManualRmcError] = useState<string | null>(null);
@@ -388,7 +399,7 @@ function RouteComponent() {
             isLoggingOut={isLoggingOut}
             onSignIn={handleSignIn}
             onOpenManualRmc={handleOpenManualRmcDialog}
-            onLogout={handleLogout}
+            onLogout={() => setIsLogoutConfirmOpen(true)}
             canGoBack={canGoBack}
             onGoBack={handleGoBack}
             onBackToCategory={clearSelectedMod}
@@ -546,6 +557,29 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isLogoutConfirmOpen} onOpenChange={setIsLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.gamebanana.logout_confirm.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.gamebanana.logout_confirm.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setIsLogoutConfirmOpen(false);
+                handleLogout();
+              }}
+            >
+              {t("page.gamebanana.logout")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

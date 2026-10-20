@@ -1035,6 +1035,10 @@
         "confirm": "Open"
       },
       "logout": "Logout",
+      "logout_confirm": {
+        "title": "Log out of GameBanana?",
+        "description": "You will need to sign in again to like mods or access content that requires an account."
+      },
       "stats": {
         "subscribers": "Subscribers",
         "sections": "Sections",

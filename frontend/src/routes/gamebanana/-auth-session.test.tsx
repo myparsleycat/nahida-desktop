@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Suspense, type ComponentType, type ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -144,12 +144,18 @@ describe("GameBanana route session handling", () => {
     expect(screen.getByText("gamebanana-content")).toBeTruthy();
   });
 
-  it("signs out from the toolbar and refreshes GameBanana data", async () => {
+  it("signs out from the toolbar after confirmation and refreshes GameBanana data", async () => {
     session.status = { data: { authenticated: true, username: "member" } };
     const { invalidateQueries } = await renderLoadedRoute();
 
     await act(async () => {
       fireEvent.click(screen.getByText("page.gamebanana.logout"));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(backend.Logout).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByText("page.gamebanana.logout"));
     });
 
     await waitFor(() => expect(backend.Logout).toHaveBeenCalledTimes(1));

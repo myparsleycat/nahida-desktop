@@ -1035,6 +1035,10 @@
         "confirm": "開く"
       },
       "logout": "ログアウト",
+      "logout_confirm": {
+        "title": "GameBananaからログアウトしますか？",
+        "description": "MODへのいいねやアカウントが必要なコンテンツを利用するには、再度ログインが必要です。"
+      },
       "stats": {
         "subscribers": "購読者",
         "sections": "セクション",
