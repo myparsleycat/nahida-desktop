@@ -1830,8 +1830,8 @@
           "summary_custom": "Custom"
         },
         "trajectory": {
-          "label": "Preview default-strength path",
-          "hint": "Mean path at default strength (1/10 speed, 0.48 s) · collision, movement and pulses not simulated"
+          "label": "Preview spray path",
+          "hint": "Mean path at the selected emitter's force (1/10 speed, 0.48 s) · collision, movement and pulses not simulated"
         },
         "remove_all": {
           "button": "Remove all",
@@ -1851,17 +1851,54 @@
           "title": "This emitter's liquid",
           "hint": "Applies to the selected emitter on top of the runtime settings. Press F10 in game after saving.",
           "needs_emitter": "Select an applied emitter to give it its own liquid.",
-          "strength": "Strength offset",
-          "strength_hint": "Levels added to the current in-game strength · result stays within 0–7",
-          "stream_width": "Stream width",
-          "stream_width_hint": "Multiplies the stream's thickness · independent of strength",
+          "force": "Spray force",
+          "amount": "Liquid amount",
           "viscosity": "Viscosity",
-          "viscosity_hint": "Multiplies how thick the liquid is · higher clings together, runs off slower and splashes less",
+          "nozzle": {
+            "title": "Nozzle",
+            "spray": "Spray",
+            "spray_hint": "The runtime's usual spray · fans out and breaks into drops by force",
+            "jet": "Narrow jet",
+            "jet_hint": "A thin straight jet that shoots far · no mist or fan",
+            "ooze": "Ooze",
+            "ooze_hint": "Gathers at the outlet as a drop that swells, stretches and breaks off, then runs down the body — no airborne path to preview"
+          },
+          "hints": {
+            "spray": {
+              "force": "Spray speed and spread · higher shoots faster, farther and wider",
+              "amount": "How much liquid flows; the stream's thickness follows · less thins the stream and very little breaks into drops, more makes it thick and dense · reaches its limit sooner at high force",
+              "viscosity": "Multiplies how thick the liquid is · higher clings together, runs off slower and splashes less"
+            },
+            "jet": {
+              "force": "Jet speed · 3 m/s at force 1, up to 5 m/s",
+              "amount": "Jet thickness · very little breaks into drops",
+              "viscosity": "How much it clings and splashes once it lands · no effect on the jet in the air"
+            },
+            "ooze": {
+              "force": "How large a drop grows before it breaks off and how hard it leaves — higher makes smaller drops that fall away",
+              "amount": "How fast the outlet fills — more flow breaks off drops more often",
+              "viscosity": "How slowly a drop stretches before it breaks off and runs down — higher creeps slower in longer trails"
+            }
+          },
           "custom_color": "Use its own color",
           "custom_color_hint": "When off, the color and color depth from the runtime settings are used.",
           "tint": "Liquid color",
           "absorption": "Color depth",
           "absorption_hint": "Millimeters of liquid it takes to reach the full color · lower is deeper",
+          "material": {
+            "title": "Material",
+            "hint": "Presets set only scattering and roughness; color, nozzle and flow stay as they are.",
+            "preset": {
+              "clear": "Clear",
+              "translucent": "Translucent",
+              "cloudy": "Cloudy",
+              "custom": "Custom"
+            },
+            "scattering": "Scattering",
+            "scattering_hint": "How cloudy the liquid is — higher hides more of what is behind it and takes on the surrounding light",
+            "roughness": "Roughness",
+            "roughness_hint": "How soft its reflections and highlights are — higher spreads them wider and dimmer"
+          },
           "reset": "Follow runtime settings",
           "save": "Save liquid",
           "saved": "Saved this emitter's liquid. Press F10 in game to reload mods.",
@@ -2833,13 +2870,10 @@
             "saved": "{{name}} settings saved.",
             "LiquidGravityProbe": {
               "toggleKey": "Toggle emitting",
-              "strengthUpKey": "Increase strength",
-              "strengthDownKey": "Decrease strength",
               "autoPulseKey": "Toggle auto pulse",
               "manualPulseKey": "Pulse while held",
               "startEnabled": "Emit when the game starts",
               "autoPulse": "Start with auto pulse",
-              "strength": "Starting strength",
               "slotCount": "Emitters that emit at once",
               "tint": "Liquid color",
               "absorptionDepth": "Color depth",

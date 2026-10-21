@@ -79,8 +79,13 @@ void main(uint3 tid:SV_DispatchThreadID){
    bool known=row+PROFILE_ROWS<=profileCount;
    slots[base+SLOT_LOOK]=known?profiles[row+3]:0;
    slots[base+SLOT_TINT]=known?profiles[row+4]:0;
-   // A new character must not inherit the motion or nozzle of the last one.
-   if(!assigned){frameState[target*4]=0;frameState[target*4+2]=0;}
+   slots[base+SLOT_NOZZLE]=known?profiles[row+5]:0;
+   // A new character must not inherit the motion or nozzle of the last one,
+   // nor the slot's outlet or stream state (Slots.hlsl SLOT_GENERATION).
+   if(!assigned){
+    frameState[target*4]=0;frameState[target*4+2]=0;
+    slots[base+SLOT_GENERATION]=float4(slotGeneration(target)+1,0,0,0);
+   }
   }else{
    float4 anchor=slots[base+4];
    slots[base+4]=float4(anchor.xyz,0);

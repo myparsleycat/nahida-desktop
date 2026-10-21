@@ -56,7 +56,6 @@ type profileDocument struct {
 // A Look starts from and stays within the runtime's own settings of the same
 // meaning, so a custom color starts from what the game shows.
 const (
-	settingStrength   = "strength"
 	settingTint       = "tint"
 	settingAbsorption = "absorptionDepth"
 )
@@ -78,14 +77,18 @@ func defaultLook() Look {
 		}
 	}
 	look.AbsorptionMM, _ = strconv.ParseFloat(runtimeSetting(settingAbsorption).Default, 64)
-	look.StreamWidth = 1
+	look.Force = 1
+	look.Amount = 1
 	look.Viscosity = 1
+	look.Nozzle = NozzleSpray
 	return look
 }
 
 func validLook(look Look) bool {
-	strength := runtimeSetting(settingStrength)
-	if span := int(strength.Max - strength.Min); look.StrengthOffset < -span || look.StrengthOffset > span {
+	if !(look.Force >= minForce && look.Force <= maxForce) {
+		return false
+	}
+	if !(look.Amount >= minAmount && look.Amount <= maxAmount) {
 		return false
 	}
 	for _, channel := range look.Tint {
@@ -93,36 +96,55 @@ func validLook(look Look) bool {
 			return false
 		}
 	}
-	if !(look.StreamWidth >= minStreamWidth && look.StreamWidth <= maxStreamWidth) {
+	if !(look.Viscosity >= minViscosity && look.Viscosity <= maxViscosity) {
 		return false
 	}
-	if !(look.Viscosity >= minViscosity && look.Viscosity <= maxViscosity) {
+	if nozzleCode(look.Nozzle) < 0 {
+		return false
+	}
+	if !(look.Scattering >= 0 && look.Scattering <= 1) || !(look.Roughness >= 0 && look.Roughness <= 1) {
 		return false
 	}
 	absorption := runtimeSetting(settingAbsorption)
 	return look.AbsorptionMM >= absorption.Min && look.AbsorptionMM <= absorption.Max
 }
 
+// nozzleCode is the number Slots.hlsl slotNozzle reads for a nozzle kind, or
+// -1 for an unknown one.
+func nozzleCode(nozzle string) int {
+	return slices.Index([]string{NozzleSpray, NozzleJet, NozzleOoze}, nozzle)
+}
+
 // lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
-// strength offset, custom color flag, tint, absorption depth in meters, stream
-// width and viscosity. An emitter without its own look writes no tail, and the
-// runtime then applies its global settings.
+// force, custom color flag, tint, absorption depth in meters, the retired
+// stream width, viscosity, amount and nozzle kind, then scattering and
+// roughness only when either is set. The width keeps its place, always zero,
+// so no record length means the same as one an older runtime wrote. An
+// emitter without its own look writes no tail, and the runtime then applies
+// its global settings.
 func lookRecord(look *Look) []float64 {
-	if look == nil ||
-		look.StrengthOffset == 0 && !look.CustomColor && look.StreamWidth == 1 && look.Viscosity == 1 {
+	material := look != nil && (look.Scattering != 0 || look.Roughness != 0)
+	if look == nil || look.Force == 1 && look.Amount == 1 && !look.CustomColor && look.Viscosity == 1 &&
+		look.Nozzle == NozzleSpray && !material {
 		return nil
 	}
 	custom := 0.0
 	if look.CustomColor {
 		custom = 1
 	}
-	return []float64{
-		float64(look.StrengthOffset), custom,
+	record := []float64{
+		look.Force, custom,
 		look.Tint[0], look.Tint[1], look.Tint[2],
 		look.AbsorptionMM / 1000,
-		look.StreamWidth,
+		0,
 		look.Viscosity,
+		look.Amount,
+		float64(max(nozzleCode(look.Nozzle), 0)),
 	}
+	if material {
+		record = append(record, look.Scattering, look.Roughness)
+	}
+	return record
 }
 
 // modMarker ties a mod folder to its profile. ModPath is where the marker was
@@ -298,11 +320,15 @@ func readProfile(layout runtimeLayout, key string) (profileDocument, error) {
 			shared := *doc.Look
 			emitter.Look = &shared
 		}
-		if emitter.Look != nil && emitter.Look.StreamWidth == 0 {
-			emitter.Look.StreamWidth = 1
-		}
-		if emitter.Look != nil && emitter.Look.Viscosity == 0 {
-			emitter.Look.Viscosity = 1
+		if look := emitter.Look; look != nil {
+			for _, scale := range []*float64{&look.Force, &look.Amount, &look.Viscosity} {
+				if *scale == 0 {
+					*scale = 1
+				}
+			}
+			if look.Nozzle == "" {
+				look.Nozzle = NozzleSpray
+			}
 		}
 	}
 	doc.Look = nil

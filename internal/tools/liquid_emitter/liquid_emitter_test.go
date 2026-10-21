@@ -576,19 +576,20 @@ func TestServiceScalesOffsetToMeters(t *testing.T) {
 	}
 }
 
-// LoadProfilesJSON reads an emitter's look as eight numbers after its 16, in
+// LoadProfilesJSON reads an emitter's look as ten numbers after its 16, in
 // this order, and a runtime from before looks rejects any record that is not
 // 16 long; an emitter that keeps the global settings must still write 16.
 func TestServiceLookExtendsGPURecords(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := context.Background()
 	look := Look{
-		StrengthOffset: -2,
-		CustomColor:    true,
-		Tint:           [3]float64{0.2, 0.4, 1},
-		AbsorptionMM:   30,
-		StreamWidth:    1.5,
-		Viscosity:      4,
+		Force:        2,
+		Amount:       0.5,
+		CustomColor:  true,
+		Tint:         [3]float64{0.2, 0.4, 1},
+		AbsorptionMM: 30,
+		Viscosity:    4,
+		Nozzle:       NozzleSpray,
 	}
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); !hasCode(err, ErrorNoEmitters) {
 		t.Fatalf("look without emitters = %v", err)
@@ -602,9 +603,14 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		return f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, PID: pid, Look: look})
 	}
 	for _, change := range []func(*Look){
-		func(l *Look) { l.StrengthOffset = 8 },
-		func(l *Look) { l.StreamWidth = 3 },
+		func(l *Look) { l.Force = 3 },
+		func(l *Look) { l.Amount = 0.01 },
 		func(l *Look) { l.Viscosity = 20 },
+		func(l *Look) { l.Nozzle = "fog" },
+		func(l *Look) { l.Scattering = -0.1 },
+		func(l *Look) { l.Roughness = 1.5 },
+		func(l *Look) { l.Scattering = math.NaN() },
+		func(l *Look) { l.Roughness = math.Inf(1) },
 	} {
 		invalid := look
 		change(&invalid)
@@ -653,28 +659,55 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		}
 	}
 	got := records()
-	if len(got) != 2 || len(got[0]) != 24 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5, 4}) ||
-		len(got[1]) != 16 {
+	if len(got) != 2 || len(got[0]) != 26 ||
+		!slices.Equal(got[0][16:], []float64{2, 1, 0.2, 0.4, 1, 0.03, 0, 4, 0.5, 0}) || len(got[1]) != 16 {
 		t.Fatalf("GPU records with one emitter's look = %v", got)
 	}
 
-	// A width or a viscosity alone is a look of the emitter's own.
-	look.StrengthOffset, look.CustomColor, look.StreamWidth, look.Viscosity = 0, false, 0.75, 1
+	// Each scale alone is a look of the emitter's own.
+	look.Force, look.Amount, look.CustomColor, look.Viscosity = 1, 1, false, 0.25
 	if _, err := setLook(look); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(); len(got[0]) != 24 || got[0][22] != 0.75 || got[0][23] != 1 {
-		t.Fatalf("GPU records with a width = %v", got)
-	}
-	look.StreamWidth, look.Viscosity = 1, 0.25
-	if _, err := setLook(look); err != nil {
-		t.Fatal(err)
-	}
-	if got := records(); len(got[0]) != 24 || got[0][22] != 1 || got[0][23] != 0.25 {
+	if got := records(); len(got[0]) != 26 || got[0][23] != 0.25 || got[0][24] != 1 {
 		t.Fatalf("GPU records with a viscosity = %v", got)
 	}
+	look.Viscosity, look.Amount = 1, 1.5
+	if _, err := setLook(look); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got[0]) != 26 || got[0][16] != 1 || got[0][24] != 1.5 {
+		t.Fatalf("GPU records with an amount = %v", got)
+	}
+	look.Amount = 1
+	for nozzle, code := range map[string]float64{NozzleJet: 1, NozzleOoze: 2} {
+		look.Nozzle = nozzle
+		if _, err := setLook(look); err != nil {
+			t.Fatal(err)
+		}
+		if got := records(); len(got[0]) != 26 || got[0][16] != 1 || got[0][25] != code {
+			t.Fatalf("GPU records with nozzle %s = %v", nozzle, got)
+		}
+	}
 
-	look.Viscosity = 1
+	// Scattering and roughness extend the record only when either is set, and
+	// then always as a pair.
+	look.Nozzle, look.Roughness = NozzleSpray, 0.2
+	if _, err := setLook(look); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got[0]) != 28 || !slices.Equal(got[0][25:], []float64{0, 0, 0.2}) {
+		t.Fatalf("GPU records with a roughness = %v", got)
+	}
+	look.Nozzle, look.Scattering, look.Roughness = NozzleJet, 0.85, 0.35
+	if _, err := setLook(look); err != nil {
+		t.Fatal(err)
+	}
+	if got := records(); len(got[0]) != 28 || !slices.Equal(got[0][25:], []float64{1, 0.85, 0.35}) {
+		t.Fatalf("GPU records with a material = %v", got)
+	}
+
+	look.Nozzle, look.Scattering, look.Roughness = NozzleSpray, 0, 0
 	if _, err := setLook(look); err != nil {
 		t.Fatal(err)
 	}
@@ -683,7 +716,8 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	}
 
 	// A profile from before each emitter had its own look shared one look,
-	// saved before the width and viscosity settings, among all of them.
+	// saved before the force, amount and viscosity settings, among all of them;
+	// its strength level offset and stream width have nothing to become.
 	var raw map[string]any
 	if _, err := readJSON(profilePath, &raw); err != nil {
 		t.Fatal(err)
@@ -695,7 +729,9 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	for _, emitter := range emitters {
 		delete(emitter.(map[string]any), "look")
 	}
-	raw["look"] = map[string]any{"strengthOffset": 1, "tint": []float64{0.9, 0.75, 0.03}, "absorptionMm": 15}
+	raw["look"] = map[string]any{
+		"strengthOffset": 2, "streamWidth": 0.5, "tint": []float64{0.9, 0.75, 0.03}, "absorptionMm": 15,
+	}
 	data, err := encodeJSON(raw)
 	if err != nil {
 		t.Fatal(err)
@@ -707,7 +743,8 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, emitter := range inspection.Emitters {
-		if emitter.Look.StrengthOffset != 1 || emitter.Look.StreamWidth != 1 || emitter.Look.Viscosity != 1 {
+		if look := emitter.Look; look.Force != 1 || look.Amount != 1 || look.Viscosity != 1 ||
+			look.Nozzle != NozzleSpray || look.Scattering != 0 || look.Roughness != 0 || lookRecord(&look) != nil {
 			t.Fatalf("legacy look of emitter %d = %+v", emitter.PID, emitter.Look)
 		}
 	}
@@ -813,7 +850,7 @@ func TestServiceCopiedModGetsOwnProfile(t *testing.T) {
 		t.Fatalf("slots reported by the copy's first apply: renumbered=%+v applied=%v", renumbered, applied)
 	}
 	look := defaultLook()
-	look.StrengthOffset = 1
+	look.Force = 1.5
 	looked, err := f.service.SetLook(ctx, LookInput{ModPath: lookRoot, PID: originalPID, Look: look})
 	if err != nil {
 		t.Fatal(err)
@@ -1042,9 +1079,8 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 	}
 
 	status, err := manager.SetSettings(ctx, efmi, runtimeName, map[string]string{
-		"toggleKey": "ctrl VK_F7", "strengthUpKey": "VK_F8", "strengthDownKey": "VK_F9",
-		"autoPulseKey": "VK_F11", "manualPulseKey": "VK_F12",
-		"startEnabled": "0", "autoPulse": "1", "strength": "6", "slotCount": "6",
+		"toggleKey": "ctrl VK_F7", "autoPulseKey": "VK_F11", "manualPulseKey": "VK_F12",
+		"startEnabled": "0", "autoPulse": "1", "slotCount": "6",
 		"tint": "0.5 0.25 1", "refraction": "0.03",
 	})
 	if err != nil || status.State != modruntime.StateCurrent {
@@ -1060,15 +1096,12 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 	}
 	for _, line := range []string{
 		"[KeyToggle]\nkey = ctrl VK_F7\n",
-		"[KeyStrengthUp]\nkey = VK_F8\n",
-		"[KeyStrengthDown]\nkey = VK_F9\n",
 		"[KeyAutoPulse]\nkey = VK_F11\n",
 		"[KeyManualPulse]\nkey = VK_F12\n",
 		"global $auto_pulse = 1\n",
 		"global $emitting = 0\n",
 		"global $effect_requested = 0\n",
 		"global $last_effect_request = 0\n",
-		"global $strength_level = 6\n",
 		"global $slot_count = 6\n",
 		"global $liquid_tint_r = 0.5\n",
 		"global $liquid_tint_g = 0.25\n",
@@ -1108,6 +1141,116 @@ func TestRuntimeBuildsWWMICameraAtMainView(t *testing.T) {
 		wwmi := slices.Contains(spec.Importers, "WWMI")
 		if atInjection == wwmi || atMainView != wwmi {
 			t.Errorf("%v: camera built at injection %v, at main view %v", spec.Importers, atInjection, atMainView)
+		}
+	}
+}
+
+// The passes the injection runs leave their slots empty, while the game may
+// still expect its own resources there, so CommandListInjectWorld must save
+// and restore every shader resource and UAV slot they bind.
+func TestRuntimeRestoresSlotsItBinds(t *testing.T) {
+	for _, spec := range RuntimeSpecs() {
+		sections := map[string][]string{}
+		err := fs.WalkDir(spec.Files, ".", func(name string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
+				return err
+			}
+			data, err := fs.ReadFile(spec.Files, name)
+			if err != nil {
+				return err
+			}
+			current := ""
+			for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+					current = line[1 : len(line)-1]
+					continue
+				}
+				sections[current] = append(sections[current], line)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// A namespaced reference such as CommandList\Namespace\Name names the
+		// section CommandListName of that namespace's INI.
+		resolve := func(target string) string {
+			if first, last := strings.Index(target, `\`), strings.LastIndex(target, `\`); first >= 0 {
+				return target[:first] + target[last+1:]
+			}
+			return target
+		}
+		inject := sections["CommandListInjectWorld"]
+		seen := map[string]bool{}
+		queue := []string{"CommandListInjectWorld"}
+		checked := 0
+		for len(queue) > 0 {
+			name := queue[0]
+			queue = queue[1:]
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			for _, line := range sections[name] {
+				key, value, ok := strings.Cut(line, "=")
+				key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+				if !ok {
+					continue
+				}
+				if key == "run" && !strings.HasPrefix(value, "BuiltIn") {
+					queue = append(queue, resolve(value))
+					continue
+				}
+				stage, slot, bound := strings.Cut(key, "-")
+				if name == "CommandListInjectWorld" || !bound || (stage != "cs" && stage != "vs" && stage != "ps") ||
+					len(slot) < 2 || (slot[0] != 't' && slot[0] != 'u') {
+					continue
+				}
+				checked++
+				saved := "ResourceSaved" + strings.ToUpper(stage[:1]) + stage[1:] + strings.ToUpper(slot)
+				if !slices.Contains(inject, saved+" = ref "+key) || !slices.Contains(inject, key+" = ref "+saved) {
+					t.Errorf("%v: %s binds %s, which the injection does not restore", spec.Importers, name, key)
+				}
+			}
+		}
+		if checked < 50 {
+			t.Fatalf("%v: found only %d bindings", spec.Importers, checked)
+		}
+	}
+}
+
+// The enhanced runtime's Composite.ini replaces the core one, so each of its
+// composite passes must bind the scattering and roughness as the core's does,
+// or the composite reads them as zero there.
+func TestRuntimeCompositesBindMaterial(t *testing.T) {
+	for _, spec := range RuntimeSpecs() {
+		composites := 0
+		err := fs.WalkDir(spec.Files, ".", func(name string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || path.Ext(name) != ".ini" {
+				return err
+			}
+			data, err := fs.ReadFile(spec.Files, name)
+			if err != nil {
+				return err
+			}
+			for _, section := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n[") {
+				lines := strings.Split(section, "\n")
+				if !slices.ContainsFunc(lines, func(line string) bool {
+					return strings.HasPrefix(line, "ps = FluidComposite")
+				}) {
+					continue
+				}
+				composites++
+				if !slices.Contains(lines, `ps-t107 = Resource\LiquidGravityProbe\FluidMaterial`) {
+					t.Errorf("%v: %s [%s does not bind the material", spec.Importers, name, lines[0])
+				}
+			}
+			return nil
+		})
+		if err != nil || composites == 0 {
+			t.Fatalf("%v: found %d composite passes (err=%v)", spec.Importers, composites, err)
 		}
 	}
 }

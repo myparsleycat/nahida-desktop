@@ -163,6 +163,9 @@ func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, er
 // SetLook stores the liquid look of one of the mod's emitters.
 func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, error) {
 	return s.run(ctx, "set-look", input.ModPath, func(sc *scope) (Inspection, error) {
+		if input.Look.Nozzle == "" {
+			input.Look.Nozzle = NozzleSpray
+		}
 		if !validLook(input.Look) {
 			return Inspection{}, infra.ContractError(ErrorInvalidLook)
 		}

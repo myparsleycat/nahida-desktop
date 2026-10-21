@@ -23,5 +23,8 @@ static const float ADHESION_LIFETIME=1.6,ADHESION_FADE=.3;
 static const float TRAIL_MARKER=6;
 static const float TRAIL_LIFETIME=1.5,TRAIL_FADE=.4,TRAIL_LIFT=.0002;
 bool trailSegment(float marker){return marker>5.5 && marker<6.5;}
+// Floor puddles and trail segments live in the reserved part of the splash
+// pool, after the airborne slots.
+bool reservedContact(float marker){return floorPuddle(marker)||trailSegment(marker);}
 #endif
 

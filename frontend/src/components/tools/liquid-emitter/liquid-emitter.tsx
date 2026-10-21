@@ -26,7 +26,7 @@ import { cn } from "@renderer/lib/utils";
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { isEqual, round } from "es-toolkit";
+import { isEqual } from "es-toolkit";
 import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
@@ -41,6 +41,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { followsRuntime, LookSection, useLookDraft } from "./liquid-emitter-look";
 import { LiquidEmitterOverlay } from "./liquid-emitter-overlay";
 import {
   type ApplyMode,
@@ -75,17 +76,6 @@ const HISTORY_LIMIT = 100;
 const MAX_OFFSET_METERS = 0.25;
 const AXES = ["X", "Y", "Z"] as const;
 const DOWN: Vec3 = [0, 0, -1];
-// The runtime's strength levels run from 0 to 7.
-const MAX_STRENGTH_OFFSET = 7;
-const DEFAULT_ABSORPTION_MM = 15;
-// Slots.hlsl slotWidth and the backend accept stream widths from 0.05 to 2.
-const MIN_STREAM_WIDTH = 0.05;
-const MAX_STREAM_WIDTH = 2;
-const DEFAULT_STREAM_WIDTH = 1;
-// Slots.hlsl slotViscosity and the backend accept viscosities from 0.1 to 10;
-// the slider moves on its base-10 logarithm so that 1 sits in the middle.
-const MAX_VISCOSITY_LOG = 1;
-const DEFAULT_VISCOSITY = 1;
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
 // The backend's maxEmitters: each emitter takes a runtime slot while its character is drawn.
@@ -128,6 +118,7 @@ export function LiquidEmitterTool({
   const current =
     editing === null ? undefined : emitters.find((emitter) => emitter.pid === editing);
   const adding = current === undefined;
+  const [draftLook, setDraftLook] = useLookDraft(`${inspection?.modPath}:${current?.pid}`);
   const atLimit = emitters.length >= MAX_EMITTERS;
   const busy =
     session.apply.isPending ||
@@ -639,8 +630,9 @@ export function LiquidEmitterTool({
         />
 
         <LookSection
-          key={`${inspection?.modPath}:${current?.pid}`}
           emitter={current}
+          draft={draftLook}
+          onDraftChange={setDraftLook}
           busy={busy}
           editable={editable}
           onSave={(look) => (current ? handleSaveLook(current.pid, look) : Promise.resolve(false))}
@@ -708,6 +700,8 @@ export function LiquidEmitterTool({
                 offset={anchor.offset}
                 direction={anchor.direction}
                 meshUnit={meshUnit}
+                force={(draftLook ?? current?.look)?.force}
+                nozzle={(draftLook ?? current?.look)?.nozzle}
                 showTrajectory={showTrajectory}
               />
             ) : null}
@@ -1076,188 +1070,6 @@ function iniFolder(iniPath: string) {
   return slash < 0 ? "." : iniPath.slice(0, slash);
 }
 
-function LookSection({
-  emitter,
-  busy,
-  editable,
-  onSave,
-}: {
-  emitter: Emitter | undefined;
-  busy: boolean;
-  editable: boolean;
-  onSave: (look: Look) => Promise<boolean>;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState<Look | null>(null);
-  if (!emitter) {
-    return (
-      <InspectorSection
-        id="liquid-emitter:look"
-        title={t("page.tools.liquid_emitter.look.title")}
-        className="px-4 py-3"
-        panelClassName="pt-3"
-      >
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.look.needs_emitter")}
-        </p>
-      </InspectorSection>
-    );
-  }
-
-  const look = draft ?? emitter.look;
-  const locked = !editable || busy;
-  const dirty = draft !== null && !isEqual(draft, emitter.look);
-  const update = (change: Partial<Look>) => setDraft({ ...look, ...change });
-  const offset = look.strengthOffset;
-  const runtimeLook = followsRuntime(look);
-
-  return (
-    <InspectorSection
-      id="liquid-emitter:look"
-      title={t("page.tools.liquid_emitter.look.title")}
-      summary={t(
-        dirty
-          ? "page.tools.liquid_emitter.look.summary.unsaved"
-          : runtimeLook
-            ? "page.tools.liquid_emitter.look.summary.runtime"
-            : "page.tools.liquid_emitter.look.summary.custom",
-      )}
-      className="px-4 py-3"
-      panelClassName="space-y-3 pt-3"
-    >
-      <p className="text-xs text-muted-foreground">{t("page.tools.liquid_emitter.look.hint")}</p>
-      <div className="space-y-1">
-        <RangeField
-          label={t("page.tools.liquid_emitter.look.strength")}
-          value={offset}
-          defaultValue={0}
-          min={-MAX_STRENGTH_OFFSET}
-          max={MAX_STRENGTH_OFFSET}
-          step={1}
-          display={offset > 0 ? `+${offset}` : String(offset)}
-          disabled={locked}
-          onChange={(value) => update({ strengthOffset: value })}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.look.strength_hint")}
-        </p>
-      </div>
-      <div className="space-y-1">
-        <RangeField
-          label={t("page.tools.liquid_emitter.look.stream_width")}
-          value={look.streamWidth}
-          defaultValue={DEFAULT_STREAM_WIDTH}
-          min={MIN_STREAM_WIDTH}
-          max={MAX_STREAM_WIDTH}
-          step={0.05}
-          display={`×${look.streamWidth.toFixed(2)}`}
-          disabled={locked}
-          onChange={(value) => update({ streamWidth: value })}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.look.stream_width_hint")}
-        </p>
-      </div>
-      <div className="space-y-1">
-        <RangeField
-          label={t("page.tools.liquid_emitter.look.viscosity")}
-          value={Math.log10(look.viscosity)}
-          defaultValue={0}
-          min={-MAX_VISCOSITY_LOG}
-          max={MAX_VISCOSITY_LOG}
-          step={0.05}
-          display={`×${look.viscosity.toFixed(2)}`}
-          disabled={locked}
-          onChange={(value) => update({ viscosity: round(10 ** value, 2) })}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.look.viscosity_hint")}
-        </p>
-      </div>
-      <label className="flex items-start gap-2 text-sm">
-        <Checkbox
-          checked={look.customColor}
-          disabled={locked}
-          onCheckedChange={(checked) => update({ customColor: checked === true })}
-        />
-        <span>
-          {t("page.tools.liquid_emitter.look.custom_color")}
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            {t("page.tools.liquid_emitter.look.custom_color_hint")}
-          </span>
-        </span>
-      </label>
-      {look.customColor ? (
-        <>
-          <label className="flex items-center justify-between gap-2 text-sm">
-            {t("page.tools.liquid_emitter.look.tint")}
-            <Input
-              type="color"
-              className="w-16 shrink-0"
-              disabled={locked}
-              value={tintToHex(look.tint)}
-              onChange={(event) => update({ tint: hexToTint(event.currentTarget.value) })}
-            />
-          </label>
-          <div className="space-y-1">
-            <RangeField
-              label={t("page.tools.liquid_emitter.look.absorption")}
-              value={look.absorptionMm}
-              defaultValue={DEFAULT_ABSORPTION_MM}
-              min={2}
-              max={60}
-              step={1}
-              display={`${look.absorptionMm} mm`}
-              disabled={locked}
-              onChange={(value) => update({ absorptionMm: value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("page.tools.liquid_emitter.look.absorption_hint")}
-            </p>
-          </div>
-        </>
-      ) : null}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1"
-          disabled={locked || runtimeLook}
-          onClick={() =>
-            update({
-              strengthOffset: 0,
-              customColor: false,
-              streamWidth: DEFAULT_STREAM_WIDTH,
-              viscosity: DEFAULT_VISCOSITY,
-            })
-          }
-        >
-          {t("page.tools.liquid_emitter.look.reset")}
-        </Button>
-        <Button
-          size="sm"
-          className="flex-1"
-          disabled={locked || !dirty}
-          onClickPromise={async () => {
-            if (await onSave(look)) setDraft(null);
-          }}
-        >
-          {t("page.tools.liquid_emitter.look.save")}
-        </Button>
-      </div>
-    </InspectorSection>
-  );
-}
-
-function followsRuntime(look: Look) {
-  return (
-    look.strengthOffset === 0 &&
-    !look.customColor &&
-    look.streamWidth === DEFAULT_STREAM_WIDTH &&
-    look.viscosity === DEFAULT_VISCOSITY
-  );
-}
-
 function anchorFromEmitter(emitter: Emitter): Anchor | null {
   const saved = emitter.anchor;
   const vec = (value: number[] | null | undefined) =>
@@ -1293,22 +1105,6 @@ function anchorFromEmitter(emitter: Emitter): Anchor | null {
     offset,
     direction,
   };
-}
-
-// Tint channels run from 0 to 1, as the runtime's own color setting stores them.
-function tintToHex(tint: number[]) {
-  const channels = [0, 1, 2].map((index) =>
-    Math.round(Math.min(1, Math.max(0, tint[index] ?? 0)) * 255)
-      .toString(16)
-      .padStart(2, "0"),
-  );
-  return `#${channels.join("")}`;
-}
-
-function hexToTint(hex: string) {
-  return [1, 3, 5].map((start) =>
-    Number((parseInt(hex.slice(start, start + 2), 16) / 255).toFixed(3)),
-  );
 }
 
 function limitOffset(offset: Vec3, limit: number): Vec3 {

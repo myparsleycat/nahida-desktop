@@ -21,6 +21,42 @@ RWBuffer<uint> puddleTransferCounter:register(u6);
 RWBuffer<uint> puddleTransferList:register(u7);
 // The trail segments Update left, in the order it counted them.
 RWStructuredBuffer<FluidParticle> trailTransfer:register(u3);
+#include "Contact.hlsl"
+// Per splash particle, its last contact (Contact.hlsl). Each thread keeps its
+// own particle's.
+RWStructuredBuffer<float4> contactHistory:register(u2);
+#include "Merge.hlsl"
+#include "Diagnostics.hlsl"
+#ifdef SPLASH_UPDATE
+RWBuffer<uint> diagnostics:register(u1);
+#else
+// Per airborne slot, the drop it would merge with (SplashMerge.hlsl).
+Buffer<uint> mergeInto:register(t102);
+#include "EmitterState.hlsl"
+StructuredBuffer<float4> emitters:register(t104);
+// Per slot and request, set when an outlet's drop got its particle
+// (OozeCommit.hlsl).
+RWBuffer<uint> oozeDelivered:register(u1);
+#endif
+ContactRecord loadContact(uint i){
+ ContactRecord h;
+ h.plane=contactHistory[i*CONTACT_ROWS];h.normal=contactHistory[i*CONTACT_ROWS+1];h.trail=contactHistory[i*CONTACT_ROWS+2];
+ return h;
+}
+void storeContact(uint i,ContactRecord h){
+ contactHistory[i*CONTACT_ROWS]=h.plane;contactHistory[i*CONTACT_ROWS+1]=h.normal;contactHistory[i*CONTACT_ROWS+2]=h.trail;
+}
+// The contact a particle starts with where it is placed: its own, when it
+// lies on a surface, which its trail starts from.
+ContactRecord startContact(FluidParticle p,float now){
+ ContactRecord h;h.plane=0;h.normal=0;h.trail=float4(p.positionAge.xyz,0);
+ if(p.velocityAlive.w>.5&&p.predictedLambda.w>.5&&!floorPuddle(p.densityBirth.w)){
+  float3 normal=p.predictedLambda.xyz;
+  float lift=trailSegment(p.densityBirth.w)?TRAIL_LIFT:FLUID_RADIUS*p.densityBirth.z;
+  h.plane=float4(p.positionAge.xyz-normal*lift,now);h.normal=float4(normal,0);
+ }
+ return h;
+}
 uint mixBits(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float random01(uint seed,uint channel){return float(mixBits(seed+channel*0x9e3779b9u)>>8)*(1.0/16777216.0);}
 // Floor splashes weaken progressively below the default strength.
@@ -62,65 +98,90 @@ float adhesionDrift(uint seed,float age,float3 position){
 }
 // Larger drops run faster, and each drop has its own pace, so a sheet of
 // drops that landed together breaks into rivulets of different speeds.
+// Merged drops beyond the largest splash (1.2) run faster still.
 float adhesionPace(uint seed,float scale){
- return lerp(.6,1.4,saturate((scale-.5)/.7))*(.6+.8*random01(seed,41));
+ float size=scale<=1.2?lerp(.6,1.4,saturate((scale-.5)/.7)):lerp(1.4,1.9,saturate((scale-1.2)/.6));
+ return size*(.6+.8*random01(seed,41));
 }
 // Stick-slip: a small drop that has slowed down stays put until its own
 // release age, then slides. A drop that arrives after that age never sticks.
 bool adhesionPinned(uint seed,float scale,float age,float3 velocity){
  return scale<PIN_MAX_SCALE && age<.3+.7*random01(seed,42) && dot(velocity,velocity)<.15*.15;
 }
-// A drop running on the body leaves a trail segment each TRAIL_SPACING of
-// its slide: positionAge.xyz its end on the surface, velocityAlive.xyz from
-// its start to its end, predictedLambda the surface normal and contact mode,
-// densityBirth.z the drop's size. Each segment takes TRAIL_DRAIN of the
-// drop's size, and a drop below TRAIL_STOP_SCALE stops as the last bead.
-// Capacity: a drop of the largest size, 1.2, leaves at most
-// ln(.45/1.2)/-ln(1-.025) = 39 segments before it stops. At its fastest
-// creep (pace 1.96 x .19 m/s on a vertical surface) those 23 cm take .63 s,
-// less than TRAIL_LIFETIME, so all 39 can be alive at once. PUDDLE_COUNT 4096
-// then holds the whole trails of about 100 drops running at the same time,
-// less what floor puddles take; past that the oldest segments make room.
-static const float TRAIL_SPACING=.006,TRAIL_DRAIN=.025,TRAIL_STOP_SCALE=.45;
-// A drop creeping slower than this, or standing, leaves no trail.
-static const float TRAIL_MIN_SPEED=.03;
-// One frame's slide becomes one segment however long; this bounds a jump.
+// A drop running on the body leaves a trail of segments behind it, each from
+// where the last one ended to where the drop is: positionAge.xyz its end on
+// the surface, velocityAlive.xyz from its start to its end, predictedLambda
+// the surface normal and contact mode, densityBirth.z the drop's size. A
+// segment is laid once the drop has slid about its own width, between
+// TRAIL_MIN_SPACING and TRAIL_MAX_SPACING, however slowly it moves, and
+// takes TRAIL_DEPOSIT of volume per meter at size 1 from the drop. A drop
+// that standing still lays none, nor one left with less than
+// TRAIL_STOP_SCALE, which stays as the last bead.
+// Capacity: a drop of the largest merged size, MERGE_MAX_SCALE 1.8, runs
+// about (5.83-.09)/(12*1.2) = 40 cm before it stops, in at most 70 segments,
+// which all live at once at its fastest creep (pace 2.66 x .19 m/s on a
+// vertical surface takes .8 s, under TRAIL_LIFETIME). PUDDLE_COUNT 4096 then
+// holds the whole trails of about 58 such drops at once, less what floor
+// puddles take; past that the oldest segments make room.
+static const float TRAIL_MIN_SPACING=.001,TRAIL_MAX_SPACING=.006,TRAIL_DEPOSIT=12,TRAIL_STOP_SCALE=.45;
+static const float TRAIL_STOP_VOLUME=TRAIL_STOP_SCALE*TRAIL_STOP_SCALE*TRAIL_STOP_SCALE;
+// A segment longer than this, after a jump, starts this far behind the drop.
 static const float TRAIL_MAX_LENGTH=.03;
-// predictedLambda.w of a clinging drop is its contact mode (1 world-fixed, 2
-// body-following) plus up to TRAIL_PROGRESS_SPAN for how far it slid since
-// its last segment, so the mode tests (> .5, > 1.5) still hold.
-static const float TRAIL_PROGRESS_SPAN=.4;
-uint adhesionMode(float encoded){return encoded>1.5?2u:1u;}
-bool reservedContact(float marker){return floorPuddle(marker)||trailSegment(marker);}
 uint trailAgeBucket(float age){return (uint)clamp(age/TRAIL_LIFETIME*TRAIL_AGE_BUCKETS,0,TRAIL_AGE_BUCKETS-1);}
-// The segment runs back along this frame's slide, which over a few
-// millimeters is the path from where the last one ended. Floors keep their
-// puddles instead.
-void leaveTrail(inout FluidParticle p,float3 from,float3 to,float3 velocity,float3 normal,float radius){
- uint mode=adhesionMode(p.predictedLambda.w);
- float run=(p.predictedLambda.w-float(mode))/TRAIL_PROGRESS_SPAN*TRAIL_SPACING;
- float3 moved=to-from;moved-=normal*dot(moved,normal);
- float slide=length(moved);
- bool running=dot(velocity,velocity)>=TRAIL_MIN_SPEED*TRAIL_MIN_SPEED && normal.y<PUDDLE_MIN_UP && p.densityBirth.z>=TRAIL_STOP_SCALE;
- run=running?run+slide:0;
- if(run>=TRAIL_SPACING && slide>1e-6){
+#ifdef SPLASH_UPDATE
+// Floors keep their puddles instead.
+void leaveTrail(inout FluidParticle p,inout ContactRecord h,float3 to,float3 normal,float radius){
+ float scale=p.densityBirth.z;
+ float3 run=to-h.trail.xyz;run-=normal*dot(run,normal);
+ float slide=length(run);
+ if(normal.y>=PUDDLE_MIN_UP||scale<TRAIL_STOP_SCALE){h.trail.xyz=to;return;}
+ if(slide<clamp(2*FLUID_RADIUS*scale,TRAIL_MIN_SPACING,TRAIL_MAX_SPACING))return;
+ float laid=min(slide,TRAIL_MAX_LENGTH);
+ float volume=scale*scale*scale-TRAIL_DEPOSIT*laid*scale;
+ if(volume>=TRAIL_STOP_VOLUME){
   uint rank;InterlockedAdd(puddleTransferCounter[TRANSFER_TRAIL_INCOMING],1,rank);
   if(rank<TRAIL_TRANSFER_CAPACITY){
    FluidParticle t;
    t.positionAge=float4(to-normal*(radius+.0001-TRAIL_LIFT),0);
-   t.velocityAlive=float4(moved/slide*min(run,TRAIL_MAX_LENGTH),p.velocityAlive.w);
-   t.predictedLambda=float4(normal,mode);
-   t.densityBirth=float4(0,IniParams[239].y,p.densityBirth.z,TRAIL_MARKER);
+   t.velocityAlive=float4(run/slide*laid,p.velocityAlive.w);
+   t.predictedLambda=float4(normal,adhesionMode(p.predictedLambda.w));
+   t.densityBirth=float4(0,IniParams[239].y,scale,TRAIL_MARKER);
    trailTransfer[rank]=t;
   }
-  p.densityBirth.z*=1-TRAIL_DRAIN;
-  run=0;
+  p.densityBirth.z=pow(volume,1.0/3);
  }
- p.predictedLambda.w=mode+TRAIL_PROGRESS_SPAN*saturate(run/TRAIL_SPACING);
+ h.trail.xyz=to;
 }
+#endif
+// Share of a fully coherent stream's impacts on the body that leave liquid
+// there whatever the angle; more would fill the airborne pool with drops.
+static const float IMPACT_DEPOSIT=.35;
+// Whether an impact's first child stays on the surface: a grazing hit sticks
+// (adhesionChance), and a coherent stream also wets the body it hits head-on.
+// Floors keep their puddles instead.
 bool adhesionEvent(CollisionEvent e){
- return random01((uint)e.incoming.w&0xffffu,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz,slotViscosity((uint)e.slot.x));
+ uint seed=(uint)e.incoming.w&0xffffu;
+ if(random01(seed,211)<adhesionChance(e.incoming.xyz,e.normalRadius.xyz,slotViscosity((uint)e.slot.x)))return true;
+ return e.normalRadius.y<PUDDLE_MIN_UP&&random01(seed,212)<IMPACT_DEPOSIT*impactCoherence(e);
 }
+#ifdef SPLASH_SPAWN
+// Merges the drop at i with the one it picked, if that one picked it too
+// (Merge.hlsl): the lower index takes their volume, momentum and youth up to
+// MERGE_MAX_VOLUME, and the other keeps what is left or frees its slot.
+void mergeWithPartner(inout FluidParticle p,uint i){
+ uint j=mergeInto[i];
+ if(j>=AIRBORNE_SPLASH_COUNT||mergeInto[j]!=i)return;
+ FluidParticle q=source[j];
+ float a=p.densityBirth.z,b=q.densityBirth.z;
+ float mine=a*a*a,theirs=b*b*b,total=mine+theirs;
+ float3 normal=p.predictedLambda.xyz,velocity=(p.velocityAlive.xyz*mine+q.velocityAlive.xyz*theirs)/total;
+ float kept=min(total,MERGE_MAX_VOLUME),rest=total-kept;
+ p.velocityAlive.xyz=velocity-normal*dot(velocity,normal);
+ if(i<j){p.densityBirth.z=pow(kept,1.0/3);p.positionAge.w=min(p.positionAge.w,q.positionAge.w);}
+ else if(rest>MERGE_REST_MIN)p.densityBirth.z=pow(rest,1.0/3);
+ else p.velocityAlive.w=0;
+}
+#endif
 void beginFloorPuddle(inout FluidParticle p,float3 normal){
  p.velocityAlive.xyz-=normal*dot(p.velocityAlive.xyz,normal);
  p.predictedLambda=float4(normal,3);
@@ -134,11 +195,37 @@ bool puddleDepthUnavailableAtBorder(uint s,float3 relativePosition){
  // Match screenSurface's 0.2 percent viewport exclusion margin.
  return abs(c.x)>=c.w*.996 || abs(c.y)>=c.w*.996;
 }
+// The pulse drops a spray slot adds around its stream: the frame's count
+// scaled by the slot's amount, so less flow sprays less beside it. The
+// frame's jitter rounds the same way in every thread, and at amount 1 the
+// count stays the frame's own.
+uint sprayPulseCount(uint s,uint pulseCount,float jitter){
+ return (uint)floor(pulseCount*slotAmount(s)+jitter);
+}
 uint childCount(CollisionEvent e){
  float expected=lerp(.25,2,impactCoherence(e))*lowStrengthFloorSplash(e)*slotSplash((uint)e.slot.x);
  uint whole=(uint)floor(expected);
  return max((adhesionEvent(e)||e.normalRadius.y>=PUDDLE_MIN_UP)?1u:0u,whole+(random01((uint)e.incoming.w&0xffffu,101)<frac(expected)?1u:0u));
 }
+#ifdef SPLASH_SPAWN
+// An oozing outlet (Slots.hlsl NOZZLE_OOZE) emits no stream: the liquid
+// gathering there (EmitterState.hlsl) requests a drop when it breaks off,
+// which falls or, on a surface, runs down it as a clinging drop. Both are
+// retained drops (marker 4), which a slow start does not end.
+uint oozeRequests(uint s){
+ uint base=s*EMITTER_ROWS+EMITTER_REQUEST;
+ return (emitters[base].w>0?1:0)+(emitters[base+REQUEST_ROWS].w>0?1:0);
+}
+void beginOozeDrop(inout FluidParticle p,uint owner,uint child){
+ uint base=owner*EMITTER_ROWS+EMITTER_REQUEST;
+ uint k=child==0&&emitters[base].w>0?0:1,row=base+k*REQUEST_ROWS;
+ float4 at=emitters[row],motion=emitters[row+1],contact=emitters[row+2];
+ p.positionAge=float4(at.xyz,0);p.velocityAlive=float4(motion.xyz,splashAliveTag(owner));
+ p.predictedLambda=contact.w>.5?contact:0;
+ p.densityBirth=float4(0,IniParams[239].y,pow(at.w,1.0/3),4);
+ oozeDelivered[owner*OOZE_REQUESTS+k]=1;
+}
+#endif
 
 [numthreads(64,1,1)]
 void main(uint3 id:SV_DispatchThreadID){
@@ -149,7 +236,9 @@ void main(uint3 id:SV_DispatchThreadID){
   float3 shift=frameState[fs].w>.5?frameState[fs].xyz-slotRoot(owner):0;
   if(length(shift)>1.5||!slotLive(owner)){p.velocityAlive.w=0;}else{
    float3 from=p.positionAge.xyz+shift;
-   float radius=FLUID_RADIUS*p.densityBirth.z;
+   float radius=FLUID_RADIUS*p.densityBirth.z,contactTime=IniParams[239].y+IniParams[239].x;
+   ContactRecord h=loadContact(i);
+   h.plane.xyz+=shift;h.trail.xyz+=shift;
    bool puddle=floorPuddle(p.densityBirth.w),trail=trailSegment(p.densityBirth.w);
    bool attached=p.predictedLambda.w>.5;
    float3 velocity=p.velocityAlive.xyz,to=from;
@@ -185,7 +274,8 @@ void main(uint3 id:SV_DispatchThreadID){
     }
    }else if(trail){
     // A segment rides the body frame as a clinging drop does, and lasts only
-    // while the visible surface under its end still continues it.
+    // while the visible surface under its end still continues it, or for a
+    // moment it is not seen (Contact.hlsl).
     float3 normal=p.predictedLambda.xyz,segment=velocity;
     if(p.predictedLambda.w>1.5 && liveAdhesionFrame(owner)){
      AdhesionFrame previous=adhesionFrames[i];
@@ -205,11 +295,18 @@ void main(uint3 id:SV_DispatchThreadID){
      to+=surfaceNormal*(TRAIL_LIFT-gap);
      velocity=segment-normal*dot(segment,normal);
      p.predictedLambda.xyz=normal;
+     h.plane=float4(to-normal*TRAIL_LIFT,contactTime);h.normal=float4(normal,0);h.trail.w=0;
     }else{
-     p.velocityAlive.w=0;
+     // Kept where it was carried while the surface is hidden; once that is
+     // too long, it fades out over TRAIL_FADE rather than vanishing.
+     velocity=segment;p.predictedLambda.xyz=normal;h.trail.w=1;
+     if(h.plane.w<=0||contactTime-h.plane.w>CONTACT_HOLD)p.positionAge.w=max(p.positionAge.w,TRAIL_LIFETIME-TRAIL_FADE-dt);
     }
    }else if(attached){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
+    // A body-following drop whose body frame is gone stays where it was
+    // rather than guess how the body moved.
+    bool tracked=p.predictedLambda.w<1.5||liveAdhesionFrame(owner);
     if(p.predictedLambda.w>1.5 && liveAdhesionFrame(owner)){
      AdhesionFrame previous=adhesionFrames[i];
      if(previous.origin.w>.5 && previous.right.w==slotAnchor(owner,4).y){
@@ -227,6 +324,12 @@ void main(uint3 id:SV_DispatchThreadID){
        from=carried+testNormal*(radius+.0001-gap);
        velocity=carryAdhesionVector(owner,velocity,previous);
        oldNormal=testNormal;
+       // Where its trail ended and the plane it lies on move with the body,
+       // or the body's motion would count as sliding over it.
+       float3 root=collisionRoot(owner);
+       h.trail.xyz=slotAnchor(owner,3).xyz+carryAdhesionVector(owner,h.trail.xyz+root-previous.origin.xyz,previous)-root;
+       h.plane.xyz=slotAnchor(owner,3).xyz+carryAdhesionVector(owner,h.plane.xyz+root-previous.origin.xyz,previous)-root;
+       h.normal.xyz=carryAdhesionVector(owner,h.normal.xyz,previous);
       }
      }
     }
@@ -241,19 +344,39 @@ void main(uint3 id:SV_DispatchThreadID){
     bool found=screenSurface(owner,to,surfacePoint,normal);
     float gap=dot(to-surfacePoint,normal);
     // Follow continuous visible surfaces only; never snap to a distant layer.
-    // A surface that moved over the droplet pushes it back out.
-    if(found && dot(oldNormal,normal)>.55 && gap<radius+.012 && gap>-SURFACE_OVERLAP
-       && length(to-surfacePoint)<.04-min(0,gap)){
+    // A surface that moved over the droplet pushes it back out. One seen
+    // again after a hold must continue the plane the drop was held on.
+    bool held=contactHeld(h);
+    bool verified=found && dot(oldNormal,normal)>.55 && gap<radius+.012 && gap>-SURFACE_OVERLAP
+       && length(to-surfacePoint)<.04-min(0,gap)
+       && (!held||(dot(normal,h.normal.xyz)>CONTACT_NORMAL_MATCH&&abs(dot(surfacePoint-h.plane.xyz,h.normal.xyz))<CONTACT_PLANE_MATCH));
+    if(verified){
      to+=normal*(radius+.0001-gap);
      velocity-=normal*dot(velocity,normal);
      p.predictedLambda=float4(normal,p.predictedLambda.w);
+     if(h.plane.w<=0)h.trail.xyz=to;
+     h.plane=float4(surfacePoint,contactTime);h.normal=float4(normal,0);h.trail.w=0;
      if(slowFloorContact(velocity,normal)){
       p.velocityAlive.xyz=velocity;beginFloorPuddle(p,normal);puddle=true;
      }else{
-      leaveTrail(p,from,to,velocity,normal,radius);
+      leaveTrail(p,h,to,normal,radius);
      }
+    }else if(h.plane.w>0&&contactTime-h.plane.w<=CONTACT_HOLD&&dot(h.normal.xyz,oldNormal)>.55){
+     // The surface is not seen for a moment: the drop stays on the plane it
+     // was last seen on, sliding at most CONTACT_HOLD_SLIDE in all, and
+     // neither merges nor leaves a trail until the surface is seen again.
+     float3 n=h.normal.xyz,move=tracked?to-from:0;
+     move-=n*dot(move,n);
+     float budget=max(CONTACT_HOLD_SLIDE-h.normal.w,0),moved=length(move);
+     if(moved>budget){move*=budget/moved;moved=budget;}
+     to=from+move;to+=n*(radius+.0001-dot(to-h.plane.xyz,n));
+     velocity-=n*dot(velocity,n);
+     p.predictedLambda=float4(n,p.predictedLambda.w);
+     h.normal.w+=moved;h.trail.w=1;
+     InterlockedAdd(diagnostics[DIAG_CONTACT_HELD],1);
     }else{
      attached=false;p.predictedLambda=0;
+     InterlockedAdd(diagnostics[DIAG_CONTACT_EXPIRED],1);
     }
    }else{
     velocity=(velocity+float3(0,-9.81,0)*dt)/(1+.8*dt);
@@ -271,6 +394,7 @@ void main(uint3 id:SV_DispatchThreadID){
       // Preserve incident tangential momentum; viscous drag acts over time.
       velocity-=normal*dot(velocity,normal);
       p.predictedLambda=float4(normal,adhesionContactMode(owner,contactPoint,normal));p.densityBirth.w=4;attached=true;
+      h.plane=float4(contactPoint-normal*radius,contactTime);h.normal=float4(normal,0);h.trail=float4(contactPoint,0);
      }else{
       float vn=dot(velocity,normal);velocity=(velocity-normal*vn)*.65-normal*vn*.24;
       p.densityBirth.x+=1;
@@ -282,8 +406,11 @@ void main(uint3 id:SV_DispatchThreadID){
      velocity-=normal*dot(velocity,normal);
      p.predictedLambda=float4(normal,adhesionContactMode(owner,contactPoint,normal));attached=true;
      to=contactPoint;
+     h.plane=float4(contactPoint-normal*(radius+.0001),contactTime);h.normal=float4(normal,0);h.trail=float4(contactPoint,0);
     }
    }
+   if(!attached||puddle){h.plane=0;h.normal=0;h.trail=float4(to,0);}
+   storeContact(i,h);
    p.positionAge=float4(to,p.positionAge.w+dt);p.velocityAlive.xyz=velocity;
    // Retained droplets must survive slow creep; detached ones keep the usual rules.
    bool retained=p.densityBirth.w>3.5;
@@ -326,8 +453,10 @@ void main(uint3 id:SV_DispatchThreadID){
     }
     rank=segmentSlots+older;
    }
+   bool placed=rank<min(incoming,segmentSlots);
    if(rank<puddles)p=source[puddleTransferList[rank]];
-   else if(rank<min(incoming,segmentSlots))p=trailTransfer[rank-puddles];
+   else if(placed)p=trailTransfer[rank-puddles];
+   if(placed)storeContact(i,startContact(p,IniParams[239].y));
   }
   // Update carries a segment from the frame saved with it.
   if(p.velocityAlive.w>.5 && trailSegment(p.densityBirth.w))saveAdhesionFrame(splashSlot(p.velocityAlive.w),i);
@@ -336,6 +465,9 @@ void main(uint3 id:SV_DispatchThreadID){
  // Return transferred slots to the airborne emitter immediately. Overflow
  // replaces the oldest floor contacts, preserving room for new incoming liquid.
  if(p.velocityAlive.w>.5 && floorPuddle(p.densityBirth.w))p.velocityAlive.w=0;
+ // A drop merged into another frees its slot for the spawns below.
+ if(clingingDrop(p,i))mergeWithPartner(p,i);
+ bool spawned=false;
  if(p.velocityAlive.w<.5){
   uint slot;InterlockedAdd(freeCounter[0],1,slot);
   float pulseSuppression=1-saturate((pulse[2].x-1)/.85);
@@ -346,9 +478,15 @@ void main(uint3 id:SV_DispatchThreadID){
   bool spraying=IniParams[237].x>.5 && pulse[3].w>.5 && pulse[5].x>.75;
   uint emitterCount=0,sprayOwner=0,sprayChild=0;
   [unroll]for(uint s=0;s<SLOT_COUNT;s++){
-   if(!spraying||!slotSeen(s))continue;
-   float lowRate=120*peripheralSpray(.5*(1-smoothstep(.28,1.69,1.1275)),slotDrive(s))*pulseSuppression;
-   uint sprayCount=pulseCount+(uint)clamp(floor(dt*lowRate+lowJitter),0,8);
+   // A jet sprays nothing around its stream, and an oozing outlet releases
+   // the drops it requested (EmitterState.hlsl), also once its flow stopped.
+   uint kind=slotNozzle(s),sprayCount=0;
+   if(kind==NOZZLE_OOZE){
+    if(slotLive(s))sprayCount=oozeRequests(s);
+   }else if(kind==NOZZLE_SPRAY&&spraying&&slotSeen(s)){
+    float lowRate=120*peripheralSpray(.5*(1-smoothstep(.28,1.69,1.1275)),slotDrive(s))*pulseSuppression*slotAmount(s);
+    sprayCount=sprayPulseCount(s,pulseCount,lowJitter)+(uint)clamp(floor(dt*lowRate+lowJitter),0,8);
+   }
    if(slot>=emitterCount&&slot<emitterCount+sprayCount){sprayOwner=s;sprayChild=slot-emitterCount;}
    emitterCount+=sprayCount;
   }
@@ -380,10 +518,16 @@ void main(uint3 id:SV_DispatchThreadID){
    float3 position=e.pointSpeed.xyz+n*(e.normalRadius.w*scale+.0001)+(x*cos(jitterAngle)+y*sin(jitterAngle))*jitterRadius;
    p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,splashAliveTag(owner));
    p.predictedLambda=0;p.densityBirth=float4(0,IniParams[239].y,scale,2);
+   spawned=true;
    // Keep fast child droplets airborne; low-speed floor contacts become wet patches.
    if(child==0 && slowFloorContact(p.velocityAlive.xyz,n)){
     beginFloorPuddle(p,n);
    }else if(child==0 && adhesionEvent(e)){
+    // A coherent stream leaves a drop large enough to run rather than stay
+    // pinned, lifted to keep its own radius off the surface.
+    float deposited=max(scale,lerp(.55,1,coherence));
+    position+=n*(e.normalRadius.w*(deposited-scale));
+    p.positionAge.xyz=position;p.densityBirth.z=deposited;
     // Start at the incoming surface-parallel speed without an impulse brake.
     float3 retained=tangent;
     p.velocityAlive.xyz=retained;p.predictedLambda=float4(n,adhesionContactMode(owner,position,n));p.densityBirth.w=4;
@@ -394,41 +538,46 @@ void main(uint3 id:SV_DispatchThreadID){
    uint seed=mixBits((uint)pulse[2].y*1637u+child*17u+owner*7919u+asuint(IniParams[239].y));
    float3 origin=currentEmitterRelative(owner),right=float3(1,0,0),up=float3(0,1,0),forward=float3(0,0,1);
    if(IniParams[241].x>.5&&slotSeen(owner)){right=slotAnchor(owner,0).xyz;up=slotAnchor(owner,1).xyz;forward=slotAnchor(owner,2).xyz;}
-   float sign=random01(seed,1)<.5?-1:1;
-   // Keep the source in the same tiny socket as the primary flow.
-   float3 position=origin+right*sign*(.0005+.002*random01(seed,2))+forward*(.001+.001*random01(seed,3))-up*.0015;
-   float3 velocity=up*(-.18+.60*random01(seed,4))+forward*(.12+.38*random01(seed,5))+right*sign*(.08+.22*random01(seed,6));
-   float previousOpening=frameState[owner*4+2].w>.5?frameState[owner*4+2].x:1;
-   float drive=slotDrive(owner);
-   SoftNozzle nozzle=evaluateSoftNozzle(drive,pulse[2].x,previousOpening,dt,IniParams[239].y);
-   float baseAngleScale=peripheralSpray(.5*lerp(.25,1,1-smoothstep(.28,1.69,1.1275)),drive);
-   if(child>=pulseCount){
-    velocity=peripheralVelocity(seed,up,right,forward,nozzle.speed,baseAngleScale);
-   }else{
-    // Pulse peripheral cone: 70% of its previous angle (49% of the original).
-    velocity*=nozzle.speed/.3807886553;
-    float speed=length(velocity);
-    float down=dot(velocity,-up);
-    float3 lateral=velocity+up*down;
-    float lateralSpeed=length(lateral);
-    float angle=.49*atan2(lateralSpeed,down);
-    // Preserve the existing polar spread, but distribute azimuth evenly
-    // around the central down axis instead of biasing it toward forward.
-    float centeredAzimuth=random01(seed,11)*6.2831853;
-    float3 centeredRadial=right*cos(centeredAzimuth)+forward*sin(centeredAzimuth);
-    velocity=centeredRadial*(speed*sin(angle))-up*(speed*cos(angle));
-    if(pulse[5].z>.5){
-     float3 baseVelocity=peripheralVelocity(seed,up,right,forward,nozzle.speed,baseAngleScale);
-     velocity=lerp(baseVelocity,velocity,pulse[5].w);
+   spawned=true;
+   if(slotNozzle(owner)==NOZZLE_OOZE)beginOozeDrop(p,owner,child);
+   else{
+    float sign=random01(seed,1)<.5?-1:1;
+    // Keep the source in the same tiny socket as the primary flow.
+    float3 position=origin+right*sign*(.0005+.002*random01(seed,2))+forward*(.001+.001*random01(seed,3))-up*.0015;
+    float3 velocity=up*(-.18+.60*random01(seed,4))+forward*(.12+.38*random01(seed,5))+right*sign*(.08+.22*random01(seed,6));
+    float previousOpening=frameState[owner*4+2].w>.5?frameState[owner*4+2].x:1;
+    float drive=slotDrive(owner);
+    SoftNozzle nozzle=evaluateSoftNozzle(drive,pulse[2].x,previousOpening,dt,IniParams[239].y);
+    float baseAngleScale=peripheralSpray(.5*lerp(.25,1,1-smoothstep(.28,1.69,1.1275)),drive);
+    if(child>=sprayPulseCount(owner,pulseCount,lowJitter)){
+     velocity=peripheralVelocity(seed,up,right,forward,nozzle.speed,baseAngleScale);
+    }else{
+     // Pulse peripheral cone: 70% of its previous angle (49% of the original).
+     velocity*=nozzle.speed/.3807886553;
+     float speed=length(velocity);
+     float down=dot(velocity,-up);
+     float3 lateral=velocity+up*down;
+     float lateralSpeed=length(lateral);
+     float angle=.49*atan2(lateralSpeed,down);
+     // Preserve the existing polar spread, but distribute azimuth evenly
+     // around the central down axis instead of biasing it toward forward.
+     float centeredAzimuth=random01(seed,11)*6.2831853;
+     float3 centeredRadial=right*cos(centeredAzimuth)+forward*sin(centeredAzimuth);
+     velocity=centeredRadial*(speed*sin(angle))-up*(speed*cos(angle));
+     if(pulse[5].z>.5){
+      float3 baseVelocity=peripheralVelocity(seed,up,right,forward,nozzle.speed,baseAngleScale);
+      velocity=lerp(baseVelocity,velocity,pulse[5].w);
+     }
     }
+    // Limit rising through the body and reappearing higher on the abdomen.
+    velocity.y=min(velocity.y,.45);
+    p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,splashAliveTag(owner));p.predictedLambda=0;
+    // Full primary/impact radius; marker 3 selects the enhanced splash material.
+    p.densityBirth=float4(0,IniParams[239].y,1.0,3);
    }
-   // Limit rising through the body and reappearing higher on the abdomen.
-   velocity.y=min(velocity.y,.45);
-   p.positionAge=float4(position,0);p.velocityAlive=float4(velocity,splashAliveTag(owner));p.predictedLambda=0;
-   // Full primary/impact radius; marker 3 selects the enhanced splash material.
-   p.densityBirth=float4(0,IniParams[239].y,1.0,3);
   }
  }
+ if(spawned)storeContact(i,startContact(p,IniParams[239].y));
 #endif
  // Reserved slots never become an extra airborne bank at contact edges.
  if(i>=AIRBORNE_SPLASH_COUNT && !reservedContact(p.densityBirth.w))p.velocityAlive.w=0;

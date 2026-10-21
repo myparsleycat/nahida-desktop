@@ -27,18 +27,26 @@ function smooth(edge0: number, edge1: number, x: number) {
 }
 
 /**
- * The mean path of the runtime's default strength (1.69) in source mesh space
- * (Z up), ported from LiquidGravityProbe's AttachmentEditor. It includes the
- * nozzle exit correction and near-field gravity relief, and ignores collision,
- * motion, pulses and particle interaction.
+ * The mean path of an emitter's force in source mesh space (Z up), ported from
+ * LiquidGravityProbe's AttachmentEditor; force 1 is the runtime's former
+ * default strength (1.69), as in Slots.hlsl slotDrive. For the spray nozzle it
+ * includes the nozzle exit correction, the high-pressure jet boost and
+ * near-field gravity relief; the jet nozzle's speed follows SoftNozzle.hlsl
+ * shapeJetNozzle under plain gravity. It ignores collision, motion, pulses and
+ * particle interaction.
  */
-export function defaultFlowTrajectory(point: Vec3, offset: Vec3, direction: Vec3): FlowTrajectory {
-    const setting = 1.69;
+export function flowTrajectory(
+    point: Vec3,
+    offset: Vec3,
+    direction: Vec3,
+    force: number,
+    nozzle: "spray" | "jet" = "spray",
+): FlowTrajectory {
+    const setting = clamp(1.69 * force, 0.28, 3.94);
     const lifetime = 0.48;
     const step = 1 / 240;
-    const opening = clamp(0.65 + 0.35 * Math.sqrt(setting), 0.8, 1.75);
-    const discharge = 0.78 + 0.22 * clamp((opening - 0.7) / 0.7, 0, 1);
-    const speed = (0.3807886553 * Math.sqrt(setting) * discharge) / (0.78 + 0.22 * (0.3 / 0.7));
+    const jet = nozzle === "jet";
+    const speed = jet ? clamp(3 * Math.sqrt(setting / 1.69), 0.8, 5) : sprayNozzleSpeed(setting);
 
     const dir = normalize(direction);
     const up = mul(dir, -1);
@@ -54,8 +62,9 @@ export function defaultFlowTrajectory(point: Vec3, offset: Vec3, direction: Vec3
     const times = [0];
     for (let time = 0; time < lifetime - 1e-9;) {
         const h = Math.min(step, lifetime - time);
-        const gravity =
-            -9.81 * (1 - 0.45 * smooth(0.4, 1.2, speed) * (1 - smooth(0.12, 0.3, travel)));
+        const gravity = jet
+            ? -9.81
+            : -9.81 * (1 - 0.45 * smooth(0.4, 1.2, speed) * (1 - smooth(0.12, 0.3, travel)));
         const next = add(position, add(mul(velocity, h), [0, 0, 0.5 * gravity * h * h]));
         velocity = add(velocity, [0, 0, gravity * h]);
         travel += Math.hypot(...sub(next, position));
@@ -65,6 +74,13 @@ export function defaultFlowTrajectory(point: Vec3, offset: Vec3, direction: Vec3
         times.push(time);
     }
     return { points, times, lifetime };
+}
+
+function sprayNozzleSpeed(setting: number) {
+    const opening = clamp(0.65 + 0.35 * Math.sqrt(setting), 0.8, 1.75);
+    const discharge = 0.78 + 0.22 * clamp((opening - 0.7) / 0.7, 0, 1);
+    const jetBoost = 1 + 0.35 * smooth(1.69, 3.94, setting);
+    return (0.3807886553 * Math.sqrt(setting) * discharge * jetBoost) / (0.78 + 0.22 * (0.3 / 0.7));
 }
 
 /** Position of a tracer that left the nozzle `age` seconds ago. */

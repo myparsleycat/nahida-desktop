@@ -7,32 +7,38 @@
 // particle is a soft disc on its ground plane instead: the discs of
 // neighbors add up into one flat film.
 // o2 adds up each particle's absorption weighted by its thickness, with the
-// weight in alpha, and o3 its absorption depth (mm) under the same weight, so
-// the composite colors overlapping liquids of different characters by how
-// much of each the ray crosses.
+// weight in alpha, o3 its absorption depth (mm) and o4 its scattering and
+// roughness under the same weight, so the composite colors overlapping
+// liquids of different characters by how much of each the ray crosses.
+// Stream particles StreamLink.hlsl joined are left to FluidStream.hlsl.
 #include "SSFRCommon.hlsl"
 #include "JetGuide.hlsl"
 #include "SheetProfile.hlsl"
+#include "StreamLinks.hlsl"
+#include "Contact.hlsl"
 StructuredBuffer<FluidParticle> particles:register(t100);
 StructuredBuffer<FluidParticle> splashes:register(t101);
+StructuredBuffer<float4> contactHistory:register(t102);
 #include "Slots.hlsl"
+StructuredBuffer<float4> links:register(t104);
 StructuredBuffer<JetGuide> renderGuides:register(t112);
 // Disc radius over the puddle particle's own, so neighboring discs overlap.
 static const float PUDDLE_SPLAT_SCALE=2;
 // Film one disc adds at its center; the composite thresholds the sum.
 static const float PUDDLE_SPLAT_FILM=.0012;
-// Stream particles farther apart than this have broken up and are not bridged.
-static const float BRIDGE_MAX=SURFACE_RADIUS*8;
 static const float MODE_NONE=0,MODE_ELLIPSOID=1,MODE_DISC=2,MODE_CAPSULE=3;
 // A trail segment's half width over the lens of the drop that left it, and
-// the film it adds on its center line.
-static const float TRAIL_WIDTH=.7,TRAIL_FILM=.0012;
-// A clinging drop's stretch along its flow, from standing to sliding, and
-// its half thickness across the surface as a fraction of its radius.
-static const float FILM_STRETCH_MIN=2,FILM_STRETCH_MAX=3,FILM_FLATTEN=.35;
+// the film it adds on its center line: close to the drop's own, so the drop
+// and its trail read as one rivulet rather than a bead on a thin line.
+static const float TRAIL_WIDTH=.85,TRAIL_FILM=.0016;
+// A clinging drop's stretch along its flow, from standing to sliding, so its
+// tail overlaps its trail, and its half thickness across the surface as a
+// fraction of its radius, at most FILM_HALF_MAX: a large merged drop spreads
+// instead of rising into a dome above its trail.
+static const float FILM_STRETCH_MIN=2.5,FILM_STRETCH_MAX=4,FILM_FLATTEN=.25,FILM_HALF_MAX=.0011;
 struct Varying{
  float4 position:SV_Position;
- float3 world:TEXCOORD0;
+ float2 ndc:TEXCOORD0;
  nointerpolation float3 center:TEXCOORD1;
  // Ellipsoid: xyz one anisotropy axis, w the scale along it (<1 flattens,
  // >1 stretches). Disc and capsule: xyz the surface normal.
@@ -49,34 +55,36 @@ struct Varying{
  // Capsule: xyz the segment direction, w its half length; center is its
  // midpoint.
  nointerpolation float4 normalScale:TEXCOORD7;
+ // The owner's scattering and roughness (Slots.hlsl).
+ nointerpolation float2 material:TEXCOORD8;
 };
 // Keeps the color weight of a covered pixel above what half floats flush to
 // zero, however thin the film there.
 static const float COLOR_WEIGHT_FLOOR=1e-5;
 float birthRadiusScale(float value){return value>=48?.70:(value>=32?.85:1);}
 #ifdef VERTEX_SHADER
-// The slots of a bank are born in order, so slots i-1 and i+1 hold the
-// particles just behind and ahead of slot i in the stream, as long as both
-// are from the same emission cycle and still part of the coherent flow.
-bool streamNeighbor(uint index,float3 root,float age,float3 center,out float3 position){
- FluidParticle q=particles[index];
- position=root+q.positionAge.xyz;
- return q.velocityAlive.w>.5&&all(isfinite(q.positionAge))
-  &&abs(q.positionAge.w-age)<3*PRIMARY_LIFETIME/BASE_PRIMARY_COUNT
-  &&renderGuides[index].longLane.w>=-2&&distance(position,center)<BRIDGE_MAX;
+// The debug color of a splash particle under DEBUG_CONTACT: a drop holding on
+// to a surface it sees green, one held without seeing it yellow, a trail
+// blue or, held, orange, a puddle cyan and a falling drop gray.
+float3 contactColor(uint index,bool attached,bool trail,bool puddle){
+ bool held=contactHistory[index*CONTACT_ROWS+2].w>.5;
+ if(puddle)return float3(0,.8,.9);
+ if(trail)return held?float3(1,.5,0):float3(.15,.35,1);
+ if(attached)return held?float3(1,.9,0):float3(.1,.9,.1);
+ return .35;
 }
 Varying main(uint id:SV_VertexID){
  uint i=id/6;bool primary=i<PRIMARY_COUNT;uint poolIndex=primary?i:i-PRIMARY_COUNT;
  FluidParticle p;if(primary)p=particles[poolIndex];else p=splashes[poolIndex];
  uint owner=primary?primarySlot(poolIndex):splashSlot(p.velocityAlive.w);
  float visualScale=lerp(.75,1,smoothstep(.28,1.69,slotDrive(owner)));
- float width=primary?slotWidth(owner):1;
+ float width=primary?slotThread(owner):1;
  float radius=SURFACE_RADIUS*width*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
  bool puddle=!primary&&floorPuddle(p.densityBirth.w),trail=!primary&&trailSegment(p.densityBirth.w);
  if(puddle)radius=SURFACE_RADIUS*max(p.densityBirth.z,.1)*puddleWidth(p.densityBirth.x)*PUDDLE_SPLAT_SCALE;
  float3 root=slotRoot(owner),center=root+p.positionAge.xyz;
- float4 projected=project(center);
- bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&slotLive(owner)&&all(isfinite(projected))&&projected.w>.05;
+ bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&slotLive(owner);
+ valid=valid&&!(primary&&streamLinked(links[poolIndex*LINK_ROWS+1]));
 
  float4 axisScale=float4(1,0,0,1),normalScale=float4(0,0,0,1);
  float fade=1;
@@ -117,8 +125,9 @@ Varying main(uint id:SV_VertexID){
    float3 flow=alongSpeed>.02?along/alongSpeed:float3(0,-1,0)+normal*normal.y;
    float flowLength=length(flow);
    if(flowLength>.05)axisScale=float4(flow/flowLength,lerp(FILM_STRETCH_MIN,FILM_STRETCH_MAX,saturate(alongSpeed/.25)));
-   normalScale=float4(normal,FILM_FLATTEN);
-   center-=normal*max(FLUID_RADIUS*max(p.densityBirth.z,.1)-radius*FILM_FLATTEN,0);
+   float flatten=min(FILM_FLATTEN,FILM_HALF_MAX/max(radius,1e-5));
+   normalScale=float4(normal,flatten);
+   center-=normal*max(FLUID_RADIUS*max(p.densityBirth.z,.1)-radius*flatten,0);
   }else if(speed>.05){
    // Fast drops stretch along their motion, so spray reads as streaks and
    // consecutive stream particles overlap instead of beading.
@@ -136,69 +145,51 @@ Varying main(uint id:SV_VertexID){
     float focus=sheetFocusDistance(amount),distance=max(p.densityBirth.z,0);
     compression=smoothstep(0,focus*.2,distance)*(1-smoothstep(focus,focus+.02,distance));
    }
-   if(compression>.001){
-    axisScale=float4(lateral/lateralLength,1-.6*amount*compression);
-   }else if(guide.longLane.w>=-2){
-    // Nozzle flutter bunches the stream into beads with sparse stretches
-    // between them. Reaching halfway to each slot neighbor keeps those
-    // stretches covered until the stream has really broken up.
-    uint slot=poolIndex%BASE_PRIMARY_COUNT;
-    float3 behind=0,ahead=0;
-    bool hasBehind=false,hasAhead=false;
-    if(slot>0)hasBehind=streamNeighbor(poolIndex-1,root,p.positionAge.w,center,behind);
-    if(slot<BASE_PRIMARY_COUNT-1)hasAhead=streamNeighbor(poolIndex+1,root,p.positionAge.w,center,ahead);
-    float3 axis=0;float halfLength=0;
-    if(hasBehind&&hasAhead){axis=ahead-behind;halfLength=max(distance(behind,center),distance(ahead,center))*.5;}
-    else if(hasBehind){axis=center-behind;halfLength=length(axis)*.5;}
-    else if(hasAhead){axis=ahead-center;halfLength=length(axis)*.5;}
-    float axisLength=length(axis);
-    if(axisLength>1e-5)axisScale=float4(axis/axisLength,clamp((halfLength+radius*.35)/radius,1,5));
-   }
+   if(compression>.001)axisScale=float4(lateral/lateralLength,1-.6*amount*compression);
   }
  }
  valid=valid&&fade>.01;
  float bound=trail?normalScale.w+radius:radius*max(max(axisScale.w,normalScale.w),1)*1.1;
- // The limit scales with the stream width, so the camera distance a stream
- // particle is culled at stays the same however wide the stream.
- valid=valid&&abs(camera[8].x*bound/max(projected.w,.05))<.06*width;
+ float4 rect;
+ valid=valid&&screenRect(center,bound,rect);
 
- const float2 corners[6]={float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
- float2 uv=corners[id%6];
- float3 right=normalize(camera[4].xyz),up=normalize(camera[5].xyz);
- float3 world=center+bound*(right*uv.x+up*uv.y);
- // A segment's rectangle lies in its own plane and covers only its film.
- if(trail)world=center+normalScale.xyz*(normalScale.w*1.02*uv.x)+normalize(cross(axisScale.xyz,normalScale.xyz))*(radius*1.05*uv.y);
  Varying o;
- o.position=valid?project(world):float4(2,2,0,1);
- o.world=world;o.center=center;o.axisScale=axisScale;o.normalScale=normalScale;o.radiusFade=float2(radius,fade);
+ o.position=valid?rectCorner(rect,id%6):float4(2,2,0,1);
+ o.ndc=o.position.xy;o.center=center;o.axisScale=axisScale;o.normalScale=normalScale;o.radiusFade=float2(radius,fade);
  o.mode=valid?(trail?MODE_CAPSULE:(puddle?MODE_DISC:MODE_ELLIPSOID)):MODE_NONE;
  o.liquid=slotLiquid(owner);
+ o.material=float2(slotScattering(owner),slotRoughness(owner));
+ uint view=debugView();
+ if(view==DEBUG_OOZE)o.liquid.rgb=.35;
+ else if(view==DEBUG_FLOW)o.liquid.rgb=primary?(coherentGuide(renderGuides[poolIndex].longLane.w)?float3(1,.5,0):float3(1,0,0)):.35;
+ else if(view==DEBUG_CONTACT)o.liquid.rgb=primary?.35:contactColor(poolIndex,attached,trail,puddle);
  // Airborne splashes and a stream that has broken up stay separate drops,
  // which FluidSmooth leaves nearly unfiltered; drops clinging to the body
  // and their trails are filtered at full width so they join into one rivulet.
  o.tag=owner;
  if(puddle)o.tag|=TAG_PUDDLE;
  else if(attached||trail)o.tag|=TAG_FILM;
- else if(!primary||renderGuides[poolIndex].longLane.w<-2)o.tag|=TAG_SPRAY;
+ else if(!primary||!coherentGuide(renderGuides[poolIndex].longLane.w))o.tag|=TAG_SPRAY;
  return o;
 }
 #endif
 #ifdef PIXEL_SHADER
-struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;};
+struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;float2 material:SV_Target4;};
 // Scales v along a unit axis, or leaves it for a zero axis. The two axes of
 // one particle are orthogonal, so the scalings commute.
 float3 scaleAlong(float3 v,float4 axisScale){return v+axisScale.xyz*(dot(v,axisScale.xyz)*(1/axisScale.w-1));}
 // Millimeters keep a thin film's weighted depth clear of half-float flushing.
-void weighLiquid(inout Surface o,float4 liquid){
+void weighLiquid(inout Surface o,float4 liquid,float2 material){
  float weight=o.thickness+COLOR_WEIGHT_FLOOR;
  o.color=float4(liquid.rgb*weight,weight);
  o.absorptionDepth=liquid.w*1000*weight;
+ o.material=material*weight;
 }
 // A film lying on the scene keeps only the pixels whose scene depth agrees
 // with it within a few millimeters: it then neither climbs a shoe standing in
 // it nor hangs past the edge of a step.
 void clipOffScene(float4 projected){
- clip(projected.w-.05);
+ clip(projected.w-NEAR_W);
  if(IniParams[237].y>.5){
   float2 uv=screenUV(projected);
   float gap=behindScene(uv,projected);
@@ -208,7 +199,7 @@ void clipOffScene(float4 projected){
 Surface main(Varying i){
  clip(i.mode-.5);
  float3 eye=eyePosition();
- float3 direction=normalize(i.world-eye);
+ float3 direction=pixelRay(i.ndc);
  float3 origin=eye-i.center;
  float radius=i.radiusFade.x;
  Surface o;
@@ -231,7 +222,7 @@ Surface main(Varying i){
   clipOffScene(projected);
   float coverage=1-r*r/(radius*radius);
   o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=TRAIL_FILM*coverage*i.radiusFade.y;
-  weighLiquid(o,i.liquid);
+  weighLiquid(o,i.liquid,i.material);
   return o;
  }
  if(i.mode>1.5){
@@ -248,7 +239,7 @@ Surface main(Varying i){
   clipOffScene(projected);
   float coverage=1-r*r/(radius*radius);
   o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=PUDDLE_SPLAT_FILM*coverage*coverage*i.radiusFade.y;
-  weighLiquid(o,i.liquid);
+  weighLiquid(o,i.liquid,i.material);
   return o;
  }
  // Scale the ray along the anisotropy axes and intersect the plain sphere.
@@ -261,15 +252,16 @@ Surface main(Varying i){
  clip(discriminant);
  float root=sqrt(discriminant);
  float entry=(-b-root)/a,exit=(-b+root)/a;
- clip(exit);
- entry=max(entry,0);
+ // Only the part beyond the near plane counts. With the eye inside the drop,
+ // or the near plane cutting it, the surface is where the ray leaves it.
+ float visible=max(entry,nearDistance(direction));
+ clip(exit-visible);
 
- float3 hit=eye+direction*entry;
+ float3 hit=eye+direction*(entry<visible?exit:entry);
  float4 projected=project(hit);
- clip(projected.w-.05);
  if(sceneInFront(screenUV(projected),projected))clip(-1);
- o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=(exit-entry)*i.radiusFade.y;
- weighLiquid(o,i.liquid);
+ o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=(exit-visible)*i.radiusFade.y;
+ weighLiquid(o,i.liquid,i.material);
  return o;
 }
 #endif

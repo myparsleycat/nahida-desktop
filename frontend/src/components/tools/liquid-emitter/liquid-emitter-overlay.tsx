@@ -1,6 +1,6 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import {
-  defaultFlowTrajectory,
+  flowTrajectory,
   normalize,
   trajectoryPointAt,
   type Vec3,
@@ -25,6 +25,8 @@ export function LiquidEmitterOverlay({
   offset,
   direction,
   meshUnit,
+  force = 1,
+  nozzle = "spray",
   showTrajectory,
   muted = false,
 }: {
@@ -33,6 +35,10 @@ export function LiquidEmitterOverlay({
   direction: Vec3;
   /** Meters per mesh unit; the overlay and the flow it previews are sized in meters. */
   meshUnit: number;
+  /** The emitter's force, which the previewed path follows. */
+  force?: number;
+  /** The emitter's nozzle kind; an oozing one runs along the surface and has no path to preview. */
+  nozzle?: string;
   showTrajectory: boolean;
   muted?: boolean;
 }) {
@@ -74,8 +80,14 @@ export function LiquidEmitterOverlay({
           <meshBasicMaterial color={color} {...overlayMaterial} />
         </mesh>
       </group>
-      {showTrajectory && !muted ? (
-        <FlowPreview point={pointMeters} offset={offsetMeters} direction={direction} />
+      {showTrajectory && !muted && nozzle !== "ooze" ? (
+        <FlowPreview
+          point={pointMeters}
+          offset={offsetMeters}
+          direction={direction}
+          force={force}
+          nozzle={nozzle === "jet" ? "jet" : "spray"}
+        />
       ) : null}
     </group>
   );
@@ -85,10 +97,22 @@ function toMeters(value: Vec3, meshUnit: number): Vec3 {
   return [value[0] * meshUnit, value[1] * meshUnit, value[2] * meshUnit];
 }
 
-function FlowPreview({ point, offset, direction }: { point: Vec3; offset: Vec3; direction: Vec3 }) {
+function FlowPreview({
+  point,
+  offset,
+  direction,
+  force,
+  nozzle,
+}: {
+  point: Vec3;
+  offset: Vec3;
+  direction: Vec3;
+  force: number;
+  nozzle: "spray" | "jet";
+}) {
   const trajectory = useMemo(
-    () => defaultFlowTrajectory(point, offset, direction),
-    [point, offset, direction],
+    () => flowTrajectory(point, offset, direction, force, nozzle),
+    [point, offset, direction, force, nozzle],
   );
   const path = useMemo(() => {
     const line = new Line(

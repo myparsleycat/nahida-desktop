@@ -42,6 +42,17 @@ SoftNozzle evaluateSoftNozzle(float setting,float pulseSpeed,float previous,floa
  return n;
 }
 
+// A narrow round outlet (Slots.hlsl NOZZLE_JET): one coherent straight stream,
+// 3 m/s at the default force and up to 5 m/s under raised force or a pulse,
+// without the slit's sheet, flutter or low-pressure breakup. The flow-trajectory
+// preview in the editor repeats this speed.
+static const float JET_SPEED_REFERENCE=3.0,JET_SPEED_MIN=.8,JET_SPEED_MAX=5.0;
+static const float JET_FAN=.004,JET_RADIUS=.0006;
+void shapeJetNozzle(inout SoftNozzle n){
+ n.speed=clamp(JET_SPEED_REFERENCE*sqrt(n.pressure/1.69),JET_SPEED_MIN,JET_SPEED_MAX);
+ n.halfGap=JET_RADIUS*n.opening;n.halfLength=n.halfGap;
+ n.lateralFan=JET_FAN;n.longitudinalFan=JET_FAN;n.lateralBias=0;n.sheetAmount=0;
+}
 
 // Artistic near-field jet response: normal gravity returns downstream.
 // Use frozen launch speed, not the falling speed, so gravity cannot weaken itself.
