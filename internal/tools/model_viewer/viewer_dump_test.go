@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -1039,6 +1040,62 @@ filename = Texture/beef0006_1_beef0007_Hash_DiffuseMap.png
 `)
 	if len(result.Meshes) != 1 || texKey(result.Meshes[0]) != "" {
 		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+}
+
+func TestLoadModViewerBindsHashOnlyThisImagesToNamedComponentsOnlyWithoutOtherTextures(t *testing.T) {
+	const components = `[TextureOverrideBodyA]
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideHairA]
+ib = ResourceHairAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+%s
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceHairAIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceHair]
+filename = hair.png
+[TextureOverride_deadbeef]
+hash = deadbeef
+this = ResourceReplacement
+[ResourceReplacement]
+filename = replacement.png
+`
+	for _, test := range []struct {
+		name     string
+		hairLine string
+		bodyTex  string
+	}{
+		{name: "sole evidence", bodyTex: "replacement.png"},
+		{name: "other mesh textured", hairLine: "ps-t0 = ResourceHair"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "hair.png", encodeTinyPNG())
+			writeTextureFile(t, dir, "replacement.png", encodeTinyPNG2x2())
+			result := loadViewerMod(t, dir, fmt.Sprintf(components, test.hairLine))
+			body := meshesNamed(result, "BodyA")
+			if len(body) != 1 {
+				t.Fatalf("meshes = %#v", result.Meshes)
+			}
+			if got := texKey(body[0]); (test.bodyTex == "") != (got == "") || !strings.Contains(got, test.bodyTex) {
+				t.Fatalf("body texKey = %q, want %q", got, test.bodyTex)
+			}
+		})
 	}
 }
 

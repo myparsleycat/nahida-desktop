@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"encoding/binary"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -442,10 +443,16 @@ func bindHashImageTextures(
 	modDir string,
 	variables map[string]any,
 ) {
+	// Authored components join only when no mesh carries any texture of its own:
+	// the standalone hash replacements are then the mod's sole texture evidence.
+	// Otherwise a leftover replacement more likely belongs to an undrawn part.
+	// Dump-named textures stay with the dump binders, which match them by index.
+	namedFallback := !slices.ContainsFunc(meshes, meshHasTextureEvidence) &&
+		!slices.ContainsFunc(resources, isDumpTextureResource)
 	var needed []*modelViewerDirectMesh
 	for index := range meshes {
 		mesh := &meshes[index]
-		if _, _, ok := ibComponentDumpRef(mesh.component); !ok {
+		if _, _, ok := ibComponentDumpRef(mesh.component); !ok && !namedFallback {
 			continue
 		}
 		if mesh.textureDefaultFile != "" {
@@ -490,7 +497,7 @@ func bindHashImageTextures(
 	for _, mesh := range needed {
 		ibHash, _, ok := ibComponentDumpRef(mesh.component)
 		if !ok {
-			continue
+			ibHash = "ib:" + modelViewerNormalizeKey(mesh.ibName)
 		}
 		byIb[ibHash] = append(byIb[ibHash], mesh)
 		unbound[ibHash] = true
@@ -537,6 +544,7 @@ func bindHashImageTextures(
 	for ibHash := range unbound {
 		leftoverIbs = append(leftoverIbs, ibHash)
 	}
+	sort.Strings(leftoverIbs)
 	sort.SliceStable(leftoverIbs, func(i, j int) bool {
 		return ibDrawWeight(byIb[leftoverIbs[i]]) > ibDrawWeight(byIb[leftoverIbs[j]])
 	})
@@ -742,6 +750,16 @@ func peekDdsRole(filePath string) *struct {
 		role string
 		area int
 	}{role: role, area: area}
+}
+
+func meshHasTextureEvidence(mesh modelViewerDirectMesh) bool {
+	return mesh.textureDefaultFile != "" || mesh.textureAuthored || len(mesh.textureAssignments) > 0 ||
+		len(mesh.slotTextureCandidates) > 0 || len(mesh.nonDiffuseTextureFiles) > 0
+}
+
+func isDumpTextureResource(resource modelViewerResource) bool {
+	file := slashPath(resource.Filename)
+	return ibComponentDumpRE.MatchString(file) || wwmiDumpTexRE.MatchString(file)
 }
 
 func sectionHasIBOrDraw(section modINISection) bool {
