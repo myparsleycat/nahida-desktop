@@ -118,8 +118,8 @@ func runtimeSettings() []modruntime.Setting {
 			Max:     7,
 			Targets: []modruntime.Target{constant("$strength_level")},
 		},
-		// Characters that emit at once; ParticleConfig.hlsl SLOT_COUNT is the most
-		// the pools hold.
+		// Emitters that emit at once, counting each of a character's own;
+		// ParticleConfig.hlsl SLOT_COUNT is the most the pools hold.
 		{
 			ID:      "slotCount",
 			Kind:    modruntime.SettingInt,

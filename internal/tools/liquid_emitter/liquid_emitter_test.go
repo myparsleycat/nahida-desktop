@@ -98,11 +98,27 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		captureCommand+"\r\n\t; nahida-liquid 7 end\r\n\tdrawindexed = 6, 3, 0") != 2 {
 		t.Fatalf("hooks not placed above both draws:\n%s", patched)
 	}
-	if again := text.drawSites(bodyDraw); again[0].pid != 7 || again[1].pid != 7 {
+	if again := text.drawSites(
+		bodyDraw,
+	); !slices.Equal(again[0].pids, []int{7}) ||
+		!slices.Equal(again[1].pids, []int{7}) {
 		t.Fatalf("existing hooks not detected: %+v", again)
 	}
 
+	// Another emitter on the same draw stacks its block under the first, and
+	// each comes off on its own.
+	text.insertHooks(text.drawSites(bodyDraw), 8, 9, 0)
+	if again := text.drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8, 7}) ||
+		!slices.Equal(again[1].pids, []int{8, 7}) {
+		t.Fatalf("stacked hooks not detected: %+v", again)
+	}
 	if removed := text.removeHooks(func(pid int) bool { return pid == 7 }); removed != 2 {
+		t.Fatalf("removed %d blocks", removed)
+	}
+	if again := text.drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8}) {
+		t.Fatalf("hook left on the draw = %+v", again)
+	}
+	if removed := text.removeHooks(func(pid int) bool { return pid == 8 }); removed != 2 {
 		t.Fatalf("removed %d blocks", removed)
 	}
 	if !bytes.Equal(text.bytes(), []byte(characterINI)) {
@@ -425,17 +441,76 @@ func TestServiceApplyAndRemoveRestoreMod(t *testing.T) {
 		!inspection.Emitters[0].Hooked {
 		t.Fatalf("inspection after apply = %+v", inspection)
 	}
-	// Picking another face of the same draw replaces the emitter instead of adding one.
+	first := inspection.Emitters[0].PID
+	// Another face of the same draw adds an emitter whose hooks stack on the first's.
 	inspection, err = f.service.Apply(ctx, f.applyInput(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(inspection.Emitters) != 1 || inspection.Emitters[0].Anchor.FaceIndex != 1 {
+	if len(inspection.Emitters) != 2 {
 		t.Fatalf("second apply = %+v", inspection.Emitters)
 	}
 	patched, _ := os.ReadFile(f.iniPath)
-	if strings.Count(string(patched), "y243 = 6") != 2 || strings.Contains(string(patched), "y243 = 3") {
-		t.Fatalf("hooks do not point at the second face:\n%s", patched)
+	if strings.Count(string(patched), "y243 = 3") != 2 || strings.Count(string(patched), "y243 = 6") != 2 {
+		t.Fatalf("hooks of both emitters not placed:\n%s", patched)
+	}
+	// Naming an emitter moves it and keeps its slot.
+	moved := f.applyInput(1)
+	moved.PID = &first
+	if inspection, err = f.service.Apply(ctx, moved); err != nil {
+		t.Fatal(err)
+	}
+	if len(inspection.Emitters) != 2 || !slices.ContainsFunc(inspection.Emitters, func(e Emitter) bool {
+		return e.PID == first && e.Anchor.FaceIndex == 1
+	}) {
+		t.Fatalf("moved emitter = %+v", inspection.Emitters)
+	}
+	if patched, _ = os.ReadFile(f.iniPath); strings.Count(string(patched), "y243 = 6") != 4 ||
+		strings.Contains(string(patched), "y243 = 3") {
+		t.Fatalf("hooks do not follow the moved emitter:\n%s", patched)
+	}
+
+	// Moving an emitter out of another INI takes its hooks and backup with it.
+	otherINI := filepath.Join(f.modRoot, "other.ini")
+	if err := os.WriteFile(otherINI, []byte(characterINI), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	viewer := f.service.viewer.(fakeViewer)
+	otherSource := viewer["mod:body:0"]
+	otherSource.INIPath = otherINI
+	viewer["mod:other:0"] = otherSource
+	inOther := f.applyInput(0)
+	inOther.MeshID = "mod:other:0"
+	if inspection, err = f.service.Apply(ctx, inOther); err != nil {
+		t.Fatal(err)
+	}
+	third := slices.IndexFunc(inspection.Emitters, func(e Emitter) bool { return e.INIPath == "other.ini" })
+	if third < 0 {
+		t.Fatalf("emitter in other.ini missing: %+v", inspection.Emitters)
+	}
+	back := f.applyInput(0)
+	back.PID = &inspection.Emitters[third].PID
+	if _, err := f.service.Apply(ctx, back); err != nil {
+		t.Fatal(err)
+	}
+	if other, _ := os.ReadFile(otherINI); string(other) != characterINI {
+		t.Fatalf("hook left in the INI the emitter moved out of:\n%s", other)
+	}
+	if _, err := os.Stat(otherINI + backupSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("backup of the INI without hooks kept (err=%v)", err)
+	}
+
+	if inspection, err = f.service.Apply(ctx, f.applyInput(0)); err != nil || len(inspection.Emitters) != maxEmitters {
+		t.Fatalf("fourth emitter = %+v (err=%v)", inspection.Emitters, err)
+	}
+	if _, err := f.service.Apply(ctx, f.applyInput(0)); !hasCode(err, ErrorEmitterLimit) {
+		t.Fatalf("emitter over the limit = %v", err)
+	}
+	missing := f.applyInput(0)
+	missing.PID = new(int)
+	*missing.PID = 4095
+	if _, err := f.service.Apply(ctx, missing); !hasCode(err, ErrorEmitterNotFound) {
+		t.Fatalf("moving an emitter the mod lacks = %v", err)
 	}
 
 	runtimeRoot := runtimeRootFor(f.modsRoot)
@@ -501,9 +576,9 @@ func TestServiceScalesOffsetToMeters(t *testing.T) {
 	}
 }
 
-// LoadProfilesJSON reads a mod's look as eight numbers after an emitter's 16,
-// in this order, and a runtime from before looks rejects any record that is
-// not 16 long; a mod that keeps the global settings must still write 16.
+// LoadProfilesJSON reads an emitter's look as eight numbers after its 16, in
+// this order, and a runtime from before looks rejects any record that is not
+// 16 long; an emitter that keeps the global settings must still write 16.
 func TestServiceLookExtendsGPURecords(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := context.Background()
@@ -518,8 +593,13 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); !hasCode(err, ErrorNoEmitters) {
 		t.Fatalf("look without emitters = %v", err)
 	}
-	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
+	applied, err := f.service.Apply(ctx, f.applyInput(0))
+	if err != nil {
 		t.Fatal(err)
+	}
+	pid := applied.Emitters[0].PID
+	setLook := func(look Look) (Inspection, error) {
+		return f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, PID: pid, Look: look})
 	}
 	for _, change := range []func(*Look){
 		func(l *Look) { l.StrengthOffset = 8 },
@@ -528,86 +608,108 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	} {
 		invalid := look
 		change(&invalid)
-		_, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: invalid})
-		if !hasCode(err, ErrorInvalidLook) {
+		if _, err := setLook(invalid); !hasCode(err, ErrorInvalidLook) {
 			t.Fatalf("out of range look %+v = %v", invalid, err)
 		}
 	}
+	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, PID: pid + 1, Look: look}); !hasCode(
+		err,
+		ErrorEmitterNotFound,
+	) {
+		t.Fatalf("look of an emitter the mod lacks = %v", err)
+	}
 
 	key, _ := readModMarker(f.modRoot)
+	profilePath := filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json")
 	records := func() [][]float64 {
 		t.Helper()
 		var doc profileDocument
-		if _, err := readJSON(filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json"), &doc); err != nil {
+		if _, err := readJSON(profilePath, &doc); err != nil {
 			t.Fatal(err)
 		}
 		return doc.GPUData
 	}
-	inspection, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look})
+	if _, err := setLook(look); err != nil {
+		t.Fatal(err)
+	}
+	// Moving the emitter keeps its look, and another emitter starts from the
+	// runtime's.
+	moved := f.applyInput(1)
+	moved.PID = &pid
+	if _, err := f.service.Apply(ctx, moved); err != nil {
+		t.Fatal(err)
+	}
+	inspection, err := f.service.Apply(ctx, f.applyInput(0))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Moving the emitter keeps the mod's look.
-	if inspection, err = f.service.Apply(ctx, f.applyInput(1)); err != nil {
-		t.Fatal(err)
-	}
-	if inspection.Look != look {
-		t.Fatalf("inspection look = %+v", inspection.Look)
+	for _, emitter := range inspection.Emitters {
+		want := defaultLook()
+		if emitter.PID == pid {
+			want = look
+		}
+		if emitter.Look != want {
+			t.Fatalf("look of emitter %d = %+v", emitter.PID, emitter.Look)
+		}
 	}
 	got := records()
-	if len(got) != 1 || len(got[0]) != 24 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5, 4}) {
-		t.Fatalf("GPU records with a look = %v", got)
+	if len(got) != 2 || len(got[0]) != 24 || !slices.Equal(got[0][16:], []float64{-2, 1, 0.2, 0.4, 1, 0.03, 1.5, 4}) ||
+		len(got[1]) != 16 {
+		t.Fatalf("GPU records with one emitter's look = %v", got)
 	}
 
-	// A width or a viscosity alone is a look of the mod's own.
+	// A width or a viscosity alone is a look of the emitter's own.
 	look.StrengthOffset, look.CustomColor, look.StreamWidth, look.Viscosity = 0, false, 0.75, 1
-	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+	if _, err := setLook(look); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(); len(got) != 1 || len(got[0]) != 24 || got[0][22] != 0.75 || got[0][23] != 1 {
+	if got := records(); len(got[0]) != 24 || got[0][22] != 0.75 || got[0][23] != 1 {
 		t.Fatalf("GPU records with a width = %v", got)
 	}
 	look.StreamWidth, look.Viscosity = 1, 0.25
-	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+	if _, err := setLook(look); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(); len(got) != 1 || len(got[0]) != 24 || got[0][22] != 1 || got[0][23] != 0.25 {
+	if got := records(); len(got[0]) != 24 || got[0][22] != 1 || got[0][23] != 0.25 {
 		t.Fatalf("GPU records with a viscosity = %v", got)
 	}
 
 	look.Viscosity = 1
-	if _, err := f.service.SetLook(ctx, LookInput{ModPath: f.modRoot, Look: look}); err != nil {
+	if _, err := setLook(look); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(); len(got) != 1 || len(got[0]) != 16 {
+	if got := records(); len(got[0]) != 16 {
 		t.Fatalf("GPU records with the global look = %v", got)
 	}
 
-	// A look saved before the width and viscosity settings keeps the runtime's.
-	profile := filepath.Join(runtimeRootFor(f.modsRoot), profilesDir, key+".json")
+	// A profile from before each emitter had its own look shared one look,
+	// saved before the width and viscosity settings, among all of them.
 	var raw map[string]any
-	if _, err := readJSON(profile, &raw); err != nil {
+	if _, err := readJSON(profilePath, &raw); err != nil {
 		t.Fatal(err)
 	}
-	legacyLook, ok := raw["look"].(map[string]any)
-	if !ok {
-		t.Fatalf("profile look = %v", raw["look"])
+	emitters, ok := raw["emitters"].([]any)
+	if !ok || len(emitters) != 2 {
+		t.Fatalf("profile emitters = %v", raw["emitters"])
 	}
-	delete(legacyLook, "streamWidth")
-	delete(legacyLook, "viscosity")
-	legacyLook["strengthOffset"] = 1
+	for _, emitter := range emitters {
+		delete(emitter.(map[string]any), "look")
+	}
+	raw["look"] = map[string]any{"strengthOffset": 1, "tint": []float64{0.9, 0.75, 0.03}, "absorptionMm": 15}
 	data, err := encodeJSON(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(profile, data, 0o600); err != nil {
+	if err := os.WriteFile(profilePath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if inspection, err = f.service.Inspect(ctx, f.modRoot); err != nil {
 		t.Fatal(err)
 	}
-	if inspection.Look.StrengthOffset != 1 || inspection.Look.StreamWidth != 1 || inspection.Look.Viscosity != 1 {
-		t.Fatalf("legacy look = %+v", inspection.Look)
+	for _, emitter := range inspection.Emitters {
+		if emitter.Look.StrengthOffset != 1 || emitter.Look.StreamWidth != 1 || emitter.Look.Viscosity != 1 {
+			t.Fatalf("legacy look of emitter %d = %+v", emitter.PID, emitter.Look)
+		}
 	}
 }
 
@@ -670,9 +772,10 @@ func TestServiceCopiedModGetsOwnProfile(t *testing.T) {
 			}
 		}
 	}
-	copyRoot, removeRoot := f.modRoot+" - Copy", f.modRoot+" - Copy 2"
+	copyRoot, removeRoot, lookRoot := f.modRoot+" - Copy", f.modRoot+" - Copy 2", f.modRoot+" - Copy 3"
 	copyMod(copyRoot)
 	copyMod(removeRoot)
+	copyMod(lookRoot)
 
 	// The renderer lists an unsplit copy's emitters by the slots it shares.
 	originalPID := 0
@@ -694,9 +797,32 @@ func TestServiceCopiedModGetsOwnProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The copy keeps the emitter it was copied with, on a slot of its own, and adds one.
 	copyKey, _ := readModMarker(copyRoot)
-	if copyKey == originalKey || len(inspection.Emitters) != 1 || inspection.Emitters[0].PID == originalPID {
+	if copyKey == originalKey || len(inspection.Emitters) != 2 ||
+		slices.ContainsFunc(inspection.Emitters, func(e Emitter) bool { return e.PID == originalPID }) {
 		t.Fatalf("copy shares the original's profile: key=%s emitters=%+v", copyKey, inspection.Emitters)
+	}
+	// The renderer follows its selection through the slots the call reports,
+	// since the emitter it named by the shared slot now has another.
+	renumbered, applied := inspection.Renumbered, inspection.Applied
+	if len(renumbered) != 1 || renumbered[0].From != originalPID || applied == nil || *applied == renumbered[0].To ||
+		!slices.ContainsFunc(inspection.Emitters, func(e Emitter) bool {
+			return e.PID == *applied && e.Anchor.FaceIndex == 1
+		}) {
+		t.Fatalf("slots reported by the copy's first apply: renumbered=%+v applied=%v", renumbered, applied)
+	}
+	look := defaultLook()
+	look.StrengthOffset = 1
+	looked, err := f.service.SetLook(ctx, LookInput{ModPath: lookRoot, PID: originalPID, Look: look})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if looked.Applied == nil || len(looked.Renumbered) != 1 ||
+		looked.Renumbered[0] != (PIDChange{From: originalPID, To: *looked.Applied}) ||
+		len(looked.Emitters) != 1 || looked.Emitters[0].PID != *looked.Applied || looked.Emitters[0].Look != look {
+		t.Fatalf("copy's first look: renumbered=%+v applied=%v emitters=%+v",
+			looked.Renumbered, looked.Applied, looked.Emitters)
 	}
 	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: copyRoot}); err != nil {
 		t.Fatal(err)

@@ -1,5 +1,5 @@
-// Match this frame's characters, as ResolveSurface reported them, to the
-// slots that tracked them in earlier frames, so each keeps its own stream.
+// Match this frame's emitters, as ResolveSurface reported them, to the slots
+// that tracked them in earlier frames, so each keeps its own stream.
 #define SLOT_STATE_WRITER
 #include "ParticleConfig.hlsl"
 Texture1D<float4> IniParams:register(t120);

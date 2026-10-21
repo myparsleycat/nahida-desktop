@@ -1805,7 +1805,11 @@
           "title": "Emitter point",
           "empty": "Click the model surface to place the emitter.",
           "triangle": "Triangle {{index}} · follows the surface",
-          "hidden": "This part is not drawn in the current view. If you changed a toggle, pick the visible surface again."
+          "hidden": "This part is not drawn in the current view. If you changed a toggle, pick the visible surface again.",
+          "new": "New emitter",
+          "editing": "Editing emitter #{{pid}}",
+          "adding": "New emitter",
+          "limit": "A mod can have up to {{max}} emitters. Remove one to add another."
         },
         "history": {
           "undo": "Undo",
@@ -1836,15 +1840,17 @@
           "confirm": "Remove all"
         },
         "emitters": {
-          "title": "Applied emitters ({{count}})",
+          "title": "Applied emitters ({{count}}/{{max}})",
           "empty": "No emitter has been applied to this mod yet.",
           "unhooked": "Hook missing",
-          "missing_mesh": "This part is no longer in the model."
+          "missing_mesh": "This part is no longer in the model.",
+          "look_runtime": "runtime liquid",
+          "look_custom": "own liquid"
         },
         "look": {
-          "title": "This character's liquid",
-          "hint": "Applies to every emitter of this mod on top of the runtime settings. Press F10 in game after saving.",
-          "needs_emitter": "Apply an emitter first to give this character its own liquid.",
+          "title": "This emitter's liquid",
+          "hint": "Applies to the selected emitter on top of the runtime settings. Press F10 in game after saving.",
+          "needs_emitter": "Select an applied emitter to give it its own liquid.",
           "strength": "Strength offset",
           "strength_hint": "Levels added to the current in-game strength · result stays within 0–7",
           "stream_width": "Stream width",
@@ -1858,7 +1864,7 @@
           "absorption_hint": "Millimeters of liquid it takes to reach the full color · lower is deeper",
           "reset": "Follow runtime settings",
           "save": "Save liquid",
-          "saved": "Saved this character's liquid. Press F10 in game to reload mods.",
+          "saved": "Saved this emitter's liquid. Press F10 in game to reload mods.",
           "summary": {
             "runtime": "Runtime settings",
             "custom": "Custom",
@@ -1884,7 +1890,16 @@
           "not_generated": "This mod was not made by this tool, so there is no original to restore.",
           "source_missing": "The original mod is no longer at {{detail}}. Enable or move it back first.",
           "invalid_look": "The liquid settings are out of range.",
-          "no_emitters": "Apply an emitter before setting this character's liquid."
+          "no_emitters": "Apply an emitter before setting its liquid.",
+          "emitter_limit": "A mod can have up to {{detail}} emitters. Remove one first.",
+          "emitter_not_found": "This emitter no longer exists. Close and reopen the tool."
+        },
+        "apply_new": "Add emitter",
+        "slots": {
+          "title": "Allow more emitters at once?",
+          "description": "This character would have {{count}} emitters, but the runtime lets only {{current}} emit at once, counting every emitter of every character on screen. Raise the limit to {{next}} for all mods to add this one. More emitters cost more GPU time.",
+          "confirm": "Raise to {{next}} and add",
+          "raised": "Up to {{count}} emitters can now emit at once."
         }
       },
       "body_shape": {
@@ -2825,7 +2840,7 @@
               "startEnabled": "Emit when the game starts",
               "autoPulse": "Start with auto pulse",
               "strength": "Starting strength",
-              "slotCount": "Characters that emit at once",
+              "slotCount": "Emitters that emit at once",
               "tint": "Liquid color",
               "absorptionDepth": "Color depth",
               "wetGround": "Wet ground brightness",
@@ -2834,7 +2849,7 @@
               "scattering": "Light scattering",
               "refraction": "Refraction",
               "hints": {
-                "slotCount": "Each additional character costs more GPU time.",
+                "slotCount": "Each emitter of a character counts on its own. More emitters cost more GPU time.",
                 "absorptionDepth": "Millimeters of liquid it takes to reach the full color · lower is deeper",
                 "wetGround": "How bright the ground stays under a puddle · 1 turns darkening off",
                 "puddleReflection": "The least a puddle reflects",

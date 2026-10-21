@@ -1,7 +1,9 @@
+import { Manager as ModRuntime } from "@bindings/modruntime";
 import { Tools } from "@bindings/tools";
 import type { Inspection, Look } from "@bindings/tools/liquid_emitter";
 import type { ModelViewerDialogSource } from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
 import { normalizeModelViewerTransport } from "@renderer/components/tools/model-viewer/model-viewer-transport";
+import { modRuntimesQueryKey } from "@renderer/components/xxmi/xxmi-mod-runtimes";
 import { Logger } from "@renderer/lib/logger";
 import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +12,8 @@ import { useEffect, useState } from "react";
 export const IN_PLACE = "in_place";
 export const NEW_MOD = "new_mod";
 export type ApplyMode = typeof IN_PLACE | typeof NEW_MOD;
+export const RUNTIME_NAME = "LiquidGravityProbe";
+export const SLOT_COUNT_SETTING = "slotCount";
 
 export function liquidEmitterQueryKey(modPath: string) {
     return ["tools:liquidEmitter", modPath];
@@ -78,13 +82,44 @@ export function useLiquidEmitterSession(modPath: string) {
         onSuccess,
     });
     const setLook = useMutation({
-        mutationFn: (look: Look) => Tools.LiquidEmitterSetLook({ modPath, look }),
+        mutationFn: ({ pid, look }: { pid: number; look: Look }) =>
+            Tools.LiquidEmitterSetLook({ modPath, pid, look }),
         onSuccess,
+    });
+    // The manager writes every setting it is given and resets the rest, so
+    // the others go along unchanged.
+    const raiseSlotCount = useMutation({
+        mutationFn: ({ inspection, slotCount }: { inspection: Inspection; slotCount: number }) =>
+            ModRuntime.SetSettings(inspection.importer, RUNTIME_NAME, {
+                ...Object.fromEntries(
+                    (inspection.runtime.settings ?? []).map((setting) => [
+                        setting.id,
+                        setting.value,
+                    ]),
+                ),
+                [SLOT_COUNT_SETTING]: String(slotCount),
+            }),
+        onSuccess: (runtime, { inspection }) => {
+            queryClient.setQueryData(liquidEmitterQueryKey(modPath), { ...inspection, runtime });
+            void queryClient.invalidateQueries({
+                queryKey: modRuntimesQueryKey(inspection.importer),
+            });
+        },
     });
     const restore = useMutation({
         mutationFn: () => Tools.LiquidEmitterRestoreSource(modPath),
         onSuccess: onMoved,
     });
 
-    return { source, loadError, inspection, install, apply, remove, setLook, restore };
+    return {
+        source,
+        loadError,
+        inspection,
+        install,
+        apply,
+        remove,
+        setLook,
+        raiseSlotCount,
+        restore,
+    };
 }

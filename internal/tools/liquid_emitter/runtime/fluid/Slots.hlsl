@@ -1,4 +1,5 @@
-// Per-character emitter slots that AssignSlots.hlsl fills each frame.
+// Emitter slots, one per emitter of a drawn character, that AssignSlots.hlsl
+// fills each frame.
 // Slot rows 0-8 are the anchor in ResolveSurface's layout: right, up, forward,
 // emitter point, (priority, profile id, area, seen this frame), character
 // root, captured triangle a, b, c. The anchor survives frames the character
@@ -15,7 +16,7 @@ static const uint SLOT_TRACK=10;
 // The root one frame before SLOT_ROOT, w 1 when known; AssignSlots
 // extrapolates the character's motion from it.
 static const uint SLOT_PREVIOUS_ROOT=11;
-// The look of the character's mod, copied from its profile: x the strength
+// The look of the emitter, copied from its profile: x the strength
 // level offset, y 1 for a custom color, z its absorption depth in meters,
 // w the stream width scale. All zero keeps the global settings.
 static const uint SLOT_LOOK=12;

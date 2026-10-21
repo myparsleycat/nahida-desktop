@@ -31,6 +31,7 @@ import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
   Loader2Icon,
+  PlusIcon,
   Redo2Icon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -45,6 +46,7 @@ import {
   type ApplyMode,
   IN_PLACE,
   NEW_MOD,
+  SLOT_COUNT_SETTING,
   useLiquidEmitterSession,
 } from "./use-liquid-emitter-session";
 
@@ -60,6 +62,8 @@ type Anchor = {
 };
 
 type History = {
+  /** The saved emitter the entries edit, or null while they place a new one. */
+  pid: number | null;
   entries: Array<Anchor | null>;
   index: number;
   /** Consecutive edits with the same key, such as one slider drag, share one undo step. */
@@ -84,6 +88,10 @@ const MAX_VISCOSITY_LOG = 1;
 const DEFAULT_VISCOSITY = 1;
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
+// The backend's maxEmitters: each emitter takes a runtime slot while its character is drawn.
+const MAX_EMITTERS = 4;
+// How far the runtime's slot count goes up when a mod needs more slots than it has.
+const SLOT_RAISE = 4;
 
 export function LiquidEmitterTool({
   modPath,
@@ -97,7 +105,7 @@ export function LiquidEmitterTool({
   const session = useLiquidEmitterSession(modPath);
   const [mode, setMode] = useState<ApplyMode>(IN_PLACE);
   const [confirmRestore, setConfirmRestore] = useState(false);
-  const [history, setHistory] = useState<History>({ entries: [null], index: 0 });
+  const [history, setHistory] = useState<History>({ pid: null, entries: [null], index: 0 });
   const [seeded, setSeeded] = useState(false);
   const [picking, setPicking] = useState(true);
   const [showTrajectory, setShowTrajectory] = useState(false);
@@ -106,6 +114,7 @@ export function LiquidEmitterTool({
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState(ALL_FORMS);
   const [visibleMeshes, setVisibleMeshes] = useState<ReadonlySet<string> | null>(null);
+  const [slotPrompt, setSlotPrompt] = useState<{ current: number; next: number } | null>(null);
 
   const inspection = session.inspection.data;
   const emitters = inspection?.emitters ?? [];
@@ -114,15 +123,18 @@ export function LiquidEmitterTool({
   const meshes = session.source?.transport.meshes;
   const forms = session.source?.transport.forms ?? [];
   const formOfMesh = (meshId: string) => meshes?.find((mesh) => mesh.id === meshId)?.form;
+  const editing = history.pid;
   const anchor = history.entries[history.index];
-  const current = anchor
-    ? emitters.find((emitter) => emitter.anchor.meshId === anchor.meshId)
-    : undefined;
+  const current =
+    editing === null ? undefined : emitters.find((emitter) => emitter.pid === editing);
+  const adding = current === undefined;
+  const atLimit = emitters.length >= MAX_EMITTERS;
   const busy =
     session.apply.isPending ||
     session.remove.isPending ||
     session.install.isPending ||
     session.setLook.isPending ||
+    session.raiseSlotCount.isPending ||
     session.restore.isPending;
   const editable =
     inspection !== undefined && EDITABLE_RUNTIME_STATES.has(inspection.runtime.state);
@@ -134,10 +146,14 @@ export function LiquidEmitterTool({
   // Start from the first saved emitter whose mesh the viewer still has.
   if (!seeded && inspection && meshes) {
     setSeeded(true);
-    const saved = emitters
-      .map(anchorFromEmitter)
-      .find((candidate) => candidate && meshes.some((mesh) => mesh.id === candidate.meshId));
-    if (saved) setHistory({ entries: [saved], index: 0 });
+    const savedEmitter = emitters.find((emitter) => {
+      const candidate = anchorFromEmitter(emitter);
+      return candidate !== null && meshes.some((mesh) => mesh.id === candidate.meshId);
+    });
+    const saved = savedEmitter ? anchorFromEmitter(savedEmitter) : null;
+    if (savedEmitter && saved) {
+      setHistory({ pid: savedEmitter.pid, entries: [saved], index: 0 });
+    }
     // A bundle of forms opens on the form being edited, or its first, so the
     // forms drawn over one another do not hide each other's surfaces.
     setForm(
@@ -153,7 +169,7 @@ export function LiquidEmitterTool({
         return { ...state, entries };
       }
       const entries = [...state.entries.slice(0, state.index + 1), next].slice(-HISTORY_LIMIT);
-      return { entries, index: entries.length - 1, lastKey: key };
+      return { ...state, entries, index: entries.length - 1, lastKey: key };
     });
   const step = (delta: number) =>
     setHistory((state) => ({
@@ -164,6 +180,19 @@ export function LiquidEmitterTool({
   const update = (key: string, change: Partial<Anchor>) => {
     if (anchor) commit({ ...anchor, ...change }, key);
   };
+  // Each emitter keeps its own undo history, so undoing never moves one emitter onto another's anchor.
+  const select = (pid: number | null, next: Anchor | null) => {
+    setHistory({ pid, entries: [next], index: 0 });
+    setNotice(null);
+  };
+  // A request may finish after another emitter was selected, so it moves the
+  // selection only while it still edits the emitter the request was for; a
+  // null next drops the selection and its anchor together.
+  const follow = (requested: number | null, next: number | null) =>
+    setHistory((state) => {
+      if (state.pid !== requested) return state;
+      return next === null ? { pid: null, entries: [null], index: 0 } : { ...state, pid: next };
+    });
 
   const handlePick = (pick: ModelViewerSurfacePick | null) => {
     if (!pick) {
@@ -197,8 +226,9 @@ export function LiquidEmitterTool({
     if (Math.hypot(...direction) > 0.001) update(`direction-${axis}`, { direction });
   };
 
-  const handleApply = () => {
+  const applyAnchor = () => {
     if (!anchor || !session.source) return;
+    const requested = editing;
     session.apply.mutate(
       {
         modPath,
@@ -212,15 +242,51 @@ export function LiquidEmitterTool({
         offset: anchor.offset,
         direction: anchor.direction,
         mode: applyMode,
+        pid: current?.pid ?? null,
       },
       {
         onSuccess: (result) => {
           if (applyMode !== NEW_MOD) {
+            // A mod copied with its marker gets new slots on its first change,
+            // so the edited emitter is followed by the slot the backend reports.
+            follow(requested, result.applied);
             toast.success(t("page.tools.liquid_emitter.applied"));
             return;
           }
           toast.success(t("page.tools.liquid_emitter.created"), { description: result.modPath });
           onModPathChange?.(result.modPath);
+        },
+        onError: (error) => toast.error(liquidErrorMessage(t, error)),
+      },
+    );
+  };
+
+  // Every emitter of a drawn character takes a runtime slot, so a new one past
+  // the runtime's slot count would stay dry until the count goes up.
+  const handleApply = () => {
+    const setting = inspection?.runtime.settings?.find((entry) => entry.id === SLOT_COUNT_SETTING);
+    const slots = Number(setting?.value);
+    if (
+      adding &&
+      setting &&
+      Number.isFinite(slots) &&
+      emitters.length + 1 > slots &&
+      slots < setting.max
+    ) {
+      setSlotPrompt({ current: slots, next: Math.min(slots + SLOT_RAISE, setting.max) });
+      return;
+    }
+    applyAnchor();
+  };
+
+  const handleRaiseSlots = (next: number) => {
+    if (!inspection) return;
+    session.raiseSlotCount.mutate(
+      { inspection, slotCount: next },
+      {
+        onSuccess: () => {
+          toast.success(t("page.tools.liquid_emitter.slots.raised", { count: next }));
+          applyAnchor();
         },
         onError: (error) => toast.error(liquidErrorMessage(t, error)),
       },
@@ -236,15 +302,28 @@ export function LiquidEmitterTool({
       onError: (error) => toast.error(liquidErrorMessage(t, error)),
     });
 
-  const handleRemove = (pids: number[]) =>
+  const handleRemove = (pids: number[]) => {
+    const requested = editing;
     session.remove.mutate(pids, {
-      onSuccess: () => toast.success(t("page.tools.liquid_emitter.removed")),
+      onSuccess: (result) => {
+        if (pids.length === 0 || (requested !== null && pids.includes(requested))) {
+          follow(requested, null);
+        } else if (requested !== null) {
+          follow(
+            requested,
+            result.renumbered?.find((change) => change.from === requested)?.to ?? requested,
+          );
+        }
+        toast.success(t("page.tools.liquid_emitter.removed"));
+      },
       onError: (error) => toast.error(liquidErrorMessage(t, error)),
     });
+  };
 
-  const handleSaveLook = (look: Look) =>
-    session.setLook.mutateAsync(look).then(
-      () => {
+  const handleSaveLook = (pid: number, look: Look) =>
+    session.setLook.mutateAsync({ pid, look }).then(
+      (result) => {
+        if (result.applied !== null) follow(pid, result.applied);
         toast.success(t("page.tools.liquid_emitter.look.saved"));
         return true;
       },
@@ -292,6 +371,17 @@ export function LiquidEmitterTool({
   const position = anchor
     ? (anchor.point.map((value, axis) => value + anchor.offset[axis]) as Vec3)
     : undefined;
+  const shown = (meshId: string) => {
+    const meshForm = formOfMesh(meshId);
+    return (
+      (form === ALL_FORMS || !meshForm || meshForm === form) &&
+      (visibleMeshes === null || visibleMeshes.has(meshId))
+    );
+  };
+  const others = emitters.flatMap((emitter) => {
+    const saved = emitter.pid === current?.pid ? null : anchorFromEmitter(emitter);
+    return saved && shown(saved.meshId) ? [{ pid: emitter.pid, anchor: saved }] : [];
+  });
 
   const inspector = (
     <div className="rounded-md bg-muted/30">
@@ -328,6 +418,16 @@ export function LiquidEmitterTool({
                 <Button
                   size="icon-sm"
                   variant="ghost"
+                  disabled={!editable || busy || atLimit || (adding && !anchor)}
+                  aria-label={t("page.tools.liquid_emitter.selection.new")}
+                  title={t("page.tools.liquid_emitter.selection.new")}
+                  onClick={() => select(null, null)}
+                >
+                  <PlusIcon />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
                   disabled={!editable || history.index === 0}
                   aria-label={t("page.tools.liquid_emitter.history.undo")}
                   title={t("page.tools.liquid_emitter.history.undo")}
@@ -348,6 +448,11 @@ export function LiquidEmitterTool({
               </div>
             </div>
             <div className="rounded-md border bg-background/40 px-3 py-2 text-sm">
+              <div className="mb-1 text-xs text-muted-foreground">
+                {current
+                  ? t("page.tools.liquid_emitter.selection.editing", { pid: current.pid })
+                  : t("page.tools.liquid_emitter.selection.adding")}
+              </div>
               {anchor ? (
                 <>
                   <div className="flex min-w-0 items-center gap-2">
@@ -372,6 +477,11 @@ export function LiquidEmitterTool({
                 </span>
               )}
             </div>
+            {adding && atLimit ? (
+              <p className="text-xs text-muted-foreground">
+                {t("page.tools.liquid_emitter.selection.limit", { max: MAX_EMITTERS })}
+              </p>
+            ) : null}
             {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
           </section>
         </div>
@@ -515,12 +625,12 @@ export function LiquidEmitterTool({
           emitters={emitters}
           meshes={meshes}
           forms={forms}
-          selectedMeshId={anchor?.meshId}
+          selectedPid={current?.pid}
           busy={busy}
           onSelect={(emitter) => {
             const saved = anchorFromEmitter(emitter);
             if (!saved) return;
-            commit(saved);
+            select(emitter.pid, saved);
             const savedForm = formOfMesh(saved.meshId);
             if (savedForm && form !== ALL_FORMS) setForm(savedForm);
           }}
@@ -529,11 +639,11 @@ export function LiquidEmitterTool({
         />
 
         <LookSection
-          key={inspection?.modPath}
-          inspection={inspection}
+          key={`${inspection?.modPath}:${current?.pid}`}
+          emitter={current}
           busy={busy}
           editable={editable}
-          onSave={handleSaveLook}
+          onSave={(look) => (current ? handleSaveLook(current.pid, look) : Promise.resolve(false))}
         />
       </div>
     </div>
@@ -543,14 +653,16 @@ export function LiquidEmitterTool({
     <div className="space-y-2 rounded-md bg-muted/30 p-3">
       <Button
         className="w-full"
-        disabled={locked || busy}
-        isLoading={session.apply.isPending}
+        disabled={locked || busy || (adding && atLimit)}
+        isLoading={session.apply.isPending || session.raiseSlotCount.isPending}
         onClick={handleApply}
       >
         {t(
           applyMode === NEW_MOD
             ? "page.tools.liquid_emitter.mode.new_mod"
-            : "page.tools.liquid_emitter.apply",
+            : adding
+              ? "page.tools.liquid_emitter.apply_new"
+              : "page.tools.liquid_emitter.apply",
         )}
       </Button>
       {current ? (
@@ -578,20 +690,65 @@ export function LiquidEmitterTool({
         form={form}
         onFormChange={setForm}
         overlay={
-          anchor && anchorShown ? (
-            <LiquidEmitterOverlay
-              point={anchor.point}
-              offset={anchor.offset}
-              direction={anchor.direction}
-              meshUnit={meshUnit}
-              showTrajectory={showTrajectory}
-            />
-          ) : null
+          <>
+            {others.map((other) => (
+              <LiquidEmitterOverlay
+                key={other.pid}
+                point={other.anchor.point}
+                offset={other.anchor.offset}
+                direction={other.anchor.direction}
+                meshUnit={meshUnit}
+                showTrajectory={false}
+                muted
+              />
+            ))}
+            {anchor && anchorShown ? (
+              <LiquidEmitterOverlay
+                point={anchor.point}
+                offset={anchor.offset}
+                direction={anchor.direction}
+                meshUnit={meshUnit}
+                showTrajectory={showTrajectory}
+              />
+            ) : null}
+          </>
         }
         inspector={inspector}
         inspectorFooter={inspectorFooter}
         onVisibleMeshesChange={setVisibleMeshes}
       />
+
+      <AlertDialog
+        open={slotPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setSlotPrompt(null);
+        }}
+      >
+        <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.tools.liquid_emitter.slots.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.tools.liquid_emitter.slots.description", {
+                count: emitters.length + 1,
+                current: slotPrompt?.current ?? 0,
+                next: slotPrompt?.next ?? 0,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const next = slotPrompt?.next;
+                setSlotPrompt(null);
+                if (next !== undefined) handleRaiseSlots(next);
+              }}
+            >
+              {t("page.tools.liquid_emitter.slots.confirm", { next: slotPrompt?.next ?? 0 })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmRemoveAll} onOpenChange={setConfirmRemoveAll}>
         <AlertDialogContent onClick={(event) => event.stopPropagation()}>
@@ -794,7 +951,7 @@ function EmitterList({
   emitters,
   meshes,
   forms,
-  selectedMeshId,
+  selectedPid,
   busy,
   onSelect,
   onRemove,
@@ -803,7 +960,7 @@ function EmitterList({
   emitters: Emitter[];
   meshes: ViewerMeshTransport[] | undefined;
   forms: ViewerForm[];
-  selectedMeshId: string | undefined;
+  selectedPid: number | undefined;
   busy: boolean;
   onSelect: (emitter: Emitter) => void;
   onRemove: (emitter: Emitter) => void;
@@ -813,7 +970,10 @@ function EmitterList({
   return (
     <InspectorSection
       id="liquid-emitter:emitters"
-      title={t("page.tools.liquid_emitter.emitters.title", { count: emitters.length })}
+      title={t("page.tools.liquid_emitter.emitters.title", {
+        count: emitters.length,
+        max: MAX_EMITTERS,
+      })}
       actions={
         emitters.length > 0 ? (
           <Button size="xs" variant="ghost" disabled={busy} onClick={onRemoveAll}>
@@ -838,13 +998,13 @@ function EmitterList({
                 key={emitter.pid}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60",
-                  emitter.anchor.meshId === selectedMeshId && "bg-muted",
+                  emitter.pid === selectedPid && "bg-muted",
                 )}
               >
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                  disabled={!mesh}
+                  disabled={!mesh || busy}
                   title={mesh ? undefined : t("page.tools.liquid_emitter.emitters.missing_mesh")}
                   onClick={() => onSelect(emitter)}
                 >
@@ -855,7 +1015,12 @@ function EmitterList({
                     <FormBadge forms={forms} form={mesh?.form ?? iniFolder(emitter.iniPath)} />
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {emitter.iniPath} · #{emitter.pid}
+                    {emitter.iniPath} · #{emitter.pid} ·{" "}
+                    {t(
+                      followsRuntime(emitter.look)
+                        ? "page.tools.liquid_emitter.emitters.look_runtime"
+                        : "page.tools.liquid_emitter.emitters.look_custom",
+                    )}
                   </span>
                 </button>
                 {!emitter.hooked ? (
@@ -912,31 +1077,39 @@ function iniFolder(iniPath: string) {
 }
 
 function LookSection({
-  inspection,
+  emitter,
   busy,
   editable,
   onSave,
 }: {
-  inspection: Inspection | undefined;
+  emitter: Emitter | undefined;
   busy: boolean;
   editable: boolean;
   onSave: (look: Look) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<Look | null>(null);
-  if (!inspection) return null;
+  if (!emitter) {
+    return (
+      <InspectorSection
+        id="liquid-emitter:look"
+        title={t("page.tools.liquid_emitter.look.title")}
+        className="px-4 py-3"
+        panelClassName="pt-3"
+      >
+        <p className="text-xs text-muted-foreground">
+          {t("page.tools.liquid_emitter.look.needs_emitter")}
+        </p>
+      </InspectorSection>
+    );
+  }
 
-  const look = draft ?? inspection.look;
-  const hasEmitters = (inspection.emitters ?? []).length > 0;
-  const locked = !editable || !hasEmitters || busy;
-  const dirty = draft !== null && !isEqual(draft, inspection.look);
+  const look = draft ?? emitter.look;
+  const locked = !editable || busy;
+  const dirty = draft !== null && !isEqual(draft, emitter.look);
   const update = (change: Partial<Look>) => setDraft({ ...look, ...change });
   const offset = look.strengthOffset;
-  const followsRuntime =
-    offset === 0 &&
-    !look.customColor &&
-    look.streamWidth === DEFAULT_STREAM_WIDTH &&
-    look.viscosity === DEFAULT_VISCOSITY;
+  const runtimeLook = followsRuntime(look);
 
   return (
     <InspectorSection
@@ -945,20 +1118,14 @@ function LookSection({
       summary={t(
         dirty
           ? "page.tools.liquid_emitter.look.summary.unsaved"
-          : followsRuntime
+          : runtimeLook
             ? "page.tools.liquid_emitter.look.summary.runtime"
             : "page.tools.liquid_emitter.look.summary.custom",
       )}
       className="px-4 py-3"
       panelClassName="space-y-3 pt-3"
     >
-      <p className="text-xs text-muted-foreground">
-        {t(
-          hasEmitters
-            ? "page.tools.liquid_emitter.look.hint"
-            : "page.tools.liquid_emitter.look.needs_emitter",
-        )}
-      </p>
+      <p className="text-xs text-muted-foreground">{t("page.tools.liquid_emitter.look.hint")}</p>
       <div className="space-y-1">
         <RangeField
           label={t("page.tools.liquid_emitter.look.strength")}
@@ -1055,7 +1222,7 @@ function LookSection({
           size="sm"
           variant="outline"
           className="flex-1"
-          disabled={locked || followsRuntime}
+          disabled={locked || runtimeLook}
           onClick={() =>
             update({
               strengthOffset: 0,
@@ -1079,6 +1246,15 @@ function LookSection({
         </Button>
       </div>
     </InspectorSection>
+  );
+}
+
+function followsRuntime(look: Look) {
+  return (
+    look.strengthOffset === 0 &&
+    !look.customColor &&
+    look.streamWidth === DEFAULT_STREAM_WIDTH &&
+    look.viscosity === DEFAULT_VISCOSITY
   );
 }
 

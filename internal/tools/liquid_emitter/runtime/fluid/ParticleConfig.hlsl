@@ -1,11 +1,12 @@
 // Particle pool sizes must match Probe.ini resource arrays, dispatch and draw ranges.
-// Every slot is one tracked character with its own block of primary particles.
+// Every slot is one tracked emitter of a character, with its own block of
+// primary particles; a character with several emitters takes several slots.
 // SLOT_COUNT is what the pools hold; AssignSlots fills only the first
 // $slot_count of them (IniParams[253].z).
 static const uint SLOT_COUNT=8;
 static const uint PRIMARY_PER_SLOT=1024;
 static const uint PRIMARY_COUNT=SLOT_COUNT*PRIMARY_PER_SLOT;
-// Characters the capture hooks of one frame can report. A candidate is the
+// Emitters the capture hooks of one frame can report. A candidate is the
 // anchor rows ResolveSurface writes, after one header row: 1+16*9 rows.
 static const uint CANDIDATE_CAPACITY=16;
 static const uint CANDIDATE_ROWS=9;

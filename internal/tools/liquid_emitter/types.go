@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "21"
+	runtimeVersion    = "22"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -30,6 +30,9 @@ const (
 	// Slots.hlsl slotViscosity clamps a look's viscosity to the same range.
 	minViscosity = 0.1
 	maxViscosity = 10
+	// Each emitter takes one of the runtime's SLOT_COUNT (8) slots while its
+	// character is drawn, so a mod may not hold more than half of them.
+	maxEmitters = 4
 
 	ErrorUnsupportedGame = "LIQUID_UNSUPPORTED_GAME"
 	ErrorRuntimeForeign  = "LIQUID_RUNTIME_FOREIGN"
@@ -50,6 +53,8 @@ const (
 	ErrorSourceMissing   = "LIQUID_SOURCE_MISSING"
 	ErrorInvalidLook     = "LIQUID_INVALID_LOOK"
 	ErrorNoEmitters      = "LIQUID_NO_EMITTERS"
+	ErrorEmitterLimit    = "LIQUID_EMITTER_LIMIT"
+	ErrorEmitterNotFound = "LIQUID_EMITTER_NOT_FOUND"
 
 	diagnosticWhere = "LiquidEmitter"
 	operationPrefix = "liquid-emitter-"
@@ -84,10 +89,11 @@ type Emitter struct {
 	// Hooked is false when the INI no longer carries this emitter's hook.
 	Hooked bool          `json:"hooked"`
 	Anchor EmitterAnchor `json:"anchor"`
+	Look   Look          `json:"look"`
 }
 
-// Look is the liquid of one mod's character, applied over the runtime's
-// global settings.
+// Look is the liquid of one emitter, applied over the runtime's global
+// settings.
 type Look struct {
 	// StrengthOffset shifts the global strength level by whole levels; the
 	// sum is kept within the runtime's levels 0 to 7.
@@ -106,16 +112,29 @@ type Look struct {
 }
 
 type Inspection struct {
-	ModPath  string            `json:"modPath"`
+	ModPath string `json:"modPath"`
+	// Importer names the game whose runtime Runtime describes, as the mod
+	// runtime manager addresses it.
+	Importer string            `json:"importer"`
 	Runtime  modruntime.Status `json:"runtime"`
 	Emitters []Emitter         `json:"emitters"`
 	// SourcePath is the original mod this tool copied ModPath from, or empty
 	// when ModPath is not such a copy.
 	SourcePath string `json:"sourcePath"`
-	Look       Look   `json:"look"`
 	// MeshUnit is the length in meters of one unit of the mod's meshes, in
 	// which anchors and their offsets are given.
 	MeshUnit float64 `json:"meshUnit"`
+	// Renumbered lists the slots this call moved the mod's emitters to: a
+	// folder copied with its marker gets slots of its own on its first change,
+	// so a slot the caller listed before may now name another emitter or none.
+	Renumbered []PIDChange `json:"renumbered"`
+	// Applied is the slot of the emitter Apply hooked or SetLook changed.
+	Applied *int `json:"applied"`
+}
+
+type PIDChange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
 }
 
 // ApplyInput describes a picked face of a model viewer mesh. FaceVertices,
@@ -134,10 +153,14 @@ type ApplyInput struct {
 	Direction         []float64 `json:"direction"`
 	// Mode is ApplyInPlace or ApplyNewMod; empty means ApplyInPlace.
 	Mode string `json:"mode"`
+	// PID names the mod's emitter to move to the picked face, which keeps its
+	// slot and look; nil adds an emitter.
+	PID *int `json:"pid"`
 }
 
 type LookInput struct {
 	ModPath string `json:"modPath"`
+	PID     int    `json:"pid"`
 	Look    Look   `json:"look"`
 }
 

@@ -180,8 +180,8 @@ var hookPIDLineRE = regexp.MustCompile(`(?i)^\s*x243\s*=\s*\d+\s*$`)
 type drawSite struct {
 	line   int
 	indent string
-	// pid is the hook directly above the draw, or -1.
-	pid int
+	// pids are the hooks stacked directly above the draw, nearest first.
+	pids []int
 }
 
 // drawSites finds the drawindexed lines with the draw's literal arguments
@@ -320,7 +320,7 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 				w.sites = append(w.sites, drawSite{
 					line:   index,
 					indent: lineIndent(w.text.lines[index]),
-					pid:    w.text.hookAbove(index),
+					pids:   w.text.hooksAbove(index),
 				})
 			}
 		}
@@ -368,18 +368,37 @@ func drawMatches(key, value string, source modelviewer.DrawSource) bool {
 	return true
 }
 
-func (t *iniText) hookAbove(line int) int {
-	if line == 0 {
-		return -1
+// hooksAbove lists the pids of the hook blocks stacked directly above line,
+// nearest first. A line between two blocks ends the stack.
+func (t *iniText) hooksAbove(line int) []int {
+	var pids []int
+	for end := line - 1; end >= 0; {
+		pid, begin, ok := hookMarker(t.lines[end])
+		if !ok || begin {
+			break
+		}
+		start := end - 1
+		for ; start >= 0; start-- {
+			other, otherBegin, marker := hookMarker(t.lines[start])
+			if !marker {
+				continue
+			}
+			if !otherBegin || other != pid {
+				return pids
+			}
+			break
+		}
+		if start < 0 {
+			break
+		}
+		pids = append(pids, pid)
+		end = start - 1
 	}
-	if pid, begin, ok := hookMarker(t.lines[line-1]); ok && !begin {
-		return pid
-	}
-	return -1
+	return pids
 }
 
-// insertHooks puts one hook block directly above each site. Sites must come
-// from the current lines.
+// insertHooks puts one hook block directly above each site, below any blocks
+// already stacked there. Sites must come from the current lines.
 func (t *iniText) insertHooks(sites []drawSite, pid, firstIndex, baseVertex int) {
 	// drawSites lists sites in traversal order, which need not follow the file;
 	// inserting bottom-up keeps every earlier line number valid.

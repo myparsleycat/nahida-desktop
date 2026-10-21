@@ -37,6 +37,7 @@ type profileEmitter struct {
 	Row        [12]float64   `json:"gpu_row"`
 	Offset     [3]float64    `json:"offset_local_m"`
 	Anchor     EmitterAnchor `json:"anchor"`
+	Look       *Look         `json:"look,omitempty"`
 }
 
 // profileDocument is read by LoadProfilesJSON on the GPU, which scans only the
@@ -47,7 +48,9 @@ type profileDocument struct {
 	GPUData       [][]float64      `json:"gpu_data"`
 	ModPath       string           `json:"mod_path"`
 	Emitters      []profileEmitter `json:"emitters"`
-	Look          *Look            `json:"look,omitempty"`
+	// Look is the look every emitter shared before each had its own;
+	// readProfile hands it to the emitters and it is never written again.
+	Look *Look `json:"look,omitempty"`
 }
 
 // A Look starts from and stays within the runtime's own settings of the same
@@ -102,7 +105,7 @@ func validLook(look Look) bool {
 
 // lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
 // strength offset, custom color flag, tint, absorption depth in meters, stream
-// width and viscosity. A mod without its own look writes no tail, and the
+// width and viscosity. An emitter without its own look writes no tail, and the
 // runtime then applies its global settings.
 func lookRecord(look *Look) []float64 {
 	if look == nil ||
@@ -289,20 +292,28 @@ func (i profileIndex) ownerOf(pid int) string {
 func readProfile(layout runtimeLayout, key string) (profileDocument, error) {
 	doc := profileDocument{SchemaVersion: 1, Enabled: true}
 	_, err := readJSON(layout.profilePath(key), &doc)
-	if doc.Look != nil && doc.Look.StreamWidth == 0 {
-		doc.Look.StreamWidth = 1
+	for index := range doc.Emitters {
+		emitter := &doc.Emitters[index]
+		if emitter.Look == nil && doc.Look != nil {
+			shared := *doc.Look
+			emitter.Look = &shared
+		}
+		if emitter.Look != nil && emitter.Look.StreamWidth == 0 {
+			emitter.Look.StreamWidth = 1
+		}
+		if emitter.Look != nil && emitter.Look.Viscosity == 0 {
+			emitter.Look.Viscosity = 1
+		}
 	}
-	if doc.Look != nil && doc.Look.Viscosity == 0 {
-		doc.Look.Viscosity = 1
-	}
+	doc.Look = nil
 	return doc, err
 }
 
 func encodeProfile(doc profileDocument) ([]byte, error) {
 	slices.SortFunc(doc.Emitters, func(a, b profileEmitter) int { return a.PID - b.PID })
-	doc.SchemaVersion, doc.GPUData = 1, make([][]float64, 0, len(doc.Emitters))
-	tail := lookRecord(doc.Look)
+	doc.SchemaVersion, doc.GPUData, doc.Look = 1, make([][]float64, 0, len(doc.Emitters)), nil
 	for _, emitter := range doc.Emitters {
+		tail := lookRecord(emitter.Look)
 		record := make([]float64, 0, 16+len(tail))
 		record = append(record, float64(emitter.PID))
 		record = append(record, emitter.Row[:]...)

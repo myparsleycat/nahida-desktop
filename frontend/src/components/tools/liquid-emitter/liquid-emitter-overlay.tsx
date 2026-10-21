@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { BufferGeometry, type Group, Line, LineBasicMaterial, Quaternion, Vector3 } from "three";
 
 const ANCHOR_COLOR = "#ffc240";
+// The mod's other emitters, shown for reference while one is edited.
+const MUTED_COLOR = "#9a9a9a";
 const PATH_COLOR = "#4de8ff";
 const BEAD_COLOR = "#ffde14";
 const ARROW_LENGTH = 0.18;
@@ -24,6 +26,7 @@ export function LiquidEmitterOverlay({
   direction,
   meshUnit,
   showTrajectory,
+  muted = false,
 }: {
   point: Vec3;
   offset: Vec3;
@@ -31,7 +34,9 @@ export function LiquidEmitterOverlay({
   /** Meters per mesh unit; the overlay and the flow it previews are sized in meters. */
   meshUnit: number;
   showTrajectory: boolean;
+  muted?: boolean;
 }) {
+  const color = muted ? MUTED_COLOR : ANCHOR_COLOR;
   const [pointMeters, offsetMeters] = useMemo(
     () => [toMeters(point, meshUnit), toMeters(offset, meshUnit)],
     [point, offset, meshUnit],
@@ -57,19 +62,19 @@ export function LiquidEmitterOverlay({
     <group renderOrder={1000} scale={1 / meshUnit}>
       <mesh position={origin} renderOrder={1000}>
         <sphereGeometry args={[0.006, 16, 12]} />
-        <meshBasicMaterial color={ANCHOR_COLOR} {...overlayMaterial} />
+        <meshBasicMaterial color={color} {...overlayMaterial} />
       </mesh>
       <group position={origin} quaternion={arrowRotation}>
         <mesh position={[0, ARROW_LENGTH * 0.4, 0]} renderOrder={1000}>
           <cylinderGeometry args={[0.0015, 0.0015, ARROW_LENGTH * 0.8, 8]} />
-          <meshBasicMaterial color={ANCHOR_COLOR} {...overlayMaterial} />
+          <meshBasicMaterial color={color} {...overlayMaterial} />
         </mesh>
         <mesh position={[0, ARROW_LENGTH * 0.9, 0]} renderOrder={1000}>
           <coneGeometry args={[0.008, ARROW_LENGTH * 0.2, 12]} />
-          <meshBasicMaterial color={ANCHOR_COLOR} {...overlayMaterial} />
+          <meshBasicMaterial color={color} {...overlayMaterial} />
         </mesh>
       </group>
-      {showTrajectory ? (
+      {showTrajectory && !muted ? (
         <FlowPreview point={pointMeters} offset={offsetMeters} direction={direction} />
       ) : null}
     </group>
