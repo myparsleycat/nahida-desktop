@@ -365,7 +365,7 @@ func TestListDiagnosticsModsGivesTheFolderBehindAJunction(t *testing.T) {
 		t.Skipf("filesystem cannot create a junction: %v", err)
 	}
 
-	mods, err := service.ListDiagnosticsMods(ctx, "GIMI")
+	mods, err := service.ListDiagnosticsMods(ctx, "GIMI", "")
 	if err != nil || len(mods) != 1 || mods[0].Name != "Linked" {
 		t.Fatalf("mods = %+v, err = %v", mods, err)
 	}
@@ -379,6 +379,57 @@ func TestListDiagnosticsModsGivesTheFolderBehindAJunction(t *testing.T) {
 	})
 	if err != nil || files != 1 {
 		t.Fatalf("walk of %s found %d files, err = %v", mods[0].Path, files, err)
+	}
+}
+
+func TestListDiagnosticsModsMarksFoldersBehindANestedJunction(t *testing.T) {
+	ctx := context.Background()
+	service, cfg := newDiagnosticsTestService(t, "[Logging]\r\nlog_level = disabled\r\n")
+	group := filepath.Join(cfg.ImporterFolder, "Mods", "Group")
+	target := filepath.Join(t.TempDir(), "Target")
+	writeTestFile(t, filepath.Join(group, "Plain", "mod.ini"), nil)
+	writeTestFile(t, filepath.Join(target, "Sub", "mod.ini"), nil)
+	if err := createJunction(filepath.Join(group, "Linked"), target); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v", err)
+	}
+
+	// A report attaching Group walks past the junction, so the renderer must not show Linked as carried by it.
+	children, err := service.ListDiagnosticsMods(ctx, "GIMI", "Group")
+	if err != nil || len(children) != 2 {
+		t.Fatalf("children = %+v, err = %v", children, err)
+	}
+	linkedAt := map[string]string{children[0].Name: children[0].LinkedAt, children[1].Name: children[1].LinkedAt}
+	if linkedAt["Linked"] != "Group/Linked" || linkedAt["Plain"] != "" {
+		t.Fatalf("linkedAt = %q", linkedAt)
+	}
+	behind, err := service.ListDiagnosticsMods(ctx, "GIMI", "Group/Linked")
+	if err != nil || len(behind) != 1 || behind[0].LinkedAt != "Group/Linked" {
+		t.Fatalf("behind = %+v, err = %v", behind, err)
+	}
+}
+
+func TestListDiagnosticsModsListsSubfoldersBelowTheModsFolder(t *testing.T) {
+	ctx := context.Background()
+	service, cfg := newDiagnosticsTestService(t, "[Logging]\r\nlog_level = disabled\r\n")
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Mods", "DISABLED a", "b", "c", "mod.ini"), nil)
+
+	top, err := service.ListDiagnosticsMods(ctx, "GIMI", "")
+	if err != nil || len(top) != 1 || !top[0].HasChildren {
+		t.Fatalf("top = %+v, err = %v", top, err)
+	}
+	// XXMI skips everything below a disabled folder, so a nested folder is disabled too.
+	nested, err := service.ListDiagnosticsMods(ctx, "GIMI", "DISABLED a/b")
+	if err != nil || len(nested) != 1 {
+		t.Fatalf("nested = %+v, err = %v", nested, err)
+	}
+	if got := nested[0]; got.Relative != "DISABLED a/b/c" || !got.Disabled || got.HasChildren {
+		t.Fatalf("nested[0] = %+v", got)
+	}
+
+	for _, parent := range []string{"../Mods", "DISABLED a/../../x", filepath.Dir(cfg.ImporterFolder)} {
+		if mods, err := service.ListDiagnosticsMods(ctx, "GIMI", parent); err == nil {
+			t.Errorf("parent %q listed %+v outside the Mods folder", parent, mods)
+		}
 	}
 }
 

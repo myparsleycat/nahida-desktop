@@ -4,6 +4,7 @@ import {
   DiagnosticsLevel,
   DiagnosticsState,
   type DiagnosticsBundle,
+  type DiagnosticsMod,
   type DiagnosticsSession,
 } from "@bindings/xxmi/models";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
@@ -27,6 +28,7 @@ import {
   SectionTitle,
 } from "@renderer/components/ui/section";
 import { Textarea } from "@renderer/components/ui/textarea";
+import { DiagnosticsModPicker } from "@renderer/components/xxmi/xxmi-diagnostics-mods";
 import { ToggleRow } from "@renderer/components/xxmi/xxmi-fields";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useFeedbackSubmit } from "@renderer/hooks/use-feedback-submit";
@@ -415,7 +417,7 @@ function ReportDialog({
     useFeedbackSubmit();
   const [body, setBody] = useState("");
   const [includeLog, setIncludeLog] = useState(true);
-  const [modDirs, setModDirs] = useState<string[]>([]);
+  const [mods, setMods] = useState<ReadonlyMap<string, DiagnosticsMod>>(new Map());
 
   // Collecting again returns the bundle already written, so a refetch does no harm. The bundle belongs to one
   // session, whose end deletes it, so it is neither shared with a later session nor kept after the dialog.
@@ -430,10 +432,6 @@ function ReportDialog({
   // Only a collection of this session that succeeded and is not being redone can be sent.
   const bundle: DiagnosticsBundle | undefined =
     bundleQuery.isSuccess && !bundleQuery.isFetching ? bundleQuery.data : undefined;
-  const { data: mods } = useQuery({
-    queryKey: ["xxmi:diagnostics-mods", importer],
-    queryFn: () => XXMI.ListDiagnosticsMods(importer),
-  });
 
   const reportProblem = bundle ? problem({ body, mediaFiles: 1, mediaBytes: bundle.size }) : null;
 
@@ -444,7 +442,9 @@ function ReportDialog({
       body,
       includeLog,
       files: [bundle.path],
-      modDirs: session ? modDirs : [],
+      modDirs: session
+        ? [...mods.values()].map((mod) => ({ path: mod.path, name: mod.relative }))
+        : [],
     });
     if (!result) return;
     try {
@@ -457,7 +457,10 @@ function ReportDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !sending && onClose()}>
-      <DialogContent className="max-h-[85vh] sm:max-w-xl" showCloseButton={!sending}>
+      <DialogContent
+        className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-xl"
+        showCloseButton={!sending}
+      >
         <DialogHeader>
           <DialogTitle>{t("page.setting.xxmi.diagnostics.reportTitle")}</DialogTitle>
           <DialogDescription>
@@ -465,137 +468,112 @@ function ReportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* The bundle is sized to the rules, so without them it is never collected. */}
-        {rulesFailed ? (
-          <Alert variant="destructive">
-            <TriangleAlertIcon />
-            <AlertDescription className="flex flex-wrap items-center gap-x-2">
-              {t("page.setting.feedback.error.rules_unavailable")}
-              <Button variant="link" size="sm" className="h-auto p-0" onClick={retryRules}>
-                {t("page.setting.feedback.retry_rules")}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : bundleQuery.isError ? (
-          <Alert variant="destructive">
-            <TriangleAlertIcon />
-            <AlertDescription>{errorMessage(bundleQuery.error)}</AlertDescription>
-          </Alert>
-        ) : !bundle ? (
-          <p className="flex items-center gap-2 text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
-            {t("page.setting.xxmi.diagnostics.collecting")}
-          </p>
-        ) : (
-          <div className="space-y-1 rounded-md bg-muted/50 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate font-medium" title={bundle.path}>
-                {bundle.path.slice(bundle.path.lastIndexOf("\\") + 1)}
-              </span>
-              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                {formatSize(bundle.size)}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={t("page.setting.xxmi.diagnostics.openFolder")}
-                onClick={() =>
-                  void Shell.OpenPath(bundle.path.slice(0, bundle.path.lastIndexOf("\\"))).catch(
-                    (error: unknown) => toast.error(toErrorMessage(error)),
-                  )
-                }
-              >
-                <FolderOpenIcon />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("page.setting.xxmi.diagnostics.bundleSummary", {
-                log: bundle.logBytes > 0 ? formatSize(bundle.logBytes) : "-",
-                dumps: bundle.dumps,
-                events: bundle.crashEvents,
-              })}
+        <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-0.5">
+          {/* The bundle is sized to the rules, so without them it is never collected. */}
+          {rulesFailed ? (
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertDescription className="flex flex-wrap items-center gap-x-2">
+                {t("page.setting.feedback.error.rules_unavailable")}
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={retryRules}>
+                  {t("page.setting.feedback.retry_rules")}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : bundleQuery.isError ? (
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertDescription>{errorMessage(bundleQuery.error)}</AlertDescription>
+            </Alert>
+          ) : !bundle ? (
+            <p className="flex items-center gap-2 text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" />
+              {t("page.setting.xxmi.diagnostics.collecting")}
             </p>
-            {bundle.logTruncated ? (
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.xxmi.diagnostics.logTruncated")}
-              </p>
-            ) : null}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <span className="text-sm font-medium">{t("page.setting.feedback.body.label")}</span>
-          <Textarea
-            value={body}
-            disabled={sending}
-            placeholder={t("page.setting.xxmi.diagnostics.bodyPlaceholder")}
-            className="max-h-60 min-h-28"
-            onChange={(event) => setBody(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <span className="text-sm font-medium">{t("page.setting.xxmi.diagnostics.mods")}</span>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              session
-                ? "page.setting.xxmi.diagnostics.modsDescription"
-                : "page.setting.feedback.attachments.mod_login_required",
-            )}
-          </p>
-          {mods && mods.length > 0 ? (
-            <ul className="max-h-48 space-y-1 overflow-y-auto">
-              {mods.map((mod) => (
-                <li key={mod.path}>
-                  <label className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted/50">
-                    <Checkbox
-                      checked={modDirs.includes(mod.path)}
-                      disabled={!session || sending}
-                      onCheckedChange={(checked) =>
-                        setModDirs((current) =>
-                          checked
-                            ? [...current, mod.path]
-                            : current.filter((path) => path !== mod.path),
-                        )
-                      }
-                    />
-                    <span className="min-w-0 flex-1 truncate" title={mod.path}>
-                      {mod.name}
-                    </span>
-                    {mod.disabled ? (
-                      <Badge variant="outline">
-                        {t("page.setting.xxmi.diagnostics.modDisabled")}
-                      </Badge>
-                    ) : null}
-                  </label>
-                </li>
-              ))}
-            </ul>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {t("page.setting.xxmi.diagnostics.noMods")}
-            </p>
+            <div className="space-y-1 rounded-md bg-muted/50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium" title={bundle.path}>
+                  {bundle.path.slice(bundle.path.lastIndexOf("\\") + 1)}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {formatSize(bundle.size)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={t("page.setting.xxmi.diagnostics.openFolder")}
+                  onClick={() =>
+                    void Shell.OpenPath(bundle.path.slice(0, bundle.path.lastIndexOf("\\"))).catch(
+                      (error: unknown) => toast.error(toErrorMessage(error)),
+                    )
+                  }
+                >
+                  <FolderOpenIcon />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.xxmi.diagnostics.bundleSummary", {
+                  log: bundle.logBytes > 0 ? formatSize(bundle.logBytes) : "-",
+                  dumps: bundle.dumps,
+                  events: bundle.crashEvents,
+                })}
+              </p>
+              {bundle.logTruncated ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.xxmi.diagnostics.logTruncated")}
+                </p>
+              ) : null}
+            </div>
           )}
-        </div>
 
-        <div className="flex items-start gap-2.5">
-          <Checkbox
-            id={logCheckboxId}
-            className="mt-0.5"
-            checked={includeLog}
-            disabled={sending}
-            onCheckedChange={(checked) => setIncludeLog(checked)}
-          />
-          <label htmlFor={logCheckboxId} className="space-y-0.5">
-            <span className="text-sm font-medium">{t("page.setting.feedback.log.label")}</span>
+          <div className="space-y-2">
+            <span className="text-sm font-medium">{t("page.setting.feedback.body.label")}</span>
+            <Textarea
+              value={body}
+              disabled={sending}
+              placeholder={t("page.setting.xxmi.diagnostics.bodyPlaceholder")}
+              className="max-h-60 min-h-28"
+              onChange={(event) => setBody(event.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-sm font-medium">{t("page.setting.xxmi.diagnostics.mods")}</span>
             <p className="text-xs text-muted-foreground">
-              {t("page.setting.feedback.log.description")}
+              {t(
+                session
+                  ? "page.setting.xxmi.diagnostics.modsDescription"
+                  : "page.setting.feedback.attachments.mod_login_required",
+              )}
             </p>
-          </label>
-        </div>
+            <DiagnosticsModPicker
+              importer={importer}
+              selected={mods}
+              disabled={!session || sending}
+              onSelectedChange={setMods}
+            />
+          </div>
 
-        {sending && <Progress value={progress} />}
-        {reportProblem && <p className="text-xs text-destructive">{reportProblem}</p>}
+          <div className="flex items-start gap-2.5">
+            <Checkbox
+              id={logCheckboxId}
+              className="mt-0.5"
+              checked={includeLog}
+              disabled={sending}
+              onCheckedChange={(checked) => setIncludeLog(checked)}
+            />
+            <label htmlFor={logCheckboxId} className="space-y-0.5">
+              <span className="text-sm font-medium">{t("page.setting.feedback.log.label")}</span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.feedback.log.description")}
+              </p>
+            </label>
+          </div>
+
+          {sending && <Progress value={progress} />}
+          {reportProblem && <p className="text-xs text-destructive">{reportProblem}</p>}
+        </div>
 
         <DialogFooter>
           {sending ? (

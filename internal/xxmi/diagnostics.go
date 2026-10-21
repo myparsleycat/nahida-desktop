@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -79,9 +81,16 @@ type DiagnosticsSession struct {
 }
 
 type DiagnosticsMod struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	Disabled bool   `json:"disabled"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+	// Relative is the slash-separated path below the Mods folder, which ListDiagnosticsMods takes as parent.
+	Relative string `json:"relative"`
+	// LinkedAt is the Relative of the deepest junction or symbolic link from the Mods folder down to this folder,
+	// or "". A report walks past a link inside the folder it attaches, so a folder above LinkedAt does not carry
+	// this one.
+	LinkedAt    string `json:"linkedAt"`
+	Disabled    bool   `json:"disabled"`
+	HasChildren bool   `json:"hasChildren"`
 }
 
 // diagnosticsRecord is the stored state of an importer's logging session.
@@ -326,9 +335,18 @@ func (x *XXMI) EndDiagnostics(ctx context.Context, importer string) (returnErr e
 	return nil
 }
 
-// ListDiagnosticsMods lists the folders of the importer's Mods folder a report can attach, the enabled ones
-// first.
-func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer string) ([]DiagnosticsMod, error) {
+// ListDiagnosticsMods lists the folders a report can attach directly inside parent, a slash-separated path below
+// the importer's Mods folder or "" for the Mods folder itself, the enabled ones first.
+func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer, parent string) ([]DiagnosticsMod, error) {
+	if parent != "" {
+		local := filepath.FromSlash(parent)
+		if !filepath.IsLocal(local) {
+			return nil, fmt.Errorf("mod folder %q is not below the Mods folder", parent)
+		}
+		if parent = filepath.ToSlash(filepath.Clean(local)); parent == "." {
+			parent = ""
+		}
+	}
 	cfg, err := x.GetImporterConfig(ctx, strings.ToUpper(strings.TrimSpace(importer)))
 	if err != nil {
 		return nil, err
@@ -337,7 +355,18 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer string) ([]Diag
 	if cfg.ImporterFolder == "" {
 		return mods, nil
 	}
-	folder := filepath.Join(cfg.ImporterFolder, "Mods")
+	modsFolder := filepath.Join(cfg.ImporterFolder, "Mods")
+	folder := filepath.Join(modsFolder, filepath.FromSlash(parent))
+	// XXMI skips a disabled folder together with everything below it.
+	parentDisabled := slices.ContainsFunc(strings.Split(parent, "/"), isDisabledModName)
+
+	release, err := diskio.AcquireDir(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	parentLinked := deepestModLink(modsFolder, parent)
 	entries, err := os.ReadDir(folder)
 	if errors.Is(err, os.ErrNotExist) {
 		return mods, nil
@@ -347,8 +376,7 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer string) ([]Diag
 	}
 	for _, entry := range entries {
 		path := filepath.Join(folder, entry.Name())
-		// A junction reads as an irregular entry, so the folder is told by its target.
-		if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		if !isModFolder(path, entry) {
 			continue
 		}
 		// The report walks the folder it is given, which does not step into a junction.
@@ -356,9 +384,18 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer string) ([]Diag
 		if err != nil {
 			continue
 		}
+		relative := entry.Name()
+		if parent != "" {
+			relative = parent + "/" + relative
+		}
+		linkedAt := parentLinked
+		if !entry.IsDir() {
+			linkedAt = relative
+		}
 		mods = append(mods, DiagnosticsMod{
-			Name: entry.Name(), Path: final,
-			Disabled: strings.HasPrefix(strings.ToUpper(entry.Name()), "DISABLED"),
+			Name: entry.Name(), Path: final, Relative: relative, LinkedAt: linkedAt,
+			Disabled:    parentDisabled || isDisabledModName(entry.Name()),
+			HasChildren: hasModSubfolder(path),
 		})
 	}
 	less := platform.NewLocaleLess()
@@ -376,6 +413,58 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer string) ([]Diag
 		return 0
 	})
 	return mods, nil
+}
+
+func isDisabledModName(name string) bool {
+	return strings.HasPrefix(strings.ToUpper(name), "DISABLED")
+}
+
+// deepestModLink returns the deepest folder of relative, a slash-separated path below modsFolder, that is a link
+// rather than a plain folder, or "".
+func deepestModLink(modsFolder, relative string) string {
+	if relative == "" {
+		return ""
+	}
+	segments := strings.Split(relative, "/")
+	for end := len(segments); end > 0; end-- {
+		prefix := strings.Join(segments[:end], "/")
+		if info, err := os.Lstat(filepath.Join(modsFolder, filepath.FromSlash(prefix))); err == nil && !info.IsDir() {
+			return prefix
+		}
+	}
+	return ""
+}
+
+func isModFolder(path string, entry fs.DirEntry) bool {
+	if entry.IsDir() {
+		return true
+	}
+	if entry.Type().IsRegular() {
+		return false
+	}
+	// A junction reads as an irregular entry, so the folder is told by its target.
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func hasModSubfolder(dir string) bool {
+	file, err := os.Open(dir)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = file.Close() }()
+
+	for {
+		entries, err := file.ReadDir(64)
+		for _, entry := range entries {
+			if isModFolder(filepath.Join(dir, entry.Name()), entry) {
+				return true
+			}
+		}
+		if err != nil {
+			return false
+		}
+	}
 }
 
 // armedDiagnostics returns the importer's session while its options belong in the d3dx.ini of folder, or nil.

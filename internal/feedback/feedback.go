@@ -127,8 +127,15 @@ type Request struct {
 	IncludeLog bool   `json:"includeLog"`
 	// Files are the media files and ModDirs the mod folders to attach.
 	Files   []string `json:"files"`
-	ModDirs []string `json:"modDirs"`
+	ModDirs []ModDir `json:"modDirs"`
 	Locale  string   `json:"locale"`
+}
+
+// ModDir is a mod folder to attach. Its files are declared below Name, a slash-separated path that keeps folders
+// picked from different parents apart, or below the folder's own name when Name is empty.
+type ModDir struct {
+	Path string `json:"path"`
+	Name string `json:"name,omitempty"`
 }
 
 // Result reports what a submitted report stored.
@@ -237,7 +244,7 @@ func (s *Service) Describe(ctx context.Context, paths []string) ([]Attachment, e
 			continue
 		}
 
-		files, err := walkMod(ctx, path)
+		files, err := walkMod(ctx, path, attachment.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -501,7 +508,15 @@ func (s *Service) collect(ctx context.Context, request Request, rules Rules) ([]
 	skipped := 0
 	var mods []modUpload
 	for _, dir := range request.ModDirs {
-		files, err := walkMod(ctx, dir)
+		root := filepath.Base(filepath.Clean(dir.Path))
+		if dir.Name != "" {
+			name := filepath.FromSlash(dir.Name)
+			if !filepath.IsLocal(name) {
+				return nil, nil, 0, fmt.Errorf("mod folder name %q is not a relative path", dir.Name)
+			}
+			root = filepath.ToSlash(filepath.Clean(name))
+		}
+		files, err := walkMod(ctx, dir.Path, root)
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -526,20 +541,19 @@ func (s *Service) collect(ctx context.Context, request Request, rules Rules) ([]
 
 type modFile struct {
 	path string
-	// relative is the slash-separated path below the mod folder's parent, so it
-	// starts with the folder's own name.
+	// relative is the slash-separated path the file is declared under, which
+	// starts with the root its mod folder is attached as.
 	relative string
 	size     int64
 }
 
-func walkMod(ctx context.Context, dir string) ([]modFile, error) {
+func walkMod(ctx context.Context, dir, root string) ([]modFile, error) {
 	release, err := diskio.AcquireDir(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	root := filepath.Base(filepath.Clean(dir))
 	var files []modFile
 	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {

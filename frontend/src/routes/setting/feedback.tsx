@@ -156,7 +156,7 @@ function RouteComponent() {
       body,
       includeLog,
       files: media.map((item) => item.path),
-      modDirs: mods.map((item) => item.path),
+      modDirs: mods.map((item) => ({ path: item.path })),
     });
     if (!result) return;
     setBody("");

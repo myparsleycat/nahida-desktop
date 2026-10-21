@@ -189,7 +189,7 @@ func TestSubmitUploadsWhatItDeclares(t *testing.T) {
 	uploader := &mods{refuse: map[string]bool{"f1": true}}
 	result, err := newServiceWithMods(t, remote, logPath, uploader).Submit(t.Context(), Request{
 		Category: "desktop", Body: "it broke", IncludeLog: true,
-		Files: []string{image}, ModDirs: []string{mod}, Locale: "ko",
+		Files: []string{image}, ModDirs: []ModDir{{Path: mod}}, Locale: "ko",
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -234,6 +234,36 @@ func TestSubmitUploadsWhatItDeclares(t *testing.T) {
 	}
 	if strings.Contains(remote.log, "secret-token") || !strings.Contains(remote.log, "ERROR") {
 		t.Errorf("log part = %q", remote.log)
+	}
+}
+
+func TestSubmitDeclaresModFilesBelowTheGivenName(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "A", "Default")
+	second := filepath.Join(dir, "B", "Default")
+	writeFile(t, filepath.Join(first, "mod.ini"), "a")
+	writeFile(t, filepath.Join(second, "mod.ini"), "b")
+
+	uploader := &mods{}
+	_, err := newServiceWithMods(t, &backend{puts: make(map[string]string)}, "", uploader).Submit(t.Context(), Request{
+		Category: "xxmi-libs", Body: "x",
+		ModDirs: []ModDir{{Path: first, Name: "A/Default"}, {Path: second, Name: "B/Default"}},
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	// Folders of the same name stay apart, which their own names alone would not keep.
+	if len(uploader.files) != 2 || uploader.files[0].Path != "A/Default/mod.ini" ||
+		uploader.files[1].Path != "B/Default/mod.ini" {
+		t.Fatalf("mod files = %+v", uploader.files)
+	}
+
+	remote := &backend{puts: make(map[string]string)}
+	_, err = newService(t, remote, "").Submit(t.Context(), Request{
+		Category: "xxmi-libs", Body: "x", ModDirs: []ModDir{{Path: first, Name: "../Default"}},
+	})
+	if err == nil || len(remote.planned) != 0 {
+		t.Fatalf("a name outside the report was accepted: err = %v, planned = %+v", err, remote.planned)
 	}
 }
 
