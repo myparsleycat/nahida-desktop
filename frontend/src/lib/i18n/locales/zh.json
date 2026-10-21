@@ -1815,7 +1815,7 @@
         },
         "position": {
           "title": "位置",
-          "hint": "原始网格坐标 · 单位 m（Z 轴向上）"
+          "hint": "原始网格坐标 · 单位 m（{{axis}} 轴向上）"
         },
         "offset": {
           "title": "离开表面 (mm)",

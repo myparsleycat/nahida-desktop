@@ -1817,7 +1817,7 @@
         },
         "position": {
           "title": "Position",
-          "hint": "Source mesh coordinates in metres (Z is up)"
+          "hint": "Source mesh coordinates in metres ({{axis}} is up)"
         },
         "offset": {
           "title": "Move from surface (mm)",

@@ -24,6 +24,7 @@ export function LiquidEmitterOverlay({
   point,
   offset,
   direction,
+  down,
   meshUnit,
   force = 1,
   nozzle = "spray",
@@ -33,6 +34,8 @@ export function LiquidEmitterOverlay({
   point: Vec3;
   offset: Vec3;
   direction: Vec3;
+  /** The mesh's down axis, along which the previewed path falls. */
+  down: Vec3;
   /** Meters per mesh unit; the overlay and the flow it previews are sized in meters. */
   meshUnit: number;
   /** The emitter's force, which the previewed path follows. */
@@ -85,6 +88,7 @@ export function LiquidEmitterOverlay({
           point={pointMeters}
           offset={offsetMeters}
           direction={direction}
+          down={down}
           force={force}
           nozzle={nozzle === "jet" ? "jet" : "spray"}
         />
@@ -101,18 +105,20 @@ function FlowPreview({
   point,
   offset,
   direction,
+  down,
   force,
   nozzle,
 }: {
   point: Vec3;
   offset: Vec3;
   direction: Vec3;
+  down: Vec3;
   force: number;
   nozzle: "spray" | "jet";
 }) {
   const trajectory = useMemo(
-    () => flowTrajectory(point, offset, direction, force, nozzle),
-    [point, offset, direction, force, nozzle],
+    () => flowTrajectory(point, offset, direction, down, force, nozzle),
+    [point, offset, direction, down, force, nozzle],
   );
   const path = useMemo(() => {
     const line = new Line(

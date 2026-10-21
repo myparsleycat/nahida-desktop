@@ -302,6 +302,7 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 		Runtime:    rt.status,
 		Emitters:   []Emitter{},
 		MeshUnit:   sc.game.meshUnit,
+		MeshDown:   sc.game.meshDown,
 		Renumbered: []PIDChange{},
 		Applied:    sc.applied,
 	}

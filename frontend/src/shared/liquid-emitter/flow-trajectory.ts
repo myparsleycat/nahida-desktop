@@ -27,8 +27,8 @@ function smooth(edge0: number, edge1: number, x: number) {
 }
 
 /**
- * The mean path of an emitter's force in source mesh space (Z up), ported from
- * LiquidGravityProbe's AttachmentEditor; force 1 is the runtime's former
+ * The mean path of an emitter's force in source mesh space, where gravity pulls
+ * along `down`, ported from LiquidGravityProbe's AttachmentEditor; force 1 is the runtime's former
  * default strength (1.69), as in Slots.hlsl slotDrive. For the spray nozzle it
  * includes the nozzle exit correction, the high-pressure jet boost and
  * near-field gravity relief; the jet nozzle's speed follows SoftNozzle.hlsl
@@ -39,6 +39,7 @@ export function flowTrajectory(
     point: Vec3,
     offset: Vec3,
     direction: Vec3,
+    down: Vec3,
     force: number,
     nozzle: "spray" | "jet" = "spray",
 ): FlowTrajectory {
@@ -49,6 +50,7 @@ export function flowTrajectory(
     const speed = jet ? clamp(3 * Math.sqrt(setting / 1.69), 0.8, 5) : sprayNozzleSpeed(setting);
 
     const dir = normalize(direction);
+    const fallAxis = normalize(down);
     const up = mul(dir, -1);
     let reference: Vec3 = [0, -1, 0];
     if (Math.abs(dot(up, reference)) > 0.95) reference = [1, 0, 0];
@@ -63,10 +65,10 @@ export function flowTrajectory(
     for (let time = 0; time < lifetime - 1e-9;) {
         const h = Math.min(step, lifetime - time);
         const gravity = jet
-            ? -9.81
-            : -9.81 * (1 - 0.45 * smooth(0.4, 1.2, speed) * (1 - smooth(0.12, 0.3, travel)));
-        const next = add(position, add(mul(velocity, h), [0, 0, 0.5 * gravity * h * h]));
-        velocity = add(velocity, [0, 0, gravity * h]);
+            ? 9.81
+            : 9.81 * (1 - 0.45 * smooth(0.4, 1.2, speed) * (1 - smooth(0.12, 0.3, travel)));
+        const next = add(position, add(mul(velocity, h), mul(fallAxis, 0.5 * gravity * h * h)));
+        velocity = add(velocity, mul(fallAxis, gravity * h));
         travel += Math.hypot(...sub(next, position));
         position = next;
         time += h;

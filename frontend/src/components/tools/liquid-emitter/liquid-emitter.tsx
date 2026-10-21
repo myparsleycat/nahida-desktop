@@ -75,7 +75,7 @@ const HISTORY_LIMIT = 100;
 // The runtime rejects a whole profile file when an offset axis exceeds 25 cm.
 const MAX_OFFSET_METERS = 0.25;
 const AXES = ["X", "Y", "Z"] as const;
-const DOWN: Vec3 = [0, 0, -1];
+const Z_DOWN: Vec3 = [0, 0, -1];
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
 // The backend's maxEmitters: each emitter takes a runtime slot while its character is drawn.
@@ -110,6 +110,7 @@ export function LiquidEmitterTool({
   const emitters = inspection?.emitters ?? [];
   // Anchors are edited in the mesh's own units, which are not meters in every game.
   const meshUnit = inspection?.meshUnit || 1;
+  const down = inspection?.meshDown.length === 3 ? (inspection.meshDown as Vec3) : Z_DOWN;
   const meshes = session.source?.transport.meshes;
   const forms = session.source?.transport.forms ?? [];
   const formOfMesh = (meshId: string) => meshes?.find((mesh) => mesh.id === meshId)?.form;
@@ -199,7 +200,7 @@ export function LiquidEmitterTool({
       barycentric: pick.barycentric,
       point: pick.point,
       offset: [0, 0, 0],
-      direction: anchor?.direction ?? DOWN,
+      direction: anchor?.direction ?? down,
     });
   };
 
@@ -523,7 +524,7 @@ export function LiquidEmitterTool({
           summary={
             anchor
               ? t(
-                  isEqual(anchor.direction, DOWN)
+                  isEqual(anchor.direction, down)
                     ? "page.tools.liquid_emitter.direction.summary_down"
                     : "page.tools.liquid_emitter.direction.summary_custom",
                 )
@@ -551,7 +552,7 @@ export function LiquidEmitterTool({
             variant="outline"
             className="w-full"
             disabled={locked}
-            onClick={() => update("direction-down", { direction: DOWN })}
+            onClick={() => update("direction-down", { direction: down })}
           >
             {t("page.tools.liquid_emitter.direction.down")}
           </Button>
@@ -599,7 +600,9 @@ export function LiquidEmitterTool({
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            {t("page.tools.liquid_emitter.position.hint")}
+            {t("page.tools.liquid_emitter.position.hint", {
+              axis: AXES[down.findIndex((value) => value !== 0)],
+            })}
           </p>
         </InspectorSection>
 
@@ -689,6 +692,7 @@ export function LiquidEmitterTool({
                 point={other.anchor.point}
                 offset={other.anchor.offset}
                 direction={other.anchor.direction}
+                down={down}
                 meshUnit={meshUnit}
                 showTrajectory={false}
                 muted
@@ -699,6 +703,7 @@ export function LiquidEmitterTool({
                 point={anchor.point}
                 offset={anchor.offset}
                 direction={anchor.direction}
+                down={down}
                 meshUnit={meshUnit}
                 force={(draftLook ?? current?.look)?.force}
                 nozzle={(draftLook ?? current?.look)?.nozzle}

@@ -80,7 +80,7 @@ const (
 )
 
 // EmitterAnchor is the editor state of one emitter in source mesh space
-// (Z up). Point is the surface point before Offset is added; the face fields
+// (see Inspection.MeshDown). Point is the surface point before Offset is added; the face fields
 // keep the viewer corner order so the editor can apply the anchor again.
 type EmitterAnchor struct {
 	MeshID            string    `json:"meshId"`
@@ -155,6 +155,9 @@ type Inspection struct {
 	// MeshUnit is the length in meters of one unit of the mod's meshes, in
 	// which anchors and their offsets are given.
 	MeshUnit float64 `json:"meshUnit"`
+	// MeshDown is the unit vector pointing down a standing character in the
+	// mod's mesh space, which is Y up for some games and Z up for others.
+	MeshDown [3]float64 `json:"meshDown"`
 	// Renumbered lists the slots this call moved the mod's emitters to: a
 	// folder copied with its marker gets slots of its own on its first change,
 	// so a slot the caller listed before may now name another emitter or none.
