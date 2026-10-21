@@ -43,6 +43,7 @@ const (
 	formatR32Uint           = 42
 	formatR16Float          = 54
 
+	bindConstantBuffer   = 0x4
 	bindShaderResource   = 0x8
 	bindRenderTarget     = 0x20
 	bindUnorderedAccess  = 0x80
@@ -254,6 +255,17 @@ func (d *warpDevice) buffer(data []byte, stride int, format uint32) gpuBuffer {
 	return gpuBuffer{resource: resource, srv: srv, uav: uav, size: len(data)}
 }
 
+func (d *warpDevice) constants(values []float32) unsafe.Pointer {
+	d.t.Helper()
+	data := float32Bytes(values)
+	desc := bufferDesc{byteWidth: uint32(len(data)), bindFlags: bindConstantBuffer}
+	initial := subresourceData{data: unsafe.Pointer(&data[0])}
+	var resource unsafe.Pointer
+	hr, _, _ := syscall.SyscallN(comMethod(d.device, 3), uintptr(d.device),
+		uintptr(unsafe.Pointer(&desc)), uintptr(unsafe.Pointer(&initial)), uintptr(unsafe.Pointer(&resource)))
+	return d.keep(resource, "create constant buffer", hr)
+}
+
 func (d *warpDevice) structured(values []float32, stride int) gpuBuffer {
 	d.t.Helper()
 	return d.buffer(float32Bytes(values), stride, 0)
@@ -353,6 +365,8 @@ func (d *warpDevice) shader(stage string, code []byte) unsafe.Pointer {
 type bindings struct {
 	srv map[int]unsafe.Pointer
 	uav map[int]unsafe.Pointer
+	// cb holds constant buffers, which only dispatch binds.
+	cb map[int]unsafe.Pointer
 }
 
 func (d *warpDevice) setResources(method int, views map[int]unsafe.Pointer) {
@@ -379,8 +393,9 @@ func (d *warpDevice) unbind(method int, views map[int]unsafe.Pointer, uav bool) 
 // dispatch runs a compute shader with the views bound, then unbinds them.
 func (d *warpDevice) dispatch(shader unsafe.Pointer, views bindings, groups [3]int) {
 	d.t.Helper()
-	const csSetShaderResources, csSetUAVs, csSetShader, dispatch = 67, 68, 69, 41
+	const csSetShaderResources, csSetUAVs, csSetShader, csSetConstantBuffers, dispatch = 67, 68, 69, 71, 41
 	d.setResources(csSetShaderResources, views.srv)
+	d.setResources(csSetConstantBuffers, views.cb)
 	for slot, view := range views.uav {
 		list := []unsafe.Pointer{view}
 		_, _, _ = syscall.SyscallN(comMethod(d.context, csSetUAVs), uintptr(d.context),
@@ -390,6 +405,7 @@ func (d *warpDevice) dispatch(shader unsafe.Pointer, views bindings, groups [3]i
 	_, _, _ = syscall.SyscallN(comMethod(d.context, dispatch), uintptr(d.context),
 		uintptr(groups[0]), uintptr(groups[1]), uintptr(groups[2]))
 	d.unbind(csSetShaderResources, views.srv, false)
+	d.unbind(csSetConstantBuffers, views.cb, false)
 	d.unbind(csSetUAVs, views.uav, true)
 }
 

@@ -3,8 +3,8 @@
 // the projection and its inverse in those constants, and IniParams[255].x the
 // first row of the view-projection, each stored as its four columns. -1 marks
 // a matrix the game does not provide, which is derived from the others; the
-// projection is always required. The game's world is the runtime's, so the
-// game-to-world rows hold the identity.
+// projection or the view-projection is required. The game's world is the
+// runtime's, so the game-to-world rows hold the identity.
 #include "Matrix.hlsl"
 Texture1D<float4> IniParams:register(t120);
 cbuffer Source:register(b13){float4 source[4096];}
@@ -19,11 +19,11 @@ void store(uint row,float4x4 m){for(uint i=0;i<4;i++)camera[row+i]=m[i];}
 void main(uint3 tid:SV_DispatchThreadID){
  int4 rows=(int4)IniParams[254];
  int viewProjection=(int)IniParams[255].x;
- float4x4 projection=load(rows.z);
  float4x4 view=rows.x>=0?load(rows.x):inverse(load(rows.y));
  float4x4 inverseView=rows.y>=0?load(rows.y):inverse(view);
+ // Transposed, P*V is V'*P', and P = (P*V)*inverse(V) is inverse(V)'*(P*V)'.
+ float4x4 projection=rows.z>=0?load(rows.z):mul(inverseView,load(viewProjection));
  float4x4 inverseProjection=rows.w>=0?load(rows.w):inverse(projection);
- // Transposed, P*V is V'*P'.
  float4x4 vp=viewProjection>=0?load(viewProjection):mul(view,projection);
  store(0,view);store(4,inverseView);store(8,projection);store(12,inverseProjection);store(16,vp);
  store(20,float4x4(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1));

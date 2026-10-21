@@ -21,6 +21,7 @@ type game struct {
 var games = []game{
 	{importer: "EFMI", dir: "efmi", meshUnit: 1},
 	{importer: "GIMI", dir: "gimi", meshUnit: 1},
+	{importer: "SRMI", dir: "srmi", meshUnit: 1},
 	{importer: "WWMI", dir: "wwmi", meshUnit: .01},
 	{importer: "ZZMI", dir: "zzmi", meshUnit: 1},
 }
