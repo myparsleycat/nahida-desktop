@@ -1747,7 +1747,11 @@
         "removed": "已移除喷射点。请在游戏中按 F10 重新加载模组。",
         "apply": "应用到游戏",
         "remove": "移除喷射点",
-        "f10_hint": "只为所选部位的绘制调用添加钩子。应用后在游戏中按 F10。",
+        "unsaved": {
+          "title": "有未应用的更改",
+          "description": "尚未应用到游戏的喷射点和液体更改将会丢失。仍要关闭吗？",
+          "confirm": "放弃并关闭"
+        },
         "created": "已创建新模组并禁用原模组。请在游戏中按 F10 重新加载模组。",
         "restored": "已删除生成的模组并重新启用原模组。",
         "mode": {
@@ -1770,7 +1774,6 @@
           "installed": "喷射运行时已就绪。",
           "state": {
             "missing": "未安装",
-            "current": "已安装",
             "outdated": "有更新",
             "modified": "文件已更改",
             "disabled": "已禁用",
@@ -1782,15 +1785,12 @@
             "modified": "修复",
             "disabled": "启用"
           },
-          "foreign_title": "已安装另一个 LiquidGravityProbe",
           "foreign_description": "请先禁用或删除 {{path}} 中的副本。两个运行时会在游戏中冲突。",
           "required": {
             "missing": {
-              "title": "未安装喷射运行时",
               "description": "安装运行时后才能指定并应用喷射点。"
             },
             "disabled": {
-              "title": "喷射运行时已禁用",
               "description": "启用运行时后才能指定并应用喷射点。"
             }
           }
@@ -1800,12 +1800,10 @@
           "missed": "该位置没有表面。请单独显示部件或换个视角。"
         },
         "selection": {
-          "title": "喷射点",
           "empty": "点击模型表面以放置喷射点。",
           "triangle": "三角形 {{index}} · 跟随表面",
           "hidden": "当前视图中未绘制此部件。如果切换了开关，请重新选取可见的表面。",
           "new": "新喷射点",
-          "editing": "正在编辑喷射点 #{{pid}}",
           "adding": "新喷射点",
           "limit": "每个模组最多可设置 {{max}} 个喷射点。要添加新的喷射点，请先移除一个。"
         },
@@ -1818,7 +1816,7 @@
           "hint": "原始网格坐标 · 单位 m（{{axis}} 轴向上）"
         },
         "offset": {
-          "title": "离开表面 (mm)",
+          "title": "偏移 (mm)",
           "reset": "回到表面位置"
         },
         "direction": {
@@ -1841,16 +1839,15 @@
         },
         "emitters": {
           "title": "已应用的喷射点 ({{count}}/{{max}})",
-          "empty": "此模组尚未应用喷射点。",
           "unhooked": "缺少钩子",
+          "unsaved": "未应用",
           "missing_mesh": "当前模型中已没有此部件。",
           "look_runtime": "运行时液体",
           "look_custom": "专用液体"
         },
         "look": {
           "title": "该喷射点的液体",
-          "hint": "在运行时设置的基础上应用于所选喷射点。保存后请在游戏中按 F10。",
-          "needs_emitter": "选择一个已应用的喷射点，才能为它单独设置液体。",
+          "hint": "在运行时设置的基础上应用于所选喷射点。应用到游戏时会与喷射点一起保存。",
           "force": "喷射强度",
           "amount": "液体量",
           "viscosity": "粘度",
@@ -1900,8 +1897,6 @@
             "roughness_hint": "反射和高光的柔和程度 · 越高越宽、越暗淡"
           },
           "reset": "跟随运行时设置",
-          "save": "保存液体设置",
-          "saved": "已保存该喷射点的液体设置。请在游戏中按 F10 重新加载模组。",
           "summary": {
             "runtime": "运行时设置",
             "custom": "自定义",

@@ -1,4 +1,4 @@
-import type { Emitter, Inspection, Look } from "@bindings/tools/liquid_emitter";
+import type { Emitter, Inspection } from "@bindings/tools/liquid_emitter";
 import { InspectorSection } from "@renderer/components/tools/inspector-section";
 import type { ModelViewerSurfacePick } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import {
@@ -31,6 +31,7 @@ import {
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
+import { isEqual } from "es-toolkit";
 import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
@@ -41,11 +42,11 @@ import {
   TriangleAlertIcon,
   Undo2Icon,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { followsRuntime, LookSection, useLookDraft } from "./liquid-emitter-look";
+import { followsRuntime, lookChanged, LookSection, useLookDraft } from "./liquid-emitter-look";
 import { LiquidEmitterOverlay } from "./liquid-emitter-overlay";
 import {
   type ApplyMode,
@@ -92,10 +93,13 @@ const SLOT_RAISE = 4;
 export function LiquidEmitterTool({
   modPath,
   onModPathChange,
+  onUnsavedChange,
 }: {
   modPath: string;
   /** Called when the tool moves to another folder: a new mod it created, or the restored original. */
   onModPathChange?: (modPath: string) => void;
+  /** Called with whether the anchor or look differs from what the mod has. */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }) {
   const { t } = useTranslation();
   const session = useLiquidEmitterSession(modPath);
@@ -129,6 +133,14 @@ export function LiquidEmitterTool({
     editing === null ? undefined : emitters.find((emitter) => emitter.pid === editing);
   const adding = current === undefined;
   const [draftLook, setDraftLook] = useLookDraft(`${inspection?.modPath}:${current?.pid}`);
+  const savedLook = current?.look ?? inspection?.defaultLook;
+  const lookDirty = lookChanged(draftLook, savedLook);
+  const anchorDirty = !isEqual(anchor, current ? anchorFromEmitter(current) : null);
+  const unsaved = anchorDirty || lookDirty;
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+  }, [onUnsavedChange, unsaved]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
   const atLimit = emitters.length >= MAX_EMITTERS;
   const busy =
     session.apply.isPending ||
@@ -250,6 +262,7 @@ export function LiquidEmitterTool({
         direction: anchor.direction,
         mode: applyMode,
         pid: current?.pid ?? null,
+        look: lookDirty ? draftLook : null,
       },
       {
         onSuccess: (result) => {
@@ -271,6 +284,23 @@ export function LiquidEmitterTool({
   // Every emitter of a drawn character takes a runtime slot, so a new one past
   // the runtime's slot count would stay dry until the count goes up.
   const handleApply = () => {
+    // A look alone needs no hooks, so it is saved even when the viewer no
+    // longer draws the emitter's mesh; an emitter whose hook went missing
+    // still goes through Apply, which restores it.
+    if (current?.hooked && draftLook && lookDirty && !anchorDirty && applyMode === IN_PLACE) {
+      const requested = current.pid;
+      session.setLook.mutate(
+        { pid: requested, look: draftLook },
+        {
+          onSuccess: (result) => {
+            if (result.applied !== null) follow(requested, result.applied);
+            toast.success(t("page.tools.liquid_emitter.applied"));
+          },
+          onError: (error) => toast.error(liquidErrorMessage(t, error)),
+        },
+      );
+      return;
+    }
     const setting = inspection?.runtime.settings?.find((entry) => entry.id === SLOT_COUNT_SETTING);
     const slots = Number(setting?.value);
     if (
@@ -326,19 +356,6 @@ export function LiquidEmitterTool({
       onError: (error) => toast.error(liquidErrorMessage(t, error)),
     });
   };
-
-  const handleSaveLook = (pid: number, look: Look) =>
-    session.setLook.mutateAsync({ pid, look }).then(
-      (result) => {
-        if (result.applied !== null) follow(pid, result.applied);
-        toast.success(t("page.tools.liquid_emitter.look.saved"));
-        return true;
-      },
-      (error: unknown) => {
-        toast.error(liquidErrorMessage(t, error));
-        return false;
-      },
-    );
 
   const handleInstall = () =>
     session.install.mutate(undefined, {
@@ -407,91 +424,81 @@ export function LiquidEmitterTool({
       </div>
 
       <div className="divide-y">
-        <div className="space-y-4 p-4">
-          <RuntimeSection
-            inspection={inspection}
-            error={session.inspection.error}
-            busy={busy}
-            installing={session.install.isPending}
-            onInstall={handleInstall}
-          />
+        <RuntimeSection
+          inspection={inspection}
+          error={session.inspection.error}
+          busy={busy}
+          installing={session.install.isPending}
+          onInstall={handleInstall}
+        />
 
-          <section className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium">
-                {t("page.tools.liquid_emitter.selection.title")}
-              </h3>
-              <div className="flex gap-1">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={!editable || busy || atLimit || (adding && !anchor)}
-                  aria-label={t("page.tools.liquid_emitter.selection.new")}
-                  title={t("page.tools.liquid_emitter.selection.new")}
-                  onClick={() => select(null, null)}
-                >
-                  <PlusIcon />
-                </Button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={!editable || history.index === 0}
-                  aria-label={t("page.tools.liquid_emitter.history.undo")}
-                  title={t("page.tools.liquid_emitter.history.undo")}
-                  onClick={() => step(-1)}
-                >
-                  <Undo2Icon />
-                </Button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={!editable || history.index >= history.entries.length - 1}
-                  aria-label={t("page.tools.liquid_emitter.history.redo")}
-                  title={t("page.tools.liquid_emitter.history.redo")}
-                  onClick={() => step(1)}
-                >
-                  <Redo2Icon />
-                </Button>
-              </div>
-            </div>
-            <div className="rounded-md border bg-background/40 px-3 py-2 text-sm">
-              <div className="mb-1 text-xs text-muted-foreground">
-                {current
-                  ? t("page.tools.liquid_emitter.selection.editing", { pid: current.pid })
-                  : t("page.tools.liquid_emitter.selection.adding")}
-              </div>
-              {anchor ? (
-                <>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-medium" title={meshLabel}>
-                      {meshLabel}
-                    </span>
-                    <FormBadge forms={forms} form={anchorForm} />
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("page.tools.liquid_emitter.selection.triangle", { index: anchor.faceIndex })}
-                  </div>
-                  {anchorHidden ? (
-                    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
-                      <TriangleAlertIcon className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-                      {t("page.tools.liquid_emitter.selection.hidden")}
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <span className="text-muted-foreground">
-                  {t("page.tools.liquid_emitter.selection.empty")}
-                </span>
-              )}
-            </div>
-            {adding && atLimit ? (
-              <p className="text-xs text-muted-foreground">
-                {t("page.tools.liquid_emitter.selection.limit", { max: MAX_EMITTERS })}
-              </p>
-            ) : null}
-            {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
-          </section>
-        </div>
+        <EmitterList
+          emitters={emitters}
+          meshes={meshes}
+          forms={forms}
+          selectedPid={current?.pid}
+          editing={
+            anchor ? { label: meshLabel, form: anchorForm, faceIndex: anchor.faceIndex } : null
+          }
+          unsaved={unsaved}
+          busy={busy}
+          actions={
+            <>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={!editable || busy || atLimit || (adding && !anchor)}
+                aria-label={t("page.tools.liquid_emitter.selection.new")}
+                title={t("page.tools.liquid_emitter.selection.new")}
+                onClick={() => select(null, null)}
+              >
+                <PlusIcon />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={!editable || history.index === 0}
+                aria-label={t("page.tools.liquid_emitter.history.undo")}
+                title={t("page.tools.liquid_emitter.history.undo")}
+                onClick={() => step(-1)}
+              >
+                <Undo2Icon />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={!editable || history.index >= history.entries.length - 1}
+                aria-label={t("page.tools.liquid_emitter.history.redo")}
+                title={t("page.tools.liquid_emitter.history.redo")}
+                onClick={() => step(1)}
+              >
+                <Redo2Icon />
+              </Button>
+            </>
+          }
+          onSelect={(emitter) => {
+            const saved = anchorFromEmitter(emitter);
+            if (!saved) return;
+            select(emitter.pid, saved);
+            const savedForm = formOfMesh(saved.meshId);
+            if (savedForm && form !== ALL_FORMS) setForm(savedForm);
+          }}
+          onRemove={(emitter) => handleRemove([emitter.pid])}
+          onRemoveAll={() => setConfirmRemoveAll(true)}
+        >
+          {anchorHidden ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+              <TriangleAlertIcon className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              {t("page.tools.liquid_emitter.selection.hidden")}
+            </p>
+          ) : null}
+          {adding && atLimit ? (
+            <p className="text-xs text-muted-foreground">
+              {t("page.tools.liquid_emitter.selection.limit", { max: MAX_EMITTERS })}
+            </p>
+          ) : null}
+          {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
+        </EmitterList>
 
         <InspectorSection
           id="liquid-emitter:offset"
@@ -501,7 +508,6 @@ export function LiquidEmitterTool({
               ? anchor.offset.map((value) => (value * meshUnit * 1000).toFixed(1)).join(" · ")
               : undefined
           }
-          defaultOpen
           className="px-4 py-3"
           panelClassName="space-y-3 pt-3"
         >
@@ -630,6 +636,15 @@ export function LiquidEmitterTool({
           </p>
         </InspectorSection>
 
+        {savedLook ? (
+          <LookSection
+            saved={savedLook}
+            draft={draftLook}
+            onDraftChange={setDraftLook}
+            locked={!editable || busy}
+          />
+        ) : null}
+
         <ApplyModeSection
           inspection={inspection}
           mode={mode}
@@ -638,42 +653,30 @@ export function LiquidEmitterTool({
           onModeChange={setMode}
           onRestore={() => setConfirmRestore(true)}
         />
-
-        <EmitterList
-          emitters={emitters}
-          meshes={meshes}
-          forms={forms}
-          selectedPid={current?.pid}
-          busy={busy}
-          onSelect={(emitter) => {
-            const saved = anchorFromEmitter(emitter);
-            if (!saved) return;
-            select(emitter.pid, saved);
-            const savedForm = formOfMesh(saved.meshId);
-            if (savedForm && form !== ALL_FORMS) setForm(savedForm);
-          }}
-          onRemove={(emitter) => handleRemove([emitter.pid])}
-          onRemoveAll={() => setConfirmRemoveAll(true)}
-        />
-
-        <LookSection
-          emitter={current}
-          draft={draftLook}
-          onDraftChange={setDraftLook}
-          busy={busy}
-          editable={editable}
-          onSave={(look) => (current ? handleSaveLook(current.pid, look) : Promise.resolve(false))}
-        />
       </div>
     </div>
   );
 
+  // A new mod and an emitter whose hook went missing are worth applying unchanged.
+  const applicable = unsaved || applyMode === NEW_MOD || current?.hooked === false;
   const inspectorFooter = (
-    <div className="space-y-2 rounded-md bg-muted/30 p-3">
+    <div className="flex gap-2 rounded-md bg-muted/30 p-3">
+      {current ? (
+        <Button
+          variant="outline"
+          className="flex-1"
+          disabled={busy}
+          onClick={() => handleRemove([current.pid])}
+        >
+          {t("page.tools.liquid_emitter.remove")}
+        </Button>
+      ) : null}
       <Button
-        className="w-full"
-        disabled={locked || busy || (adding && atLimit)}
-        isLoading={session.apply.isPending || session.raiseSlotCount.isPending}
+        className="flex-1"
+        disabled={locked || busy || !applicable || (adding && atLimit)}
+        isLoading={
+          session.apply.isPending || session.raiseSlotCount.isPending || session.setLook.isPending
+        }
         onClick={handleApply}
       >
         {t(
@@ -684,17 +687,6 @@ export function LiquidEmitterTool({
               : "page.tools.liquid_emitter.apply",
         )}
       </Button>
-      {current ? (
-        <Button
-          variant="outline"
-          className="w-full"
-          disabled={busy}
-          onClick={() => handleRemove([current.pid])}
-        >
-          {t("page.tools.liquid_emitter.remove")}
-        </Button>
-      ) : null}
-      <p className="text-xs text-muted-foreground">{t("page.tools.liquid_emitter.f10_hint")}</p>
     </div>
   );
 
@@ -729,8 +721,8 @@ export function LiquidEmitterTool({
                 direction={anchor.direction}
                 down={down}
                 meshUnit={meshUnit}
-                force={(draftLook ?? current?.look)?.force}
-                nozzle={(draftLook ?? current?.look)?.nozzle}
+                force={(draftLook ?? savedLook)?.force}
+                nozzle={(draftLook ?? savedLook)?.nozzle}
                 showTrajectory={showTrajectory}
               />
             ) : null}
@@ -908,63 +900,55 @@ function RuntimeSection({
   onInstall: () => void;
 }) {
   const { t } = useTranslation();
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <TriangleAlertIcon />
-        <AlertDescription>{liquidErrorMessage(t, error)}</AlertDescription>
-      </Alert>
-    );
-  }
-  if (!inspection) {
-    return <Loader2Icon className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />;
-  }
+  const problem = Boolean(error);
+  const state = inspection?.runtime.state;
+  // An installed runtime needs nothing from the user.
+  if (!problem && (state === undefined || state === "current")) return null;
 
-  const state = inspection.runtime.state;
-  if (state === "foreign") {
-    return (
-      <Alert variant="destructive">
-        <TriangleAlertIcon />
-        <AlertTitle>{t("page.tools.liquid_emitter.runtime.foreign_title")}</AlertTitle>
-        <AlertDescription>
-          {t("page.tools.liquid_emitter.runtime.foreign_description", {
-            path: inspection.runtime.path,
-          })}
-        </AlertDescription>
-      </Alert>
-    );
-  }
-  if (state === "missing" || state === "disabled") {
-    return (
-      <Alert>
-        <TriangleAlertIcon />
-        <AlertTitle>{t(`page.tools.liquid_emitter.runtime.required.${state}.title`)}</AlertTitle>
-        <AlertDescription>
-          {t(`page.tools.liquid_emitter.runtime.required.${state}.description`)}
-        </AlertDescription>
-        <div className="col-start-2 pt-2">
-          <Button size="sm" disabled={busy} isLoading={installing} onClick={onInstall}>
-            {t(`page.tools.liquid_emitter.runtime.action.${state}`)}
-          </Button>
-        </div>
-      </Alert>
-    );
-  }
+  const required = state === "missing" || state === "disabled";
+  const actionable = !problem && (required || state === "outdated" || state === "modified");
+  const description = problem
+    ? liquidErrorMessage(t, error)
+    : state === "foreign"
+      ? t("page.tools.liquid_emitter.runtime.foreign_description", {
+          path: inspection?.runtime.path,
+        })
+      : required
+        ? t(`page.tools.liquid_emitter.runtime.required.${state}.description`)
+        : null;
 
   return (
-    <section className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2 text-sm">
-        <span className="text-muted-foreground">
+    <section className="space-y-2 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <h3 className="min-w-0 flex-1 truncate text-sm font-medium">
           {t("page.tools.liquid_emitter.runtime.title")}
-        </span>
-        <Badge variant={state === "current" ? "secondary" : "destructive"}>
-          {t(`page.tools.liquid_emitter.runtime.state.${state}`)}
-        </Badge>
+        </h3>
+        {!problem && state ? (
+          <Badge variant="destructive">
+            {t(`page.tools.liquid_emitter.runtime.state.${state}`)}
+          </Badge>
+        ) : null}
+        {actionable ? (
+          <Button
+            size="xs"
+            variant={required ? "default" : "outline"}
+            disabled={busy}
+            isLoading={installing}
+            onClick={onInstall}
+          >
+            {t(`page.tools.liquid_emitter.runtime.action.${state}`)}
+          </Button>
+        ) : null}
       </div>
-      {state !== "current" ? (
-        <Button size="sm" variant="outline" disabled={busy} onClick={onInstall}>
-          {t(`page.tools.liquid_emitter.runtime.action.${state}`)}
-        </Button>
+      {description ? (
+        <p
+          className={cn(
+            "text-xs break-all",
+            problem || state === "foreign" ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {description}
+        </p>
       ) : null}
     </section>
   );
@@ -975,21 +959,32 @@ function EmitterList({
   meshes,
   forms,
   selectedPid,
+  editing,
+  unsaved,
   busy,
+  actions,
   onSelect,
   onRemove,
   onRemoveAll,
+  children,
 }: {
   emitters: Emitter[];
   meshes: ViewerMeshTransport[] | undefined;
   forms: ViewerForm[];
+  /** The applied emitter being edited, or undefined while a new one is placed. */
   selectedPid: number | undefined;
+  /** Where the anchor being edited sits now, which may differ from the applied one. */
+  editing: { label: string; form: string | undefined; faceIndex: number } | null;
+  unsaved: boolean;
   busy: boolean;
+  actions: ReactNode;
   onSelect: (emitter: Emitter) => void;
   onRemove: (emitter: Emitter) => void;
   onRemoveAll: () => void;
+  children: ReactNode;
 }) {
   const { t } = useTranslation();
+  const adding = selectedPid === undefined;
   return (
     <InspectorSection
       id="liquid-emitter:emitters"
@@ -997,75 +992,95 @@ function EmitterList({
         count: emitters.length,
         max: MAX_EMITTERS,
       })}
+      summary={adding ? t("page.tools.liquid_emitter.selection.adding") : `#${selectedPid}`}
       actions={
-        emitters.length > 0 ? (
-          <Button size="xs" variant="ghost" disabled={busy} onClick={onRemoveAll}>
-            {t("page.tools.liquid_emitter.remove_all.button")}
-          </Button>
-        ) : null
+        <div className="flex items-center gap-0.5">
+          {actions}
+          {emitters.length > 0 ? (
+            <Button size="xs" variant="ghost" disabled={busy} onClick={onRemoveAll}>
+              {t("page.tools.liquid_emitter.remove_all.button")}
+            </Button>
+          ) : null}
+        </div>
       }
       defaultOpen
       className="px-4 py-3"
-      panelClassName="pt-2"
+      panelClassName="space-y-2 pt-2"
     >
-      {emitters.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.emitters.empty")}
-        </p>
-      ) : (
-        <ul className="space-y-1">
-          {emitters.map((emitter) => {
-            const mesh = meshes?.find((candidate) => candidate.id === emitter.anchor.meshId);
-            return (
-              <li
-                key={emitter.pid}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60",
-                  emitter.pid === selectedPid && "bg-muted",
-                )}
+      <ul className="space-y-1">
+        {emitters.map((emitter) => {
+          const mesh = meshes?.find((candidate) => candidate.id === emitter.anchor.meshId);
+          const selected = emitter.pid === selectedPid;
+          const shown = selected && editing;
+          return (
+            <li
+              key={emitter.pid}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60",
+                selected && "bg-muted",
+              )}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                disabled={!mesh || busy}
+                title={mesh ? undefined : t("page.tools.liquid_emitter.emitters.missing_mesh")}
+                onClick={() => onSelect(emitter)}
               >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                  disabled={!mesh || busy}
-                  title={mesh ? undefined : t("page.tools.liquid_emitter.emitters.missing_mesh")}
-                  onClick={() => onSelect(emitter)}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">
-                      {mesh ? partLabel(mesh, meshes) : emitter.section}
-                    </span>
-                    <FormBadge forms={forms} form={mesh?.form ?? iniFolder(emitter.iniPath)} />
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">
+                    {shown ? editing.label : mesh ? partLabel(mesh, meshes) : emitter.section}
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {emitter.iniPath} · #{emitter.pid} ·{" "}
-                    {t(
-                      followsRuntime(emitter.look)
-                        ? "page.tools.liquid_emitter.emitters.look_runtime"
-                        : "page.tools.liquid_emitter.emitters.look_custom",
-                    )}
-                  </span>
-                </button>
-                {!emitter.hooked ? (
-                  <Badge variant="destructive">
-                    {t("page.tools.liquid_emitter.emitters.unhooked")}
-                  </Badge>
-                ) : null}
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  disabled={busy}
-                  aria-label={t("page.tools.liquid_emitter.remove")}
-                  title={t("page.tools.liquid_emitter.remove")}
-                  onClick={() => onRemove(emitter)}
-                >
-                  <Trash2Icon />
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  <FormBadge
+                    forms={forms}
+                    form={shown ? editing.form : (mesh?.form ?? iniFolder(emitter.iniPath))}
+                  />
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {emitter.iniPath} · #{emitter.pid} ·{" "}
+                  {t(
+                    followsRuntime(emitter.look)
+                      ? "page.tools.liquid_emitter.emitters.look_runtime"
+                      : "page.tools.liquid_emitter.emitters.look_custom",
+                  )}
+                </span>
+              </button>
+              {selected && unsaved ? (
+                <Badge variant="outline">{t("page.tools.liquid_emitter.emitters.unsaved")}</Badge>
+              ) : null}
+              {!emitter.hooked ? (
+                <Badge variant="destructive">
+                  {t("page.tools.liquid_emitter.emitters.unhooked")}
+                </Badge>
+              ) : null}
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={busy}
+                aria-label={t("page.tools.liquid_emitter.remove")}
+                title={t("page.tools.liquid_emitter.remove")}
+                onClick={() => onRemove(emitter)}
+              >
+                <Trash2Icon />
+              </Button>
+            </li>
+          );
+        })}
+        {adding ? (
+          <li className="rounded-md bg-muted px-2 py-1.5 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{t("page.tools.liquid_emitter.selection.adding")}</span>
+              <FormBadge forms={forms} form={editing?.form} />
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {editing
+                ? `${editing.label} · ${t("page.tools.liquid_emitter.selection.triangle", { index: editing.faceIndex })}`
+                : t("page.tools.liquid_emitter.selection.empty")}
+            </span>
+          </li>
+        ) : null}
+      </ul>
+      {children}
     </InspectorSection>
   );
 }

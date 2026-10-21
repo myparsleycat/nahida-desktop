@@ -164,6 +164,8 @@ type Inspection struct {
 	Renumbered []PIDChange `json:"renumbered"`
 	// Applied is the slot of the emitter Apply hooked or SetLook changed.
 	Applied *int `json:"applied"`
+	// DefaultLook is the look an emitter added without one starts from.
+	DefaultLook Look `json:"defaultLook"`
 }
 
 type PIDChange struct {
@@ -190,6 +192,8 @@ type ApplyInput struct {
 	// PID names the mod's emitter to move to the picked face, which keeps its
 	// slot and look; nil adds an emitter.
 	PID *int `json:"pid"`
+	// Look, when set, replaces the look the emitter keeps or starts from.
+	Look *Look `json:"look"`
 }
 
 type LookInput struct {

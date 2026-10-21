@@ -134,6 +134,7 @@ func (s *Service) applyAsNewMod(
 	triangle anchorTriangle,
 	anchor EmitterAnchor,
 	emitterPID *int,
+	look *Look,
 ) (Inspection, error) {
 	if s.mod == nil {
 		return Inspection{}, errors.New("mod service is unavailable")
@@ -179,7 +180,7 @@ func (s *Service) applyAsNewMod(
 		}
 		source.INIPath = filepath.Join(target, rel)
 		sc.root, sc.origin = target, origin
-		if err := s.apply(sc, rt.root, source, triangle, anchor, emitterPID); err != nil {
+		if err := s.apply(sc, rt.root, source, triangle, anchor, emitterPID, look); err != nil {
 			return Inspection{}, err
 		}
 		return s.inspection(sc, rt)

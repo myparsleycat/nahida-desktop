@@ -750,6 +750,42 @@ func TestServiceLookExtendsGPURecords(t *testing.T) {
 	}
 }
 
+// The renderer saves an anchor and its look with one Apply, so a look given
+// there must reach a new emitter and replace the one a moved emitter keeps.
+func TestServiceApplyStoresGivenLook(t *testing.T) {
+	f := newServiceFixture(t)
+	ctx := context.Background()
+	look := Look{Force: 2, Amount: 0.5, AbsorptionMM: 30, Viscosity: 4, Nozzle: NozzleJet}
+
+	invalid := f.applyInput(0)
+	invalid.Look = &Look{Force: 3, Amount: 1, AbsorptionMM: 30, Viscosity: 1}
+	if _, err := f.service.Apply(ctx, invalid); !hasCode(err, ErrorInvalidLook) {
+		t.Fatalf("apply with an out of range look = %v", err)
+	}
+
+	added := f.applyInput(0)
+	added.Look = &look
+	inspection, err := f.service.Apply(ctx, added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inspection.Emitters) != 1 || inspection.Emitters[0].Look != look {
+		t.Fatalf("emitters after adding with a look = %+v", inspection.Emitters)
+	}
+
+	pid := inspection.Emitters[0].PID
+	moved := f.applyInput(1)
+	moved.PID = &pid
+	look.Nozzle, look.Viscosity = NozzleOoze, 0.5
+	moved.Look = &look
+	if inspection, err = f.service.Apply(ctx, moved); err != nil {
+		t.Fatal(err)
+	}
+	if len(inspection.Emitters) != 1 || inspection.Emitters[0].Look != look {
+		t.Fatalf("emitters after moving with a look = %+v", inspection.Emitters)
+	}
+}
+
 // Changing the original must not release or reuse a slot an unsplit copy
 // still hooks; the copy is split off first and keeps its emitter.
 func TestServiceOriginalChangeSplitsCopies(t *testing.T) {

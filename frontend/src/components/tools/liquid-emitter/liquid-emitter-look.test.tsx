@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { Emitter, Look } from "@bindings/tools/liquid_emitter";
+import type { Look } from "@bindings/tools/liquid_emitter";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -22,25 +22,14 @@ const saved: Look = {
   roughness: 0,
 };
 
-function renderLook(look: Look, draft: Look | null = null) {
+function renderLook(look: Look) {
   const onDraftChange = vi.fn<(look: Look | null) => void>();
-  const onSave = vi.fn<(look: Look) => Promise<boolean>>().mockResolvedValue(true);
-  const emitter = { pid: 3, look } as Emitter;
-  render(
-    <LookSection
-      emitter={emitter}
-      draft={draft}
-      onDraftChange={onDraftChange}
-      busy={false}
-      editable
-      onSave={onSave}
-    />,
-  );
+  render(<LookSection saved={look} draft={null} onDraftChange={onDraftChange} locked={false} />);
   // The section remembers being opened for the rest of the run.
-  if (!screen.queryByText("page.tools.liquid_emitter.look.save")) {
+  if (!screen.queryByText("page.tools.liquid_emitter.look.reset")) {
     fireEvent.click(screen.getByText("page.tools.liquid_emitter.look.title"));
   }
-  return { onDraftChange, onSave };
+  return { onDraftChange };
 }
 
 describe("liquid look material", () => {
@@ -59,17 +48,6 @@ describe("liquid look material", () => {
       const button = screen.getByText(`page.tools.liquid_emitter.look.material.preset.${preset}`);
       expect(button.closest("button")?.getAttribute("aria-pressed")).toBe("false");
     }
-  });
-
-  it("saves the material with the rest of the look and drops the draft", async () => {
-    const draft = { ...saved, scattering: 0.35, roughness: 0.2 };
-    const { onDraftChange, onSave } = renderLook(saved, draft);
-    await act(async () => {
-      fireEvent.click(screen.getByText("page.tools.liquid_emitter.look.save"));
-    });
-
-    expect(onSave).toHaveBeenCalledWith(draft);
-    expect(onDraftChange).toHaveBeenLastCalledWith(null);
   });
 
   it("resets the material with the rest of the look", () => {

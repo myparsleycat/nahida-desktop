@@ -1749,7 +1749,11 @@
         "removed": "Emitter removed. Press F10 in game to reload mods.",
         "apply": "Apply to game",
         "remove": "Remove emitter",
-        "f10_hint": "Only the selected part's draw call is hooked. Press F10 in game after applying.",
+        "unsaved": {
+          "title": "You have unapplied changes",
+          "description": "Changes to the emitter and its liquid that were not applied to the game will be lost. Close anyway?",
+          "confirm": "Discard and close"
+        },
         "created": "Created a new mod and disabled the original. Press F10 in game to reload mods.",
         "restored": "Deleted the generated mod and enabled the original again.",
         "mode": {
@@ -1772,7 +1776,6 @@
           "installed": "Emitter runtime is ready.",
           "state": {
             "missing": "Not installed",
-            "current": "Installed",
             "outdated": "Update available",
             "modified": "Files changed",
             "disabled": "Disabled",
@@ -1784,15 +1787,12 @@
             "modified": "Repair",
             "disabled": "Enable"
           },
-          "foreign_title": "Another LiquidGravityProbe is installed",
           "foreign_description": "Disable or remove the copy at {{path}} first. Two copies of the runtime conflict in game.",
           "required": {
             "missing": {
-              "title": "The emitter runtime is not installed",
               "description": "Install the runtime to place and apply emitters."
             },
             "disabled": {
-              "title": "The emitter runtime is disabled",
               "description": "Enable the runtime to place and apply emitters."
             }
           }
@@ -1802,12 +1802,10 @@
           "missed": "No surface there. Show the part alone or turn the model."
         },
         "selection": {
-          "title": "Emitter point",
           "empty": "Click the model surface to place the emitter.",
           "triangle": "Triangle {{index}} · follows the surface",
           "hidden": "This part is not drawn in the current view. If you changed a toggle, pick the visible surface again.",
           "new": "New emitter",
-          "editing": "Editing emitter #{{pid}}",
           "adding": "New emitter",
           "limit": "A mod can have up to {{max}} emitters. Remove one to add another."
         },
@@ -1820,7 +1818,7 @@
           "hint": "Source mesh coordinates in metres ({{axis}} is up)"
         },
         "offset": {
-          "title": "Move from surface (mm)",
+          "title": "Offset (mm)",
           "reset": "Back to the surface point"
         },
         "direction": {
@@ -1843,16 +1841,15 @@
         },
         "emitters": {
           "title": "Applied emitters ({{count}}/{{max}})",
-          "empty": "No emitter has been applied to this mod yet.",
           "unhooked": "Hook missing",
+          "unsaved": "Not applied",
           "missing_mesh": "This part is no longer in the model.",
           "look_runtime": "runtime liquid",
           "look_custom": "own liquid"
         },
         "look": {
           "title": "This emitter's liquid",
-          "hint": "Applies to the selected emitter on top of the runtime settings. Press F10 in game after saving.",
-          "needs_emitter": "Select an applied emitter to give it its own liquid.",
+          "hint": "Applies to the selected emitter on top of the runtime settings. Saved with the emitter when you apply it to the game.",
           "force": "Spray force",
           "amount": "Liquid amount",
           "viscosity": "Viscosity",
@@ -1902,8 +1899,6 @@
             "roughness_hint": "How soft its reflections and highlights are — higher spreads them wider and dimmer"
           },
           "reset": "Follow runtime settings",
-          "save": "Save liquid",
-          "saved": "Saved this emitter's liquid. Press F10 in game to reload mods.",
           "summary": {
             "runtime": "Runtime settings",
             "custom": "Custom",

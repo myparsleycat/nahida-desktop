@@ -122,6 +122,12 @@ func (s *Service) InstallRuntime(ctx context.Context, modPath string) (Inspectio
 
 func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, error) {
 	return s.run(ctx, "apply", input.ModPath, func(sc *scope) (Inspection, error) {
+		if input.Look != nil {
+			if err := checkLook(input.Look); err != nil {
+				return Inspection{}, err
+			}
+			sc.fields["look"] = *input.Look
+		}
 		sc.stage = stageGeometry
 		sc.fields["meshId"], sc.fields["faceIndex"] = input.MeshID, input.FaceIndex
 		if input.PID != nil {
@@ -136,12 +142,12 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 		switch input.Mode {
 		case "", ApplyInPlace:
 		case ApplyNewMod:
-			return s.applyAsNewMod(ctx, sc, source, triangle, anchor, input.PID)
+			return s.applyAsNewMod(ctx, sc, source, triangle, anchor, input.PID, input.Look)
 		default:
 			return Inspection{}, infra.ContractError(ErrorInvalidMode + ":" + input.Mode)
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
-			if err := s.apply(sc, rt.root, source, triangle, anchor, input.PID); err != nil {
+			if err := s.apply(sc, rt.root, source, triangle, anchor, input.PID, input.Look); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -163,11 +169,8 @@ func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, er
 // SetLook stores the liquid look of one of the mod's emitters.
 func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, error) {
 	return s.run(ctx, "set-look", input.ModPath, func(sc *scope) (Inspection, error) {
-		if input.Look.Nozzle == "" {
-			input.Look.Nozzle = NozzleSpray
-		}
-		if !validLook(input.Look) {
-			return Inspection{}, infra.ContractError(ErrorInvalidLook)
+		if err := checkLook(&input.Look); err != nil {
+			return Inspection{}, err
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
 			if err := s.setLook(sc, rt.root, input.PID, input.Look); err != nil {
@@ -176,6 +179,17 @@ func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, err
 			return s.inspection(sc, rt)
 		})
 	})
+}
+
+// checkLook fills in the nozzle a caller from before nozzles left empty.
+func checkLook(look *Look) error {
+	if look.Nozzle == "" {
+		look.Nozzle = NozzleSpray
+	}
+	if !validLook(*look) {
+		return infra.ContractError(ErrorInvalidLook)
+	}
+	return nil
 }
 
 func (s *Service) run(
@@ -297,14 +311,15 @@ func (s *Service) withRuntime(
 func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	sc.stage = stageLoad
 	inspection := Inspection{
-		ModPath:    sc.root,
-		Importer:   sc.importer,
-		Runtime:    rt.status,
-		Emitters:   []Emitter{},
-		MeshUnit:   sc.game.meshUnit,
-		MeshDown:   sc.game.meshDown,
-		Renumbered: []PIDChange{},
-		Applied:    sc.applied,
+		ModPath:     sc.root,
+		Importer:    sc.importer,
+		Runtime:     rt.status,
+		Emitters:    []Emitter{},
+		MeshUnit:    sc.game.meshUnit,
+		MeshDown:    sc.game.meshDown,
+		Renumbered:  []PIDChange{},
+		Applied:     sc.applied,
+		DefaultLook: defaultLook(),
 	}
 	for _, from := range slices.Sorted(maps.Keys(sc.renumbered)) {
 		inspection.Renumbered = append(inspection.Renumbered, PIDChange{From: from, To: sc.renumbered[from]})
@@ -368,9 +383,9 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 }
 
 // apply hooks the picked face. With target, the mod's emitter of that slot
-// moves there and keeps its look, leaving whatever INI held it before;
-// otherwise an emitter is added. The mod's other emitters keep their hooks,
-// including those stacked on the same draw.
+// moves there and keeps its look unless look is given, leaving whatever INI
+// held it before; otherwise an emitter is added. The mod's other emitters
+// keep their hooks, including those stacked on the same draw.
 func (s *Service) apply(
 	sc *scope,
 	runtimeRoot string,
@@ -378,6 +393,7 @@ func (s *Service) apply(
 	triangle anchorTriangle,
 	anchor EmitterAnchor,
 	target *int,
+	look *Look,
 ) error {
 	sc.stage = stageLoad
 	layout := runtimeLayout{root: runtimeRoot}
@@ -408,13 +424,14 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
-	var look *Look
 	if target != nil {
 		at := slices.IndexFunc(doc.Emitters, func(emitter profileEmitter) bool { return emitter.PID == *target })
 		if at < 0 {
 			return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterNotFound, *target))
 		}
-		look = doc.Emitters[at].Look
+		if look == nil {
+			look = doc.Emitters[at].Look
+		}
 	} else if len(doc.Emitters) >= maxEmitters {
 		return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterLimit, maxEmitters))
 	}

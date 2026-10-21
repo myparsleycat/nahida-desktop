@@ -1,4 +1,4 @@
-import type { Emitter, Look } from "@bindings/tools/liquid_emitter";
+import type { Look } from "@bindings/tools/liquid_emitter";
 import { InspectorSection } from "@renderer/components/tools/inspector-section";
 import { RangeField } from "@renderer/components/tools/range-field";
 import { Button } from "@renderer/components/ui/button";
@@ -39,39 +39,20 @@ type MaterialPreset = keyof typeof MATERIAL_PRESETS;
 const PRESETS = Object.keys(MATERIAL_PRESETS) as MaterialPreset[];
 
 export function LookSection({
-  emitter,
+  saved,
   draft,
   onDraftChange,
-  busy,
-  editable,
-  onSave,
+  locked,
 }: {
-  emitter: Emitter | undefined;
+  /** The emitter's stored look, or the one a new emitter starts from. */
+  saved: Look;
   draft: Look | null;
   onDraftChange: (look: Look | null) => void;
-  busy: boolean;
-  editable: boolean;
-  onSave: (look: Look) => Promise<boolean>;
+  locked: boolean;
 }) {
   const { t } = useTranslation();
-  if (!emitter) {
-    return (
-      <InspectorSection
-        id="liquid-emitter:look"
-        title={t("page.tools.liquid_emitter.look.title")}
-        className="px-4 py-3"
-        panelClassName="pt-3"
-      >
-        <p className="text-xs text-muted-foreground">
-          {t("page.tools.liquid_emitter.look.needs_emitter")}
-        </p>
-      </InspectorSection>
-    );
-  }
-
-  const look = draft ?? emitter.look;
-  const locked = !editable || busy;
-  const dirty = draft !== null && !isEqual(draft, emitter.look);
+  const look = draft ?? saved;
+  const dirty = lookChanged(draft, saved);
   const update = (change: Partial<Look>) => onDraftChange({ ...look, ...change });
   const runtimeLook = followsRuntime(look);
   const nozzle = nozzleOf(look);
@@ -264,38 +245,30 @@ export function LookSection({
           {t("page.tools.liquid_emitter.look.material.roughness_hint")}
         </p>
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1"
-          disabled={locked || runtimeLook}
-          onClick={() =>
-            update({
-              force: DEFAULT_SCALE,
-              amount: DEFAULT_SCALE,
-              customColor: false,
-              viscosity: DEFAULT_VISCOSITY,
-              nozzle: DEFAULT_NOZZLE,
-              ...MATERIAL_PRESETS.clear,
-            })
-          }
-        >
-          {t("page.tools.liquid_emitter.look.reset")}
-        </Button>
-        <Button
-          size="sm"
-          className="flex-1"
-          disabled={locked || !dirty}
-          onClickPromise={async () => {
-            if (await onSave(look)) onDraftChange(null);
-          }}
-        >
-          {t("page.tools.liquid_emitter.look.save")}
-        </Button>
-      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full"
+        disabled={locked || runtimeLook}
+        onClick={() =>
+          update({
+            force: DEFAULT_SCALE,
+            amount: DEFAULT_SCALE,
+            customColor: false,
+            viscosity: DEFAULT_VISCOSITY,
+            nozzle: DEFAULT_NOZZLE,
+            ...MATERIAL_PRESETS.clear,
+          })
+        }
+      >
+        {t("page.tools.liquid_emitter.look.reset")}
+      </Button>
     </InspectorSection>
   );
+}
+
+export function lookChanged(draft: Look | null, saved: Look | undefined) {
+  return draft !== null && !isEqual(draft, saved);
 }
 
 // The unsaved look of the emitter key names, one emitter of one mod. Any
