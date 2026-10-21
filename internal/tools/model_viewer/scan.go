@@ -690,9 +690,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	attachIbComponentDumpTextures(output, resources)
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
-	if isModelViewerEFMI(sections) {
-		attachSlotBoundDiffuse(output, modDir)
-	}
+	attachSlotBoundDiffuse(output, modDir, isModelViewerEFMI(sections))
 	if timing != nil {
 		timing.AttachMs += time.Since(stageStartedAt).Milliseconds()
 	}
