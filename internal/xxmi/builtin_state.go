@@ -135,11 +135,19 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
-	keys := make([]string, 0, len(importers))
-	for _, importer := range importers {
-		keys = append(keys, importer.Key)
+	configs := make(map[string]ImporterConfig, len(rows))
+	for _, row := range rows {
+		cfg, err := storedImporterConfig(row)
+		if err != nil {
+			return Overview{}, err
+		}
+		configs[row.Key] = cfg
 	}
-	running, err := x.runningImporters(ctx, keys)
+	watched := make(map[string][]string, len(importers))
+	for _, importer := range importers {
+		watched[importer.Key] = configs[importer.Key].gameProcessNames(importer.Key)
+	}
+	running, err := x.runningImporters(ctx, watched)
 	if err != nil {
 		return Overview{}, err
 	}

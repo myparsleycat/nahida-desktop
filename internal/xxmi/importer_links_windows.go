@@ -43,7 +43,7 @@ func (x *XXMI) FlattenImporterLinks(ctx context.Context) error {
 	// An importer that cannot be read is reported and skipped, so it does not hold back the others' repair.
 	var links []chainedFolderLink
 	var errs []error
-	keys := []string{}
+	watched := map[string][]string{}
 	for _, row := range rows {
 		var cfg ImporterConfig
 		if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
@@ -74,14 +74,14 @@ func (x *XXMI) FlattenImporterLinks(ctx context.Context) error {
 			}
 		}
 		if found {
-			keys = append(keys, row.Key)
+			watched[row.Key] = cfg.gameProcessNames(row.Key)
 		}
 	}
 	if len(links) == 0 {
 		return errors.Join(errs...)
 	}
 
-	running, err := x.runningImporters(ctx, keys)
+	running, err := x.runningImporters(ctx, watched)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}

@@ -5,6 +5,7 @@ package platform
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -39,5 +40,25 @@ func TestPreviousPIDsReturnsRecentUniqueProcesses(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("PreviousPIDs = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestPreviousPIDsKeepsProcessesAcrossRepeatedSwitches(t *testing.T) {
+	t.Parallel()
+	n := &Native{}
+	n.focus.push(1)
+	for range 100 {
+		n.focus.push(2)
+		n.focus.push(3)
+	}
+	if got := n.PreviousPIDs(3); !slices.Equal(got, []uint32{2, 1}) {
+		t.Fatalf("PreviousPIDs after switching = %v, want [2 1]", got)
+	}
+
+	for pid := range uint32(focusHistoryLimit) {
+		n.focus.push(100 + pid)
+	}
+	if got := n.PreviousPIDs(0); len(got) != focusHistoryLimit || slices.Contains(got, 1) {
+		t.Fatalf("PreviousPIDs kept %d processes including the oldest: %v", len(got), got)
 	}
 }

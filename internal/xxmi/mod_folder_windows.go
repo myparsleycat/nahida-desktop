@@ -85,7 +85,7 @@ func (x *XXMI) SetImporterModFolder(
 	}
 
 	stage = "check-running"
-	running, err := x.runningImporters(ctx, []string{spec.key})
+	running, err := x.runningImporters(ctx, map[string][]string{spec.key: cfg.gameProcessNames(spec.key)})
 	if err != nil {
 		return folder, err
 	}

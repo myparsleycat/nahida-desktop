@@ -32,12 +32,12 @@ func TestRunningImportersUsesOneSnapshotAndPreservesLaunchingState(t *testing.T)
 		t.Fatal("could not acquire importer")
 	}
 	want := map[string]bool{"GIMI": true, "WWMI": true, "srmi": true, "ZZMI": false}
-	running, err := service.runningImporters(t.Context(), []string{"GIMI", "WWMI", "srmi", "ZZMI"})
+	running, err := service.runningImporters(t.Context(), packageImporters("GIMI", "WWMI", "srmi", "ZZMI"))
 	if err != nil || !maps.Equal(running, want) || calls != 1 {
 		t.Fatalf("running = %v, calls = %d, err = %v", running, calls, err)
 	}
 	service.setLaunching("SRMI", false)
-	running, err = service.runningImporters(t.Context(), []string{"SRMI"})
+	running, err = service.runningImporters(t.Context(), packageImporters("SRMI"))
 	if err != nil || running["SRMI"] {
 		t.Fatalf("finished launch = %v, err = %v", running, err)
 	}
@@ -56,7 +56,7 @@ func TestRunningImportersSkipsSnapshotWhileAllImportersAreLaunching(t *testing.T
 		return nil, errors.New("snapshot unavailable")
 	}
 	service.setLaunching("GIMI", true)
-	running, err := service.runningImporters(t.Context(), []string{"GIMI"})
+	running, err := service.runningImporters(t.Context(), packageImporters("GIMI"))
 	if err != nil || !running["GIMI"] {
 		t.Fatalf("launching importer = %v, err = %v", running, err)
 	}
@@ -93,6 +93,28 @@ func TestBuiltinRunningStateSkipsExternalAndDisabledImporters(t *testing.T) {
 	running, err = service.builtinRunningState(t.Context())
 	if err != nil || len(running) != 0 || calls != 1 {
 		t.Fatalf("disabled state = %v, calls = %d, err = %v", running, calls, err)
+	}
+}
+
+func TestBuiltinRunningStateWatchesEveryProcessALaunchCanPick(t *testing.T) {
+	t.Parallel()
+	service := newRunningStateTestService(t)
+	useBuiltinLauncher(t, service)
+	// A store launch finds the game folder only when it starts, and then ignores the process override.
+	if err := service.client.XXMIImporters.Upsert(
+		t.Context(), "EFMI", `{"enabled":true,"gameLaunch":"Epic","gameProcessExe":"Renamed.exe"}`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	for process, want := range map[string]bool{"renamed.exe": true, "endfield.exe": true, "unrelated.exe": false} {
+		service.processSnapshot = func(context.Context) (map[string]bool, error) {
+			return map[string]bool{process: true}, nil
+		}
+		running, err := service.builtinRunningState(t.Context())
+		if err != nil || running["EFMI"] != want {
+			t.Fatalf("%s running = %v, err = %v, want EFMI %t", process, running, err, want)
+		}
 	}
 }
 
@@ -201,7 +223,7 @@ func TestWatchRunningWakesForLaunchesWithoutReportingAnActiveGameAsStopped(t *te
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		go service.watchRunning(ctx, func(ctx context.Context) (map[string]bool, error) {
-			return service.runningImporters(ctx, []string{"GIMI"})
+			return service.runningImporters(ctx, packageImporters("GIMI"))
 		})
 		synctest.Wait()
 
@@ -303,6 +325,15 @@ func TestRunningWatchLifecycleIsIdempotentAndJoinsBeforeShutdown(t *testing.T) {
 	default:
 		t.Fatal("shutdown returned before watcher exited")
 	}
+}
+
+func packageImporters(keys ...string) map[string][]string {
+	importers := make(map[string][]string, len(keys))
+	for _, key := range keys {
+		spec, _ := lookupImporterPackage(key)
+		importers[key] = packageProcessNames(spec)
+	}
+	return importers
 }
 
 func newRunningStateTestService(t *testing.T) *XXMI {

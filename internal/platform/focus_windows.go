@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/samber/lo"
 	"golang.org/x/sys/windows"
 )
 
@@ -50,30 +49,32 @@ func (n *Native) StartFocusTracking() {
 	}()
 }
 
+// focusHistoryLimit bounds the distinct processes remembered. Switching back and forth between the same
+// windows does not use it up, so a process leaves only after this many others were focused since.
+const focusHistoryLimit = 64
+
 func (t *focusTracker) push(pid uint32) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if len(t.history) > 0 && t.history[len(t.history)-1] == pid {
 		return
 	}
-	t.history = append(t.history, pid)
-	if len(t.history) > 30 {
-		t.history = t.history[len(t.history)-30:]
+	t.history = append(slices.DeleteFunc(t.history, func(seen uint32) bool { return seen == pid }), pid)
+	if len(t.history) > focusHistoryLimit {
+		t.history = slices.Delete(t.history, 0, len(t.history)-focusHistoryLimit)
 	}
 }
 
+// PreviousPIDs returns the processes focused before, most recent first, excluding currentPID.
 func (n *Native) PreviousPIDs(currentPID uint32) []uint32 {
 	if n == nil {
 		return nil
 	}
 	n.focus.mu.Lock()
 	defer n.focus.mu.Unlock()
-	reversed := slices.Clone(n.focus.history)
-	slices.Reverse(reversed)
-
-	return lo.Take(lo.Uniq(lo.Filter(reversed, func(pid uint32, _ int) bool {
-		return pid != currentPID
-	})), 5)
+	previous := slices.DeleteFunc(slices.Clone(n.focus.history), func(pid uint32) bool { return pid == currentPID })
+	slices.Reverse(previous)
+	return previous
 }
 
 func (n *Native) ProcessName(pid uint32) string {

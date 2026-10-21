@@ -120,7 +120,7 @@ func (x *XXMI) CollectDiagnostics(
 
 	// The game holds its log open and writes to it until it exits.
 	stage = "check-running"
-	running, err := x.runningImporters(ctx, []string{key})
+	running, err := x.runningImporters(ctx, map[string][]string{key: cfg.gameProcessNames(key)})
 	if err != nil {
 		return bundle, err
 	}

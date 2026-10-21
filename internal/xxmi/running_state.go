@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -138,22 +139,100 @@ func (x *XXMI) builtinRunningState(ctx context.Context) (map[string]bool, error)
 	if err != nil {
 		return nil, fmt.Errorf("list watched importers: %w", err)
 	}
-	keys := make([]string, 0, len(rows))
+	importers := make(map[string][]string, len(rows))
 	for _, row := range rows {
-		var cfg struct {
-			Enabled bool `json:"enabled"`
-		}
-		if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
-			return nil, fmt.Errorf("read watched importer %s: %w", row.Key, err)
+		cfg, err := storedImporterConfig(row)
+		if err != nil {
+			return nil, err
 		}
 		if cfg.Enabled {
-			keys = append(keys, row.Key)
+			importers[row.Key] = cfg.gameProcessNames(row.Key)
 		}
 	}
-	return x.runningImporters(ctx, keys)
+	return x.runningImporters(ctx, importers)
 }
 
-func (x *XXMI) runningImporters(ctx context.Context, keys []string) (map[string]bool, error) {
+// gameProcessNames maps each importer to the image names its game runs under, following the settings of the
+// selected launcher. An importer without settings matches every executable its package knows about.
+func (x *XXMI) gameProcessNames(ctx context.Context) (map[string][]string, error) {
+	importers := make(map[string][]string, len(importerPackages))
+	for key, spec := range importerPackages {
+		importers[key] = packageProcessNames(spec)
+	}
+	client, err := x.settingsClient()
+	if err != nil {
+		return nil, err
+	}
+	mode, err := launcherMode(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("read launcher mode: %w", err)
+	}
+
+	if mode == LauncherExternal {
+		launcher, err := x.loadExternalLauncher(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if launcher == nil {
+			return importers, nil
+		}
+		for key, importer := range launcher.parsed.Importers {
+			if names := importer.Importer.processNames(); len(names) > 0 {
+				importers[key] = names
+			}
+		}
+		return importers, nil
+	}
+
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list importers: %w", err)
+	}
+	for _, row := range rows {
+		cfg, err := storedImporterConfig(row)
+		if err != nil {
+			return nil, err
+		}
+		if names := cfg.gameProcessNames(row.Key); len(names) > 0 {
+			importers[row.Key] = names
+		}
+	}
+	return importers, nil
+}
+
+// storedImporterConfig reads the fields of a stored importer row that game detection needs. Schema upgrades in
+// decodeImporterConfig leave them unchanged, so the row does not need the importer defaults.
+func storedImporterConfig(row db.XXMIImporterRow) (ImporterConfig, error) {
+	var cfg ImporterConfig
+	if err := json.Unmarshal([]byte(row.Config), &cfg); err != nil {
+		return ImporterConfig{}, fmt.Errorf("read importer %s: %w", row.Key, err)
+	}
+	return cfg, nil
+}
+
+// gameProcessNames lists every image name launchProcessName can pick: the process override and the
+// executables of the importer package. The pick depends on the game folder a launch resolves, which a store
+// client may supply at launch time, so detection watches all of them instead of guessing the folder.
+func (cfg ImporterConfig) gameProcessNames(key string) []string {
+	spec, ok := lookupImporterPackage(key)
+	if !ok {
+		return nil
+	}
+	names := packageProcessNames(spec)
+	override := strings.TrimSpace(cfg.GameProcessExe)
+	if override != "" &&
+		!slices.ContainsFunc(names, func(name string) bool { return strings.EqualFold(name, override) }) {
+		names = append(names, override)
+	}
+	return names
+}
+
+func packageProcessNames(spec importerPackageSpec) []string {
+	return slices.Concat(spec.processNames, spec.gameExeNames)
+}
+
+func (x *XXMI) runningImporters(ctx context.Context, importers map[string][]string) (map[string]bool, error) {
+	keys := slices.Collect(maps.Keys(importers))
 	running := make(map[string]bool, len(keys))
 	if len(keys) == 0 {
 		return running, nil
@@ -170,13 +249,11 @@ func (x *XXMI) runningImporters(ctx context.Context, keys []string) (map[string]
 
 	// Read the launches again: one may have started while the snapshot was taken.
 	x.markLaunching(running, keys)
-	for _, key := range keys {
+	for key, names := range importers {
 		if running[key] {
 			continue
 		}
-		spec, _ := lookupImporterPackage(key)
-		running[key] = slices.ContainsFunc(slices.Concat(spec.gameExeNames, spec.processNames),
-			func(name string) bool { return processes[strings.ToLower(name)] })
+		running[key] = slices.ContainsFunc(names, func(name string) bool { return processes[strings.ToLower(name)] })
 	}
 	return running, nil
 }

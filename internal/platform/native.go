@@ -3,7 +3,8 @@ package platform
 import "sync"
 
 type focusTracker struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// history holds each focused process once, ordered from least to most recently focused.
 	history []uint32
 	started bool
 }

@@ -66,15 +66,18 @@ type Options struct {
 	Archive  *infra.Archive
 	HTTP     *infra.Client
 	// Download is the shared file downloader; nil downloads through HTTP directly.
-	Download   *infra.Download
-	XXMI       ImporterSource
-	Log        *infra.Log
-	Dialog     *platform.Dialog
-	EventEmit  func(string, ...any)
-	Transfer   *transfer.Transfer
-	GameBanana *gamebanana.GameBanana
-	Native     *platform.Native
-	Focus      func()
+	Download *infra.Download
+	XXMI     ImporterSource
+	// GameProcesses finds the running game of each importer, adding extra image names per importer;
+	// nil reports no running game.
+	GameProcesses func(ctx context.Context, extra map[string][]string) (map[uint32]string, error)
+	Log           *infra.Log
+	Dialog        *platform.Dialog
+	EventEmit     func(string, ...any)
+	Transfer      *transfer.Transfer
+	GameBanana    *gamebanana.GameBanana
+	Native        *platform.Native
+	Focus         func()
 	// Elevated changes files in a game folder this process cannot write to; nil fails those writes.
 	Elevated elevated.FileGateway
 }
@@ -88,6 +91,7 @@ type Mod struct {
 	http           *infra.Client
 	download       *infra.Download
 	xxmi           ImporterSource
+	gameProcesses  func(context.Context, map[string][]string) (map[uint32]string, error)
 	log            *infra.Log
 	pathDiagnostic infra.DiagnosticThrottle
 	// importerSyncDiagnostic keeps a failing importer folder lookup from logging on every game listing.
@@ -135,6 +139,7 @@ func NewWithOptions(opts Options) *Mod {
 		xxmi:     opts.XXMI, log: opts.Log, dialog: opts.Dialog, emit: opts.EventEmit,
 		transfer: opts.Transfer, gamebanana: opts.GameBanana, native: opts.Native, elevated: opts.Elevated,
 		shaders: newShaderFixes(), extractPrompts: map[string]chan string{},
+		gameProcesses:     opts.GameProcesses,
 		downloader:        infra.NewParallelDownloader(),
 		nteSigBypasserURL: defaultNteSigBypasserURL,
 		nteASILoaderURL:   defaultNteASILoaderURL,
