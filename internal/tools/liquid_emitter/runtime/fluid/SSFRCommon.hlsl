@@ -8,9 +8,6 @@ Texture1D<float4> IniParams:register(t120);
 #include "../camera/Camera.hlsl"
 Texture2D<float> sceneDepth:register(t106);
 struct FluidParticle{float4 positionAge;float4 velocityAlive;float4 predictedLambda;float4 densityBirth;};
-// Render radius: particle spacing is about FLUID_RADIUS, so overlapping
-// spheres merge into one surface once the depth is smoothed.
-static const float SURFACE_RADIUS=FLUID_RADIUS*1.6;
 // Depth of a pixel no particle covered. Written by the frame clear.
 static const float NO_FLUID=1e30;
 float4 project(float3 p){return p.x*camera[16]+p.y*camera[17]+p.z*camera[18]+camera[19];}
@@ -18,12 +15,13 @@ float2 screenUV(float4 p){return float2(p.x/p.w*.5+.5,.5-p.y/p.w*.5);}
 float3 eyePosition(){return camera[7].xyz;}
 bool noFluid(float depth){return depth>=NO_FLUID*.5;}
 // FluidSurface keeps the nearest particle's tag in the low mantissa bits of
-// its view depth: bits 0-2 the owner slot, 3 a floor puddle disc, 4 spray.
-// Positive floats order like their bits, so min blending still keeps the
-// nearest particle, now with its tag; the bits move the depth by under 4e-6
+// its view depth: bits 0-2 the owner slot, 3 a floor puddle disc, 4 spray,
+// 5 a film of drops clinging to the body. Positive floats order like their
+// bits, so min blending still keeps the nearest particle, now with its tag;
+// the six bits move the depth by at most 63 ulp, under 7.6e-6 (below 1e-5)
 // of itself. A pass that writes a filtered depth must tag it again.
-static const uint DEPTH_TAG_MASK=31;
-static const uint TAG_SLOT_MASK=7,TAG_PUDDLE=8,TAG_SPRAY=16;
+static const uint DEPTH_TAG_MASK=63;
+static const uint TAG_SLOT_MASK=7,TAG_PUDDLE=8,TAG_SPRAY=16,TAG_FILM=32;
 float encodeFluidDepth(float depth,uint tag){return asfloat((asuint(depth)&~DEPTH_TAG_MASK)|tag);}
 float fluidDepthValue(float raw){return asfloat(asuint(raw)&~DEPTH_TAG_MASK);}
 uint fluidDepthTag(float raw){return asuint(raw)&DEPTH_TAG_MASK;}
@@ -31,6 +29,51 @@ uint fluidDepthTag(float raw){return asuint(raw)&DEPTH_TAG_MASK;}
 // liquid joins only the liquid of its own character.
 bool sameFluidBody(uint a,uint b){return (a&b&TAG_PUDDLE)!=0||((a^b)&TAG_SLOT_MASK)==0;}
 float4 screenTriangle(uint id){return float4(id==1?3:-1,id==2?3:-1,0,1);}
+// Clip w at and below which the fluid passes draw nothing: their near plane.
+static const float NEAR_W=.05;
+// Ray distance from the eye along a unit direction to the near plane; 1e30
+// for a ray that never reaches it.
+float nearDistance(float3 direction){
+ float rate=dot(direction,float3(camera[16].w,camera[17].w,camera[18].w));
+ return rate>1e-8?max((NEAR_W-project(eyePosition()).w)/rate,0):1e30;
+}
+// The screen rectangle, in normalized device coordinates, that a sphere
+// covers: the box around the projected corners of the cube around it, or the
+// whole screen once the cube reaches the near plane, where those corners no
+// longer bound it. False when the sphere lies wholly behind the near plane
+// or off the screen. Its size culls nothing: a drop at the lens still draws.
+bool screenRect(float3 center,float bound,out float4 rect){
+ rect=float4(1e30,1e30,-1e30,-1e30);
+ bool crossing=false;float farthest=-1e30;
+ [unroll]for(uint k=0;k<8;k++){
+  float3 corner=center+bound*float3((k&1)!=0?1:-1,(k&2)!=0?1:-1,(k&4)!=0?1:-1);
+  float4 c=project(corner);
+  farthest=max(farthest,c.w);
+  if(c.w<=NEAR_W){crossing=true;continue;}
+  rect.xy=min(rect.xy,c.xy/c.w);rect.zw=max(rect.zw,c.xy/c.w);
+ }
+ if(!(farthest>NEAR_W)||!all(isfinite(center))||!(bound>0))return false;
+ if(crossing)rect=float4(-1,-1,1,1);
+ rect=float4(max(rect.xy,-1),min(rect.zw,1));
+ return all(rect.xy<rect.zw);
+}
+// One of the six vertices of the two triangles that cover rect.
+float4 rectCorner(float4 rect,uint vertex){
+ const float2 corners[6]={float2(0,0),float2(1,0),float2(0,1),float2(0,1),float2(1,0),float2(1,1)};
+ return float4(lerp(rect.xy,rect.zw,corners[vertex]),0,1);
+}
+// What $liquid_debug_view (IniParams[240].x) shows instead of the liquid:
+// the state of oozing outlets, stream flows and their links, how drops hold
+// on to surfaces, or thickness and material. The particle passes then write
+// a color of their own where absorption goes, which the composite shows
+// unlit.
+static const uint DEBUG_OOZE=1,DEBUG_FLOW=2,DEBUG_CONTACT=3,DEBUG_OPTICS=4;
+uint debugView(){return (uint)IniParams[240].x;}
+bool debugColors(){uint view=debugView();return view>=DEBUG_OOZE&&view<=DEBUG_CONTACT;}
+float3 debugHue(uint key){
+ float hue=frac(float(key)*.618034);
+ return saturate(abs(frac(hue+float3(0,2.0/3,1.0/3))*6-3)-1);
+}
 // World position whose projection has clip w `depth` at screen `uv`. Solves
 // the x, y and w rows of the projection for the eye-relative offset, which
 // holds under TAA jitter and either handedness.
@@ -44,6 +87,10 @@ float3 worldAt(float2 uv,float depth){
  float det=dot(rx,cross(ry,rw));
  if(abs(det)<1e-12)return eye;
  return eye+(b.x*cross(ry,rw)+b.y*cross(rw,rx)+b.z*cross(rx,ry))/det;
+}
+// Unit ray from the eye through the screen point at normalized device xy.
+float3 pixelRay(float2 ndc){
+ return normalize(worldAt(float2(ndc.x*.5+.5,.5-ndc.y*.5),1)-eyePosition());
 }
 // Screen pixels one meter spans perpendicular to the view at `depth`.
 float pixelsPerMeter(float depth,float2 dims){

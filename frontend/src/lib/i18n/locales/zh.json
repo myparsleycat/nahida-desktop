@@ -1803,7 +1803,11 @@
           "title": "喷射点",
           "empty": "点击模型表面以放置喷射点。",
           "triangle": "三角形 {{index}} · 跟随表面",
-          "hidden": "当前视图中未绘制此部件。如果切换了开关，请重新选取可见的表面。"
+          "hidden": "当前视图中未绘制此部件。如果切换了开关，请重新选取可见的表面。",
+          "new": "新喷射点",
+          "editing": "正在编辑喷射点 #{{pid}}",
+          "adding": "新喷射点",
+          "limit": "每个模组最多可设置 {{max}} 个喷射点。要添加新的喷射点，请先移除一个。"
         },
         "history": {
           "undo": "撤销",
@@ -1824,8 +1828,8 @@
           "summary_custom": "自定义"
         },
         "trajectory": {
-          "label": "预览默认强度轨迹",
-          "hint": "默认强度下的平均路径（1/10 速度，0.48 秒） · 不模拟碰撞、移动和脉冲"
+          "label": "预览喷射轨迹",
+          "hint": "所选喷出点喷射强度下的平均路径（1/10 速度，0.48 秒） · 不模拟碰撞、移动和脉冲"
         },
         "remove_all": {
           "button": "全部移除",
@@ -1834,27 +1838,68 @@
           "confirm": "全部移除"
         },
         "emitters": {
-          "title": "已应用的喷射点 ({{count}})",
+          "title": "已应用的喷射点 ({{count}}/{{max}})",
           "empty": "此模组尚未应用喷射点。",
           "unhooked": "缺少钩子",
-          "missing_mesh": "当前模型中已没有此部件。"
+          "missing_mesh": "当前模型中已没有此部件。",
+          "look_runtime": "运行时液体",
+          "look_custom": "专用液体"
         },
         "look": {
-          "title": "该角色的液体",
-          "hint": "在运行时设置的基础上应用于此模组的所有喷射点。保存后请在游戏中按 F10。",
-          "needs_emitter": "请先应用喷射点，才能为该角色单独设置液体。",
-          "strength": "强度修正",
-          "strength_hint": "在游戏内当前强度上增加的级数 · 结果保持在 0~7",
-          "stream_width": "水流粗细",
-          "stream_width_hint": "水流粗细的倍率 · 与强度分开生效",
+          "title": "该喷射点的液体",
+          "hint": "在运行时设置的基础上应用于所选喷射点。保存后请在游戏中按 F10。",
+          "needs_emitter": "选择一个已应用的喷射点，才能为它单独设置液体。",
+          "force": "喷射强度",
+          "amount": "液体量",
+          "viscosity": "粘度",
+          "nozzle": {
+            "title": "喷嘴",
+            "spray": "普通喷射",
+            "spray_hint": "运行时默认的喷射 · 随强度呈扇形散开并分成液滴",
+            "jet": "细喷嘴",
+            "jet_hint": "细而直、射得很远的水柱 · 没有雾和扇形",
+            "ooze": "渗出",
+            "ooze_hint": "在出口聚成液滴，鼓起、拉长后断开，再顺着身体流下 · 没有空中路径预览"
+          },
+          "hints": {
+            "spray": {
+              "force": "喷射速度与扩散 · 越高喷得越快、越远、越宽",
+              "amount": "流出的液体量，水流粗细也由此决定 · 减少则变细，极少时断成液滴落下 · 增加则变粗变密 · 强度越高越早达到上限",
+              "viscosity": "液体黏稠度的倍率 · 越高越聚拢、流下越慢、越不易飞溅"
+            },
+            "jet": {
+              "force": "水柱速度 · 强度 1 时 3 m/s，最高 5 m/s",
+              "amount": "水柱粗细 · 极少时断成液滴",
+              "viscosity": "落地后附着与飞溅的程度 · 不影响空中的水柱"
+            },
+            "ooze": {
+              "force": "液滴断开前长到多大以及离开的力度 · 越高液滴越小、越容易甩落",
+              "amount": "出口积液的速度 · 越多液滴断开得越频繁",
+              "viscosity": "液滴拉长断开和流下的速度 · 越高流得越慢、拖得越长"
+            }
+          },
           "custom_color": "使用专属颜色",
           "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
           "tint": "液体颜色",
           "absorption": "颜色浓度",
           "absorption_hint": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
+          "material": {
+            "title": "材质",
+            "hint": "预设只改变散射和粗糙度，颜色、喷嘴和流量保持不变",
+            "preset": {
+              "clear": "透明",
+              "translucent": "半透明",
+              "cloudy": "浑浊",
+              "custom": "自定义"
+            },
+            "scattering": "散射",
+            "scattering_hint": "液体的浑浊程度 · 越高越遮住后方，并带上周围的光",
+            "roughness": "粗糙度",
+            "roughness_hint": "反射和高光的柔和程度 · 越高越宽、越暗淡"
+          },
           "reset": "跟随运行时设置",
           "save": "保存液体设置",
-          "saved": "已保存该角色的液体设置。请在游戏中按 F10 重新加载模组。",
+          "saved": "已保存该喷射点的液体设置。请在游戏中按 F10 重新加载模组。",
           "summary": {
             "runtime": "运行时设置",
             "custom": "自定义",
@@ -1880,7 +1925,16 @@
           "not_generated": "此模组不是由此工具创建的，没有可恢复的原模组。",
           "source_missing": "原模组已不在 {{detail}}。请先将其移回原位置。",
           "invalid_look": "液体设置超出范围。",
-          "no_emitters": "请先应用喷射点，再设置该角色的液体。"
+          "no_emitters": "请先应用喷射点，再设置它的液体。",
+          "emitter_limit": "每个模组最多可设置 {{detail}} 个喷射点。请先移除一个。",
+          "emitter_not_found": "该喷射点已不存在。请关闭并重新打开工具。"
+        },
+        "apply_new": "添加喷射点",
+        "slots": {
+          "title": "要增加可同时喷射的数量吗？",
+          "description": "该角色将有 {{count}} 个喷射点，但运行时只允许画面中所有角色的喷射点合计 {{current}} 个同时喷射。要添加此喷射点，需要将这个对所有模组生效的值提高到 {{next}}。喷射点越多，GPU 负担越大。",
+          "confirm": "提高到 {{next}} 并添加",
+          "raised": "现在最多可同时喷射 {{count}} 个喷射点。"
         }
       },
       "body_shape": {
@@ -2762,14 +2816,11 @@
             "saved": "已保存 {{name}} 的设置。",
             "LiquidGravityProbe": {
               "toggleKey": "开启/关闭喷射",
-              "strengthUpKey": "增大强度",
-              "strengthDownKey": "减小强度",
               "autoPulseKey": "切换自动脉冲",
               "manualPulseKey": "按住时脉冲",
               "startEnabled": "游戏启动时开启喷射",
               "autoPulse": "以自动脉冲开始",
-              "strength": "初始强度",
-              "slotCount": "可同时喷射的角色数",
+              "slotCount": "可同时喷射的喷射点数",
               "tint": "液体颜色",
               "absorptionDepth": "颜色浓度",
               "wetGround": "湿润地面亮度",
@@ -2778,7 +2829,7 @@
               "scattering": "光散射",
               "refraction": "折射",
               "hints": {
-                "slotCount": "角色越多，GPU 负担越大。",
+                "slotCount": "角色的每个喷射点都单独计数。喷射点越多，GPU 负担越大。",
                 "absorptionDepth": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
                 "wetGround": "水洼下方地面保留的亮度 · 设为 1 则不变暗",
                 "puddleReflection": "水洼反射的最低强度",

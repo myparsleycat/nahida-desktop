@@ -98,6 +98,10 @@ type scope struct {
 	fields   map[string]any
 	// origin is set while applying to a folder just copied from another mod.
 	origin *modMarker
+	// renumbered and applied are what Inspection.Renumbered and
+	// Inspection.Applied report for this call.
+	renumbered map[int]int
+	applied    *int
 }
 
 func (s *Service) Inspect(ctx context.Context, modPath string) (Inspection, error) {
@@ -120,6 +124,9 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 	return s.run(ctx, "apply", input.ModPath, func(sc *scope) (Inspection, error) {
 		sc.stage = stageGeometry
 		sc.fields["meshId"], sc.fields["faceIndex"] = input.MeshID, input.FaceIndex
+		if input.PID != nil {
+			sc.fields["targetPid"] = *input.PID
+		}
 		source, triangle, anchor, err := s.resolveAnchor(sc, input)
 		if err != nil {
 			return Inspection{}, err
@@ -129,12 +136,12 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 		switch input.Mode {
 		case "", ApplyInPlace:
 		case ApplyNewMod:
-			return s.applyAsNewMod(ctx, sc, source, triangle, anchor)
+			return s.applyAsNewMod(ctx, sc, source, triangle, anchor, input.PID)
 		default:
 			return Inspection{}, infra.ContractError(ErrorInvalidMode + ":" + input.Mode)
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
-			if err := s.apply(sc, rt.root, source, triangle, anchor); err != nil {
+			if err := s.apply(sc, rt.root, source, triangle, anchor, input.PID); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -153,15 +160,17 @@ func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, er
 	})
 }
 
-// SetLook stores the mod's own liquid look with its emitters, so a mod needs
-// at least one emitter to have one.
+// SetLook stores the liquid look of one of the mod's emitters.
 func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, error) {
 	return s.run(ctx, "set-look", input.ModPath, func(sc *scope) (Inspection, error) {
+		if input.Look.Nozzle == "" {
+			input.Look.Nozzle = NozzleSpray
+		}
 		if !validLook(input.Look) {
 			return Inspection{}, infra.ContractError(ErrorInvalidLook)
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
-			if err := s.setLook(sc, rt.root, input.Look); err != nil {
+			if err := s.setLook(sc, rt.root, input.PID, input.Look); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -288,11 +297,16 @@ func (s *Service) withRuntime(
 func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	sc.stage = stageLoad
 	inspection := Inspection{
-		ModPath:  sc.root,
-		Runtime:  rt.status,
-		Emitters: []Emitter{},
-		Look:     defaultLook(),
-		MeshUnit: sc.game.meshUnit,
+		ModPath:    sc.root,
+		Importer:   sc.importer,
+		Runtime:    rt.status,
+		Emitters:   []Emitter{},
+		MeshUnit:   sc.game.meshUnit,
+		Renumbered: []PIDChange{},
+		Applied:    sc.applied,
+	}
+	for _, from := range slices.Sorted(maps.Keys(sc.renumbered)) {
+		inspection.Renumbered = append(inspection.Renumbered, PIDChange{From: from, To: sc.renumbered[from]})
 	}
 	marker, err := readMarker(sc.root)
 	if err != nil || marker.ModKey == "" {
@@ -309,9 +323,6 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	if err != nil {
 		return inspection, err
 	}
-	if doc.Look != nil {
-		inspection.Look = *doc.Look
-	}
 	index, err := readIndex(layout, sc.modsRoot)
 	if err != nil {
 		return inspection, err
@@ -321,12 +332,17 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	for _, emitter := range doc.Emitters {
 		_, hooked := hooks[emitter.INIPath][emitter.PID]
 		listed[emitter.PID] = true
+		look := defaultLook()
+		if emitter.Look != nil {
+			look = *emitter.Look
+		}
 		inspection.Emitters = append(inspection.Emitters, Emitter{
 			PID:     emitter.PID,
 			INIPath: emitter.INIPath,
 			Section: emitter.Section,
 			Hooked:  hooked,
 			Anchor:  emitter.Anchor,
+			Look:    look,
 		})
 	}
 
@@ -340,7 +356,9 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 				continue
 			}
 			listed[pid] = true
-			orphans = append(orphans, Emitter{PID: pid, INIPath: iniPath, Section: section, Hooked: true})
+			orphans = append(orphans, Emitter{
+				PID: pid, INIPath: iniPath, Section: section, Hooked: true, Look: defaultLook(),
+			})
 		}
 	}
 	slices.SortFunc(orphans, func(a, b Emitter) int { return a.PID - b.PID })
@@ -348,18 +366,31 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	return inspection, nil
 }
 
+// apply hooks the picked face. With target, the mod's emitter of that slot
+// moves there and keeps its look, leaving whatever INI held it before;
+// otherwise an emitter is added. The mod's other emitters keep their hooks,
+// including those stacked on the same draw.
 func (s *Service) apply(
 	sc *scope,
 	runtimeRoot string,
 	source modelviewer.DrawSource,
 	triangle anchorTriangle,
 	anchor EmitterAnchor,
+	target *int,
 ) error {
 	sc.stage = stageLoad
 	layout := runtimeLayout{root: runtimeRoot}
-	key, _, err := s.ownedKey(sc, layout)
+	key, renumbered, err := s.ownedKey(sc, layout)
 	if err != nil {
 		return err
+	}
+	sc.renumbered = renumbered
+	if target != nil {
+		// The caller named the emitter by the slot the copy shared with the
+		// original before it was split off.
+		if to, ok := renumbered[*target]; ok {
+			target = &to
+		}
 	}
 	sc.stage = stageLoad
 	index, err := readIndex(layout, sc.modsRoot)
@@ -376,6 +407,16 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
+	var look *Look
+	if target != nil {
+		at := slices.IndexFunc(doc.Emitters, func(emitter profileEmitter) bool { return emitter.PID == *target })
+		if at < 0 {
+			return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterNotFound, *target))
+		}
+		look = doc.Emitters[at].Look
+	} else if len(doc.Emitters) >= maxEmitters {
+		return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterLimit, maxEmitters))
+	}
 	iniRel, err := filepath.Rel(sc.root, source.INIPath)
 	if err != nil {
 		return err
@@ -391,6 +432,15 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
+	others := make(map[string]*iniText)
+	err = eachINI(sc.root, func(name string, other *iniText) {
+		if !platform.SamePathFold(name, source.INIPath) {
+			others[name] = other
+		}
+	})
+	if err != nil {
+		return err
+	}
 	sites := text.drawSites(source)
 	if len(sites) == 0 {
 		return infra.ContractError(ErrorDrawNotFound + ":" + source.Section)
@@ -398,30 +448,47 @@ func (s *Service) apply(
 	if text.sharedDraw(source, sites) {
 		return infra.ContractError(ErrorSharedDraw + ":" + source.Section)
 	}
+
+	// A hook on the draw that no emitter of this mod stands for is left from
+	// another mod or a lost profile, and would capture without a profile.
+	listed := make(map[int]bool, len(doc.Emitters))
+	for _, emitter := range doc.Emitters {
+		listed[emitter.PID] = true
+	}
 	replaced := map[int]bool{}
-	pid := -1
 	for _, site := range sites {
-		if site.pid < 0 {
-			continue
-		}
-		replaced[site.pid] = true
-		if pid < 0 && index.ownerOf(site.pid) == key {
-			pid = site.pid
+		for _, hooked := range site.pids {
+			if index.ownerOf(hooked) != key || !listed[hooked] {
+				replaced[hooked] = true
+			}
 		}
 	}
-	if pid < 0 {
-		if pid, err = index.allocate(); err != nil {
-			return err
-		}
+	pid := 0
+	if target != nil {
+		pid = *target
+	} else if pid, err = index.allocate(); err != nil {
+		return err
 	}
 	replaced[pid] = true
-	sc.fields["pid"] = pid
-	text.removeHooks(func(candidate int) bool { return replaced[candidate] })
+	sc.fields["pid"], sc.applied = pid, &pid
+	drop := func(candidate int) bool { return replaced[candidate] }
+	text.removeHooks(drop)
 	firstIndex := source.StartIndex + anchor.FaceIndex*3
 	text.insertHooks(
 		text.drawSites(source),
 		pid, firstIndex, source.BaseVertex,
 	)
+	changes := []fileChange{{path: source.INIPath, data: text.bytes()}}
+	for _, name := range slices.Sorted(maps.Keys(others)) {
+		other := others[name]
+		if other.removeHooks(drop) == 0 {
+			continue
+		}
+		changes = append(changes, fileChange{path: name, data: other.bytes()})
+		if len(other.hookPIDs()) == 0 {
+			changes = append(changes, fileChange{path: name + backupSuffix, remove: true})
+		}
+	}
 
 	priority := 0.0
 	emitters := make([]profileEmitter, 0, len(doc.Emitters)+1)
@@ -447,6 +514,7 @@ func (s *Service) apply(
 		Row:        profile.row,
 		Offset:     profile.offset,
 		Anchor:     anchor,
+		Look:       look,
 	})
 	doc.Emitters, doc.Enabled, doc.ModPath = emitters, true, sc.root
 
@@ -460,11 +528,11 @@ func (s *Service) apply(
 	slices.Sort(owned)
 	index.Owners[key] = slices.Compact(owned)
 
-	changes, err := s.profileChanges(layout, index, key, doc)
+	profileChanges, err := s.profileChanges(layout, index, key, doc)
 	if err != nil {
 		return err
 	}
-	changes = append([]fileChange{{path: source.INIPath, data: text.bytes()}}, changes...)
+	changes = append(changes, profileChanges...)
 	backup := source.INIPath + backupSuffix
 	if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
 		changes = append([]fileChange{{path: backup, data: original}}, changes...)
@@ -476,12 +544,16 @@ func (s *Service) apply(
 	return s.commit(sc, append(changes, marker...))
 }
 
-func (s *Service) setLook(sc *scope, runtimeRoot string, look Look) error {
+func (s *Service) setLook(sc *scope, runtimeRoot string, pid int, look Look) error {
 	sc.stage = stageLoad
 	layout := runtimeLayout{root: runtimeRoot}
-	key, _, err := s.ownedKey(sc, layout)
+	key, renumbered, err := s.ownedKey(sc, layout)
 	if err != nil {
 		return err
+	}
+	sc.renumbered = renumbered
+	if to, ok := renumbered[pid]; ok {
+		pid = to
 	}
 	if key == "" {
 		return infra.ContractError(ErrorNoEmitters)
@@ -494,12 +566,16 @@ func (s *Service) setLook(sc *scope, runtimeRoot string, look Look) error {
 	if len(doc.Emitters) == 0 {
 		return infra.ContractError(ErrorNoEmitters)
 	}
+	at := slices.IndexFunc(doc.Emitters, func(emitter profileEmitter) bool { return emitter.PID == pid })
+	if at < 0 {
+		return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterNotFound, pid))
+	}
 	index, err := readIndex(layout, sc.modsRoot)
 	if err != nil {
 		return err
 	}
-	doc.Look, doc.ModPath = &look, sc.root
-	sc.fields["look"] = look
+	doc.Emitters[at].Look, doc.ModPath = &look, sc.root
+	sc.fields["pid"], sc.fields["look"], sc.applied = pid, look, &pid
 
 	changes, err := s.profileChanges(layout, index, key, doc)
 	if err != nil {
@@ -516,6 +592,7 @@ func (s *Service) remove(sc *scope, runtimeRoot string, pids []int) error {
 	sc.stage = stageLoad
 	layout := runtimeLayout{root: runtimeRoot}
 	key, renumbered, err := s.ownedKey(sc, layout)
+	sc.renumbered = renumbered
 	if err != nil || key == "" {
 		return err
 	}
@@ -726,7 +803,7 @@ func (s *Service) forkCopy(
 		index.Owners[forked] = append(index.Owners[forked], to)
 		return nil
 	}
-	doc := profileDocument{SchemaVersion: 1, Enabled: true, ModPath: sc.root, Look: shared.Look}
+	doc := profileDocument{SchemaVersion: 1, Enabled: true, ModPath: sc.root}
 	for _, emitter := range shared.Emitters {
 		if !hooked[emitter.PID] {
 			continue

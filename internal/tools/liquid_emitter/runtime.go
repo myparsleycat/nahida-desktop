@@ -90,8 +90,6 @@ func runtimeSettings() []modruntime.Setting {
 	}
 	return []modruntime.Setting{
 		key("toggleKey", "KeyToggle", "VK_NUMPAD1"),
-		key("strengthUpKey", "KeyStrengthUp", "VK_NUMPAD2"),
-		key("strengthDownKey", "KeyStrengthDown", "VK_NUMPAD3"),
 		key("autoPulseKey", "KeyAutoPulse", "VK_NUMPAD4"),
 		key("manualPulseKey", "KeyManualPulse", "VK_NUMPAD0"),
 		// The toggle compares the request with the last one it saw, so starting
@@ -110,16 +108,8 @@ func runtimeSettings() []modruntime.Setting {
 			Default: "0",
 			Targets: []modruntime.Target{constant("$auto_pulse")},
 		},
-		{
-			ID:      settingStrength,
-			Kind:    modruntime.SettingInt,
-			Default: "3",
-			Min:     0,
-			Max:     7,
-			Targets: []modruntime.Target{constant("$strength_level")},
-		},
-		// Characters that emit at once; ParticleConfig.hlsl SLOT_COUNT is the most
-		// the pools hold.
+		// Emitters that emit at once, counting each of a character's own;
+		// ParticleConfig.hlsl SLOT_COUNT is the most the pools hold.
 		{
 			ID:      "slotCount",
 			Kind:    modruntime.SettingInt,

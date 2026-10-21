@@ -38,19 +38,18 @@ void main(uint3 tid:SV_DispatchThreadID){
  float area=length(n);stats[7]=float4(area,id,profile.x,1);if(area<1e-9||area>.03)return;
  stats[0].w+=1;
 
- // Every part of one character is drawn with the same root, so the root
- // groups the hooks of a frame by character. Within one, the emitter with the
- // lowest priority value wins, as the single-emitter runtime chose before.
- uint count=min((uint)candidates[0].x,CANDIDATE_CAPACITY),slot=count;
+ // Every part of one character is drawn with the same root, so the root and
+ // the emitter id tell this frame's emitters apart: a character's emitters
+ // each report a candidate of their own and get their own slot. A hook that
+ // runs again for the same character, in another pass, reports nothing new.
+ uint count=min((uint)candidates[0].x,CANDIDATE_CAPACITY);
  [loop]for(uint k=0;k<count;k++){
   float3 other=candidates[1+k*CANDIDATE_ROWS+5].xyz-root;
-  if(dot(other,other)<.0001){slot=k;break;}
+  if(dot(other,other)<.0001&&abs(candidates[1+k*CANDIDATE_ROWS+4].y-(float)id)<.5)return;
  }
- if(slot<count && profile.x>=candidates[1+slot*CANDIDATE_ROWS+4].x)return;
- if(slot==count){
-  if(count>=CANDIDATE_CAPACITY)return;
-  candidates[0]=float4(count+1,0,0,0);
- }
+ if(count>=CANDIDATE_CAPACITY)return;
+ candidates[0]=float4(count+1,0,0,0);
+ uint slot=count;
 
  n/=area;
  // Carry the model's forward/up frame through the live triangle deformation.

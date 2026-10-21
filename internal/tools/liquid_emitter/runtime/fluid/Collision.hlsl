@@ -68,20 +68,32 @@ bool sweptBySurface(uint slot,float3 to,float3 velocity,float radius,out float3 
 struct CollisionEvent{float4 pointSpeed;float4 normalRadius;float4 incoming;float4 slot;};
 
 // Incidence measured from the tangent plane: preferentially retain grazing hits.
-float adhesionChance(float3 velocity,float3 normal){
+// Thicker liquid (slotViscosity) sticks more often.
+float adhesionChance(float3 velocity,float3 normal,float viscosity){
  float speed=length(velocity);
  float incidence=max(0,-dot(velocity,normal))/max(speed,1e-6);
- return .75*(1-smoothstep(.15,.50,incidence))*smoothstep(.08,.20,speed);
+ float stick=viscosity==1?.75:min(.95,.75*pow(viscosity,.25));
+ return stick*(1-smoothstep(.15,.50,incidence))*smoothstep(.08,.20,speed);
 }
-static const float ADHESION_LIFETIME=1.6;
-// Preserve the slow terminal creep, but relax toward it gradually (8/s).
-// Exact integration of dv/dt = 8 * (terminal - tangential velocity).
-void advanceAdhesion(float3 velocity,float3 normal,float dt,out float3 nextVelocity,out float3 displacement){
+// Preserve the slow terminal creep, but relax toward it gradually (8/s at
+// viscosity 1). Thicker liquid creeps slower and settles to it faster.
+// Exact integration of dv/dt = drag * (terminal - tangential velocity).
+// `pace` scales the downhill terminal speed and `drift` adds a sideways
+// component of that speed across the slope, so each clinging drop runs at
+// its own speed along its own bending path; 1 and 0 give the plain creep.
+void advanceAdhesionDrop(float3 velocity,float3 normal,float dt,float viscosity,float pace,float drift,out float3 nextVelocity,out float3 displacement){
  float3 tangent=velocity-normal*dot(velocity,normal);
  float3 gravity=float3(0,-9.81,0);
- float3 terminal=(gravity-normal*dot(gravity,normal))*(.35/18);
- const float drag=8;
+ float thickness=viscosity==1?1:sqrt(viscosity);
+ float3 downhill=(gravity-normal*dot(gravity,normal))*(.35/18)/thickness;
+ // Perpendicular to the unit normal, so as long as the downhill speed.
+ float3 across=cross(normal,downhill);
+ float3 terminal=downhill*pace+across*drift;
+ float drag=8*thickness;
  float decay=exp(-drag*dt);
  nextVelocity=terminal+(tangent-terminal)*decay;
  displacement=terminal*dt+(tangent-terminal)*((1-decay)/drag);
+}
+void advanceAdhesion(float3 velocity,float3 normal,float dt,float viscosity,out float3 nextVelocity,out float3 displacement){
+ advanceAdhesionDrop(velocity,normal,dt,viscosity,1,0,nextVelocity,displacement);
 }

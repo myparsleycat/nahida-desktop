@@ -11,9 +11,29 @@ Texture2D<float> fluidAbsorptionDepth:register(t103);
 Texture2D<float4> sceneLighting:register(t104);
 // Row 0 the light from above, row 1 the broad surroundings (FluidAmbient.hlsl).
 StructuredBuffer<float4> fluidAmbient:register(t105);
+// Scattering and roughness under the weight in fluidColor's alpha
+// (FluidSurface.hlsl); unsmoothed.
+Texture2D<float2> fluidMaterial:register(t107);
 struct ScreenVarying{float4 position:SV_Position;};
 // Share of the offset lookup in the reflection a missed puddle ray keeps.
 static const float REFLECTION_MISS_LOCAL=.3;
+// Drops clinging to the body and their trails (TAG_FILM) are a film on it,
+// facing whatever way it does: the thickness they saturate toward, how far
+// their normals bend onto the body, how much of the key-light glint they
+// lose, and their wet darkening as a share of a puddle's.
+static const float FILM_LIMIT=.0018,FILM_NORMAL_PULL=.8,FILM_GLINT_CUT=.5,FILM_WET=.35;
+// The film carries its liquid by color and a broad sheen along the body
+// rather than by darkening: the sheen lobe is wide enough to catch the
+// curve of a limb, and the drops on it scatter less so they do not stand
+// out as bright beads against the trail.
+static const float FILM_SHEEN=.3,FILM_SCATTER=.5;
+// Film at which a trail fully shows: its coverage, sheen and darkening. A
+// trail segment adds 1.6 mm on its center line, which smoothing spreads.
+static const float FILM_SHOWN=.0008;
+// Scattering coefficient per meter at a scattering of 1, which goes with its
+// square: at the translucent preset's .35 a 2 mm stream lets about 37
+// percent through, at the cloudy .85 about 3 percent.
+static const float SCATTERING_PER_METER=4000;
 #ifdef VERTEX_SHADER
 ScreenVarying main(uint id:SV_VertexID){ScreenVarying o;o.position=screenTriangle(id);return o;}
 #endif
@@ -136,12 +156,16 @@ float4 main(ScreenVarying i):SV_Target{
  // Liquid lying within a few millimeters of upward-facing ground is a
  // puddle. Its depth normals still carry the bumps of the individual discs,
  // so they are pulled onto the ground plane to read as one flat film.
- float puddle=0;
+ // A clinging film is pulled less, so a rivulet keeps some relief while its
+ // drops stop catching a highlight each, as domes of their own would.
+ float puddle=0,surfaceFilm=0;
  float3 groundPoint,groundNormal;
  if(sceneSurface(uv,groundPoint,groundNormal)){
   float height=abs(dot(position-groundPoint,groundNormal));
-  puddle=smoothstep(.6,.8,groundNormal.y)*(1-smoothstep(.006,.012,height));
-  n=normalize(lerp(n,groundNormal,puddle*.9));
+  float contact=1-smoothstep(.006,.012,height);
+  puddle=smoothstep(.6,.8,groundNormal.y)*contact;
+  surfaceFilm=(tag&TAG_FILM)!=0?(1-puddle)*contact:0;
+  n=normalize(lerp(n,groundNormal,puddle*.9+surfaceFilm*FILM_NORMAL_PULL));
  }
 
  float3 right=normalize(camera[4].xyz),up=normalize(camera[5].xyz);
@@ -159,10 +183,20 @@ float4 main(ScreenVarying i):SV_Target{
  float mixedDepth=fluidAbsorptionDepth.Load(int3(pixel,0));
  float depthMeters=max(look.w,.001);
  float3 absorb=-log(max(saturate(look.rgb),.02))/depthMeters;
+ float2 material=0;
  if(mixed.a>0&&all(isfinite(mixed))&&isfinite(mixedDepth)){
   absorb=max(mixed.rgb/mixed.a,0);
   depthMeters=max(mixedDepth/mixed.a/1000,.001);
+  float2 weighted=fluidMaterial.Load(int3(pixel,0));
+  if(all(isfinite(weighted)))material=saturate(weighted/mixed.a);
  }
+ uint view=debugView();
+ [branch]if(view>=DEBUG_OOZE&&view<=DEBUG_OPTICS){
+  // The particle passes wrote their debug colors where absorption goes.
+  float3 shown=view==DEBUG_OPTICS?float3(saturate(thickness/.01),material):(mixed.a>0?saturate(mixed.rgb/mixed.a):0);
+  return float4(shown,smoothstep(0,.0004,thickness));
+ }
+ float scattering=SCATTERING_PER_METER*material.x*material.x,roughness=material.y;
  // The body color at the liquid's own absorption depth: each character's
  // tint, and a thickness-weighted blend where liquids overlap.
  float3 tint=exp(-absorb*depthMeters);
@@ -170,10 +204,16 @@ float4 main(ScreenVarying i):SV_Target{
  // keeps most of its chord, while a puddle stacks the discs of every
  // particle lying there and would read as centimeters where the real film
  // is a millimeter or two. Saturate each toward its own limit so the puddle
- // stays a film the ground shows through and a lone drop stays pale.
- float filmLimit=lerp(.005,.0015,puddle);
+ // stays a film the ground shows through and a lone drop stays pale. Drops
+ // gathered on the body would otherwise add up into a dark stain.
+ float filmLimit=lerp(lerp(.005,.0015,puddle),FILM_LIMIT,surfaceFilm);
  float film=filmLimit*(1-exp(-thickness/filmLimit));
- float3 transmit=exp(-film*absorb);
+ // Scattering turns light aside rather than absorbing it: the scene behind
+ // dims further, and the liquid gives back the light around it in the
+ // share each color is scattered rather than absorbed. It is lit, never lit
+ // up: in the dark it adds nothing.
+ float3 absorbed=exp(-film*absorb),transmit=absorbed*exp(-film*scattering);
+ float3 albedo=scattering/max(absorb+scattering,1e-6);
  float2 refractionUV=uv+float2(dot(n,right),-dot(n,up))*IniParams[253].x*saturate(film/.004);
  float3 background=hdrBilinear(refractionUV);
  float3 ambient=(hdrAt(uv+float2(.04,0))+hdrAt(uv-float2(.04,0))+hdrAt(uv+float2(0,.04))+hdrAt(uv-float2(0,.04)))*.25;
@@ -185,7 +225,10 @@ float4 main(ScreenVarying i):SV_Target{
  float fresnel=.0204+.9796*pow(1-saturate(dot(n,toward)),5);
  float3 reflected=reflect(-toward,n);
  float2 reflectionUV=saturate(uv+float2(dot(reflected,right),-dot(reflected,up))*.19);
- float3 reflection=hdrBilinear(reflectionUV)*.6+hdrBilinear(reflectionUV+float2(.004,0))*.2+hdrBilinear(reflectionUV-float2(.004,0))*.2;
+ // Roughness spreads the reflection and the highlights over wider, dimmer
+ // lobes; it changes nothing else.
+ float spread=lerp(.004,.03,roughness);
+ float3 reflection=hdrBilinear(reflectionUV)*.6+hdrBilinear(reflectionUV+float2(spread,0))*.2+hdrBilinear(reflectionUV-float2(spread,0))*.2;
  // The offset lookup above suits the curved stream; a flat puddle mirrors
  // what stands on it, which needs a traced ray.
  // A traced ray that leaves the screen finds nothing to mirror. The upper
@@ -193,11 +236,12 @@ float4 main(ScreenVarying i):SV_Target{
  // the local color, so the film does not turn flat gray toward the edges.
  [branch]if(puddle>.01){
   float3 missed=lerp(lerp(ambient,upperBroad,saturate(reflected.y)),reflection,REFLECTION_MISS_LOCAL);
-  reflection=lerp(reflection,traceReflection(position,reflected,missed),puddle);
+  reflection=lerp(reflection,traceReflection(position,reflected,missed),puddle*(1-.6*roughness));
  }
  // Approximate a compact key-light lobe; its intensity follows the captured scene, not a constant glow.
  float3 light=normalize(float3(-.4,.8,.2)),halfway=normalize(light+toward);
- float spec=pow(saturate(dot(n,halfway)),96),shoulder=pow(saturate(dot(n,halfway)),24);
+ float spec=pow(saturate(dot(n,halfway)),lerp(96,12,roughness))*lerp(1,.15,roughness);
+ float shoulder=pow(saturate(dot(n,halfway)),lerp(24,6,roughness))*lerp(1,.3,roughness);
  // A narrow bright peak on every bead turns the stream into a string of
  // pearls; a lower peak over a wider shoulder reads as a wet sheen.
  float3 glint=float3(1,.97,.84)*(spec*2.2+shoulder*.35)*illumination;
@@ -206,24 +250,29 @@ float4 main(ScreenVarying i):SV_Target{
  // the view direction gives the cylinder the lengthwise sheen of a wet
  // surface without depending on where the game's light is.
  float3 sheenHalfway=normalize(normalize(toward+float3(0,.5,0))+toward);
- glint+=float3(1,.97,.84)*pow(saturate(dot(n,sheenHalfway)),32)*.45*illumination;
+ glint+=float3(1,.97,.84)*pow(saturate(dot(n,sheenHalfway)),lerp(32,8,roughness))*.45*lerp(1,.35,roughness)*illumination;
  // Both lobes are stand-ins for a light the scene does not provide. On the
  // curved stream they add a stripe; on a flat puddle every pixel shares one
  // normal, so from the mirror angle of either lobe the whole film turns
  // white. A puddle shines by the mirror image it traces instead.
  glint*=1-puddle;
+ glint*=1-surfaceFilm*FILM_GLINT_CUT;
+ glint+=float3(1,.97,.84)*pow(saturate(dot(n,sheenHalfway)),lerp(8,3,roughness))*FILM_SHEEN*lerp(1,.5,roughness)*illumination*surfaceFilm;
  // Clear liquid mostly absorbs: the scene behind darkens and takes the tint.
  // A little in-scattering keeps the color readable over dark backgrounds
  // without the liquid glowing like paint.
- float3 scatter=tint*(1-transmit)*shade.w*illumination;
+ float3 scatter=tint*(1-absorbed)*shade.w*illumination*(1-surfaceFilm*FILM_SCATTER);
+ scatter+=(1-transmit)*albedo*ambient;
  // A lone droplet spans a few pixels, so its depth normals cover a whole
  // hemisphere and always catch the glint. Highlights need the body of the
  // stream or a large drop behind them, or spray turns into glitter. A
  // puddle's thickness is the sum of discs a millimeter thick, so its mirror
  // image is gated where the film exists rather than where discs stack.
- float highlight=lerp(smoothstep(.003,.008,thickness),smoothstep(.0003,.0012,thickness),puddle);
- // Water filling the ground's pores darkens it under a puddle.
- float wet=puddle*saturate(film/.002);
+ // A trail is thinner still and shines wherever it lies.
+ float highlight=lerp(lerp(smoothstep(.003,.008,thickness),smoothstep(.0003,.0012,thickness),puddle),smoothstep(.0001,FILM_SHOWN,thickness),surfaceFilm);
+ // Water filling the ground's pores darkens it under a puddle. Wet skin or
+ // cloth darkens less, or the trail reads as a stain.
+ float wet=puddle*saturate(film/.002)+FILM_WET*surfaceFilm*saturate(film/FILM_SHOWN);
  background*=lerp(1,shade.x,wet);
  // From standing height Fresnel alone gives a puddle about 6 percent
  // reflectance, which disappears into the film; a puddle reads as liquid by
@@ -235,7 +284,7 @@ float4 main(ScreenVarying i):SV_Target{
  // fully; only silhouettes, where smoothing thins the liquid out, fade. A
  // puddle's thickness is the sum of soft discs, which a threshold turns
  // into one film with an irregular edge, and lone drops into small dots.
- float alpha=lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle);
+ float alpha=lerp(lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle),smoothstep(.00005,FILM_SHOWN,thickness),surfaceFilm);
  return float4(color,alpha);
 }
 #endif

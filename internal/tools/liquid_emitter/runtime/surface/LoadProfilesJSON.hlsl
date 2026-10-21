@@ -1,11 +1,16 @@
 // JSON byte buffers are loaded by EFMI. Parse once after each F10 reload.
 // Accepted runtime records: [global_id, 12 profile floats, 3 local offset floats],
-// optionally followed by the mod's look: strength offset, custom color flag,
-// tint rgb, absorption depth in meters and, from runtime 15, the stream width
-// scale. Without it the look rows stay zero, which means the global settings;
-// a look written before the width reads width zero, which means scale 1.
+// optionally followed by the mod's look: force scale, custom color flag,
+// tint rgb, absorption depth in meters, a retired number, the viscosity scale
+// and the amount scale. Without it the look rows stay zero, which means the
+// global settings; a scale left zero means 1. Before runtime 24 the look had
+// no amount, its first number was a strength level offset and the retired one
+// a stream width (from runtime 15); both are dropped. Runtime 16 added the
+// viscosity, runtime 25 the nozzle kind (Slots.hlsl slotNozzle) after the
+// amount, and runtime 27 the scattering and roughness after it, which come as
+// a pair or not at all.
 #include "../fluid/ParticleConfig.hlsl"
-static const uint RECORD_BASE=16,RECORD_LOOK=22,RECORD_WIDTH=23;
+static const uint RECORD_BASE=16,RECORD_LOOK=22,RECORD_WIDTH=23,RECORD_VISCOSITY=24,RECORD_AMOUNT=25,RECORD_NOZZLE=26,RECORD_MATERIAL=28;
 Buffer<uint> jsonBytes:register(t0);
 RWStructuredBuffer<float4> profiles:register(u0);
 RWStructuredBuffer<float4> offsets:register(u1);
@@ -42,15 +47,18 @@ bool records(uint p,uint size,bool writeRows){
  [loop]for(uint record=0;record<4096;record++){
   spaces(p,size);if(at(p,size)==93)return true;
   if(!take(p,size,91))return false;
-  float v[RECORD_WIDTH];
-  [unroll]for(uint d=RECORD_BASE;d<RECORD_WIDTH;d++)v[d]=0;
+  float v[RECORD_MATERIAL];
+  [unroll]for(uint d=RECORD_BASE;d<RECORD_MATERIAL;d++)v[d]=0;
   uint count=0;
-  [loop]while(count<RECORD_WIDTH){
+  [loop]while(count<RECORD_MATERIAL){
    if(!number(p,size,v[count]))return false;
    count++;
    if(!take(p,size,44))break;
   }
-  if((count!=RECORD_BASE&&count!=RECORD_LOOK&&count!=RECORD_WIDTH)||!take(p,size,93))return false;
+  if((count!=RECORD_BASE&&count!=RECORD_LOOK&&count!=RECORD_WIDTH&&count!=RECORD_VISCOSITY&&count!=RECORD_AMOUNT&&count!=RECORD_NOZZLE&&count!=RECORD_MATERIAL)||!take(p,size,93))return false;
+  if(count<RECORD_AMOUNT){v[16]=0;v[24]=0;}
+  v[25]=clamp(floor(v[25]),0,2);
+  if(any(float2(v[26],v[27])<0)||any(float2(v[26],v[27])>1))return false;
   if(v[0]<0||v[0]>=4096||v[0]!=floor(v[0]))return false;
   uint id=(uint)v[0],row=id*PROFILE_ROWS;if(row+PROFILE_ROWS>capacity||id>=offsetCapacity)return false;
   if(any(abs(float3(v[13],v[14],v[15]))>.25))return false;
@@ -59,8 +67,9 @@ bool records(uint p,uint size,bool writeRows){
    profiles[row]=float4(v[1],v[2],v[3],v[4]);
    profiles[row+1]=float4(v[5],v[6],v[7],v[8]);
    profiles[row+2]=float4(v[9],v[10],v[11],v[12]);
-   profiles[row+3]=float4(v[16],v[17],v[21],v[22]);
-   profiles[row+4]=float4(v[18],v[19],v[20],0);
+   profiles[row+3]=float4(v[16],v[17],v[21],v[24]);
+   profiles[row+4]=float4(v[18],v[19],v[20],v[23]);
+   profiles[row+5]=float4(v[25],v[26],v[27],0);
    offsets[id]=float4(v[13],v[14],v[15],0);
   }
   spaces(p,size);if(at(p,size)==93)return true;if(!take(p,size,44))return false;

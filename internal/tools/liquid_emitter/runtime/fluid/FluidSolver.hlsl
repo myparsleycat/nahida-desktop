@@ -16,6 +16,19 @@ StructuredBuffer<float4> sheetFrame:register(t111);
 RWStructuredBuffer<float4> focusMomentum:register(u6);
 #include "JetGuide.hlsl"
 RWStructuredBuffer<JetGuide> jetGuide:register(u7);
+// Branch tags below -2 in JetGuide.longLane.w and focusMomentum.w follow an
+// analytic ballistic path outside the neighbor solve: a dispersed scatter
+// parcel, or one of a narrow nozzle's coherent jet (FluidSurface.hlsl draws
+// the jet as one stream).
+static const float BRANCH_SCATTER=-3,BRANCH_JET=-4;
+#ifdef PHASE_PREDICT
+#include "EmitterState.hlsl"
+StructuredBuffer<float4> emitters:register(t104);
+// Per stream particle, from its birth: the slot generation and flow
+// generation it was born in, its emission sequence and its drawn width over
+// SSFRCommon.hlsl SURFACE_RADIUS (StreamLink.hlsl).
+RWStructuredBuffer<uint4> streamMeta:register(u4);
+#endif
 #define STEP IniParams[239]
 #define PARAM IniParams[238]
 #define DT STEP.x
@@ -35,7 +48,6 @@ float laplacian(float r){return r<H?45.0/(PI*H*H*H*H*H)*(1-r/H):0;}
 float hash1(float x){return frac(sin(x*127.1+311.7)*43758.5453);}
 #include "SoftNozzle.hlsl"
 #include "SheetProfile.hlsl"
-float storedLaunchSpeed(float value){return max(value-16*floor(value/16)-1,0);}
 bool releasedSheet(FluidParticle p,uint i){float amount=sheetFrame[i].w;return abs(amount)>.001;}
 bool finite3(float3 p){return all(isfinite(p)) && all(abs(p)<100);}
 #ifdef PHASE_STATE
@@ -89,6 +101,8 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  // Each slot simulates its own block of particles relative to its own root.
  uint slot=primarySlot(i),inSlot=i%PRIMARY_PER_SLOT,segment=slot*PRIMARY_PER_SLOT,fs=slot*4;
 #ifdef PHASE_PREDICT
+ uint nozzleKind=slotNozzle(slot);
+ bool jet=nozzleKind==NOZZLE_JET;
  // Stratified, irregular births: fixed timestamps never stretch the age of live fluid.
  float lifetime=PRIMARY_LIFETIME;
  float cycle=floor(STEP.y/lifetime);
@@ -103,14 +117,28 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  bool teleport=length(shift)>1.5;
  // Spawn only events belonging to this substep, never catch up old emissions.
  // This same rule covers first activation, reactivation, and teleport recovery.
- bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot);
+ // An oozing outlet emits no stream (Splash.hlsl); a switch to it lets the
+ // stream already out finish its life.
+ bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot) && nozzleKind!=NOZZLE_OOZE;
  float drive=slotDrive(slot);
  bool initialized=p.densityBirth.w>.5;
  bool birth=emitting && age>=0 && age<DT;
- // Reserve births add density during pressure pulses or raised strength.
- // Baseline slots and the independently allocated splash pool are untouched.
+ // The share of the slot's pool that is born: the baseline bank at amount 1,
+ // doubled by the reserve bank during pressure pulses or raised force, as
+ // before the amount. More flow adds births within the pool; less thins the
+ // stream instead (Slots.hlsl slotThread) until amount .1, below which births
+ // thin out into drops. Each bank's births are in time order, so a
+ // golden-ratio dither keeps the kept ones evenly spread. The independently
+ // allocated splash pool is untouched.
  float sheetDemand=max(saturate((drive-1.69)/2.25),saturate((pulse[2].x-1)/.85));
- if(birth && reserve && sheetDemand<.05){
+ float amount=slotAmount(slot);
+ float births=amount<.1?amount/.1:max(amount,1);
+ float share=saturate(.5*births*(1+saturate(sheetDemand/.05)));
+ // A fast jet spreads its births over a longer path, so it keeps both banks
+ // and thins out into drops only below amount .1.
+ if(jet)share=saturate(births);
+ float keep=reserve?share*2-1:share*2;
+ if(birth && frac(float(emissionSlot)*.61803398875)>=keep){
   p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
  }
  if(!birth){
@@ -131,16 +159,19 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float previousOpening=frameState[fs+2].w>.5?frameState[fs+2].x:1;
   float nozzleDt=DT*(STEP.z<.5?1:2);
   SoftNozzle nozzle=evaluateSoftNozzle(drive,pulse[2].x,previousOpening,nozzleDt,t);
+  if(jet)shapeJetNozzle(nozzle);
   // The centerline stays down. Pressure widens a symmetric fore/aft sheet.
   float3 axis=-up;
   float3 slitLong=normalize(forward-up*dot(forward,up));
-  float lowScatter=lowFlowScatter(drive,pulse[2].x);
-  float frozenMode=nozzle.sheetAmount>.001?nozzle.sheetAmount:-lowScatter;
+  float lowScatter=jet?0:lowFlowScatter(drive,pulse[2].x);
+  // A jet is released from the neighbor solve at birth, whose pressure would
+  // push its closely spaced particles apart.
+  float frozenMode=jet?-1:(nozzle.sheetAmount>.001?nozzle.sheetAmount:-lowScatter);
   birthSheetFrame[i]=float4(slitLong,frozenMode);
   float3 socketOrigin=origin-forward*.001-up*.004;
   float angle=hash1(i+t*17)*2*PI,r=sqrt(hash1(i*7+t*13));
   float rim=1+.10*sin(angle*3+1.1)+.05*cos(angle*5-.4);
-  origin+=(right*cos(angle)*nozzle.halfGap+slitLong*sin(angle)*nozzle.halfLength)*slotWidth(slot)*r*rim-forward*.001-up*.004;
+  origin+=(right*cos(angle)*nozzle.halfGap+slitLong*sin(angle)*nozzle.halfLength)*slotOutlet(slot)*r*rim-forward*.001-up*.004;
   float azimuth=hash1(i*11+t*37)*2*PI;
   float radial=sqrt(hash1(i*19+t*23));
   float sideSlope=cos(azimuth)*radial*nozzle.lateralFan+nozzle.lateralBias;
@@ -153,7 +184,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float burstCycle=floor(t/4.8),burstTime=t-burstCycle*4.8;
   float scatterStart=.35+.30*hash1(burstCycle*5.17+11);
   float scatterDuration=.20+1.20*hash1(burstCycle*7.91+23);
-  bool minimumFlow=drive<.4 && pulse[5].x>.75;
+  bool minimumFlow=!jet && drive<.4 && pulse[5].x>.75;
   if(minimumFlow){
    // Minimum flow is ballistic; pressure pulses narrow the birth velocity below.
    nozzle.sheetAmount=0;frozenMode=-1;
@@ -190,9 +221,10 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
    birthSheetFrame[i]=float4(slitLong,frozenMode);
    sideSlope=0;longSlope=0;nozzle.speed=.27;
   }
+  if(jet && !tailEmission)branchTag=BRANCH_JET;
   float3 direction=normalize(axis+right*sideSlope+slitLong*longSlope);
   float3 launch=direction*nozzle.speed;
-  if(branchTag< -2){
+  if(branchTag==BRANCH_SCATTER){
    // A wide independent ballistic cloud needs lateral speed, not just a
    // larger angle on a very slow normalized outlet vector.
    uint scatterSeed=asuint(t)^(i*747796405u+2891336453u);
@@ -223,7 +255,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
    p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
   }
   // Thin only the fully dispersed birth events, not the coherent/pulse core.
-  if(branchTag< -2 && ((i+(uint)floor(t/.48))&1u)!=0){
+  if(branchTag==BRANCH_SCATTER && ((i+(uint)floor(t/.48))&1u)!=0){
    p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
   }
   // Geometric incident ray: the virtual sheet reaches its broadest section
@@ -234,7 +266,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   // Inherit motion at birth; backdate the moving socket to the birth instant.
   origin-=inherited*age;
   launch+=inherited;
-  float3 gravity=G*jetGravityScale(nozzle.speed,0);
+  float3 gravity=jet?G:G*jetGravityScale(nozzle.speed,0);
   float3 position=origin+launch*age+.5*gravity*age*age;
   float3 velocity=launch+gravity*age;
   JetGuide guide;
@@ -245,7 +277,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   guide.longLane=float4(slitLong,branchTag!=0?branchTag:lane);
   guide.carrierAmount=float4(inherited,frozenMode);
   jetGuide[i]=guide;
-  focusMomentum[i]=branchTag< -2?float4(launch,-3):float4(crossingRay*nozzle.speed+inherited,min(6,max(nozzle.speed,length(velocity))));
+  focusMomentum[i]=branchTag< -2?float4(launch,branchTag):float4(crossingRay*nozzle.speed+inherited,min(6,max(nozzle.speed,length(velocity))));
   p.positionAge=float4(position-velocity*DT,age);
   p.velocityAlive=float4(velocity,1);
   p.predictedLambda=float4(position,0);
@@ -253,6 +285,10 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float tailProgress=pulse[4].w<=1?0:saturate((pulse[4].z-1)/max(pulse[4].w-1,1));
   float tailSizeMarker=tailProgress>.99?3:(tailProgress>.01?2:1);
   p.densityBirth=float4(RHO,t,0,1+nozzle.speed+(tailEmission?16*tailSizeMarker:0));
+  // The final sputters are drawn smaller (FluidSurface.hlsl birthRadiusScale).
+  float width=slotThread(slot)*(tailEmission?(tailSizeMarker>2.5?.70:(tailSizeMarker>1.5?.85:1)):lerp(.75,1,smoothstep(.28,1.69,drive)));
+  uint sequence=(uint)(cycle+2)*PRIMARY_PER_SLOT+inSlot;
+  streamMeta[i]=uint4(slotGeneration(slot),(uint)emitters[slot*EMITTER_ROWS+EMITTER_FLOW].y,sequence,asuint(width));
  }else{
   p.positionAge.xyz+=shift;p.positionAge.w=age;
   float launchSpeed=storedLaunchSpeed(p.densityBirth.w);
@@ -395,13 +431,16 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  }
  if(alive){
   if(coupled){
-  float3 velocitySmoothing=smoothVelocity*.01;
+  // The XSPH weights sum to about 1, so the smoothing is a blend toward the
+  // neighbors' velocity that stays stable at the thickest viscosity.
+  float viscosity=slotViscosity(slot);
+  float3 velocitySmoothing=smoothVelocity*(.01*viscosity);
   if(frozenSheet.w>.001){
    // Do not erase the emerging fan's opposite transverse velocities immediately.
    float emergence=(1-smoothstep(.045,.085,p.positionAge.w))*frozenSheet.w;
    velocitySmoothing-=frozenSheet.xyz*dot(velocitySmoothing,frozenSheet.xyz)*emergence;
   }
-  velocity+=(DT*(viscous+cohesion*1.2)+velocitySmoothing)*coupling;
+  velocity+=(DT*(viscous*viscosity+cohesion*1.2)+velocitySmoothing)*coupling;
   float segmentLength=length(p.predictedLambda.xyz-p.positionAge.xyz);
   float oldTravel=max(p.densityBirth.z,0),travel=oldTravel+segmentLength;
   if(coupling>0 && travel<focusDistance && sheetWeight>.0001 && frozenSheet.w>.001){
@@ -427,7 +466,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   float3 contact,normal;
   if(collideFluid(slot,p.positionAge.xyz,p.predictedLambda.xyz,velocity,FLUID_RADIUS,contact,normal)){
    float impact=max(0,-dot(velocity,normal));
-   if(impact>.15 || adhesionChance(velocity,normal)>.001){
+   if(impact>.15 || adhesionChance(velocity,normal,slotViscosity(slot))>.001){
     // Impact coherence comes from nearby parcels on the same moving path,
     // not from the selected strength. Dispersed rain therefore splashes less.
     float alignedSupport=0;
