@@ -1827,7 +1827,9 @@
           "title": "Spray direction",
           "down": "Point straight down",
           "summary_down": "Down",
-          "summary_custom": "Custom"
+          "tilt": "Tilt from down",
+          "azimuth": "Azimuth",
+          "hint": "Tilt 0° points straight down and 90° sideways. Azimuth turns counterclockwise seen from above, starting from the X axis."
         },
         "trajectory": {
           "label": "Preview spray path",

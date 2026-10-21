@@ -1825,7 +1825,9 @@
           "title": "喷射方向",
           "down": "朝正下方",
           "summary_down": "正下方",
-          "summary_custom": "自定义"
+          "tilt": "倾斜（相对正下方）",
+          "azimuth": "方位角",
+          "hint": "倾斜 0° 为正下方，90° 为水平。方位角从 X 轴起，从上方看逆时针旋转。"
         },
         "trajectory": {
           "label": "预览喷射轨迹",

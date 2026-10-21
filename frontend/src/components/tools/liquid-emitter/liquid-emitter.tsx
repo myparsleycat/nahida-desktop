@@ -23,10 +23,14 @@ import { ButtonGroup } from "@renderer/components/ui/button-group";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
 import { cn } from "@renderer/lib/utils";
+import {
+  anglesToDirection,
+  type DirectionAngles,
+  directionToAngles,
+} from "@shared/liquid-emitter/direction-angles";
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { isEqual } from "es-toolkit";
 import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
@@ -72,6 +76,8 @@ type History = {
 };
 
 const HISTORY_LIMIT = 100;
+// Within this tilt of straight down or up, the azimuth no longer turns the direction.
+const POLE_DEGREES = 0.05;
 // The runtime rejects a whole profile file when an offset axis exceeds 25 cm.
 const MAX_OFFSET_METERS = 0.25;
 const AXES = ["X", "Y", "Z"] as const;
@@ -105,6 +111,9 @@ export function LiquidEmitterTool({
   const [form, setForm] = useState(ALL_FORMS);
   const [visibleMeshes, setVisibleMeshes] = useState<ReadonlySet<string> | null>(null);
   const [slotPrompt, setSlotPrompt] = useState<{ current: number; next: number } | null>(null);
+  // Straight down or up has no azimuth of its own, so the last one set is kept
+  // for when the direction tilts away again.
+  const [poleAzimuth, setPoleAzimuth] = useState(0);
 
   const inspection = session.inspection.data;
   const emitters = inspection?.emitters ?? [];
@@ -211,11 +220,17 @@ export function LiquidEmitterTool({
     update(key, { offset: limitOffset(offset, MAX_OFFSET_METERS / meshUnit) });
   };
 
-  const setDirectionAxis = (axis: number, value: number) => {
-    if (!anchor || !Number.isFinite(value)) return;
-    const direction = [...anchor.direction] as Vec3;
-    direction[axis] = value;
-    if (Math.hypot(...direction) > 0.001) update(`direction-${axis}`, { direction });
+  const measured = anchor ? directionToAngles(anchor.direction, down) : undefined;
+  const atPole =
+    measured !== undefined && (measured.tilt < POLE_DEGREES || measured.tilt > 180 - POLE_DEGREES);
+  const angles = measured && atPole ? { ...measured, azimuth: poleAzimuth } : measured;
+  const setDirectionAngle = (key: keyof DirectionAngles, value: number) => {
+    if (!angles) return;
+    const next = { ...angles, [key]: value };
+    setPoleAzimuth(next.azimuth);
+    // Turning the azimuth of a vertical direction leaves the direction as it is.
+    if (atPole && key === "azimuth") return;
+    update(`direction-${key}`, { direction: anglesToDirection(next, down) });
   };
 
   const applyAnchor = () => {
@@ -522,31 +537,40 @@ export function LiquidEmitterTool({
           id="liquid-emitter:direction"
           title={t("page.tools.liquid_emitter.direction.title")}
           summary={
-            anchor
-              ? t(
-                  isEqual(anchor.direction, down)
-                    ? "page.tools.liquid_emitter.direction.summary_down"
-                    : "page.tools.liquid_emitter.direction.summary_custom",
-                )
+            angles
+              ? angles.tilt < POLE_DEGREES
+                ? t("page.tools.liquid_emitter.direction.summary_down")
+                : `${angles.tilt.toFixed(0)}° · ${angles.azimuth.toFixed(0)}°`
               : undefined
           }
           className="px-4 py-3"
-          panelClassName="space-y-2 pt-3"
+          panelClassName="space-y-3 pt-3"
         >
-          <div className="grid grid-cols-3 gap-2">
-            {AXES.map((label, axis) => (
-              <label key={label} className="space-y-1 text-xs text-muted-foreground">
-                {label}
-                <Input
-                  type="number"
-                  step={0.1}
-                  disabled={locked}
-                  value={anchor ? Number(anchor.direction[axis].toFixed(3)) : ""}
-                  onChange={(event) => setDirectionAxis(axis, Number(event.currentTarget.value))}
-                />
-              </label>
-            ))}
-          </div>
+          <RangeField
+            label={t("page.tools.liquid_emitter.direction.tilt")}
+            value={angles?.tilt ?? 0}
+            defaultValue={0}
+            min={0}
+            max={180}
+            step={1}
+            display={`${(angles?.tilt ?? 0).toFixed(0)}°`}
+            disabled={locked}
+            onChange={(value) => setDirectionAngle("tilt", value)}
+          />
+          <RangeField
+            label={t("page.tools.liquid_emitter.direction.azimuth")}
+            value={angles?.azimuth ?? 0}
+            defaultValue={0}
+            min={0}
+            max={359}
+            step={1}
+            display={`${(angles?.azimuth ?? 0).toFixed(0)}°`}
+            disabled={locked}
+            onChange={(value) => setDirectionAngle("azimuth", value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("page.tools.liquid_emitter.direction.hint")}
+          </p>
           <Button
             size="sm"
             variant="outline"
