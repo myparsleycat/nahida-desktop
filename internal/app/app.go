@@ -153,9 +153,15 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 
 	rt.window.Configure(app, rt.setting, rt.log)
+	// A cold launch that only opens a model viewer has no use for the elevated helper, so its UAC
+	// prompt waits until the main window first appears.
+	startElevatedHelper := sync.OnceFunc(rt.startElevatedHelperIfEnabled)
 	var windowCreated, windowReady sync.Once
 	app.Window.OnCreate(func(window application.Window) {
 		windowCreated.Do(func() { rt.logStartupMilestone("window-created") })
+		if window.Name() == "main" {
+			startElevatedHelper()
+		}
 		window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 			windowReady.Do(func() { rt.logStartupMilestone("window-runtime-ready") })
 		})
@@ -186,7 +192,9 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		return err
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		rt.startElevatedHelperIfEnabled()
+		if modelViewerArgument(os.Args, in.Cwd) == "" {
+			startElevatedHelper()
+		}
 		rt.startup.start(rt.runStartupWork)
 		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
 			newLaunchHandler(
