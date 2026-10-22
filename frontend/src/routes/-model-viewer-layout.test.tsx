@@ -1,5 +1,6 @@
 import { RootProvider } from "@renderer/components/root-provider";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
+import { useSettingUpdateSync } from "@renderer/hooks/use-settings";
 import { useGlobalStore } from "@renderer/store/global";
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -29,6 +30,7 @@ vi.mock("@renderer/components/titlebar/titlebar-window-controls", () => ({
 vi.mock("@renderer/components/ui/sonner", () => ({ Toaster: () => <div>Viewer toaster</div> }));
 vi.mock("@renderer/store/global", () => ({ useGlobalStore: vi.fn() }));
 vi.mock("@renderer/hooks/use-global-events", () => ({ useGlobalEvents: vi.fn() }));
+vi.mock("@renderer/hooks/use-settings", () => ({ useSettingUpdateSync: vi.fn() }));
 vi.mock("@renderer/hooks/use-mod-events", () => ({
   useDownloadArchiveExtractPromptHandler: vi.fn(),
 }));
@@ -74,5 +76,6 @@ it("renders only the independent window shell without main providers or global h
   expect(RootProvider).not.toHaveBeenCalled();
   expect(useGlobalEvents).not.toHaveBeenCalled();
   expect(useGlobalStore).not.toHaveBeenCalled();
+  expect(useSettingUpdateSync).toHaveBeenCalled();
   await waitFor(() => expect(language.changeLanguage).toHaveBeenCalledWith("ko"));
 });

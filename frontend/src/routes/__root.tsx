@@ -24,6 +24,7 @@ import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useModFixInspectionTitlebarActivity } from "@renderer/hooks/use-mod-fix-inspection";
 import { useNativeWindowTheme } from "@renderer/hooks/use-native-window-theme";
+import { useSettingUpdateSync } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
@@ -402,6 +403,7 @@ export const Route = createRootRouteWithContext<{
 
 function RootLayout() {
   const location = useLocation();
+  useSettingUpdateSync();
   if (location.pathname === "/model-viewer-window") {
     return (
       <ThemeProvider>

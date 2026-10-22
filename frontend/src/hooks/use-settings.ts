@@ -1,4 +1,9 @@
-import { getSetting, setSetting, settingsManyQueryKey } from "@renderer/lib/settings";
+import {
+    applySettingUpdate,
+    getSetting,
+    setSetting,
+    settingsManyQueryKey,
+} from "@renderer/lib/settings";
 import type { AppSettings, SettingKey } from "@shared/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
@@ -12,33 +17,29 @@ type SettingsShape<TConfig extends SettingsConfig> = {
 
 type SettingUpdate<T> = T | ((current: T) => T);
 
-function useInvalidateOnSettingUpdate(keys: readonly SettingKey[], queryKey: readonly unknown[]) {
+// Every window mounts this once at its root; the setting hooks below rely on it to stay current
+// because their queries never go stale on their own.
+export function useSettingUpdateSync() {
     const queryClient = useQueryClient();
 
-    useEffect(() => {
-        const off = Events.On("setting:update", (event) => {
-            const { key, value } = event.data as { key: string; value: unknown };
-            if (keys.includes(key as SettingKey)) {
-                if (queryKey.length === 2 && queryKey[0] === "settings" && queryKey[1] === key) {
-                    queryClient.setQueryData(queryKey, value);
-                    return;
-                }
-
-                void queryClient.invalidateQueries({ queryKey: [...queryKey] });
-            }
-        });
-
-        return off;
-    }, [keys, queryClient, queryKey]);
+    useEffect(
+        () =>
+            Events.On("setting:update", (event) => {
+                const payload: unknown = Array.isArray(event.data) ? event.data[0] : event.data;
+                if (!payload || typeof payload !== "object" || !("key" in payload)) return;
+                applySettingUpdate(
+                    queryClient,
+                    payload.key,
+                    "value" in payload ? payload.value : undefined,
+                );
+            }),
+        [queryClient],
+    );
 }
 
 export function useSetting<K extends SettingKey>(key: K) {
-    const queryKey = useMemo(() => ["settings", key] as const, [key]);
-
-    useInvalidateOnSettingUpdate([key], queryKey);
-
     return useQuery({
-        queryKey,
+        queryKey: ["settings", key] as const,
         queryFn: () => getSetting(key),
         staleTime: Number.POSITIVE_INFINITY,
         refetchOnWindowFocus: false,
@@ -53,8 +54,6 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
     );
     const settingKeys = useMemo(() => entries.map(([, key]) => key), [entries]);
     const queryKey = useMemo(() => settingsManyQueryKey(settingKeys), [settingKeys]);
-
-    useInvalidateOnSettingUpdate(settingKeys, queryKey);
 
     const { data, isLoading: isQueryLoading } = useQuery({
         queryKey,
@@ -134,12 +133,8 @@ export function useModGridLayoutSettings() {
         "mod.gridFixedCardWidth",
         "mod.gridFixedColumnCount",
     ] as const;
-    const queryKey = settingsManyQueryKey(keys);
-
-    useInvalidateOnSettingUpdate(keys, queryKey);
-
     return useQuery({
-        queryKey,
+        queryKey: settingsManyQueryKey(keys),
         queryFn: async () => {
             const settings = await getSetting(keys);
 
