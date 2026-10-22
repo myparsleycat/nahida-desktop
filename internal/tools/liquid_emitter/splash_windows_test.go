@@ -13,7 +13,7 @@ import (
 const (
 	airborneCount, splashCount = 2048, 6144
 	contactRows                = 3
-	transferCounters           = 69
+	transferCounters           = 70
 	trailIncoming              = 3
 	fluidRadius                = .0028
 )
@@ -26,6 +26,8 @@ type splashDrop struct {
 	// normal and mode of a clinging drop (predictedLambda), none for 0.
 	normal vec3
 	mode   float64
+	// spread of a floor puddle (densityBirth.x).
+	spread float64
 	scale  float64
 	marker float64
 }
@@ -35,7 +37,7 @@ func (p splashDrop) floats() []float32 {
 		float32(p.position[0]), float32(p.position[1]), float32(p.position[2]), float32(p.age),
 		float32(p.velocity[0]), float32(p.velocity[1]), float32(p.velocity[2]), float32(p.owner + 1),
 		float32(p.normal[0]), float32(p.normal[1]), float32(p.normal[2]), float32(p.mode),
-		0, 0, float32(p.scale), float32(p.marker),
+		float32(p.spread), 0, float32(p.scale), float32(p.marker),
 	}
 }
 
@@ -45,7 +47,7 @@ func readDrop(values []float32, index int) splashDrop {
 		position: vec3{float64(v[0]), float64(v[1]), float64(v[2])}, age: float64(v[3]),
 		velocity: vec3{float64(v[4]), float64(v[5]), float64(v[6])}, owner: int(math.Round(float64(v[7]))) - 1,
 		normal: vec3{float64(v[8]), float64(v[9]), float64(v[10])}, mode: float64(v[11]),
-		scale: float64(v[14]), marker: float64(v[15]),
+		spread: float64(v[12]), scale: float64(v[14]), marker: float64(v[15]),
 	}
 }
 
@@ -66,7 +68,10 @@ type splashPasses struct {
 	depth                       gpuTexture
 	lastTrail                   []float32
 	lastTrailCount              uint32
-	depthWidth, depthHeight     int
+	// transfer is the puddle transfer counters the last step left for the
+	// next mergeAndSpawn, none before a step.
+	transfer                []uint32
+	depthWidth, depthHeight int
 	// surfaceMode is IniParams[241].x, 1 while drops may follow the body.
 	surfaceMode float32
 	// pulse is Pulse.hlsl's state, and emitting IniParams[237].x.
@@ -165,11 +170,11 @@ func (s *splashPasses) step(dt float64) {
 		uav: map[int]unsafe.Pointer{
 			0: target.uav, 1: s.diagnose.uav, 2: s.history.uav, 3: trails.uav,
 			4: s.d.uints([]uint32{0}).uav, 5: s.adhesion.uav, 6: counters.uav,
-			7: s.d.uints(make([]uint32, airborneCount)).uav,
 		},
 	}, [3]int{splashCount / 64, 1, 1})
 	s.particles = s.d.readFloats(target)
-	s.lastTrailCount = s.d.readUints(counters)[trailIncoming]
+	s.transfer = s.d.readUints(counters)
+	s.lastTrailCount = s.transfer[trailIncoming]
 	s.lastTrail = s.d.readFloats(trails)
 }
 
@@ -179,9 +184,15 @@ func (s *splashPasses) mergeAndSpawn(dt float64) {
 	s.t.Helper()
 	source := s.d.structured(s.particles, 64)
 	mergeInto := s.d.uints(make([]uint32, airborneCount))
+	transfer := s.transfer
+	if transfer == nil {
+		transfer = make([]uint32, transferCounters)
+	}
+	s.transfer = nil
+	counters, list := s.d.uints(transfer), s.d.uints(make([]uint32, 2*airborneCount))
 	s.d.dispatch(s.merge, bindings{
 		srv: map[int]unsafe.Pointer{100: source.srv, 102: s.history.srv, 103: s.slots, 120: s.params(dt)},
-		uav: map[int]unsafe.Pointer{1: mergeInto.uav},
+		uav: map[int]unsafe.Pointer{1: mergeInto.uav, 6: counters.uav, 7: list.uav},
 	}, [3]int{airborneCount / 64, 1, 1})
 	views := s.common(dt, source)
 	views[102] = mergeInto.srv
@@ -193,8 +204,7 @@ func (s *splashPasses) mergeAndSpawn(dt float64) {
 			0: target.uav, 1: s.d.uints(make([]uint32, 16)).uav, 2: s.history.uav,
 			3: s.d.structured(make([]float32, airborneCount*particleFloats), 64).uav,
 			4: s.d.uints([]uint32{0}).uav, 5: s.adhesion.uav,
-			6: s.d.uints(make([]uint32, transferCounters)).uav,
-			7: s.d.uints(make([]uint32, airborneCount)).uav,
+			6: counters.uav, 7: list.uav,
 		},
 	}, [3]int{splashCount / 64, 1, 1})
 	s.particles = s.d.readFloats(target)
@@ -260,6 +270,118 @@ func TestClingingDropsMergeInMutualPairs(t *testing.T) {
 				t.Errorf("drop %d merged: %+v", index, got)
 			}
 		}
+	}
+}
+
+// A new floor puddle landing inside a puddle of its emitter pours into it
+// over Update, Merge and Spawn: their volumes add, the center moves to where
+// the liquid lies and the puddle starts its lifetime again, and the new one
+// takes no reserved slot. One landing outside gets a slot of its own, the
+// only free one, without the pouring one using it up or pushing out a live
+// puddle.
+func TestFloorPuddleAbsorbsArrivals(t *testing.T) {
+	const dt = 1.0 / 60
+	s := newSplashPasses(t, newTestCamera(vec3{0, 1, .3}, vec3{0, 0, 0}, math.Pi/3, 1, .1, 100))
+	s.showWall(0)
+	up := vec3{0, 1, 0}
+	puddle := func(x, scale, age float64) splashDrop {
+		// Puddle.hlsl puddleHalfHeight of a fully spread puddle, lifted as
+		// Splash.hlsl keeps it, so with no depth it holds the root plane.
+		height := fluidRadius*scale/9 + .0002
+		return splashDrop{
+			position: vec3{x, height, 0}, normal: up, mode: 3, spread: 1, scale: scale, marker: 5, age: age,
+		}
+	}
+	// The host holds as much as the largest splash drop, so it does not drain.
+	s.put(airborneCount, puddle(0, 1.2, 1))
+	for index := airborneCount + 1; index < splashCount-1; index++ {
+		s.put(index, puddle(-1, 1, 1))
+	}
+	s.put(0, puddle(.01, 1, 0))
+	s.put(1, puddle(.2, 1, 0))
+	s.step(dt)
+	s.mergeAndSpawn(dt)
+
+	near := func(value, want float64) bool { return math.Abs(value-want) < 1e-3*math.Max(1, want) }
+	host := s.drop(airborneCount)
+	if want := 1.728 + 1; !host.alive() || host.marker != 5 || !near(host.volume(), want) {
+		t.Fatalf("host puddle: volume %v, want %v: %+v", host.volume(), want, host)
+	}
+	if want := .01 / 2.728; math.Abs(host.position[0]-want) > 1e-4 || host.age > 1e-6 {
+		t.Errorf("host puddle: center x %v, want %v, age %v", host.position[0], want, host.age)
+	}
+	var others []splashDrop
+	filled := 0
+	for index := range splashCount {
+		p := s.drop(index)
+		if index >= airborneCount && p.alive() && p.marker == 5 {
+			filled++
+		}
+		if index != airborneCount && p.alive() && p.position[0] > -.5 {
+			others = append(others, p)
+		}
+	}
+	if filled != splashCount-airborneCount {
+		t.Errorf("%d reserved puddles live, want every slot filled", filled)
+	}
+	if len(others) != 1 || others[0].marker != 5 || math.Abs(others[0].position[0]-.2) > 1e-3 ||
+		!near(others[0].volume(), 1) {
+		t.Errorf("other live particles: %+v", others)
+	}
+}
+
+// A floor puddle stays where it lies wherever its character goes: with the
+// root 2 m above it and 4 m away, the puddle lives on.
+func TestFloorPuddleOutlastsCharacterDistance(t *testing.T) {
+	const dt = 1.0 / 60
+	s := newSplashPasses(t, newTestCamera(vec3{0, 1, .3}, vec3{0, 0, 0}, math.Pi/3, 1, .1, 100))
+	s.showWall(0)
+	scale := math.Cbrt(10)
+	s.put(airborneCount, splashDrop{
+		position: vec3{4, fluidRadius*scale/9 + .0002 - 2, 0}, normal: vec3{0, 1, 0}, mode: 3, spread: 1,
+		scale: scale, marker: 5, age: .5,
+	})
+	for range 10 {
+		s.step(dt)
+	}
+	if got := s.drop(airborneCount); !got.alive() || got.marker != 5 {
+		t.Errorf("puddle away from its character: %+v", got)
+	}
+}
+
+// A slot whose character is no longer drawn keeps its root, and with it its
+// floor puddles, past SLOT_TIMEOUT while they may still last, and gives it up
+// at SLOT_TIMEOUT to a character waiting for a slot.
+func TestUndrawnSlotOutlastsItsPuddles(t *testing.T) {
+	const now, candidateRows, candidateCapacity, trackRow = 10.0, 9, 16, 10
+	bundle := newShaderBundle(t, games[0].dir)
+	d := newWARPDevice(t)
+	assign := d.shader("cs", bundle.compile(filepath.Join(bundle.root, "fluid", "AssignSlots.hlsl"), "cs"))
+	keeps := func(waiting bool) bool {
+		slots := liveSlots(0)
+		slots[(0*slotRows+trackRow)*4] = now - 4
+		candidates := make([]float32, (1+candidateCapacity*candidateRows)*4)
+		if waiting {
+			// Another character, 5 m away, that slot 0 must not follow.
+			candidates[0] = 1
+			candidates[(1+4)*4+1] = 3
+			candidates[(1+5)*4] = 5
+		}
+		state := d.structured(slots, 16)
+		d.dispatch(assign, bindings{
+			srv: map[int]unsafe.Pointer{
+				0: d.structured(candidates, 16).srv, 1: d.structured(make([]float32, 4), 16).srv,
+				120: d.iniParams(map[int][4]float32{239: {0, now, 0, 0}, 253: {0, 0, 1, 0}}),
+			},
+			uav: map[int]unsafe.Pointer{0: state.uav, 1: d.structured(make([]float32, slotCount*4*4), 16).uav},
+		}, [3]int{1, 1, 1})
+		return d.readFloats(state)[(0*slotRows+slotRootRow)*4+3] > .5
+	}
+	if !keeps(false) {
+		t.Error("slot freed 4 s after its character was last drawn, while its puddles may last")
+	}
+	if keeps(true) {
+		t.Error("slot kept from a waiting character 4 s after its own was last drawn")
 	}
 }
 

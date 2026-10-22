@@ -1,6 +1,6 @@
 #include "ParticleConfig.hlsl"
-#include "Puddle.hlsl"
 Texture1D<float4> IniParams:register(t120);
+#include "Puddle.hlsl"
 #include "Slots.hlsl"
 StructuredBuffer<float4> frameState:register(t105);
 StructuredBuffer<float4> pulse:register(t109);
@@ -16,8 +16,9 @@ RWBuffer<uint> freeCounter:register(u4);
 // Incoming puddles and trail segments, free and live reserved slots
 // (ParticleConfig.hlsl TRANSFER_COUNTER_SIZE).
 RWBuffer<uint> puddleTransferCounter:register(u6);
-// Airborne indices of the incoming puddles, in the order Update counted them,
-// so a receiving floor slot reads its puddle instead of searching for it.
+// Airborne indices of the incoming puddles, as SplashMerge listed them
+// (ParticleConfig.hlsl), so a receiving floor slot reads its puddle and a
+// puddle what pours into it instead of searching for them.
 RWBuffer<uint> puddleTransferList:register(u7);
 // The trail segments Update left, in the order it counted them.
 RWStructuredBuffer<FluidParticle> trailTransfer:register(u3);
@@ -182,6 +183,32 @@ void mergeWithPartner(inout FluidParticle p,uint i){
  else p.velocityAlive.w=0;
 }
 #endif
+#ifdef SPLASH_SPAWN
+// The new puddles SplashMerge found landing in this one pour into it: their
+// volume up to puddleMaxVolume, beyond which liquid runs off, their momentum,
+// and the ground they cover, which moves its center along its own plane.
+// Liquid reaching it restarts its lifetime. A puddle the pool overflow
+// replaces this frame loses what would have poured into it.
+void pourArrivals(inout FluidParticle p,uint i){
+ uint count=min(puddleTransferCounter[TRANSFER_PUDDLE_POURED],AIRBORNE_SPLASH_COUNT);
+ float volume=puddleVolume(p.densityBirth.z),total=volume,spread=p.densityBirth.x;
+ float3 ground=puddleGround(p),moment=ground*volume,momentum=p.velocityAlive.xyz*volume;
+ [loop]for(uint k=0;k<count;k++){
+  uint a=puddleTransferList[TRANSFER_POURED_LIST+k];
+  if(mergeInto[a]!=i)continue;
+  FluidParticle q=source[a];
+  float v=puddleVolume(q.densityBirth.z);
+  total+=v;moment+=puddleGround(q)*v;momentum+=q.velocityAlive.xyz*v;
+  spread=max(spread,q.densityBirth.x);
+ }
+ if(total<=volume)return;
+ float3 normal=p.predictedLambda.xyz,center=moment/total,velocity=momentum/total;
+ center-=normal*dot(center-ground,normal);
+ p.densityBirth.z=pow(max(volume,min(total,puddleMaxVolume())),1.0/3);p.densityBirth.x=spread;
+ p.positionAge=float4(center+normal*puddleHalfHeight(FLUID_RADIUS*p.densityBirth.z,spread),0);
+ p.velocityAlive.xyz=velocity-normal*dot(velocity,normal);
+}
+#endif
 void beginFloorPuddle(inout FluidParticle p,float3 normal){
  p.velocityAlive.xyz-=normal*dot(p.velocityAlive.xyz,normal);
  p.predictedLambda=float4(normal,3);
@@ -245,6 +272,13 @@ void main(uint3 id:SV_DispatchThreadID){
    if(puddle){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
     float oldHeight=puddleHalfHeight(radius,p.densityBirth.x);
+    // A grown puddle soaks away back toward one drop (Puddle.hlsl), so its
+    // edge recedes once liquid stops reaching it.
+    float volume=puddleVolume(p.densityBirth.z);
+    if(grownPuddle(volume)){
+     volume=drainPuddle(volume,dt);
+     p.densityBirth.z=pow(volume,1.0/3);radius=FLUID_RADIUS*p.densityBirth.z;
+    }
     advanceAdhesion(velocity,oldNormal,dt,slotViscosity(owner),velocity,displacement);
     float targetSpread=1-smoothstep(.03,PUDDLE_ENTRY_SPEED,length(velocity));
     p.densityBirth.x=lerp(p.densityBirth.x,max(p.densityBirth.x,targetSpread),1-exp(-5*dt));
@@ -257,7 +291,10 @@ void main(uint3 id:SV_DispatchThreadID){
        && abs(gap-oldHeight)<.012 && length(to-floorPoint)<.04){
      to+=floorNormal*(height+.0002-gap);
      velocity-=floorNormal*dot(velocity,floorNormal);
-     p.predictedLambda=float4(floorNormal,3);
+     // A grown puddle lies on far more floor than the pixel under its center,
+     // whose depth normal is noisy: it settles toward that one gradually.
+     float settle=grownPuddle(volume)?1-exp(-dt/PUDDLE_NORMAL_SETTLE):1;
+     p.predictedLambda=float4(normalize(lerp(oldNormal,floorNormal,settle)),3);
     }else if(!found && puddleDepthUnavailableAtBorder(owner,to)){
      // No offscreen geometry is known: hold the last WORLD position, normal
      // and footprint. Do not invent a continuation of the contact plane.
@@ -267,6 +304,11 @@ void main(uint3 id:SV_DispatchThreadID){
     }else if(!found && oldNormal.y>.995 && abs(from.y-(oldHeight+.0002))<.005){
      // Root-height fallback is valid only for a patch already on that plane.
      to.y=height+.0002;velocity.y=0;
+    }else if(grownPuddle(volume)){
+     // A grown puddle covers more ground than the pixel under its center,
+     // which a foot standing in it hides: it stays where it lies.
+     to=from;velocity=0;
+     p.predictedLambda=float4(oldNormal,3);
     }else{
      // At edges or an unrelated depth layer, return to free flight.
      puddle=false;attached=false;p.predictedLambda=0;
@@ -414,8 +456,12 @@ void main(uint3 id:SV_DispatchThreadID){
    p.positionAge=float4(to,p.positionAge.w+dt);p.velocityAlive.xyz=velocity;
    // Retained droplets must survive slow creep; detached ones keep the usual rules.
    bool retained=p.densityBirth.w>3.5;
-   float lifetime=puddle?PUDDLE_LIFETIME:(trail?TRAIL_LIFETIME:(retained?ADHESION_LIFETIME:.42));
-   if(p.positionAge.w>lifetime||(!attached&&(p.densityBirth.x>2||(!retained&&length(velocity)<.12)))||length(to)>2.5||to.y< -1.5||!all(isfinite(to))||!all(isfinite(velocity)))p.velocityAlive.w=0;
+   float lifetime=puddle?puddleLifetime(puddleVolume(p.densityBirth.z)):(trail?TRAIL_LIFETIME:(retained?ADHESION_LIFETIME:.42));
+   // Slot particles live within 2.5 m of their character's root, which moves
+   // with it. A floor puddle stays where it lies wherever the character goes
+   // and ends only with its lifetime.
+   bool outOfReach=!puddle&&(length(to)>2.5||to.y< -1.5);
+   if(p.positionAge.w>lifetime||(!attached&&(p.densityBirth.x>2||(!retained&&length(velocity)<.12)))||outOfReach||!all(isfinite(to))||!all(isfinite(velocity)))p.velocityAlive.w=0;
   }
  }
 #endif
@@ -427,6 +473,7 @@ void main(uint3 id:SV_DispatchThreadID){
   // Free slots rank first, then live segments oldest first, then live
   // puddles oldest first: a puddle may replace a segment, never the reverse.
   uint puddles=puddleTransferCounter[0];
+  bool kept=true;
   uint incoming=puddles+min(puddleTransferCounter[TRANSFER_TRAIL_INCOMING],TRAIL_TRANSFER_CAPACITY);
   if(incoming>0){
    uint freeSlots=puddleTransferCounter[2];
@@ -454,10 +501,11 @@ void main(uint3 id:SV_DispatchThreadID){
     rank=segmentSlots+older;
    }
    bool placed=rank<min(incoming,segmentSlots);
-   if(rank<puddles)p=source[puddleTransferList[rank]];
-   else if(placed)p=trailTransfer[rank-puddles];
+   if(rank<puddles){p=source[puddleTransferList[rank]];kept=false;}
+   else if(placed){p=trailTransfer[rank-puddles];kept=false;}
    if(placed)storeContact(i,startContact(p,IniParams[239].y));
   }
+  if(kept&&p.velocityAlive.w>.5&&floorPuddle(p.densityBirth.w))pourArrivals(p,i);
   // Update carries a segment from the frame saved with it.
   if(p.velocityAlive.w>.5 && trailSegment(p.densityBirth.w))saveAdhesionFrame(splashSlot(p.velocityAlive.w),i);
   target[i]=p;return;
@@ -582,10 +630,8 @@ void main(uint3 id:SV_DispatchThreadID){
  // Reserved slots never become an extra airborne bank at contact edges.
  if(i>=AIRBORNE_SPLASH_COUNT && !reservedContact(p.densityBirth.w))p.velocityAlive.w=0;
 #ifdef SPLASH_UPDATE
- if(i<AIRBORNE_SPLASH_COUNT && p.velocityAlive.w>.5 && floorPuddle(p.densityBirth.w)){
-  uint rank;InterlockedAdd(puddleTransferCounter[0],1,rank);
-  puddleTransferList[rank]=i;
- }
+ // SplashMerge lists the airborne puddles, once it knows which pour into
+ // another.
  if(i>=AIRBORNE_SPLASH_COUNT && p.velocityAlive.w<.5){
   uint ignored;InterlockedAdd(puddleTransferCounter[2],1,ignored);
  }

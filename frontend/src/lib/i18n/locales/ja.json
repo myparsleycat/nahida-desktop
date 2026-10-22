@@ -2822,6 +2822,8 @@
               "absorptionDepth": "色の濃さ",
               "wetGround": "濡れた地面の明るさ",
               "puddleReflection": "水たまりの反射",
+              "puddleSize": "水たまりの最大サイズ",
+              "puddleLinger": "水たまりの持続時間",
               "streamReflection": "水流の反射",
               "scattering": "光の散乱",
               "refraction": "屈折",
@@ -2830,6 +2832,8 @@
                 "absorptionDepth": "液体の色が完全に現れる厚さ（mm） · 小さいほど濃い",
                 "wetGround": "水たまりの下の地面に残る明るさ · 1で暗くならない",
                 "puddleReflection": "水たまりの反射の最小の強さ",
+                "puddleSize": "液体がたまるほど水たまりが広がる最大の半径（cm）",
+                "puddleLinger": "液体が届かなくなってから大きな水たまりが引いていく秒数 · 大きいほど長く残る",
                 "streamReflection": "水流と水滴の反射の強さ",
                 "scattering": "暗い背景の上で液体そのものの色が見える度合い",
                 "refraction": "背後の景色が屈折して見える度合い"

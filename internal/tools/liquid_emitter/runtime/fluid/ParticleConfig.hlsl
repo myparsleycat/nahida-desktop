@@ -20,14 +20,20 @@ static const uint PROFILE_ROWS=6;
 static const uint AIRBORNE_SPLASH_COUNT=2048;
 static const uint PUDDLE_COUNT=4096;
 static const uint SPLASH_COUNT=AIRBORNE_SPLASH_COUNT+PUDDLE_COUNT;
-// ResourcePuddleTransferCounter: [0] incoming puddles, [1] free-slot cursor,
-// [2] free reserved slots after Update, [3] incoming trail segments, [4] live
-// reserved trail segments after Update, then TRAIL_AGE_BUCKETS counts of
-// those by age and as many cursors into them for Spawn.
+// ResourcePuddleTransferCounter: [0] incoming puddles that take a reserved
+// slot, [1] free-slot cursor, [2] free reserved slots after Update, [3]
+// incoming trail segments, [4] live reserved trail segments after Update, then
+// TRAIL_AGE_BUCKETS counts of those by age and as many cursors into them for
+// Spawn, and last the incoming puddles that pour into another instead.
 static const uint TRAIL_AGE_BUCKETS=32;
 static const uint TRANSFER_TRAIL_INCOMING=3,TRANSFER_TRAIL_LIVE=4,TRANSFER_TRAIL_AGES=5;
 static const uint TRANSFER_TRAIL_CURSORS=TRANSFER_TRAIL_AGES+TRAIL_AGE_BUCKETS;
-static const uint TRANSFER_COUNTER_SIZE=TRANSFER_TRAIL_CURSORS+TRAIL_AGE_BUCKETS;
+static const uint TRANSFER_PUDDLE_POURED=TRANSFER_TRAIL_CURSORS+TRAIL_AGE_BUCKETS;
+static const uint TRANSFER_COUNTER_SIZE=TRANSFER_PUDDLE_POURED+1;
+// ResourcePuddleTransferList: the airborne indices of the incoming puddles
+// that take a slot, then from AIRBORNE_SPLASH_COUNT of those that pour into
+// another (SplashMerge.hlsl).
+static const uint TRANSFER_POURED_LIST=AIRBORNE_SPLASH_COUNT;
 // ResourceTrailTransfer holds at most one new segment per airborne slot.
 static const uint TRAIL_TRANSFER_CAPACITY=AIRBORNE_SPLASH_COUNT;
 static const uint EVENT_CAPACITY=2048;

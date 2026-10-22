@@ -2822,6 +2822,8 @@
               "absorptionDepth": "颜色浓度",
               "wetGround": "湿润地面亮度",
               "puddleReflection": "水洼反射",
+              "puddleSize": "水洼最大尺寸",
+              "puddleLinger": "水洼持续时间",
               "streamReflection": "水流反射",
               "scattering": "光散射",
               "refraction": "折射",
@@ -2830,6 +2832,8 @@
                 "absorptionDepth": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
                 "wetGround": "水洼下方地面保留的亮度 · 设为 1 则不变暗",
                 "puddleReflection": "水洼反射的最低强度",
+                "puddleSize": "液体积得越多水洼扩展到的最大半径（厘米）",
+                "puddleLinger": "液体不再流入后大水洼退去所需的秒数 · 越大留存越久",
                 "streamReflection": "水流和水滴的反射强度",
                 "scattering": "在深色背景上液体自身颜色的显现程度",
                 "refraction": "背后景物被折射的程度"

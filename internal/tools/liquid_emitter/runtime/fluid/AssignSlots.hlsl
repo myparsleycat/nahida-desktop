@@ -4,6 +4,7 @@
 #include "ParticleConfig.hlsl"
 Texture1D<float4> IniParams:register(t120);
 #include "Slots.hlsl"
+#include "Puddle.hlsl"
 StructuredBuffer<float4> candidates:register(t0);
 StructuredBuffer<float4> profiles:register(t1);
 // FluidSolver's frame state, four rows per slot.
@@ -11,8 +12,14 @@ RWStructuredBuffer<float4> frameState:register(u1);
 // How far a slot follows its character onto a different emitter id, past the
 // motion predicted from the last two frames.
 static const float FOLLOW_RADIUS=.5;
-// Longer than any slot particle lives: stream .48 s, adhesion 1.6 s, puddle 2.4 s.
+// Longer than any slot particle but a grown puddle lives: stream .48 s,
+// adhesion 1.6 s, puddle of one drop 2.4 s.
 static const float SLOT_TIMEOUT=3.0;
+// A slot whose character is no longer drawn keeps its root, which its floor
+// puddles are stored relative to, for as long as the largest of them could
+// last after the last drop reached it. A character waiting for a slot takes
+// it back after SLOT_TIMEOUT instead.
+float slotHold(){return SLOT_TIMEOUT+puddleLifetime(puddleMaxVolume());}
 static const uint NONE=0xffffffffu;
 float3 candidateRoot(uint c){return candidates[1+c*CANDIDATE_ROWS+5].xyz;}
 float candidateId(uint c){return candidates[1+c*CANDIDATE_ROWS+4].y;}
@@ -56,13 +63,16 @@ void main(uint3 tid:SV_DispatchThreadID){
  }
 
  // Characters no slot followed take the empty slots; the rest wait for one.
+ bool waiting=false;
  [loop]for(uint fresh=0;fresh<count;fresh++){
   if(taken[fresh])continue;
   [loop]for(uint empty=0;empty<active;empty++){
    if(slotLive(empty)||match[empty]!=NONE)continue;
    match[empty]=fresh;taken[fresh]=true;break;
   }
+  waiting=waiting||!taken[fresh];
  }
+ float timeout=waiting?SLOT_TIMEOUT:slotHold();
 
  [loop]for(uint target=0;target<SLOT_COUNT;target++){
   uint base=target*SLOT_ROWS;
@@ -91,7 +101,7 @@ void main(uint3 tid:SV_DispatchThreadID){
    slots[base+4]=float4(anchor.xyz,0);
    // Freeing last keeps the slot from being reused in the frame its
    // particles are dropped. A slot above $slot_count never waits it out.
-   if(slotLive(target)&&(target>=active||now-slots[base+SLOT_TRACK].x>SLOT_TIMEOUT)){
+   if(slotLive(target)&&(target>=active||now-slots[base+SLOT_TRACK].x>timeout)){
     slots[base+SLOT_ROOT]=0;slots[base+SLOT_PREVIOUS_ROOT]=0;
    }
   }

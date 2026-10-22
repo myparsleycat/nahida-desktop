@@ -22,10 +22,18 @@ StructuredBuffer<float4> contactHistory:register(t102);
 #include "Slots.hlsl"
 StructuredBuffer<float4> links:register(t104);
 StructuredBuffer<JetGuide> renderGuides:register(t112);
-// Disc radius over the puddle particle's own, so neighboring discs overlap.
-static const float PUDDLE_SPLAT_SCALE=2;
 // Film one disc adds at its center; the composite thresholds the sum.
 static const float PUDDLE_SPLAT_FILM=.0012;
+// A grown puddle (Puddle.hlsl) is one disc, which a plain circle would give
+// away: its edge wavers by up to PUDDLE_LOBE of its radius, and its film
+// flattens inside so it reads as a pool rather than a dome.
+static const float PUDDLE_LOBE=.18;
+// Rise over distance from its center by which the floor under a grown puddle
+// may leave its plane, about 6 degrees (drapeOnScene).
+static const float PUDDLE_DRAPE_SLOPE=.1;
+// drapeOnScene checks the floor at the points dividing the way from the
+// center to a pixel into this many parts.
+static const uint PUDDLE_DRAPE_SAMPLES=4;
 static const float MODE_NONE=0,MODE_ELLIPSOID=1,MODE_DISC=2,MODE_CAPSULE=3;
 // A trail segment's half width over the lens of the drop that left it, and
 // the film it adds on its center line: close to the drop's own, so the drop
@@ -53,7 +61,7 @@ struct Varying{
  // Ellipsoid: a second anisotropy axis orthogonal to axisScale.xyz, or zero
  // for none, with its scale in w. The third axis of the frame keeps scale 1.
  // Capsule: xyz the segment direction, w its half length; center is its
- // midpoint.
+ // midpoint. Disc: xyz the phases of its edge lobes, w 1 plus their depth.
  nointerpolation float4 normalScale:TEXCOORD7;
  // The owner's scattering and roughness (Slots.hlsl).
  nointerpolation float2 material:TEXCOORD8;
@@ -81,9 +89,10 @@ Varying main(uint id:SV_VertexID){
  float width=primary?slotThread(owner):1;
  float radius=SURFACE_RADIUS*width*(primary&&p.densityBirth.w>=16?birthRadiusScale(p.densityBirth.w):visualScale*(primary?1:max(p.densityBirth.z,.1)));
  bool puddle=!primary&&floorPuddle(p.densityBirth.w),trail=!primary&&trailSegment(p.densityBirth.w);
- if(puddle)radius=SURFACE_RADIUS*max(p.densityBirth.z,.1)*puddleWidth(p.densityBirth.x)*PUDDLE_SPLAT_SCALE;
+ if(puddle)radius=puddleRadius(p.densityBirth.z,p.densityBirth.x);
  float3 root=slotRoot(owner),center=root+p.positionAge.xyz;
- bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1&&slotLive(owner);
+ bool reach=puddle||length(p.positionAge.xyz)<2.5&&p.positionAge.y>=-1;
+ bool valid=p.velocityAlive.w>.5&&all(isfinite(p.positionAge))&&all(isfinite(p.velocityAlive))&&reach&&slotLive(owner);
  valid=valid&&!(primary&&streamLinked(links[poolIndex*LINK_ROWS+1]));
 
  float4 axisScale=float4(1,0,0,1),normalScale=float4(0,0,0,1);
@@ -96,7 +105,12 @@ Varying main(uint id:SV_VertexID){
   // ground (Splash.hlsl). The disc goes on the contact plane itself, or at a
   // low camera angle the depth check would take the gap for an obstacle.
   center-=axisScale.xyz*puddleHalfHeight(FLUID_RADIUS*max(p.densityBirth.z,.1),p.densityBirth.x);
-  fade=1-smoothstep(PUDDLE_LIFETIME-.4,PUDDLE_LIFETIME,p.positionAge.w);
+  float volume=puddleVolume(max(p.densityBirth.z,.1)),lifetime=puddleLifetime(volume);
+  fade=1-smoothstep(lifetime-.4,lifetime,p.positionAge.w);
+  // The deeper film of a grown puddle rides on its fade.
+  fade*=puddleDepthGain(volume);
+  float grown=saturate((puddleExtent(volume)/pow(PUDDLE_DROP_VOLUME,1.0/3)-1)/4);
+  normalScale=float4(frac(p.densityBirth.y*float3(127.1,311.7,74.7))*6.2831853,1+PUDDLE_LOBE*grown);
  }else if(trail){
   // The solver keeps the segment's end on the surface (Splash.hlsl).
   float3 normal=p.predictedLambda.xyz,segment=p.velocityAlive.xyz;
@@ -196,6 +210,51 @@ void clipOffScene(float4 projected){
   if(gap<-1e29||abs(gap)>.004+sceneSlopeAllowanceAt(uv))clip(-1);
  }
 }
+// How far along the ray through `at` on a puddle's plane the scene lies
+// before it, and so how high above the plane, or false where the scene
+// there is no plane (SSFRCommon.hlsl behindSceneSmooth) or off screen.
+bool sceneAbovePlane(float3 at,float3 normal,out float along,out float height){
+ along=0;height=0;
+ float4 projected=project(at);
+ float2 uv=screenUV(projected);
+ if(projected.w<=NEAR_W||any(uv<0)||any(uv>1))return false;
+ float gap=behindSceneSmooth(uv,projected);
+ // The gap is in view distance; along the ray it rises off the plane by
+ // its share of the ray's slope against the plane.
+ float3 direction=normalize(at-eyePosition());
+ float rate=dot(direction,float3(camera[16].w,camera[17].w,camera[18].w));
+ if(gap<-1e29||rate<1e-4)return false;
+ along=gap/rate;height=-along*dot(direction,normal);
+ return true;
+}
+// A grown puddle is one wide disc on the plane its center found, which a
+// small error in that plane lifts off the floor or sinks into it toward its
+// edge, past what clipOffScene keeps: the pixels then fall away in rows. Its
+// pixel moves along the ray onto the scene where the scene lies within
+// PUDDLE_DRAPE_SLOPE of the plane at its distance r from the center; a shoe
+// or a step stands farther off and is still cut away. The slope allowance of
+// a silhouette texel would let it onto the shoe, so the drape leaves it to
+// clipOffScene.
+// Far from the center that allowance also takes in a low step or the top of
+// a low block, so the scene must also rise toward the pixel as the floor
+// tilted against the plane does: evenly from the center. Points between
+// with the floor well below that line show a step on the way; ones well
+// above it are something standing in front of the floor, such as a shoe,
+// and say nothing of it.
+float4 drapeOnScene(float4 projected,float3 hit,float3 center,float3 normal,float r){
+ if(IniParams[237].y<=.5||projected.w<=NEAR_W)return projected;
+ float along,height;
+ if(!sceneAbovePlane(hit,normal,along,height)||abs(height)>.004+PUDDLE_DRAPE_SLOPE*r)return projected;
+ float tolerance=.004+.25*abs(height);
+ [unroll]for(uint k=1;k<PUDDLE_DRAPE_SAMPLES;k++){
+  float share=float(k)/PUDDLE_DRAPE_SAMPLES,betweenAlong,between;
+  if(!sceneAbovePlane(lerp(center,hit,share),normal,betweenAlong,between))continue;
+  float expected=height*share;
+  if(between<expected-tolerance||(between>expected+tolerance&&between<=max(height,0)+tolerance))return projected;
+ }
+ float3 direction=normalize(hit-eyePosition());
+ return projected-along*(direction.x*camera[16]+direction.y*camera[17]+direction.z*camera[18]);
+}
 Surface main(Varying i){
  clip(i.mode-.5);
  float3 eye=eyePosition();
@@ -232,12 +291,18 @@ Surface main(Varying i){
   clip(abs(denominator)-1e-4);
   float t=-dot(origin,normal)/denominator;
   clip(t);
-  float3 hit=eye+direction*t;
-  float r=distance(hit,i.center);
-  clip(radius-r);
+  float3 hit=eye+direction*t,offset=hit-i.center;
+  float r=length(offset),lobe=i.normalScale.w-1,edge=radius;
+  if(lobe>0){
+   float3 helper=abs(normal.x)>.9?float3(0,0,1):float3(1,0,0),x=normalize(cross(normal,helper)),y=cross(normal,x);
+   float angle=atan2(dot(offset,y),dot(offset,x));
+   edge*=1+lobe*(.5*sin(3*angle+i.normalScale.x)+.3*sin(5*angle+i.normalScale.y)+.2*sin(7*angle+i.normalScale.z));
+  }
+  clip(edge-r);
   float4 projected=project(hit);
+  if(lobe>0)projected=drapeOnScene(projected,hit,i.center,normal,r);
   clipOffScene(projected);
-  float coverage=1-r*r/(radius*radius);
+  float coverage=1-pow(r/edge,2+4*lobe/PUDDLE_LOBE);
   o.depth=encodeFluidDepth(projected.w,i.tag);o.thickness=PUDDLE_SPLAT_FILM*coverage*coverage*i.radiusFade.y;
   weighLiquid(o,i.liquid,i.material);
   return o;

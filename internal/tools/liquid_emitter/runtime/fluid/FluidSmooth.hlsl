@@ -17,6 +17,20 @@ ScreenVarying main(uint id:SV_VertexID){ScreenVarying o;o.position=screenTriangl
 #endif
 #ifdef PIXEL_SHADER
 struct Smoothed{float depth:SV_Target0;float thickness:SV_Target1;};
+// Depth change per pixel along SMOOTH_STEP of the puddle at `pixel`, from the
+// neighbors on its body on either side, or zero where neither is.
+float puddleSlope(int2 pixel,int2 last,float center,uint tag,float threshold){
+ float change=0,count=0;
+ [unroll]for(int side=-1;side<=1;side+=2){
+  float raw=fluidDepth.Load(int3(clamp(pixel+SMOOTH_STEP*side,int2(0,0),last),0));
+  if(noFluid(raw)||!sameFluidBody(tag,fluidDepthTag(raw)))continue;
+  float step=(fluidDepthValue(raw)-center)*side;
+  // A neighbor farther off than the floor recedes is another surface.
+  if(abs(step)>4*threshold)continue;
+  change+=step;count++;
+ }
+ return count>0?change/count:0;
+}
 Smoothed main(ScreenVarying i){
  uint width,height;fluidDepth.GetDimensions(width,height);
  int2 pixel=int2(i.position.xy);
@@ -35,6 +49,12 @@ Smoothed main(ScreenVarying i){
  int taps=(int)ceil(radiusPixels);
  float sigma=radiusPixels*.5;
  float threshold=worldRadius*1.5;
+ // A puddle lies on the floor, which a low view sees recede by more than the
+ // threshold within a few pixels: measured against the center alone, the
+ // nearer samples drop out and the farther ones clamp, pushing it behind the
+ // floor by an amount that changes from row to row. Its samples are measured
+ // against its own slope instead, so a plane stays where it is.
+ float slope=(tag&TAG_PUDDLE)!=0?puddleSlope(pixel,int2(width-1,height-1),center,tag,threshold):0;
  float depthWeight=0,depthSum=0,thicknessWeight=0,thicknessSum=0;
  [loop]for(int k=-taps;k<=taps;k++){
   int2 sample=clamp(pixel+SMOOTH_STEP*k,int2(0,0),int2(width-1,height-1));
@@ -43,7 +63,7 @@ Smoothed main(ScreenVarying i){
   bool fluid=!noFluid(sampleRaw);
   if(fluid&&!sameFluidBody(tag,fluidDepthTag(sampleRaw)))continue;
   thicknessSum+=fluidThickness.Load(int3(sample,0))*gaussian;thicknessWeight+=gaussian;
-  float depth=fluidDepthValue(sampleRaw);
+  float depth=fluidDepthValue(sampleRaw)-slope*k;
   if(!fluid||depth<center-threshold)continue;
   depthSum+=min(depth,center+threshold)*gaussian;depthWeight+=gaussian;
  }

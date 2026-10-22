@@ -131,6 +131,8 @@ func runtimeSettings() []modruntime.Setting {
 		number(settingAbsorption, "$liquid_absorb_mm", "15", 2, 60, 1),
 		number("wetGround", "$liquid_wet_darken", "0.85", 0.5, 1, 0.01),
 		number("puddleReflection", "$liquid_puddle_reflect", "0.15", 0, 0.5, 0.01),
+		number("puddleSize", "$liquid_puddle_size", "50", 5, 80, 1),
+		number("puddleLinger", "$liquid_puddle_linger", "6", 1, 20, 0.5),
 		number("streamReflection", "$liquid_stream_reflect", "1.6", 0, 3, 0.1),
 		number("scattering", "$liquid_scatter", "0.35", 0, 1, 0.05),
 		number("refraction", "$liquid_refraction", "0.02", 0, 0.06, 0.005),

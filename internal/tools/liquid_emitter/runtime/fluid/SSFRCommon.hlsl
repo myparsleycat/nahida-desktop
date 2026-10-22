@@ -3,8 +3,8 @@
 #ifndef LIQUID_SSFR_COMMON
 #define LIQUID_SSFR_COMMON
 #include "ParticleConfig.hlsl"
-#include "Puddle.hlsl"
 Texture1D<float4> IniParams:register(t120);
+#include "Puddle.hlsl"
 #include "../camera/Camera.hlsl"
 Texture2D<float> sceneDepth:register(t106);
 struct FluidParticle{float4 positionAge;float4 velocityAlive;float4 predictedLambda;float4 densityBirth;};
@@ -149,6 +149,38 @@ float behindScene(float2 uv,float4 c){
  float4 view=base+(c.z/c.w)*camera[14];
  if(scene<0||abs(view.w)<=1e-8)return -1e30;
  return abs(view.z/view.w)-scene;
+}
+// How far the point with clip `c` lies behind the scene at `uv` as above,
+// with the scene depth interpolated between the four texels around `uv`.
+// Raw depth runs linearly across the screen on a plane, so a floor reads as
+// the plane itself rather than as one step per row of a depth buffer coarser
+// than the screen. -1e30 where any of the four is empty or they do not lie on
+// one plane, as across the edge of a shoe.
+float behindSceneSmooth(float2 uv,float4 c){
+ uint w,h;sceneDepth.GetDimensions(w,h);
+ if(w<2||h<2)return -1e30;
+ float2 position=saturate(uv)*float2(w,h)-.5;
+ int2 corner=clamp(int2(floor(position)),int2(0,0),int2(w-2,h-2));
+ float2 f=saturate(position-corner);
+ float d00=sceneDepth.Load(int3(corner,0)),d10=sceneDepth.Load(int3(corner+int2(1,0),0));
+ float d01=sceneDepth.Load(int3(corner+int2(0,1),0)),d11=sceneDepth.Load(int3(corner+int2(1,1),0));
+ int2 last=int2(w-1,h-1);
+ float dl=sceneDepth.Load(int3(clamp(corner-int2(1,0),int2(0,0),last),0)),dr=sceneDepth.Load(int3(clamp(corner+int2(2,0),int2(0,0),last),0));
+ float du=sceneDepth.Load(int3(clamp(corner-int2(0,1),int2(0,0),last),0)),dd=sceneDepth.Load(int3(clamp(corner+int2(0,2),int2(0,0),last),0));
+ float4 d=float4(d00,d10,d01,d11),beyond=float4(dl,dr,du,dd);
+ if(!all(isfinite(d)&&d>0&&d<1)||!all(isfinite(beyond)&&beyond>0&&beyond<1))return -1e30;
+ // On a plane the step between texels is the same across the four and on
+ // into the next texel each way; an edge parallel to the texel rows keeps
+ // the first but breaks the second.
+ float sx=d10-d00,sy=d01-d00,slack=1e-7;
+ if(abs(d11-d01-sx)>.25*abs(sx)+slack||abs(d11-d10-sy)>.25*abs(sy)+slack)return -1e30;
+ if(abs(d00-dl-sx)>.25*abs(sx)+slack||abs(dr-d10-sx)>.25*abs(sx)+slack)return -1e30;
+ if(abs(d00-du-sy)>.25*abs(sy)+slack||abs(dd-d01-sy)>.25*abs(sy)+slack)return -1e30;
+ float4 base=(uv.x*2-1)*camera[12]+(1-uv.y*2)*camera[13]+camera[15];
+ float4 scene=base+lerp(lerp(d00,d10,f.x),lerp(d01,d11,f.x),f.y)*camera[14];
+ float4 view=base+(c.z/c.w)*camera[14];
+ if(abs(scene.w)<=1e-8||abs(view.w)<=1e-8)return -1e30;
+ return abs(view.z/view.w)-abs(scene.z/scene.w);
 }
 // Whether scene geometry at `uv` hides a fluid point with clip `projected`.
 bool sceneInFront(float2 uv,float4 projected){

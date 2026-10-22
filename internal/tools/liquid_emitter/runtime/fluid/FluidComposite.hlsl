@@ -30,6 +30,9 @@ static const float FILM_SHEEN=.3,FILM_SCATTER=.5;
 // Film at which a trail fully shows: its coverage, sheen and darkening. A
 // trail segment adds 1.6 mm on its center line, which smoothing spreads.
 static const float FILM_SHOWN=.0008;
+// Puddle thickness beyond about two overlapping lone discs, and the film a
+// puddle reaches when liquid keeps gathering in it.
+static const float PUDDLE_DEEP_START=.002,PUDDLE_DEEP_SCALE=.0015,PUDDLE_FILM_MAX=.0045;
 // Scattering coefficient per meter at a scattering of 1, which goes with its
 // square: at the translucent preset's .35 a 2 mm stream lets about 37
 // percent through, at the cloudy .85 about 3 percent.
@@ -208,6 +211,12 @@ float4 main(ScreenVarying i):SV_Target{
  // gathered on the body would otherwise add up into a dark stain.
  float filmLimit=lerp(lerp(.005,.0015,puddle),FILM_LIMIT,surfaceFilm);
  float film=filmLimit*(1-exp(-thickness/filmLimit));
+ // A grown puddle's disc carries a deeper film (Puddle.hlsl) than lone discs
+ // overlap into, so only it passes the shallow limit above: it deepens toward
+ // PUDDLE_FILM_MAX and takes on more of its color. A drop lying in it stays
+ // as it was.
+ float pooled=(tag&TAG_PUDDLE)!=0?puddle:0;
+ film+=pooled*(PUDDLE_FILM_MAX-.0015)*(1-exp(-max(thickness-PUDDLE_DEEP_START,0)/PUDDLE_DEEP_SCALE));
  // Scattering turns light aside rather than absorbing it: the scene behind
  // dims further, and the liquid gives back the light around it in the
  // share each color is scattered rather than absorbed. It is lit, never lit

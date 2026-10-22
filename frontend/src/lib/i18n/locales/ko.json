@@ -2822,6 +2822,8 @@
               "absorptionDepth": "색 진하기",
               "wetGround": "젖은 바닥 밝기",
               "puddleReflection": "웅덩이 반사",
+              "puddleSize": "웅덩이 최대 크기",
+              "puddleLinger": "웅덩이 유지 시간",
               "streamReflection": "줄기 반사",
               "scattering": "빛 산란",
               "refraction": "굴절",
@@ -2830,6 +2832,8 @@
                 "absorptionDepth": "액체 색이 온전히 나타나는 두께(mm) · 낮을수록 진함",
                 "wetGround": "웅덩이 아래 바닥이 유지하는 밝기 · 1이면 어두워지지 않음",
                 "puddleReflection": "웅덩이 반사의 최소 세기",
+                "puddleSize": "액체가 많이 고일수록 웅덩이가 넓어지는 최대 반경(cm)",
+                "puddleLinger": "액체가 더 닿지 않을 때 커진 웅덩이가 빠지는 시간(초) · 클수록 오래 남음",
                 "streamReflection": "줄기와 방울의 반사 세기",
                 "scattering": "어두운 배경 위에서 액체 자체의 색이 보이는 정도",
                 "refraction": "뒤쪽 장면이 굴절되어 보이는 정도"

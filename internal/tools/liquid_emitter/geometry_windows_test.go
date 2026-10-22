@@ -3,6 +3,7 @@
 package liquidemitter
 
 import (
+	"fmt"
 	"math"
 	"path/filepath"
 	"testing"
@@ -220,5 +221,187 @@ func TestSurfaceDrawsDropCutByNearPlane(t *testing.T) {
 	}
 	if math.Abs(float64(depth)-exit) > .03*exit {
 		t.Errorf("depth %v, want about %v where the ray leaves the drop", depth, exit)
+	}
+}
+
+// grownPuddleDraw is what drawGrownPuddle measured: the floor pixels well
+// inside the puddle, those of them it covers, the pixels it covers on top of
+// the block, and how far, in view distance, the depth it wrote at a covered
+// floor pixel lies off the floor there at most.
+type grownPuddleDraw struct {
+	inside, covered, onBlock int
+	offFloor                 float64
+}
+
+// drawGrownPuddle draws one grown puddle on a flat floor with its plane
+// tilted toward the camera, and a block 3 cm tall standing in it at blockX
+// from its center, as a shoe would. The scene depth has depthSize texels a
+// side for the puddle's 128 pixels, as a game rendering below its output
+// resolution has.
+func drawGrownPuddle(t *testing.T, tilt float64, depthSize int, blockX float64) grownPuddleDraw {
+	t.Helper()
+	const width, height, blockTop = 128, 128, .03
+	bundle := newShaderBundle(t, games[0].dir)
+	file := filepath.Join(bundle.root, "fluid", "FluidSurface.hlsl")
+	d := newWARPDevice(t)
+	camera := newTestCamera(vec3{0, 1.6, 2}, vec3{0, 0, 0}, math.Pi/6, 1, .1, 100)
+	// The scene at screen point u, v: its view distance, and whether it lies
+	// on the block or on the floor well inside the puddle and clear of it.
+	scene := func(u, v float64) (distance float64, onBlock, inner bool) {
+		ray := camera.ray(u, v)
+		if ray[1] >= 0 {
+			return 0, false, false
+		}
+		point := camera.eye.add(ray.scale((blockTop - camera.eye[1]) / ray[1]))
+		if math.Abs(point[0]-blockX) < .05 && math.Abs(point[2]) < .05 {
+			return camera.view(point)[2], true, false
+		}
+		point = camera.eye.add(ray.scale(-camera.eye[1] / ray[1]))
+		return camera.view(point)[2], false, point.dot(point) < .25*.25 && math.Abs(point[0]-blockX) > .09
+	}
+	depth := make([]float32, depthSize*depthSize)
+	for y := range depthSize {
+		for x := range depthSize {
+			depth[y*depthSize+x] = 1
+			if distance, _, _ := scene(
+				(float64(x)+.5)/float64(depthSize),
+				(float64(y)+.5)/float64(depthSize),
+			); distance > 0 {
+				depth[y*depthSize+x] = float32(camera.depth(distance))
+			}
+		}
+	}
+
+	// About 800 drops, which spreads it well past 25 cm.
+	scale := math.Cbrt(800)
+	normal := vec3{0, math.Cos(tilt), math.Sin(tilt)}
+	puddle := splashDrop{
+		position: normal.scale(fluidRadius*scale/9 + .0002), normal: normal, mode: 3, spread: 1, scale: scale,
+		marker: 5,
+	}
+	splashes := make([]float32, splashCount*particleFloats)
+	copy(splashes, puddle.floats())
+	params := d.iniParams(map[int][4]float32{237: {0, 1, 0, 0}})
+	cameraRows := d.structured(camera.rows(), 16).srv
+	vsViews := bindings{srv: map[int]unsafe.Pointer{
+		100: d.structured(make([]float32, primaryCount*particleFloats), 64).srv,
+		101: d.structured(splashes, 64).srv,
+		102: d.structured(make([]float32, splashCount*3*4), 16).srv,
+		103: d.structured(liveSlots(0), 16).srv,
+		104: d.structured(make([]float32, primaryCount*linkRows*4), 16).srv,
+		112: d.structured(make([]float32, primaryCount*16), 64).srv,
+		113: cameraRows, 120: params,
+	}}
+	psViews := bindings{srv: map[int]unsafe.Pointer{
+		106: d.floatTexture(depthSize, depthSize, depth).srv, 113: cameraRows, 120: params,
+	}}
+	targets := []gpuTexture{
+		d.texture2D(width, height, formatR32Float, 4, nil, true),
+		d.texture2D(width, height, formatR32Float, 4, nil, true),
+		d.texture2D(width, height, formatR32G32B32A32Float, 16, nil, true),
+		d.texture2D(width, height, formatR32Float, 4, nil, true),
+		d.texture2D(width, height, formatR32G32Float, 8, nil, true),
+	}
+	d.clearTarget(targets[0], [4]float32{1e30})
+	d.draw(d.shader("vs", bundle.compile(file, "vs")), d.shader("ps", bundle.compile(file, "ps")),
+		vsViews, psViews, targets, (primaryCount+splashCount)*6)
+
+	var got grownPuddleDraw
+	written := bytesFloat32(d.readTexture(targets[0], 4))
+	thickness := bytesFloat32(d.readTexture(targets[1], 4))
+	for y := range height {
+		for x := range width {
+			index := y*width + x
+			distance, onBlock, inner := scene((float64(x)+.5)/width, (float64(y)+.5)/height)
+			drawn := thickness[index] > 0
+			if onBlock && drawn {
+				got.onBlock++
+			}
+			if !inner {
+				continue
+			}
+			got.inside++
+			if drawn {
+				got.covered++
+				got.offFloor = math.Max(got.offFloor, math.Abs(float64(written[index])-distance))
+			}
+		}
+	}
+	return got
+}
+
+// A grown puddle is one wide disc on the plane its center sees, which depth
+// noise tilts by a few degrees. It must still cover the floor under it rather
+// than break into rows where its plane leaves the floor, lie on the floor
+// rather than on the steps of a scene depth coarser than the screen, and
+// still not climb onto what stands in it, near its center or far enough out
+// that a block's top lies within the floor's allowed rise.
+func TestSurfaceDrapesGrownPuddleOnFloor(t *testing.T) {
+	for _, depthSize := range []int{128, 85} {
+		for _, degrees := range []float64{0, 4, -4} {
+			for _, blockX := range []float64{.12, .32} {
+				got := drawGrownPuddle(t, degrees*math.Pi/180, depthSize, blockX)
+				label := fmt.Sprintf("depth %d, tilt %v degrees, block at %v m", depthSize, degrees, blockX)
+				if got.inside < 200 || got.covered != got.inside {
+					t.Errorf("%s: puddle covers %d of %d floor pixels", label, got.covered, got.inside)
+				}
+				if got.offFloor > .002 {
+					t.Errorf("%s: puddle depth lies up to %.4f m off the floor", label, got.offFloor)
+				}
+				// A depth coarser than the screen gives the block's silhouette texels
+				// a slope allowance that keeps a pixel or two of any film on it
+				// (clipOffScene); the drape must add none.
+				allowed := 0
+				if depthSize < 128 {
+					allowed = 2
+				}
+				if got.onBlock > allowed {
+					t.Errorf("%s: puddle covers %d pixels on top of the block", label, got.onBlock)
+				}
+			}
+		}
+	}
+}
+
+// A puddle seen from standing height recedes by more than the depth filter's
+// range within a few rows. Smoothing across rows must leave such a plane where
+// it lies: a filter that measures each sample against the center alone drops
+// the nearer ones and clamps the farther ones, pushing the puddle behind the
+// floor by an amount that changes from row to row, which the composite shows
+// as bands.
+func TestSmoothKeepsRecedingPuddlePlane(t *testing.T) {
+	const size, near, recede = 64, 2.0, .01
+	bundle := newShaderBundle(t, games[0].dir)
+	file := filepath.Join(bundle.root, "fluid", "FluidSmoothV.hlsl")
+	d := newWARPDevice(t)
+	// A narrow view, so the filter spans a few pixels at 2 m.
+	camera := newTestCamera(vec3{0, 1, 0}, vec3{0, 1, -1}, math.Pi/60, 1, .1, 100)
+	depth := make([]float32, size*size)
+	for y := range size {
+		for x := range size {
+			depth[y*size+x] = tagDepth(near+recede*float64(y), 8)
+		}
+	}
+	params := d.iniParams(nil)
+	targets := []gpuTexture{
+		d.texture2D(size, size, formatR32Float, 4, nil, true),
+		d.texture2D(size, size, formatR32Float, 4, nil, true),
+	}
+	d.draw(d.shader("vs", bundle.compile(file, "vs")), d.shader("ps", bundle.compile(file, "ps")), bindings{},
+		bindings{srv: map[int]unsafe.Pointer{
+			100: d.floatTexture(size, size, depth).srv,
+			101: d.floatTexture(size, size, make([]float32, size*size)).srv,
+			103: d.structured(liveSlots(0), 16).srv,
+			113: d.structured(camera.rows(), 16).srv, 120: params,
+		}}, targets, 3)
+
+	smoothed := bytesFloat32(d.readTexture(targets[0], 4))
+	worst := 0.0
+	for y := 8; y < size-8; y++ {
+		want := near + recede*float64(y)
+		worst = math.Max(worst, math.Abs(float64(smoothed[y*size+size/2])-want))
+	}
+	if worst > .0005 {
+		t.Errorf("smoothing moved the receding puddle by up to %.4f m", worst)
 	}
 }

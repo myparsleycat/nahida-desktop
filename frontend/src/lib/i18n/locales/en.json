@@ -2876,6 +2876,8 @@
               "absorptionDepth": "Color depth",
               "wetGround": "Wet ground brightness",
               "puddleReflection": "Puddle reflection",
+              "puddleSize": "Puddle size",
+              "puddleLinger": "Puddle linger",
               "streamReflection": "Stream reflection",
               "scattering": "Light scattering",
               "refraction": "Refraction",
@@ -2884,6 +2886,8 @@
                 "absorptionDepth": "Millimeters of liquid it takes to reach the full color · lower is deeper",
                 "wetGround": "How bright the ground stays under a puddle · 1 turns darkening off",
                 "puddleReflection": "The least a puddle reflects",
+                "puddleSize": "Centimeters a puddle can spread to as more liquid gathers in it",
+                "puddleLinger": "Seconds over which a grown puddle drains once liquid stops reaching it · higher lasts longer",
                 "streamReflection": "How strongly the stream and drops reflect",
                 "scattering": "How much of its own color the liquid shows over dark backgrounds",
                 "refraction": "How far the liquid bends what is behind it"
