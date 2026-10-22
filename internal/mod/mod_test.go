@@ -212,6 +212,50 @@ func TestImporterSyncKeepsGameEditSavedDuringLookup(t *testing.T) {
 	}
 }
 
+func TestImporterSyncAdoptsGameAtImporterModsFolder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	gimi, zzmi, wwmi := filepath.Join(root, "GIMI"), filepath.Join(root, "ZZMI"), filepath.Join(root, "WWMI")
+	custom := filepath.Join(root, "custom-ww-mods")
+	characters := filepath.Join(gimi, "Mods", "Characters")
+	for _, dir := range []string{filepath.Join(zzmi, "Mods"), characters, wwmi, custom} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	createJunction(t, custom, filepath.Join(wwmi, "Mods"))
+	alias := filepath.Join(root, "zzz-alias")
+	createJunction(t, filepath.Join(zzmi, "Mods"), alias)
+	service.xxmi = compressionImporterSource{
+		{Key: "GIMI", ImporterFolder: gimi}, {Key: "ZZMI", ImporterFolder: zzmi}, {Key: "WWMI", ImporterFolder: wwmi},
+	}
+
+	cases := []struct{ game, folder, want string }{
+		{"绝区零", filepath.Join(zzmi, "Mods"), "ZZMI"},
+		{"鸣潮", custom, "WWMI"},
+		{"Characters", characters, ""},
+		{"ZZZ alias", alias, ""},
+	}
+	for _, tc := range cases {
+		if err := service.AddGame(ctx, tc.game, tc.folder, nil, nil, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := service.GetGames(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		row, err := service.client.GamePaths.GetByGame(ctx, tc.game)
+		if err != nil || row == nil {
+			t.Fatalf("%s: row = %#v, %v", tc.game, row, err)
+		}
+		if got := cleanOptional(row.Importer); (got == nil) != (tc.want == "") || got != nil && *got != tc.want {
+			t.Fatalf("%s: importer = %v, want %q", tc.game, got, tc.want)
+		}
+	}
+}
+
 func TestUpdateGameDoesNotRequireExistingConfiguredDirectory(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{})

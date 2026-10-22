@@ -596,7 +596,8 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 }
 
 // SyncImporterModFolders points every XXMI game at its importer's current Mods folder. A game whose importer
-// is not enabled keeps its last folder, and one whose folder another game already uses is left alone.
+// is not enabled keeps its last folder, and one whose folder another game already uses is left alone. A game
+// without an importer whose folder is an importer's Mods folder takes that importer, unless another game has it.
 //
 //wails:ignore
 func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
@@ -610,18 +611,49 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 	}
 
 	var importers []xxmi.EnabledImporter
+	var loadErr error
 	loaded := false
+	load := func() error {
+		if !loaded {
+			importers, loadErr = m.enabledImporters(ctx)
+			loaded = true
+		}
+		return loadErr
+	}
+	used := map[string]struct{}{}
+	for _, row := range rows {
+		if importer := cleanOptional(row.Importer); importer != nil {
+			used[strings.ToUpper(*importer)] = struct{}{}
+		}
+	}
+
 	changed, conflicts := []string{}, []string{}
 	for _, row := range rows {
+		if cleanOptional(row.Importer) == nil {
+			// Adoption is a convenience, so importers that cannot be read only fail the sync for XXMI games.
+			if m.xxmi == nil || load() != nil {
+				continue
+			}
+			key, ok := importerOwningModFolder(importers, row.ModFolderPath)
+			if _, taken := used[strings.ToUpper(key)]; !ok || taken {
+				continue
+			}
+			adopted, err := client.GamePaths.AdoptImporter(ctx, row.Game, row.ModFolderPath, key)
+			if err != nil {
+				return err
+			}
+			if adopted {
+				used[strings.ToUpper(key)] = struct{}{}
+				changed = append(changed, row.Game)
+			}
+			continue
+		}
 		key, ok := xxmiImporterKey(row.Importer)
 		if !ok {
 			continue
 		}
-		if !loaded {
-			if importers, err = m.enabledImporters(ctx); err != nil {
-				return err
-			}
-			loaded = true
+		if err := load(); err != nil {
+			return err
 		}
 		folder, ok := importerModFolder(importers, key)
 		if !ok || platform.SamePathFold(folder, row.ModFolderPath) {
@@ -717,6 +749,26 @@ func importerModFolder(importers []xxmi.EnabledImporter, key string) (string, bo
 		}
 	}
 	return "", false
+}
+
+// importerOwningModFolder returns the importer whose Mods folder is folder itself, also when either path is a
+// junction to the other. A folder inside a Mods folder is not adopted: the sync would move it to the Mods folder.
+func importerOwningModFolder(importers []xxmi.EnabledImporter, folder string) (string, bool) {
+	physical := finalPathOr(folder)
+	for _, importer := range importers {
+		mods, ok := importerModFolder(importers, importer.Key)
+		if ok && (platform.SamePathFold(mods, folder) || platform.SamePathFold(finalPathOr(mods), physical)) {
+			return importer.Key, true
+		}
+	}
+	return "", false
+}
+
+func finalPathOr(path string) string {
+	if resolved, err := platform.FinalPath(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 // xxmiImporterKey returns the importer whose Mods folder is the game's mod folder. NTE and games without an

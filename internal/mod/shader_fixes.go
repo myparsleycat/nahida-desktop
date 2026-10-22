@@ -17,7 +17,6 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/platform"
-	"nahida.live/desktop/internal/xxmi"
 )
 
 const (
@@ -430,18 +429,8 @@ func (s *ShaderFixes) getGlobalShaderFixesPath(modPath string) string {
 	if !found {
 		return ""
 	}
-	keys := make([]string, 0, len(importers))
 	for _, importer := range importers {
-		keys = append(keys, importer.Key)
-	}
-	importerKey := matched.Importer
-	if importerKey == "" {
-		if matchedKey := xxmi.GetMatchingImporter(matched.Game, keys); matchedKey != nil {
-			importerKey = *matchedKey
-		}
-	}
-	for _, importer := range importers {
-		if strings.EqualFold(importer.Key, importerKey) {
+		if strings.EqualFold(importer.Key, matched.Importer) {
 			return filepath.Join(importer.ImporterFolder, shaderFixesDirName)
 		}
 	}
@@ -480,18 +469,8 @@ func (s *ShaderFixes) getShaderFixesManifestSearchRoots(modPath, globalShaderPat
 	}
 	importers := s.importers()
 	for _, game := range s.games() {
-		keys := make([]string, 0, len(importers))
 		for _, importer := range importers {
-			keys = append(keys, importer.Key)
-		}
-		importerKey := game.Importer
-		if importerKey == "" {
-			if matched := xxmi.GetMatchingImporter(game.Game, keys); matched != nil {
-				importerKey = *matched
-			}
-		}
-		for _, importer := range importers {
-			if !strings.EqualFold(importer.Key, importerKey) {
+			if !strings.EqualFold(importer.Key, game.Importer) {
 				continue
 			}
 			if normalizeModPath(

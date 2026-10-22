@@ -167,6 +167,20 @@ WHERE "game" = ? AND "modFolderPath" = ? AND "importer" IS ?
 	return affected > 0, err
 }
 
+// AdoptImporter assigns importer to game only while its row still has no importer and holds the folder the caller
+// read. It reports whether it assigned.
+func (s GamePathsStore) AdoptImporter(ctx context.Context, game, modFolderPath, importer string) (bool, error) {
+	result, err := s.c.db.ExecContext(ctx, `
+UPDATE "game_paths" SET "importer" = ?
+WHERE "game" = ? AND "modFolderPath" = ? AND ("importer" IS NULL OR trim("importer") = '')`,
+		importer, game, modFolderPath)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected > 0, err
+}
+
 func (s GamePathsStore) SetNteLauncherPath(ctx context.Context, game, nteLauncherPath string) error {
 	return s.c.exec(ctx, `UPDATE "game_paths" SET "nteLauncherPath" = ? WHERE "game" = ?`, nteLauncherPath, game)
 }

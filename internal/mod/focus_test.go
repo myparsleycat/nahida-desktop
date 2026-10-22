@@ -26,7 +26,7 @@ func TestRunningGamePrefersFocusedGameByImporter(t *testing.T) {
 	}{
 		{name: "most recently focused", focused: []uint32{20, 10}, running: running, want: "WW"},
 		{name: "game order without focus", running: running, want: "메인"},
-		{name: "name fallback without importer", running: map[uint32]string{30: "ZZMI"}, want: "젠레스"},
+		{name: "game without importer", running: map[uint32]string{30: "ZZMI"}},
 		{name: "unregistered game", running: map[uint32]string{40: "SRMI"}},
 	}
 	for _, tc := range cases {
@@ -43,11 +43,11 @@ func TestRunningGamePrefersFocusedGameByImporter(t *testing.T) {
 	}
 }
 
-func TestNTEProcessNamesIncludesGamesMatchedByName(t *testing.T) {
+func TestNTEProcessNamesIncludesRegisteredExecutables(t *testing.T) {
 	t.Parallel()
 
-	executable := `D:\Games\NTE\Client\NTEGame.exe`
-	games := []GameConfig{{Game: "이환", GameExecutablePath: &executable}}
+	executable, nte := `D:\Games\NTE\Client\NTEGame.exe`, db.NTEImporter
+	games := []GameConfig{{Game: "이환", Importer: &nte, GameExecutablePath: &executable}}
 	names := nteProcessNames(games)
 	if !slices.Equal(names[db.NTEImporter], []string{nteExecutableName, "NTEGame.exe"}) {
 		t.Fatalf("nteProcessNames = %v", names)

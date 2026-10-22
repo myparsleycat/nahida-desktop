@@ -9,7 +9,6 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/xxmi"
 )
 
 // GetPreviousFocusedGame returns the registered game whose process is running, preferring the most
@@ -76,7 +75,7 @@ func nteProcessNames(games []GameConfig) map[string][]string {
 }
 
 // runningGame picks the game for the running importers, trying recently focused processes first and then the
-// rest in game order. Games without an importer fall back to matching their name.
+// rest in game order.
 func runningGame(games []GameConfig, focused []uint32, running map[uint32]string) *string {
 	for _, pid := range focused {
 		key, ok := running[pid]
@@ -102,11 +101,11 @@ func runningGame(games []GameConfig, focused []uint32, running map[uint32]string
 }
 
 func gameUsesImporter(game GameConfig, key string) bool {
-	if game.Importer != nil && strings.TrimSpace(*game.Importer) != "" {
-		if key == db.NTEImporter {
-			return isNTEImporter(game.Importer)
-		}
-		return strings.EqualFold(strings.TrimSpace(*game.Importer), key)
+	if game.Importer == nil {
+		return false
 	}
-	return xxmi.GetMatchingImporter(game.Game, []string{key}) != nil
+	if key == db.NTEImporter {
+		return isNTEImporter(game.Importer)
+	}
+	return strings.EqualFold(strings.TrimSpace(*game.Importer), key)
 }
