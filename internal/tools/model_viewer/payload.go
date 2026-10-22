@@ -55,10 +55,13 @@ func prepareModelViewerPayload(
 				if prepared.drawSources == nil {
 					prepared.drawSources = make(map[string]DrawSource)
 				}
-				prepared.drawSources[item.ID] = *mesh.drawSource
+				source := *mesh.drawSource
+				source.vertexBuffer = mesh.positionFile
+				prepared.drawSources[item.ID] = source
 			}
 		}
 	}
+	linkModelViewerDrawSources(transport, prepared.drawSources)
 	return meshPayloads, texturePayloads, textureStats, ctx.Err()
 }
 

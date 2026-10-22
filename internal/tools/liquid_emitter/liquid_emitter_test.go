@@ -196,6 +196,50 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		t.Fatalf("draw in a command list shared with another buffer = %+v", sites)
 	}
 
+	// A frame animation binds the same index buffer file under one resource
+	// per frame, so the hook must fire on every frame, not only the picked one.
+	const frames = "[TextureOverrideBody]\nif $swapvar == 0\n\tib = ResourceBodyIB.0\n\tdrawindexed = 6, 3, 0\n" +
+		"else if $swapvar == 1\n\tib = ResourceBodyIB.1\n\tdrawindexed = 6, 3, 0\nendif\n"
+	if text, err = parseINIText([]byte(frames)); err != nil {
+		t.Fatal(err)
+	}
+	frame := bodyDraw
+	frame.IB, frame.IBAliases = "BodyIB.1", []string{"BodyIB.0", "BodyIB.1"}
+	if sites := text.drawSites(frame); len(sites) != 2 || text.sharedDraw(frame, sites) {
+		t.Fatalf("draw sites of a frame animation = %+v", sites)
+	}
+
+	// Frames may share one command list, which another override may also run
+	// under one of the same buffers with its own vertex buffers. A custom
+	// shader run only by the override is part of it, like a command list.
+	const frameList = "[TextureOverrideBody]\nif $swapvar == 0\n\tib = ResourceBodyIB.0\nelse\n\tib = ResourceBodyIB.1\nendif\n" +
+		"run = CommandListShared\n\n[CommandListShared]\ndrawindexed = 6, 3, 0\n"
+	const frameShader = "[TextureOverrideBody]\nrun = CustomShaderBody\n\n[CustomShaderBody]\n" +
+		"if $swapvar == 0\n\tib = ResourceBodyIB.0\n\tdrawindexed = 6, 3, 0\n" +
+		"else\n\tib = ResourceBodyIB.1\n\tdrawindexed = 6, 3, 0\nendif\n"
+	for ini, want := range map[string]struct {
+		sites  int
+		shared bool
+	}{
+		frameList: {1, false},
+		frameList + "\n[TextureOverrideArm]\nib = ResourceBodyIB.1\nrun = CommandListShared\n": {1, true},
+		frameList + "\n[TextureOverrideArm]\nrun = CommandListShared\n":                        {1, true},
+		frameShader: {2, false},
+	} {
+		if text, err = parseINIText([]byte(ini)); err != nil {
+			t.Fatal(err)
+		}
+		for _, ib := range frame.IBAliases {
+			frame.IB = ib
+			if sites := text.drawSites(
+				frame,
+			); len(sites) != want.sites ||
+				text.sharedDraw(frame, sites) != want.shared {
+				t.Fatalf("draw sites over %s = %+v, want %+v in\n%s", ib, sites, want, ini)
+			}
+		}
+	}
+
 	// One CRLF line in an LF file must not merge the hook lines.
 	const mixed = "[TextureOverrideBody]\r\nrun = CommandListBody\n\n[CommandListBody]\n"
 	hooked := mixed + "; nahida-liquid 7 begin\nx243 = 7\ny243 = 6\nz243 = 0\n" + captureCommand +

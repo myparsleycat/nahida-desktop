@@ -47,7 +47,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { followsRuntime, lookChanged, LookSection, useLookDraft } from "./liquid-emitter-look";
-import { LiquidEmitterOverlay } from "./liquid-emitter-overlay";
+import { LiquidEmitterOverlay, type LiquidEmitterSurface } from "./liquid-emitter-overlay";
 import {
   type ApplyMode,
   IN_PLACE,
@@ -386,21 +386,44 @@ export function LiquidEmitterTool({
   const meshLabel = anchorMesh ? partLabel(anchorMesh, meshes) : (anchor?.meshId ?? "");
   const anchorForm = anchorMesh?.form;
   const anchorInForm = form === ALL_FORMS || !anchorForm || anchorForm === form;
+  // A frame animation shows one mesh per frame, all of them the same draw for
+  // the game, so a part counts as drawn while any mesh of its draw is visible.
+  const visibleDraws = new Set(
+    meshes?.flatMap((mesh) => (mesh.drawKey && visibleMeshes?.has(mesh.id) ? [mesh.drawKey] : [])),
+  );
+  // The anchor's own mesh comes first, so it keeps the marker while it is shown.
+  const surfaceOf = (target: Anchor): LiquidEmitterSurface => {
+    const drawKey = meshes?.find((mesh) => mesh.id === target.meshId)?.drawKey;
+    const sameDraw = drawKey
+      ? (meshes ?? []).flatMap((mesh) =>
+          mesh.drawKey === drawKey && mesh.id !== target.meshId ? [mesh.id] : [],
+        )
+      : [];
+    return {
+      meshIds: [target.meshId, ...sameDraw],
+      faceIndex: target.faceIndex,
+      barycentric: target.barycentric,
+    };
+  };
+  const drawn = (meshId: string) => {
+    const drawKey = meshes?.find((mesh) => mesh.id === meshId)?.drawKey;
+    return (
+      visibleMeshes === null ||
+      visibleMeshes.has(meshId) ||
+      (drawKey !== undefined && visibleDraws.has(drawKey))
+    );
+  };
   // A toggle can swap the selected part for another drawn in the same place,
   // so the marker would otherwise point at a part the game is not drawing.
   // Another form tab hides the part on purpose and needs no warning.
-  const anchorHidden =
-    anchor !== null && anchorInForm && visibleMeshes !== null && !visibleMeshes.has(anchor.meshId);
+  const anchorHidden = anchor !== null && anchorInForm && !drawn(anchor.meshId);
   const anchorShown = anchor !== null && anchorInForm && !anchorHidden;
   const position = anchor
     ? (anchor.point.map((value, axis) => value + anchor.offset[axis]) as Vec3)
     : undefined;
   const shown = (meshId: string) => {
     const meshForm = formOfMesh(meshId);
-    return (
-      (form === ALL_FORMS || !meshForm || meshForm === form) &&
-      (visibleMeshes === null || visibleMeshes.has(meshId))
-    );
+    return (form === ALL_FORMS || !meshForm || meshForm === form) && drawn(meshId);
   };
   const others = emitters.flatMap((emitter) => {
     const saved = emitter.pid === current?.pid ? null : anchorFromEmitter(emitter);
@@ -706,6 +729,7 @@ export function LiquidEmitterTool({
               <LiquidEmitterOverlay
                 key={other.pid}
                 point={other.anchor.point}
+                surface={surfaceOf(other.anchor)}
                 offset={other.anchor.offset}
                 direction={other.anchor.direction}
                 down={down}
@@ -717,6 +741,7 @@ export function LiquidEmitterTool({
             {anchor && anchorShown ? (
               <LiquidEmitterOverlay
                 point={anchor.point}
+                surface={surfaceOf(anchor)}
                 offset={anchor.offset}
                 direction={anchor.direction}
                 down={down}

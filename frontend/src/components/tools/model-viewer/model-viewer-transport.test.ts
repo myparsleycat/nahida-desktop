@@ -16,6 +16,7 @@ describe("normalizeModelViewerTransport", () => {
                     id: "mesh",
                     component: "body",
                     geometryUrl: "positions",
+                    drawKey: "draw0",
                     conditions: null,
                     texKey: null,
                     textureVariants: null,
@@ -69,6 +70,7 @@ describe("normalizeModelViewerTransport", () => {
 
         expect(result.meshes[0]).toMatchObject({
             geometryUrl: "positions",
+            drawKey: "draw0",
             conditions: [],
             textureVariants: [],
             normalMapVariants: [],

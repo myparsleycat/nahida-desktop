@@ -431,6 +431,18 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			output = append(output, taskMeshes[taskIndex])
 		}
 	}
+	// Draw numbers restart with each index buffer, so a section drawing over
+	// several, such as one per animation frame, would repeat an ID. The suffix
+	// cannot meet a draw number, so unique IDs saved before stay as they were.
+	usedIDs := make(map[string]bool, len(output))
+	for meshIndex := range output {
+		id := output[meshIndex].id
+		for suffix := 1; usedIDs[id]; suffix++ {
+			id = output[meshIndex].id + "-" + strconv.Itoa(suffix)
+		}
+		usedIDs[id] = true
+		output[meshIndex].id = id
+	}
 	if err := attachModelViewerDirectPositionOverrides(
 		output,
 		sections,

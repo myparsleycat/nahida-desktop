@@ -6,7 +6,16 @@ import {
   type Vec3,
 } from "@shared/liquid-emitter/flow-trajectory";
 import { useEffect, useMemo, useRef } from "react";
-import { BufferGeometry, type Group, Line, LineBasicMaterial, Quaternion, Vector3 } from "three";
+import {
+  BufferGeometry,
+  type Group,
+  Line,
+  LineBasicMaterial,
+  Mesh,
+  type Object3D,
+  Quaternion,
+  Vector3,
+} from "three";
 
 const ANCHOR_COLOR = "#ffc240";
 // The mod's other emitters, shown for reference while one is edited.
@@ -20,8 +29,17 @@ const PREVIEW_SPEED = 0.1;
 
 const overlayMaterial = { depthTest: false, depthWrite: false, transparent: true } as const;
 
+/** The picked spot of a draw's triangle, which each mesh of that draw places on its own surface. */
+export type LiquidEmitterSurface = {
+  /** The meshes the game draws with one draw call, in order of preference. */
+  meshIds: readonly string[];
+  faceIndex: number;
+  barycentric: Vec3;
+};
+
 export function LiquidEmitterOverlay({
   point,
+  surface,
   offset,
   direction,
   down,
@@ -31,7 +49,9 @@ export function LiquidEmitterOverlay({
   showTrajectory,
   muted = false,
 }: {
+  /** Where the anchor was picked, used while no mesh of its surface is shown. */
   point: Vec3;
+  surface?: LiquidEmitterSurface;
   offset: Vec3;
   direction: Vec3;
   /** The mesh's down axis, along which the previewed path falls. */
@@ -46,6 +66,7 @@ export function LiquidEmitterOverlay({
   muted?: boolean;
 }) {
   const color = muted ? MUTED_COLOR : ANCHOR_COLOR;
+  const surfaceRef = useSurfaceShift(point, surface);
   const [pointMeters, offsetMeters] = useMemo(
     () => [toMeters(point, meshUnit), toMeters(offset, meshUnit)],
     [point, offset, meshUnit],
@@ -68,33 +89,83 @@ export function LiquidEmitterOverlay({
   );
 
   return (
-    <group renderOrder={1000} scale={1 / meshUnit}>
-      <mesh position={origin} renderOrder={1000}>
-        <sphereGeometry args={[0.006, 16, 12]} />
-        <meshBasicMaterial color={color} {...overlayMaterial} />
-      </mesh>
-      <group position={origin} quaternion={arrowRotation}>
-        <mesh position={[0, ARROW_LENGTH * 0.4, 0]} renderOrder={1000}>
-          <cylinderGeometry args={[0.0015, 0.0015, ARROW_LENGTH * 0.8, 8]} />
+    <group ref={surfaceRef}>
+      <group renderOrder={1000} scale={1 / meshUnit}>
+        <mesh position={origin} renderOrder={1000}>
+          <sphereGeometry args={[0.006, 16, 12]} />
           <meshBasicMaterial color={color} {...overlayMaterial} />
         </mesh>
-        <mesh position={[0, ARROW_LENGTH * 0.9, 0]} renderOrder={1000}>
-          <coneGeometry args={[0.008, ARROW_LENGTH * 0.2, 12]} />
-          <meshBasicMaterial color={color} {...overlayMaterial} />
-        </mesh>
+        <group position={origin} quaternion={arrowRotation}>
+          <mesh position={[0, ARROW_LENGTH * 0.4, 0]} renderOrder={1000}>
+            <cylinderGeometry args={[0.0015, 0.0015, ARROW_LENGTH * 0.8, 8]} />
+            <meshBasicMaterial color={color} {...overlayMaterial} />
+          </mesh>
+          <mesh position={[0, ARROW_LENGTH * 0.9, 0]} renderOrder={1000}>
+            <coneGeometry args={[0.008, ARROW_LENGTH * 0.2, 12]} />
+            <meshBasicMaterial color={color} {...overlayMaterial} />
+          </mesh>
+        </group>
+        {showTrajectory && !muted && nozzle !== "ooze" ? (
+          <FlowPreview
+            point={pointMeters}
+            offset={offsetMeters}
+            direction={direction}
+            down={down}
+            force={force}
+            nozzle={nozzle === "jet" ? "jet" : "spray"}
+          />
+        ) : null}
       </group>
-      {showTrajectory && !muted && nozzle !== "ooze" ? (
-        <FlowPreview
-          point={pointMeters}
-          offset={offsetMeters}
-          direction={direction}
-          down={down}
-          force={force}
-          nozzle={nozzle === "jet" ? "jet" : "spray"}
-        />
-      ) : null}
     </group>
   );
+}
+
+// A frame animation draws the anchor's triangle with another mesh on each
+// frame, and toggles or shape keys move its vertices, so the marker follows
+// the surface shown now instead of where it was picked. The flow preview
+// only translates with its start, so the whole overlay is moved in place of
+// rebuilding it on every frame the surface moves.
+function useSurfaceShift(picked: Vec3, surface: LiquidEmitterSurface | undefined) {
+  const scene = useThree((state) => state.scene);
+  const invalidate = useThree((state) => state.invalidate);
+  const groupRef = useRef<Group>(null);
+  const shift = useMemo(() => new Vector3(), []);
+  useFrame(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    const tracked = (surface && surfacePoint(scene, surface)) ?? picked;
+    shift.set(tracked[0] - picked[0], tracked[1] - picked[1], tracked[2] - picked[2]);
+    if (group.position.equals(shift)) return;
+    group.position.copy(shift);
+    invalidate();
+  });
+  return groupRef;
+}
+
+function surfacePoint(root: Object3D, surface: LiquidEmitterSurface): Vec3 | null {
+  const shown = new Map<string, Mesh>();
+  root.traverseVisible((object) => {
+    const meshId: unknown = object.userData.meshId;
+    if (object instanceof Mesh && typeof meshId === "string" && surface.meshIds.includes(meshId)) {
+      shown.set(meshId, object);
+    }
+  });
+  const mesh = surface.meshIds.map((meshId) => shown.get(meshId)).find((found) => found);
+  const position = mesh?.geometry.attributes.position;
+  if (!mesh || !position) return null;
+
+  // Corners are read in the order the pick measured its barycentric weights.
+  const index = mesh.geometry.index;
+  const first = surface.faceIndex * 3;
+  if (surface.faceIndex < 0 || first + 3 > (index ? index.count : position.count)) return null;
+  const point: Vec3 = [0, 0, 0];
+  for (let corner = 0; corner < 3; corner++) {
+    const vertex = index ? index.getX(first + corner) : first + corner;
+    for (let axis = 0; axis < 3; axis++) {
+      point[axis] += position.getComponent(vertex, axis) * surface.barycentric[corner];
+    }
+  }
+  return point;
 }
 
 function toMeters(value: Vec3, meshUnit: number): Vec3 {

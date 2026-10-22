@@ -137,7 +137,7 @@ drawindexed = 3, 0, 3
 }
 
 // Frame-swap animation mods bind vb0 only from another hash's command list,
-// so the scan finds no mesh and the legacy build must still name the draw.
+// so the scan finds no mesh and the legacy build must still name each frame's draw.
 func TestModelViewerLegacyMeshKeepsDrawSource(t *testing.T) {
 	dir := t.TempDir()
 	const vertexCount = 6
@@ -170,8 +170,13 @@ vb1 = ResourceBodyTexcoord.0
 hash = 22222222
 match_first_index = 0
 handling = skip
+if $swapvar == 0
 ib = ResourceBodyAIB.0
 drawindexed = 3, 3, 0
+else
+ib = ResourceBodyAIB.1
+drawindexed = 3, 3, 0
+endif
 [CommandListBodyBlend]
 if $swapvar == 0
 handling = skip
@@ -201,6 +206,10 @@ filename = BodyTexcoord.buf
 type = Buffer
 format = DXGI_FORMAT_R32_UINT
 filename = BodyA.ib
+[ResourceBodyAIB.1]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = BodyA.ib
 `)
 	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
 	cache := newModelViewerBufferCache()
@@ -213,10 +222,15 @@ filename = BodyA.ib
 		t.Fatalf("fixture must take the legacy build: scanned=%d err=%v", len(scanned), err)
 	}
 	meshes, _, _, _, err := buildModelViewerDirectMeshesPrepared(iniPath, dir, "", sections, resources, nil, cache, nil)
-	if err != nil || len(meshes) != 1 {
+	if err != nil || len(meshes) != 2 {
 		t.Fatalf("meshes=%d err=%v", len(meshes), err)
 	}
 
+	// Each frame's draw is numbered within its own index buffer, so the IDs
+	// must still differ or one frame's draw would replace the other's.
+	if meshes[0].id == meshes[1].id {
+		t.Fatalf("both frames have mesh ID %q", meshes[0].id)
+	}
 	mesh := meshes[0]
 	source := mesh.drawSource
 	if source == nil || source.INIPath != iniPath || source.Section != "BodyA" ||

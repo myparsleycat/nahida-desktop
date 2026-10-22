@@ -200,10 +200,22 @@ func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
 // part as well, and an emitter added there would take this one's slot.
 func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bool {
 	bodies := t.sectionBodies()
+	own := strings.ToLower("TextureOverride" + source.Section)
 	for name := range bodies {
 		walk := newDrawWalk(t, bodies, source)
 		walk.visit(name, []string{""}, map[string]bool{})
+		// The index buffer aliases of a frame animation hold only under its own
+		// override, or a section that is only ever run (a command list or custom
+		// shader) walked on its own. Another override reaching the site under
+		// any of them, or under the buffer it inherits, draws its own vertex
+		// buffers.
+		called := strings.HasPrefix(name, "commandlist") || strings.HasPrefix(name, "customshader") ||
+			strings.HasPrefix(name, "builtin")
+		foreign := len(source.IBAliases) > 1 && name != own && !called
 		for _, site := range sites {
+			if foreign && len(walk.reached[site.line]) > 0 {
+				return true
+			}
 			if slices.ContainsFunc(walk.reached[site.line], func(ib string) bool {
 				return ib != "" && !source.MatchesIB(ib)
 			}) {

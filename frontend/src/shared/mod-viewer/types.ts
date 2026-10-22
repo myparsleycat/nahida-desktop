@@ -263,6 +263,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
     component: string;
     geometryUrl: string;
     sourceIndicesUrl?: string;
+    drawKey?: string;
     bounds?: ModelViewerBounds;
     shapeTargets: Array<{
         var: string;

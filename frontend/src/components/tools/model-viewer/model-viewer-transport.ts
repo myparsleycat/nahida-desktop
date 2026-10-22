@@ -136,6 +136,7 @@ export function normalizeModelViewerTransport(
             form: mesh.form || undefined,
             geometryUrl: mesh.geometryUrl,
             sourceIndicesUrl: mesh.sourceIndicesUrl,
+            drawKey: mesh.drawKey || undefined,
             bounds: mesh.bounds ?? undefined,
             conditions: normalizeDNF(mesh.conditions),
             texKey: mesh.texKey,
