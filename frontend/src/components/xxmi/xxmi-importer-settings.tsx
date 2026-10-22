@@ -81,7 +81,8 @@ function normalizedFolder(folder: string) {
 }
 
 async function resolveImporterGameFolder(importer: string, next: ImporterConfig) {
-  if (!next.gameFolder) return next;
+  // A disabled importer never launches, so a game folder that no longer holds the game must not block turning it off.
+  if (!next.gameFolder || !next.enabled) return next;
   return {
     ...next,
     gameFolder: (await XXMI.ValidateGameFolder(importer, next.gameFolder)).path,

@@ -10,6 +10,7 @@ const xxmi = vi.hoisted(() => ({
   InstallImporterPackage: vi.fn(),
   RestoreOfficialDLL: vi.fn(),
   ImportCustomDLL: vi.fn(),
+  ValidateGameFolder: vi.fn(),
 }));
 const fileDrop = vi.hoisted(() => ({
   drop: (_drop: { paths: string[]; target: { id: string } }) => {},
@@ -358,9 +359,27 @@ it("lets an importer whose pinned package is missing be disabled and saved", asy
   );
 });
 
+it("lets an importer whose game folder no longer holds the game be disabled and saved", async () => {
+  config.gameFolder = "D:\\Games\\Removed";
+  xxmi.ValidateGameFolder.mockRejectedValue(new Error("game executable for GIMI was not found"));
+  xxmi.SaveImporterConfig.mockResolvedValue(undefined);
+  render(<XXMIImporterSettings importer="GIMI" />);
+
+  fireEvent.click(screen.getByRole("switch", { name: "page.setting.xxmi.builtin.enabled" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "g.save" })[0]);
+  await waitFor(() =>
+    expect(xxmi.SaveImporterConfig).toHaveBeenCalledWith(
+      "GIMI",
+      expect.objectContaining({ enabled: false, gameFolder: "D:\\Games\\Removed" }),
+    ),
+  );
+  expect(xxmi.ValidateGameFolder).not.toHaveBeenCalled();
+});
+
 afterEach(() => {
   cleanup();
   config.mode = "xxmi";
+  config.gameFolder = "";
   config.packageVersion = { follow: "latest" };
   overview.sharedLibsProvider = "spectrumqt";
   overview.sharedLibsVersion = "";
@@ -370,6 +389,7 @@ afterEach(() => {
   xxmi.InstallImporterPackage.mockReset();
   xxmi.RestoreOfficialDLL.mockReset();
   xxmi.ImportCustomDLL.mockReset();
+  xxmi.ValidateGameFolder.mockReset();
   overview.importers = [];
   overview.sharedCustomDll = "";
   overview.customDlls = [];
