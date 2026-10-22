@@ -832,7 +832,7 @@ vb0 = ResourcePos
 [TextureOverride_VB_beef0006_Texcoord]
 hash = beef0006
 vb1 = ResourceTc
-[TextureOverride_IB_beef0006_Component1]
+[TextureOverride_IB_beef0006__Component1]
 hash = beef0006
 match_first_index = 0
 ib = Resource_beef0006_Component1
@@ -865,7 +865,7 @@ filename = Texture/beef0006_1_beef0008_Hash_LightMap.png
 hash = beef0008
 this = Resource_Texture_beef0008
 `)
-	component1 := meshesNamed(result, "_IB_beef0006_Component1")
+	component1 := meshesNamed(result, "_IB_beef0006__Component1")
 	component2 := meshesNamed(result, "_IB_beef0006_Component2")
 	if len(component1) < 1 || len(component2) < 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)

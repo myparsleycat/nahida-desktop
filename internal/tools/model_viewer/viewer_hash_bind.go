@@ -14,7 +14,7 @@ var (
 	ibComponentDumpRE   = regexp.MustCompile(
 		`(?i)(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\.`,
 	)
-	ibComponentDumpRefRE = regexp.MustCompile(`(?i)(?:^|_)IB_([0-9a-f]{8})(?:_[A-Za-z][A-Za-z0-9]*)*_Component(\d+)$`)
+	ibComponentDumpRefRE = regexp.MustCompile(`(?i)(?:^|_)IB_([0-9a-f]{8})(?:_+[A-Za-z][A-Za-z0-9]*)*_+Component(\d+)$`)
 	hashLightMapRE       = regexp.MustCompile(`(?i)hash_lightmap|_lightmap\.`)
 	hashDiffuseRE        = regexp.MustCompile(`(?i)hash_diffusemap|diffuse`)
 	hashImageExtRE       = regexp.MustCompile(`(?i)\.(dds|png|jpe?g)$`)
