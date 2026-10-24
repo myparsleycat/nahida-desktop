@@ -33,6 +33,7 @@ var modLibraries = []modLibrary{
 	{name: "Offset", namespace: `global\offset`},
 	{name: "HealthBar", namespace: `global\healthbar`},
 	{name: "Tracking", namespace: `global\tracking`},
+	{name: "KatFXMatcap", namespace: "katfxmatcap"},
 }
 
 // libraryMask holds one bit per modLibraries entry.
@@ -53,8 +54,9 @@ var libraryReferencePrefixes = map[string]bool{
 }
 
 // libraryHeadSize bounds how much of an INI is read to find its namespace declaration,
-// which precedes the first section.
-const libraryHeadSize = 4096
+// which precedes the first section. Libraries such as KatFXMatcap document their API in a
+// comment header of nearly 4 KiB before the declaration.
+const libraryHeadSize = 16 << 10
 
 // referencedLibraries reports the libraries a lowercase INI line refers to. The prefix
 // check keeps file paths such as Textures\RabbitFX\map.dds from counting as references.
