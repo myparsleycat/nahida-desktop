@@ -184,7 +184,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     mutationFn: async ({ groupPath, name }: { groupPath: string; name: string }) => {
       return await FS.Mkdir(groupPath, name);
     },
-    onSuccess: async (_, variables) => {
+    onSuccess: async (path, variables) => {
       setExpandedGroup(variables.groupPath, true);
       setCreateFolderTarget(null);
       createFolderForm.reset();
@@ -193,6 +193,9 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         queryClient.invalidateQueries({ queryKey: ["modGroup", variables.groupPath] }),
         queryClient.invalidateQueries({ queryKey: ["subGroups", variables.groupPath] }),
       ]);
+
+      // Selecting before the refetch lets the route drop a top-level folder missing from the stale list.
+      handleSelect({ name: variables.name, path, mods: [] }, true);
     },
     onError: (error) => {
       const message = toErrorMessage(error);
