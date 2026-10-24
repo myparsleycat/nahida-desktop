@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io/fs"
 	"math"
 	"os"
@@ -311,6 +312,11 @@ func TestServiceKeepsSlotsOfHooksAfterRuntimeLoss(t *testing.T) {
 	}
 	if copied, _ := os.ReadFile(filepath.Join(copyRoot, "mod.ini")); string(copied) != characterINI {
 		t.Fatalf("left-over hook in the copy was not removed:\n%s", copied)
+	}
+	// A profile loader written where the runtime was would bind resources and
+	// shaders that no install provides.
+	if _, err := os.Stat(runtimeRootFor(f.modsRoot)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("removal wrote into the missing runtime folder (err=%v)", err)
 	}
 
 	other := filepath.Join(f.modsRoot, "Chen", "Chen Other")
@@ -831,37 +837,56 @@ func TestServiceApplyStoresGivenLook(t *testing.T) {
 }
 
 // Changing the original must not release or reuse a slot an unsplit copy
-// still hooks; the copy is split off first and keeps its emitter.
+// still hooks; the copy is split off first and keeps its emitter. Another
+// tool's copy of the runtime elsewhere in Mods reads as foreign but leaves
+// this app's runtime, where the copy's profile goes, in place.
 func TestServiceOriginalChangeSplitsCopies(t *testing.T) {
-	f := newServiceFixture(t)
-	ctx := context.Background()
-	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
-		t.Fatal(err)
-	}
-	originalKey, _ := readModMarker(f.modRoot)
-	copyRoot := f.modRoot + " - Copy"
-	if err := os.MkdirAll(copyRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	entries, _ := os.ReadDir(f.modRoot)
-	for _, entry := range entries {
-		data, _ := os.ReadFile(filepath.Join(f.modRoot, entry.Name()))
-		if err := os.WriteFile(filepath.Join(copyRoot, entry.Name()), data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	for _, foreign := range []bool{false, true} {
+		t.Run(fmt.Sprintf("foreign=%v", foreign), func(t *testing.T) {
+			f := newServiceFixture(t)
+			ctx := context.Background()
+			if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
+				t.Fatal(err)
+			}
+			originalKey, _ := readModMarker(f.modRoot)
+			copyRoot := f.modRoot + " - Copy"
+			if err := os.MkdirAll(copyRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			entries, _ := os.ReadDir(f.modRoot)
+			for _, entry := range entries {
+				data, _ := os.ReadFile(filepath.Join(f.modRoot, entry.Name()))
+				if err := os.WriteFile(filepath.Join(copyRoot, entry.Name()), data, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if foreign {
+				other := filepath.Join(f.modsRoot, "Other Probe")
+				if err := os.MkdirAll(other, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				probe := []byte("namespace = " + runtimeNamespace + "\n")
+				if err := os.WriteFile(filepath.Join(other, probeFile), probe, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
-		t.Fatal(err)
-	}
-	copyKey, _ := readModMarker(copyRoot)
-	inspection, err := f.service.Inspect(ctx, copyRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if copyKey == "" || copyKey == originalKey || len(inspection.Emitters) != 1 ||
-		!inspection.Emitters[0].Hooked || inspection.Emitters[0].Anchor.MeshID == "" {
-		t.Fatalf("copy after removing from the original: key=%q emitters=%+v", copyKey, inspection.Emitters)
+			if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
+				t.Fatal(err)
+			}
+			copyKey, _ := readModMarker(copyRoot)
+			inspection, err := f.service.Inspect(ctx, copyRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if foreign && inspection.Runtime.State != modruntime.StateForeign {
+				t.Fatalf("runtime state = %q, want foreign", inspection.Runtime.State)
+			}
+			if copyKey == "" || copyKey == originalKey || len(inspection.Emitters) != 1 ||
+				!inspection.Emitters[0].Hooked || inspection.Emitters[0].Anchor.MeshID == "" {
+				t.Fatalf("copy after removing from the original: key=%q emitters=%+v", copyKey, inspection.Emitters)
+			}
+		})
 	}
 }
 
@@ -1179,6 +1204,7 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		"[KeyAutoPulse]\nkey = VK_F11\n",
 		"[KeyManualPulse]\nkey = VK_F12\n",
 		"global $auto_pulse = 1\n",
+		"global $enabled = 0\n",
 		"global $emitting = 0\n",
 		"global $effect_requested = 0\n",
 		"global $last_effect_request = 0\n",
@@ -1221,6 +1247,32 @@ func TestRuntimeBuildsWWMICameraAtMainView(t *testing.T) {
 		wwmi := slices.Contains(spec.Importers, "WWMI")
 		if atInjection == wwmi || atMainView != wwmi {
 			t.Errorf("%v: camera built at injection %v, at main view %v", spec.Importers, atInjection, atMainView)
+		}
+	}
+}
+
+// CommandListDrawWorld draws once per frame while $seen and !$drawn hold, so
+// [Present] itself must reset both every frame, outside any condition: a
+// section header placed above the resets moves them out of Present.
+func TestRuntimeResetsFrameStateEveryPresent(t *testing.T) {
+	for _, spec := range RuntimeSpecs() {
+		bundled, err := fs.ReadFile(spec.Files, probeFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ini := strings.ReplaceAll(string(bundled), "\r\n", "\n")
+		start := strings.Index(ini, "\n[Present]\n")
+		if start < 0 {
+			t.Fatalf("%v: no [Present]", spec.Importers)
+		}
+		present := ini[start+len("\n[Present]\n"):]
+		if end := strings.Index(present, "\n["); end >= 0 {
+			present = present[:end+1]
+		}
+		for _, line := range []string{"post $seen = 0\n", "post $drawn = 0\n"} {
+			if !strings.HasPrefix(present, line) && !strings.Contains(present, "\n"+line) {
+				t.Errorf("%v: [Present] does not run %q every frame", spec.Importers, strings.TrimSpace(line))
+			}
 		}
 	}
 }

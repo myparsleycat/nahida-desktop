@@ -147,7 +147,7 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 			return Inspection{}, infra.ContractError(ErrorInvalidMode + ":" + input.Mode)
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
-			if err := s.apply(sc, rt.root, source, triangle, anchor, input.PID, input.Look); err != nil {
+			if err := s.apply(sc, rt.layout(), source, triangle, anchor, input.PID, input.Look); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -158,7 +158,7 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 func (s *Service) Remove(ctx context.Context, input RemoveInput) (Inspection, error) {
 	return s.run(ctx, "remove", input.ModPath, func(sc *scope) (Inspection, error) {
 		return s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
-			if err := s.remove(sc, rt.root, input.PIDs); err != nil {
+			if err := s.remove(sc, rt.layout(), input.PIDs); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -173,7 +173,7 @@ func (s *Service) SetLook(ctx context.Context, input LookInput) (Inspection, err
 			return Inspection{}, err
 		}
 		return s.withRuntime(ctx, sc, true, func(rt runtimeState) (Inspection, error) {
-			if err := s.setLook(sc, rt.root, input.PID, input.Look); err != nil {
+			if err := s.setLook(sc, rt.layout(), input.PID, input.Look); err != nil {
 				return Inspection{}, err
 			}
 			return s.inspection(sc, rt)
@@ -281,6 +281,18 @@ type runtimeState struct {
 	status modruntime.Status
 }
 
+// layout addresses the profiles below rt.root. A runtime folder that is gone
+// has none to keep, and readIndex rebuilds the slots from the hooks once the
+// runtime is installed; one that another tool's copy of the runtime occupies
+// keeps that copy's tables. Either is read but never written, so a removal
+// changes only the mod. A foreign copy elsewhere in Mods leaves rt.root this
+// app's own, which stays writable.
+func (rt runtimeState) layout() runtimeLayout {
+	_, err := os.Stat(rt.root)
+	occupied := rt.status.State == modruntime.StateForeign && samePhysicalPath(rt.status.Path, rt.root)
+	return runtimeLayout{root: rt.root, readOnly: occupied || errors.Is(err, fs.ErrNotExist)}
+}
+
 // withRuntime runs action inside the runtime manager, which holds the disk
 // slot of the Mods folder until it returns. With install, the runtime is
 // enabled and brought up to date first.
@@ -334,7 +346,7 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	} else if generated {
 		inspection.SourcePath = marker.Source
 	}
-	layout := runtimeLayout{root: rt.root}
+	layout := rt.layout()
 	doc, err := readProfile(layout, key)
 	if err != nil {
 		return inspection, err
@@ -388,7 +400,7 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 // keep their hooks, including those stacked on the same draw.
 func (s *Service) apply(
 	sc *scope,
-	runtimeRoot string,
+	layout runtimeLayout,
 	source modelviewer.DrawSource,
 	triangle anchorTriangle,
 	anchor EmitterAnchor,
@@ -396,7 +408,6 @@ func (s *Service) apply(
 	look *Look,
 ) error {
 	sc.stage = stageLoad
-	layout := runtimeLayout{root: runtimeRoot}
 	key, renumbered, err := s.ownedKey(sc, layout)
 	if err != nil {
 		return err
@@ -562,9 +573,8 @@ func (s *Service) apply(
 	return s.commit(sc, append(changes, marker...))
 }
 
-func (s *Service) setLook(sc *scope, runtimeRoot string, pid int, look Look) error {
+func (s *Service) setLook(sc *scope, layout runtimeLayout, pid int, look Look) error {
 	sc.stage = stageLoad
-	layout := runtimeLayout{root: runtimeRoot}
 	key, renumbered, err := s.ownedKey(sc, layout)
 	if err != nil {
 		return err
@@ -606,9 +616,8 @@ func (s *Service) setLook(sc *scope, runtimeRoot string, pid int, look Look) err
 	return s.commit(sc, append(changes, marker...))
 }
 
-func (s *Service) remove(sc *scope, runtimeRoot string, pids []int) error {
+func (s *Service) remove(sc *scope, layout runtimeLayout, pids []int) error {
 	sc.stage = stageLoad
-	layout := runtimeLayout{root: runtimeRoot}
 	key, renumbered, err := s.ownedKey(sc, layout)
 	sc.renumbered = renumbered
 	if err != nil || key == "" {
@@ -708,13 +717,17 @@ func (s *Service) remove(sc *scope, runtimeRoot string, pids []int) error {
 // together with its marker still points at the original's profile and slots,
 // so the copy is given its own key, slots and hooks before either is changed;
 // when sc.root is the copy, the returned map gives each shared slot's new
-// number.
+// number. A read-only layout could not store the copy's own profile, so the
+// copies keep sharing the key: the slot table is not written either.
 func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int, error) {
 	marker, err := readMarker(sc.root)
 	if err != nil || marker.ModKey == "" {
 		return "", nil, err
 	}
 	key := marker.ModKey
+	if layout.readOnly {
+		return key, nil, nil
+	}
 	doc, err := readProfile(layout, key)
 	if err != nil {
 		return "", nil, err
@@ -944,6 +957,9 @@ func (s *Service) profileChanges(
 	key string,
 	doc profileDocument,
 ) ([]fileChange, error) {
+	if layout.readOnly {
+		return nil, nil
+	}
 	var changes []fileChange
 	if len(doc.Emitters) == 0 {
 		changes = append(changes, fileChange{path: layout.profilePath(key), remove: true})

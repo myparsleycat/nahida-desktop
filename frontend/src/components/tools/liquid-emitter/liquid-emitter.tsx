@@ -639,8 +639,10 @@ export function LiquidEmitterTool({
                   disabled={locked}
                   value={position ? Number(position[axis].toFixed(4)) : ""}
                   onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    if (anchor && Number.isFinite(value)) {
+                    // A cleared field or a lone minus sign reads as "", which Number takes for 0.
+                    const text = event.currentTarget.value;
+                    const value = Number(text);
+                    if (anchor && text.trim() !== "" && Number.isFinite(value)) {
                       setOffsetAxis(
                         axis,
                         (value - anchor.point[axis]) * meshUnit,

@@ -93,13 +93,16 @@ func runtimeSettings() []modruntime.Setting {
 		key("autoPulseKey", "KeyAutoPulse", "VK_NUMPAD4"),
 		key("manualPulseKey", "KeyManualPulse", "VK_NUMPAD0"),
 		// The toggle compares the request with the last one it saw, so starting
-		// off must set all three or the first frame would read it as a toggle.
+		// off must set the request and the last one seen together, or the first
+		// frame would read it as a toggle. $enabled starts off as well, or the
+		// whole pipeline would draw nothing until the drain timer ran out.
 		{
 			ID:      "startEnabled",
 			Kind:    modruntime.SettingBool,
 			Default: "1",
 			Targets: []modruntime.Target{
-				constant("$emitting"), constant("$effect_requested"), constant("$last_effect_request"),
+				constant("$enabled"), constant("$emitting"),
+				constant("$effect_requested"), constant("$last_effect_request"),
 			},
 		},
 		{

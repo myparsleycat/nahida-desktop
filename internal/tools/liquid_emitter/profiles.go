@@ -160,7 +160,11 @@ type modMarker struct {
 	ReenableSource bool   `json:"reenableSource,omitempty"`
 }
 
-type runtimeLayout struct{ root string }
+type runtimeLayout struct {
+	root string
+	// readOnly keeps profileChanges from writing below root.
+	readOnly bool
+}
 
 func (r runtimeLayout) indexPath() string {
 	return filepath.Join(r.root, profilesDir, profileIndexFile)
