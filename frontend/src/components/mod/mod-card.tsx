@@ -1,4 +1,3 @@
-import { Badge } from "@renderer/components/ui/badge";
 import { Separator } from "@renderer/components/ui/separator";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { useModDownloadTransfer } from "@renderer/hooks/use-mod-download-transfer";
@@ -7,7 +6,7 @@ import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
-import { CalendarIcon, FolderIcon, PackageIcon } from "lucide-react";
+import { PackageIcon } from "lucide-react";
 import { memo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -39,7 +38,8 @@ export const ModCard = memo(function ModCard({
   onToggle,
   onToggleKeyUpdate,
 }: ModCardProps) {
-  const { t } = useTranslation();
+  const { i18n } = useTranslation();
+  const hasDependencies = Boolean(mod.dependencies?.length);
   const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const downloadTransfer = useModDownloadTransfer(mod.path);
   const isDownloading = mod.isDownloading || Boolean(downloadTransfer);
@@ -65,7 +65,7 @@ export const ModCard = memo(function ModCard({
           aria-busy={isDownloading}
           aria-disabled={isDownloading}
           className={cn(
-            "relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg",
+            "group/mod-card relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg",
             isDownloading
               ? "cursor-wait bg-muted grayscale"
               : getModColorClass(mod.isEnabled, hasMissingDependency(mod)),
@@ -110,19 +110,64 @@ export const ModCard = memo(function ModCard({
             <ModCardHeader mod={mod} actions={actions} />
 
             <div className="relative z-10 flex h-[calc(100%-2rem)] flex-row space-x-2">
-              <ModPreviewContainer
-                mod={mod}
-                selectedGroupPath={selectedGroupPath}
-                modelPreviewEligible={
-                  !actions.isNteGame &&
-                  !isDownloading &&
-                  !mod.isDownloadPlaceholder &&
-                  mod.inis.length > 0
-                }
-                onDeletePreview={() => actions.openDeletePreview(mod)}
-                onOpenModelViewer={() => void actions.openModelViewer(mod)}
-                onPaste={() => actions.openPastePreview(mod)}
-              />
+              <div className="relative flex min-w-0 flex-1">
+                <ModPreviewContainer
+                  mod={mod}
+                  selectedGroupPath={selectedGroupPath}
+                  modelPreviewEligible={
+                    !actions.isNteGame &&
+                    !isDownloading &&
+                    !mod.isDownloadPlaceholder &&
+                    mod.inis.length > 0
+                  }
+                  onDeletePreview={() => actions.openDeletePreview(mod)}
+                  onOpenModelViewer={() => void actions.openModelViewer(mod)}
+                  onPaste={() => actions.openPastePreview(mod)}
+                />
+
+                {!mod.isDownloadPlaceholder && (
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute bottom-0 left-0 z-20 flex max-w-full flex-col rounded-sm bg-background/70 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm",
+                      hasDependencies
+                        ? "w-fit transition-[width] duration-200 ease-out [interpolate-size:allow-keywords] group-hover/mod-card:w-full"
+                        : "w-full opacity-0 transition-opacity duration-150 group-hover/mod-card:opacity-100",
+                    )}
+                  >
+                    {/* Animating grid rows from 0fr to 1fr expands the line to its content height.
+                        w-0 with min-w-full keeps the line out of the collapsed fit-content width. */}
+                    <div
+                      className={cn(
+                        hasDependencies &&
+                          "grid w-0 min-w-full grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity] duration-200 ease-out group-hover/mod-card:grid-rows-[1fr] group-hover/mod-card:opacity-100",
+                      )}
+                    >
+                      <p className="min-h-0 overflow-hidden">
+                        <span className={cn("block truncate", hasDependencies && "pb-0.5")}>
+                          {formatSize(mod.size)} ·{" "}
+                          {formatDate(new Date(mod.mtime), i18n.language, "Pp")}
+                        </span>
+                      </p>
+                    </div>
+                    {hasDependencies && (
+                      <p className="flex items-center gap-1">
+                        <PackageIcon className="size-3 shrink-0" />
+                        <span className="truncate">
+                          {mod.dependencies?.map((dependency, index) => (
+                            <span
+                              key={dependency.name}
+                              className={dependency.installed ? undefined : "text-destructive"}
+                            >
+                              {index > 0 && ", "}
+                              {dependency.name}
+                            </span>
+                          ))}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {!actions.isNteGame && mod.inis.length > 0 && (
                 <>
@@ -148,50 +193,6 @@ export const ModCard = memo(function ModCard({
                 </>
               )}
             </div>
-
-            {!mod.isDownloadPlaceholder && (
-              <div className="absolute bottom-1 left-1 z-10 flex flex-col space-y-1">
-                <Badge
-                  className="flex h-5 items-center gap-1.5 bg-background/35 text-xs text-foreground backdrop-blur"
-                  style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-                >
-                  <FolderIcon />
-                  {formatSize(mod.size)}
-                </Badge>
-                <Badge
-                  className="flex h-5 items-center gap-1.5 bg-background/35 text-xs text-foreground backdrop-blur"
-                  style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-                >
-                  <CalendarIcon />
-                  {formatDate(new Date(mod.mtime), "ko")}
-                </Badge>
-                {mod.dependencies && mod.dependencies.length > 0 && (
-                  <div className="flex gap-1">
-                    {mod.dependencies.map((dependency) => (
-                      <Badge
-                        key={dependency.name}
-                        variant={dependency.installed ? "default" : "destructive"}
-                        title={
-                          dependency.installed
-                            ? undefined
-                            : t("page.mod.dialog.missing-dependencies.badge")
-                        }
-                        className={cn(
-                          "flex h-5 items-center gap-1.5 text-xs backdrop-blur",
-                          dependency.installed
-                            ? "bg-background/35 text-foreground"
-                            : "bg-destructive text-white dark:bg-destructive",
-                        )}
-                        style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-                      >
-                        <PackageIcon />
-                        {dependency.name}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           {downloadTransfer && <ModDownloadOverlay transfer={downloadTransfer} variant="card" />}
         </div>

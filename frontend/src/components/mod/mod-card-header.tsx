@@ -29,6 +29,7 @@ import {
   SparklesIcon,
   SwordsIcon,
   TrashIcon,
+  TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
 import { memo } from "react";
@@ -46,11 +47,27 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isConvertingModel = actions.convertingModelPath === mod.path;
+  const missingDependencies = mod.dependencies?.filter((dependency) => !dependency.installed) ?? [];
 
   return (
     <div className="relative z-10 flex items-center justify-between pb-1">
-      <TruncatedText className="text-sm font-semibold" text={stripDisabledPrefix(mod.name)} />
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
+        {missingDependencies.length > 0 && (
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger render={<span />} className="shrink-0 text-destructive">
+              <TriangleAlertIcon className="size-4" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{t("page.mod.dialog.missing-dependencies.badge")}</p>
+              <p className="font-semibold">
+                {missingDependencies.map((dependency) => dependency.name).join(", ")}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <TruncatedText className="text-sm font-semibold" text={stripDisabledPrefix(mod.name)} />
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
             render={
