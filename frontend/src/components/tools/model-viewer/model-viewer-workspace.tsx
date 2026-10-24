@@ -33,7 +33,7 @@ import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import type { ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { CheckIcon, Loader2Icon } from "lucide-react";
+import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -148,6 +148,7 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
+  const [highlightGameTextures, setHighlightGameTextures] = useState(false);
   const [ownForm, setOwnForm] = useState(ALL_FORMS);
   const [viewerStatus, setViewerStatus] = useState<ViewerStatus>(source ? "loading" : "idle");
   const [isSavingPreview, setIsSavingPreview] = useState(false);
@@ -179,6 +180,7 @@ export function ModelViewerWorkspace({
     }
 
     setActiveState(source?.transport.defaultState ?? {});
+    setHighlightGameTextures(false);
     setOwnForm(ALL_FORMS);
     setActiveAnimationId(source?.transport.animations[0]?.id ?? null);
     setAnimationPlaying(false);
@@ -411,6 +413,8 @@ export function ModelViewerWorkspace({
       payloadTransport ? evaluateViewerState(payloadTransport, effectiveState, activeForm) : null,
     [activeForm, effectiveState, payloadTransport],
   );
+  const gameTextureMeshCount =
+    payloadEval?.meshes.filter((mesh) => mesh.visible && !mesh.texKey).length ?? 0;
   const ineffectiveMap = useModelViewerIneffectiveValues(
     open && payloadTransport?.variables.length ? payloadTransport.memorySessionId : undefined,
     activeState,
@@ -776,6 +780,7 @@ export function ModelViewerWorkspace({
                   threeEnvironment={threeEnvironment}
                   threeExposure={threeExposure}
                   toonShadows={toonShadows}
+                  highlightGameTextures={highlightGameTextures}
                   onLoad={handleViewerLoad}
                   onError={handleViewerError}
                   onSurfacePick={onSurfacePick}
@@ -784,6 +789,13 @@ export function ModelViewerWorkspace({
                 />
                 {forms.length > 1 ? (
                   <FormSwitcher forms={forms} value={activeForm} onChange={selectForm} />
+                ) : null}
+                {isViewerReady && gameTextureMeshCount > 0 ? (
+                  <GameTextureNotice
+                    count={gameTextureMeshCount}
+                    highlighted={highlightGameTextures}
+                    onHighlightedChange={setHighlightGameTextures}
+                  />
                 ) : null}
                 {viewerStatus === "loading" ? (
                   <div
@@ -919,6 +931,42 @@ function FormSwitcher({
         ))}
       </TabsList>
     </Tabs>
+  );
+}
+
+function GameTextureNotice({
+  count,
+  highlighted,
+  onHighlightedChange,
+}: {
+  count: number;
+  highlighted: boolean;
+  onHighlightedChange: (highlighted: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={highlighted}
+              className={cn(
+                "absolute bottom-3 left-3 z-[5] max-w-[calc(100%-1.5rem)] bg-background/75 shadow-sm backdrop-blur-md",
+                highlighted && "border-amber-500 text-amber-500 hover:text-amber-500",
+              )}
+              onClick={() => onHighlightedChange(!highlighted)}
+            />
+          }
+        >
+          <InfoIcon />
+          <span className="truncate">{t("page.tools.model_viewer.game_textures", { count })}</span>
+        </TooltipTrigger>
+        <TooltipContent>{t("page.tools.model_viewer.game_textures_hint")}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

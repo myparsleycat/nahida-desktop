@@ -55,6 +55,7 @@ type PayloadMeshUserData = {
     sourceIndicesUrl?: string;
     materialProfile?: ModViewerTransport["materialProfile"];
     toonShadows: boolean;
+    highlightGameTextures?: boolean;
     lastPositionVariantIndex?: number | null;
     lastShapeSignature?: string;
     geometryStale?: boolean;
@@ -112,6 +113,8 @@ const rabbitFXFallbackLightMap = new DataTexture(
 );
 rabbitFXFallbackLightMap.colorSpace = NoColorSpace;
 rabbitFXFallbackLightMap.needsUpdate = true;
+
+const GAME_TEXTURE_HIGHLIGHT = 0xf59e0b;
 
 // Eight workers overlap transfers and decoding without dispatching every payload request at once.
 export const MODEL_PAYLOAD_LOAD_CONCURRENCY = 8;
@@ -285,6 +288,33 @@ export function setPayloadToonShadows(root: Object3D, enabled: boolean): void {
             state.toonEnabled.value = enabled ? 1 : 0;
         }
     });
+}
+
+/**
+ * Tints the meshes the mod binds no diffuse texture to. The game draws them
+ * with its own textures, which the viewer cannot read.
+ */
+export function setPayloadGameTextureHighlight(root: Object3D, enabled: boolean): void {
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.highlightGameTextures = enabled;
+        if (object.material instanceof MeshStandardMaterial && userData.lastMaps) {
+            applyGameTextureHighlight(object.material, userData, userData.lastMaps.texKey);
+        }
+    });
+}
+
+function applyGameTextureHighlight(
+    material: MeshStandardMaterial,
+    userData: PayloadMeshUserData,
+    texKey: string | null,
+): void {
+    material.color.set(
+        userData.highlightGameTextures && !texKey ? GAME_TEXTURE_HIGHLIGHT : 0xffffff,
+    );
 }
 
 export async function preparePayloadEval(
@@ -520,6 +550,7 @@ function applyEvaluatedMaps(
     const hadMetalnessMap = Boolean(material.metalnessMap);
     const hadRoughnessMap = Boolean(material.roughnessMap);
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
+    applyGameTextureHighlight(material, userData, evaluated.texKey);
     material.normalMap = normalMap;
     if (material.normalMap) {
         material.normalScale.y = -1;

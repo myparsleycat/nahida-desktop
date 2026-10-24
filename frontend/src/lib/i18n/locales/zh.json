@@ -1435,6 +1435,8 @@
         "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
         "generating_selected_state": "正在生成所选状态",
         "model_data_unavailable": "模型数据不可用。",
+        "game_textures_other": "{{count}} 个部位使用游戏原始贴图",
+        "game_textures_hint": "使用游戏内原始贴图的部位显示为白色。点击可高亮显示",
         "animation_clip": "动画片段",
         "animation_frame": "帧 {{current}} / {{end}}",
         "animation_frame_slider": "动画帧",
