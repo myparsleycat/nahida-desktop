@@ -269,7 +269,7 @@ func (s *Service) UseAppData(store *appdata.Store) error {
 	if store == nil {
 		return errors.New("agent app data is unavailable")
 	}
-	path, err := store.EnsureDir(filepath.Join("agent", "skills"))
+	path, err := store.EnsureDir(appdata.AgentSkillsDir)
 	if err != nil {
 		return err
 	}

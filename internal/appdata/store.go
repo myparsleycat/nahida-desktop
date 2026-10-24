@@ -17,6 +17,8 @@ const (
 	ModBisectDir     = "mod-bisect"
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"
+	AgentDir         = "agent"
+	AgentSkillsDir   = AgentDir + string(filepath.Separator) + "skills"
 )
 
 var ErrInvalidPath = errors.New("invalid app data path")
@@ -29,6 +31,20 @@ type Store struct {
 
 // Open resolves and creates <homeDir>/.nahida-desktop.
 func Open(homeDir string) (*Store, error) {
+	s, err := Locate(homeDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(s.root, 0o700); err != nil {
+		return nil, fmt.Errorf("create app data root: %w", err)
+	}
+	return s, nil
+}
+
+// Locate resolves <homeDir>/.nahida-desktop without creating it, so that startup can restore the permissions
+// of a root that refuses the account first. Open fails on a root that is a junction to such a folder, because
+// the folder cannot be read to tell that it exists.
+func Locate(homeDir string) (*Store, error) {
 	if strings.TrimSpace(homeDir) == "" {
 		return nil, fmt.Errorf("open app data: %w: empty home directory", ErrInvalidPath)
 	}
@@ -36,11 +52,7 @@ func Open(homeDir string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve home directory: %w", err)
 	}
-	root := filepath.Join(home, RootDirName)
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, fmt.Errorf("create app data root: %w", err)
-	}
-	return &Store{root: root}, nil
+	return &Store{root: filepath.Join(home, RootDirName)}, nil
 }
 
 func (s *Store) Root() string {

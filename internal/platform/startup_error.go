@@ -15,6 +15,12 @@ func ShowStartupError(err error) error {
 	return showStartupError(startupErrorTitle, startupErrorMessage(err))
 }
 
+// ConfirmStartup asks a yes/no question before the Wails runtime is available and reports
+// whether the user chose yes.
+func ConfirmStartup(message string) (bool, error) {
+	return confirmStartup("Nahida Desktop", strings.ReplaceAll(message, "\x00", "�"))
+}
+
 func startupErrorMessage(err error) string {
 	if err == nil {
 		err = errors.New("unknown startup error")

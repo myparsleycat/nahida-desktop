@@ -62,6 +62,7 @@ type runtime struct {
 	input             *platform.Input
 	elevated          *elevated.Client
 	elevatedLifecycle *elevatedLifecycle
+	appDataAccess     appDataAccess
 	screen            *platform.Screen
 	window            *Window
 	gameBananaLogin   *gameBananaLogin
@@ -267,10 +268,16 @@ func newRuntime() *runtime {
 		input:             input,
 		elevated:          elevatedClient,
 		elevatedLifecycle: elevatedHelper,
-		screen:            screen,
-		window:            window,
-		gameBananaLogin:   login,
-		notifications:     notifier,
+		appDataAccess: appDataAccess{
+			denied:  platform.AccessDenied,
+			confirm: platform.ConfirmStartup,
+			files:   elevatedFiles,
+			locale:  platform.SystemLocale,
+		},
+		screen:          screen,
+		window:          window,
+		gameBananaLogin: login,
+		notifications:   notifier,
 	}
 	rt.xxmi.UseImportersChanged(func(ctx context.Context) {
 		if err := errors.Join(rt.mod.SyncImporterModFolders(ctx), rt.mod.InvalidateImporterGames(ctx)); err != nil {

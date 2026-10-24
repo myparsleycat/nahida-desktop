@@ -5,16 +5,22 @@ package elevated
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 func TestWriteHelperInstallsAndReusesBinary(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir, err := platform.FinalPath(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := []byte("helper-binary")
 
 	path, err := writeHelper(dir, data)
@@ -57,6 +63,78 @@ func TestWriteHelperInstallsAndReusesBinary(t *testing.T) {
 	}
 	if string(got) != string(updated) {
 		t.Fatalf("replaced helper = %q, want %q", got, updated)
+	}
+}
+
+// The launch is checked against the image path Windows reports, so a helper below an app data root moved
+// behind a junction must be installed at the junction destination. Restoring app data permissions needs
+// the helper while the root refuses the account, directly or behind a junction, so extraction then moves
+// to the fallback directory instead of failing.
+func TestPrepareHelperPicksRunnableDirectory(t *testing.T) {
+	t.Parallel()
+
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	deny := func(t *testing.T, path, rights string) {
+		t.Helper()
+		if output, err := exec.Command(
+			"icacls", path, "/deny", "*"+user.User.Sid.String()+":"+rights,
+		).CombinedOutput(); err != nil {
+			t.Skipf("filesystem cannot deny %s: %v (%s)", rights, err, output)
+		}
+		t.Cleanup(func() { _ = exec.Command("icacls", path, "/reset").Run() })
+	}
+
+	for _, test := range []struct {
+		name     string
+		junction bool
+		rights   string
+		fallback bool
+	}{
+		{name: "denied folder", rights: "(WD,AD)", fallback: true},
+		{name: "junction", junction: true},
+		{name: "junction to denied folder", junction: true, rights: "(F)", fallback: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			home, err := platform.FinalPath(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := filepath.Join(home, ".nahida-desktop")
+			folder := root
+			if test.junction {
+				folder = filepath.Join(home, "moved")
+			}
+			if err := os.Mkdir(folder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if test.junction {
+				if output, err := exec.Command("cmd", "/c", "mklink", "/J", root, folder).CombinedOutput(); err != nil {
+					t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+				}
+			}
+			if test.rights != "" {
+				deny(t, folder, test.rights)
+			}
+
+			fallback := filepath.Join(home, "fallback")
+			want := filepath.Join(folder, helperDirName)
+			if test.fallback {
+				want = fallback
+			}
+			data := []byte("helper-binary")
+			path, err := prepareHelper(filepath.Join(root, helperDirName), fallback, data)
+			if err != nil {
+				t.Fatalf("prepareHelper = %v", err)
+			}
+			if path != filepath.Join(want, helperFileName(data)) {
+				t.Fatalf("prepareHelper path = %q, want below %q", path, want)
+			}
+		})
 	}
 }
 

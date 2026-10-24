@@ -182,7 +182,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("prepare elevated helper: %w", err)
 	}
-	helper, err := writeHelper(helperDir, helperData)
+	helper, err := prepareHelper(helperDir, fallbackHelperDir(), helperData)
 	if err != nil {
 		return fmt.Errorf("prepare elevated helper: %w", err)
 	}

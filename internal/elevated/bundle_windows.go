@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -48,6 +49,27 @@ func defaultHelperDir() (string, error) {
 	return filepath.Join(home, appdata.RootDirName, helperDirName), nil
 }
 
+// fallbackHelperDir is used when the account cannot write the app data directory, which is the
+// case restoring its permissions through the helper has to start from.
+func fallbackHelperDir() string {
+	return filepath.Join(os.TempDir(), "nahida-desktop-"+helperDirName)
+}
+
+// prepareHelper installs data under dir, or under fallback when dir cannot hold it. Besides a dir that
+// refuses the account, that is an app data root that is a junction to a folder refusing the account, which
+// does not even read as a folder; restoring the permissions of either needs the helper first.
+func prepareHelper(dir, fallback string, data []byte) (string, error) {
+	helper, err := writeHelper(dir, data)
+	if err == nil || errors.Is(err, errHelperNotBundled) {
+		return helper, err
+	}
+	helper, fallbackErr := writeHelper(fallback, data)
+	if fallbackErr != nil {
+		return "", errors.Join(err, fallbackErr)
+	}
+	return helper, nil
+}
+
 // bundledHelper returns the embedded helper bytes.
 func bundledHelper() ([]byte, error) {
 	data, err := helperBundle.ReadFile("bundle/" + helperExecutableName)
@@ -71,10 +93,10 @@ func helperFileName(data []byte) string {
 	return helperFilePrefix + hex.EncodeToString(digest[:8]) + helperFileSuffix
 }
 
-// writeHelper installs data under dir with a content-addressed name and returns
-// its path. Stale versions are removed best effort. Reparse points in the helper
-// directory chain are rejected so a same-user process cannot redirect the
-// elevated launch to a different binary.
+// writeHelper installs data under the path dir resolves to with a content-addressed
+// name and returns its path. Stale versions are removed best effort. Reparse points
+// in the helper directory chain are rejected so a same-user process cannot redirect
+// the elevated launch to a different binary.
 func writeHelper(dir string, data []byte) (string, error) {
 	if len(data) == 0 {
 		return "", errHelperNotBundled
@@ -82,6 +104,15 @@ func writeHelper(dir string, data []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create elevated helper directory %q: %w", dir, err)
 	}
+
+	// The launch is checked against the image path Windows reports, which has every junction and 8.3 alias
+	// resolved, so the helper is installed at that path. An app data root moved behind a junction still
+	// reaches its helper this way.
+	final, err := platform.FinalPath(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve elevated helper directory %q: %w", dir, err)
+	}
+	dir = final
 	if err := rejectHelperReparsePoints(dir); err != nil {
 		return "", err
 	}

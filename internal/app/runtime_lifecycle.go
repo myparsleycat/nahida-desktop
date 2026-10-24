@@ -32,26 +32,45 @@ func bootRuntime(
 	in runtimePathInput,
 	configureBrowserArguments func([]string) error,
 ) (runtimePaths, error) {
-	data, err := appdata.Open(in.HomeDir)
+	data, err := appdata.Locate(in.HomeDir)
 	if err != nil {
 		return runtimePaths{}, err
-	}
-	logs, err := data.EnsureDir(appdata.LogsDir)
-	if err != nil {
-		return runtimePaths{Root: data.Root()}, err
 	}
 	dbPath := in.DBOverride
 	if dbPath == "" {
 		if in.Packaged {
 			dbPath, err = data.Resolve(appdata.DatabaseFile)
 			if err != nil {
-				return runtimePaths{Root: data.Root(), Logs: logs}, err
+				return runtimePaths{Root: data.Root()}, err
 			}
 		} else {
 			dbPath = filepath.Join(in.Cwd, "local.db")
 		}
 	}
+
+	// The restore runs before the root and the logs directory are created because either may be one
+	// of the denied entries; its outcome is logged once the log file is configured. Creating the logs
+	// directory also creates the root.
+	restored, accessErr := rt.appDataAccess.restore(ctx, startupAppDataEntries(data, dbPath))
+	logs, err := data.EnsureDir(appdata.LogsDir)
+	if err != nil {
+		if accessErr != nil {
+			return runtimePaths{Root: data.Root()}, accessErr
+		}
+		return runtimePaths{Root: data.Root()}, err
+	}
 	paths := runtimePaths{Root: data.Root(), DB: dbPath, Logs: logs}
+	rt.configureLog(paths, in.Packaged)
+	if accessErr != nil {
+		_ = infra.ReportError(rt.log, accessErr.cause, "AppData", infra.Diagnostic{
+			Operation: "restore-access", Stage: "startup", Fields: map[string]any{"paths": accessErr.paths},
+		})
+		return paths, accessErr
+	}
+	if len(restored) > 0 && rt.log != nil {
+		rt.log.Warn(map[string]any{"paths": restored}, "AppData.restoreAccess")
+	}
+
 	rt.appData = data
 	if rt.mod != nil {
 		rt.mod.UseAppData(data)
@@ -70,7 +89,6 @@ func bootRuntime(
 			return runtimePaths{Root: data.Root()}, err
 		}
 	}
-	rt.configureLog(paths, in.Packaged)
 	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
 		return paths, err
 	}
