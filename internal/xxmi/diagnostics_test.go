@@ -74,11 +74,14 @@ func TestDiagnosticsSessionSurvivesSavesAndLaunchesAndRestoresTheINI(t *testing.
 		"[Logging]\r\nlog_level = disabled\r\nunbuffered = 0\r\nshow_warnings = 1\r\n")
 
 	if err := service.StartDiagnostics(ctx, "gimi", DiagnosticsOptions{
-		Level: DiagnosticsDebug, DebugLocks: true,
+		Level: DiagnosticsDebug, DebugLocks: true, FrameTimes: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	session := map[string]string{"log_level": "debug", "unbuffered": "1", "crash": "1", "debug_locks": "1"}
+	session := map[string]string{
+		"log_level": "debug", "unbuffered": "1", "crash": "1", "debug_locks": "1",
+		"spike_log_threshold": "0", "spike_log_relative": "2",
+	}
 	assertLoggingOptions(t, "start", readTestINI(t, cfg), session)
 
 	// A settings save and a launch rebuilding the file from the provider's d3dx.ini both write the
@@ -100,10 +103,45 @@ func TestDiagnosticsSessionSurvivesSavesAndLaunchesAndRestoresTheINI(t *testing.
 	}
 	assertLoggingOptions(t, "end", readTestINI(t, cfg), map[string]string{
 		"log_level": "disabled", "unbuffered": "0", "crash": "", "debug_locks": "",
+		"spike_log_threshold": "", "spike_log_relative": "",
 	})
 	if session, err := service.GetDiagnostics(ctx, "GIMI"); err != nil || session != nil {
 		t.Fatalf("session after end = %+v, err = %v", session, err)
 	}
+}
+
+// A session stored by a version that did not restore the frame time options reads them when it is changed to
+// set them, so its end does not leave the game logging frame times.
+func TestDiagnosticsSessionReadsOptionsItsStoredRecordLacks(t *testing.T) {
+	ctx := context.Background()
+	service, cfg := newDiagnosticsTestService(t, "[Logging]\r\nlog_level = disabled\r\nspike_log_relative = 3\r\n")
+	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{Level: DiagnosticsInfo}); err != nil {
+		t.Fatal(err)
+	}
+	records, err := service.loadDiagnostics(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(records["GIMI"].Restore, "spike_log_threshold")
+	delete(records["GIMI"].Restore, "spike_log_relative")
+	if err := service.storeDiagnostics(ctx, records); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{
+		Level: DiagnosticsInfo, FrameTimes: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertLoggingOptions(t, "frame times on", readTestINI(t, cfg), map[string]string{
+		"spike_log_threshold": "0", "spike_log_relative": "2",
+	})
+	if err := service.EndDiagnostics(ctx, "GIMI"); err != nil {
+		t.Fatal(err)
+	}
+	assertLoggingOptions(t, "end", readTestINI(t, cfg), map[string]string{
+		"spike_log_threshold": "", "spike_log_relative": "3",
+	})
 }
 
 func TestDiagnosticsSessionSkipsTheLoggingQuestion(t *testing.T) {
@@ -171,7 +209,9 @@ func TestCollectDiagnosticsBundlesOnlyTheSessionFiles(t *testing.T) {
 		return "Event[0]\r\n  Faulting application name: GenshinImpact.exe\r\n", 1, nil
 	}
 
-	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{Level: DiagnosticsInfo}); err != nil {
+	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{
+		Level: DiagnosticsInfo, FrameTimes: true,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.CollectDiagnostics(ctx, "GIMI", 100<<20); err == nil ||
@@ -183,6 +223,7 @@ func TestCollectDiagnosticsBundlesOnlyTheSessionFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, staleLog, []byte("D3D11 DLL starting init\nsession line\n"))
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, diagnosticsSpikeLogName), []byte("frame 1: 40.00ms\n"))
 	writeTestFile(t, filepath.Join(gameFolder, "3DM-20991231000000.dmp"), []byte("new dump"))
 	bundle, err := service.CollectDiagnostics(ctx, "GIMI", 100<<20)
 	if err != nil {
@@ -202,7 +243,8 @@ func TestCollectDiagnosticsBundlesOnlyTheSessionFiles(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{
-		"d3d11_log.txt", "d3dx.ini", "dumps/3DM-20991231000000.dmp", "session.json", "windows-events.txt",
+		"d3d11_log.txt", "d3d11_spike_log.txt", "d3dx.ini", "dumps/3DM-20991231000000.dmp", "session.json",
+		"windows-events.txt",
 	}
 	if !slices.Equal(names, want) {
 		t.Fatalf("bundle entries = %q, want %q", names, want)

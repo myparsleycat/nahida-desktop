@@ -25,6 +25,11 @@ const (
 	errDiagnosticsTooLarge = "XXMI_DIAGNOSTICS_TOO_LARGE"
 
 	diagnosticsLogName = "d3d11_log.txt"
+	// diagnosticsSpikeLogName is written by a DLL that supports frame time logging. It is kept to a fixed
+	// window, as its summaries are spread evenly over the session.
+	diagnosticsSpikeLogName = "d3d11_spike_log.txt"
+	diagnosticsSpikeLogHead = 1 << 20
+	diagnosticsSpikeLogTail = 15 << 20
 	// A log over head and tail together keeps its start, where the DLL lists its settings, and the end that
 	// leads up to the problem. The tail shrinks while the bundle exceeds the upload bound.
 	diagnosticsLogHead    = 4 << 20
@@ -56,6 +61,7 @@ type diagnosticsFile struct {
 // diagnosticsSources are the files and records of a session that go into its bundle.
 type diagnosticsSources struct {
 	log         *diagnosticsFile
+	spikeLog    *diagnosticsFile
 	dumps       []diagnosticsFile
 	ini         []byte
 	events      string
@@ -173,11 +179,10 @@ func (x *XXMI) diagnosticsSources(
 ) (diagnosticsSources, error) {
 	sources := diagnosticsSources{collectedAt: time.Now()}
 
-	// d3d11_log.txt is created again by each launch that logs, so one older than the session is not its own.
-	logPath := filepath.Join(cfg.ImporterFolder, diagnosticsLogName)
-	if info, err := os.Stat(logPath); err == nil && info.Mode().IsRegular() && info.Size() > 0 &&
-		!info.ModTime().Before(record.StartedAt) {
-		sources.log = &diagnosticsFile{path: logPath, size: info.Size(), modified: info.ModTime()}
+	// The logs are created again by each launch that logs, so one older than the session is not its own.
+	sources.log = sessionLog(filepath.Join(cfg.ImporterFolder, diagnosticsLogName), record.StartedAt)
+	if record.FrameTimes {
+		sources.spikeLog = sessionLog(filepath.Join(cfg.ImporterFolder, diagnosticsSpikeLogName), record.StartedAt)
 	}
 	sources.dumps = sessionDumps(slices.Concat(record.DumpDirs, []string{cfg.ImporterFolder}), record.StartedAt)
 
@@ -213,6 +218,14 @@ func (x *XXMI) diagnosticsSources(
 		sources.events, sources.eventCount = events, count
 	}
 	return sources, nil
+}
+
+func sessionLog(path string, since time.Time) *diagnosticsFile {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.ModTime().Before(since) {
+		return nil
+	}
+	return &diagnosticsFile{path: path, size: info.Size(), modified: info.ModTime()}
 }
 
 // sessionDumps returns the newest 3DMigoto crash dumps written to dirs since the session started.
@@ -261,6 +274,9 @@ func writeDiagnosticsBundle(
 	paths := []string{destination}
 	if sources.log != nil {
 		paths = append(paths, sources.log.path)
+	}
+	if sources.spikeLog != nil {
+		paths = append(paths, sources.spikeLog.path)
 	}
 	for _, dump := range sources.dumps {
 		paths = append(paths, dump.path)
@@ -334,6 +350,21 @@ func writeDiagnosticsZip(
 		}
 		bundle.LogBytes, bundle.LogTruncated = written, omitted > 0
 		manifest.Log = &diagnosticsManifestLog{Bytes: sources.log.size, OmittedBytes: omitted}
+	}
+	if sources.spikeLog != nil {
+		entry, err := archive.CreateHeader(&zip.FileHeader{
+			Name: diagnosticsSpikeLogName, Method: zip.Deflate, Modified: sources.spikeLog.modified,
+		})
+		if err != nil {
+			return "", bundle, err
+		}
+		_, omitted, err := copyLogWindow(
+			ctx, entry, sources.spikeLog.path, diagnosticsSpikeLogHead, diagnosticsSpikeLogTail,
+		)
+		if err != nil {
+			return "", bundle, fmt.Errorf("add %s: %w", sources.spikeLog.path, err)
+		}
+		manifest.SpikeLog = &diagnosticsManifestLog{Bytes: sources.spikeLog.size, OmittedBytes: omitted}
 	}
 	for _, dump := range sources.dumps {
 		name := "dumps/" + filepath.Base(dump.path)
@@ -486,6 +517,7 @@ type diagnosticsManifest struct {
 	Importer        string                    `json:"importer"`
 	Level           DiagnosticsLevel          `json:"level"`
 	DebugLocks      bool                      `json:"debugLocks"`
+	FrameTimes      bool                      `json:"frameTimes,omitempty"`
 	StartedAt       string                    `json:"startedAt"`
 	LaunchedAt      string                    `json:"launchedAt,omitempty"`
 	CollectedAt     string                    `json:"collectedAt"`
@@ -496,6 +528,7 @@ type diagnosticsManifest struct {
 	D3D11SHA256     string                    `json:"d3d11Sha256,omitempty"`
 	D3D11Size       int64                     `json:"d3d11Size,omitempty"`
 	Log             *diagnosticsManifestLog   `json:"log,omitempty"`
+	SpikeLog        *diagnosticsManifestLog   `json:"spikeLog,omitempty"`
 	Dumps           []diagnosticsManifestFile `json:"dumps,omitempty"`
 	CrashEvents     int                       `json:"crashEvents"`
 }
@@ -513,7 +546,7 @@ type diagnosticsManifestFile struct {
 
 func diagnosticsManifestFor(key string, record diagnosticsRecord, sources diagnosticsSources) diagnosticsManifest {
 	manifest := diagnosticsManifest{
-		Importer: key, Level: record.Level, DebugLocks: record.DebugLocks,
+		Importer: key, Level: record.Level, DebugLocks: record.DebugLocks, FrameTimes: record.FrameTimes,
 		StartedAt:     record.StartedAt.Format(time.RFC3339),
 		CollectedAt:   sources.collectedAt.Format(time.RFC3339),
 		AppVersion:    platform.AppVersion,

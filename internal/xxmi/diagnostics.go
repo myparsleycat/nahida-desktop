@@ -41,7 +41,9 @@ const (
 
 // diagnosticsRestoredOptions are the [Logging] options a session sets that no importer setting decides, so
 // ending the session puts back the values the file had. The settings write the rest of [Logging] again.
-var diagnosticsRestoredOptions = []string{"unbuffered", "crash", "debug_locks"}
+var diagnosticsRestoredOptions = []string{
+	"unbuffered", "crash", "debug_locks", "spike_log_threshold", "spike_log_relative",
+}
 
 type DiagnosticsLevel string
 
@@ -62,6 +64,9 @@ const (
 type DiagnosticsOptions struct {
 	Level      DiagnosticsLevel `json:"level"`
 	DebugLocks bool             `json:"debugLocks"`
+	// FrameTimes has the DLL write d3d11_spike_log.txt: what slow frames spent their time on, and a summary of
+	// the frame times every few seconds.
+	FrameTimes bool `json:"frameTimes"`
 }
 
 type DiagnosticsSupport struct {
@@ -75,6 +80,7 @@ type DiagnosticsSession struct {
 	State      DiagnosticsState   `json:"state"`
 	Level      DiagnosticsLevel   `json:"level"`
 	DebugLocks bool               `json:"debugLocks"`
+	FrameTimes bool               `json:"frameTimes"`
 	StartedAt  string             `json:"startedAt"`
 	LaunchedAt string             `json:"launchedAt"`
 	Bundle     *DiagnosticsBundle `json:"bundle"`
@@ -98,6 +104,7 @@ type diagnosticsRecord struct {
 	State      DiagnosticsState `json:"state"`
 	Level      DiagnosticsLevel `json:"level"`
 	DebugLocks bool             `json:"debugLocks"`
+	FrameTimes bool             `json:"frameTimes,omitempty"`
 	StartedAt  time.Time        `json:"startedAt"`
 	LaunchedAt time.Time        `json:"launchedAt,omitzero"`
 	// ImporterFolder is the folder whose d3dx.ini the session changed and Restore was read from.
@@ -113,7 +120,7 @@ type diagnosticsRecord struct {
 
 func (r diagnosticsRecord) session() *DiagnosticsSession {
 	session := &DiagnosticsSession{
-		State: r.State, Level: r.Level, DebugLocks: r.DebugLocks,
+		State: r.State, Level: r.Level, DebugLocks: r.DebugLocks, FrameTimes: r.FrameTimes,
 		StartedAt: r.StartedAt.Format(time.RFC3339), Bundle: r.Bundle,
 	}
 	if !r.LaunchedAt.IsZero() {
@@ -195,7 +202,7 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 			Operation: "start-diagnostics", Stage: stage,
 			Fields: map[string]any{
 				"importer": key, "level": options.Level, "debugLocks": options.DebugLocks,
-				"importerFolder": cfg.ImporterFolder,
+				"frameTimes": options.FrameTimes, "importerFolder": cfg.ImporterFolder,
 			},
 		})
 	}()
@@ -251,15 +258,23 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 		saved := *record
 		rollback = &saved
 	}
-	record.Level, record.DebugLocks = options.Level, options.DebugLocks
+	record.Level, record.DebugLocks, record.FrameTimes = options.Level, options.DebugLocks, options.FrameTimes
 
 	// The session is stored before the file changes, so a write that fails or a crash after it leaves a
 	// session whose end restores the values the file had.
 	stage = "write-ini"
 	_, logLevel := migotoINISupport(cfg)
 	_, err = editImporterINI(ctx, cfg.ImporterFolder, func(doc *iniDocument) error {
-		if fresh {
-			record.Restore = currentDiagnosticsOptions(doc)
+		// A session stored before an option was restored has not read that option's value yet, which the
+		// session has not set either.
+		current := currentDiagnosticsOptions(doc)
+		if fresh || record.Restore == nil {
+			record.Restore = current
+		}
+		for option, value := range current {
+			if _, ok := record.Restore[option]; !ok {
+				record.Restore[option] = value
+			}
 		}
 		records[key] = record
 		if err := x.storeDiagnostics(ctx, records); err != nil {
@@ -677,10 +692,23 @@ func applyDiagnosticsINI(doc *iniDocument, record diagnosticsRecord, logLevel bo
 	} else {
 		restoreDiagnosticsOption(doc, "debug_locks", record.Restore)
 	}
+	// Twice the recent average frame time, as the frame rate of the game is not known beforehand
+	if record.FrameTimes {
+		doc.SetOption("Logging", "spike_log_threshold", "0", true)
+		doc.SetOption("Logging", "spike_log_relative", "2", true)
+	} else {
+		restoreDiagnosticsOption(doc, "spike_log_threshold", record.Restore)
+		restoreDiagnosticsOption(doc, "spike_log_relative", record.Restore)
+	}
 }
 
+// restoreDiagnosticsOption puts back the value the file had, or leaves an option the session never read alone.
 func restoreDiagnosticsOption(doc *iniDocument, option string, restore map[string]*string) {
-	if value := restore[option]; value != nil {
+	value, read := restore[option]
+	if !read {
+		return
+	}
+	if value != nil {
 		doc.SetOption("Logging", option, *value, true)
 		return
 	}

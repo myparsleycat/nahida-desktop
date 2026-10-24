@@ -319,12 +319,13 @@ function StartDialog({
     current?.level || DiagnosticsLevel.DiagnosticsInfo,
   );
   const [debugLocks, setDebugLocks] = useState(current?.debugLocks ?? false);
+  const [frameTimes, setFrameTimes] = useState(current?.frameTimes ?? false);
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
     setBusy(true);
     try {
-      await XXMI.StartDiagnostics(importer, { level, debugLocks });
+      await XXMI.StartDiagnostics(importer, { level, debugLocks, frameTimes });
       toast.success(t("page.setting.xxmi.diagnostics.started"));
       await onStarted(!current && canLaunch);
     } catch (error) {
@@ -376,6 +377,12 @@ function StartDialog({
           description={t("page.setting.xxmi.diagnostics.debugLocksDescription")}
           checked={debugLocks}
           onCheckedChange={setDebugLocks}
+        />
+        <ToggleRow
+          label={t("page.setting.xxmi.diagnostics.frameTimes")}
+          description={t("page.setting.xxmi.diagnostics.frameTimesDescription")}
+          checked={frameTimes}
+          onCheckedChange={setFrameTimes}
         />
         <p className="text-xs text-muted-foreground">
           {t("page.setting.xxmi.diagnostics.alwaysOn")}
