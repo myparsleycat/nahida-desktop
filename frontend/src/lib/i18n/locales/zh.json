@@ -2897,7 +2897,7 @@
           "debugLocks": "卡死诊断",
           "debugLocksDescription": "在游戏未崩溃但卡住时检测死锁。游戏可能稍微变慢。",
           "frameTimes": "记录帧时间",
-          "frameTimesDescription": "在报告中记录慢帧的耗时去向以及每 5 秒的帧时间摘要。用于诊断卡顿或输入延迟。需要支持此功能的运行时。",
+          "frameTimesDescription": "记录慢帧的耗时明细以及每 5 秒的帧时间统计。用于诊断卡顿或输入延迟。需要支持此功能的运行时。",
           "alwaysOn": "日志模式下始终开启无缓冲日志和崩溃转储。",
           "reportTitle": "反馈库问题",
           "reportDescription": "收集的日志会随 XXMI 库分类的反馈一起发送。日志中的电脑用户名会被匿名化。",

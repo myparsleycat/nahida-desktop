@@ -2952,7 +2952,7 @@
           "debugLocks": "Diagnose freezes",
           "debugLocksDescription": "Detects deadlocks when the game freezes without crashing. The game may run slightly slower.",
           "frameTimes": "Record frame times",
-          "frameTimesDescription": "Writes what slow frames spent their time on and a frame time summary every 5 seconds to the report. Use it for stutter or input lag. Needs a runtime that supports it.",
+          "frameTimesDescription": "Records a timing breakdown of slow frames and frame time statistics every 5 seconds. Helps diagnose stutter and input lag. Requires a supported runtime.",
           "alwaysOn": "Unbuffered logging and crash dumps are always on in logging mode.",
           "reportTitle": "Report a libraries problem",
           "reportDescription": "The collected logs are sent with the report in the XXMI libraries category. Your PC user name is anonymized in logs.",
