@@ -5,6 +5,7 @@
 // into view and projection. The game's world is the runtime's, so the
 // game-to-world rows hold the identity.
 #include "Matrix.hlsl"
+#include "SplitViewProjection.hlsl"
 Texture1D<float4> IniParams:register(t120);
 cbuffer Source:register(b13){float4 source[4096];}
 RWStructuredBuffer<float4> camera:register(u0);
@@ -32,28 +33,8 @@ void main(uint3 tid:SV_DispatchThreadID){
  }
  if(first==rows)return;
 
- // Matrices are handled transposed as in BuildCamera.hlsl; m is the matrix itself.
- float4x4 vp=float4x4(source[first],source[first+1],source[first+2],source[first+3]);
- float4x4 m=transpose(vp);
- float3 forward=normalize(m[3].xyz);
- float3 right=normalize(m[0].xyz-dot(m[0].xyz,forward)*forward);
- // Unity's view space looks down -z and mirrors its left-handed world.
- float3 up=cross(forward,right);
- // The eye is the one point where clip x, y and w all vanish.
- float3 a0=m[0].xyz,a1=m[1].xyz,a2=m[3].xyz;
- float3 c12=cross(a1,a2),c20=cross(a2,a0),c01=cross(a0,a1);
- float det=dot(a0,c12);
- if(abs(det)<1e-12)return;
- float3 eye=-(c12*m[0].w+c20*m[1].w+c01*m[3].w)/det;
-
- float4x4 inverseView=float4x4(float4(right,0),float4(up,0),float4(-forward,0),float4(eye,1));
- float4x4 view=float4x4(
-  float4(right.x,up.x,-forward.x,0),
-  float4(right.y,up.y,-forward.y,0),
-  float4(right.z,up.z,-forward.z,0),
-  float4(-dot(eye,right),-dot(eye,up),dot(eye,forward),1));
- // Transposed, VP*inverse(V) is inverse(V)'*VP'.
- float4x4 projection=mul(inverseView,vp);
+ float4x4 view,inverseView,projection;
+ if(!splitViewProjection(float4x4(source[first],source[first+1],source[first+2],source[first+3]),view,inverseView,projection))return;
  // The view-projection is stored rebuilt from its parts: fxc compiles a
  // store of vp itself to a loop that reads its first column four times.
  store(0,view);store(4,inverseView);store(8,projection);store(12,inverse(projection));

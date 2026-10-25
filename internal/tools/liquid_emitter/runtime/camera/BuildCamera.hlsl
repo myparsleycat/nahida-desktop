@@ -3,9 +3,11 @@
 // the projection and its inverse in those constants, and IniParams[255].x the
 // first row of the view-projection, each stored as its four columns. -1 marks
 // a matrix the game does not provide, which is derived from the others; the
-// projection or the view-projection is required. The game's world is the
-// runtime's, so the game-to-world rows hold the identity.
+// projection or the view-projection is required. Without the view and its
+// inverse, the view-projection is split into view and projection. The game's
+// world is the runtime's, so the game-to-world rows hold the identity.
 #include "Matrix.hlsl"
+#include "SplitViewProjection.hlsl"
 Texture1D<float4> IniParams:register(t120);
 cbuffer Source:register(b13){float4 source[4096];}
 RWStructuredBuffer<float4> camera:register(u0);
@@ -19,10 +21,15 @@ void store(uint row,float4x4 m){for(uint i=0;i<4;i++)camera[row+i]=m[i];}
 void main(uint3 tid:SV_DispatchThreadID){
  int4 rows=(int4)IniParams[254];
  int viewProjection=(int)IniParams[255].x;
- float4x4 view=rows.x>=0?load(rows.x):inverse(load(rows.y));
- float4x4 inverseView=rows.y>=0?load(rows.y):inverse(view);
- // Transposed, P*V is V'*P', and P = (P*V)*inverse(V) is inverse(V)'*(P*V)'.
- float4x4 projection=rows.z>=0?load(rows.z):mul(inverseView,load(viewProjection));
+ float4x4 view,inverseView,projection;
+ if(rows.x<0&&rows.y<0){
+  if(!splitViewProjection(load(viewProjection),view,inverseView,projection))return;
+ }else{
+  view=rows.x>=0?load(rows.x):inverse(load(rows.y));
+  inverseView=rows.y>=0?load(rows.y):inverse(view);
+  // Transposed, P*V is V'*P', and P = (P*V)*inverse(V) is inverse(V)'*(P*V)'.
+  projection=rows.z>=0?load(rows.z):mul(inverseView,load(viewProjection));
+ }
  float4x4 inverseProjection=rows.w>=0?load(rows.w):inverse(projection);
  float4x4 vp=viewProjection>=0?load(viewProjection):mul(view,projection);
  store(0,view);store(4,inverseView);store(8,projection);store(12,inverseProjection);store(16,vp);
