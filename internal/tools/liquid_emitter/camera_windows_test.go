@@ -126,7 +126,9 @@ func TestBuildCameraDerivesMissingMatrices(t *testing.T) {
 			} {
 				for r := range 4 {
 					for c := range 4 {
-						if math.Abs(check.got[r][c]-check.want[r][c]) > 1e-4*math.Max(1, math.Abs(check.want[r][c])) {
+						value := check.got[r][c]
+						if math.IsNaN(value) || math.IsInf(value, 0) ||
+							math.Abs(value-check.want[r][c]) > 1e-4*math.Max(1, math.Abs(check.want[r][c])) {
 							t.Errorf("%s[%d][%d] = %g, want %g (rows %v)", check.name, r, c,
 								check.got[r][c], check.want[r][c], rows)
 						}
