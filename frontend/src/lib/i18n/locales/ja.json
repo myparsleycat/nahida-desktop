@@ -2701,7 +2701,15 @@
             "managedHint": "ほかのインポーター設定に従って決まり、保存や起動のたびに上書きされます。",
             "managedRenderingHint": "詳細設定タブの「描画設定を強制」がオンの間は、このインポーターに必要な値に保たれます。",
             "overrideHint": "保存や起動のたびにこの値を d3dx.ini に適用します。",
-            "clearOverride": "解除"
+            "clearOverride": "解除",
+            "statusFilter": "状態",
+            "statusAll": "すべてのオプション",
+            "statusOverridden": "変更した値",
+            "statusEditable": "編集可能",
+            "statusManaged": "自動管理",
+            "sectionFilter": "セクション",
+            "sectionAll": "すべてのセクション",
+            "noMatch": "フィルターに一致するオプションはありません。"
           }
         },
         "xxmiPath": "XXMIパス",

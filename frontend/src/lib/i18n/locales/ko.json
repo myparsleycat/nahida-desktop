@@ -2701,7 +2701,15 @@
             "managedHint": "다른 임포터 설정에 따라 정해지며, 저장하거나 실행할 때마다 덮어씁니다.",
             "managedRenderingHint": "고급 탭의 \"렌더링 강제\"가 켜져 있는 동안 이 임포터에 필요한 값으로 유지됩니다.",
             "overrideHint": "저장하거나 실행할 때마다 이 값을 d3dx.ini에 적용합니다.",
-            "clearOverride": "해제"
+            "clearOverride": "해제",
+            "statusFilter": "상태",
+            "statusAll": "모든 옵션",
+            "statusOverridden": "변경한 값",
+            "statusEditable": "편집 가능",
+            "statusManaged": "자동 관리",
+            "sectionFilter": "섹션",
+            "sectionAll": "모든 섹션",
+            "noMatch": "필터와 일치하는 옵션이 없습니다."
           }
         },
         "xxmiPath": "XXMI 경로",

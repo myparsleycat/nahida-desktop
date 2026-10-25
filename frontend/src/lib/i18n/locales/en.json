@@ -2756,7 +2756,15 @@
             "managedHint": "Set by the other importer settings; saving and every launch overwrite it.",
             "managedRenderingHint": "Kept at the value this importer needs while \"Enforce rendering\" is on in the Advanced tab.",
             "overrideHint": "Saving and every launch apply this value to d3dx.ini.",
-            "clearOverride": "Clear"
+            "clearOverride": "Clear",
+            "statusFilter": "Status",
+            "statusAll": "All options",
+            "statusOverridden": "Overridden",
+            "statusEditable": "Editable",
+            "statusManaged": "Managed",
+            "sectionFilter": "Section",
+            "sectionAll": "All sections",
+            "noMatch": "No options match the filter."
           }
         },
         "xxmiPath": "XXMI Path",

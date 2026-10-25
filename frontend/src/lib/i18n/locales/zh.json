@@ -2701,7 +2701,15 @@
             "managedHint": "由其他导入器设置决定，每次保存或启动都会覆盖。",
             "managedRenderingHint": "高级选项卡中的“强制渲染设置”开启时，会保持为此导入器所需的值。",
             "overrideHint": "每次保存或启动都会将此值应用到 d3dx.ini。",
-            "clearOverride": "取消"
+            "clearOverride": "取消",
+            "statusFilter": "状态",
+            "statusAll": "全部选项",
+            "statusOverridden": "已更改",
+            "statusEditable": "可编辑",
+            "statusManaged": "自动管理",
+            "sectionFilter": "段",
+            "sectionAll": "全部段",
+            "noMatch": "没有与筛选条件匹配的选项。"
           }
         },
         "xxmiPath": "XXMI路径",
