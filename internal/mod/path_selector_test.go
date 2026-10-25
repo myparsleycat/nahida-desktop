@@ -25,7 +25,7 @@ func (d *scriptedPathSelectionDialog) SaveFile(platform.SaveFileOptions) (platfo
 	return d.next()
 }
 
-func (d *scriptedPathSelectionDialog) SelectDirectory() (platform.DialogResult, error) {
+func (d *scriptedPathSelectionDialog) SelectDirectory(string) (platform.DialogResult, error) {
 	return d.next()
 }
 
@@ -47,7 +47,7 @@ func (d failingPathSelectionDialog) SaveFile(platform.SaveFileOptions) (platform
 	return platform.DialogResult{}, d.err
 }
 
-func (d failingPathSelectionDialog) SelectDirectory() (platform.DialogResult, error) {
+func (d failingPathSelectionDialog) SelectDirectory(string) (platform.DialogResult, error) {
 	return platform.DialogResult{}, d.err
 }
 

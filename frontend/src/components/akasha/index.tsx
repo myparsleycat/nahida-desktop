@@ -225,6 +225,7 @@ export function AkashaHeadButtons({
         defaultPath: "",
         filters: [],
         properties: [directory ? "openDirectory" : "openFile", "multiSelections"],
+        role: "drive-upload",
       });
       if (selected.canceled || !selected.filePaths?.length) return;
 

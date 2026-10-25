@@ -22,6 +22,9 @@ type FileFilter struct {
 type SaveFileOptions struct {
 	SuggestedName string       `json:"suggestedName"`
 	Filters       []FileFilter `json:"filters"`
+	// Role keeps the last folder Windows remembers for this kind of dialog
+	// apart from dialogs with another role. Dialogs without a role share one.
+	Role string `json:"role,omitempty"`
 }
 
 // DialogResult is the Electron save/select return value.
@@ -36,6 +39,8 @@ type OpenDialogOptions struct {
 	DefaultPath string       `json:"defaultPath"`
 	Filters     []FileFilter `json:"filters"`
 	Properties  []string     `json:"properties"`
+	// Role has the same meaning as SaveFileOptions.Role.
+	Role string `json:"role,omitempty"`
 }
 
 // OpenDialogResult is the Electron showOpenDialog return value.
@@ -75,7 +80,7 @@ type DirectoryConflictOptions struct {
 
 type Dialog struct {
 	saveFile          func(SaveFileOptions) (string, error)
-	selectDirectory   func() (string, error)
+	selectDirectory   func(role string) (string, error)
 	openDialog        func(OpenDialogOptions) ([]string, error)
 	showModal         func(ModalOptions) (ModalResult, error)
 	directoryConflict func(DirectoryConflictOptions) (DirectoryConflictChoice, error)
@@ -105,8 +110,10 @@ func (d *Dialog) SaveFile(opts SaveFileOptions) (DialogResult, error) {
 	return DialogResult{FilePath: path}, nil
 }
 
-func (d *Dialog) SelectDirectory() (DialogResult, error) {
-	path, err := d.selectDirectory()
+// SelectDirectory shows a folder picker. role has the same meaning as
+// SaveFileOptions.Role.
+func (d *Dialog) SelectDirectory(role string) (DialogResult, error) {
+	path, err := d.selectDirectory(role)
 	if errors.Is(err, application.ErrDialogCancelled) {
 		return DialogResult{Canceled: true}, nil
 	}
@@ -160,6 +167,7 @@ func defaultSaveFile(opts SaveFileOptions) (string, error) {
 	}
 	dlg := application.Get().Dialog.SaveFile()
 	dlg.AttachToWindow(win)
+	dlg.SetRole(opts.Role)
 	if opts.SuggestedName != "" {
 		dlg.SetFilename(opts.SuggestedName)
 	}
@@ -171,13 +179,14 @@ func defaultSaveFile(opts SaveFileOptions) (string, error) {
 	return dlg.PromptForSingleSelection()
 }
 
-func defaultSelectDirectory() (string, error) {
+func defaultSelectDirectory(role string) (string, error) {
 	win, err := requireMainWindow()
 	if err != nil {
 		return "", err
 	}
 	dlg := application.Get().Dialog.OpenFile()
 	dlg.AttachToWindow(win)
+	dlg.SetRole(role)
 	dlg.CanChooseDirectories(true)
 	dlg.CanChooseFiles(false)
 	dlg.CanCreateDirectories(true)
@@ -191,6 +200,7 @@ func defaultOpenDialog(opts OpenDialogOptions) ([]string, error) {
 	}
 	dlg := application.Get().Dialog.OpenFile()
 	dlg.AttachToWindow(win)
+	dlg.SetRole(opts.Role)
 	if opts.Title != "" {
 		dlg.SetTitle(opts.Title)
 	}

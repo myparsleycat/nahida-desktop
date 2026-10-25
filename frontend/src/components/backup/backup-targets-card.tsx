@@ -35,7 +35,7 @@ export function BackupTargetsCard({ targets }: { targets: Target[] }) {
 
   const addFolder = async () => {
     try {
-      const result = await Dialog.SelectDirectory();
+      const result = await Dialog.SelectDirectory("backup-target");
       if (result.canceled || !result.filePath) return;
       await Backup.AddCustomPath(result.filePath);
       await refresh();

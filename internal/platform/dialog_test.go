@@ -70,10 +70,10 @@ func TestSelectDirectory(t *testing.T) {
 	t.Parallel()
 
 	d := NewDialog()
-	d.selectDirectory = func() (string, error) {
+	d.selectDirectory = func(string) (string, error) {
 		return "", nil
 	}
-	got, err := d.SelectDirectory()
+	got, err := d.SelectDirectory("")
 	if err != nil {
 		t.Fatalf("SelectDirectory: %v", err)
 	}
@@ -81,10 +81,10 @@ func TestSelectDirectory(t *testing.T) {
 		t.Fatalf("canceled = %+v", got)
 	}
 
-	d.selectDirectory = func() (string, error) {
+	d.selectDirectory = func(string) (string, error) {
 		return `D:\mods`, nil
 	}
-	got, err = d.SelectDirectory()
+	got, err = d.SelectDirectory("")
 	if err != nil {
 		t.Fatalf("SelectDirectory path: %v", err)
 	}
@@ -92,10 +92,10 @@ func TestSelectDirectory(t *testing.T) {
 		t.Fatalf("path = %+v", got)
 	}
 
-	d.selectDirectory = func() (string, error) {
+	d.selectDirectory = func(string) (string, error) {
 		return "", ErrMainWindowNotFound
 	}
-	if _, err := d.SelectDirectory(); err == nil {
+	if _, err := d.SelectDirectory(""); err == nil {
 		t.Fatal("expected window error")
 	}
 }
@@ -126,10 +126,10 @@ func TestDialogCancellationSentinel(t *testing.T) {
 	t.Run("directory", func(t *testing.T) {
 		t.Parallel()
 		d := NewDialog()
-		d.selectDirectory = func() (string, error) {
+		d.selectDirectory = func(string) (string, error) {
 			return "", application.ErrDialogCancelled
 		}
-		got, err := d.SelectDirectory()
+		got, err := d.SelectDirectory("")
 		if err != nil || !got.Canceled || got.FilePath != "" {
 			t.Fatalf("SelectDirectory() = %+v, %v", got, err)
 		}
@@ -159,13 +159,13 @@ func TestDialogPreservesNonCancellationErrors(t *testing.T) {
 	dialogErr := errors.New("native dialog failed")
 	d := NewDialog()
 	d.saveFile = func(SaveFileOptions) (string, error) { return "", dialogErr }
-	d.selectDirectory = func() (string, error) { return "", dialogErr }
+	d.selectDirectory = func(string) (string, error) { return "", dialogErr }
 	d.openDialog = func(OpenDialogOptions) ([]string, error) { return nil, dialogErr }
 
 	if _, err := d.SaveFile(SaveFileOptions{}); !errors.Is(err, dialogErr) {
 		t.Fatalf("SaveFile error = %v, want %v", err, dialogErr)
 	}
-	if _, err := d.SelectDirectory(); !errors.Is(err, dialogErr) {
+	if _, err := d.SelectDirectory(""); !errors.Is(err, dialogErr) {
 		t.Fatalf("SelectDirectory error = %v, want %v", err, dialogErr)
 	}
 	if _, err := d.ShowOpenDialog(OpenDialogOptions{}); !errors.Is(err, dialogErr) {

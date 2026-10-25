@@ -52,8 +52,10 @@ type folderPathSelectionErrorLog struct {
 
 type pathSelectionDialog interface {
 	SaveFile(platform.SaveFileOptions) (platform.DialogResult, error)
-	SelectDirectory() (platform.DialogResult, error)
+	SelectDirectory(role string) (platform.DialogResult, error)
 }
+
+const modDownloadDialogRole = "mod-download"
 
 type pathSelector struct {
 	mu         sync.Mutex
@@ -204,7 +206,10 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 		return false, newFolderPathSelectionError(selectionStage, "", err)
 	}
 	if pending.selectFile {
-		result, err := p.dialog.SaveFile(platform.SaveFileOptions{SuggestedName: pending.suggestedName})
+		result, err := p.dialog.SaveFile(platform.SaveFileOptions{
+			SuggestedName: pending.suggestedName,
+			Role:          modDownloadDialogRole,
+		})
 		if err != nil {
 			p.settleError(selectionID, err)
 			return false, newFolderPathSelectionError(selectionStage, "", err)
@@ -235,7 +240,7 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 		}
 		return true, nil
 	}
-	result, err := p.dialog.SelectDirectory()
+	result, err := p.dialog.SelectDirectory(modDownloadDialogRole)
 	if err != nil {
 		p.settleError(selectionID, err)
 		return false, newFolderPathSelectionError(selectionStage, "", err)

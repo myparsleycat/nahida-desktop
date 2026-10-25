@@ -525,6 +525,7 @@ export default function BodyShapeTool({
       defaultPath: "",
       filters: [],
       properties: ["openDirectory"],
+      role: "body-shape-mod",
     });
     if (selected.canceled || !selected.filePaths?.[0]) return;
     setModPath(selected.filePaths[0]);

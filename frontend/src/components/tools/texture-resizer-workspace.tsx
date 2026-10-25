@@ -170,6 +170,7 @@ export function TextureResizerWorkspace({
       defaultPath: "",
       filters: [],
       properties: ["openDirectory"],
+      role: "texture-resizer-target",
     });
     const filePath = selected.filePaths?.[0];
     if (filePath) {
