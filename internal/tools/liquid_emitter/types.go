@@ -10,7 +10,7 @@ import "nahida.live/desktop/internal/modruntime"
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "39"
+	runtimeVersion    = "40"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -166,6 +166,8 @@ type Inspection struct {
 	Applied *int `json:"applied"`
 	// DefaultLook is the look an emitter added without one starts from.
 	DefaultLook Look `json:"defaultLook"`
+	// MaxEmitters is the most emitters one mod may hold.
+	MaxEmitters int `json:"maxEmitters"`
 }
 
 type PIDChange struct {

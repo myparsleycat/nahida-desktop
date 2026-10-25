@@ -332,6 +332,7 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 		Renumbered:  []PIDChange{},
 		Applied:     sc.applied,
 		DefaultLook: defaultLook(),
+		MaxEmitters: maxEmitters,
 	}
 	for _, from := range slices.Sorted(maps.Keys(sc.renumbered)) {
 		inspection.Renumbered = append(inspection.Renumbered, PIDChange{From: from, To: sc.renumbered[from]})

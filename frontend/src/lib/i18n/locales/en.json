@@ -1934,7 +1934,8 @@
         "apply_new": "Add emitter",
         "slots": {
           "title": "Allow more emitters at once?",
-          "description": "This character would have {{count}} emitters, but the runtime lets only {{current}} emit at once, counting every emitter of every character on screen. Raise the limit to {{next}} for all mods to add this one. More emitters cost more GPU time.",
+          "description": "This character would have {{count}} emitters, but the runtime lets only {{current}} emit at once, counting every emitter of every character on screen. Raise the limit to {{next}} for all mods, or add this one without raising it: while more emitters than the limit are drawn, some of them do not emit. Emitters of forms that are not drawn together do not count against each other. More emitters cost more GPU time.",
+          "keep": "Add without raising",
           "confirm": "Raise to {{next}} and add",
           "raised": "Up to {{count}} emitters can now emit at once."
         }
