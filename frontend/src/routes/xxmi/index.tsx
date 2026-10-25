@@ -488,6 +488,7 @@ export function XXMIDashboard() {
                           defaultPath: "",
                           filters: [{ name: "ZIP", extensions: ["zip"] }],
                           properties: ["openFile"],
+                          role: "xxmi-legacy-import",
                         });
                         if (selected.canceled || !selected.filePaths?.[0]) return;
                         await XXMI.ImportLegacyRuntimeZip(selected.filePaths[0]);

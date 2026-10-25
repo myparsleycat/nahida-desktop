@@ -92,6 +92,7 @@ export function CustomDLLField({
               defaultPath: "",
               filters: [{ name: "DLL", extensions: ["dll"] }],
               properties: ["openFile"],
+              role: "xxmi-custom-dll",
             }).catch((error: unknown) => {
               toast.error(toErrorMessage(error));
               return undefined;

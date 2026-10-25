@@ -167,6 +167,7 @@ export function ReShadeSettings() {
                         },
                       ],
                       properties: ["openFile", "multiSelections"],
+                      role: "reshade-preset",
                     });
                     if (selected.canceled || !selected.filePaths?.length) return;
 

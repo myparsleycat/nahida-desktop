@@ -266,6 +266,7 @@ export function useTouchProfileSession({
             defaultPath: "",
             filters: [],
             properties: ["openDirectory"],
+            role: "touch-profile-mod",
         });
         if (selected && !selected.canceled && selected.filePaths?.[0]) {
             setModPath(selected.filePaths[0]);

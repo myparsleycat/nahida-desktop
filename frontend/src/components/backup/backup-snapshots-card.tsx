@@ -189,7 +189,7 @@ function RestoreDialog({ snapshot, onClose }: { snapshot: Snapshot | null; onClo
 
   const pickDestination = async () => {
     try {
-      const result = await PlatformDialog.SelectDirectory();
+      const result = await PlatformDialog.SelectDirectory("backup-destination");
       if (!result.canceled && result.filePath) setDestination(result.filePath);
     } catch (error) {
       toast.error(backupErrorMessage(t, error));

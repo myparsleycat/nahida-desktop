@@ -28,7 +28,7 @@ require (
 	modernc.org/sqlite v1.59.0
 )
 
-replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.34
+replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 v3.0.0-beta.34-nahida.1
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect

@@ -1439,7 +1439,7 @@ func (m *Mod) HasSingleTopLevelDirectory(ctx context.Context, archivePath string
 }
 
 func (m *Mod) SelectFolder(ctx context.Context, game string) (*string, error) {
-	path, err := m.pickDirectory("Select " + game + " Mod Folder")
+	path, err := m.pickDirectory("Select "+game+" Mod Folder", "mod-game-folder")
 	if err != nil || path == nil {
 		return path, err
 	}
@@ -1450,7 +1450,7 @@ func (m *Mod) SelectFolder(ctx context.Context, game string) (*string, error) {
 }
 
 func (m *Mod) PickFolder() (*string, error) {
-	return m.pickDirectory("")
+	return m.pickDirectory("", "mod-game-folder")
 }
 
 func (m *Mod) PickExecutable() (*string, error) {
@@ -1460,6 +1460,7 @@ func (m *Mod) PickExecutable() (*string, error) {
 	result, err := m.dialog.ShowOpenDialog(platform.OpenDialogOptions{
 		Properties: []string{"openFile"},
 		Filters:    []platform.FileFilter{{Name: "Launcher", Extensions: []string{"exe"}}},
+		Role:       "mod-launcher",
 	})
 	if err != nil {
 		return nil, err
@@ -1471,13 +1472,14 @@ func (m *Mod) PickExecutable() (*string, error) {
 	return &path, nil
 }
 
-func (m *Mod) pickDirectory(title string) (*string, error) {
+func (m *Mod) pickDirectory(title, role string) (*string, error) {
 	if m == nil || m.dialog == nil {
 		return nil, errors.New("dialog service is not configured")
 	}
 	result, err := m.dialog.ShowOpenDialog(platform.OpenDialogOptions{
 		Title:      title,
 		Properties: []string{"openDirectory"},
+		Role:       role,
 	})
 	if err != nil {
 		return nil, err

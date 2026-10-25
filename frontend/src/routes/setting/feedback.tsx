@@ -141,12 +141,13 @@ function RouteComponent() {
         },
       ],
       properties: ["openFile", "multiSelections"],
+      role: "feedback-attachment",
     });
     return selected.canceled ? [] : (selected.filePaths ?? []);
   };
 
   const pickMod = async () => {
-    const selected = await Dialog.SelectDirectory();
+    const selected = await Dialog.SelectDirectory("feedback-mod");
     return selected.canceled || !selected.filePath ? [] : [selected.filePath];
   };
 

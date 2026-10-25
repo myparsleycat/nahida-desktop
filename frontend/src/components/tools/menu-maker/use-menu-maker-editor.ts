@@ -129,12 +129,13 @@ export function useMenuMakerEditor({
             defaultPath: state.source?.path ?? path,
             filters: [{ name: "3DMigoto INI", extensions: ["ini", "txt"] }],
             properties: ["openFile"],
+            role: "menu-maker-source",
         });
         const selectedPath = result.filePaths?.[0];
         if (selectedPath) await loadSource(selectedPath);
     };
     const chooseFolder = async () => {
-        const result = await Dialog.SelectDirectory();
+        const result = await Dialog.SelectDirectory("menu-maker-source");
         if (!result.canceled && result.filePath) await scanFolder(result.filePath);
     };
     const outputName = state.source?.fileName.replace(/\.(?:ini|txt)$/i, ".ini") ?? "mod.ini";
@@ -217,6 +218,7 @@ export function useMenuMakerEditor({
         const selection = await Dialog.SaveFile({
             suggestedName: outputName,
             filters: [{ name: "INI", extensions: ["ini"] }],
+            role: "menu-maker-output",
         });
         if (selection.canceled || !selection.filePath) return;
         dispatch({ type: "busy", value: true });
@@ -247,6 +249,7 @@ export function useMenuMakerEditor({
         const selection = await Dialog.SaveFile({
             suggestedName: outputName.replace(/\.ini$/i, ".zip"),
             filters: [{ name: "ZIP", extensions: ["zip"] }],
+            role: "menu-maker-output",
         });
         if (selection.canceled || !selection.filePath) return;
         dispatch({ type: "busy", value: true });
