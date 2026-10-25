@@ -58,7 +58,7 @@ func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection
 
 		var key, aside string
 		_, err = s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
-			if key, _, err = s.ownedKey(sc, runtimeLayout{root: rt.root}); err != nil {
+			if key, _, err = s.ownedKey(sc, rt.layout()); err != nil {
 				return Inspection{}, err
 			}
 			aside, err = s.moveAside(sc)
@@ -87,7 +87,7 @@ func (s *Service) RestoreSource(ctx context.Context, modPath string) (Inspection
 		sc.root = restored
 		return s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
 			if key != "" {
-				if err := s.dropKey(sc, rt.root, key); err != nil {
+				if err := s.dropKey(sc, rt.layout(), key); err != nil {
 					return Inspection{}, err
 				}
 			}
@@ -180,7 +180,7 @@ func (s *Service) applyAsNewMod(
 		}
 		source.INIPath = filepath.Join(target, rel)
 		sc.root, sc.origin = target, origin
-		if err := s.apply(sc, rt.root, source, triangle, anchor, emitterPID, look); err != nil {
+		if err := s.apply(sc, rt.layout(), source, triangle, anchor, emitterPID, look); err != nil {
 			return Inspection{}, err
 		}
 		return s.inspection(sc, rt)
@@ -256,15 +256,14 @@ func (s *Service) dropCopyProfile(ctx context.Context, sc *scope, target string)
 		return err
 	}
 	_, err = s.withRuntime(ctx, sc, false, func(rt runtimeState) (Inspection, error) {
-		return Inspection{}, s.dropKey(sc, rt.root, marker.ModKey)
+		return Inspection{}, s.dropKey(sc, rt.layout(), marker.ModKey)
 	})
 	return err
 }
 
 // dropKey releases every slot and the profile file of one mod key.
-func (s *Service) dropKey(sc *scope, runtimeRoot, key string) error {
+func (s *Service) dropKey(sc *scope, layout runtimeLayout, key string) error {
 	sc.stage = stageLoad
-	layout := runtimeLayout{root: runtimeRoot}
 	index, err := readIndex(layout, sc.modsRoot)
 	if err != nil {
 		return err

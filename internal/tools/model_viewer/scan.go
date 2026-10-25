@@ -34,6 +34,7 @@ type modelViewerDirectDrawRecord struct {
 	conditions      ModelViewerDNF
 	draw            modelViewerDrawInstruction
 	auto            bool
+	implicit        bool
 	copies          int
 }
 
@@ -663,6 +664,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				IndexCount: record.draw.IndexCount,
 				BaseVertex: record.draw.BaseVertex,
 				Auto:       record.auto,
+				Implicit:   record.implicit,
 				Reversed:   source.kind == modelViewerDrawVertexWWMI,
 			},
 		}

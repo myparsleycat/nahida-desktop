@@ -31,7 +31,7 @@ import {
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { isEqual } from "es-toolkit";
+import { clamp, isEqual } from "es-toolkit";
 import type { TFunction } from "i18next";
 import {
   CrosshairIcon,
@@ -85,8 +85,6 @@ const AXES = ["X", "Y", "Z"] as const;
 const Z_DOWN: Vec3 = [0, 0, -1];
 // Applying repairs an outdated or changed runtime, so only these leave editing open.
 const EDITABLE_RUNTIME_STATES = new Set<string>(["current", "outdated", "modified"]);
-// The backend's maxEmitters: each emitter takes a runtime slot while its character is drawn.
-const MAX_EMITTERS = 4;
 // How far the runtime's slot count goes up when a mod needs more slots than it has.
 const SLOT_RAISE = 4;
 
@@ -141,7 +139,8 @@ export function LiquidEmitterTool({
     onUnsavedChange?.(unsaved);
   }, [onUnsavedChange, unsaved]);
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
-  const atLimit = emitters.length >= MAX_EMITTERS;
+  const maxEmitters = inspection?.maxEmitters;
+  const atLimit = maxEmitters !== undefined && emitters.length >= maxEmitters;
   const busy =
     session.apply.isPending ||
     session.remove.isPending ||
@@ -229,7 +228,7 @@ export function LiquidEmitterTool({
     if (!anchor) return;
     const offset = [...anchor.offset] as Vec3;
     offset[axis] = meters / meshUnit;
-    update(key, { offset: limitOffset(offset, MAX_OFFSET_METERS / meshUnit) });
+    update(key, { offset: limitOffsetAxis(offset, axis, MAX_OFFSET_METERS / meshUnit) });
   };
 
   const measured = anchor ? directionToAngles(anchor.direction, down) : undefined;
@@ -343,12 +342,14 @@ export function LiquidEmitterTool({
     const requested = editing;
     session.remove.mutate(pids, {
       onSuccess: (result) => {
-        if (pids.length === 0 || (requested !== null && pids.includes(requested))) {
-          follow(requested, null);
-        } else if (requested !== null) {
+        // A new emitter still being placed is none of the removed ones, so its anchor stays.
+        if (requested !== null) {
+          const removed = pids.length === 0 || pids.includes(requested);
           follow(
             requested,
-            result.renumbered?.find((change) => change.from === requested)?.to ?? requested,
+            removed
+              ? null
+              : (result.renumbered?.find((change) => change.from === requested)?.to ?? requested),
           );
         }
         toast.success(t("page.tools.liquid_emitter.removed"));
@@ -457,6 +458,7 @@ export function LiquidEmitterTool({
 
         <EmitterList
           emitters={emitters}
+          maxEmitters={maxEmitters}
           meshes={meshes}
           forms={forms}
           selectedPid={current?.pid}
@@ -517,7 +519,7 @@ export function LiquidEmitterTool({
           ) : null}
           {adding && atLimit ? (
             <p className="text-xs text-muted-foreground">
-              {t("page.tools.liquid_emitter.selection.limit", { max: MAX_EMITTERS })}
+              {t("page.tools.liquid_emitter.selection.limit", { max: maxEmitters })}
             </p>
           ) : null}
           {notice ? <p className="text-xs text-destructive">{notice}</p> : null}
@@ -542,8 +544,8 @@ export function LiquidEmitterTool({
                 label={label}
                 value={millimeters}
                 defaultValue={0}
-                min={-150}
-                max={150}
+                min={-MAX_OFFSET_METERS * 1000}
+                max={MAX_OFFSET_METERS * 1000}
                 step={0.5}
                 display={`${millimeters.toFixed(1)} mm`}
                 disabled={locked}
@@ -639,8 +641,10 @@ export function LiquidEmitterTool({
                   disabled={locked}
                   value={position ? Number(position[axis].toFixed(4)) : ""}
                   onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    if (anchor && Number.isFinite(value)) {
+                    // A cleared field or a lone minus sign reads as "", which Number takes for 0.
+                    const text = event.currentTarget.value;
+                    const value = Number(text);
+                    if (anchor && text.trim() !== "" && Number.isFinite(value)) {
                       setOffsetAxis(
                         axis,
                         (value - anchor.point[axis]) * meshUnit,
@@ -777,6 +781,15 @@ export function LiquidEmitterTool({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="secondary"
+              onClick={() => {
+                setSlotPrompt(null);
+                applyAnchor();
+              }}
+            >
+              {t("page.tools.liquid_emitter.slots.keep")}
+            </AlertDialogAction>
             <AlertDialogAction
               onClick={() => {
                 const next = slotPrompt?.next;
@@ -981,6 +994,7 @@ function RuntimeSection({
 
 function EmitterList({
   emitters,
+  maxEmitters,
   meshes,
   forms,
   selectedPid,
@@ -994,6 +1008,8 @@ function EmitterList({
   children,
 }: {
   emitters: Emitter[];
+  /** Undefined until the mod is inspected. */
+  maxEmitters: number | undefined;
   meshes: ViewerMeshTransport[] | undefined;
   forms: ViewerForm[];
   /** The applied emitter being edited, or undefined while a new one is placed. */
@@ -1015,7 +1031,7 @@ function EmitterList({
       id="liquid-emitter:emitters"
       title={t("page.tools.liquid_emitter.emitters.title", {
         count: emitters.length,
-        max: MAX_EMITTERS,
+        max: maxEmitters ?? "-",
       })}
       summary={adding ? t("page.tools.liquid_emitter.selection.adding") : `#${selectedPid}`}
       actions={
@@ -1176,18 +1192,30 @@ function anchorFromEmitter(emitter: Emitter): Anchor | null {
   };
 }
 
-function limitOffset(offset: Vec3, limit: number): Vec3 {
-  const length = Math.hypot(...offset);
-  if (length <= limit) return offset;
-  return offset.map((value) => (value * limit) / length) as Vec3;
+// Only the edited axis gives way to the length limit, so the other axes keep their values.
+function limitOffsetAxis(offset: Vec3, axis: number, limit: number): Vec3 {
+  const others = offset.reduce((sum, value, index) => (index === axis ? sum : sum + value ** 2), 0);
+  const room = Math.sqrt(Math.max(limit ** 2 - others, 0));
+  const next = [...offset] as Vec3;
+  next[axis] = clamp(offset[axis], -room, room);
+  return next;
 }
 
 const errorCodePattern = /LIQUID_([A-Z_]+)(?::([^\n]*))?/;
+// Changing the runtime's settings goes through the mod runtime manager, which has codes of its own.
+const runtimeErrorCodePattern = /(MOD_RUNTIME_[A-Z_]+)(?::([^\n]*))?/;
 
 export function liquidErrorMessage(t: TFunction, error: unknown) {
   const message = toErrorMessage(error);
   const match = errorCodePattern.exec(message);
-  if (!match) return message;
+  if (!match) {
+    const runtime = runtimeErrorCodePattern.exec(message);
+    if (!runtime) return message;
+    return t(`page.setting.xxmi.modRuntimes.errors.${runtime[1]}`, {
+      detail: runtime[2]?.trim() ?? "",
+      defaultValue: message,
+    });
+  }
   const key = `page.tools.liquid_emitter.error.${match[1].toLowerCase()}`;
   const translated = t(key, { detail: match[2]?.trim() ?? "" });
   return translated === key ? message : translated;

@@ -27,6 +27,11 @@ type DrawSource struct {
 	IndexCount int
 	BaseVertex int
 	Auto       bool
+	// Implicit is set when the override only binds the index buffer and has
+	// no draw of its own: another override of the same hash, usually the one
+	// with handling = skip, draws whatever buffer is bound with
+	// drawindexed = auto.
+	Implicit bool
 	// Reversed is set when the viewer swapped the winding of every triangle.
 	Reversed bool
 

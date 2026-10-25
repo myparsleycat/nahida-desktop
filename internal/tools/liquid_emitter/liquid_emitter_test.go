@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io/fs"
 	"math"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -240,6 +242,101 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		}
 	}
 
+	// An auto draw covers its whole index buffer, so the buffer bound at each
+	// auto line tells the parts of one override apart.
+	const autoParts = "[TextureOverrideBody]\nib = ResourceBodyIB\n;drawindexed = auto\ndrawindexed = auto\n" +
+		"ib = ResourceDressIB\nvb0 = ResourceDressPosition\nDrawIndexed = AUTO\n"
+	if text, err = parseINIText([]byte(autoParts)); err != nil {
+		t.Fatal(err)
+	}
+	for ib, line := range map[string]int{"BodyIB": 3, "DressIB": 6} {
+		draw := modelviewer.DrawSource{Section: "Body", IB: ib, Auto: true}
+		if sites := text.drawSites(draw); len(sites) != 1 || sites[0].line != line || text.sharedDraw(draw, sites) {
+			t.Fatalf("auto draw sites over %s = %+v, want line %d", ib, sites, line)
+		}
+	}
+
+	// GIMI draws every part of a hash from one auto line under the IB override;
+	// each part override only binds its buffer, so its hook goes below that.
+	const implicitParts = "[TextureOverrideAmberIB]\nhash = b03c7e30\nhandling = skip\ndrawindexed = auto\n\n" +
+		"[TextureOverrideAmberHead]\nhash = b03c7e30\nmatch_first_index = 0\nib = ResourceAmberHeadIB\n\n" +
+		"[TextureOverrideAmberBody]\nhash = b03c7e30\nmatch_first_index = 5670\nib = ResourceAmberBodyIB"
+	if text, err = parseINIText([]byte(implicitParts)); err != nil {
+		t.Fatal(err)
+	}
+	head := modelviewer.DrawSource{Section: "AmberHead", IB: "AmberHeadIB", Auto: true, Implicit: true}
+	amberBody := modelviewer.DrawSource{Section: "AmberBody", IB: "AmberBodyIB", Auto: true, Implicit: true}
+	for _, draw := range []modelviewer.DrawSource{head, amberBody} {
+		if sites := text.drawSites(draw); len(sites) != 1 || text.sharedDraw(draw, sites) ||
+			text.bindsVertexBuffersLate(draw) {
+			t.Fatalf("implicit draw sites of %s = %+v", draw.Section, sites)
+		}
+	}
+	text.insertHooks(text.drawSites(head), 7, 6, 0)
+	text.insertHooks(text.drawSites(amberBody), 7, 6, 0)
+	text.insertHooks(text.drawSites(amberBody), 8, 9, 0)
+	patched = string(text.bytes())
+	block := func(pid, first int) string {
+		return "; nahida-liquid " + strconv.Itoa(pid) + " begin\nx243 = " + strconv.Itoa(pid) + "\ny243 = " +
+			strconv.Itoa(first) + "\nz243 = 0\n" + captureCommand + "\n; nahida-liquid " + strconv.Itoa(pid) + " end"
+	}
+	if !strings.Contains(patched, "handling = skip\ndrawindexed = auto\n\n") ||
+		!strings.Contains(patched, "ib = ResourceAmberHeadIB\n"+block(7, 6)+"\n\n") ||
+		!strings.HasSuffix(patched, "ib = ResourceAmberBodyIB\n"+block(7, 6)+"\n"+block(8, 9)) {
+		t.Fatalf("hooks not placed below the part buffers:\n%s", patched)
+	}
+	if sites := text.drawSites(amberBody); len(sites) != 1 || !slices.Equal(sites[0].pids, []int{8, 7}) {
+		t.Fatalf("stacked implicit hooks = %+v", sites)
+	}
+	if removed := text.removeHooks(func(int) bool { return true }); removed != 3 ||
+		string(text.bytes()) != implicitParts {
+		t.Fatalf("removed %d implicit blocks:\n%q", removed, text.bytes())
+	}
+
+	// The merger script binds each outfit's buffer in its own branch.
+	const implicitOutfits = "[TextureOverrideAyakaHead]\nrun = CommandListAyakaHead\n\n[CommandListAyakaHead]\n" +
+		"if $swapvar == 0\n\tib = ResourceAyakaHeadIB.0\nelse if $swapvar == 1\n\tib = ResourceAyakaHeadIB.1\nendif\n"
+	if text, err = parseINIText([]byte(implicitOutfits)); err != nil {
+		t.Fatal(err)
+	}
+	outfit := modelviewer.DrawSource{Section: "AyakaHead", IB: "AyakaHeadIB.0", Auto: true, Implicit: true}
+	if sites := text.drawSites(outfit); len(sites) != 1 || sites[0].line != 6 || sites[0].indent != "\t" ||
+		text.sharedDraw(outfit, sites) {
+		t.Fatalf("implicit draw sites of one outfit = %+v", sites)
+	}
+
+	// SRMI binds vb1 right below the part's buffer, so the hook goes below it.
+	const srmiPart = "[TextureOverrideHead]\nib = ResourceHeadIB\nvb1 = ResourceHeadTexcoord\nps-t0 = ResourceHeadDiffuse\n"
+	if text, err = parseINIText([]byte(srmiPart)); err != nil {
+		t.Fatal(err)
+	}
+	srmiHead := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
+	text.insertHooks(text.drawSites(srmiHead), 7, 6, 0)
+	if !strings.Contains(string(text.bytes()), "vb1 = ResourceHeadTexcoord\n"+block(7, 6)+"\nps-t0") {
+		t.Fatalf("hook not placed below the vertex buffers:\n%s", text.bytes())
+	}
+
+	// A vertex buffer bound later is not bound yet at the hook, and the runtime
+	// keeps the first capture when the buffer is bound again over new vertex
+	// buffers. A branch that binds its own does not follow another's hook.
+	for ini, late := range map[string]bool{
+		"[TextureOverrideHead]\nib = ResourceHeadIB\nps-t0 = ResourceHeadDiffuse\nvb0 = ResourceHeadPosition\n":         true,
+		"[TextureOverrideHead]\nib = ResourceHeadIB\nvb0 = ResourceDefault\nib = ResourceHeadIB\nvb0 = ResourceFinal\n": true,
+		"[TextureOverrideHead]\nif $outfit == 0\n\tvb0 = ResourceA\n\tib = ResourceHeadIB\nelse\n" +
+			"\tvb0 = ResourceB\n\tib = ResourceHeadIB\nendif\n": false,
+		"[TextureOverrideHead]\nif $outfit == 0\n\tib = ResourceHeadIB\nendif\nvb0 = ResourceHeadPosition\n": true,
+		srmiPart: false,
+		"[TextureOverrideHead]\nvb0 = ResourceHeadPosition\nib = ResourceHeadIB\n": false,
+	} {
+		if text, err = parseINIText([]byte(ini)); err != nil {
+			t.Fatal(err)
+		}
+		draw := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
+		if text.bindsVertexBuffersLate(draw) != late {
+			t.Fatalf("late vertex buffers = %t, want %t in\n%s", !late, late, ini)
+		}
+	}
+
 	// One CRLF line in an LF file must not merge the hook lines.
 	const mixed = "[TextureOverrideBody]\r\nrun = CommandListBody\n\n[CommandListBody]\n"
 	hooked := mixed + "; nahida-liquid 7 begin\nx243 = 7\ny243 = 6\nz243 = 0\n" + captureCommand +
@@ -311,6 +408,11 @@ func TestServiceKeepsSlotsOfHooksAfterRuntimeLoss(t *testing.T) {
 	}
 	if copied, _ := os.ReadFile(filepath.Join(copyRoot, "mod.ini")); string(copied) != characterINI {
 		t.Fatalf("left-over hook in the copy was not removed:\n%s", copied)
+	}
+	// A profile loader written where the runtime was would bind resources and
+	// shaders that no install provides.
+	if _, err := os.Stat(runtimeRootFor(f.modsRoot)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("removal wrote into the missing runtime folder (err=%v)", err)
 	}
 
 	other := filepath.Join(f.modsRoot, "Chen", "Chen Other")
@@ -831,37 +933,56 @@ func TestServiceApplyStoresGivenLook(t *testing.T) {
 }
 
 // Changing the original must not release or reuse a slot an unsplit copy
-// still hooks; the copy is split off first and keeps its emitter.
+// still hooks; the copy is split off first and keeps its emitter. Another
+// tool's copy of the runtime elsewhere in Mods reads as foreign but leaves
+// this app's runtime, where the copy's profile goes, in place.
 func TestServiceOriginalChangeSplitsCopies(t *testing.T) {
-	f := newServiceFixture(t)
-	ctx := context.Background()
-	if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
-		t.Fatal(err)
-	}
-	originalKey, _ := readModMarker(f.modRoot)
-	copyRoot := f.modRoot + " - Copy"
-	if err := os.MkdirAll(copyRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	entries, _ := os.ReadDir(f.modRoot)
-	for _, entry := range entries {
-		data, _ := os.ReadFile(filepath.Join(f.modRoot, entry.Name()))
-		if err := os.WriteFile(filepath.Join(copyRoot, entry.Name()), data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	for _, foreign := range []bool{false, true} {
+		t.Run(fmt.Sprintf("foreign=%v", foreign), func(t *testing.T) {
+			f := newServiceFixture(t)
+			ctx := context.Background()
+			if _, err := f.service.Apply(ctx, f.applyInput(0)); err != nil {
+				t.Fatal(err)
+			}
+			originalKey, _ := readModMarker(f.modRoot)
+			copyRoot := f.modRoot + " - Copy"
+			if err := os.MkdirAll(copyRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			entries, _ := os.ReadDir(f.modRoot)
+			for _, entry := range entries {
+				data, _ := os.ReadFile(filepath.Join(f.modRoot, entry.Name()))
+				if err := os.WriteFile(filepath.Join(copyRoot, entry.Name()), data, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if foreign {
+				other := filepath.Join(f.modsRoot, "Other Probe")
+				if err := os.MkdirAll(other, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				probe := []byte("namespace = " + runtimeNamespace + "\n")
+				if err := os.WriteFile(filepath.Join(other, probeFile), probe, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
-		t.Fatal(err)
-	}
-	copyKey, _ := readModMarker(copyRoot)
-	inspection, err := f.service.Inspect(ctx, copyRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if copyKey == "" || copyKey == originalKey || len(inspection.Emitters) != 1 ||
-		!inspection.Emitters[0].Hooked || inspection.Emitters[0].Anchor.MeshID == "" {
-		t.Fatalf("copy after removing from the original: key=%q emitters=%+v", copyKey, inspection.Emitters)
+			if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
+				t.Fatal(err)
+			}
+			copyKey, _ := readModMarker(copyRoot)
+			inspection, err := f.service.Inspect(ctx, copyRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if foreign && inspection.Runtime.State != modruntime.StateForeign {
+				t.Fatalf("runtime state = %q, want foreign", inspection.Runtime.State)
+			}
+			if copyKey == "" || copyKey == originalKey || len(inspection.Emitters) != 1 ||
+				!inspection.Emitters[0].Hooked || inspection.Emitters[0].Anchor.MeshID == "" {
+				t.Fatalf("copy after removing from the original: key=%q emitters=%+v", copyKey, inspection.Emitters)
+			}
+		})
 	}
 }
 
@@ -1179,6 +1300,7 @@ func TestRuntimeSettingsMatchBundle(t *testing.T) {
 		"[KeyAutoPulse]\nkey = VK_F11\n",
 		"[KeyManualPulse]\nkey = VK_F12\n",
 		"global $auto_pulse = 1\n",
+		"global $enabled = 0\n",
 		"global $emitting = 0\n",
 		"global $effect_requested = 0\n",
 		"global $last_effect_request = 0\n",
@@ -1221,6 +1343,32 @@ func TestRuntimeBuildsWWMICameraAtMainView(t *testing.T) {
 		wwmi := slices.Contains(spec.Importers, "WWMI")
 		if atInjection == wwmi || atMainView != wwmi {
 			t.Errorf("%v: camera built at injection %v, at main view %v", spec.Importers, atInjection, atMainView)
+		}
+	}
+}
+
+// CommandListDrawWorld draws once per frame while $seen and !$drawn hold, so
+// [Present] itself must reset both every frame, outside any condition: a
+// section header placed above the resets moves them out of Present.
+func TestRuntimeResetsFrameStateEveryPresent(t *testing.T) {
+	for _, spec := range RuntimeSpecs() {
+		bundled, err := fs.ReadFile(spec.Files, probeFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ini := strings.ReplaceAll(string(bundled), "\r\n", "\n")
+		start := strings.Index(ini, "\n[Present]\n")
+		if start < 0 {
+			t.Fatalf("%v: no [Present]", spec.Importers)
+		}
+		present := ini[start+len("\n[Present]\n"):]
+		if end := strings.Index(present, "\n["); end >= 0 {
+			present = present[:end+1]
+		}
+		for _, line := range []string{"post $seen = 0\n", "post $drawn = 0\n"} {
+			if !strings.HasPrefix(present, line) && !strings.Contains(present, "\n"+line) {
+				t.Errorf("%v: [Present] does not run %q every frame", spec.Importers, strings.TrimSpace(line))
+			}
 		}
 	}
 }

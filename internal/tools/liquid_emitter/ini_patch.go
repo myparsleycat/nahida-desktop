@@ -178,20 +178,38 @@ func lineEnding(line string) string {
 var hookPIDLineRE = regexp.MustCompile(`(?i)^\s*x243\s*=\s*\d+\s*$`)
 
 type drawSite struct {
-	line   int
+	// line is where a new hook block goes: the draw line, or for an implicit
+	// draw the line below the hooks stacked under its ib = line.
+	line int
+	// key is the line the walk matched: the draw line or the ib = line.
+	key    int
 	indent string
-	// pids are the hooks stacked directly above the draw, nearest first.
+	// pids are the hooks stacked directly above line, nearest first.
 	pids []int
 }
 
 // drawSites finds the drawindexed lines with the draw's literal arguments
 // that run under [TextureOverride<section>] with the draw's index buffer
 // bound, following run = and CommandList assignments within the same file.
+// An implicit draw has no such line, so its sites are the ib = lines that
+// bind its buffer: the capture there runs with the same buffers bound as the
+// drawindexed = auto of the hash that follows.
 func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
+	return t.ownWalk(source).sites
+}
+
+// bindsVertexBuffersLate reports whether the override of an implicit draw
+// binds a vertex buffer on some path after one of its sites has captured, as
+// when it binds the buffer again over other vertex buffers.
+func (t *iniText) bindsVertexBuffersLate(source modelviewer.DrawSource) bool {
+	return source.Implicit && t.ownWalk(source).lateVertexBuffers
+}
+
+func (t *iniText) ownWalk(source modelviewer.DrawSource) *drawWalk {
 	walk := newDrawWalk(t, t.sectionBodies(), source)
 	// An empty name stands for the buffer bound before the override runs.
-	walk.visit(strings.ToLower("TextureOverride"+source.Section), []string{""}, map[string]bool{})
-	return walk.sites
+	walk.visit(strings.ToLower("TextureOverride"+source.Section), walkState{bound: []string{""}}, map[string]bool{})
+	return walk
 }
 
 // sharedDraw reports whether any of sites can also run with another index
@@ -203,7 +221,7 @@ func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bo
 	own := strings.ToLower("TextureOverride" + source.Section)
 	for name := range bodies {
 		walk := newDrawWalk(t, bodies, source)
-		walk.visit(name, []string{""}, map[string]bool{})
+		walk.visit(name, walkState{bound: []string{""}}, map[string]bool{})
 		// The index buffer aliases of a frame animation hold only under its own
 		// override, or a section that is only ever run (a command list or custom
 		// shader) walked on its own. Another override reaching the site under
@@ -213,10 +231,10 @@ func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bo
 			strings.HasPrefix(name, "builtin")
 		foreign := len(source.IBAliases) > 1 && name != own && !called
 		for _, site := range sites {
-			if foreign && len(walk.reached[site.line]) > 0 {
+			if foreign && len(walk.reached[site.key]) > 0 {
 				return true
 			}
-			if slices.ContainsFunc(walk.reached[site.line], func(ib string) bool {
+			if slices.ContainsFunc(walk.reached[site.key], func(ib string) bool {
 				return ib != "" && !source.MatchesIB(ib)
 			}) {
 				return true
@@ -256,26 +274,56 @@ type drawWalk struct {
 	// source's arguments, whether or not they match.
 	reached    map[int][]string
 	expansions int
+	// lateVertexBuffers is set when a path binds a vertex buffer after the
+	// capture of an implicit draw's site has run on it. The runtime keeps the
+	// first capture of a draw, which would then hold stale buffers.
+	lateVertexBuffers bool
+	// covered maps each vertex buffer line bound directly below an implicit
+	// site's ib = line to that site; its hook goes below them.
+	covered map[int]int
 }
 
 func newDrawWalk(text *iniText, bodies map[string][][2]int, source modelviewer.DrawSource) *drawWalk {
-	return &drawWalk{text: text, bodies: bodies, source: source, found: map[int]bool{}, reached: map[int][]string{}}
+	return &drawWalk{
+		text: text, bodies: bodies, source: source,
+		found: map[int]bool{}, reached: map[int][]string{}, covered: map[int]int{},
+	}
 }
 
-// ifFrame is an open if block: the buffers bound when it was entered and
-// those bound at the end of each branch already walked.
+// walkState is what one execution path carries: the index buffers that may
+// be bound and the implicit sites whose capture may already have run.
+type walkState struct {
+	bound    []string
+	captured []int
+}
+
+func unionStates(a, b walkState) walkState {
+	return walkState{bound: unionBuffers(a.bound, b.bound), captured: unionLines(a.captured, b.captured)}
+}
+
+func unionLines(a, b []int) []int {
+	return slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(a), b...))))
+}
+
+func lineKey(line string) string {
+	key, _, _ := strings.Cut(strings.SplitN(line, ";", 2)[0], "=")
+	return strings.ToLower(strings.TrimSpace(key))
+}
+
+// ifFrame is an open if block: the state when it was entered and the states
+// at the end of each branch already walked.
 type ifFrame struct {
-	entry, exits []string
+	entry, exits walkState
 	hasElse      bool
 }
 
-// visit walks a section in execution order with the index buffers that may
-// be bound on entry and returns those that may be bound on exit. Each branch
-// of an if block starts from the buffers bound at the if, and the block ends
-// with those any of its branches, or skipping it without an else, can leave.
-func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []string {
+// visit walks a section in execution order with the state that may hold on
+// entry and returns the state that may hold on exit. Each branch of an if
+// block starts from the state at the if, and the block ends with what any of
+// its branches, or skipping it without an else, can leave.
+func (w *drawWalk) visit(name string, state walkState, active map[string]bool) walkState {
 	if active[name] || w.expansions >= 256 {
-		return bound
+		return state
 	}
 	w.expansions++
 	active[name] = true
@@ -285,9 +333,9 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 	endIf := func() {
 		frame := frames[len(frames)-1]
 		frames = frames[:len(frames)-1]
-		bound = unionBuffers(frame.exits, bound)
+		state = unionStates(frame.exits, state)
 		if !frame.hasElse {
-			bound = unionBuffers(bound, frame.entry)
+			state = unionStates(state, frame.entry)
 		}
 	}
 	for _, span := range w.bodies[name] {
@@ -296,14 +344,14 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 			lower := strings.ToLower(line)
 			switch {
 			case strings.HasPrefix(lower, "if "):
-				frames = append(frames, ifFrame{entry: bound})
+				frames = append(frames, ifFrame{entry: state})
 				continue
 			case strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if ") || lower == "else":
 				if len(frames) > 0 {
 					frame := &frames[len(frames)-1]
-					frame.exits = unionBuffers(frame.exits, bound)
+					frame.exits = unionStates(frame.exits, state)
 					frame.hasElse = frame.hasElse || lower == "else"
-					bound = frame.entry
+					state = frame.entry
 				}
 				continue
 			case lower == "endif":
@@ -319,18 +367,49 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 			key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
 			switch nested := nestedSection(key, value); {
 			case nested != "":
-				bound = w.visit(nested, bound, active)
+				state = w.visit(nested, state, active)
 			case key == "ib":
-				bound = []string{value}
+				state.bound = []string{value}
+				if !w.source.Implicit || strings.EqualFold(value, "null") || !w.source.MatchesIB(value) {
+					continue
+				}
+				w.reached[index] = unionBuffers(w.reached[index], state.bound)
+				state.captured = unionLines(state.captured, []int{index})
+				if !w.found[index] {
+					w.found[index] = true
+					// Vertex buffers bound right below the index buffer, as SRMI binds
+					// vb1, come before the hook.
+					last := index
+					for last+1 < span[1] && vertexBufferKeyRE.MatchString(lineKey(w.text.lines[last+1])) {
+						last++
+						w.covered[last] = index
+					}
+					at := w.text.belowHooks(last + 1)
+					w.sites = append(w.sites, drawSite{
+						line:   at,
+						key:    index,
+						indent: lineIndent(w.text.lines[index]),
+						pids:   w.text.hooksAbove(at),
+					})
+				}
+			case vertexBufferKeyRE.MatchString(key):
+				owner, covered := w.covered[index]
+				w.lateVertexBuffers = w.lateVertexBuffers || slices.ContainsFunc(state.captured, func(site int) bool {
+					return !covered || site != owner
+				})
 			case drawMatches(key, value, w.source):
-				w.reached[index] = unionBuffers(w.reached[index], bound)
+				w.reached[index] = unionBuffers(w.reached[index], state.bound)
 				if w.found[index] ||
-					!slices.ContainsFunc(bound, func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) }) {
+					!slices.ContainsFunc(
+						state.bound,
+						func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) },
+					) {
 					continue
 				}
 				w.found[index] = true
 				w.sites = append(w.sites, drawSite{
 					line:   index,
+					key:    index,
 					indent: lineIndent(w.text.lines[index]),
 					pids:   w.text.hooksAbove(index),
 				})
@@ -340,7 +419,7 @@ func (w *drawWalk) visit(name string, bound []string, active map[string]bool) []
 	for len(frames) > 0 {
 		endIf()
 	}
-	return bound
+	return state
 }
 
 func unionBuffers(a, b []string) []string {
@@ -358,9 +437,19 @@ func nestedSection(key, value string) string {
 	return ""
 }
 
+var vertexBufferKeyRE = regexp.MustCompile(`^vb\d+$`)
+
 // drawMatches compares only the index range. EFMI writes the instance
 // arguments of drawindexedinstanced as INSTANCE_COUNT and FIRST_INSTANCE.
+// 3DMigoto runs an auto draw over the whole bound index buffer from index 0
+// with base vertex 0, so it matches any auto line.
 func drawMatches(key, value string, source modelviewer.DrawSource) bool {
+	if source.Implicit || key != "drawindexed" && key != "drawindexedinstanced" {
+		return false
+	}
+	if source.Auto {
+		return strings.EqualFold(value, "auto")
+	}
 	fields := strings.Split(value, ",")
 	var want map[int]int
 	switch {
@@ -378,6 +467,28 @@ func drawMatches(key, value string, source modelviewer.DrawSource) bool {
 		}
 	}
 	return true
+}
+
+// belowHooks returns the first line at or after line that does not belong to
+// a complete hook block stacked there.
+func (t *iniText) belowHooks(line int) int {
+	for line < len(t.lines) {
+		pid, begin, ok := hookMarker(t.lines[line])
+		if !ok || !begin {
+			return line
+		}
+		end := line + 1
+		for ; end < len(t.lines); end++ {
+			if other, otherBegin, marker := hookMarker(t.lines[end]); marker && !otherBegin && other == pid {
+				break
+			}
+		}
+		if end == len(t.lines) {
+			return line
+		}
+		line = end + 1
+	}
+	return line
 }
 
 // hooksAbove lists the pids of the hook blocks stacked directly above line,
@@ -417,7 +528,7 @@ func (t *iniText) insertHooks(sites []drawSite, pid, firstIndex, baseVertex int)
 	sites = slices.Clone(sites)
 	slices.SortFunc(sites, func(a, b drawSite) int { return b.line - a.line })
 	for _, site := range sites {
-		eol := lineEnding(t.lines[site.line])
+		eol := lineEnding(t.lines[site.key])
 		block := []string{
 			fmt.Sprintf("%s; nahida-liquid %d begin%s", site.indent, pid, eol),
 			fmt.Sprintf("%sx243 = %d%s", site.indent, pid, eol),

@@ -1913,7 +1913,7 @@
           "runtime_foreign": "Another LiquidGravityProbe is installed at {{detail}}. Disable or remove it first.",
           "runtime_disabled": "The emitter runtime is disabled. Enable it in the mod library.",
           "viewer_session": "The model view is out of date. Close and reopen the tool.",
-          "unsupported_draw": "This part is drawn with a computed index range, so it cannot take an emitter.",
+          "unsupported_draw": "This part binds vertex buffers after its index buffer and has no draw call of its own, so it cannot take an emitter.",
           "draw_mismatch": "The picked face does not match the mod files. Close and reopen the tool.",
           "draw_not_found": "The draw call of this part was not found in its INI. It may use variables or have changed.",
           "shared_draw": "This part's draw call also runs for another part with a different index buffer, so it cannot take an emitter.",
@@ -1934,7 +1934,8 @@
         "apply_new": "Add emitter",
         "slots": {
           "title": "Allow more emitters at once?",
-          "description": "This character would have {{count}} emitters, but the runtime lets only {{current}} emit at once, counting every emitter of every character on screen. Raise the limit to {{next}} for all mods to add this one. More emitters cost more GPU time.",
+          "description": "This character would have {{count}} emitters, but the runtime lets only {{current}} emit at once, counting every emitter of every character on screen. Raise the limit to {{next}} for all mods, or add this one without raising it: while more emitters than the limit are drawn, some of them do not emit. Emitters of forms that are not drawn together do not count against each other. More emitters cost more GPU time.",
+          "keep": "Add without raising",
           "confirm": "Raise to {{next}} and add",
           "raised": "Up to {{count}} emitters can now emit at once."
         }
