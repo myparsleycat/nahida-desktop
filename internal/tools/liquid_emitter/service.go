@@ -245,9 +245,6 @@ func (s *Service) resolveAnchor(
 	if !ok || !platform.SameOrChildPath(sc.root, source.INIPath) {
 		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorViewerSession + ":" + input.MeshID)
 	}
-	if source.Auto {
-		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorUnsupportedDraw + ":" + source.Section)
-	}
 	indexOrder, err := source.TriangleVertices(input.FaceIndex)
 	if err != nil {
 		return none, anchorTriangle{}, EmitterAnchor{}, err
@@ -477,6 +474,9 @@ func (s *Service) apply(
 	}
 	if text.sharedDraw(source, sites) {
 		return infra.ContractError(ErrorSharedDraw + ":" + source.Section)
+	}
+	if text.bindsVertexBuffersLate(source) {
+		return infra.ContractError(ErrorUnsupportedDraw + ":" + source.Section)
 	}
 
 	// A hook on the draw that no emitter of this mod stands for is left from

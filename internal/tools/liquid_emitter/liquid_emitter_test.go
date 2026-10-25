@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -238,6 +239,101 @@ func TestINIHooksRoundTrip(t *testing.T) {
 				text.sharedDraw(frame, sites) != want.shared {
 				t.Fatalf("draw sites over %s = %+v, want %+v in\n%s", ib, sites, want, ini)
 			}
+		}
+	}
+
+	// An auto draw covers its whole index buffer, so the buffer bound at each
+	// auto line tells the parts of one override apart.
+	const autoParts = "[TextureOverrideBody]\nib = ResourceBodyIB\n;drawindexed = auto\ndrawindexed = auto\n" +
+		"ib = ResourceDressIB\nvb0 = ResourceDressPosition\nDrawIndexed = AUTO\n"
+	if text, err = parseINIText([]byte(autoParts)); err != nil {
+		t.Fatal(err)
+	}
+	for ib, line := range map[string]int{"BodyIB": 3, "DressIB": 6} {
+		draw := modelviewer.DrawSource{Section: "Body", IB: ib, Auto: true}
+		if sites := text.drawSites(draw); len(sites) != 1 || sites[0].line != line || text.sharedDraw(draw, sites) {
+			t.Fatalf("auto draw sites over %s = %+v, want line %d", ib, sites, line)
+		}
+	}
+
+	// GIMI draws every part of a hash from one auto line under the IB override;
+	// each part override only binds its buffer, so its hook goes below that.
+	const implicitParts = "[TextureOverrideAmberIB]\nhash = b03c7e30\nhandling = skip\ndrawindexed = auto\n\n" +
+		"[TextureOverrideAmberHead]\nhash = b03c7e30\nmatch_first_index = 0\nib = ResourceAmberHeadIB\n\n" +
+		"[TextureOverrideAmberBody]\nhash = b03c7e30\nmatch_first_index = 5670\nib = ResourceAmberBodyIB"
+	if text, err = parseINIText([]byte(implicitParts)); err != nil {
+		t.Fatal(err)
+	}
+	head := modelviewer.DrawSource{Section: "AmberHead", IB: "AmberHeadIB", Auto: true, Implicit: true}
+	amberBody := modelviewer.DrawSource{Section: "AmberBody", IB: "AmberBodyIB", Auto: true, Implicit: true}
+	for _, draw := range []modelviewer.DrawSource{head, amberBody} {
+		if sites := text.drawSites(draw); len(sites) != 1 || text.sharedDraw(draw, sites) ||
+			text.bindsVertexBuffersLate(draw) {
+			t.Fatalf("implicit draw sites of %s = %+v", draw.Section, sites)
+		}
+	}
+	text.insertHooks(text.drawSites(head), 7, 6, 0)
+	text.insertHooks(text.drawSites(amberBody), 7, 6, 0)
+	text.insertHooks(text.drawSites(amberBody), 8, 9, 0)
+	patched = string(text.bytes())
+	block := func(pid, first int) string {
+		return "; nahida-liquid " + strconv.Itoa(pid) + " begin\nx243 = " + strconv.Itoa(pid) + "\ny243 = " +
+			strconv.Itoa(first) + "\nz243 = 0\n" + captureCommand + "\n; nahida-liquid " + strconv.Itoa(pid) + " end"
+	}
+	if !strings.Contains(patched, "handling = skip\ndrawindexed = auto\n\n") ||
+		!strings.Contains(patched, "ib = ResourceAmberHeadIB\n"+block(7, 6)+"\n\n") ||
+		!strings.HasSuffix(patched, "ib = ResourceAmberBodyIB\n"+block(7, 6)+"\n"+block(8, 9)) {
+		t.Fatalf("hooks not placed below the part buffers:\n%s", patched)
+	}
+	if sites := text.drawSites(amberBody); len(sites) != 1 || !slices.Equal(sites[0].pids, []int{8, 7}) {
+		t.Fatalf("stacked implicit hooks = %+v", sites)
+	}
+	if removed := text.removeHooks(func(int) bool { return true }); removed != 3 ||
+		string(text.bytes()) != implicitParts {
+		t.Fatalf("removed %d implicit blocks:\n%q", removed, text.bytes())
+	}
+
+	// The merger script binds each outfit's buffer in its own branch.
+	const implicitOutfits = "[TextureOverrideAyakaHead]\nrun = CommandListAyakaHead\n\n[CommandListAyakaHead]\n" +
+		"if $swapvar == 0\n\tib = ResourceAyakaHeadIB.0\nelse if $swapvar == 1\n\tib = ResourceAyakaHeadIB.1\nendif\n"
+	if text, err = parseINIText([]byte(implicitOutfits)); err != nil {
+		t.Fatal(err)
+	}
+	outfit := modelviewer.DrawSource{Section: "AyakaHead", IB: "AyakaHeadIB.0", Auto: true, Implicit: true}
+	if sites := text.drawSites(outfit); len(sites) != 1 || sites[0].line != 6 || sites[0].indent != "\t" ||
+		text.sharedDraw(outfit, sites) {
+		t.Fatalf("implicit draw sites of one outfit = %+v", sites)
+	}
+
+	// SRMI binds vb1 right below the part's buffer, so the hook goes below it.
+	const srmiPart = "[TextureOverrideHead]\nib = ResourceHeadIB\nvb1 = ResourceHeadTexcoord\nps-t0 = ResourceHeadDiffuse\n"
+	if text, err = parseINIText([]byte(srmiPart)); err != nil {
+		t.Fatal(err)
+	}
+	srmiHead := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
+	text.insertHooks(text.drawSites(srmiHead), 7, 6, 0)
+	if !strings.Contains(string(text.bytes()), "vb1 = ResourceHeadTexcoord\n"+block(7, 6)+"\nps-t0") {
+		t.Fatalf("hook not placed below the vertex buffers:\n%s", text.bytes())
+	}
+
+	// A vertex buffer bound later is not bound yet at the hook, and the runtime
+	// keeps the first capture when the buffer is bound again over new vertex
+	// buffers. A branch that binds its own does not follow another's hook.
+	for ini, late := range map[string]bool{
+		"[TextureOverrideHead]\nib = ResourceHeadIB\nps-t0 = ResourceHeadDiffuse\nvb0 = ResourceHeadPosition\n":         true,
+		"[TextureOverrideHead]\nib = ResourceHeadIB\nvb0 = ResourceDefault\nib = ResourceHeadIB\nvb0 = ResourceFinal\n": true,
+		"[TextureOverrideHead]\nif $outfit == 0\n\tvb0 = ResourceA\n\tib = ResourceHeadIB\nelse\n" +
+			"\tvb0 = ResourceB\n\tib = ResourceHeadIB\nendif\n": false,
+		"[TextureOverrideHead]\nif $outfit == 0\n\tib = ResourceHeadIB\nendif\nvb0 = ResourceHeadPosition\n": true,
+		srmiPart: false,
+		"[TextureOverrideHead]\nvb0 = ResourceHeadPosition\nib = ResourceHeadIB\n": false,
+	} {
+		if text, err = parseINIText([]byte(ini)); err != nil {
+			t.Fatal(err)
+		}
+		draw := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
+		if text.bindsVertexBuffersLate(draw) != late {
+			t.Fatalf("late vertex buffers = %t, want %t in\n%s", !late, late, ini)
 		}
 	}
 

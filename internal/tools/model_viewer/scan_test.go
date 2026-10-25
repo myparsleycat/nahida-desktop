@@ -136,6 +136,49 @@ drawindexed = 3, 0, 3
 	}
 }
 
+// The liquid emitter hooks an implicit draw at its ib = line, since its auto
+// draw line belongs to the IB override that every part of the hash runs.
+func TestModelViewerMarksImplicitAutoDraws(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	sections := parseModINI(`[TextureOverrideBodyPosition]
+hash = 11111111
+vb0 = ResourcePos
+[TextureOverrideBodyTexcoord]
+hash = 22222222
+vb1 = ResourceTc
+[TextureOverrideBodyIB]
+hash = 33333333
+handling = skip
+drawindexed = auto
+[TextureOverrideBodyHead]
+hash = 33333333
+match_first_index = 0
+ib = ResourceBodyIB
+[TextureOverrideOther]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = auto
+` + viewerBodyResources)
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
+	meshes, err := buildModelViewerDirectScannedMeshesAt(filepath.Join(dir, "mod.ini"), dir, sections, nil, cache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	implicit := map[string]bool{}
+	for _, mesh := range meshes {
+		if mesh.drawSource == nil || !mesh.drawSource.Auto {
+			t.Fatalf("draw source of %s = %+v", mesh.component, mesh.drawSource)
+		}
+		implicit[mesh.drawSource.Section] = mesh.drawSource.Implicit
+	}
+	if len(implicit) != 2 || !implicit["BodyHead"] || implicit["Other"] {
+		t.Fatalf("implicit by section = %v", implicit)
+	}
+}
+
 // Frame-swap animation mods bind vb0 only from another hash's command list,
 // so the scan finds no mesh and the legacy build must still name each frame's draw.
 func TestModelViewerLegacyMeshKeepsDrawSource(t *testing.T) {

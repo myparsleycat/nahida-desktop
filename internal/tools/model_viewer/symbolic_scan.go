@@ -380,7 +380,11 @@ func (c *modelViewerSymbolicScanContext) implicitRecords(
 	if len(state.buffers["ib"]) == 0 {
 		return nil
 	}
-	return c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue())
+	records := c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue())
+	for index := range records {
+		records[index].implicit = true
+	}
+	return records
 }
 
 func appendModelViewerFallbackVertexBuffers(

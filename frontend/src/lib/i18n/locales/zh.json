@@ -1910,7 +1910,7 @@
           "runtime_foreign": "{{detail}} 中已安装另一个 LiquidGravityProbe。请先禁用或删除它。",
           "runtime_disabled": "喷射运行时已禁用。请在模组库中启用。",
           "viewer_session": "模型视图已过期。请关闭并重新打开此工具。",
-          "unsupported_draw": "此部件使用计算出的索引范围绘制,无法添加喷射点。",
+          "unsupported_draw": "此部件没有自己的绘制调用,且在索引缓冲区之后绑定顶点缓冲区,无法添加喷射点。",
           "draw_mismatch": "所选面与模组文件不一致。请关闭并重新打开此工具。",
           "draw_not_found": "在 INI 中找不到此部件的绘制调用。它可能使用了变量,或文件已更改。",
           "shared_draw": "此部件的绘制调用也会用于使用其他索引缓冲区的部件,无法添加喷射点。",
