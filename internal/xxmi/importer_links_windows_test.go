@@ -45,7 +45,7 @@ func TestCreateJunctionSkipsLinkedTarget(t *testing.T) {
 	assertLinksTo(t, link, physical)
 }
 
-func TestFlattenImporterLinksRepointsChainedLinksOnly(t *testing.T) {
+func TestRepairImporterLinks(t *testing.T) {
 	ctx := context.Background()
 	service, folder := newModFolderTestService(t)
 	mods := filepath.Join(folder, "Mods")
@@ -60,8 +60,14 @@ func TestFlattenImporterLinksRepointsChainedLinksOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	extras := filepath.Join(folder, "Extras")
+	if err := writeJunction(extras, direct); err != nil {
+		t.Fatal(err)
+	}
+	launcherShaders := filepath.Join(t.TempDir(), "ShaderFixes")
+	writeModFolderFile(t, filepath.Join(launcherShaders, "help.ini"))
 	shaders := filepath.Join(folder, "ShaderFixes")
-	if err := writeJunction(shaders, direct); err != nil {
+	if err := writeJunction(shaders, launcherShaders); err != nil {
 		t.Fatal(err)
 	}
 
@@ -70,16 +76,60 @@ func TestFlattenImporterLinksRepointsChainedLinksOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := service.FlattenImporterLinks(ctx); err == nil {
+	if err := service.RepairImporterLinks(ctx); err == nil {
 		t.Fatal("unreadable importer config was not reported")
 	}
 	assertLinksTo(t, mods, physical)
 	if !fileExists(filepath.Join(mods, "Hero", "mod.ini")) {
 		t.Fatal("mods are unreachable through the flattened link")
 	}
-	assertLinksTo(t, shaders, direct)
+	assertLinksTo(t, extras, direct)
 	// The intermediate link belongs to whoever made it, such as an external launcher, and stays as it was.
 	if !fileExists(filepath.Join(middle, "Hero", "mod.ini")) {
 		t.Fatal("flattening changed the intermediate link")
+	}
+
+	info, err := os.Lstat(shaders)
+	if err != nil || isInstallReparsePoint(info) || !info.IsDir() {
+		t.Fatalf("ShaderFixes is not a real folder: %v, %v", info, err)
+	}
+	if !fileExists(filepath.Join(shaders, "help.ini")) {
+		t.Fatal("ShaderFixes content was not copied")
+	}
+	if !fileExists(filepath.Join(launcherShaders, "help.ini")) {
+		t.Fatal("the external launcher's ShaderFixes was changed")
+	}
+}
+
+func TestReplaceFolderLinkKeepsLinkOverNestedLink(t *testing.T) {
+	shared := t.TempDir()
+	writeModFolderFile(t, filepath.Join(shared, "fix.hlsl"))
+	launcherShaders := filepath.Join(t.TempDir(), "ShaderFixes")
+	if err := os.MkdirAll(launcherShaders, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJunction(filepath.Join(launcherShaders, "Shared"), shared); err != nil {
+		t.Fatal(err)
+	}
+	importer := t.TempDir()
+	shaders := filepath.Join(importer, "ShaderFixes")
+	if err := writeJunction(shaders, launcherShaders); err != nil {
+		t.Fatal(err)
+	}
+	link, ok := folderLink(shaders)
+	if !ok {
+		t.Fatal("ShaderFixes junction was not recognized")
+	}
+
+	if err := replaceFolderLink(context.Background(), link); err == nil {
+		t.Fatal("a target holding a nested link was replaced")
+	}
+	assertLinksTo(t, shaders, launcherShaders)
+	if !fileExists(filepath.Join(shaders, "Shared", "fix.hlsl")) {
+		t.Fatal("shaders behind the nested link are unreachable")
+	}
+	entries, err := os.ReadDir(importer)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("importer folder holds %v (%v), want only ShaderFixes", entries, err)
 	}
 }
