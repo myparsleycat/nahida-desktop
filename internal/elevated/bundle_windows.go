@@ -94,9 +94,10 @@ func helperFileName(data []byte) string {
 }
 
 // writeHelper installs data under the path dir resolves to with a content-addressed
-// name and returns its path. Stale versions are removed best effort. Reparse points
-// in the helper directory chain are rejected so a same-user process cannot redirect
-// the elevated launch to a different binary.
+// name and returns its path. Stale versions are removed best effort. A same-user
+// process cannot redirect the elevated launch: start hashes the helper through a
+// handle that denies writes and deletes until launch, then checks the image path
+// Windows reports for the launched process.
 func writeHelper(dir string, data []byte) (string, error) {
 	if len(data) == 0 {
 		return "", errHelperNotBundled
@@ -113,9 +114,6 @@ func writeHelper(dir string, data []byte) (string, error) {
 		return "", fmt.Errorf("resolve elevated helper directory %q: %w", dir, err)
 	}
 	dir = final
-	if err := rejectHelperReparsePoints(dir); err != nil {
-		return "", err
-	}
 
 	target := filepath.Join(dir, helperFileName(data))
 	if !helperFileMatches(target, data) {
@@ -155,24 +153,6 @@ func installHelper(target, dir string, data []byte) error {
 	}
 	if err := os.Rename(tempPath, target); err != nil {
 		return fmt.Errorf("install elevated helper: %w", err)
-	}
-	return nil
-}
-
-// rejectHelperReparsePoints refuses a helper directory chain that resolves
-// through a reparse point. A junction or symlink here would let a same-user
-// process show the genuine helper to verification while the elevated launch
-// resolves the path to a different binary. The user profile above the app data
-// root is out of scope because it can be legitimately redirected.
-func rejectHelperReparsePoints(dir string) error {
-	for _, path := range []string{filepath.Dir(dir), dir} {
-		info, err := os.Lstat(path)
-		if err != nil {
-			return fmt.Errorf("inspect helper path %q: %w", path, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("helper path %q is a reparse point", path)
-		}
 	}
 	return nil
 }
