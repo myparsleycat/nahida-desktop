@@ -25,7 +25,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-const emptyStatus: ElevatedHelperStatus = { enabled: false, running: false };
+const emptyStatus: ElevatedHelperStatus = {
+  enabled: false,
+  running: false,
+  blockedByAntivirus: false,
+};
 
 function asHelperStatus(value: unknown): ElevatedHelperStatus {
   if (typeof value !== "object" || value === null) return emptyStatus;
@@ -33,6 +37,7 @@ function asHelperStatus(value: unknown): ElevatedHelperStatus {
   return {
     enabled: record.enabled === true,
     running: record.running === true,
+    blockedByAntivirus: record.blockedByAntivirus === true,
   };
 }
 
@@ -113,10 +118,11 @@ export function useElevatedHelper() {
         },
         defaultOpen,
         starting,
+        blocked: status.blockedByAntivirus,
         t,
       }),
     );
-  }, [startHelper, starting, status.enabled, status.running, t]);
+  }, [startHelper, starting, status.blockedByAntivirus, status.enabled, status.running, t]);
 
   const closeDialog = useCallback(() => {
     if (starting) return;
@@ -135,7 +141,11 @@ export function useElevatedHelper() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t("titlebar.activity.elevatedHelper.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("titlebar.activity.elevatedHelper.description")}
+              {t(
+                status.blockedByAntivirus
+                  ? "titlebar.activity.elevatedHelper.blockedDescription"
+                  : "titlebar.activity.elevatedHelper.description",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -147,6 +157,6 @@ export function useElevatedHelper() {
         </AlertDialogContent>
       </AlertDialog>
     ),
-    [closeDialog, dialogOpen, startHelper, starting, t],
+    [closeDialog, dialogOpen, startHelper, starting, status.blockedByAntivirus, t],
   );
 }

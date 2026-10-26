@@ -68,9 +68,12 @@ func InputErrorFromCode(code string) (error, bool) {
 
 // ElevatedHelperStatus is the renderer-facing snapshot of whether the helper
 // setting is on and whether the helper process is actually connected.
+// BlockedByAntivirus reports that the last start of a helper that is not running
+// failed because antivirus software refused its executable.
 type ElevatedHelperStatus struct {
-	Enabled bool `json:"enabled"`
-	Running bool `json:"running"`
+	Enabled            bool `json:"enabled"`
+	Running            bool `json:"running"`
+	BlockedByAntivirus bool `json:"blockedByAntivirus"`
 }
 
 // ElevatedInputSender handles requests that Windows UIPI prevents this

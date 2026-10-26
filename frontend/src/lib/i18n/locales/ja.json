@@ -2488,6 +2488,7 @@
             "XXMI_BUSY": "このインポーターは起動処理中です。完了するまでお待ちください。",
             "XXMI_GAME_RUNNING": "ランタイムの変更や再起動の前にゲームを終了してください。",
             "XXMI_RUNTIME_LOCKED": "ランタイムファイルは使用中です。ゲームと関連ツールを終了して再試行してください。",
+            "ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS": "ウイルス対策ソフトが昇格ヘルパーの実行ファイルをブロックしました。Windows セキュリティの保護の履歴で nahida-elevated-helper ファイルを許可するか、%USERPROFILE%\\.nahida-desktop\\elevated フォルダーをウイルス対策の除外に追加してください。",
             "XXMI_ELEVATION_DENIED": "ゲームの起動には管理者権限の承認が必要です。",
             "XXMI_LOADER_TOO_OLD": "選択した XXMI インジェクターが古すぎます。新しいライブラリを選んでください。",
             "XXMI_INJECT_FAILED": "XXMI ランタイムをゲームに注入できませんでした。",
@@ -3258,6 +3259,7 @@
         "label": "ヘルパー停止",
         "title": "昇格ヘルパーが実行されていません",
         "description": "管理者権限が必要な操作は、ヘルパーが実行中のときだけ利用できます。ヘルパーを開始すると Windows の UAC 確認が表示されます。",
+        "blockedDescription": "ウイルス対策ソフトが昇格ヘルパーの実行ファイルをブロックしました。Windows セキュリティの保護の履歴で nahida-elevated-helper ファイルを許可するか、%USERPROFILE%\\.nahida-desktop\\elevated フォルダーをウイルス対策の除外に追加してから、ヘルパーをもう一度開始してください。",
         "start": "ヘルパーを開始"
       }
     }

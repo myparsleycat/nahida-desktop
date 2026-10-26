@@ -62,6 +62,28 @@ func TestElevatedLifecycleStartFailureKeepsEnabled(t *testing.T) {
 	}
 }
 
+func TestElevatedLifecycleReportsAntivirusBlockUntilStartSucceeds(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubElevatedClient{startErr: errors.Join(elevated.ErrBlockedByAntivirus, errors.New("lock"))}
+	statuses := make(chan platform.ElevatedHelperStatus, 4)
+	lifecycle := newElevatedLifecycle(stub, nil, statusEmitter(statuses))
+	defer lifecycle.shutdown()
+
+	lifecycle.setEnabled(true)
+	if got := waitHelperStatus(t, statuses); !got.BlockedByAntivirus || got.Running {
+		t.Fatalf("status = %+v, want blocked by antivirus and not running", got)
+	}
+
+	stub.mu.Lock()
+	stub.startErr = nil
+	stub.mu.Unlock()
+	lifecycle.setEnabled(true)
+	if got := waitHelperStatus(t, statuses); got.BlockedByAntivirus || !got.Running {
+		t.Fatalf("status = %+v, want running and not blocked", got)
+	}
+}
+
 func TestElevatedLifecycleStartSuccessReportsRunning(t *testing.T) {
 	t.Parallel()
 

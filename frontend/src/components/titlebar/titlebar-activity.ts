@@ -270,11 +270,13 @@ export function buildElevatedHelperTitlebarActivity({
     onStart,
     defaultOpen,
     starting,
+    blocked,
     t,
 }: {
     onStart: () => void;
     defaultOpen?: boolean;
     starting?: boolean;
+    blocked?: boolean;
     t: Translate;
 }): TitlebarActivity {
     return {
@@ -285,7 +287,11 @@ export function buildElevatedHelperTitlebarActivity({
         order: 2,
         popover: {
             title: t("titlebar.activity.elevatedHelper.title"),
-            description: t("titlebar.activity.elevatedHelper.description"),
+            description: t(
+                blocked
+                    ? "titlebar.activity.elevatedHelper.blockedDescription"
+                    : "titlebar.activity.elevatedHelper.description",
+            ),
             action: {
                 label: t("titlebar.activity.elevatedHelper.start"),
                 onClick: onStart,

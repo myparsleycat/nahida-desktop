@@ -136,6 +136,10 @@ func (c *Client) Connected() bool {
 	return c.conn != nil
 }
 
+// ErrBlockedByAntivirus marks a start that failed because antivirus software refused the helper
+// executable. Its text is a renderer contract; keep it in sync with use-launch-guard.tsx.
+var ErrBlockedByAntivirus = errors.New("ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS")
+
 // Start enables the helper and connects to it. Launching may wait on a UAC
 // prompt, so it runs without holding the state lock; Close can invalidate the
 // attempt and the launched helper is discarded when it returns.
@@ -143,7 +147,16 @@ func (c *Client) Start(ctx context.Context) error {
 	c.mu.Lock()
 	c.wanted = true
 	c.mu.Unlock()
-	return c.start(ctx)
+	return classifyStartError(c.start(ctx))
+}
+
+// classifyStartError marks the errors Windows returns when antivirus software blocks or removes the
+// helper while it is written, opened, or launched; retrying cannot get past them.
+func classifyStartError(err error) error {
+	if errors.Is(err, windows.ERROR_VIRUS_INFECTED) || errors.Is(err, windows.ERROR_VIRUS_DELETED) {
+		return fmt.Errorf("%w: %w", ErrBlockedByAntivirus, err)
+	}
+	return err
 }
 
 // start launches the helper and connects to it. It holds startMu, not mu, while

@@ -147,6 +147,12 @@ it("reports a declined elevation over the game settings step that asked for it",
   expect(launchErrorCode(detail)).toBe("XXMI_ELEVATION_DENIED");
 });
 
+it("reports an antivirus block over the elevation denial that wraps it", () => {
+  const detail =
+    "XXMI_ELEVATION_DENIED: ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS: lock elevated helper executable";
+  expect(launchErrorCode(detail)).toBe("ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS");
+});
+
 it("repairs a damaged runtime before retrying launch", async () => {
   xxmi.StartGame.mockRejectedValueOnce(
     new Error("XXMI_RUNTIME_CORRUPTED: C:\\Mods\\GIMI\\d3d11.dll is missing"),

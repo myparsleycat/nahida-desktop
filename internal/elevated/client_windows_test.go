@@ -27,6 +27,38 @@ func (failingConn) SetDeadline(time.Time) error      { return nil }
 func (failingConn) SetReadDeadline(time.Time) error  { return nil }
 func (failingConn) SetWriteDeadline(time.Time) error { return nil }
 
+func TestClassifyStartErrorMarksAntivirusBlocks(t *testing.T) {
+	t.Parallel()
+
+	lock := errors.New("lock elevated helper executable")
+	tests := []struct {
+		name    string
+		err     error
+		blocked bool
+	}{
+		{name: "infected", err: errors.Join(lock, windows.ERROR_VIRUS_INFECTED), blocked: true},
+		{name: "deleted", err: errors.Join(lock, windows.ERROR_VIRUS_DELETED), blocked: true},
+		{name: "access denied", err: errors.Join(lock, windows.ERROR_ACCESS_DENIED)},
+		{name: "nil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := classifyStartError(tt.err)
+			if errors.Is(got, ErrBlockedByAntivirus) != tt.blocked {
+				t.Fatalf("classifyStartError(%v) = %v, blocked want %v", tt.err, got, tt.blocked)
+			}
+			if tt.err != nil && !errors.Is(got, tt.err) {
+				t.Fatalf("classifyStartError(%v) = %v, want the original error kept", tt.err, got)
+			}
+			if tt.err == nil && got != nil {
+				t.Fatalf("classifyStartError(nil) = %v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestCallLockedInvalidatesConnectionOnTransportError(t *testing.T) {
 	t.Parallel()
 

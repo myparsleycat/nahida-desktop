@@ -2488,6 +2488,7 @@
             "XXMI_BUSY": "此导入器正在启动，请等待完成。",
             "XXMI_GAME_RUNNING": "更换运行时或再次启动前，请先关闭游戏。",
             "XXMI_RUNTIME_LOCKED": "运行时文件正在使用中。请关闭游戏和相关工具后重试。",
+            "ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS": "杀毒软件阻止了提权助手的可执行文件。请在 Windows 安全中心的保护历史记录中允许 nahida-elevated-helper 文件，或将 %USERPROFILE%\\.nahida-desktop\\elevated 文件夹添加到杀毒软件的排除项。",
             "XXMI_ELEVATION_DENIED": "启动游戏需要批准管理员权限。",
             "XXMI_LOADER_TOO_OLD": "所选 XXMI 注入器版本过旧，请选择较新的库版本。",
             "XXMI_INJECT_FAILED": "无法将 XXMI 运行时注入游戏。",
@@ -3258,6 +3259,7 @@
         "label": "助手未运行",
         "title": "提权助手未在运行",
         "description": "需要管理员权限的操作仅在助手运行时可用。启动助手时 Windows 将显示 UAC 提示。",
+        "blockedDescription": "杀毒软件阻止了提权助手的可执行文件。请在 Windows 安全中心的保护历史记录中允许 nahida-elevated-helper 文件，或将 %USERPROFILE%\\.nahida-desktop\\elevated 文件夹添加到杀毒软件的排除项，然后重新启动助手。",
         "start": "启动助手"
       }
     }

@@ -2543,6 +2543,7 @@
             "XXMI_BUSY": "This importer is already launching. Wait for it to finish.",
             "XXMI_GAME_RUNNING": "Close the game before changing its runtime or launching it again.",
             "XXMI_RUNTIME_LOCKED": "A runtime file is in use. Close the game and other tools, then retry.",
+            "ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS": "Antivirus software blocked the elevated helper executable. Allow the nahida-elevated-helper file in the Windows Security protection history, or add the %USERPROFILE%\\.nahida-desktop\\elevated folder to the antivirus exclusions.",
             "XXMI_ELEVATION_DENIED": "Administrator approval is needed to launch this game.",
             "XXMI_LOADER_TOO_OLD": "The selected XXMI injector is too old. Choose a newer library version.",
             "XXMI_INJECT_FAILED": "XXMI could not inject the runtime into the game.",
@@ -3263,6 +3264,7 @@
         "label": "Helper not running",
         "title": "Elevated helper is not running",
         "description": "The helper must be running for actions that need administrator rights. Windows will show a UAC prompt when you start it.",
+        "blockedDescription": "Antivirus software blocked the elevated helper executable. Allow the nahida-elevated-helper file in the Windows Security protection history, or add the %USERPROFILE%\\.nahida-desktop\\elevated folder to the antivirus exclusions, then start the helper again.",
         "start": "Start helper"
       }
     }

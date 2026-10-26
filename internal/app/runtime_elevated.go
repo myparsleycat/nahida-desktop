@@ -58,6 +58,8 @@ type elevatedLifecycle struct {
 	// the worker without cancelling l.ctx. Guarded by mu.
 	startCancel context.CancelFunc
 	leases      int
+	// blocked records that the last start failed on antivirus. Guarded by mu.
+	blocked bool
 }
 
 // elevatedStartup tracks the single startup goroutine that reads the setting.
@@ -248,8 +250,12 @@ func (l *elevatedLifecycle) run() {
 			stage = "start"
 			err = l.startClient()
 			l.starting.Store(false)
+			if !errors.Is(err, context.Canceled) {
+				l.noteStart(err)
+			}
 		} else {
 			err = l.stopClient()
+			l.noteStart(nil)
 		}
 		// A cancellation means shutdown or a racing disable superseded this
 		// start; it is an expected stop, not a failure worth reporting.
@@ -286,6 +292,12 @@ func (l *elevatedLifecycle) startClient() error {
 	return l.client.Start(ctx)
 }
 
+func (l *elevatedLifecycle) noteStart(err error) {
+	l.mu.Lock()
+	l.blocked = errors.Is(err, elevated.ErrBlockedByAntivirus)
+	l.mu.Unlock()
+}
+
 func (l *elevatedLifecycle) stopClient() error {
 	if l.client == nil {
 		return nil
@@ -313,6 +325,9 @@ func (l *elevatedLifecycle) acquire(ctx context.Context) (func(), error) {
 	startCtx, cancel := l.bindShutdown(ctx)
 	err := l.client.Start(startCtx)
 	cancel()
+	if !errors.Is(err, context.Canceled) {
+		l.noteStart(err)
+	}
 	if err != nil {
 		l.release()
 		return nil, err
@@ -386,12 +401,13 @@ func (l *elevatedLifecycle) status() platform.ElevatedHelperStatus {
 	}
 	l.mu.Lock()
 	enabled := (l.desired || l.leases > 0) && !l.workerStop
+	blocked := l.blocked
 	l.mu.Unlock()
 	if !enabled {
 		return platform.ElevatedHelperStatus{}
 	}
 	running := l.client != nil && l.client.Connected()
-	return platform.ElevatedHelperStatus{Enabled: true, Running: running}
+	return platform.ElevatedHelperStatus{Enabled: true, Running: running, BlockedByAntivirus: blocked && !running}
 }
 
 func (l *elevatedLifecycle) publishStatus() {

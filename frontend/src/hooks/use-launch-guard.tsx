@@ -37,7 +37,10 @@ const LAUNCH_BLOCKER_D3D11_MODE = "XXMI_D3D11_MODE_NOTICE_REQUIRED";
 const LAUNCH_BLOCKER_LOGGING = "XXMI_LOGGING_ENABLED";
 const LAUNCH_BLOCKER_GAME_FOLDER = "XXMI_GAME_FOLDER_NOT_CONFIGURED";
 const LAUNCH_BLOCKER_RUNTIME = "XXMI_RUNTIME_CORRUPTED";
+// The first code a message contains wins, so a cause goes before the codes that wrap it.
 const launchErrorCodes = [
+  // Keep in sync with ErrBlockedByAntivirus in internal/elevated/client_windows.go.
+  "ELEVATED_HELPER_BLOCKED_BY_ANTIVIRUS",
   "XXMI_BUSY",
   "XXMI_GAME_RUNNING",
   "XXMI_RUNTIME_LOCKED",

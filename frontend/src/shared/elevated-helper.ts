@@ -9,6 +9,7 @@ export const ELEVATED_HELPER_ACTIVITY_ID = "elevated-helper";
 export type ElevatedHelperStatus = {
     enabled: boolean;
     running: boolean;
+    blockedByAntivirus: boolean;
 };
 
 export function isElevatedHelperRequiredError(error: unknown): boolean {
