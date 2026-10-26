@@ -372,19 +372,32 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 	}
 	upload.uploading = true
 	expected := upload.expected
+	if upload.data == nil && expected > 0 {
+		upload.data = make([]byte, 0, expected)
+	}
+	// The uploading flag keeps other requests off the unfilled tail, so the
+	// chunk is read in place instead of through a temporary buffer.
+	target := upload.data[received:expected]
 	p.mu.Unlock()
 
-	data, err := io.ReadAll(io.LimitReader(request.Body, remaining+1))
-	if err != nil || int64(len(data)) > remaining {
-		failure := err
-		if failure == nil {
-			failure = errors.New("memory upload length mismatch")
+	read, err := io.ReadFull(request.Body, target)
+	switch {
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		err = nil
+	case err == nil:
+		var extra [1]byte
+		if _, extraErr := io.ReadFull(request.Body, extra[:]); extraErr == nil {
+			err = errors.New("memory upload length mismatch")
+		} else if !errors.Is(extraErr, io.EOF) {
+			err = extraErr
 		}
+	}
+	if err != nil {
 		p.reportProtocolFailure(
-			failure,
+			err,
 			request,
 			"read-memory-upload",
-			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": len(data)},
+			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": read},
 		)
 		p.mu.Lock()
 		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
@@ -401,10 +414,7 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		http.NotFound(w, request)
 		return
 	}
-	if upload.data == nil && expected > 0 {
-		upload.data = make([]byte, 0, expected)
-	}
-	upload.data = append(upload.data, data...)
+	upload.data = upload.data[:received+int64(read)]
 	upload.uploading, upload.ready = false, int64(len(upload.data)) == expected
 	p.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)

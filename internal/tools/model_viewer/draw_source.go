@@ -175,16 +175,39 @@ func (d DrawSource) TriangleVertices(face int) ([3]uint32, error) {
 	if face < 0 || (!d.Auto && face*3+3 > d.IndexCount) {
 		return [3]uint32{}, fmt.Errorf("triangle %d is outside draw of %d indices", face, d.IndexCount)
 	}
-	raw, err := os.ReadFile(d.IBPath)
-	if err != nil {
-		return [3]uint32{}, fmt.Errorf("read index buffer %q: %w", d.IBPath, err)
-	}
-	indices, err := modelViewerDecodeIndices(raw, d.IBFormat)
+	width, err := modelViewerIndexBytes(d.IBFormat)
 	if err != nil {
 		return [3]uint32{}, fmt.Errorf("decode index buffer %q: %w", d.IBPath, err)
 	}
-	if first < 0 || first+3 > len(indices) {
+
+	// Only the picked triangle is read; the whole buffer can be many megabytes.
+	file, err := os.Open(d.IBPath)
+	if err != nil {
+		return [3]uint32{}, fmt.Errorf("read index buffer %q: %w", d.IBPath, err)
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return [3]uint32{}, fmt.Errorf("read index buffer %q: %w", d.IBPath, err)
+	}
+	if info.Size()%int64(width) != 0 {
+		return [3]uint32{}, fmt.Errorf(
+			"decode index buffer %q: byte length %d is not divisible by %d",
+			d.IBPath,
+			info.Size(),
+			width,
+		)
+	}
+	if first < 0 || int64(first+3)*int64(width) > info.Size() {
 		return [3]uint32{}, fmt.Errorf("triangle %d is outside index buffer %q", face, d.IBPath)
+	}
+	var raw [12]byte
+	if _, err := file.ReadAt(raw[:3*width], int64(first)*int64(width)); err != nil {
+		return [3]uint32{}, fmt.Errorf("read index buffer %q: %w", d.IBPath, err)
+	}
+	indices, err := modelViewerDecodeIndices(raw[:3*width], d.IBFormat)
+	if err != nil {
+		return [3]uint32{}, fmt.Errorf("decode index buffer %q: %w", d.IBPath, err)
 	}
 	var vertices [3]uint32
 	for corner := range vertices {

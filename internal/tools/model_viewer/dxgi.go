@@ -206,28 +206,36 @@ func modelViewerHalfToFloat(value uint16) float32 {
 	return sign * float32(math.Ldexp(1, exponent-15)) * (1 + fraction/1024)
 }
 
-func modelViewerDecodeIndices(bytes []byte, format string) ([]uint32, error) {
+func modelViewerIndexBytes(format string) (int, error) {
 	upper := strings.ToUpper(format)
 	switch {
 	case strings.Contains(upper, "R16_UINT"):
-		if len(bytes)%2 != 0 {
-			return nil, fmt.Errorf("R16_UINT index buffer has an odd byte length")
-		}
-		out := make([]uint32, len(bytes)/2)
+		return 2, nil
+	case strings.Contains(upper, "R32_UINT"), strings.Contains(upper, "UNKNOWN"):
+		return 4, nil
+	default:
+		return 0, fmt.Errorf("unsupported IB format: %s", format)
+	}
+}
+
+func modelViewerDecodeIndices(bytes []byte, format string) ([]uint32, error) {
+	width, err := modelViewerIndexBytes(format)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes)%width != 0 {
+		return nil, fmt.Errorf("%s index buffer byte length %d is not divisible by %d", format, len(bytes), width)
+	}
+
+	out := make([]uint32, len(bytes)/width)
+	if width == 2 {
 		for i := range out {
 			out[i] = uint32(binary.LittleEndian.Uint16(bytes[i*2:]))
 		}
 		return out, nil
-	case strings.Contains(upper, "R32_UINT"), strings.Contains(upper, "UNKNOWN"):
-		if len(bytes)%4 != 0 {
-			return nil, fmt.Errorf("R32_UINT index buffer byte length is not divisible by 4")
-		}
-		out := make([]uint32, len(bytes)/4)
-		for i := range out {
-			out[i] = binary.LittleEndian.Uint32(bytes[i*4:])
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("unsupported IB format: %s", format)
 	}
+	for i := range out {
+		out[i] = binary.LittleEndian.Uint32(bytes[i*4:])
+	}
+	return out, nil
 }

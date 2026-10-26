@@ -291,11 +291,16 @@ func readDiagnosticFile(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() > diagnosticFileLimit {
 		return nil, errors.New("diagnostic input must be a regular file no larger than 128 MiB")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, diagnosticFileLimit+1))
-	if len(data) > diagnosticFileLimit {
-		return nil, errors.New("diagnostic input exceeds 128 MiB")
+	data := make([]byte, info.Size())
+	if _, err := io.ReadFull(file, data); err != nil {
+		return nil, err
 	}
-	return data, err
+	// Change detection compares these bytes, so a file that grew after Stat must not read as unchanged.
+	var extra [1]byte
+	if _, err := io.ReadFull(file, extra[:]); !errors.Is(err, io.EOF) {
+		return nil, errors.Join(err, errors.New("diagnostic input changed while reading"))
+	}
+	return data, nil
 }
 
 func linearDDSFormat(format uint32) uint32 {
