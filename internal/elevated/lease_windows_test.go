@@ -126,6 +126,27 @@ func TestFileLeaseRemembersDeclinedConsent(t *testing.T) {
 	}
 }
 
+func TestFileLeaseRetriesAcquisitionCancelledByTheCaller(t *testing.T) {
+	t.Parallel()
+
+	ops := []FileOp{{Kind: FileOpRemove, Target: filepath.Join(t.TempDir(), "stale.bak")}}
+	gateway := &recordingGateway{acquireErr: context.Canceled}
+	lease := NewFileLease(gateway)
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := lease.Apply(cancelled, ops); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Apply = %v, want the cancellation", err)
+	}
+
+	gateway.acquireErr = nil
+	if err := lease.Apply(t.Context(), ops); err != nil {
+		t.Fatalf("Apply after cancellation = %v, want a new acquisition", err)
+	}
+	if gateway.acquires != 2 || len(gateway.batches) != 1 {
+		t.Fatalf("acquires = %d, batches = %d; want the helper started again", gateway.acquires, len(gateway.batches))
+	}
+}
+
 func TestFileLeaseTellsUnavailableHelperFromRefusedRequest(t *testing.T) {
 	t.Parallel()
 
