@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -395,11 +397,11 @@ func drainAndClose(body io.ReadCloser) {
 }
 
 func replaceFile(source, destination string) error {
-	if err := os.Rename(source, destination); err == nil {
+	if err := platform.ReplaceAtomic(source, destination); err == nil {
 		return nil
 	}
 	if err := os.Remove(destination); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return os.Rename(source, destination)
+	return platform.ReplaceAtomic(source, destination)
 }

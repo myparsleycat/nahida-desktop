@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 // maxVDFSize bounds the Steam files read into memory; localconfig.vdf of a large library stays far below it.
@@ -215,7 +217,7 @@ func (s Steam) SetLaunchOptions(appID, options string) error {
 	if err := temp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temp.Name(), path)
+	return platform.ReplaceAtomic(temp.Name(), path)
 }
 
 // steamAppConfig returns the settings block of an application. Missing structure is reported

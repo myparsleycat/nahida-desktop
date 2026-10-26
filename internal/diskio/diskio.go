@@ -13,7 +13,7 @@ package diskio
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,11 +39,25 @@ type limiter struct {
 	limit    int64
 
 	mu    sync.Mutex
+	log   Logger
 	dirs  map[string]string
 	gates map[string]*semaphore.Weighted
 }
 
+// Logger is satisfied by *infra.Log. diskio does not import infra because the
+// elevated helper links diskio and must stay free of infra's dependencies.
+type Logger interface {
+	Info(msg any, where string)
+	Warn(msg any, where string)
+}
+
 var shared = &limiter{resolve: resolveVolume, classify: incursSeekPenalty, limit: rotationalLimit}
+
+func UseLog(log Logger) {
+	shared.mu.Lock()
+	shared.log = log
+	shared.mu.Unlock()
+}
 
 // Acquire waits for a slot on every rotational volume that holds one of the
 // files and returns the function that gives the slots back. Files on other
@@ -130,14 +144,19 @@ func (l *limiter) gateLocked(volume string) *semaphore.Weighted {
 		return gate
 	}
 	rotational, err := l.classify(volume)
-	if err != nil {
-		slog.Warn("classify disk volume", "volume", volume, "error", err)
+	if err != nil && l.log != nil {
+		l.log.Warn(fmt.Sprintf("classify disk volume %s: %v", volume, err), "DiskIO")
 	}
 
 	var gate *semaphore.Weighted
 	if rotational {
 		gate = semaphore.NewWeighted(l.limit)
-		slog.Info("limit concurrent file operations on rotational volume", "volume", volume, "limit", l.limit)
+		if l.log != nil {
+			l.log.Info(
+				fmt.Sprintf("limit concurrent file operations on rotational volume %s to %d", volume, l.limit),
+				"DiskIO",
+			)
+		}
 	}
 	if l.gates == nil {
 		l.gates = make(map[string]*semaphore.Weighted)

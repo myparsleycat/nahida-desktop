@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -109,8 +111,29 @@ func (s *Store) WriteFile(relative string, data []byte, mode fs.FileMode) error 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create app data file parent %q: %w", relative, err)
 	}
-	if err := os.WriteFile(path, data, mode); err != nil {
+	if err := writeFileAtomic(path, data, mode); err != nil {
 		return fmt.Errorf("write app data file %q: %w", relative, err)
 	}
 	return nil
+}
+
+func writeFileAtomic(path string, data []byte, mode fs.FileMode) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".nhd-write-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(temp.Name()) }()
+	if _, err := temp.Write(data); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err := temp.Sync(); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err := temp.Chmod(mode); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return platform.ReplaceAtomic(temp.Name(), path)
 }

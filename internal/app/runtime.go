@@ -12,6 +12,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/backup"
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/feedback"
@@ -71,6 +72,7 @@ type runtime struct {
 
 func newRuntime() *runtime {
 	log := infra.NewLogWithOptions(infra.LogOptions{Dev: !platform.Packaged()})
+	diskio.UseLog(log)
 	httpClient := infra.NewClient()
 	httpClient.UseLog(log)
 	shell := platform.NewShell(newWailsShellOptions())

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 func ValidateImporterSettings(key string, cfg ImporterConfig) error {
@@ -40,13 +42,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 	if err := validateLocalFolder("gameFolder", cfg.GameFolder, false); err != nil {
 		return err
 	}
-	if cfg.GameFolder != "" {
-		importer := strings.ToLower(filepath.Clean(cfg.ImporterFolder))
-		game := strings.ToLower(filepath.Clean(cfg.GameFolder))
-		if importer == game || strings.HasPrefix(importer, game+string(filepath.Separator)) ||
-			strings.HasPrefix(game, importer+string(filepath.Separator)) {
-			return fmt.Errorf("importer and game folders must not contain each other")
-		}
+	if platform.SameOrChildPath(cfg.GameFolder, cfg.ImporterFolder) ||
+		platform.SameOrChildPath(cfg.ImporterFolder, cfg.GameFolder) {
+		return fmt.Errorf("importer and game folders must not contain each other")
 	}
 	for _, field := range []struct {
 		name, value string
