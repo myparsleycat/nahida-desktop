@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -421,14 +422,25 @@ func resolveDDSFiles(path string) ([]string, error) {
 }
 
 func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResizeListItem, error) {
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return TextureResizeListItem{}, err
 	}
-	m, err := parseDDS(raw)
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
 	if err != nil {
 		return TextureResizeListItem{}, err
 	}
+	header := make([]byte, ddsDX10HeaderEnd)
+	read, err := io.ReadFull(file, header)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return TextureResizeListItem{}, err
+	}
+	m, err := parseDDS(header[:read])
+	if err != nil {
+		return TextureResizeListItem{}, err
+	}
+
 	candidates := textureCandidates(m.width, m.height)
 	target, canResize := pickTextureCandidate(candidates, textureBounds(m.width, m.height, s))
 	tw, th := m.width, m.height
@@ -471,7 +483,7 @@ func buildTextureItem(path, root string, s TextureResizeSettings) (TextureResize
 		FilePath:                path,
 		RelativePath:            rel,
 		FileName:                filepath.Base(path),
-		FileSize:                int64(len(raw)),
+		FileSize:                info.Size(),
 		Format:                  m.format,
 		ColorSpace:              m.colorSpace,
 		LayerCount:              m.layers,

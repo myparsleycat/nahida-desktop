@@ -82,7 +82,8 @@ func TestListTextureFolderParsesDDSAndSortsByPixels(t *testing.T) {
 	root := t.TempDir()
 	large := filepath.Join(root, "z.dds")
 	small := filepath.Join(root, "a.dds")
-	if err := os.WriteFile(large, makeTestDDS(4096, 2048, 72), 0o600); err != nil {
+	largeDDS := append(makeTestDDS(4096, 2048, 72), make([]byte, 4096)...)
+	if err := os.WriteFile(large, largeDDS, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(small, makeTestDDS(2048, 1024, 28), 0o600); err != nil {
@@ -102,7 +103,7 @@ func TestListTextureFolderParsesDDSAndSortsByPixels(t *testing.T) {
 		t.Fatalf("items = %#v", items)
 	}
 	if items[0].TargetWidth != 2048 || items[0].TargetHeight != 1024 || !items[0].CanResize ||
-		items[0].MipLevelCount != 4 {
+		items[0].MipLevelCount != 4 || items[0].FileSize != int64(len(largeDDS)) {
 		t.Fatalf("large item = %#v", items[0])
 	}
 	if items[1].ColorSpace != "linear" || items[1].FormatConversionMessage != nil {
