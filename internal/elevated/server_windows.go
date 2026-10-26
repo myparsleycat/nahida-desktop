@@ -59,15 +59,59 @@ func validateHandlers(handlers map[string]Handler) error {
 	return nil
 }
 
+var (
+	errServerParameters  = errors.New("missing elevated helper session parameters")
+	errServerNotElevated = errors.New("elevated helper is not running elevated")
+	errServerParent      = errors.New("elevated helper parent could not be verified")
+	errServerPipe        = errors.New("elevated helper pipe failed")
+	errServerClient      = errors.New("elevated helper client was rejected")
+)
+
+// serverExits are the exit codes of a helper whose startup failed, which the client reads when the
+// helper exits before it connects. The helper ships inside the client, so both read the same table.
+var serverExits = []struct {
+	code uint32
+	err  error
+}{
+	{code: 2, err: errServerParameters},
+	{code: 3, err: errServerNotElevated},
+	{code: 4, err: errServerParent},
+	{code: 5, err: errHelperAlreadyRunning},
+	{code: 6, err: errServerPipe},
+	{code: 7, err: errServerClient},
+}
+
+// ServerExitCode is the process exit code for a RunServer failure.
+func ServerExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	for _, exit := range serverExits {
+		if errors.Is(err, exit.err) {
+			return int(exit.code)
+		}
+	}
+	return 1
+}
+
+func serverExitReason(code uint32) string {
+	for _, exit := range serverExits {
+		if exit.code == code {
+			return exit.err.Error()
+		}
+	}
+	return ""
+}
+
 func RunServer(ctx context.Context, options ServerOptions) error {
 	if options.Pipe == "" || options.Secret == "" || options.ParentPID == 0 || options.ParentExe == "" {
-		return errors.New("missing elevated helper session parameters")
+		return errServerParameters
 	}
 	if err := validateHandlers(options.Handlers); err != nil {
 		return err
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
-		return errors.New("elevated helper is not running elevated")
+		return errServerNotElevated
 	}
 	parent, err := windows.OpenProcess(
 		windows.SYNCHRONIZE|windows.PROCESS_QUERY_INFORMATION,
@@ -75,12 +119,12 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 		options.ParentPID,
 	)
 	if err != nil {
-		return fmt.Errorf("open parent process: %w", err)
+		return fmt.Errorf("%w: open parent process: %w", errServerParent, err)
 	}
 	defer func() { _ = windows.CloseHandle(parent) }()
 	parentPath, err := processImagePath(parent)
 	if err != nil {
-		return fmt.Errorf("read parent process image: %w", err)
+		return fmt.Errorf("%w: read parent process image: %w", errServerParent, err)
 	}
 	// The client passes its own executable path and the kernel reports the image
 	// the parent actually runs. Requiring the two to match keeps the helper from
@@ -88,7 +132,12 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	// "nahida-desktop.exe" name that rejected renamed portable builds. The pipe
 	// secret remains the authentication; this is a consistency check.
 	if !equalPath(parentPath, options.ParentExe) {
-		return fmt.Errorf("reject parent process image %q, expected %q", parentPath, options.ParentExe)
+		return fmt.Errorf(
+			"%w: reject parent process image %q, expected %q",
+			errServerParent,
+			parentPath,
+			options.ParentExe,
+		)
 	}
 
 	// Grant the pipe to the verified parent process user, not the helper token.
@@ -98,7 +147,7 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 	// denied. The parent PID and image are already verified above.
 	parentSID, err := processUserSID(parent)
 	if err != nil {
-		return fmt.Errorf("read parent process user: %w", err)
+		return fmt.Errorf("%w: read parent process user: %w", errServerParent, err)
 	}
 	instance, err := lockHelperInstance(parentSID.String())
 	if err != nil {
@@ -113,7 +162,7 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 		OutputBufferSize:   maxMessageSize,
 	})
 	if err != nil {
-		return fmt.Errorf("listen on elevated helper pipe: %w", err)
+		return fmt.Errorf("%w: listen: %w", errServerPipe, err)
 	}
 	defer func() { _ = listener.Close() }()
 
@@ -150,16 +199,16 @@ func RunServer(ctx context.Context, options ServerOptions) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			return fmt.Errorf("accept elevated helper client: %w", err)
+			return fmt.Errorf("%w: accept: %w", errServerPipe, err)
 		}
 	}
 	defer func() { _ = conn.Close() }()
 	clientPID, err := namedPipeProcessID(conn, procGetNamedPipeClientPID)
 	if err != nil {
-		return fmt.Errorf("read elevated helper pipe client pid: %w", err)
+		return fmt.Errorf("%w: read pipe client pid: %w", errServerClient, err)
 	}
 	if clientPID != options.ParentPID {
-		return fmt.Errorf("reject elevated helper client pid %d, expected %d", clientPID, options.ParentPID)
+		return fmt.Errorf("%w: pid %d, expected %d", errServerClient, clientPID, options.ParentPID)
 	}
 	return serveHelperConnection(ctx, conn, options.Secret, Peer{UserSID: parentSID}, options.Handlers)
 }

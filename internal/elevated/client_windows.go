@@ -313,7 +313,7 @@ func dialPipeUntilReady(ctx context.Context, pipe string, process windows.Handle
 				return nil, fmt.Errorf("check elevated helper startup: %w", err)
 			}
 			if event == windows.WAIT_OBJECT_0 {
-				return nil, errors.New("elevated helper exited before connecting")
+				return nil, helperExitError(process)
 			}
 		}
 		conn, err := winio.DialPipeContext(ctx, pipe)
@@ -332,6 +332,17 @@ func dialPipeUntilReady(ctx context.Context, pipe string, process windows.Handle
 		case <-timer.C:
 		}
 	}
+}
+
+func helperExitError(process windows.Handle) error {
+	var code uint32
+	if err := windows.GetExitCodeProcess(process, &code); err != nil {
+		return errors.New("elevated helper exited before connecting")
+	}
+	if reason := serverExitReason(code); reason != "" {
+		return fmt.Errorf("elevated helper exited before connecting (exit code %d: %s)", code, reason)
+	}
+	return fmt.Errorf("elevated helper exited before connecting (exit code %d)", code)
 }
 
 func processImagePath(process windows.Handle) (string, error) {
