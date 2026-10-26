@@ -350,14 +350,31 @@ func resizeTextureSurfaceRgba32F(
 	surface *ddsutil.SurfaceRgba32Float,
 	layers, depth, targetWidth, targetHeight uint32,
 ) (*ddsutil.SurfaceRgba32Float, error) {
-	data := make([]float32, 0, uint64(layers)*uint64(depth)*uint64(targetWidth)*uint64(targetHeight)*4)
+	size := uint64(targetWidth) * uint64(targetHeight) * 4
+	data := make([]float32, uint64(layers)*uint64(depth)*size)
+	resize := surface.Width != targetWidth || surface.Height != targetHeight
+	var vertical []float32
+	var rows, columns []textureResizeWeights
+	if resize {
+		vertical = make([]float32, uint64(surface.Width)*uint64(targetHeight)*4)
+		rows = textureResizeWeightSets(surface.Height, targetHeight)
+		columns = textureResizeWeightSets(surface.Width, targetWidth)
+	}
+
+	out := data
 	for layer := range layers {
 		for level := range depth {
 			base := surface.Get(layer, level, 0)
 			if base == nil {
 				return nil, infra.ContractError(missingBaseMipTextureError)
 			}
-			data = append(data, resizeTextureRgba32F(base, surface.Width, surface.Height, targetWidth, targetHeight)...)
+			if resize {
+				resizeTextureRgba32FVertical(vertical, base, surface.Width, rows)
+				resizeTextureRgba32FHorizontal(out[:size], vertical, surface.Width, targetHeight, columns)
+			} else {
+				copy(out[:size], base)
+			}
+			out = out[size:]
 		}
 	}
 	return &ddsutil.SurfaceRgba32Float{
@@ -534,16 +551,6 @@ func quantizeTextureChannel(value float32) uint8 {
 	return uint8(math.Round(float64(value * 255.0)))
 }
 
-// resizeTextureRgba32F resizes a flat RGBA f32 image with a separable
-// triangle filter, mirroring image::imageops::resize(FilterType::Triangle).
-func resizeTextureRgba32F(source []float32, sourceWidth, sourceHeight, targetWidth, targetHeight uint32) []float32 {
-	if sourceWidth == targetWidth && sourceHeight == targetHeight {
-		return source
-	}
-	vertical := resizeTextureRgba32FVertical(source, sourceWidth, sourceHeight, targetHeight)
-	return resizeTextureRgba32FHorizontal(vertical, sourceWidth, targetHeight, targetWidth)
-}
-
 type textureResizeWeights struct {
 	start   uint32
 	weights []float32
@@ -586,11 +593,11 @@ func textureTriangleKernel(x float32) float32 {
 	return 0
 }
 
-// resizeTextureRgba32FVertical maps a width×height image to width×targetHeight.
-func resizeTextureRgba32FVertical(source []float32, width, height, targetHeight uint32) []float32 {
-	out := make([]float32, uint64(width)*uint64(targetHeight)*4)
-	sets := textureResizeWeightSets(height, targetHeight)
-	for outY, set := range sets {
+// resizeTextureRgba32FVertical writes a width×len(rows) image into out. With
+// the horizontal pass it forms a separable triangle filter, mirroring
+// image::imageops::resize(FilterType::Triangle).
+func resizeTextureRgba32FVertical(out, source []float32, width uint32, rows []textureResizeWeights) {
+	for outY, set := range rows {
 		for x := range width {
 			var accumulated [4]float32
 			for offset, weight := range set.weights {
@@ -607,14 +614,13 @@ func resizeTextureRgba32FVertical(source []float32, width, height, targetHeight 
 			out[outIndex+3] = accumulated[3]
 		}
 	}
-	return out
 }
 
-// resizeTextureRgba32FHorizontal maps a width×height image to targetWidth×height.
-func resizeTextureRgba32FHorizontal(source []float32, width, height, targetWidth uint32) []float32 {
-	out := make([]float32, uint64(targetWidth)*uint64(height)*4)
-	sets := textureResizeWeightSets(width, targetWidth)
-	for outX, set := range sets {
+// resizeTextureRgba32FHorizontal writes a width×height image into out as
+// len(columns)×height.
+func resizeTextureRgba32FHorizontal(out, source []float32, width, height uint32, columns []textureResizeWeights) {
+	targetWidth := uint64(len(columns))
+	for outX, set := range columns {
 		for y := range height {
 			var accumulated [4]float32
 			for offset, weight := range set.weights {
@@ -624,14 +630,13 @@ func resizeTextureRgba32FHorizontal(source []float32, width, height, targetWidth
 				accumulated[2] += source[sourceIndex+2] * weight
 				accumulated[3] += source[sourceIndex+3] * weight
 			}
-			outIndex := (uint64(y)*uint64(targetWidth) + uint64(outX)) * 4
+			outIndex := (uint64(y)*targetWidth + uint64(outX)) * 4
 			out[outIndex] = accumulated[0]
 			out[outIndex+1] = accumulated[1]
 			out[outIndex+2] = accumulated[2]
 			out[outIndex+3] = accumulated[3]
 		}
 	}
-	return out
 }
 
 func readDDSFile(path string) (*ddsutil.Dds, error) {

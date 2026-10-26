@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -18,6 +19,11 @@ const (
 	uploadNZSTExtension = ".nzst"
 	uploadNZSTMaxSize   = int64(64 << 30)
 )
+
+// A decoder allocates a window-sized history buffer, megabytes, on first use,
+// so it is kept for the next file. Only one that read its stream to the end
+// goes back.
+var uploadNZSTDecoders sync.Pool
 
 func isUploadNZST(path string) bool {
 	return strings.HasSuffix(strings.ToLower(path), uploadNZSTExtension)
@@ -48,12 +54,22 @@ func copyUploadNZST(ctx context.Context, path string, output io.Writer, limit in
 	if info.Size() == 0 {
 		return 0, io.ErrUnexpectedEOF
 	}
-	decoder, err := zstd.NewReader(source, zstd.WithDecoderConcurrency(1))
-	if err != nil {
+	decoder, ok := uploadNZSTDecoders.Get().(*zstd.Decoder)
+	if !ok {
+		decoder, err = zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		if err != nil {
+			return 0, err
+		}
+	}
+	if err := decoder.Reset(source); err != nil {
 		return 0, err
 	}
-	defer decoder.Close()
-	return io.Copy(output, io.LimitReader(&uploadNZSTReader{ctx: ctx, reader: decoder}, limit+1))
+	written, err := io.Copy(output, io.LimitReader(&uploadNZSTReader{ctx: ctx, reader: decoder}, limit+1))
+	if err == nil && written <= limit {
+		_ = decoder.Reset(nil)
+		uploadNZSTDecoders.Put(decoder)
+	}
+	return written, err
 }
 
 type uploadNZSTReader struct {

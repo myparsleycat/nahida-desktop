@@ -730,26 +730,57 @@ func sanitizeMultipartValue(value string) string {
 	return value
 }
 
+// uploadScratch holds the read and encode buffers of direct uploads. A prepared
+// payload waits in packs and retries, so it is cloned to its exact size and the
+// scratch goes back for the next file.
+var uploadScratch = sync.Pool{New: func() any { return new([]byte) }}
+
 func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRules) ([]byte, string, error) {
-	data, err := os.ReadFile(filepath.FromSlash(file.FullPath))
+	source, _ := uploadScratch.Get().(*[]byte)
+	defer uploadScratch.Put(source)
+	data, err := readUploadSource(filepath.FromSlash(file.FullPath), (*source)[:0])
+	*source = data[:0]
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: read upload file %q: %w", ErrBackupSourceRead, file.Name, err)
 	}
 	if skipUploadCompression(data, file.Size, compression) {
-		return data, "", nil
+		return bytes.Clone(data), "", nil
 	}
-	compressed, err := encodeUpload(compression.Level, data)
+
+	output, _ := uploadScratch.Get().(*[]byte)
+	defer uploadScratch.Put(output)
+	compressed, err := encodeUpload(compression.Level, data, (*output)[:0])
 	if err != nil {
 		return nil, "", err
 	}
-	return compressed, uploadCompressionAlgorithm, nil
+	*output = compressed[:0]
+	return bytes.Clone(compressed), uploadCompressionAlgorithm, nil
+}
+
+// readUploadSource reads the whole file into buffer like os.ReadFile, growing it
+// only when the file is larger than its capacity.
+func readUploadSource(path string, buffer []byte) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return buffer, err
+	}
+	defer func() { _ = file.Close() }()
+
+	reader := bytes.NewBuffer(buffer)
+	if info, err := file.Stat(); err == nil {
+		reader.Grow(int(info.Size()) + bytes.MinRead)
+	}
+	_, err = reader.ReadFrom(file)
+	return reader.Bytes(), err
 }
 
 // A new encoder builds its match tables, megabytes each above the default
 // level, on first use, so encoders are kept for the next file instead.
 var uploadEncoders [zstd.SpeedBestCompression + 1]sync.Pool
 
-func encodeUpload(level int, data []byte) ([]byte, error) {
+// encodeUpload appends the frame to dst. EncodeAll grows a nil dst by appending
+// for inputs of 1MB and more, so callers pass reusable capacity.
+func encodeUpload(level int, data, dst []byte) ([]byte, error) {
 	speed := zstd.EncoderLevelFromZstd(level)
 	pool := &uploadEncoders[speed]
 	encoder, ok := pool.Get().(*zstd.Encoder)
@@ -761,7 +792,7 @@ func encodeUpload(level int, data []byte) ([]byte, error) {
 		}
 	}
 	defer pool.Put(encoder)
-	return encoder.EncodeAll(data, nil), nil
+	return encoder.EncodeAll(data, dst), nil
 }
 
 // skipUploadCompression applies the published rules in their own order: tiny

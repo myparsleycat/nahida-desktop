@@ -372,10 +372,27 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 	}
 	upload.uploading = true
 	expected := upload.expected
+	if upload.data == nil && expected > 0 {
+		upload.data = make([]byte, 0, expected)
+	}
+	// The uploading flag keeps other requests off the slot, and the data is
+	// taken only once ready, so the body is read into it outside the lock.
+	slot := upload.data[received:expected]
 	p.mu.Unlock()
 
-	data, err := io.ReadAll(io.LimitReader(request.Body, remaining+1))
-	if err != nil || int64(len(data)) > remaining {
+	chunk, err := io.ReadFull(request.Body, slot)
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		err = nil
+	}
+	overflow := 0
+	if err == nil && chunk == len(slot) {
+		var probe [1]byte
+		overflow, err = io.ReadFull(request.Body, probe[:])
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
+	}
+	if err != nil || overflow > 0 {
 		failure := err
 		if failure == nil {
 			failure = errors.New("memory upload length mismatch")
@@ -384,7 +401,7 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 			failure,
 			request,
 			"read-memory-upload",
-			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": len(data)},
+			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": chunk + overflow},
 		)
 		p.mu.Lock()
 		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
@@ -401,10 +418,7 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 		http.NotFound(w, request)
 		return
 	}
-	if upload.data == nil && expected > 0 {
-		upload.data = make([]byte, 0, expected)
-	}
-	upload.data = append(upload.data, data...)
+	upload.data = upload.data[:received+int64(chunk)]
 	upload.uploading, upload.ready = false, int64(len(upload.data)) == expected
 	p.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)

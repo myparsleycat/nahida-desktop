@@ -24,6 +24,14 @@ const (
 	maxZstdRestoreSize   = int64(64 << 30)
 )
 
+// Encoders and decoders allocate window-sized history buffers, megabytes each,
+// on first use, so they are kept for the next file instead. Only those that
+// finished their stream go back; a failed one is dropped with its state.
+var (
+	zstdEncoders sync.Pool
+	zstdDecoders sync.Pool
+)
+
 func compressDisabledZstd(
 	ctx context.Context,
 	roots []string,
@@ -448,20 +456,27 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (retur
 			returnErr = infra.WithCause(returnErr, os.Remove(tempPath))
 		}
 	}()
-	encoder, err := zstd.NewWriter(
-		temp,
-		zstd.WithEncoderLevel(zstd.SpeedDefault),
-		zstd.WithEncoderConcurrency(1),
-		zstd.WithEncoderCRC(true),
-	)
-	if err != nil {
-		return err
+	encoder, ok := zstdEncoders.Get().(*zstd.Encoder)
+	if !ok {
+		encoder, err = zstd.NewWriter(
+			nil,
+			zstd.WithEncoderLevel(zstd.SpeedDefault),
+			zstd.WithEncoderConcurrency(1),
+			zstd.WithEncoderCRC(true),
+		)
+		if err != nil {
+			return err
+		}
 	}
+	encoder.Reset(temp)
 	_, copyErr := io.Copy(encoder, &contextReader{ctx: ctx, reader: source})
 	closeErr := encoder.Close()
 	if copyErr != nil || closeErr != nil {
 		return errors.Join(copyErr, closeErr)
 	}
+	encoder.Reset(nil)
+	zstdEncoders.Put(encoder)
+
 	if err := temp.Sync(); err != nil {
 		return err
 	}
@@ -478,11 +493,16 @@ func streamRestoreZstdWithLimit(ctx context.Context, sourcePath, tempPath string
 		return err
 	}
 	defer func() { _ = source.Close() }()
-	decoder, err := zstd.NewReader(source, zstd.WithDecoderConcurrency(1))
-	if err != nil {
+	decoder, ok := zstdDecoders.Get().(*zstd.Decoder)
+	if !ok {
+		decoder, err = zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		if err != nil {
+			return err
+		}
+	}
+	if err := decoder.Reset(source); err != nil {
 		return err
 	}
-	defer decoder.Close()
 	temp, err := os.OpenFile(tempPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -501,6 +521,8 @@ func streamRestoreZstdWithLimit(ctx context.Context, sourcePath, tempPath string
 	if written > limit {
 		return fmt.Errorf("zstd data exceeds restore limit: %s", sourcePath)
 	}
+	_ = decoder.Reset(nil)
+	zstdDecoders.Put(decoder)
 	return nil
 }
 
