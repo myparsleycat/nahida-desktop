@@ -160,7 +160,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	}
 	if !c.wanted || ctx.Err() != nil {
 		c.mu.Unlock()
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 
 	// A failed teardown retains the process handle. Never launch a replacement
@@ -204,7 +204,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("locate elevated helper %q: %w", helper, err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.Mode().IsRegular() {
 		return fmt.Errorf("elevated helper is not a regular file: %q", helper)
 	}
 	helperPath, err := windows.UTF16PtrFromString(helper)
@@ -266,7 +266,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		return fmt.Errorf("verify elevated helper image %q, expected %q", processPath, helper)
 	}
 	if c.invalidated(generation) || ctx.Err() != nil {
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 
 	connectCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -291,7 +291,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if c.generation != generation || !c.wanted || ctx.Err() != nil {
 		c.mu.Unlock()
 		_ = conn.Close()
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 	c.conn, c.process, c.pid, c.secret = conn, process, pid, secret
 
@@ -301,7 +301,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		closeErr := c.closeLocked()
 		c.mu.Unlock()
 		if ctx.Err() != nil {
-			err = errors.Join(context.Canceled, err)
+			err = errors.Join(ctx.Err(), err)
 		}
 		return helperStartupError(err, closeErr)
 	}
@@ -309,6 +309,15 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	c.mu.Unlock()
 	c.watch(watchProcess, generation)
 	return nil
+}
+
+// startCancelled is the error of a start that Close or the caller's context superseded. A deadline stays a
+// deadline, so a start that timed out is not mistaken for one the user cancelled.
+func startCancelled(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return context.Canceled
 }
 
 // invalidated reports whether a Close superseded the launch identified by
