@@ -19,6 +19,7 @@ const (
 	DownloadSpoolDir = "download-spool"
 	AgentDir         = "agent"
 	AgentSkillsDir   = AgentDir + string(filepath.Separator) + "skills"
+	ElevatedDir      = "elevated"
 )
 
 var ErrInvalidPath = errors.New("invalid app data path")

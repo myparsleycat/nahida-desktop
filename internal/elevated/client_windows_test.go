@@ -185,6 +185,44 @@ func TestSendKeysPreservesStableErrorCode(t *testing.T) {
 	}
 }
 
+type deadlineConn struct {
+	net.Conn
+	deadlines chan time.Time
+}
+
+func (c deadlineConn) SetDeadline(deadline time.Time) error {
+	select {
+	case c.deadlines <- deadline:
+	default:
+	}
+	return c.Conn.SetDeadline(deadline)
+}
+
+func TestSendKeysOutlastsTheHelperInputTimeout(t *testing.T) {
+	t.Parallel()
+
+	client, server := net.Pipe()
+	defer func() { _ = server.Close() }()
+	go func() {
+		request, err := readMessage(server)
+		if err != nil {
+			return
+		}
+		_ = writeMessage(server, message{Version: protocolVersion, ID: request.ID, OK: true, Payload: []byte("{}")})
+	}()
+
+	conn := deadlineConn{Conn: client, deadlines: make(chan time.Time, 1)}
+	caller := &Client{conn: conn, secret: "secret"}
+	started := time.Now()
+	if _, err := caller.SendKeys(context.Background(), platform.KeyRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	helperTimeout := InputHandler(nil).Timeout
+	if budget := (<-conn.deadlines).Sub(started); budget <= helperTimeout {
+		t.Fatalf("call deadline = %v after start, want longer than the helper's %v", budget, helperTimeout)
+	}
+}
+
 func TestCallCancelUnblocksReadAndStatus(t *testing.T) {
 	t.Parallel()
 

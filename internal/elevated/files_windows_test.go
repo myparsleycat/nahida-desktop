@@ -157,6 +157,10 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := FileOp{Kind: FileOpCopy, Source: source, Target: existing, SHA256: digest}
+	windowsDir, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, test := range []struct {
 		name string
@@ -176,6 +180,9 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 		{name: "copy over directory", op: FileOp{Kind: FileOpCopy, Source: source, Target: directory, SHA256: digest}},
 		{name: "remove directory", op: FileOp{Kind: FileOpRemove, Target: directory}},
 		{name: "remove with source", op: FileOp{Kind: FileOpRemove, Source: source, Target: existing}},
+		{name: "remove in Windows folder", op: FileOp{
+			Kind: FileOpRemove, Target: filepath.Join(windowsDir, "nahida-missing.dll"),
+		}},
 		{name: "unknown kind", op: FileOp{Kind: "rename", Source: source, Target: existing}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

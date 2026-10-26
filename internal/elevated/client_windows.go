@@ -25,6 +25,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -89,6 +90,10 @@ type Client struct {
 	// exchange; cancellation must not wait for that lock.
 	session atomic.Pointer[helperSession]
 
+	// appData locates the per-user folder the embedded helper is extracted into, shared by every
+	// distribution channel including portable runs.
+	appData *appdata.Store
+
 	// startMu serializes launch attempts. It is separate from mu because it is
 	// held across launch, and Close must stay reachable while ShellExecuteExW
 	// waits on a UAC prompt.
@@ -114,6 +119,14 @@ func (c *Client) UseDisconnect(fn func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.onDisconnect = fn
+}
+
+// UseAppData sets the app data root the helper is extracted under. It has to be set before the first
+// Start, which includes restoring the permissions of that root.
+func (c *Client) UseAppData(store *appdata.Store) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.appData = store
 }
 
 // Connected reports whether the authenticated helper pipe is live.
@@ -147,7 +160,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	}
 	if !c.wanted || ctx.Err() != nil {
 		c.mu.Unlock()
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 
 	// A failed teardown retains the process handle. Never launch a replacement
@@ -160,6 +173,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		}
 	}
 	generation := c.generation
+	appData := c.appData
 	c.mu.Unlock()
 
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
@@ -174,9 +188,9 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("resolve application executable: %w", err)
 	}
-	helperDir, err := defaultHelperDir()
+	helperDir, err := appData.Resolve(appdata.ElevatedDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve elevated helper directory: %w", err)
 	}
 	helperData, err := bundledHelper()
 	if err != nil {
@@ -190,7 +204,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("locate elevated helper %q: %w", helper, err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.Mode().IsRegular() {
 		return fmt.Errorf("elevated helper is not a regular file: %q", helper)
 	}
 	helperPath, err := windows.UTF16PtrFromString(helper)
@@ -228,6 +242,10 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		if startErr == nil || process == 0 {
 			return
 		}
+
+		// This helper never got a connection, so it waits in Accept for its parent and would only
+		// use up the shutdown grace. stopHelperProcess still confirms the exit.
+		_ = windows.TerminateProcess(process, 1)
 		c.mu.Lock()
 		c.process, c.pid = process, pid
 		startErr = helperStartupError(startErr, c.closeLocked())
@@ -248,7 +266,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		return fmt.Errorf("verify elevated helper image %q, expected %q", processPath, helper)
 	}
 	if c.invalidated(generation) || ctx.Err() != nil {
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 
 	connectCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -273,7 +291,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if c.generation != generation || !c.wanted || ctx.Err() != nil {
 		c.mu.Unlock()
 		_ = conn.Close()
-		return context.Canceled
+		return startCancelled(ctx)
 	}
 	c.conn, c.process, c.pid, c.secret = conn, process, pid, secret
 
@@ -283,7 +301,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		closeErr := c.closeLocked()
 		c.mu.Unlock()
 		if ctx.Err() != nil {
-			err = errors.Join(context.Canceled, err)
+			err = errors.Join(ctx.Err(), err)
 		}
 		return helperStartupError(err, closeErr)
 	}
@@ -291,6 +309,15 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	c.mu.Unlock()
 	c.watch(watchProcess, generation)
 	return nil
+}
+
+// startCancelled is the error of a start that Close or the caller's context superseded. A deadline stays a
+// deadline, so a start that timed out is not mistaken for one the user cancelled.
+func startCancelled(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return context.Canceled
 }
 
 // invalidated reports whether a Close superseded the launch identified by
@@ -309,7 +336,7 @@ func dialPipeUntilReady(ctx context.Context, pipe string, process windows.Handle
 				return nil, fmt.Errorf("check elevated helper startup: %w", err)
 			}
 			if event == windows.WAIT_OBJECT_0 {
-				return nil, errors.New("elevated helper exited before connecting")
+				return nil, helperExitError(process)
 			}
 		}
 		conn, err := winio.DialPipeContext(ctx, pipe)
@@ -328,6 +355,17 @@ func dialPipeUntilReady(ctx context.Context, pipe string, process windows.Handle
 		case <-timer.C:
 		}
 	}
+}
+
+func helperExitError(process windows.Handle) error {
+	var code uint32
+	if err := windows.GetExitCodeProcess(process, &code); err != nil {
+		return errors.New("elevated helper exited before connecting")
+	}
+	if reason := serverExitReason(code); reason != "" {
+		return fmt.Errorf("elevated helper exited before connecting (exit code %d: %s)", code, reason)
+	}
+	return fmt.Errorf("elevated helper exited before connecting (exit code %d)", code)
 }
 
 func processImagePath(process windows.Handle) (string, error) {

@@ -47,7 +47,7 @@ func TestNewCopyOpBindsSourceDigest(t *testing.T) {
 
 	source, digest := stagedFile(t, "new settings")
 	target := filepath.Join(t.TempDir(), "Engine.ini")
-	op, err := NewCopyOp(source, target)
+	op, err := NewCopyOp(t.Context(), source, target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,14 @@ func TestNewCopyOpBindsSourceDigest(t *testing.T) {
 		t.Fatalf("helper would refuse the operation: %v", err)
 	}
 
-	if _, err := NewCopyOp(filepath.Join(t.TempDir(), "missing.bin"), target); !errors.Is(err, os.ErrNotExist) {
+	if _, err := NewCopyOp(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.bin"),
+		target,
+	); !errors.Is(
+		err,
+		os.ErrNotExist,
+	) {
 		t.Fatalf("missing source error = %v", err)
 	}
 }
@@ -123,6 +130,27 @@ func TestFileLeaseRemembersDeclinedConsent(t *testing.T) {
 	lease.Release()
 	if gateway.releases != 0 {
 		t.Fatal("a lease that was never granted was released")
+	}
+}
+
+func TestFileLeaseRetriesAcquisitionCancelledByTheCaller(t *testing.T) {
+	t.Parallel()
+
+	ops := []FileOp{{Kind: FileOpRemove, Target: filepath.Join(t.TempDir(), "stale.bak")}}
+	gateway := &recordingGateway{acquireErr: context.Canceled}
+	lease := NewFileLease(gateway)
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := lease.Apply(cancelled, ops); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Apply = %v, want the cancellation", err)
+	}
+
+	gateway.acquireErr = nil
+	if err := lease.Apply(t.Context(), ops); err != nil {
+		t.Fatalf("Apply after cancellation = %v, want a new acquisition", err)
+	}
+	if gateway.acquires != 2 || len(gateway.batches) != 1 {
+		t.Fatalf("acquires = %d, batches = %d; want the helper started again", gateway.acquires, len(gateway.batches))
 	}
 }
 
