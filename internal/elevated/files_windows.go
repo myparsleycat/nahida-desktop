@@ -129,15 +129,23 @@ func validateFileOp(op FileOp) error {
 }
 
 // isLocalDrivePath rejects UNC and device paths and drive letters mapped to a share: a share is
-// resolved with the helper's credentials instead of the user's, a mapping the user made is
-// missing from the elevated logon session, and device paths bypass path normalization.
+// resolved with the helper's credentials instead of the user's, and device paths bypass path
+// normalization. Drive letters live in each logon session, so a mapped or subst drive of the user
+// does not resolve in the elevated session, where the same letter may even name another drive.
 func isLocalDrivePath(path string) bool {
 	volume := filepath.VolumeName(path)
 	if len(volume) != 2 || volume[1] != ':' || !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return false
 	}
 	root, err := windows.UTF16PtrFromString(volume + `\`)
-	return err == nil && windows.GetDriveType(root) != windows.DRIVE_REMOTE
+	if err != nil {
+		return false
+	}
+	switch windows.GetDriveType(root) {
+	case windows.DRIVE_REMOTE, windows.DRIVE_NO_ROOT_DIR, windows.DRIVE_UNKNOWN:
+		return false
+	}
+	return true
 }
 
 func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
