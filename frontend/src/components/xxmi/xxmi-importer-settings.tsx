@@ -556,13 +556,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         )}
                       </div>
                     )}
-                    <SelectRow
-                      label={t("page.setting.xxmi.builtin.windowMode")}
-                      description={t("page.setting.xxmi.builtin.windowModeDescription")}
-                      value={config.windowMode}
-                      options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
-                      onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
-                    />
+                    {config.gimi?.unlockFPS && (
+                      <SelectRow
+                        label={t("page.setting.xxmi.builtin.windowMode")}
+                        description={t("page.setting.xxmi.builtin.windowModeDescription")}
+                        value={config.windowMode}
+                        options={["Windowed", "Borderless", "Fullscreen", "Exclusive Fullscreen"]}
+                        onValueChange={(windowMode) => setConfig({ ...config, windowMode })}
+                      />
+                    )}
                     {(importer === "WWMI" || importer === "EFMI" || importer === "ZZMI") && (
                       <SelectRow
                         label={t("page.setting.xxmi.builtin.renderer")}
