@@ -135,7 +135,8 @@ func TestExecuteXcmdDeletesSkipsJunctionInDeletionPath(t *testing.T) {
 	createXXMIJunction(t, outside, filepath.Join(importerRoot, "Core", "linked"))
 	if err := os.WriteFile(
 		filepath.Join(commandRoot, "Core", "auto_update.xcmd"),
-		[]byte("[PreInstall]\ndelete = Core/linked/victim.txt\n"),
+		// A target missing behind the link is already gone and is not reported as skipped.
+		[]byte("[PreInstall]\ndelete = Core/linked/victim.txt\ndelete = Core/linked/missing.txt\n"),
 		0o644,
 	); err != nil {
 		t.Fatal(err)

@@ -294,7 +294,8 @@ func (r *installRoot) writeFileAtomic(
 }
 
 func (r *installRoot) removeAll(relative string) error {
-	// A missing intermediate directory means the target is already gone, just like a missing leaf.
+	// A missing intermediate directory means the target is already gone, just like a missing leaf. So does a
+	// target missing behind a link, which is never removed but needs no skip either.
 	err := r.withParent(relative, false, 0, func(parent *os.Root, name string) error {
 		info, err := parent.Lstat(name)
 		if errors.Is(err, os.ErrNotExist) {
@@ -308,6 +309,11 @@ func (r *installRoot) removeAll(relative string) error {
 		}
 		return parent.RemoveAll(name)
 	})
+	if errors.Is(err, errInstallReparsePoint) {
+		if _, statErr := os.Lstat(filepath.Join(r.path, relative)); errors.Is(statErr, os.ErrNotExist) {
+			return nil
+		}
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

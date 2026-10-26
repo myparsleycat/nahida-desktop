@@ -250,8 +250,8 @@ func (x *XXMI) launchBuiltinGameLocked(
 		if err != nil {
 			return err
 		}
-		for _, target := range skipped {
-			warn("Skipped auto_update.xcmd delete through a symbolic link or junction: " + target)
+		if len(skipped) > 0 {
+			warn("Skipped auto_update.xcmd deletes through a symbolic link or junction: " + strings.Join(skipped, ", "))
 		}
 		progress("ensure-runtime")
 		progress("deploy-runtime")
