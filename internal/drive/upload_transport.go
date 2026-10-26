@@ -67,14 +67,22 @@ func (r *backupSourceReader) Read(buffer []byte) (int, error) {
 // for the whole request, so a part that waits on the network holds none. The
 // wait for a slot runs inside the request timeout, and a block keeps the part
 // from queueing behind other disk work once for every small read.
+// The block returns to the pool only once the body is read to its end: the
+// transport can still read an abandoned body, so that one keeps its block.
 type diskGatedReader struct {
 	ctx     context.Context
 	path    string
 	reader  io.Reader
-	block   []byte
+	size    int
+	block   *[]byte
 	pending []byte
 	err     error
 }
+
+var uploadBlocks = sync.Pool{New: func() any {
+	block := make([]byte, uploadReadBlockSize)
+	return &block
+}}
 
 func (r *diskGatedReader) Read(buffer []byte) (int, error) {
 	if len(r.pending) == 0 {
@@ -87,6 +95,9 @@ func (r *diskGatedReader) Read(buffer []byte) (int, error) {
 	}
 	n := copy(buffer, r.pending)
 	r.pending = r.pending[n:]
+	if len(r.pending) == 0 && r.err != nil {
+		r.releaseBlock()
+	}
 	return n, nil
 }
 
@@ -97,15 +108,27 @@ func (r *diskGatedReader) fill() error {
 	}
 	defer release()
 
-	n, err := io.ReadFull(r.reader, r.block)
+	if r.block == nil {
+		r.block, _ = uploadBlocks.Get().(*[]byte)
+	}
+	block := (*r.block)[:r.size]
+	n, err := io.ReadFull(r.reader, block)
 	if errors.Is(err, io.ErrUnexpectedEOF) {
 		err = io.EOF
 	}
-	r.pending, r.err = r.block[:n], err
+	r.pending, r.err = block[:n], err
 	if n == 0 {
+		r.releaseBlock()
 		return err
 	}
 	return nil
+}
+
+func (r *diskGatedReader) releaseBlock() {
+	if r.block != nil {
+		uploadBlocks.Put(r.block)
+		r.block, r.pending = nil, nil
+	}
 }
 
 func (r *uploadProgressReader) Read(buffer []byte) (int, error) {
@@ -323,7 +346,7 @@ func (d *Drive) uploadParts(
 				ctx:    ctx,
 				path:   sourcePath,
 				reader: &backupSourceReader{reader: io.NewSectionReader(handle, start, size), remaining: size},
-				block:  make([]byte, min(size, uploadReadBlockSize)),
+				size:   int(min(size, uploadReadBlockSize)),
 			}
 			began := d.now()
 			result, sendErr := d.sendMultipart(ctx, partURL, http.MethodPut, multipartUpload{
@@ -715,15 +738,30 @@ func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRule
 	if skipUploadCompression(data, file.Size, compression) {
 		return data, "", nil
 	}
-	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(compression.Level)))
+	compressed, err := encodeUpload(compression.Level, data)
 	if err != nil {
 		return nil, "", err
 	}
-	compressed := encoder.EncodeAll(data, nil)
-	if err := encoder.Close(); err != nil {
-		return nil, "", err
-	}
 	return compressed, uploadCompressionAlgorithm, nil
+}
+
+// A new encoder builds its match tables, megabytes each above the default
+// level, on first use, so encoders are kept for the next file instead.
+var uploadEncoders [zstd.SpeedBestCompression + 1]sync.Pool
+
+func encodeUpload(level int, data []byte) ([]byte, error) {
+	speed := zstd.EncoderLevelFromZstd(level)
+	pool := &uploadEncoders[speed]
+	encoder, ok := pool.Get().(*zstd.Encoder)
+	if !ok {
+		var err error
+		encoder, err = zstd.NewWriter(nil, zstd.WithEncoderLevel(speed), zstd.WithEncoderConcurrency(1))
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer pool.Put(encoder)
+	return encoder.EncodeAll(data, nil), nil
 }
 
 // skipUploadCompression applies the published rules in their own order: tiny

@@ -692,6 +692,48 @@ func uploadTestParts(t *testing.T, test uploadPartsTest, handler http.HandlerFun
 	return progress.Load(), err
 }
 
+// A part the transport has not finished reading keeps its pooled block while
+// another part takes a block and reads to the end.
+func TestDiskGatedReaderKeepsItsBlockUntilReadToTheEnd(t *testing.T) {
+	content := make([]byte, 128*1024)
+	for index := range content {
+		content[index] = byte(index % 251)
+	}
+	path := writeUploadContent(t, "parts.bin", content)
+	handle, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = handle.Close() }()
+	half := len(content) / 2
+	part := func(index int) *diskGatedReader {
+		return &diskGatedReader{
+			ctx:    t.Context(),
+			path:   path,
+			reader: io.NewSectionReader(handle, int64(index*half), int64(half)),
+			size:   half,
+		}
+	}
+
+	first := part(0)
+	head := make([]byte, 1024)
+	if _, err := io.ReadFull(first, head); err != nil {
+		t.Fatal(err)
+	}
+	second, err := io.ReadAll(part(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rest, err := io.ReadAll(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(append(head, rest...), content[:half]) || !bytes.Equal(second, content[half:]) {
+		t.Fatal("a part read bytes of the other part")
+	}
+}
+
 // steppedClock answers a time that moves on by step at every reading, so the
 // time between two readings is the step whatever the speed of the runner.
 func steppedClock(step time.Duration) func() time.Time {
