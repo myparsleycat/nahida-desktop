@@ -118,12 +118,11 @@ func validateFileOp(op FileOp) error {
 		if filepath.Dir(op.Target) == op.Target {
 			return errors.New("target cannot be a volume root")
 		}
-		if system, err := windows.GetSystemWindowsDirectory(); err != nil ||
-			platform.SameOrChildPath(system, op.Target) {
-			return errors.New("target cannot be in the Windows folder")
-		}
 	default:
 		return errors.New("operation is not allowed")
+	}
+	if system, err := windows.GetSystemWindowsDirectory(); err != nil || platform.SameOrChildPath(system, op.Target) {
+		return errors.New("target cannot be in the Windows folder")
 	}
 	return nil
 }
