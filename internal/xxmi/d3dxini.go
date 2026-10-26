@@ -215,7 +215,11 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 			case !first || !had:
 				out.lines = append(out.lines, block.body...)
 			case tail > 0:
-				out.lines = slices.Concat(out.lines, old[:iniTail(old)], block.body[tail:])
+				kept := old[:iniTail(old)]
+				if strings.EqualFold(block.name, "include") {
+					kept = iniRestoreIncludes(block.body[:tail], old)
+				}
+				out.lines = slices.Concat(out.lines, kept, block.body[tail:])
 			default:
 				// The template only documents the section, so the previous commands go below that text
 				// instead of bringing a second copy of it along.
@@ -311,6 +315,60 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 		return line != "" && !kept[line]
 	})
 	return out, lost
+}
+
+// iniRestoreIncludes returns the previous [Include] body with each line the template sets and previous does not
+// mention, set or commented out, put back ahead of its first option. A file that lost the package's own include,
+// such as Core\EFMI\main.ini, loads no mod that depends on it, and keeping the section verbatim never repairs it.
+func iniRestoreIncludes(template, previous []string) []string {
+	mentioned := map[string]bool{}
+	for _, line := range previous {
+		if match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(line, " \t;#")); len(match) != 0 {
+			mentioned[iniIncludeID(match)] = true
+		}
+	}
+	set := map[string]bool{}
+	var missing []string
+	for _, line := range template {
+		match := iniOptionPattern.FindStringSubmatch(line)
+		if len(match) == 0 {
+			continue
+		}
+		set[iniIncludeID(match)] = true
+		if !mentioned[iniIncludeID(match)] {
+			missing = append(missing, line)
+		}
+	}
+
+	// An include commented out in the run that ends the section would be dropped as the banner of the next one,
+	// and the rebuild after that would turn it back on.
+	tail := iniTail(previous)
+	body := slices.Clone(previous[:tail])
+	for _, line := range previous[tail:] {
+		if match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(line, " \t;#")); len(match) != 0 &&
+			set[iniIncludeID(match)] {
+			body = append(body, line)
+		}
+	}
+
+	at := slices.IndexFunc(body, iniOptionPattern.MatchString)
+	if at < 0 {
+		at = len(body)
+	}
+	return slices.Insert(body, at, missing...)
+}
+
+// iniIncludeID identifies a repeatable include by its key and path, and any other option, such as user_config, by
+// its key alone: 3DMigoto reads the first value of a single-valued key, so a template default put ahead of the
+// previous value would replace it.
+func iniIncludeID(match []string) string {
+	key := strings.ToLower(match[2])
+	switch key {
+	case "include", "include_recursive", "exclude_recursive":
+		value := strings.TrimSpace(strings.TrimSuffix(match[4], iniCommentSuffix(match[4])))
+		return key + "=" + strings.ToLower(strings.ReplaceAll(value, "/", `\`))
+	}
+	return key
 }
 
 // iniValidUTF8 returns data with every byte that is not part of a UTF-8 sequence read as Windows-1252. 3DMigoto

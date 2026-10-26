@@ -98,17 +98,22 @@ func TestINIEditorCreatesMissingSection(t *testing.T) {
 func TestRebuildINICarriesPreviousFile(t *testing.T) {
 	t.Parallel()
 	template := []byte("; head\n[Loader]\ntarget = Game.exe\n; loader notes\n;launch = x\n\n; includes\n" +
-		"[Include]\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n\n; system\n" +
+		"[Include]\ninclude = Core\\Game\\main.ini\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n" +
+		"user_config = d3dx_user.ini\n\n; system\n" +
 		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 0\ndisabled = 1\nfresh = 2\n\n; constants\n" +
 		"[Constants]\n; declare globals\n\n; present\n[Present]\nrun = CommandListNew\n")
 	previous := []byte(
 		"; old head\r\n[System]\r\nKEPT = 7 ; mine\r\n; disabled = 0\r\n;gone = 1\r\nlegacy = 3\r\n\r\n" +
-			"[Include]\r\ninclude = Core\\main.ini\r\nexclude_recursive = DISABLED*\r\n; old tail\r\n\r\n" +
+			"[Include]\r\ninclude = Core\\main.ini\r\nexclude_recursive = DISABLED*\r\nuser_config = profiles\\custom.ini\r\n" +
+			";include = Core/Game/main.ini\r\n; old tail\r\n\r\n" +
 			"[Constants]\r\n; old doc\r\nglobal $x = 1\r\n; old doc\r\n\r\n" +
 			"[Loader]\r\ntarget = Old.exe\r\nlaunch = old.exe\r\n\r\n[Stereo]\r\nautomatic_mode = 0\r\n;unlock = 1\r\n; next banner\r\n",
 	)
+	// An include the previous file lacks is restored, since the template's own include is what loads the package,
+	// but one it commented out stays off. user_config takes a single value, so the previous path is kept.
 	want := "; head\n[Loader]\ntarget = Old.exe\nlaunch = old.exe\n; loader notes\n;launch = x\n\n; includes\n" +
-		"[Include]\ninclude = Core\\main.ini\nexclude_recursive = DISABLED*\n\n; system\n" +
+		"[Include]\ninclude_recursive = Mods\ninclude = Core\\main.ini\nexclude_recursive = DISABLED*\n" +
+		"user_config = profiles\\custom.ini\n;include = Core/Game/main.ini\n\n; system\n" +
 		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 7\n; disabled = 0\nfresh = 2\n;gone = 1\nlegacy = 3\n\n; constants\n" +
 		"[Constants]\n; declare globals\nglobal $x = 1\n\n; present\n[Present]\nrun = CommandListNew\n\n[Stereo]\nautomatic_mode = 0\n;unlock = 1\n"
 
