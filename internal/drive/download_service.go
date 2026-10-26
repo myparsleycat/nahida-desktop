@@ -43,7 +43,7 @@ func (d *Drive) StartDownload(ctx context.Context, params StartDownloadParams) (
 			err = &ModTicketRedemptionError{err: err}
 		}
 	}()
-	if d == nil || d.transfer == nil || d.download == nil {
+	if d.transfer == nil || d.download == nil {
 		return StartDownloadResult{}, errors.New("download services are not configured")
 	}
 	if len(params.Items) == 0 {
@@ -185,9 +185,7 @@ func (d *Drive) resolveDownloadTarget(ctx context.Context, params StartDownloadP
 		return resolvedDownloadTarget{}, err
 	}
 	if path == nil || *path == "" {
-		if d.log != nil {
-			d.log.Info("Download cancelled by user selection", "Drive:Download")
-		}
+		d.log.Info("Download cancelled by user selection", "Drive:Download")
 		return resolvedDownloadTarget{canceled: true}, nil
 	}
 	if isSingle && fileName != nil && *fileName != "" {
@@ -386,7 +384,7 @@ func (d *Drive) resolveDirectoryDownloadName(
 }
 
 func driveFS(d *Drive) *platform.FS {
-	if d != nil && d.fs != nil {
+	if d.fs != nil {
 		return d.fs
 	}
 	return platform.NewFS()

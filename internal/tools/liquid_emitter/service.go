@@ -238,9 +238,6 @@ func (s *Service) resolveAnchor(
 	input ApplyInput,
 ) (modelviewer.DrawSource, anchorTriangle, EmitterAnchor, error) {
 	var none modelviewer.DrawSource
-	if s.viewer == nil {
-		return none, anchorTriangle{}, EmitterAnchor{}, errors.New("model viewer is unavailable")
-	}
 	source, ok := s.viewer.DrawSource(input.ViewerSessionID, input.MeshID)
 	if !ok || !platform.SameOrChildPath(sc.root, source.INIPath) {
 		return none, anchorTriangle{}, EmitterAnchor{}, infra.ContractError(ErrorViewerSession + ":" + input.MeshID)
@@ -425,9 +422,7 @@ func (s *Service) apply(
 	}
 	newKey := key == ""
 	for newKey && (key == "" || index.Owners[key] != nil) {
-		if key, err = newModKey(); err != nil {
-			return err
-		}
+		key = newModKey()
 	}
 	doc, err := readProfile(layout, key)
 	if err != nil {
@@ -821,9 +816,7 @@ func (s *Service) forkCopy(
 
 	forked := ""
 	for forked == "" || index.Owners[forked] != nil {
-		if forked, err = newModKey(); err != nil {
-			return "", nil, err
-		}
+		forked = newModKey()
 	}
 	pids := make(map[int]int)
 	move := func(from int) error {

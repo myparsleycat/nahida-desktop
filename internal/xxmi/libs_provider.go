@@ -921,7 +921,7 @@ func (x *XXMI) findProviderRelease(
 		return nil, err
 	}
 	for i := range releases {
-		if normalizeVersion(releases[i].TagName) == version && !releases[i].Draft {
+		if normalizeVersion(releases[i].TagName) == version {
 			return &releases[i], nil
 		}
 	}

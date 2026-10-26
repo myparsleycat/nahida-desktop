@@ -132,7 +132,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     setIsDragOver((prev) => (prev === next ? prev : next));
   };
 
-  const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files");
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
 
   const handleDragEnter = (e: React.DragEvent) => {
     if (!hasFiles(e)) return;

@@ -95,9 +95,6 @@ func newCompressionCoordinator(owner *Mod) *compressionCoordinator {
 //
 //wails:ignore
 func (m *Mod) StartCompression(ctx context.Context) error {
-	if m == nil || m.compression == nil {
-		return nil
-	}
 	m.watchMu.Lock()
 	defer m.watchMu.Unlock()
 
@@ -118,7 +115,7 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 //
 //wails:ignore
 func (m *Mod) RefreshCompressionImporters(ctx context.Context) {
-	if m == nil || m.compression == nil || m.compression.stopped.Load() {
+	if m.compression.stopped.Load() {
 		return
 	}
 	if err := m.compression.replaceWatcher(ctx); err != nil {
@@ -133,16 +130,10 @@ func (m *Mod) RefreshCompressionImporters(ctx context.Context) {
 //
 //wails:ignore
 func (m *Mod) WaitCompressionPass(ctx context.Context) error {
-	if m == nil || m.compression == nil {
-		return nil
-	}
 	return m.compression.waitForRun(ctx)
 }
 
 func (m *Mod) GetCompressionState(ctx context.Context) (CompressionState, error) {
-	if m == nil || m.compression == nil {
-		return CompressionState{}, errors.New("mod compression is not configured")
-	}
 	if err := m.compression.loadStateIfNeeded(ctx); err != nil {
 		return CompressionState{}, err
 	}
@@ -150,7 +141,7 @@ func (m *Mod) GetCompressionState(ctx context.Context) (CompressionState, error)
 }
 
 func (m *Mod) SetCompressionConfig(ctx context.Context, config CompressionConfig) (CompressionState, error) {
-	if m == nil || m.compression == nil || m.settings == nil {
+	if m.settings == nil {
 		return CompressionState{}, errors.New("mod compression is not configured")
 	}
 	if config.Method != "zstd" && config.Method != "xpress4k" {
@@ -194,7 +185,7 @@ func (m *Mod) SetCompressionConfig(ctx context.Context, config CompressionConfig
 }
 
 func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (CompressionState, error) {
-	if m == nil || m.compression == nil || m.client == nil {
+	if m.client == nil {
 		return CompressionState{}, errors.New("mod compression is not configured")
 	}
 	if !m.compression.requestMu.TryLock() {
@@ -761,7 +752,7 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 
 func (c *compressionCoordinator) settings() (compressionSettings, error) {
 	settings, ok := c.owner.settings.(compressionSettings)
-	if !ok || settings == nil {
+	if !ok {
 		return nil, errors.New("mod compression settings are unavailable")
 	}
 	return settings, nil
@@ -940,7 +931,7 @@ func (c *compressionCoordinator) fail(err error, stage, method, path string) {
 }
 
 func (c *compressionCoordinator) logError(err error, stage, method, path string) {
-	if err == nil || c.owner.log == nil {
+	if err == nil {
 		return
 	}
 	c.diagnostic.Report(
@@ -1107,9 +1098,6 @@ func (o *compressionFileOwnership) contains(id string) bool {
 }
 
 func (o *compressionFileOwnership) empty() bool {
-	if o == nil {
-		return true
-	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return len(o.files) == 0

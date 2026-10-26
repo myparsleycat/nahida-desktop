@@ -102,11 +102,7 @@ func (m *Mod) logMergeFailure(
 			Error:  failure.err.Error(),
 		}
 	}
-	var log *infra.Log
-	if m != nil {
-		log = m.log
-	}
-	return infra.ReportError(log, err, "Mod", infra.Diagnostic{
+	return infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
 		Operation: "merge-mods", Stage: "execute",
 		Fields: map[string]any{
 			"groupPath": request.GroupPath, "placement": request.Placement,

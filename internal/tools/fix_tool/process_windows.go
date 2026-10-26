@@ -13,9 +13,6 @@ import (
 )
 
 func killProcessTree(cmd *exec.Cmd) error {
-	if cmd == nil || cmd.Process == nil {
-		return nil
-	}
 	treeErr := exec.Command("taskkill", "/pid", strconv.Itoa(cmd.Process.Pid), "/f", "/t").Run()
 	killErr := cmd.Process.Kill()
 	if treeErr == nil || errors.Is(killErr, os.ErrProcessDone) {

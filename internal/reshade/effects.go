@@ -134,9 +134,6 @@ func (r *ReShade) effectPackages(ctx context.Context) ([]EffectPackage, layout, 
 	if err != nil {
 		return nil, layout, err
 	}
-	if r.github == nil {
-		return nil, layout, errors.New("GitHub client is not configured")
-	}
 	data, err := r.github.FetchFile(ctx, effectListRepo, effectListURL, maxEffectList)
 	if err != nil {
 		return nil, layout, err
@@ -162,9 +159,6 @@ func (r *ReShade) installEffectPackageFiles(
 	match := effectPackRE.FindStringSubmatch(pkg.ID)
 	if match == nil {
 		return errors.New("RESHADE_EFFECT_PACKAGE_UNSUPPORTED")
-	}
-	if r.archive == nil {
-		return errors.New("archive extractor is not configured")
 	}
 	staging, err := os.MkdirTemp(layout.root, ".effects-")
 	if err != nil {

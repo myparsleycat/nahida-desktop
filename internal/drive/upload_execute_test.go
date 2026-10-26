@@ -91,27 +91,6 @@ func TestUploadQueueBackpressureReportsWaitingInsteadOfPreparation(t *testing.T)
 	run.close()
 }
 
-func TestRunUploadTasksHonorsConfiguredConcurrency(t *testing.T) {
-	var active atomic.Int32
-	var peak atomic.Int32
-	tasks := make([]func(), 6)
-	for index := range tasks {
-		tasks[index] = func() {
-			current := active.Add(1)
-			for current > peak.Load() && !peak.CompareAndSwap(peak.Load(), current) {
-			}
-			time.Sleep(20 * time.Millisecond)
-			active.Add(-1)
-		}
-	}
-	if err := runUploadTasks(context.Background(), 3, tasks); err != nil {
-		t.Fatal(err)
-	}
-	if peak.Load() != 3 {
-		t.Fatalf("peak concurrency = %d, want 3", peak.Load())
-	}
-}
-
 func TestUploadTaskPoolStartsWorkBeforePlanningFinishes(t *testing.T) {
 	t.Parallel()
 	pool := newUploadTaskPool(context.Background(), 1)

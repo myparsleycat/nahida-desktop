@@ -243,7 +243,7 @@ export const dialogStore = createStore<DialogStates & DialogActions>((set, get) 
 
     resolveDialog: (dialogName, result) => {
         if (activeDialogs[dialogName]) {
-            activeDialogs[dialogName]?.(result);
+            activeDialogs[dialogName](result);
             activeDialogs[dialogName] = null;
         }
     },

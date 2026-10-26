@@ -591,9 +591,6 @@ func underSkippedRoot(target string, roots map[string]struct{}) bool {
 
 func newUploadPID() string {
 	var data [16]byte
-	if _, err := rand.Read(data[:]); err != nil {
-		digest := sha256.Sum256([]byte(fmt.Sprintf("%p", &data)))
-		return hex.EncodeToString(digest[:10])
-	}
+	rand.Read(data[:])
 	return base64.RawURLEncoding.EncodeToString(data[:])
 }

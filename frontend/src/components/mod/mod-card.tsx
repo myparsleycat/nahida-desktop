@@ -21,7 +21,7 @@ interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
   actions: ModActionApi;
-  onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
+  onToggle: (mod: ModInfo, event: React.MouseEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
     iniPath: string,

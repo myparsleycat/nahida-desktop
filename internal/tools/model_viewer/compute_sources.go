@@ -179,18 +179,16 @@ func (t *Service) prepareModelViewerComputeSources(
 			}
 			deformer.Pose.Frames.URL = t.protocol.LocalFileURL(deformer.Pose.Frames.sourcePath, true)
 		}
-		if t.log != nil {
-			t.log.Info(
-				fmt.Sprintf(
-					"Prepared compute inputs: deformer=%s vertices=%d compactVertices=%d packedDecoded=%t",
-					deformer.ID,
-					originalCount,
-					deformer.VertexCount,
-					packed,
-				),
-				"Tools.ModelViewerComputeSource",
-			)
-		}
+		t.log.Info(
+			fmt.Sprintf(
+				"Prepared compute inputs: deformer=%s vertices=%d compactVertices=%d packedDecoded=%t",
+				deformer.ID,
+				originalCount,
+				deformer.VertexCount,
+				packed,
+			),
+			"Tools.ModelViewerComputeSource",
+		)
 	}
 	return ctx.Err()
 }

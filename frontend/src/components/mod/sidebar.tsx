@@ -215,14 +215,12 @@ export default function ModSidebar({
         return;
       }
 
-      const nextWidth = clampCharacterSidebarWidth(sidebarWidth);
       isDraggingRef.current = true;
       dragStateRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
-        startWidth: nextWidth,
+        startWidth: sidebarWidth,
       };
-      setSidebarWidth(nextWidth);
       document.body.style.userSelect = "none";
       document.body.style.cursor = "col-resize";
       event.preventDefault();

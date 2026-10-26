@@ -253,14 +253,8 @@ func (s *Service) authorize(login *providerLogin) {
 }
 
 func newProviderLogin(providerID string, config providerOAuthConfig, client *http.Client) (*providerLogin, error) {
-	verifier, err := randomBase64(32)
-	if err != nil {
-		return nil, err
-	}
-	state, err := randomBase64(32)
-	if err != nil {
-		return nil, err
-	}
+	verifier := randomBase64(32)
+	state := randomBase64(32)
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", config.CallbackPort))
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -500,12 +494,10 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func randomBase64(size int) (string, error) {
+func randomBase64(size int) string {
 	buffer := make([]byte, size)
-	if _, err := rand.Read(buffer); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buffer), nil
+	rand.Read(buffer)
+	return base64.RawURLEncoding.EncodeToString(buffer)
 }
 
 func writeCallbackPage(response http.ResponseWriter, status int, title, message string) {

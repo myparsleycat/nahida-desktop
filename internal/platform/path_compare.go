@@ -31,6 +31,5 @@ func SameOrChildPath(root, target string) bool {
 		return false
 	}
 	relative, err := filepath.Rel(rootAbs, targetAbs)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		!filepath.IsAbs(relative)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

@@ -63,10 +63,7 @@ func (t *Service) TouchProfilePrepare(
 	if strings.TrimSpace(input.ModPath) == "" {
 		return result, infra.ContractError("Touch profile mod path is required")
 	}
-	id, err := newTouchID()
-	if err != nil {
-		return result, err
-	}
+	id := newTouchID()
 	if len(id) > 12 {
 		id = id[:12]
 	}
@@ -90,9 +87,7 @@ func (t *Service) TouchProfilePrepare(
 	stage = "scan"
 	t.emitTouchProgress(id, "scan", .05, "Scanning mod structure", "")
 	analysis, err := analyzeTouchMod(input.ModPath, func(message string) {
-		if t.log != nil {
-			t.log.Warn(message, "TouchProfile")
-		}
+		t.log.Warn(message, "TouchProfile")
 	})
 	if err != nil {
 		return result, err
@@ -754,7 +749,7 @@ func (t *Service) TouchProfileRegenerate(ctx context.Context, input TouchProfile
 	}
 	defer func() { session.Operation = "" }()
 	sourceRoot, outputRoot := session.Applied.SourceRoot, session.Applied.OutputRoot
-	id, _ := newTouchID()
+	id := newTouchID()
 	if len(id) > 8 {
 		id = id[:8]
 	}

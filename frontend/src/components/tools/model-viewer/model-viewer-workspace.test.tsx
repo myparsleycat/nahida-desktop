@@ -61,6 +61,7 @@ const payload: ModelViewerTransport = {
   memorySessionId: "workspace",
   modPath: "C:/mod",
   iniPath: "C:/mod/mod.ini",
+  inis: [{ path: "C:/mod/mod.ini", prefix: "" }],
   name: "Model",
   previewPath: "C:/mod/preview.jpg",
   meshes: [],

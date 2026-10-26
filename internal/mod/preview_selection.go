@@ -141,9 +141,6 @@ func updateSelectedPreview(modPath, imagePath string) error {
 }
 
 func (m *Mod) previewBoundary(ctx context.Context, path string) string {
-	if m == nil {
-		return ""
-	}
 	game, err := m.ownedPath(ctx, path)
 	if err != nil || game == nil {
 		return ""

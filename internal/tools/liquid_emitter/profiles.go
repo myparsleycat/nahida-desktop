@@ -442,10 +442,8 @@ func samePhysicalPath(left, right string) bool {
 	return platform.SamePathFold(physicalPath(left), physicalPath(right))
 }
 
-func newModKey() (string, error) {
+func newModKey() string {
 	var raw [6]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw[:]), nil
+	rand.Read(raw[:])
+	return hex.EncodeToString(raw[:])
 }

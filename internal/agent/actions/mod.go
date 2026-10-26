@@ -77,7 +77,6 @@ func registerModActions(registry *Registry, deps Dependencies) {
 			}
 			return deps.Mod.Rename(ctx, path, input.NewName)
 		},
-		describe: pathDescription("Rename a mod folder."),
 	})
 	registry.add(pathAction("mod.enable_all", "Enable every mod in a group.", RiskConfirm,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {
@@ -186,7 +185,6 @@ func registerModActions(registry *Registry, deps Dependencies) {
 			}
 			return actionOK(deps.Mod.SetManualSubGroup(ctx, path, input.Enabled))
 		},
-		describe: pathDescription("Change manual subgroup state."),
 	})
 	registry.add(twoPathAction("mod.import_folder", "Import a local folder into a mod group.", RiskConfirm,
 		func(ctx context.Context, source, target string, _ json.RawMessage) (any, error) {

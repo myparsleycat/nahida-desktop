@@ -143,9 +143,6 @@ func New(options Options) *Service {
 		huntingService = hunting.New(hunting.Options{
 			Importer: options.XXMI, Input: options.Input, Screen: options.Screen, Clipboard: options.Shell,
 			Report: func(err error, stage string, fields map[string]any) {
-				if options.Log == nil {
-					return
-				}
 				_ = infra.ReportError(options.Log, err, "Hunting", infra.Diagnostic{
 					Operation: "hunting-session", Stage: stage, Fields: fields,
 				})

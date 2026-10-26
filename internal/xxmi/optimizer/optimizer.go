@@ -50,12 +50,6 @@ type iniFile struct {
 }
 
 func Optimize(ctx context.Context, options Options) (Report, error) {
-	if options.Prefix != "DISABLED " && options.Prefix != "DISABLED_" {
-		return Report{}, errors.New("invalid disabled prefix")
-	}
-	if options.ImporterFolder == "" || !filepath.IsAbs(options.ImporterFolder) {
-		return Report{}, errors.New("invalid importer folder")
-	}
 	if len(options.Exclude) == 0 {
 		options.Exclude = []string{"DISABLED*"}
 	}

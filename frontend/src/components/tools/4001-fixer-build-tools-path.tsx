@@ -21,7 +21,7 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
     void Tools.FourThousandOneFixerGetBuildToolsPath()
       .then((path) => {
         if (cancelled) return;
-        const saved = path?.trim() ?? "";
+        const saved = path.trim();
         if (!saved) return;
         setSavedPath(saved);
         setDraft(saved);
@@ -52,7 +52,7 @@ export function FourThousandOneFixerBuildToolsPath({ disabled }: { disabled: boo
 
     try {
       const result = await Tools.FourThousandOneFixerSetBuildToolsPath(candidate);
-      if (result?.found) {
+      if (result.found) {
         setSavedPath(result.path);
         setDraft(result.path);
         return;

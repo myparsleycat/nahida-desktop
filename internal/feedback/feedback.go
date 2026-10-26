@@ -203,9 +203,6 @@ func New(options Options) *Service {
 // Rules fetches the server's feedback upload rules, which the renderer checks a
 // report against before sending it.
 func (s *Service) Rules(ctx context.Context) (Rules, error) {
-	if s.remote == nil {
-		return Rules{}, errors.New("the Nahida backend is not configured")
-	}
 	data, err := s.backend(ctx, http.MethodGet, rulesPath, nil, nil)
 	if err != nil {
 		return Rules{}, err
@@ -269,9 +266,6 @@ func (s *Service) Cancel() {
 
 // Submit uploads the attachments and stores the report.
 func (s *Service) Submit(ctx context.Context, request Request) (Result, error) {
-	if s.remote == nil {
-		return Result{}, errors.New("the Nahida backend is not configured")
-	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	if !s.begin(cancel) {
@@ -334,10 +328,7 @@ func (s *Service) submit(ctx context.Context, request Request, stage *string) (R
 	if err != nil {
 		return Result{}, err
 	}
-	reportID, err := newReportID()
-	if err != nil {
-		return Result{}, err
-	}
+	reportID := newReportID()
 	progress := s.newProgress(media, mods)
 	progress.report(true)
 
@@ -402,9 +393,6 @@ func (s *Service) uploadMods(
 ) ([]fileDeclaration, int, error) {
 	if len(mods) == 0 {
 		return nil, 0, nil
-	}
-	if s.mods == nil {
-		return nil, 0, errors.New("the mod uploader is not configured")
 	}
 
 	files := make([]drive.UploadFile, len(mods))
@@ -498,9 +486,6 @@ func (s *Service) collect(ctx context.Context, request Request, rules Rules) ([]
 		return uploads, nil, 0, nil
 	}
 
-	if s.modFileRule == nil {
-		return nil, nil, 0, errors.New("the upload rules are not configured")
-	}
 	permitted, err := s.modFileRule(ctx)
 	if err != nil {
 		return nil, nil, 0, err
@@ -587,9 +572,6 @@ func walkMod(ctx context.Context, dir, root string) ([]modFile, error) {
 // log to attach. A report is worth sending without it, so a failure here is
 // reported and does not stop the report.
 func (s *Service) readLog() []byte {
-	if s.logPath == nil {
-		return nil
-	}
 	path, err := s.logPath()
 	if err == nil {
 		var data []byte
@@ -641,10 +623,8 @@ func environment() map[string]string {
 	}
 }
 
-func newReportID() (string, error) {
+func newReportID() string {
 	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw), nil
+	rand.Read(raw)
+	return hex.EncodeToString(raw)
 }

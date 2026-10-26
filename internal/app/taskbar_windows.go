@@ -45,7 +45,7 @@ func (t *nativeTaskbar) Set(hwnd uintptr, value *float64, mode string) {
 	if t == nil || hwnd == 0 {
 		return
 	}
-	update := taskbarUpdate{hwnd: hwnd, value: cloneProgress(value), mode: mode}
+	update := taskbarUpdate{hwnd: hwnd, value: value, mode: mode}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {

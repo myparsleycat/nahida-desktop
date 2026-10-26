@@ -218,9 +218,6 @@ func NewWithOptions(opts Options) *Tools {
 
 //wails:ignore
 func (t *Tools) UseClient(client *db.Client) {
-	if t == nil {
-		return
-	}
 	if t.githubRate != nil && client != nil {
 		t.githubRate.UseAppState(client.AppState)
 	}
@@ -238,9 +235,6 @@ func (t *Tools) UseClient(client *db.Client) {
 
 //wails:ignore
 func (t *Tools) UseAppData(data *appdata.Store) {
-	if t == nil {
-		return
-	}
 	t.bisect.UseAppData(data)
 	t.fixer4001.UseAppData(data)
 	t.texture.UseAppData(data)
@@ -251,9 +245,6 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 
 //wails:ignore
 func (t *Tools) ServiceShutdown() error {
-	if t == nil {
-		return nil
-	}
 	return errors.Join(
 		t.shutdownFixTool(),
 		t.shutdownFixInspections(),

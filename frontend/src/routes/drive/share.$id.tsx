@@ -99,7 +99,7 @@ function RouteComponent() {
     refetchInterval: (query) =>
       driveContentsRefetchInterval(
         backendStatus,
-        typeof document !== "undefined" && document.hidden,
+        document.hidden,
         hasStoringContent(query.state.data?.children),
       ),
     retry: driveContentsRetry(backendStatus),

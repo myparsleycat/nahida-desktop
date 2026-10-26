@@ -37,13 +37,8 @@ func (t *Service) loadModViewer(
 	stage := "discover"
 	sessionID := ""
 	folder := ""
-	if t.log != nil {
-		t.log.Info("Starting model viewer load", "StaticGlb.loadForViewer")
-	}
+	t.log.Info("Starting model viewer load", "StaticGlb.loadForViewer")
 	defer func() {
-		if t.log == nil {
-			return
-		}
 		if err != nil {
 			err = infra.ReportError(
 				t.log,
@@ -79,9 +74,6 @@ func (t *Service) loadModViewer(
 	if err := ctx.Err(); err != nil {
 		return ModelViewerTransport{}, err
 	}
-	if t.protocol == nil {
-		return ModelViewerTransport{}, fmt.Errorf("protocol service is unavailable")
-	}
 	var windowID uint
 	if window, ok := ctx.Value(application.WindowKey).(application.Window); ok {
 		windowID = window.ID()
@@ -104,16 +96,14 @@ func (t *Service) loadModViewer(
 	if discoverErr != nil {
 		return ModelViewerTransport{}, discoverErr
 	}
-	if t.log != nil {
-		t.log.Info(
-			fmt.Sprintf(
-				"INI discovery completed in %dms (inis=%d)",
-				time.Since(discoveryStartedAt).Milliseconds(),
-				len(iniPaths),
-			),
-			"StaticGlb.loadForViewer",
-		)
-	}
+	t.log.Info(
+		fmt.Sprintf(
+			"INI discovery completed in %dms (inis=%d)",
+			time.Since(discoveryStartedAt).Milliseconds(),
+			len(iniPaths),
+		),
+		"StaticGlb.loadForViewer",
+	)
 	if len(iniPaths) == 0 {
 		return ModelViewerTransport{}, infra.ContractError("No active .ini files found in this folder.")
 	}
@@ -176,60 +166,58 @@ func (t *Service) loadModViewer(
 	prepared.textures = nil // Extracted payloads now own the mesh attributes.
 	runtime.GC()
 	meshPayloadMs = time.Since(stageStartedAt).Milliseconds()
-	if t.log != nil {
-		t.log.Info(
-			fmt.Sprintf(
-				"Texture preparation completed in %dms (textures=%d directDDS=%d preparedImages=%d)",
-				textureStats.TotalWallMs,
-				textureStats.LogicalTextures,
-				textureStats.DirectDDS,
-				textureStats.PreparedImages,
-			),
-			"StaticGlb.loadForViewer",
-		)
-		t.log.Info(
-			fmt.Sprintf(
-				"Texture preparation detail: jobs=%d paths=%d contents=%d decodes=%d encodes=%d hashBytes=%d hash=%dms prepare=%dms",
-				textureStats.Jobs,
-				textureStats.UniquePaths,
-				textureStats.UniqueContents,
-				textureStats.Decodes,
-				textureStats.Encodes,
-				textureStats.HashBytes,
-				textureStats.HashWallMs,
-				textureStats.PrepareWallMs,
-			),
-			"StaticGlb.loadForViewer",
-		)
-		t.log.Info(
-			fmt.Sprintf(
-				"INI parse detail: referenced=%dms validate=%dms (total %dms)",
-				prepared.referencedMs,
-				prepared.validateMs,
-				prepared.parseMs,
-			),
-			"StaticGlb.loadForViewer",
-		)
-		t.log.Info(
-			fmt.Sprintf(
-				"Mesh build detail: scan=%dms(%d recs) setup=%dms geometry=%dms(%d) overrides=%dms attach=%dms normalize=%dms legacy=%dms(groups=%dms condScan=%dms prepare=%dms extract=%dms)",
-				prepared.timing.ScanMs,
-				prepared.timing.Records,
-				prepared.timing.SetupMs,
-				prepared.timing.GeometryMs,
-				prepared.timing.Geometries,
-				prepared.timing.OverridesMs,
-				prepared.timing.AttachMs,
-				prepared.timing.NormalizeMs,
-				prepared.timing.LegacyMs,
-				prepared.timing.GroupsMs,
-				prepared.timing.LegacyScanMs,
-				prepared.timing.LegacyPrepareMs,
-				prepared.timing.LegacyExtractMs,
-			),
-			"StaticGlb.loadForViewer",
-		)
-	}
+	t.log.Info(
+		fmt.Sprintf(
+			"Texture preparation completed in %dms (textures=%d directDDS=%d preparedImages=%d)",
+			textureStats.TotalWallMs,
+			textureStats.LogicalTextures,
+			textureStats.DirectDDS,
+			textureStats.PreparedImages,
+		),
+		"StaticGlb.loadForViewer",
+	)
+	t.log.Info(
+		fmt.Sprintf(
+			"Texture preparation detail: jobs=%d paths=%d contents=%d decodes=%d encodes=%d hashBytes=%d hash=%dms prepare=%dms",
+			textureStats.Jobs,
+			textureStats.UniquePaths,
+			textureStats.UniqueContents,
+			textureStats.Decodes,
+			textureStats.Encodes,
+			textureStats.HashBytes,
+			textureStats.HashWallMs,
+			textureStats.PrepareWallMs,
+		),
+		"StaticGlb.loadForViewer",
+	)
+	t.log.Info(
+		fmt.Sprintf(
+			"INI parse detail: referenced=%dms validate=%dms (total %dms)",
+			prepared.referencedMs,
+			prepared.validateMs,
+			prepared.parseMs,
+		),
+		"StaticGlb.loadForViewer",
+	)
+	t.log.Info(
+		fmt.Sprintf(
+			"Mesh build detail: scan=%dms(%d recs) setup=%dms geometry=%dms(%d) overrides=%dms attach=%dms normalize=%dms legacy=%dms(groups=%dms condScan=%dms prepare=%dms extract=%dms)",
+			prepared.timing.ScanMs,
+			prepared.timing.Records,
+			prepared.timing.SetupMs,
+			prepared.timing.GeometryMs,
+			prepared.timing.Geometries,
+			prepared.timing.OverridesMs,
+			prepared.timing.AttachMs,
+			prepared.timing.NormalizeMs,
+			prepared.timing.LegacyMs,
+			prepared.timing.GroupsMs,
+			prepared.timing.LegacyScanMs,
+			prepared.timing.LegacyPrepareMs,
+			prepared.timing.LegacyExtractMs,
+		),
+		"StaticGlb.loadForViewer",
+	)
 	if len(transport.Meshes) == 0 {
 		if resource := firstUnresolvedModelViewerPositionResource(prepared.scans); resource != "" {
 			return ModelViewerTransport{}, infra.ContractError(
@@ -248,7 +236,7 @@ func (t *Service) loadModViewer(
 				fmt.Sprintf("No mesh geometry found across %d ini file(s).", len(iniPaths)),
 			)
 		}
-		if prepared.timing != nil && prepared.timing.SkippedMissingTexcoord {
+		if prepared.timing.SkippedMissingTexcoord {
 			return ModelViewerTransport{}, infra.ContractError("Draw sections are missing a texcoord buffer (vb1).")
 		}
 		return ModelViewerTransport{}, infra.ContractError("No mesh data could be extracted (buffer files missing?).")
@@ -309,19 +297,17 @@ func (t *Service) loadModViewer(
 	t.modelViewerMu.Unlock()
 	keep = true
 	payloadWriteMs = time.Since(stageStartedAt).Milliseconds()
-	if t.log != nil {
-		t.log.Info(
-			fmt.Sprintf(
-				"Load stages: iniParse=%dms meshBuild=%dms meshPayload=%dms post=%dms payloadWrite=%dms",
-				prepared.parseMs,
-				prepared.buildMs,
-				meshPayloadMs,
-				postProcessMs,
-				payloadWriteMs,
-			),
-			"StaticGlb.loadForViewer",
-		)
-	}
+	t.log.Info(
+		fmt.Sprintf(
+			"Load stages: iniParse=%dms meshBuild=%dms meshPayload=%dms post=%dms payloadWrite=%dms",
+			prepared.parseMs,
+			prepared.buildMs,
+			meshPayloadMs,
+			postProcessMs,
+			payloadWriteMs,
+		),
+		"StaticGlb.loadForViewer",
+	)
 	return transport, nil
 }
 
@@ -438,12 +424,10 @@ func (t *Service) prepareModelViewerGeometry(
 			prepared.variableNames[key] = value
 		}
 		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder) {
-			if t.log != nil {
-				t.log.Warn(
-					"Skipped unsafe Model Viewer resource path: "+sanitizeModelViewerLogValue(resource),
-					"StaticGlb.loadForViewer",
-				)
-			}
+			t.log.Warn(
+				"Skipped unsafe Model Viewer resource path: "+sanitizeModelViewerLogValue(resource),
+				"StaticGlb.loadForViewer",
+			)
 		}
 		resources := resolveModelViewerEffectiveResourcesAt(
 			folder,
@@ -501,9 +485,7 @@ func (t *Service) prepareModelViewerGeometry(
 			meshes,
 			built[unitIndex].scoped.names,
 			func(message string) {
-				if t.log != nil {
-					t.log.Warn(fmt.Sprintf("INI=%q %s", iniPath, message), "StaticGlb.loadForViewer")
-				}
+				t.log.Warn(fmt.Sprintf("INI=%q %s", iniPath, message), "StaticGlb.loadForViewer")
 			},
 		); deformer != nil {
 			prepared.computeDeformers = append(prepared.computeDeformers, *deformer)

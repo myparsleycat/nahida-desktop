@@ -64,14 +64,14 @@ func (t *Service) UseAppData(data *appdata.Store) {
 }
 
 func (t *Service) requireClient() (*db.Client, error) {
-	if t == nil || t.client == nil {
+	if t.client == nil {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
 }
 
 func (t *Service) appDataPath(relative string) (string, error) {
-	if t == nil || t.appData == nil {
+	if t.appData == nil {
 		return "", errors.New("tools service has no app data store")
 	}
 	return t.appData.Resolve(relative)
@@ -94,7 +94,7 @@ func (t *Service) setAppState(ctx context.Context, key, value string) error {
 }
 
 func (t *Service) logError(err error, where string) {
-	if err != nil && t != nil && t.log != nil {
+	if err != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})

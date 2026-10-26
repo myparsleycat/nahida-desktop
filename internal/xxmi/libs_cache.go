@@ -58,7 +58,7 @@ func (x *XXMI) ensureLibsVersionLocked(ctx context.Context, version string) erro
 	}
 	var release *github.Release
 	for i := range releases {
-		if normalizeVersion(releases[i].TagName) == version && !releases[i].Draft {
+		if normalizeVersion(releases[i].TagName) == version {
 			release = &releases[i]
 			break
 		}

@@ -596,7 +596,7 @@ func (d *Drive) doRequest(
 	extra http.Header,
 	body any,
 ) (*http.Response, any, *edenError, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return nil, nil, nil, errDriveHTTPUnconfigured
 	}
 	if ctx == nil {

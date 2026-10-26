@@ -127,9 +127,7 @@ func (x *XXMI) RepairImporterLinks(ctx context.Context) error {
 			}))
 			continue
 		}
-		if x.log != nil {
-			x.log.Info(fields, "XXMI.RepairImporterLinks")
-		}
+		x.log.Info(fields, "XXMI.RepairImporterLinks")
 	}
 	return errors.Join(errs...)
 }

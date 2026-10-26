@@ -47,9 +47,6 @@ func (t *Service) UseClient(client *db.Client) {
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	t.runMu.Lock()
 	run := t.run
 	if run != nil {
@@ -84,9 +81,6 @@ func (t *Service) Begin(parent context.Context) (*Run, error) {
 
 // Finish releases the run gate and cancels the run context.
 func (t *Service) Finish(run *Run) {
-	if run == nil {
-		return
-	}
 	t.runMu.Lock()
 	if t.run == run {
 		t.run = nil
@@ -105,20 +99,20 @@ func (r *Run) Execute(path string, kind db.ScriptType, dir string, args []string
 }
 
 func (t *Service) requireClient() (*db.Client, error) {
-	if t == nil || t.client == nil {
+	if t.client == nil {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }
 
 func (t *Service) logError(err error, where string) {
-	if err != nil && t != nil && t.log != nil {
+	if err != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})

@@ -67,14 +67,11 @@ func (t *Service) UseAppData(data *appdata.Store) {
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	return t.shutdownTouchProfiles()
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }

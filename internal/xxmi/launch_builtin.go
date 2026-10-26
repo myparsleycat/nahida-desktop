@@ -74,9 +74,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	warn := func(warning string) {
-		if x.log != nil {
-			x.log.Warn(map[string]any{"importer": key, "stage": stage, "warning": warning}, "XXMI.StartGame")
-		}
+		x.log.Warn(map[string]any{"importer": key, "stage": stage, "warning": warning}, "XXMI.StartGame")
 		if x.eventEmit != nil {
 			x.eventEmit("xxmi:launch-progress", map[string]any{
 				"importer": key, "stage": stage, "warning": warning,
@@ -149,10 +147,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 			return err
 		}
 	}
-	packageSpec, ok := lookupImporterPackage(key)
-	if !ok {
-		return fmt.Errorf("unknown importer %q", key)
-	}
+	packageSpec, _ := lookupImporterPackage(key)
 	progress("resolve-game")
 	usesPlatform := cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic"
 	var platform platformLaunch
@@ -187,12 +182,10 @@ func (x *XXMI) launchBuiltinGameLocked(
 	processName := launchProcessName(cfg, packageSpec, gameExe)
 	progress("auto-update")
 	if err := x.autoUpdateForLaunch(ctx, key, lease); err != nil {
-		if x.log != nil {
-			_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
-				Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
-				Fields: map[string]any{"importer": key},
-			})
-		}
+		_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
+			Fields: map[string]any{"importer": key},
+		})
 		if x.eventEmit != nil {
 			x.eventEmit("xxmi:launch-progress", map[string]any{
 				"importer": key, "stage": stage, "detail": err.Error(),
@@ -264,9 +257,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 			}
 		}
 		for _, warning := range warnings {
-			if x.log != nil {
-				x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
-			}
+			x.log.Warn(map[string]any{"importer": key, "warning": warning}, "XXMI.StartGame")
 		}
 		progress("validate-runtime")
 		if err := validateDeployedRuntime(cfg.ImporterFolder, cfg.Mode); err != nil {
@@ -361,7 +352,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 			var restorable, excluded []string
 			if err == nil && len(unreadable) > 0 {
 				restorable, excluded = filterImporterAccessPaths(cfg.ImporterFolder, unreadable)
-				if len(excluded) > 0 && x.log != nil {
+				if len(excluded) > 0 {
 					x.log.Warn(map[string]any{
 						"importer": key, "paths": excluded,
 						"warning": "Paths could not be resolved within the importer or Mods folders",
@@ -418,7 +409,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	client := x.client
 	x.mu.RUnlock()
 	if key == "WWMI" && cfg.WWMI != nil && cfg.WWMI.RetiredEngineOptionsPending && migotoDLLUsed &&
-		cfg.GameFolder != "" && cfg.GameLaunch != "Custom" && cfg.GameLaunch != "Manual" && client != nil {
+		cfg.GameFolder != "" && cfg.GameLaunch != "Custom" && cfg.GameLaunch != "Manual" {
 		// initializeGameLaunch just removed the retired Engine.ini options; later launches keep
 		// whatever the user adds there.
 		if err := client.XXMIImporters.SetConfigFlag(
@@ -435,9 +426,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 	reshadeModule := ""
 	if reshadeUsed {
 		progress("reshade")
-		if x.reshade == nil {
-			return errors.New("RESHADE_NOT_INSTALLED: ReShade is not configured")
-		}
 		reshadeModule, err = x.reshade.PrepareLaunch(ctx, key)
 		if err != nil {
 			return err
@@ -512,15 +500,11 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	progress("finish")
-	if client == nil {
-		warn("Launch count was not updated: XXMI settings store is not configured")
-	} else if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
+	if err := client.XXMIImporters.IncrementLaunchCount(ctx, key); err != nil {
 		warn("Launch count was not updated: " + err.Error())
 	}
-	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Started %s (PID: %d, verified: %t)", key, result.PID, result.InjectionVerified),
-			"XXMI.StartGame")
-	}
+	x.log.Info(fmt.Sprintf("Started %s (PID: %d, verified: %t)", key, result.PID, result.InjectionVerified),
+		"XXMI.StartGame")
 	return nil
 }
 
@@ -618,10 +602,6 @@ func (x *XXMI) builtinLaunchSpec(
 	gameExe, processName, parentExe string,
 	migotoDLLUsed bool,
 ) (inject.LaunchSpec, error) {
-	if _, ok := lookupImporterPackage(key); !ok {
-		return inject.LaunchSpec{}, fmt.Errorf("unknown importer %q", key)
-	}
-
 	// Nothing is deployed for a launch that leaves the XXMI DLL out, so it has no manifest to read.
 	var deployed runtimeManifest
 	var err error

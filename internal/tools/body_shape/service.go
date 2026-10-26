@@ -53,17 +53,15 @@ func NewWithOptions(opts Options) *Service {
 }
 
 func (t *Service) logError(err error, where string) {
-	if err != nil && t != nil && t.log != nil {
+	if err != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})
 	}
 }
 
-func newID() (string, error) {
+func newID() string {
 	data := make([]byte, 16)
-	if _, err := rand.Read(data); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
+	rand.Read(data)
+	return base64.RawURLEncoding.EncodeToString(data)
 }

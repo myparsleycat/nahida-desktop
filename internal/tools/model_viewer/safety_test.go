@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -100,9 +99,6 @@ func createViewerDirectoryLink(t *testing.T, kind, target, link string) {
 			t.Skipf("directory symlinks unavailable: %v", err)
 		}
 		return
-	}
-	if runtime.GOOS != "windows" {
-		t.Skip("junctions are Windows only")
 	}
 	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
 		t.Skipf("junction creation unavailable: %v (%s)", err, out)

@@ -87,8 +87,5 @@ func (t *Tools) TouchProfileRollback(
 }
 
 func (t *Tools) shutdownTouchProfiles() error {
-	if t == nil || t.touchProfile == nil {
-		return nil
-	}
 	return t.touchProfile.Shutdown()
 }

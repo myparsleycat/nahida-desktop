@@ -3,7 +3,7 @@ package modelviewer
 import "strings"
 
 func remapModelViewerTransportVariables(transport *ModelViewerTransport, names map[string]modelViewerVariableName) {
-	if transport == nil || len(names) == 0 {
+	if len(names) == 0 {
 		return
 	}
 	publicName := func(value string) string {
@@ -92,9 +92,6 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 }
 
 func normalizeModelViewerTransportValueTypes(transport *ModelViewerTransport) {
-	if transport == nil {
-		return
-	}
 	for variableIndex := range transport.Variables {
 		variable := &transport.Variables[variableIndex]
 		variable.DefaultValue = modelViewerString(variable.DefaultValue)

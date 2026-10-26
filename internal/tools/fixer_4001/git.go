@@ -125,8 +125,6 @@ func (t *Service) locateGit(ctx context.Context, release minGitRelease) (gitPath
 			t.reportCleanup(os.RemoveAll(filepath.Join(toolsRoot, entry.Name())), "locateGit")
 		}
 	}
-	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Installed portable Git %s at %s", release.version, installRoot), "4001Fixer:locateGit")
-	}
+	t.log.Info(fmt.Sprintf("Installed portable Git %s at %s", release.version, installRoot), "4001Fixer:locateGit")
 	return gitPath, nil
 }

@@ -60,9 +60,6 @@ func (t *Tools) GetModelViewerIneffectiveValues(
 //
 //wails:ignore
 func (t *Tools) CleanupModelViewerWindow(windowID uint) {
-	if t == nil || t.modelViewer == nil {
-		return
-	}
 	t.modelViewer.CleanupModelViewerWindow(windowID)
 }
 
@@ -72,15 +69,9 @@ func (t *Tools) CleanupModelViewerWindow(windowID uint) {
 //
 //wails:ignore
 func (t *Tools) CleanupStaleModelViewerDirs(ctx context.Context) error {
-	if t == nil || t.modelViewer == nil {
-		return nil
-	}
 	return t.modelViewer.CleanupStaleModelViewerDirs(ctx)
 }
 
 func (t *Tools) shutdownModelViewer() error {
-	if t == nil || t.modelViewer == nil {
-		return nil
-	}
 	return t.modelViewer.Shutdown()
 }

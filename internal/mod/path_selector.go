@@ -103,9 +103,6 @@ func (p *pathSelector) getSelectedPathWithModeModal(
 	suggestedNames []string,
 	selectFile bool,
 ) (PathSelectorResult, error) {
-	if p == nil {
-		return PathSelectorResult{}, errors.New("path selector is not configured")
-	}
 	if downloadSource == "" {
 		downloadSource = "nahidaLive"
 	}
@@ -159,14 +156,6 @@ func (p *pathSelector) getSelectedPathWithModeModal(
 }
 
 func (m *Mod) SelectFolderPath(ctx context.Context, selectionID string) (bool, error) {
-	if m == nil {
-		return false, newFolderPathSelectionError("lookup", "", errors.New("pending selection not found"))
-	}
-	if m.paths == nil {
-		err := newFolderPathSelectionError("lookup", "", errors.New("pending selection not found"))
-		m.logFolderPathSelectionError(selectionID, err)
-		return false, err
-	}
 	selected, err := m.paths.selectFolderPath(ctx, selectionID)
 	if err != nil {
 		m.logFolderPathSelectionError(selectionID, err)
@@ -175,16 +164,10 @@ func (m *Mod) SelectFolderPath(ctx context.Context, selectionID string) (bool, e
 }
 
 func (m *Mod) SelectModManagerPath(_ context.Context, selectionID, path string, fileName *string) error {
-	if m == nil || m.paths == nil {
-		return errors.New("pending selection not found")
-	}
 	return m.paths.selectModManagerPath(selectionID, path, fileName)
 }
 
 func (m *Mod) CancelPathSelection(selectionID string) error {
-	if m == nil || m.paths == nil {
-		return nil
-	}
 	m.paths.cancel(selectionID)
 	return nil
 }
@@ -271,7 +254,7 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 }
 
 func (m *Mod) logFolderPathSelectionError(selectionID string, err error) {
-	if m == nil || m.log == nil || err == nil {
+	if err == nil {
 		return
 	}
 	entry := folderPathSelectionErrorLog{SelectionID: selectionID, Stage: "unknown", Error: err.Error()}

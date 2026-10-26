@@ -138,7 +138,7 @@ func touchFolderBaseName(name string) string {
 }
 
 func replaceTouchOutput(staging, output string) (err error) {
-	id, _ := newTouchID()
+	id := newTouchID()
 	if len(id) > 8 {
 		id = id[:8]
 	}

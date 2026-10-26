@@ -107,9 +107,6 @@ func (d *Drive) streamDownloadMetadata(
 	if err != nil {
 		return err
 	}
-	if response.Body == nil {
-		return errors.New("download metadata stream is empty")
-	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		raw, readErr := io.ReadAll(response.Body)
@@ -245,7 +242,7 @@ func (d *Drive) enumerateDownload(
 	spoolPath string,
 	onProgress func(files int, totalBytes int64),
 ) (_ *downloadPlan, err error) {
-	if params.Data == nil && (d == nil || d.http == nil) {
+	if params.Data == nil && d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
 	writer, err := newSpoolWriter(spoolPath)

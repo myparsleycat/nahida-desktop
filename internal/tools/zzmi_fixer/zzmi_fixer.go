@@ -846,7 +846,7 @@ func secureSessionOriginal(target, candidate string) (string, error) {
 
 //wails:ignore
 func (t *Service) CleanupZZMIAbandonedStaging(ctx context.Context) error {
-	if t == nil || t.appData == nil {
+	if t.appData == nil {
 		return nil
 	}
 	base, err := t.zzmiBackupBase()

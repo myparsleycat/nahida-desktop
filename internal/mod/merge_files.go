@@ -11,9 +11,6 @@ import (
 
 func createUniqueMergeFolder(parent, name string, created *[]mergeRollback) (string, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		name = "Merged"
-	}
 	entries, err := os.ReadDir(parent)
 	if err != nil {
 		return "", err
@@ -331,16 +328,6 @@ func mergeRelativePath(base, target string) string {
 		return relative
 	}
 	return `.\` + relative
-}
-
-func mergeFolderName(node MergePlanNode, request MergeModsRequest) string {
-	if value := strings.TrimSpace(node.Name); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(request.PackName); value != "" {
-		return value
-	}
-	return "Merged"
 }
 
 func platformUniqueName(name string, existing []string) string {

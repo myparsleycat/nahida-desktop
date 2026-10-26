@@ -108,7 +108,7 @@ func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]Re
 	}
 	out := make([]ReleaseInfo, 0, len(releases))
 	for _, release := range releases {
-		if release.Draft || strings.EqualFold(release.TagName, "main") ||
+		if strings.EqualFold(release.TagName, "main") ||
 			strings.EqualFold(release.TagName, "master") || (release.Prerelease && !includePrereleases) {
 			continue
 		}

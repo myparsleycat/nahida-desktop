@@ -48,7 +48,7 @@ func (m *Mod) executeNamespaceMerge(
 	var disableRoots []string
 	if request.Placement == "new_folder" {
 		var err error
-		masterDir, err = createUniqueMergeFolder(request.GroupPath, mergeFolderName(node, request), created)
+		masterDir, err = createUniqueMergeFolder(request.GroupPath, node.Name, created)
 		if err != nil {
 			return "", err
 		}

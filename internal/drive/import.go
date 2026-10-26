@@ -64,14 +64,8 @@ func (d *Drive) beginCopy(
 	if id == "" {
 		id = newOperationID()
 	}
-	if parent == nil {
-		parent = context.Background()
-	}
 	ctx, cancel := context.WithCancel(parent)
 	d.mu.Lock()
-	if d.ops == nil {
-		d.ops = make(map[string]*copyOperation)
-	}
 	d.ops[id] = &copyOperation{cancel: cancel, source: source}
 	d.mu.Unlock()
 	return ctx, id, cancel, func() {
@@ -90,9 +84,7 @@ func (d *Drive) emitCopyProgress(operationID string, progress DriveCopyProgress)
 		op.lastProgress = &copy
 	}
 	d.mu.Unlock()
-	if d.log != nil {
-		d.log.Info(progress, "Drive:CopyFromUrl:Progress")
-	}
+	d.log.Info(progress, "Drive:CopyFromUrl:Progress")
 	if d.eventEmit != nil {
 		d.eventEmit("drive:copy-progress", progress)
 	}
@@ -119,21 +111,14 @@ func (d *Drive) emitCopyCanceledProgress(operationID string) {
 
 // CancelCopyFromURL is Electron drive.fn.cancelCopyFromUrl.
 func (d *Drive) CancelCopyFromURL(operationID string) bool {
-	if d == nil {
-		return false
-	}
 	d.mu.Lock()
 	op, ok := d.ops[operationID]
 	d.mu.Unlock()
-	if !ok || op == nil {
-		if d.log != nil {
-			d.log.Warn(map[string]any{"operationId": operationID}, "Drive:CopyFromUrl:CancelOperationNotFound")
-		}
+	if !ok {
+		d.log.Warn(map[string]any{"operationId": operationID}, "Drive:CopyFromUrl:CancelOperationNotFound")
 		return false
 	}
-	if d.log != nil {
-		d.log.Info(map[string]any{"operationId": operationID, "source": op.source}, "Drive:CopyFromUrl:CancelRequested")
-	}
+	d.log.Info(map[string]any{"operationId": operationID, "source": op.source}, "Drive:CopyFromUrl:CancelRequested")
 	op.cancel()
 	d.emitCopyCanceledProgress(operationID)
 	return true
@@ -532,8 +517,6 @@ func (d *Drive) runCopyFromURLMany(
 
 func newOperationID() string {
 	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "op"
-	}
+	rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }

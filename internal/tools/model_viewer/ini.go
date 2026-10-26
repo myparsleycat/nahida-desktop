@@ -378,9 +378,6 @@ func modelViewerSectionValue(section modINISection, key string) string {
 }
 
 func setModelViewerSectionValue(section *modINISection, key, value string) {
-	if section == nil {
-		return
-	}
 	for candidate := range section.Values {
 		if strings.EqualFold(candidate, key) {
 			section.Values[candidate] = value

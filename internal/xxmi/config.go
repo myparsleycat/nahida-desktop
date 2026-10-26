@@ -356,6 +356,7 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
+	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
 	key = strings.ToUpper(strings.TrimSpace(key))
 	changes, err := x.saveImporterConfig(ctx, key, cfg)
 	if err != nil {
@@ -380,8 +381,6 @@ type configChanges struct {
 }
 
 func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) (configChanges, error) {
-	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
-	key = strings.ToUpper(strings.TrimSpace(key))
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return configChanges{}, err
 	}

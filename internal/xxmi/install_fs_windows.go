@@ -101,7 +101,7 @@ func ensureInstallRoot(path string) (*installRoot, error) {
 }
 
 func (r *installRoot) Close() error {
-	if r == nil || r.root == nil {
+	if r == nil {
 		return nil
 	}
 	return r.root.Close()
@@ -396,9 +396,7 @@ func (r *installRoot) renameChild(oldName, newName string) error {
 func createInstallTempFile(root *os.Root, prefix string, perm fs.FileMode) (string, *os.File, error) {
 	for range 32 {
 		random := make([]byte, 16)
-		if _, err := rand.Read(random); err != nil {
-			return "", nil, err
-		}
+		_, _ = rand.Read(random)
 		name := prefix + hex.EncodeToString(random)
 		file, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, perm)
 		if errors.Is(err, fs.ErrExist) {

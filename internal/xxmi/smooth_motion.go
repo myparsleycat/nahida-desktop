@@ -67,8 +67,6 @@ func (x *XXMI) disableSmoothMotion(ctx context.Context, exe string) error {
 	if err != nil {
 		return err
 	}
-	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Disabled NVIDIA Smooth Motion for %s", exe), xxmiSmoothMotionWhere)
-	}
+	x.log.Info(fmt.Sprintf("Disabled NVIDIA Smooth Motion for %s", exe), xxmiSmoothMotionWhere)
 	return nil
 }

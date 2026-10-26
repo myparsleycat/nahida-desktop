@@ -72,14 +72,9 @@ func relaunchChildEnv(environ []string, pid int) []string {
 }
 
 func (w *Window) Restart() error {
-	var app *application.App
-	var log *infra.Log
-	if w != nil {
-		w.mu.Lock()
-		app = w.app
-		log = w.log
-		w.mu.Unlock()
-	}
+	w.mu.Lock()
+	app, log := w.app, w.log
+	w.mu.Unlock()
 	if app == nil {
 		app = currentApplication()
 	}

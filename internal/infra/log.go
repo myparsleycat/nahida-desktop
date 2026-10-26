@@ -201,9 +201,7 @@ func (l *Log) Log(level string, msg any, where string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.dev {
-		if l.writer != nil {
-			_, _ = l.writer.Write(encodeDevConsoleLine(msg, where))
-		}
+		_, _ = l.writer.Write(encodeDevConsoleLine(msg, where))
 		return
 	}
 	if !shouldWrite(level, l.level) {
@@ -231,9 +229,7 @@ func (l *Log) Log(level string, msg any, where string) {
 			}
 		}
 	}
-	if l.writer != nil {
-		_, _ = l.writer.Write(line)
-	}
+	_, _ = l.writer.Write(line)
 }
 
 func (l *Log) fileFailureLocked(err error, stage string) {
@@ -241,28 +237,23 @@ func (l *Log) fileFailureLocked(err error, stage string) {
 		return
 	}
 	l.fileErr = true
-	if l.writer != nil {
-		record := map[string]any{
-			"operation": "log-file",
-			"stage":     stage,
-			"path":      l.dest,
-			"error":     limitDiagnosticText(err.Error(), 4<<10),
-		}
-		causes, truncated, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
-		if len(causes) > 1 {
-			record["causes"] = causes
-		}
-		if truncated {
-			record["causesTruncated"] = true
-		}
-		_, _ = l.writer.Write(encodeLogLine(l.now(), "error", record, "Log"))
+	record := map[string]any{
+		"operation": "log-file",
+		"stage":     stage,
+		"path":      l.dest,
+		"error":     limitDiagnosticText(err.Error(), 4<<10),
 	}
+	causes, truncated, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
+	if len(causes) > 1 {
+		record["causes"] = causes
+	}
+	if truncated {
+		record["causesTruncated"] = true
+	}
+	_, _ = l.writer.Write(encodeLogLine(l.now(), "error", record, "Log"))
 }
 
 func (l *Log) rotateIfNeededLocked(incoming int64) error {
-	if l.file == nil || l.dest == "" {
-		return nil
-	}
 	info, err := l.file.Stat()
 	if err != nil {
 		return err
@@ -282,9 +273,6 @@ func (l *Log) rotateIfNeededLocked(incoming int64) error {
 }
 
 func rotateCompressedLog(path string, maxFiles int) error {
-	if maxFiles <= 0 {
-		return os.Remove(path)
-	}
 	oldest := rotatedLogPath(path, maxFiles)
 	if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) {
 		return err

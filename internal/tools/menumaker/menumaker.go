@@ -197,11 +197,7 @@ func (m *MenuMaker) ApplyBundle(
 				"writtenPaths": writtenPaths, "rolledBack": result.RolledBack,
 				"rollbackError": rollbackError, "cleanupState": cleanupState,
 			}
-			var log *infra.Log
-			if m != nil {
-				log = m.log
-			}
-			err = infra.ReportError(log, err, "MenuMaker", infra.Diagnostic{
+			err = infra.ReportError(m.log, err, "MenuMaker", infra.Diagnostic{
 				Operation: "apply-bundle", Stage: stage, Fields: fields,
 			})
 		}

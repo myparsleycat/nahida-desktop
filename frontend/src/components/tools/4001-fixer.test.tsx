@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { Tools } from "@bindings/tools";
-import { XXMI } from "@bindings/xxmi";
+import { type LauncherMode, XXMI } from "@bindings/xxmi";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,8 +23,19 @@ vi.mock("@wailsio/runtime", () => ({ Events: { On: () => vi.fn() } }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 beforeEach(() => {
-  vi.mocked(Tools.FourThousandOneFixerGetState).mockResolvedValue(null);
-  vi.mocked(XXMI.GetXXMIData).mockResolvedValue(null);
+  vi.mocked(Tools.FourThousandOneFixerGetState).mockResolvedValue({
+    isBuilding: false,
+    activeTask: null,
+    progress: "",
+    errorMessage: "",
+  });
+  vi.mocked(XXMI.GetXXMIData).mockResolvedValue({
+    mode: "builtin" as LauncherMode,
+    xxmiPath: null,
+    dllVersion: null,
+    enabledImporters: null,
+    disabledImporters: null,
+  });
   vi.mocked(Tools.FourThousandOneFixerGetProviderReleases).mockResolvedValue([]);
 });
 

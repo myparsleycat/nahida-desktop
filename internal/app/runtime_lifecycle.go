@@ -36,9 +36,7 @@ func bootRuntime(
 	if err != nil {
 		return runtimePaths{}, err
 	}
-	if rt.elevated != nil {
-		rt.elevated.UseAppData(data)
-	}
+	rt.elevated.UseAppData(data)
 	dbPath := in.DBOverride
 	if dbPath == "" {
 		if in.Packaged {
@@ -70,27 +68,17 @@ func bootRuntime(
 		})
 		return paths, accessErr
 	}
-	if len(restored) > 0 && rt.log != nil {
+	if len(restored) > 0 {
 		rt.log.Warn(map[string]any{"paths": restored}, "AppData.restoreAccess")
 	}
 
 	rt.appData = data
-	if rt.mod != nil {
-		rt.mod.UseAppData(data)
-	}
-	if rt.drive != nil {
-		rt.drive.UseAppData(data)
-	}
-	if rt.tools != nil {
-		rt.tools.UseAppData(data)
-	}
-	if rt.reshade != nil {
-		rt.reshade.UseAppData(data)
-	}
-	if rt.agent != nil {
-		if err := rt.agent.UseAppData(data); err != nil {
-			return runtimePaths{Root: data.Root()}, err
-		}
+	rt.mod.UseAppData(data)
+	rt.drive.UseAppData(data)
+	rt.tools.UseAppData(data)
+	rt.reshade.UseAppData(data)
+	if err := rt.agent.UseAppData(data); err != nil {
+		return runtimePaths{Root: data.Root()}, err
 	}
 	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
 		return paths, err
@@ -99,9 +87,6 @@ func bootRuntime(
 }
 
 func (rt *runtime) configureLog(paths runtimePaths, packaged bool) {
-	if rt == nil || rt.log == nil {
-		return
-	}
 	opts := infra.LogOptions{Dev: !packaged}
 	if packaged {
 		opts.Dest = infra.DesktopLogPath(paths.Logs)
@@ -123,23 +108,10 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 		)
 	}
 	rt.store = store
-	if rt.updater != nil && store.DB != nil {
-		rt.updater.AttachGitHubRate(store.DB.AppState, rt.http, rt.log)
-	}
-	if rt.log == nil {
-		rt.log = infra.NewLogWithOptions(infra.LogOptions{Dev: !platform.Packaged()})
-	}
-	if rt.setting == nil {
-		rt.setting = setting.NewWithOptions(store.DB, setting.Options{
-			Locale: platform.SystemLocale(),
-		})
-	} else {
-		rt.setting.UseClient(store.DB)
-		rt.setting.UseLocale(platform.SystemLocale())
-	}
-	if rt.transfer != nil {
-		rt.transfer.UseSettings(rt.setting)
-	}
+	rt.updater.AttachGitHubRate(store.DB.AppState, rt.log)
+	rt.setting.UseClient(store.DB)
+	rt.setting.UseLocale(platform.SystemLocale())
+	rt.transfer.UseSettings(rt.setting)
 	if err := rt.setting.MigrateElectronStorage(ctx); err != nil {
 		return rt.failInit(err, "migrate-settings")
 	}
@@ -155,122 +127,60 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	if err := rt.initProxy(ctx, configureBrowserArguments); err != nil {
 		return rt.failInit(err, "proxy")
 	}
-	if rt.transfer != nil {
-		if err := rt.transfer.ApplyBandwidthLimitsFromSettings(ctx); err != nil {
-			return rt.failInit(err, "bandwidth-settings")
-		}
+	if err := rt.transfer.ApplyBandwidthLimitsFromSettings(ctx); err != nil {
+		return rt.failInit(err, "bandwidth-settings")
 	}
-	if rt.auth != nil {
-		rt.auth.UseClient(store.DB)
-	}
-	if rt.xxmi != nil {
-		rt.xxmi.UseClient(store.DB)
-	}
-	if rt.reshade != nil {
-		rt.reshade.UseClient(store.DB)
-	}
-	if rt.gamebanana != nil {
-		rt.gamebanana.UseClient(store.DB)
-	}
-	if rt.mod != nil {
-		rt.mod.UseClient(store.DB)
-		rt.mod.UseSettings(rt.setting)
-	}
-	if rt.modRuntime != nil {
-		rt.modRuntime.UseClient(store.DB)
-	}
-	if rt.native != nil {
-		rt.native.StartFocusTracking()
-	}
-	if rt.tools != nil {
-		rt.tools.UseClient(store.DB)
-	}
-	if rt.backup != nil {
-		rt.backup.UseClient(store.DB)
-	}
-	if rt.agent != nil {
-		if err := rt.agent.UseClient(ctx, store.DB); err != nil {
-			return rt.failInit(err, "agent")
-		}
+	rt.auth.UseClient(store.DB)
+	rt.xxmi.UseClient(store.DB)
+	rt.reshade.UseClient(store.DB)
+	rt.gamebanana.UseClient(store.DB)
+	rt.mod.UseClient(store.DB)
+	rt.mod.UseSettings(rt.setting)
+	rt.modRuntime.UseClient(store.DB)
+	rt.native.StartFocusTracking()
+	rt.tools.UseClient(store.DB)
+	rt.backup.UseClient(store.DB)
+	if err := rt.agent.UseClient(ctx, store.DB); err != nil {
+		return rt.failInit(err, "agent")
 	}
 	return nil
 }
 
 func (rt *runtime) Close() error {
-	if rt == nil {
-		return nil
-	}
 	var err error
-	if rt.githubRate != nil {
-		rt.githubRate.Close()
-	}
-	if rt.startup != nil {
-		rt.startup.stop()
-	}
-	if rt.elevatedLifecycle != nil {
-		rt.elevatedLifecycle.shutdown()
-	}
-	if rt.elevated != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
-	}
-	if rt.gameBananaLogin != nil {
-		rt.gameBananaLogin.Close()
-	}
-	if rt.gamebanana != nil {
-		_ = infra.ReportError(
-			rt.log,
-			rt.gamebanana.ServiceShutdown(),
-			"Runtime",
-			infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"},
-		)
-	}
+	rt.githubRate.Close()
+	rt.startup.stop()
+	rt.elevatedLifecycle.shutdown()
+	err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
+	rt.gameBananaLogin.Close()
+	_ = infra.ReportError(
+		rt.log,
+		rt.gamebanana.ServiceShutdown(),
+		"Runtime",
+		infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"},
+	)
 	if rt.proxyRelay != nil {
 		err = errors.Join(err, rt.proxyRelay.Close())
 		rt.proxyRelay = nil
 	}
-	if rt.updater != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
-	}
-	if rt.protocol != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.protocol.ServiceShutdown(), infra.Diagnostic{Stage: "protocol"}))
-	}
-	if rt.transfer != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.transfer.ServiceShutdown(), infra.Diagnostic{Stage: "transfer"}))
-	}
-	if rt.window != nil {
-		rt.window.CloseTaskbar()
-	}
-	if rt.auth != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
-	}
-	if rt.backup != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
-	}
-	if rt.xxmi != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.xxmi.ServiceShutdown(), infra.Diagnostic{Stage: "xxmi"}))
-	}
-	if rt.mod != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
-	}
-	if rt.agent != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.agent.ServiceShutdown(), infra.Diagnostic{Stage: "agent"}))
-	}
-	if rt.tools != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.tools.ServiceShutdown(), infra.Diagnostic{Stage: "tools"}))
-	}
-	if rt.native != nil {
-		err = errors.Join(err, infra.AnnotateError(rt.native.Close(), infra.Diagnostic{Stage: "native"}))
-	}
+	err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
+	err = errors.Join(err, infra.AnnotateError(rt.protocol.ServiceShutdown(), infra.Diagnostic{Stage: "protocol"}))
+	err = errors.Join(err, infra.AnnotateError(rt.transfer.ServiceShutdown(), infra.Diagnostic{Stage: "transfer"}))
+	rt.window.CloseTaskbar()
+	err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
+	err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
+	err = errors.Join(err, infra.AnnotateError(rt.xxmi.ServiceShutdown(), infra.Diagnostic{Stage: "xxmi"}))
+	err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
+	err = errors.Join(err, infra.AnnotateError(rt.agent.ServiceShutdown(), infra.Diagnostic{Stage: "agent"}))
+	err = errors.Join(err, infra.AnnotateError(rt.tools.ServiceShutdown(), infra.Diagnostic{Stage: "tools"}))
+	err = errors.Join(err, infra.AnnotateError(rt.native.Close(), infra.Diagnostic{Stage: "native"}))
 	err = infra.ReportError(rt.log, err, "Runtime", infra.Diagnostic{Operation: "shutdown"})
 	if rt.store != nil {
 		storeErr := rt.store.Close()
 		_ = infra.ReportError(rt.log, storeErr, "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "store"})
 		err = errors.Join(err, storeErr)
 	}
-	if rt.log != nil {
-		err = errors.Join(err, rt.log.Close())
-	}
-	return err
+	return errors.Join(err, rt.log.Close())
 }
 
 func (rt *runtime) failInit(err error, stage string) error {

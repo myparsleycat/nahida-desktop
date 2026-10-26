@@ -529,7 +529,7 @@ func (d *Drive) sendMultipart(
 	rawURL, method string,
 	upload multipartUpload,
 ) (uploadHTTPResult, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return uploadHTTPResult{}, errDriveHTTPUnconfigured
 	}
 	finishSending := beginUploadRequest(ctx)

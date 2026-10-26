@@ -77,9 +77,6 @@ type bisectUndo struct {
 }
 
 func (t *Service) BisectGetState() *BisectSnapshot {
-	if t == nil {
-		return nil
-	}
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	if t.bisect == nil {

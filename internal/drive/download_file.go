@@ -70,19 +70,17 @@ func (d *Drive) downloadDriveFile(
 				if parallelProgress != 0 && onProgress != nil {
 					onProgress(-parallelProgress)
 				}
-				if d.log != nil {
-					_ = infra.ReportError(
-						d.log,
-						err,
-						"Drive:Download:parallel-fallback",
-						infra.Diagnostic{
-							Severity:  infra.DiagnosticWarn,
-							Operation: "download",
-							Stage:     "parallel-fallback",
-							Fields:    map[string]any{"name": file.Name, "fileId": file.ID, "path": destination},
-						},
-					)
-				}
+				_ = infra.ReportError(
+					d.log,
+					err,
+					"Drive:Download:parallel-fallback",
+					infra.Diagnostic{
+						Severity:  infra.DiagnosticWarn,
+						Operation: "download",
+						Stage:     "parallel-fallback",
+						Fields:    map[string]any{"name": file.Name, "fileId": file.ID, "path": destination},
+					},
+				)
 			}
 		}
 	}

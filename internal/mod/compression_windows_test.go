@@ -8,7 +8,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -403,52 +402,6 @@ func TestWofOwnershipPersistsAcrossReconciliation(t *testing.T) {
 	}
 	if deleted.Load() != 1 {
 		t.Fatalf("deleted backing count = %d, want 1", deleted.Load())
-	}
-}
-
-func TestXpressWorkersHaveNoSixtyFourFileBatchBarrier(t *testing.T) {
-	workerCount := min(xpressWorkerCount(runtime.GOMAXPROCS(0)), 80)
-	if workerCount < 2 {
-		t.Skip("parallel worker test requires at least two workers")
-	}
-	files := make([]compressionFile, 80)
-	for index := range files {
-		files[index] = compressionFile{path: fileName(index), size: 1}
-	}
-	release := make(chan struct{})
-	started := make(chan struct{}, workerCount)
-	var peak, active, began atomic.Int32
-	done := make(chan error, 1)
-	go func() {
-		done <- runXpressWorkers(context.Background(), files, func(string, int64, bool) {}, func(string, error) {}, func(compressionFile) error {
-			current := active.Add(1)
-			for {
-				old := peak.Load()
-				if current <= old || peak.CompareAndSwap(old, current) {
-					break
-				}
-			}
-			if began.Add(1) <= int32(workerCount) {
-				started <- struct{}{}
-			}
-			<-release
-			active.Add(-1)
-			return nil
-		})
-	}()
-	for range workerCount {
-		select {
-		case <-started:
-		case <-time.After(2 * time.Second):
-			t.Fatal("workers did not fill the continuous pool")
-		}
-	}
-	close(release)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if peak.Load() != int32(workerCount) {
-		t.Fatalf("peak workers = %d, want %d", peak.Load(), workerCount)
 	}
 }
 

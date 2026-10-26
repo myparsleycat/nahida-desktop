@@ -27,8 +27,5 @@ func (c *Client) CachedReleases(ctx context.Context, repo Repo, refresh bool) ([
 	if err := repo.Validate(); err != nil {
 		return nil, err
 	}
-	if c == nil {
-		return nil, errHTTPNotConfigured
-	}
 	return c.AllReleases(infra.WithGitHubRefresh(ctx, refresh), repo)
 }

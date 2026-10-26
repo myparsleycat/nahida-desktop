@@ -14,13 +14,9 @@ export class Logger {
             }
         }
         const normalized = serializeDiagnostic(object);
-        try {
-            void Log.Log(level, normalized, where ?? "renderer").catch((error: unknown) => {
-                Logger.fallback(error, normalized, where);
-            });
-        } catch (error) {
+        void Log.Log(level, normalized, where ?? "renderer").catch((error: unknown) => {
             Logger.fallback(error, normalized, where);
-        }
+        });
 
         if (import.meta.env.DEV) {
             const consoleLog = `${where ? `[${where}] ` : ""}${typeof normalized === "string" ? normalized : (JSON.stringify(normalized) ?? "")}`;

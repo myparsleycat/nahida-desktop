@@ -291,9 +291,6 @@ func hashFiles(
 
 	rows := make([]db.BackupFileCacheRow, 0, len(hashed))
 	for _, result := range hashed {
-		if result.SHA256 == "" {
-			continue
-		}
 		file := &files[pendingIndex[result.FID]]
 		file.sha256 = result.SHA256
 		rows = append(rows, db.BackupFileCacheRow{

@@ -349,24 +349,6 @@ func resolveAgentMergeNode(actionCtx actionContext, input mergePlanNode) (modser
 	return node, nil
 }
 
-// windowTargetLabel describes a window selector for the approval prompt.
-func windowTargetLabel(title, process string, pid uint32) string {
-	parts := make([]string, 0, 3)
-	if title = strings.TrimSpace(title); title != "" {
-		parts = append(parts, fmt.Sprintf("title %q", title))
-	}
-	if process = strings.TrimSpace(process); process != "" {
-		parts = append(parts, fmt.Sprintf("process %q", process))
-	}
-	if pid != 0 {
-		parts = append(parts, fmt.Sprintf("pid %d", pid))
-	}
-	if len(parts) == 0 {
-		return "no window selector"
-	}
-	return strings.Join(parts, ", ")
-}
-
 func pathDescription(summary string) func(actionContext, json.RawMessage) (string, string, error) {
 	return func(actionCtx actionContext, raw json.RawMessage) (string, string, error) {
 		var input struct {

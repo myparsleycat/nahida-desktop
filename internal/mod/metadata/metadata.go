@@ -81,18 +81,12 @@ func Write(modPath string, data []byte) error {
 // Update reads and replaces nhd.json under one queue reservation, preventing lost read-modify-write updates.
 // The callback must only transform the supplied contents; it must not call metadata operations on the same path.
 func Update(modPath string, change func([]byte) ([]byte, error)) error {
-	if change == nil {
-		return errors.New("mod metadata update callback is nil")
-	}
 	return update(modPath, change, false)
 }
 
 // Upsert reads and replaces nhd.json under one queue reservation, passing nil to change when absent.
 // The callback must not call metadata operations on the same directory.
 func Upsert(modPath string, change func([]byte) ([]byte, error)) error {
-	if change == nil {
-		return errors.New("mod metadata upsert callback is nil")
-	}
 	return update(modPath, change, true)
 }
 
@@ -134,9 +128,6 @@ func WriteBatch(entries []WriteEntry) error {
 // Missing files are skipped; returning changed=false leaves a file untouched. The callback must not
 // call metadata operations on any of the reserved directories.
 func UpdateBatch(dirs []string, change func(string, []byte) ([]byte, bool, error)) error {
-	if change == nil {
-		return errors.New("mod metadata batch update callback is nil")
-	}
 	release, err := reserve(dirs...)
 	if err != nil {
 		return err

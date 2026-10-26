@@ -101,7 +101,7 @@ func (x *XXMI) PreviewExternalLauncherImport(
 		}
 		for _, release := range releases {
 			candidate := normalizeVersion(release.TagName)
-			if release.Draft || release.Prerelease && !includePrereleases || !semver.IsValid("v"+candidate) {
+			if release.Prerelease && !includePrereleases || !semver.IsValid("v"+candidate) {
 				continue
 			}
 			if version.LatestVersion == "" || semver.Compare("v"+candidate, "v"+version.LatestVersion) > 0 {

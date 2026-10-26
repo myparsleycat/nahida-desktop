@@ -16,12 +16,8 @@ func (rt *runtime) dispatchDeepLinkDownload(args []string) {
 	if download == nil {
 		return
 	}
-	ctx := context.Background()
-	if rt.startup != nil {
-		// Shutdown cancels the startup context, releasing a pending path selector.
-		ctx = rt.startup.ctx
-	}
-	go rt.runDeepLinkDownload(ctx, *download)
+	// Shutdown cancels the startup context, releasing a pending path selector.
+	go rt.runDeepLinkDownload(rt.startup.ctx, *download)
 }
 
 func (rt *runtime) runDeepLinkDownload(ctx context.Context, download deepLinkDownload) {
@@ -61,9 +57,6 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 	// Shared links and mods carry their own credentials; only the user's own
 	// drive needs a session.
 	if download.Link == nil && download.Mod == nil && download.Ticket == "" {
-		if rt.auth == nil {
-			return "", errors.New("auth service is not configured")
-		}
 		loggedIn, err := rt.auth.IsLoggedIn(ctx)
 		if err != nil {
 			return "", err
@@ -71,9 +64,6 @@ func (rt *runtime) startDeepLinkDownload(ctx context.Context, download deepLinkD
 		if !loggedIn {
 			return "unauthorized", nil
 		}
-	}
-	if rt.drive == nil {
-		return "", errors.New("drive service is not configured")
 	}
 
 	name := download.Name

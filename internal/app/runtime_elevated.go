@@ -454,9 +454,6 @@ func (rt *runtime) reportElevatedHelperError(err error, stage string) {
 }
 
 func reportElevatedHelperError(log *infra.Log, err error, stage string) {
-	if err == nil || log == nil {
-		return
-	}
 	_ = infra.ReportError(log, err, "ElevatedHelper", infra.Diagnostic{
 		Severity: infra.DiagnosticWarn, Operation: "elevated-helper", Stage: stage,
 	})

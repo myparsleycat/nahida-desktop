@@ -868,11 +868,7 @@ func (s *Service) persistArtifacts(
 				record.ToggleTxtHash == row.ToggleTxtHash && record.ToggleIniHash == row.ToggleIniHash {
 				continue
 			}
-			id, err := newID()
-			if err != nil {
-				return deferred, err
-			}
-			row.ID = id
+			row.ID = newID()
 			if err := client.ToggleViewerArtifacts.Upsert(recordCtx, row); err != nil {
 				return deferred, err
 			}
@@ -1109,9 +1105,7 @@ func (s *Service) reportError(err error, stage string) error {
 }
 
 func (s *Service) logInfo(message string) {
-	if s.log != nil {
-		s.log.Info(message, "ToggleViewer")
-	}
+	s.log.Info(message, "ToggleViewer")
 	s.addLog("INFO", message)
 }
 
@@ -1277,10 +1271,8 @@ func containsPathFold(paths []string, path string) bool {
 	return false
 }
 
-func newID() (string, error) {
+func newID() string {
 	data := make([]byte, 16)
-	if _, err := rand.Read(data); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(data), nil
+	rand.Read(data)
+	return hex.EncodeToString(data)
 }

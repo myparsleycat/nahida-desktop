@@ -51,8 +51,5 @@ func (t *Tools) RecoverBisects(ctx context.Context) error {
 }
 
 func (t *Tools) shutdownBisect() error {
-	if t == nil || t.bisect == nil {
-		return nil
-	}
 	return t.bisect.Shutdown()
 }

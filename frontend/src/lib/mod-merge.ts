@@ -61,8 +61,7 @@ export function planHasClassicViolation(
     return node.children.some((child) => planHasClassicViolation(child, packsByPath));
 }
 
-export function planIsValid(node: MergePlanNode | null | undefined): node is MergePlanNode {
-    if (!node) return false;
+export function planIsValid(node: MergePlanNode): boolean {
     if (node.kind === "leaf") return true;
     if (!isSafeMergeName(node.name) || !node.forwardKey.trim()) return false;
     if (node.engine === "namespace" && !node.backKey.trim()) return false;

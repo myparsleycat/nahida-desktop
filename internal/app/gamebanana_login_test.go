@@ -639,13 +639,3 @@ func TestGameBananaLoginClearCookiesWaitsForLogoutNavigation(t *testing.T) {
 		t.Fatalf("deleted = %v", deleted)
 	}
 }
-
-func TestRuntimeWiresGameBananaLogin(t *testing.T) {
-	rt := newRuntime()
-	if rt.gameBananaLogin == nil {
-		t.Fatal("login controller missing")
-	}
-	if rt.gamebanana == nil {
-		t.Fatal("gamebanana service missing")
-	}
-}

@@ -203,10 +203,8 @@ func (m *Mod) CopyFolderToGroup(
 		if err := os.RemoveAll(source); err != nil {
 			return target, err
 		}
-	} else if m.shaders != nil {
-		if err := m.shaders.DeleteModManifest(target); err != nil {
-			return target, err
-		}
+	} else if err := m.shaders.DeleteModManifest(target); err != nil {
+		return target, err
 	}
 	m.queueFixInspection(target)
 	return target, nil

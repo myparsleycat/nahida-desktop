@@ -112,10 +112,6 @@ function hasOpenDialogOrOverlay() {
         return true;
     }
 
-    if (typeof document === "undefined") {
-        return false;
-    }
-
     return Boolean(
         document.querySelector(
             '[role="dialog"], [role="alertdialog"], [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"]',

@@ -81,7 +81,7 @@ func (m *Mod) ResolveNteInstallPath(_ context.Context, inputPath string) (*NtePa
 	if target, linkErr := resolveNteLinkTarget(linked); linkErr == nil && !samePath(target, linked) {
 		modRoot = target
 	} else if !directoryWritableOrCreatable(linked) {
-		if m == nil || m.appData == nil {
+		if m.appData == nil {
 			return nil, errors.New("mod service has no app data store")
 		}
 		modRoot, err = m.appData.Resolve(appdata.NTEModsDir)

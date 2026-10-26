@@ -14,7 +14,7 @@ import (
 // GetPreviousFocusedGame returns the registered game whose process is running, preferring the most
 // recently focused one when several are.
 func (m *Mod) GetPreviousFocusedGame(ctx context.Context) (*string, error) {
-	if m == nil || m.gameProcesses == nil {
+	if m.gameProcesses == nil {
 		return nil, nil
 	}
 	games, err := m.listGames(ctx)
@@ -42,9 +42,6 @@ func (m *Mod) GetPreviousFocusedGame(ctx context.Context) (*string, error) {
 }
 
 func (m *Mod) reportFocusedGameError(err error, severity infra.DiagnosticSeverity, stage string) {
-	if m.log == nil {
-		return
-	}
 	_ = infra.ReportError(m.log, err, "Mod:previousFocusedGame", infra.Diagnostic{
 		Severity: severity, Operation: "Mod:previousFocusedGame", Stage: stage,
 	})

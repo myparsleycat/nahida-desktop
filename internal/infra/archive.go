@@ -287,11 +287,7 @@ func shouldSkipArchiveEntry(name string) bool {
 }
 
 func safeArchivePath(name string) (string, error) {
-	normalized := normalizeArchiveName(name)
-	if normalized == "" {
-		return "", errors.New("archive entry has an empty path")
-	}
-	parts := strings.Split(normalized, "/")
+	parts := strings.Split(normalizeArchiveName(name), "/")
 	safe := make([]string, 0, len(parts))
 	for _, part := range parts {
 		switch part {

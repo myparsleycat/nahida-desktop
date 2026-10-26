@@ -120,11 +120,6 @@ describe("buildDefaultPlan", () => {
 });
 
 describe("planIsValid", () => {
-    it("returns false for null or undefined", () => {
-        expect(planIsValid(null)).toBe(false);
-        expect(planIsValid(undefined)).toBe(false);
-    });
-
     it("returns true for leaf node", () => {
         expect(planIsValid({ kind: "leaf", path: "mod1" })).toBe(true);
     });

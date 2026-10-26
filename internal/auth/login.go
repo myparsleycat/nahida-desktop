@@ -119,9 +119,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	a.info("start login")
 
 	seed := make([]byte, 32)
-	if _, err := rand.Read(seed); err != nil {
-		return err
-	}
+	rand.Read(seed)
 	verifier := base64.RawURLEncoding.EncodeToString(seed)
 	challenge := sha256.Sum256([]byte(verifier))
 	base := strings.TrimRight(a.http.BackendURL(), "/")

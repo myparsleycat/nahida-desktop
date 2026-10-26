@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -60,9 +59,6 @@ func mainWindowBackground(dark bool) application.RGBA {
 
 //wails:ignore
 func (w *Window) SetStartHidden(hidden bool) {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	w.startHidden = hidden
 	w.mu.Unlock()
@@ -70,7 +66,7 @@ func (w *Window) SetStartHidden(hidden bool) {
 
 //wails:ignore
 func (w *Window) SetInitialRoute(route string) {
-	if w == nil || route == "" {
+	if route == "" {
 		return
 	}
 	w.mu.Lock()
@@ -89,9 +85,6 @@ func NewWindow() *Window {
 
 //wails:ignore
 func (w *Window) Configure(app *application.App, settings *setting.Setting, log *infra.Log) {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	w.app, w.settings, w.log = app, settings, log
 	w.mu.Unlock()
@@ -99,10 +92,6 @@ func (w *Window) Configure(app *application.App, settings *setting.Setting, log 
 
 //wails:ignore
 func (w *Window) Create() application.Window {
-	if w == nil {
-		return nil
-	}
-
 	// Native creation pumps Windows messages, so another tray click can reenter
 	// before NewWithOptions returns. Waiting here would block the UI thread.
 	w.mu.Lock()
@@ -328,18 +317,16 @@ func (w *Window) registerEvents(window application.Window) {
 		}
 		runInBackground, err := settings.GetRunInBackground(context.Background())
 		if err != nil {
-			if log != nil {
-				_ = infra.ReportError(
-					log,
-					err,
-					"MainWindow.runInBackground",
-					infra.Diagnostic{
-						Severity:  infra.DiagnosticError,
-						Operation: "MainWindow.runInBackground",
-						Stage:     "background",
-					},
-				)
-			}
+			_ = infra.ReportError(
+				log,
+				err,
+				"MainWindow.runInBackground",
+				infra.Diagnostic{
+					Severity:  infra.DiagnosticError,
+					Operation: "MainWindow.runInBackground",
+					Stage:     "background",
+				},
+			)
 			return
 		}
 		if !runInBackground {
@@ -382,7 +369,7 @@ func (w *Window) saveBoundsLocked(window application.Window) {
 		context.Background(),
 		setting.Bounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height},
 	)
-	if err != nil && log != nil {
+	if err != nil {
 		_ = infra.ReportError(
 			log,
 			err,
@@ -394,9 +381,6 @@ func (w *Window) saveBoundsLocked(window application.Window) {
 
 //wails:ignore
 func (w *Window) FocusAndNavigate(route string) {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	w.startHidden = false
 	if route != "" {
@@ -435,9 +419,6 @@ func (w *Window) OpenSetting() { w.FocusAndNavigate("/setting/gen") }
 // SyncRoute keeps the SPA route available when the native window must be
 // recreated to change WebView devtools availability or the backdrop.
 func (w *Window) SyncRoute(ctx context.Context, route string) {
-	if w == nil {
-		return
-	}
 	if window, ok := ctx.Value(application.WindowKey).(application.Window); !ok || window.Name() != "main" {
 		return
 	}
@@ -449,9 +430,6 @@ func (w *Window) SyncRoute(ctx context.Context, route string) {
 
 //wails:ignore
 func (w *Window) SetConsoleWindowEnabled(enabled bool) {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	current := w.window
 	previous := w.consoleOpen
@@ -477,7 +455,7 @@ func (w *Window) SetConsoleWindowEnabled(enabled bool) {
 
 //wails:ignore
 func (w *Window) SetBackdropEnabled(enabled bool) {
-	if w == nil || !w32.SupportsBackdropTypes() {
+	if !w32.SupportsBackdropTypes() {
 		return
 	}
 	w.mu.Lock()
@@ -537,9 +515,6 @@ func normalizeWindowRoute(route string) string {
 // The Mica backdrop takes its tint from the window theme, not from the page; the solid
 // fallback colour follows the same theme.
 func (w *Window) SyncTheme(dark bool) {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	window, solidBackground := w.window, w.solidBackground
 	w.mu.Unlock()
@@ -562,10 +537,6 @@ func (w *Window) SyncTheme(dark bool) {
 
 //wails:ignore
 func (w *Window) SetProgressBar(value *float64, mode string) {
-	if w == nil {
-		return
-	}
-	value = cloneProgress(value)
 	w.mu.Lock()
 	changed := !equalProgress(w.taskbarValue, value) || w.taskbarMode != mode
 	w.taskbarValue = value
@@ -579,9 +550,6 @@ func (w *Window) SetProgressBar(value *float64, mode string) {
 
 //wails:ignore
 func (w *Window) CloseTaskbar() {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	window, taskbar := w.window, w.taskbar
 	w.taskbarValue = nil
@@ -590,16 +558,11 @@ func (w *Window) CloseTaskbar() {
 	if window != nil {
 		w.clearTaskbarProgress(window)
 	}
-	if taskbar != nil {
-		taskbar.Close()
-	}
+	taskbar.Close()
 }
 
 //wails:ignore
 func (w *Window) Focus() {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	if w.focusing {
 		w.mu.Unlock()
@@ -621,9 +584,6 @@ func (w *Window) Focus() {
 //
 //wails:ignore
 func (w *Window) WaitReady(ctx context.Context) (bool, error) {
-	if w == nil {
-		return false, errors.New("window service is unavailable")
-	}
 	w.mu.Lock()
 	ready := w.ready
 	w.mu.Unlock()
@@ -655,9 +615,6 @@ func (w *Window) WaitReady(ctx context.Context) (bool, error) {
 //
 //wails:ignore
 func (w *Window) NotifyUpdateReady() {
-	if w == nil {
-		return
-	}
 	w.mu.Lock()
 	window := w.window
 	w.mu.Unlock()
@@ -672,11 +629,9 @@ func (w *Window) syncTaskbarProgress(window application.Window) {
 		return
 	}
 	w.mu.Lock()
-	taskbar, value, mode := w.taskbar, cloneProgress(w.taskbarValue), w.taskbarMode
+	taskbar, value, mode := w.taskbar, w.taskbarValue, w.taskbarMode
 	w.mu.Unlock()
-	if taskbar != nil {
-		taskbar.Set(hwnd, value, mode)
-	}
+	taskbar.Set(hwnd, value, mode)
 }
 
 func (w *Window) clearTaskbarProgress(window application.Window) {
@@ -687,38 +642,23 @@ func (w *Window) clearTaskbarProgress(window application.Window) {
 	w.mu.Lock()
 	taskbar := w.taskbar
 	w.mu.Unlock()
-	if taskbar != nil {
-		taskbar.Set(hwnd, nil, "")
-	}
+	taskbar.Set(hwnd, nil, "")
 }
 
 func (w *Window) logTaskbarError(err error) {
-	if err == nil || w == nil {
-		return
-	}
 	w.mu.Lock()
 	log := w.log
 	w.mu.Unlock()
-	if log != nil {
-		_ = infra.ReportError(
-			log,
-			err,
-			"MainWindow.taskbarProgress",
-			infra.Diagnostic{
-				Severity:  infra.DiagnosticError,
-				Operation: "MainWindow.taskbarProgress",
-				Stage:     "background",
-			},
-		)
-	}
-}
-
-func cloneProgress(value *float64) *float64 {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
+	_ = infra.ReportError(
+		log,
+		err,
+		"MainWindow.taskbarProgress",
+		infra.Diagnostic{
+			Severity:  infra.DiagnosticError,
+			Operation: "MainWindow.taskbarProgress",
+			Stage:     "background",
+		},
+	)
 }
 
 func equalProgress(a, b *float64) bool {
@@ -763,9 +703,6 @@ func webviewHWND(window application.Window) uintptr {
 }
 
 func (w *Window) native() *application.WebviewWindow {
-	if w == nil {
-		return nil
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.window == nil {

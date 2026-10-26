@@ -181,9 +181,6 @@ type Plan struct {
 
 // Run executes the prepared action.
 func (p Plan) Run(ctx context.Context) (any, error) {
-	if p.run == nil {
-		return nil, errors.New("desktop action plan is empty")
-	}
 	return p.run(ctx)
 }
 

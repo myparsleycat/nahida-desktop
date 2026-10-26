@@ -142,10 +142,7 @@ func (s *Service) Begin(
 		return ImageResult{}, err
 	}
 
-	id, err := newSessionID()
-	if err != nil {
-		return ImageResult{}, err
-	}
+	id := newSessionID()
 	now := s.now()
 	current := &session{
 		id: id, owner: owner, importerKey: runtime.ImporterKey, pid: window.PID,
@@ -274,9 +271,6 @@ func (s *Service) Found(ctx context.Context, owner string) (Snapshot, error) {
 
 	if current.selected == "" {
 		return s.snapshot(current), ErrCategoryRequired
-	}
-	if s.clipboard == nil {
-		return s.snapshot(current), fmt.Errorf("%w: text clipboard access is unavailable", ErrConfigUnsupported)
 	}
 	operationCtx, cancel := context.WithCancel(ctx)
 	s.setOperationCancel(current, cancel)
@@ -669,7 +663,7 @@ func (s *Service) targetGone(current *session) bool {
 }
 
 func (s *Service) cleanup(ctx context.Context, current *session) error {
-	if current == nil || (!current.huntingOn && !current.initiallyActive) {
+	if !current.huntingOn && !current.initiallyActive {
 		return nil
 	}
 	lease, err := s.input.AcquireForeground(ctx, current.target)
@@ -745,12 +739,10 @@ func (s *Service) reportError(err error, stage string, current *session) {
 	})
 }
 
-func newSessionID() (string, error) {
+func newSessionID() string {
 	var value [16]byte
-	if _, err := rand.Read(value[:]); err != nil {
-		return "", fmt.Errorf("read hunting session entropy: %w", err)
-	}
-	return hex.EncodeToString(value[:]), nil
+	rand.Read(value[:])
+	return hex.EncodeToString(value[:])
 }
 
 func waitContext(ctx context.Context, duration time.Duration) error {

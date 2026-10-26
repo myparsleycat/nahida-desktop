@@ -82,8 +82,8 @@ export type BodyShapeViewportProps = {
   /** Whether the parent preview currently differs from the original geometry. */
   positionsChanged: boolean;
   /** Stable identity for the mesh frame; changing mask data should not reframe the camera. */
-  frameKey?: string;
-  orientation?: string;
+  frameKey: string;
+  orientation: string;
 
   /* Brush props */
   brushEnabled?: boolean;
@@ -117,7 +117,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
     );
 
     const rotation = useMemo(() => {
-      const [roll, pitch, yaw] = parseOrientation(props.orientation ?? "0deg 0deg 0deg");
+      const [roll, pitch, yaw] = parseOrientation(props.orientation);
       return new Euler(
         MathUtils.degToRad(pitch),
         MathUtils.degToRad(yaw),
@@ -203,7 +203,7 @@ function BodyShapeMesh({
 }) {
   const meshRef = useRef<Mesh>(null);
   const brushRingRef = useRef<LineLoop>(null);
-  const framedKeyRef = useRef<string | Float32Array | null>(null);
+  const framedKeyRef = useRef<string | null>(null);
   const isPaintingRef = useRef(false);
   const pointerFrameRef = useRef<number | null>(null);
   const pendingPointersRef = useRef<BrushPointerSample[]>([]);
@@ -374,11 +374,10 @@ function BodyShapeMesh({
   });
 
   useEffect(() => {
-    const nextFrameKey = frameKey ?? originalPositions;
-    if (framedKeyRef.current === nextFrameKey) return;
-    framedKeyRef.current = nextFrameKey;
+    if (framedKeyRef.current === frameKey) return;
+    framedKeyRef.current = frameKey;
     frameCamera();
-  }, [camera, frameKey, geometry, originalPositions, invalidate]);
+  }, [camera, frameKey, geometry, invalidate]);
 
   /* Brush Raycasting & Pointer Handlers */
   useEffect(() => {

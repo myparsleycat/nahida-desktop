@@ -554,23 +554,12 @@ func TestGitHubProviderSharesTransportLimit(t *testing.T) {
 	}
 }
 
-func TestGitHubCoreCaptureDoesNotOverwriteWithOtherResources(t *testing.T) {
+func TestGitHubLegacyRateRecordIsRateLimited(t *testing.T) {
 	t.Parallel()
 	rate := NewGitHubRateCoordinator()
 	t.Cleanup(rate.Close)
-	_, err := rate.CaptureResponse(t.Context(), githubTestHeaders(42, time.Now().Add(time.Hour)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	header := githubTestHeaders(0, time.Now().Add(time.Hour))
-	header.Set("X-RateLimit-Resource", "search")
-	_, _ = rate.CaptureResponse(t.Context(), header)
-	state, _ := rate.GetRateState(t.Context())
-	if state == nil || state.Remaining != 42 {
-		t.Fatalf("core overwritten: %+v", state)
-	}
 	old, _ := json.Marshal(GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix()})
-	if state = decodeGitHubRateState(string(old)); state == nil || !rate.IsRateLimited(state) {
+	if state := decodeGitHubRateState(string(old)); state == nil || !rate.IsRateLimited(state) {
 		t.Fatalf("legacy record=%+v", state)
 	}
 }

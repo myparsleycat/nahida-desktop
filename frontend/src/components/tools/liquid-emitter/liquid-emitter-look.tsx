@@ -309,7 +309,7 @@ function materialPresetOf(look: Look): MaterialPreset | null {
 // Tint channels run from 0 to 1, as the runtime's own color setting stores them.
 function tintToHex(tint: number[]) {
   const channels = [0, 1, 2].map((index) =>
-    Math.round(Math.min(1, Math.max(0, tint[index] ?? 0)) * 255)
+    Math.round(Math.min(1, Math.max(0, tint[index])) * 255)
       .toString(16)
       .padStart(2, "0"),
   );

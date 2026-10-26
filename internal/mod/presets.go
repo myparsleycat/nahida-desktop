@@ -130,10 +130,7 @@ func (m *Mod) CreatePreset(
 			return Preset{}, errors.New("PRESET_CONFLICT_RESOLUTION_FAILED")
 		}
 	}
-	id, err := newPresetID()
-	if err != nil {
-		return Preset{}, err
-	}
+	id := newPresetID()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	row := db.ModPresetRow{
 		ID: id, Game: game, Name: name, Description: description, ItemCount: int64(len(items)),
@@ -358,10 +355,8 @@ func presetFromRow(row db.ModPresetRow) Preset {
 	}
 }
 
-func newPresetID() (string, error) {
+func newPresetID() string {
 	buffer := make([]byte, 16)
-	if _, err := rand.Read(buffer); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buffer), nil
+	rand.Read(buffer)
+	return base64.RawURLEncoding.EncodeToString(buffer)
 }

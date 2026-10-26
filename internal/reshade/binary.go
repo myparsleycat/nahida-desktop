@@ -94,9 +94,6 @@ func (r *ReShade) downloadVersion(ctx context.Context, version string, progress 
 	if _, err := verifyCache(destination, version); err == nil {
 		return destination, nil
 	}
-	if r.download == nil {
-		return "", errors.New("download client is not configured")
-	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", err
 	}

@@ -249,35 +249,7 @@ func (t *Service) SaveTextureResizeSettings(
 	if err != nil {
 		return TextureResizeSettings{}, err
 	}
-	if patch.Mode != nil {
-		current.Mode = normalizeTextureMode(*patch.Mode)
-	}
-	if patch.Operation != nil {
-		current.Operation = normalizeTextureOperation(*patch.Operation)
-	}
-	if patch.Percent != nil {
-		current.Percent = normalizeTexturePercent(*patch.Percent)
-	}
-	if patch.CustomWidth != nil {
-		current.CustomWidth = normalizeTextureDimension(*patch.CustomWidth)
-	}
-	if patch.CustomHeight != nil {
-		current.CustomHeight = normalizeTextureDimension(*patch.CustomHeight)
-	}
-	if patch.OutputFormat != nil {
-		current.OutputFormat = normalizeTextureFormat(*patch.OutputFormat)
-	}
-	if patch.Backup != nil {
-		current.Backup = *patch.Backup
-	}
-	if patch.UpscaleModel != nil {
-		current.UpscaleModel = normalizeUpscaleModel(*patch.UpscaleModel)
-	}
-	if patch.UpscaleScale != nil {
-		current.UpscaleScale = normalizeUpscaleScale(current.UpscaleModel, *patch.UpscaleScale)
-	} else {
-		current.UpscaleScale = normalizeUpscaleScale(current.UpscaleModel, current.UpscaleScale)
-	}
+	current = mergeTexturePatch(current, patch)
 	client, _ := t.requireClient()
 	values := map[string]string{
 		textureSettingKeys.mode:      current.Mode,

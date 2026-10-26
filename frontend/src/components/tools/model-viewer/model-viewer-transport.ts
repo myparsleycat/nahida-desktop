@@ -1,5 +1,6 @@
 import type {
     ModelViewerDNF,
+    ModelViewerTextureTransport,
     ModelViewerTransport as WailsModelViewerTransport,
 } from "@bindings/tools/model_viewer";
 import type {
@@ -103,17 +104,14 @@ export function normalizeModelViewerTransport(
     value: WailsModelViewerTransport,
 ): ModViewerTransport {
     const textures: ModViewerTransport["textures"] = {};
-    for (const [key, texture] of Object.entries(value.textures ?? {})) {
-        if (!texture) {
-            continue;
-        }
-        const encoding = texture.encoding === "dds" ? "dds" : "image";
-        const unknownEncoding =
-            texture.encoding !== "" && texture.encoding !== "image" && texture.encoding !== "dds";
+    for (const [key, texture] of Object.entries(value.textures ?? {}) as [
+        string,
+        ModelViewerTextureTransport,
+    ][]) {
         textures[key] = {
-            url: unknownEncoding && texture.fallbackUrl ? texture.fallbackUrl : texture.url,
+            url: texture.url,
             role: normalizeTextureRole(texture.role),
-            encoding,
+            encoding: texture.encoding === "dds" ? "dds" : "image",
             fallbackUrl: texture.fallbackUrl || undefined,
             format: normalizeDDSFormat(texture.format),
             width: texture.width || undefined,

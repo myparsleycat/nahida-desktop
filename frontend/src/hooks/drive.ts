@@ -12,13 +12,13 @@ export function useDrag() {
     };
 
     const onDragEnter = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
+        if (e.dataTransfer.types.includes("Files")) {
             setUploadDragging(true);
         }
     };
 
     const onDragLeave = (e: React.DragEvent) => {
-        if (!e.dataTransfer?.types.includes("Files")) {
+        if (!e.dataTransfer.types.includes("Files")) {
             return;
         }
 
@@ -32,13 +32,13 @@ export function useDrag() {
     };
 
     const onDragOver = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
+        if (e.dataTransfer.types.includes("Files")) {
             setUploadDragging(true);
         }
     };
 
     const onDrop = (e: React.DragEvent) => {
-        if (!e.dataTransfer?.types.includes("Files")) return;
+        if (!e.dataTransfer.types.includes("Files")) return;
         clearDragging();
     };
 
@@ -50,8 +50,6 @@ export function useDrag() {
             paths,
         });
 
-        if (!selectedPaths || selectedPaths.length < 1) return;
-
         if ((skippedExtensions ?? []).length > 0) {
             const result = await dialogStore
                 .getState()
@@ -62,7 +60,7 @@ export function useDrag() {
         }
 
         let conflictStrategy: "suffix" | "skip" = "suffix";
-        if ((conflicts ?? []).length > 0) {
+        if (conflicts!.length > 0) {
             const result = await dialogStore
                 .getState()
                 .showDialog<"suffix" | "skip" | "cancel">("conflictNameDialog", { conflicts });

@@ -168,25 +168,23 @@ func (d *Drive) createImportTransfer(
 		InitialStatus: transfer.StatusPreparing, Data: transfer.Data{}, ManualStart: true,
 	})
 	if err != nil {
-		if d.log != nil {
-			_ = infra.ReportError(
-				d.log,
-				err,
-				"Drive:CopyFromUrl:TransferCreateSkipped",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticWarn,
-					Operation: "copy-from-url",
-					Fields:    map[string]any{"operationId": operationID},
-				},
-			)
-		}
+		_ = infra.ReportError(
+			d.log,
+			err,
+			"Drive:CopyFromUrl:TransferCreateSkipped",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "copy-from-url",
+				Fields:    map[string]any{"operationId": operationID},
+			},
+		)
 		return false
 	}
 	d.mu.Lock()
 	op := d.ops[operationID]
 	d.mu.Unlock()
 	if op != nil {
-		if err := d.transfer.AttachCancel(operationID, op.cancel); err != nil && d.log != nil {
+		if err := d.transfer.AttachCancel(operationID, op.cancel); err != nil {
 			_ = infra.ReportError(
 				d.log,
 				err,
@@ -210,7 +208,7 @@ func (d *Drive) consumeImportSSE(
 	body any,
 	stream importStream,
 ) error {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return errDriveHTTPUnconfigured
 	}
 	if ctx == nil {
@@ -259,9 +257,6 @@ func (d *Drive) consumeImportSSE(
 			),
 			infra.AnnotateError(readErr, infra.HTTPDiagnostic(http.MethodGet, "", "read-error-response", resp)),
 		)
-	}
-	if resp.Body == nil {
-		return newDriveAPIError(codeImportInvalidResponse, "The server import stream was empty.", 0, nil)
 	}
 	stopWatch := watchCancel(ctx, resp.Body)
 	defer stopWatch()

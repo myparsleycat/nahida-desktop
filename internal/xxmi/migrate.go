@@ -112,9 +112,6 @@ func appDataLauncherPath() *string {
 }
 
 func (x *XXMI) scanDrivesForLauncher(ctx context.Context) (*string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	roots, err := x.searchRoots()
 	if err != nil {
 		return nil, err

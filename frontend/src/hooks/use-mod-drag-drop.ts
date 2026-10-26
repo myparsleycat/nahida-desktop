@@ -137,7 +137,7 @@ export function useModDragDrop(
     };
 
     const handleDragEnter = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
+        if (e.dataTransfer.types.includes("Files")) {
             if (!groupPath) {
                 return;
             }
@@ -146,7 +146,7 @@ export function useModDragDrop(
     };
 
     const handleDragLeave = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
+        if (e.dataTransfer.types.includes("Files")) {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = e.clientX;
             const y = e.clientY;
@@ -158,7 +158,7 @@ export function useModDragDrop(
     };
 
     const handleDragOver = (e: React.DragEvent) => {
-        if (e.dataTransfer?.types.includes("Files")) {
+        if (e.dataTransfer.types.includes("Files")) {
             if (!groupPath) {
                 return;
             }
@@ -276,7 +276,7 @@ export function useModDragDrop(
     });
 
     const handleDrop = (e: React.DragEvent) => {
-        if (!e.dataTransfer?.types.includes("Files")) return;
+        if (!e.dataTransfer.types.includes("Files")) return;
         setIsDragging(false);
     };
 

@@ -30,10 +30,6 @@ type loginCall struct {
 }
 
 func (g *GameBanana) openAuthenticatedSession(ctx context.Context) (string, error) {
-	if g == nil {
-		return "", ErrAuthFailed
-	}
-
 	g.loginMu.Lock()
 	if g.loggingOut || g.shuttingDown {
 		g.loginMu.Unlock()
@@ -179,7 +175,7 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 }
 
 func (g *GameBanana) warnLoginFailure(stage string, err error) {
-	if g == nil || g.log == nil || infra.IsCancellationError(err) {
+	if infra.IsCancellationError(err) {
 		return
 	}
 	detail := map[string]any{"operation": "login", "stage": stage}
@@ -199,9 +195,6 @@ func waitLoginCall(ctx context.Context, call *loginCall) (string, error) {
 }
 
 func (g *GameBanana) cancelLogin() {
-	if g == nil {
-		return
-	}
 	g.loginMu.Lock()
 	call := g.login
 	g.login = nil

@@ -24,7 +24,7 @@ export const ModListRow = memo(function ModListRow({
 }: {
   mod: ModInfo;
   actions: ModActionApi;
-  handleToggle: (mod: ModInfo, e?: React.MouseEvent) => void;
+  handleToggle: (mod: ModInfo, e: React.MouseEvent) => void;
 }) {
   const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const downloadTransfer = useModDownloadTransfer(mod.path);

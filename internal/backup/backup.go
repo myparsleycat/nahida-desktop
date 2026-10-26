@@ -274,9 +274,6 @@ func (b *Backup) GetOverview(ctx context.Context) (Overview, error) {
 
 // SetGameExcluded includes a registered game in the backup or leaves it out.
 func (b *Backup) SetGameExcluded(ctx context.Context, game string, excluded bool) error {
-	if b.opts.Settings == nil {
-		return ErrNotConfigured
-	}
 	current, err := b.excludedGames(ctx)
 	if err != nil {
 		return err
@@ -357,7 +354,7 @@ func (b *Backup) Cancel() {
 func (b *Backup) requireClient() (*db.Client, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.client == nil || b.opts.Remote == nil || b.opts.Settings == nil {
+	if b.client == nil {
 		return nil, ErrNotConfigured
 	}
 	return b.client, nil
@@ -420,9 +417,6 @@ func (b *Backup) interval(ctx context.Context) (time.Duration, error) {
 }
 
 func (b *Backup) loggedIn(ctx context.Context) (bool, error) {
-	if b.opts.Session == nil {
-		return false, nil
-	}
 	return b.opts.Session.IsLoggedIn(ctx)
 }
 

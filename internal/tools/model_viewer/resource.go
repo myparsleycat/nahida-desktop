@@ -425,9 +425,6 @@ func newModelViewerBufferCache() *modelViewerBufferCache {
 }
 
 func (c *modelViewerBufferCache) releaseGeometryScratch() {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	clear(c.indices)
 	clear(c.geometries)
@@ -438,9 +435,6 @@ func (c *modelViewerBufferCache) releaseGeometryScratch() {
 }
 
 func (c *modelViewerBufferCache) releaseAll() {
-	if c == nil {
-		return
-	}
 	c.releaseGeometryScratch()
 	c.mu.Lock()
 	clear(c.files)

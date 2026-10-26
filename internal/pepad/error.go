@@ -13,8 +13,7 @@ var (
 	ErrAuthenticode = errors.New(
 		"input contains an Authenticode certificate table; pass the explicit allow option to produce an invalidated signature",
 	)
-	ErrValidation       = errors.New("transformation validation failed")
-	ErrNotDeterministic = errors.New("patch planning was not deterministic")
+	ErrValidation = errors.New("transformation validation failed")
 )
 
 func invalidPE(msg string) error {

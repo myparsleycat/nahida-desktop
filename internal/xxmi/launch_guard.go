@@ -165,7 +165,7 @@ func (g *smoothMotionGate) smoothMotionEnabled(ctx context.Context, exe string) 
 			Severity: infra.DiagnosticWarn, Operation: "smooth-motion-support", Stage: support.reason,
 			Fields: fields,
 		})
-	case g.x.log != nil:
+	default:
 		g.x.log.Info(fields, xxmiLaunchGuardWhere)
 	}
 	return true, nil
@@ -271,7 +271,7 @@ func (x *XXMI) disableGIMIDCR(ctx context.Context) error {
 // reports none.
 func (x *XXMI) notifyLaunchWarning(importer string, warning launchWarning) {
 	detail := warning.err.Error()
-	if x.log != nil && !infra.IsReportedError(warning.err) {
+	if !infra.IsReportedError(warning.err) {
 		x.log.Warn(map[string]any{"importer": importer, "code": warning.code, "error": detail}, xxmiLaunchGuardWhere)
 	}
 	if x.eventEmit != nil {
@@ -294,10 +294,8 @@ func (x *XXMI) rejectLaunchBlockersFrom(
 		x.notifyLaunchWarning(importer, warning)
 	}
 	if errors.Is(err, errSmoothMotionUnreadable) {
-		if x.log != nil {
-			x.log.Warn(map[string]any{"importer": importer, "executable": exe, "error": err.Error()},
-				xxmiLaunchGuardWhere)
-		}
+		x.log.Warn(map[string]any{"importer": importer, "executable": exe, "error": err.Error()},
+			xxmiLaunchGuardWhere)
 		err = nil
 	}
 	if err != nil {
@@ -307,9 +305,7 @@ func (x *XXMI) rejectLaunchBlockersFrom(
 		return nil
 	}
 	joined := errors.Join(blockers...)
-	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, joined), xxmiLaunchGuardWhere)
-	}
+	x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, joined), xxmiLaunchGuardWhere)
 	return infra.AnnotateError(joined, infra.Diagnostic{
 		Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "launch-guard",
 		Fields: map[string]any{"importer": importer, "executable": exe},
@@ -384,10 +380,8 @@ func (x *XXMI) rejectLogging(ctx context.Context, importer string, external bool
 	if err != nil || !enabled {
 		return err
 	}
-	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, errLoggingEnabled),
-			xxmiLaunchGuardWhere)
-	}
+	x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, errLoggingEnabled),
+		xxmiLaunchGuardWhere)
 	return infra.AnnotateError(errLoggingEnabled, infra.Diagnostic{
 		Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "launch-guard",
 		Fields: map[string]any{"importer": importer, "external": external},

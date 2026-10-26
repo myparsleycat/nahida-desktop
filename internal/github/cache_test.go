@@ -92,14 +92,7 @@ func TestTagsHonorsCacheRefreshAndStaleFallback(t *testing.T) {
 	})
 }
 
-func TestNilClientReportsMissingConfiguration(t *testing.T) {
-	var client *Client
-	if client.Configured() {
-		t.Fatal("nil client reported as configured")
-	}
-	if _, err := client.ReleaseTags(context.Background(), testRepo, false); !errors.Is(err, errHTTPNotConfigured) {
-		t.Fatalf("err = %v, want errHTTPNotConfigured", err)
-	}
+func TestClientWithoutHTTPReportsMissingConfiguration(t *testing.T) {
 	if New(Options{Download: infra.NewDownload()}).Configured() {
 		t.Fatal("client without HTTP reported as configured")
 	}

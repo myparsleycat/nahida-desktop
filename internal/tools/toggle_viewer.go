@@ -40,15 +40,9 @@ func (t *Tools) ToggleViewerApplyHotkeyToArtifacts(ctx context.Context, hotkey s
 //
 //wails:ignore
 func (t *Tools) StartToggleViewerWatcher(ctx context.Context) error {
-	if t == nil || t.toggleViewer == nil {
-		return nil
-	}
 	return t.toggleViewer.StartWatcher(ctx)
 }
 
 func (t *Tools) shutdownToggleViewer() error {
-	if t == nil || t.toggleViewer == nil {
-		return nil
-	}
 	return t.toggleViewer.Shutdown()
 }

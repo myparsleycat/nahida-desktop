@@ -1,7 +1,6 @@
 package infra
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -796,7 +795,7 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 	rate := NewGitHubRateCoordinator()
 	rate.UseAppState(client.AppState)
 
-	allowed, state, err := rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
+	allowed, state, err := rate.CanUseGitHubAPI(ctx)
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI missing: %v", err)
 	}
@@ -810,7 +809,7 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(time.Hour).Unix(), Used: 60, Resource: "core"},
 	)
 	rate.UseAppState(client.AppState)
-	allowed, state, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
+	allowed, state, err = rate.CanUseGitHubAPI(ctx)
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI limited: %v", err)
 	}
@@ -824,51 +823,12 @@ func TestGitHubRateCoordinatorCanUseGitHubAPI(t *testing.T) {
 		GitHubRateState{Limit: 60, Remaining: 0, Reset: time.Now().Add(-time.Hour).Unix(), Used: 60, Resource: "core"},
 	)
 	rate.UseAppState(client.AppState)
-	allowed, _, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
+	allowed, _, err = rate.CanUseGitHubAPI(ctx)
 	if err != nil {
 		t.Fatalf("CanUseGitHubAPI expired: %v", err)
 	}
 	if !allowed {
 		t.Fatal("expired reset should allow GitHub API use")
-	}
-
-	if err := client.AppState.Delete(ctx, githubCoreRateKey); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	rate.UseAppState(client.AppState)
-	var requests int
-	rate.UseHTTP(NewClientWithOptions(ClientOptions{
-		HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			requests++
-			if r.URL.String() != githubRateLimitURL {
-				t.Fatalf("unexpected URL %s", r.URL)
-			}
-			if got := r.Header.Get("Accept"); got != "application/vnd.github+json" {
-				t.Fatalf("Accept = %q", got)
-			}
-			header := make(http.Header)
-			header.Set("X-RateLimit-Limit", "60")
-			header.Set("X-RateLimit-Remaining", "12")
-			header.Set("X-RateLimit-Reset", "2000000000")
-			header.Set("X-RateLimit-Used", "48")
-			header.Set("X-RateLimit-Resource", "core")
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     header,
-				Body:       io.NopCloser(bytes.NewReader([]byte(`{}`))),
-			}, nil
-		})},
-	}))
-	allowed, state, err = rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{RefreshIfMissing: true})
-	if err != nil {
-		t.Fatalf("CanUseGitHubAPI refresh: %v", err)
-	}
-	if requests != 1 || !allowed || state == nil || state.Remaining != 12 || state.Reset != 2000000000 {
-		t.Fatalf("refresh allowed=%v state=%#v requests=%d", allowed, state, requests)
-	}
-	stored, err := rate.GetRateState(ctx)
-	if err != nil || stored == nil || stored.Remaining != 12 {
-		t.Fatalf("stored = %#v, %v", stored, err)
 	}
 }
 
@@ -905,43 +865,6 @@ func TestCheckForUpdatesGatesOnGitHubRateLimit(t *testing.T) {
 	}
 	if engine.checks != 0 {
 		t.Fatalf("user-initiated check ran while rate limited: checks=%d", engine.checks)
-	}
-}
-
-func TestCheckForUpdatesDoesNotProbeMissingRateState(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	client := openUpdaterTestDB(t)
-	var requests int
-	rate := NewGitHubRateCoordinator()
-	rate.UseAppState(client.AppState)
-	rate.UseHTTP(NewClientWithOptions(ClientOptions{
-		HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			requests++
-			header := make(http.Header)
-			header.Set("X-RateLimit-Limit", "60")
-			header.Set("X-RateLimit-Remaining", "0")
-			header.Set("X-RateLimit-Reset", "2000000000")
-			header.Set("X-RateLimit-Used", "60")
-			header.Set("X-RateLimit-Resource", "core")
-			body := []byte(`{"rate":{"limit":60,"remaining":0,"reset":2000000000,"used":60,"resource":"core"}}`)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     header,
-				Body:       io.NopCloser(bytes.NewReader(body)),
-			}, nil
-		})},
-	}))
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "3.0.0"}}
-	u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "notify"}, rate: rate}
-	if err := u.CheckForUpdates(ctx, false); err != nil {
-		t.Fatalf("automatic CheckForUpdates: %v", err)
-	}
-	if requests != 0 {
-		t.Fatalf("rate_limit requests = %d, want 0", requests)
-	}
-	if engine.checks != 1 {
-		t.Fatalf("checks = %d, want 1", engine.checks)
 	}
 }
 

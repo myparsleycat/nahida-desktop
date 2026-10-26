@@ -64,29 +64,26 @@ func (t *Service) UseAppData(data *appdata.Store) {
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	return t.cancelBisectLocked()
 }
 
 func (t *Service) requireClient() (*db.Client, error) {
-	if t == nil || t.client == nil {
+	if t.client == nil {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }
 
 func (t *Service) logError(err error, where string) {
-	if err != nil && t != nil && t.log != nil {
+	if err != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})

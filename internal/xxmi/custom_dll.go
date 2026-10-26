@@ -72,9 +72,7 @@ func (x *XXMI) ImportCustomDLL(ctx context.Context, path string) (dll CustomDLL,
 		x.importedCustomDLLs = map[string]bool{}
 	}
 	x.importedCustomDLLs[dll.ID] = true
-	if x.log != nil {
-		x.log.Info(map[string]any{"custom_dll": dll.ID, "name": dll.Name, "size": dll.Size}, "XXMI.ImportCustomDLL")
-	}
+	x.log.Info(map[string]any{"custom_dll": dll.ID, "name": dll.Name, "size": dll.Size}, "XXMI.ImportCustomDLL")
 	return dll, nil
 }
 

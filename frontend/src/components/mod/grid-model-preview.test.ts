@@ -40,10 +40,28 @@ const renderSettings = {
     toonShadows: false,
 };
 
+class VisibleIntersectionObserver {
+    readonly #callback: IntersectionObserverCallback;
+
+    constructor(callback: IntersectionObserverCallback) {
+        this.#callback = callback;
+    }
+
+    observe(target: Element) {
+        this.#callback(
+            [{ isIntersecting: true, target } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+        );
+    }
+
+    disconnect() {}
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(Tools.LoadModGridPreview).mockReset();
     vi.mocked(Tools.CleanupModelViewer).mockResolvedValue(true);
+    vi.stubGlobal("IntersectionObserver", VisibleIntersectionObserver);
     let nextUrl = 0;
     Object.defineProperty(URL, "createObjectURL", {
         configurable: true,
@@ -58,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 describe("resolveGridModelPreviewState", () => {

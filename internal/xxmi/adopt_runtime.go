@@ -135,10 +135,8 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	if err := x.SaveImporterConfig(ctx, importer, cfg); err != nil {
 		return nil, err
 	}
-	if x.log != nil {
-		x.log.Info(map[string]any{"importer": importer, "importer_folder": folder, "warnings": warnings},
-			"XXMI.RestoreOfficialDLL")
-	}
+	x.log.Info(map[string]any{"importer": importer, "importer_folder": folder, "warnings": warnings},
+		"XXMI.RestoreOfficialDLL")
 	return warnings, nil
 }
 

@@ -50,14 +50,12 @@ func (x *XXMI) optimizeMods(
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
-	if client != nil {
-		style, err := client.Settings.GetValue(ctx, "mod_disabled_prefix_style")
-		if err != nil {
-			return optimizer.Report{}, err
-		}
-		if style != nil && *style == "underscore" {
-			prefix = "DISABLED_"
-		}
+	style, err := client.Settings.GetValue(ctx, "mod_disabled_prefix_style")
+	if err != nil {
+		return optimizer.Report{}, err
+	}
+	if style != nil && *style == "underscore" {
+		prefix = "DISABLED_"
 	}
 	return optimizer.Optimize(ctx, optimizer.Options{
 		Importer: input.Importer, ImporterFolder: cfg.ImporterFolder,

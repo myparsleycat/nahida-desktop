@@ -89,7 +89,7 @@ func (d *Drive) runUploadPlan(
 	recovers bool,
 	onProgress func(UploadExecutionProgress),
 ) (map[string]string, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
 	run, err := d.newUploadRun(ctx, files, plan, rules, concurrency, onProgress)
@@ -702,17 +702,6 @@ func redistributeUploadFiles(files []FinalUploadFile) []FinalUploadFile {
 
 func shouldFlushUploadPack(files int, payloadBytes int64, pack UploadPackRules) bool {
 	return files >= pack.MaxFiles || payloadBytes >= pack.PayloadBudget
-}
-
-func runUploadTasks(ctx context.Context, concurrency int, tasks []func()) error {
-	pool := newUploadTaskPool(ctx, min(max(1, concurrency), max(1, len(tasks))))
-	for _, task := range tasks {
-		if err := pool.Submit(task); err != nil {
-			_ = pool.Close()
-			return err
-		}
-	}
-	return pool.Close()
 }
 
 type uploadTaskPool struct {

@@ -52,30 +52,25 @@ func (t *Service) CleanupModelViewer(_ context.Context, memorySessionID string) 
 	}
 	lastSession := exists && len(t.modelViewerSessions) == 0
 	t.modelViewerMu.Unlock()
-	if exists && t.protocol != nil {
+	if exists {
 		t.protocol.CleanupMemorySession(memorySessionID)
 	}
 	if lastSession {
 		startedAt := time.Now()
 		modelViewerFreeOSMemory()
-		if t.log != nil {
-			t.log.Info(
-				fmt.Sprintf(
-					"Released model viewer memory in %dms (session=%s)",
-					time.Since(startedAt).Milliseconds(),
-					memorySessionID,
-				),
-				"StaticGlb.cleanupViewer",
-			)
-		}
+		t.log.Info(
+			fmt.Sprintf(
+				"Released model viewer memory in %dms (session=%s)",
+				time.Since(startedAt).Milliseconds(),
+				memorySessionID,
+			),
+			"StaticGlb.cleanupViewer",
+		)
 	}
 	return exists, nil
 }
 
 func (t *Service) shutdownModelViewer() error {
-	if t == nil {
-		return nil
-	}
 	t.modelViewerMu.Lock()
 	ids := make([]string, 0, len(t.modelViewerSessions))
 	for id := range t.modelViewerSessions {
@@ -86,10 +81,8 @@ func (t *Service) shutdownModelViewer() error {
 	}
 	clear(t.modelViewerSessions)
 	t.modelViewerMu.Unlock()
-	if t.protocol != nil {
-		for _, id := range ids {
-			t.protocol.CleanupMemorySession(id)
-		}
+	for _, id := range ids {
+		t.protocol.CleanupMemorySession(id)
 	}
 	return nil
 }

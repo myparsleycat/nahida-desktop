@@ -241,19 +241,6 @@ describe("buildModCompressionTitlebarActivity", () => {
         ).toBeNull();
     });
 
-    it("hides unrecognized statuses instead of labeling them as checking", () => {
-        expect(
-            buildModCompressionTitlebarActivity(
-                state({
-                    status: "broken" as CompressionState["status"],
-                    totalFiles: 2,
-                    totalBytes: 40,
-                }),
-                t,
-            ),
-        ).toBeNull();
-    });
-
     it("hides decompressing until restore work exists", () => {
         expect(
             buildModCompressionTitlebarActivity(state({ status: "decompressing" }), t),
@@ -374,26 +361,6 @@ describe("buildModFixTitlebarActivity", () => {
         expect(onDismissFix).toHaveBeenCalledWith("E:/Mods/TestMod");
     });
 
-    it("omits popover actions without handlers", () => {
-        const activity = buildModFixTitlebarActivity({
-            modPath: "E:/Mods/TestMod",
-            displayName: "TestMod",
-            result: {
-                needsFix: true,
-                importer: "ZZMI",
-                toolName: "ZZMI Fixer",
-                summary: "1 file outdated",
-                details: ["mod.ini"],
-                affectedFiles: ["mod.ini"],
-                actionTool: "hash",
-            },
-            t: (key) => key,
-        });
-
-        expect(activity.popover?.action).toBeUndefined();
-        expect(activity.popover?.dismiss).toBeUndefined();
-    });
-
     it("truncates long mod names in detail", () => {
         const activity = buildModFixTitlebarActivity({
             modPath: "E:/Mods/Skimpier Burnice",
@@ -407,6 +374,8 @@ describe("buildModFixTitlebarActivity", () => {
                 affectedFiles: null,
                 actionTool: "hash",
             },
+            onOpenFixer: vi.fn(),
+            onDismissFix: vi.fn(),
             t: (key) => key,
         });
 

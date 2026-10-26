@@ -90,12 +90,10 @@ func (x *XXMI) CompressLaunchTextures(
 	if err != nil {
 		return result, x.reportLaunchTextures(err, "compress", importer, mods)
 	}
-	if x.log != nil {
-		x.log.Info(map[string]any{
-			"importer": importer, "modsFolder": mods, "backup": backup,
-			"updated": result.Updated, "skipped": result.Skipped, "failed": result.Failed,
-		}, xxmiLaunchTexturesWhere)
-	}
+	x.log.Info(map[string]any{
+		"importer": importer, "modsFolder": mods, "backup": backup,
+		"updated": result.Updated, "skipped": result.Skipped, "failed": result.Failed,
+	}, xxmiLaunchTexturesWhere)
 	return result, nil
 }
 

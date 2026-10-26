@@ -152,9 +152,6 @@ func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
 }
 
 func (s *Sandbox) Close() error {
-	if s == nil {
-		return nil
-	}
 	var result error
 	for _, root := range s.roots {
 		result = errors.Join(result, root.root.Close())
@@ -602,12 +599,8 @@ func (s *Sandbox) resolve(rootID, relativePath string) (*openedRoot, string, err
 }
 
 // ResolveExisting resolves a sandbox path that must already exist. It is one half of the resolver the
-// desktop action registry binds to, so a nil sandbox reports itself as unavailable instead of
-// panicking.
+// desktop action registry binds to.
 func (s *Sandbox) ResolveExisting(rootID, relativePath string) (string, error) {
-	if s == nil {
-		return "", errors.New("agent sandbox is unavailable")
-	}
 	root, clean, err := s.resolve(rootID, relativePath)
 	if err != nil {
 		return "", err
@@ -628,9 +621,6 @@ func (s *Sandbox) ResolveExisting(rootID, relativePath string) (string, error) {
 // ResolveTarget resolves a sandbox path that may be missing, such as an action's output file. The
 // existing parent chain decides containment, so a symlink pointing outside the root is rejected.
 func (s *Sandbox) ResolveTarget(rootID, relativePath string) (string, error) {
-	if s == nil {
-		return "", errors.New("agent sandbox is unavailable")
-	}
 	root, clean, err := s.resolve(rootID, relativePath)
 	if err != nil {
 		return "", err

@@ -86,7 +86,7 @@ func New(opts Options) *Client {
 
 // Configured reports whether c can call the API, fetch files and download files.
 func (c *Client) Configured() bool {
-	return c != nil && c.http != nil && c.download != nil
+	return c.http != nil && c.download != nil
 }
 
 // Releases lists the repository's published releases, newest first, without
@@ -250,7 +250,7 @@ func (c *Client) GetBytes(ctx context.Context, apiURL string, limit int64) ([]by
 	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "api.github.com") {
 		return nil, infra.WithCause(fmt.Errorf("unsafe GitHub API URL %q", infra.SanitizeLogURL(apiURL)), err)
 	}
-	if c == nil || c.http == nil {
+	if c.http == nil {
 		return nil, errHTTPNotConfigured
 	}
 	header := make(http.Header)
@@ -277,17 +277,11 @@ func (c *Client) GetBytes(ctx context.Context, apiURL string, limit int64) ([]by
 
 // RateState returns the last recorded core-rate state, if any.
 func (c *Client) RateState(ctx context.Context) (*infra.GitHubRateState, error) {
-	if c == nil {
-		return nil, nil
-	}
 	return c.rate.GetRateState(ctx)
 }
 
 // IsRateLimited reports whether state exhausts the core-rate budget.
 func (c *Client) IsRateLimited(state *infra.GitHubRateState) bool {
-	if c == nil {
-		return false
-	}
 	return c.rate.IsRateLimited(state)
 }
 

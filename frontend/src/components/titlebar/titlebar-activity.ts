@@ -313,8 +313,8 @@ export function buildModFixTitlebarActivity({
     modPath: string;
     displayName: string;
     result: FixInspectionResult;
-    onOpenFixer?: (modPath: string, actionTool?: string) => void;
-    onDismissFix?: (modPath: string) => void;
+    onOpenFixer: (modPath: string, actionTool?: string) => void;
+    onDismissFix: (modPath: string) => void;
     t: (key: string, opts?: Record<string, unknown>) => string;
 }): TitlebarActivity {
     const detail = truncateModName(displayName);
@@ -332,22 +332,18 @@ export function buildModFixTitlebarActivity({
                 tool: result.toolName,
             }),
             description: result.summary,
-            action: onOpenFixer
-                ? {
-                      label: t("page.mod.fix_needed_toast.action"),
-                      onClick: () => {
-                          onOpenFixer(modPath, result.actionTool);
-                      },
-                  }
-                : undefined,
-            dismiss: onDismissFix
-                ? {
-                      label: t("titlebar.activity.modFix.dismiss"),
-                      onClick: () => {
-                          onDismissFix(modPath);
-                      },
-                  }
-                : undefined,
+            action: {
+                label: t("page.mod.fix_needed_toast.action"),
+                onClick: () => {
+                    onOpenFixer(modPath, result.actionTool);
+                },
+            },
+            dismiss: {
+                label: t("titlebar.activity.modFix.dismiss"),
+                onClick: () => {
+                    onDismissFix(modPath);
+                },
+            },
             defaultOpen: true,
         },
     };

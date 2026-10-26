@@ -32,25 +32,16 @@ func (t *Service) PersistModelViewerToggleState(
 }
 
 func (t *Service) GetPersistLogs() []string {
-	if t == nil || t.persist == nil {
-		return []string{}
-	}
 	return t.persist.GetLogs()
 }
 
 func (t *Service) StartPersistWatcher(ctx context.Context) error {
-	if t == nil || t.persist == nil {
-		return nil
-	}
 	t.watchMu.Lock()
 	defer t.watchMu.Unlock()
 	return t.startPersistWatcher(ctx)
 }
 
 func (t *Service) startPersistWatcher(ctx context.Context) error {
-	if t == nil || t.persist == nil {
-		return nil
-	}
 	enabled := false
 	if getter, ok := t.settings.(interface {
 		GetPersistToggles(context.Context) (bool, error)
@@ -84,11 +75,9 @@ func (t *Service) startPersistWatcher(ctx context.Context) error {
 }
 
 func (t *Service) StopPersistWatcher() bool {
-	if t != nil && t.persist != nil {
-		t.watchMu.Lock()
-		defer t.watchMu.Unlock()
-		t.persist.Stop()
-	}
+	t.watchMu.Lock()
+	defer t.watchMu.Unlock()
+	t.persist.Stop()
 	return true
 }
 

@@ -684,9 +684,6 @@ func (g *GameBanana) request(
 ) (result *http.Response, err error) {
 	diagnostic := infra.HTTPDiagnostic(method, rawURL, "request", nil)
 	defer func() { err = infra.AnnotateError(err, diagnostic) }()
-	if g.http == nil {
-		return nil, errors.New("GameBanana HTTP client is not configured")
-	}
 	if header == nil {
 		header = make(http.Header)
 	} else {
@@ -982,7 +979,7 @@ func (g *GameBanana) saveCookieLocked(ctx context.Context, cookie string) error 
 	client := g.client
 	crypto := g.crypto
 	g.mu.Unlock()
-	if client == nil || crypto == nil {
+	if client == nil {
 		return errors.New("GameBanana cookie store is not configured")
 	}
 	stored := "rmc=" + rmc

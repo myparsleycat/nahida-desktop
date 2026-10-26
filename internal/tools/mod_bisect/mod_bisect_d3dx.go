@@ -210,7 +210,7 @@ func (t *Service) recoverD3dxBackupLocked(ctx context.Context, game db.GamePathR
 }
 
 func (t *Service) d3dxBackupPath(game string) string {
-	if t == nil || t.appData == nil {
+	if t.appData == nil {
 		return ""
 	}
 	safe := strings.Map(func(r rune) rune {

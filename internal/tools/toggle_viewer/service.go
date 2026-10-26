@@ -108,7 +108,7 @@ func (s *Service) UseClient(client *db.Client) {
 }
 
 func (s *Service) requireClient() (*db.Client, error) {
-	if s == nil || s.client == nil {
+	if s.client == nil {
 		return nil, errors.New("toggle viewer is not bound to a database")
 	}
 	return s.client, nil
@@ -142,9 +142,6 @@ func (s *Service) SuspendImporterWatcher(ctx context.Context) (func() error, err
 }
 
 func (s *Service) Shutdown() error {
-	if s == nil {
-		return nil
-	}
 	s.mu.Lock()
 	s.closing = true
 	s.stopRetryLocked()

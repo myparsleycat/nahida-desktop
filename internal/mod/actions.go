@@ -333,22 +333,20 @@ func (m *Mod) rejectActiveDownloadAction(path string) (func(), error) {
 }
 
 func (m *Mod) isActiveDownloadDestination(path string) bool {
-	return m != nil && m.transfer != nil && m.transfer.IsActiveDownloadDestination(path)
+	return m.transfer != nil && m.transfer.IsActiveDownloadDestination(path)
 }
 
 func (m *Mod) guardActiveDownloadActions(paths []string) ([]bool, func()) {
-	if m == nil || m.transfer == nil {
+	if m.transfer == nil {
 		return make([]bool, len(paths)), func() {}
 	}
 	return m.transfer.GuardDownloadDestinations(paths)
 }
 
 func (m *Mod) logActionError(err error, where string) {
-	if err != nil && m != nil && m.log != nil {
-		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
-			Severity: infra.DiagnosticError, Operation: where, Stage: "item-action",
-		})
-	}
+	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+		Severity: infra.DiagnosticError, Operation: where, Stage: "item-action",
+	})
 }
 
 func (m *Mod) enable(ctx context.Context, path string) (string, error) {
@@ -410,10 +408,8 @@ func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error
 	if !isDisabled(filepath.Base(path)) {
 		return filepath.Clean(path), nil
 	}
-	if m.compression != nil {
-		if err := m.compression.restoreBeforeEnable(ctx, path); err != nil {
-			return "", err
-		}
+	if err := m.compression.restoreBeforeEnable(ctx, path); err != nil {
+		return "", err
 	}
 	copyShaderFixes := false
 	if m.settings != nil {
@@ -424,7 +420,7 @@ func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error
 		copyShaderFixes = value
 	}
 	var processed []ShaderFixesProcessedFile
-	if copyShaderFixes && m.shaders != nil {
+	if copyShaderFixes {
 		copied, err := m.shaders.HandleShaders(path, true)
 		if err != nil {
 			processed = processedFilesFromError(err)
@@ -437,7 +433,7 @@ func (m *Mod) enableWithShaders(ctx context.Context, path string) (string, error
 	}
 	result, err := m.enable(ctx, path)
 	if err != nil {
-		if copyShaderFixes && m.shaders != nil {
+		if copyShaderFixes {
 			if rollbackErr := m.shaders.RollbackEnabledShaders(path, processed); rollbackErr != nil {
 				m.logShaderError(rollbackErr, "Mod:enable:rollbackShaders:"+path)
 			}
@@ -451,24 +447,22 @@ func (m *Mod) disableWithShaders(ctx context.Context, path string) (string, erro
 	if isDisabled(filepath.Base(path)) {
 		return filepath.Clean(path), nil
 	}
-	if m.shaders != nil {
-		if _, err := m.shaders.HandleShaders(path, false); err != nil {
-			if _, rollbackErr := m.shaders.HandleShaders(path, true); rollbackErr != nil {
-				m.logShaderError(rollbackErr, "Mod:disable:rollbackShaders:"+path)
-			}
-			return "", err
+	if _, err := m.shaders.HandleShaders(path, false); err != nil {
+		if _, rollbackErr := m.shaders.HandleShaders(path, true); rollbackErr != nil {
+			m.logShaderError(rollbackErr, "Mod:disable:rollbackShaders:"+path)
 		}
+		return "", err
 	}
 	result, err := m.disable(ctx, path)
-	if err == nil && m.compression != nil {
+	if err == nil {
 		m.compression.scheduleScope(result)
 	}
 	return result, err
 }
 
 func (m *Mod) lockedFolderError(err error, modPath string) error {
-	if err == nil || m == nil || m.fs == nil {
-		return err
+	if err == nil {
+		return nil
 	}
 	lock := m.fs.IsLockedPathError(err, modPath)
 	if !lock.IsLocked {

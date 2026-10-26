@@ -65,7 +65,7 @@ func (s *Store) Root() string {
 
 // Resolve returns an absolute path below Root for a non-empty relative path.
 func (s *Store) Resolve(relative string) (string, error) {
-	if s == nil || s.root == "" {
+	if s == nil {
 		return "", errors.New("app data store is not open")
 	}
 	if relative == "" || filepath.IsAbs(relative) || filepath.VolumeName(relative) != "" {
@@ -75,12 +75,7 @@ func (s *Store) Resolve(relative string) (string, error) {
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidPath, relative)
 	}
-	target := filepath.Join(s.root, clean)
-	inside, err := filepath.Rel(s.root, target)
-	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidPath, relative)
-	}
-	return target, nil
+	return filepath.Join(s.root, clean), nil
 }
 
 func (s *Store) EnsureDir(relative string) (string, error) {

@@ -93,19 +93,6 @@ func TestCDNTraceGetRejectsOversizedBody(t *testing.T) {
 	}
 }
 
-func TestCDNTraceGetRequiresClient(t *testing.T) {
-	t.Parallel()
-
-	_, err := (*CDNTrace)(nil).Get(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	_, err = NewCDNTrace(nil).Get(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 func TestCDNTraceGetUsesConfiguredBackendURL(t *testing.T) {
 	t.Parallel()
 

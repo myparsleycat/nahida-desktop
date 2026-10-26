@@ -36,9 +36,7 @@ func NewWithOptions(opts Options) *Service {
 	}
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }
 	t.persist.infoFn = func(message string) {
-		if t.log != nil {
-			t.log.Info(message, "TogglePersist")
-		}
+		t.log.Info(message, "TogglePersist")
 	}
 	var persistDiagnostics infra.DiagnosticThrottle
 	t.persist.diagnosticFn = func(err error, message string) {
@@ -54,22 +52,17 @@ func NewWithOptions(opts Options) *Service {
 		)
 	}
 	t.persist.errorFn = func(message string) {
-		if t.log != nil {
-			t.log.Error(message, "TogglePersist")
-		}
+		t.log.Error(message, "TogglePersist")
 	}
 	return t
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	return t.shutdownPersistWatcher()
 }

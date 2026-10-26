@@ -605,7 +605,7 @@ func (m *Mod) finishDownloadError(
 	canceled := ctx.Err() != nil || isAbortErr(err)
 	if canceled {
 		status := transfer.StatusCanceled
-		if updateErr := transfers.Update(pid, transfer.Updates{Status: &status}); updateErr != nil && m.log != nil {
+		if updateErr := transfers.Update(pid, transfer.Updates{Status: &status}); updateErr != nil {
 			_ = infra.ReportError(m.log, updateErr, "Mod", infra.Diagnostic{
 				Severity:  infra.DiagnosticError,
 				Operation: "custom-download",
@@ -643,9 +643,6 @@ func (m *Mod) finishDownloadError(
 }
 
 func (m *Mod) sanitizeName(name string) string {
-	if m.fs == nil {
-		return name
-	}
 	return m.fs.SanitizeWindowsFilename(name, " ")
 }
 

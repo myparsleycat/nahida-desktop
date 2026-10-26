@@ -37,8 +37,5 @@ func NewWithOptions(opts Options) *Service {
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	return t.shutdownModelViewer()
 }

@@ -205,9 +205,6 @@ func (a *Auth) saveToken(ctx context.Context, token string) error {
 // a.mu held, in the step that orders this save among the other token changes.
 func (a *Auth) saveTokenIf(ctx context.Context, token string, current func() bool) error {
 	return a.mutateToken(ctx, current, func() error {
-		if a.crypto == nil {
-			return errors.New("auth crypto is not configured")
-		}
 		if a.store == nil {
 			return errors.New("auth store is not configured")
 		}
@@ -229,9 +226,6 @@ func (a *Auth) getToken(ctx context.Context) (string, error) {
 	key, err := a.store.GetValue(ctx, tokenKey)
 	if err != nil || key == nil || *key == "" {
 		return "", err
-	}
-	if a.crypto == nil {
-		return "", nil
 	}
 	plain, decryptErr := a.crypto.DecryptString(*key)
 	if decryptErr == nil {
@@ -589,9 +583,7 @@ func (a *Auth) broadcast(name string, data any) {
 }
 
 func (a *Auth) info(msg string) {
-	if a.log != nil {
-		a.log.Info(msg, "Auth")
-	}
+	a.log.Info(msg, "Auth")
 }
 
 func (a *Auth) reportBackgroundError(err error, operation, stage, endpoint string) {

@@ -168,13 +168,7 @@ describe("normalizeModelViewerTransport", () => {
                     fallbackUrl: "unknown.png",
                     role: "normal_map",
                     encoding: "dds",
-                    format: "unknown",
-                },
-                unknownEncoding: {
-                    url: "future.dds",
-                    fallbackUrl: "future.png",
-                    role: "diffuse",
-                    encoding: "future",
+                    format: "",
                 },
             },
         });
@@ -194,10 +188,6 @@ describe("normalizeModelViewerTransport", () => {
             encoding: "dds",
             fallbackUrl: "unknown.png",
             format: undefined,
-        });
-        expect(normalized.textures.unknownEncoding).toMatchObject({
-            url: "future.png",
-            encoding: "image",
         });
     });
 

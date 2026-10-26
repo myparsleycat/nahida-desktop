@@ -202,11 +202,7 @@ func New(opts Options) *Manager {
 }
 
 //wails:ignore
-func (m *Manager) UseClient(client *db.Client) {
-	if client != nil {
-		m.games = client.GamePaths
-	}
-}
+func (m *Manager) UseClient(client *db.Client) { m.games = client.GamePaths }
 
 // List reports every runtime the importer can use, in its game's Mods folder.
 func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
@@ -422,12 +418,10 @@ func (m *Manager) Refresh(ctx context.Context, importer string) error {
 					return status, err
 				}
 				if changed {
-					if m.log != nil {
-						m.log.Info(map[string]any{
-							"importer": importer, "runtime": sel.Name, "path": root,
-							"message": "Left an outdated runtime with changed files for a manual update",
-						}, diagnosticWhere)
-					}
+					m.log.Info(map[string]any{
+						"importer": importer, "runtime": sel.Name, "path": root,
+						"message": "Left an outdated runtime with changed files for a manual update",
+					}, diagnosticWhere)
 					return status, nil
 				}
 

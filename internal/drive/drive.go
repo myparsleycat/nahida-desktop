@@ -31,23 +31,19 @@ type SearchParams struct {
 
 // Options wire Drive to the existing HTTP client and filename check.
 type Options struct {
-	HTTP             *infra.Client
-	FS               *platform.FS
-	Log              *infra.Log
-	Transfer         *transfer.Transfer
-	Download         *infra.Download
-	ParallelDownload *infra.ParallelDownloader
-	Archive          *infra.Archive
-	Dialog           *platform.Dialog
-	UploadSettings   UploadSettings
-	PathSelector     PathSelector
-	EventEmit        func(name string, data ...any)
-	Sleep            func(context.Context, time.Duration) error
-	Now              func() time.Time
-	DirRetries       *int
-	// FetchUploadRules overrides the upload-rules fetch. Tests inject fixed
-	// rules; production leaves it nil and always asks the server.
-	FetchUploadRules func(context.Context) (UploadRules, any, error)
+	HTTP           *infra.Client
+	FS             *platform.FS
+	Log            *infra.Log
+	Transfer       *transfer.Transfer
+	Download       *infra.Download
+	Archive        *infra.Archive
+	Dialog         *platform.Dialog
+	UploadSettings UploadSettings
+	PathSelector   PathSelector
+	EventEmit      func(name string, data ...any)
+	Sleep          func(context.Context, time.Duration) error
+	Now            func() time.Time
+	DirRetries     *int
 }
 
 // Drive is the Wails service for Electron Drive CRUD, copy/import, and
@@ -92,26 +88,19 @@ func NewWithOptions(opts Options) *Drive {
 	if opts.DirRetries != nil {
 		retries = *opts.DirRetries
 	}
-	parallelDownload := opts.ParallelDownload
-	if parallelDownload == nil {
-		parallelDownload = infra.NewParallelDownloader()
-	}
+	parallelDownload := infra.NewParallelDownloader()
 	if opts.HTTP != nil {
-		if parallelDownload.Client == nil {
-			parallelDownload.Client = opts.HTTP.HTTPClient()
-		}
-		if parallelDownload.GetHeaders == nil {
-			parallelDownload.GetHeaders = func(rawURL string) (map[string]string, error) {
-				header, err := opts.HTTP.GetHeaders(rawURL)
-				if err != nil {
-					return nil, err
-				}
-				out := make(map[string]string, len(header))
-				for key := range header {
-					out[key] = header.Get(key)
-				}
-				return out, nil
+		parallelDownload.Client = opts.HTTP.HTTPClient()
+		parallelDownload.GetHeaders = func(rawURL string) (map[string]string, error) {
+			header, err := opts.HTTP.GetHeaders(rawURL)
+			if err != nil {
+				return nil, err
 			}
+			out := make(map[string]string, len(header))
+			for key := range header {
+				out[key] = header.Get(key)
+			}
+			return out, nil
 		}
 	}
 	dialog := opts.Dialog
@@ -135,11 +124,7 @@ func NewWithOptions(opts Options) *Drive {
 		dirRetries:       retries,
 		ops:              make(map[string]*copyOperation),
 	}
-	if opts.FetchUploadRules != nil {
-		d.fetchRules = opts.FetchUploadRules
-	} else {
-		d.fetchRules = d.fetchUploadRules
-	}
+	d.fetchRules = d.fetchUploadRules
 	return d
 }
 
@@ -161,25 +146,16 @@ type PathSelector interface {
 
 //wails:ignore
 func (d *Drive) UseHTTP(c *infra.Client) {
-	if d == nil {
-		return
-	}
 	d.http = c
 }
 
 //wails:ignore
 func (d *Drive) UseFS(fs *platform.FS) {
-	if d == nil {
-		return
-	}
 	d.fs = fs
 }
 
 //wails:ignore
 func (d *Drive) UseLog(log *infra.Log) {
-	if d == nil {
-		return
-	}
 	d.log = log
 }
 
@@ -188,26 +164,18 @@ func (d *Drive) UseLog(log *infra.Log) {
 //
 //wails:ignore
 func (d *Drive) UseAppData(data *appdata.Store) {
-	if d == nil {
-		return
-	}
 	d.appData = data
 	d.sweepDownloadSpools()
 }
 
 //wails:ignore
 func (d *Drive) UsePathSelector(paths PathSelector) {
-	if d == nil {
-		return
-	}
 	d.paths = paths
 }
 
 //wails:ignore
 func (d *Drive) UseFixInspection(fn func([]string)) {
-	if d != nil {
-		d.inspectAddedMods = fn
-	}
+	d.inspectAddedMods = fn
 }
 
 func (d *Drive) GetItem(ctx context.Context, itemID string) (result any, err error) {
@@ -335,7 +303,7 @@ func (d *Drive) deleteItems(ctx context.Context, ids []string) (BatchDeletionOut
 	if err != nil {
 		return BatchDeletionOutcome{}, CreateDriveAPIError(err, "delete:items", 0)
 	}
-	if accepted.ErrorMessage != "" && d.log != nil {
+	if accepted.ErrorMessage != "" {
 		d.log.Warn(formatPartialDeleteLog(accepted, "delete"), "Drive:delete:items:partial")
 	}
 	return accepted, nil

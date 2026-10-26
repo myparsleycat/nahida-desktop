@@ -26,7 +26,7 @@ func TestDisableUnmanagedDoesNotRequireRegisteredGame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	disabled, err := (&Mod{}).DisableUnmanaged(context.Background(), source)
+	disabled, err := New().DisableUnmanaged(context.Background(), source)
 	if err != nil {
 		t.Fatal(err)
 	}

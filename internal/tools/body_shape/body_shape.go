@@ -182,15 +182,10 @@ func (t *Service) BodyShapeLoadMod(ctx context.Context, modPath string) (BodySha
 		return BodyShapeSessionDescriptor{}, err
 	}
 	loaded, err := loadBodyShapeMod(modPath, func(message string) {
-		if t.log != nil {
-			t.log.Warn(message, "BodyShapeEditor")
-		}
+		t.log.Warn(message, "BodyShapeEditor")
 	})
 	if err != nil {
 		return BodyShapeSessionDescriptor{}, err
-	}
-	if t.protocol == nil {
-		return BodyShapeSessionDescriptor{}, errors.New("tools service has no protocol service")
 	}
 	sessionID := t.protocol.CreateMemorySession()
 	session := &bodyShapeSession{
@@ -302,9 +297,7 @@ func (t *Service) BodyShapeExport(
 		remapped.Meshes[index] = mesh
 	}
 	result, err = exportBodyShapeMeshes(remapped, func(message string) {
-		if t.log != nil {
-			t.log.Warn(message, "BodyShapeEditor")
-		}
+		t.log.Warn(message, "BodyShapeEditor")
 	})
 	if err != nil {
 		return result, err
@@ -417,10 +410,7 @@ func (t *Service) BodyShapeBeginExport(
 	})); err != nil {
 		return BodyShapeExportUpload{}, err
 	}
-	exportID, err := newID()
-	if err != nil {
-		return BodyShapeExportUpload{}, err
-	}
+	exportID := newID()
 
 	result := BodyShapeExportUpload{ExportID: exportID, Meshes: make([]BodyShapeExportMeshUpload, 0, len(meshes))}
 	created := make([]string, 0, len(meshes)*2)
@@ -574,9 +564,7 @@ func (t *Service) BodyShapeCloseSession(_ context.Context, sessionID string) (Bo
 	t.bodyShapeMu.Lock()
 	delete(t.bodyShapeSessions, sessionID)
 	t.bodyShapeMu.Unlock()
-	if t.protocol != nil {
-		t.protocol.CleanupMemorySession(sessionID)
-	}
+	t.protocol.CleanupMemorySession(sessionID)
 	return BodyShapeOK{OK: true}, nil
 }
 
@@ -600,17 +588,12 @@ func findBodyShapeMesh(meshes []BodyShapeMeshCandidate, id string) *BodyShapeMes
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	t.bodyShapeMu.Lock()
 	sessions := t.bodyShapeSessions
 	t.bodyShapeSessions = make(map[string]*bodyShapeSession)
 	t.bodyShapeMu.Unlock()
-	if t.protocol != nil {
-		for id := range sessions {
-			t.protocol.CleanupMemorySession(id)
-		}
+	for id := range sessions {
+		t.protocol.CleanupMemorySession(id)
 	}
 	return nil
 }

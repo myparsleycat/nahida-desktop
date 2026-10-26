@@ -75,9 +75,6 @@ func (cfg ImporterConfig) usesReShade() bool {
 func (x *XXMI) LaunchPresetEffects(ctx context.Context, importer string) (reshade.PresetEffects, error) {
 	importer = strings.ToUpper(strings.TrimSpace(importer))
 	none := reshade.PresetEffects{Packages: []reshade.EffectPackage{}, Unknown: []string{}}
-	if x.reshade == nil {
-		return none, nil
-	}
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil || external {
 		return none, err

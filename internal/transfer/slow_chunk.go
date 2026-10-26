@@ -487,9 +487,7 @@ func candidateSpeed(candidate slowCandidate) float64 {
 
 func SlowReconnectDelay() time.Duration {
 	var data [8]byte
-	if _, err := rand.Read(data[:]); err != nil {
-		return slowChunkReconnectDelay
-	}
+	rand.Read(data[:])
 	jitterMilliseconds := binary.LittleEndian.Uint64(data[:]) % uint64(slowChunkReconnectJitter/time.Millisecond+1)
 	jitter := time.Duration(jitterMilliseconds) * time.Millisecond
 	return slowChunkReconnectDelay + jitter

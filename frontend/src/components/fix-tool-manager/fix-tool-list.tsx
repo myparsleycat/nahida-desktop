@@ -47,13 +47,13 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
   );
 
   const handleDragEnter = (e: React.DragEvent) => {
-    if (e.dataTransfer?.types.includes("Files")) {
+    if (e.dataTransfer.types.includes("Files")) {
       setIsDragOver(true);
     }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    if (e.dataTransfer?.types.includes("Files")) {
+    if (e.dataTransfer.types.includes("Files")) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX;
       const y = e.clientY;
@@ -65,7 +65,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer?.types.includes("Files")) {
+    if (e.dataTransfer.types.includes("Files")) {
       setIsDragOver(true);
     }
   };
@@ -101,7 +101,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
   });
 
   const handleDrop = (e: React.DragEvent) => {
-    if (e.dataTransfer?.types.includes("Files")) {
+    if (e.dataTransfer.types.includes("Files")) {
       setIsDragOver(false);
     }
   };

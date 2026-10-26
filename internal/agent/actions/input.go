@@ -3,9 +3,7 @@ package actions
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
-	"strings"
 
 	"nahida.live/desktop/internal/platform"
 )
@@ -76,19 +74,6 @@ func registerInputActions(registry *Registry, deps Dependencies) {
 				Keys:   input.Keys, Delivery: input.Delivery, HoldMs: input.HoldMs, IntervalMs: input.IntervalMs,
 				RestoreFocus: input.RestoreFocus,
 			})
-		},
-		describe: func(_ actionContext, raw json.RawMessage) (string, string, error) {
-			var input struct {
-				Title   string   `json:"title"`
-				Process string   `json:"process"`
-				PID     uint32   `json:"pid"`
-				Keys    []string `json:"keys"`
-			}
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", "", err
-			}
-			summary := fmt.Sprintf("Send %s to a window.", strings.Join(input.Keys, ", "))
-			return summary, windowTargetLabel(input.Title, input.Process, input.PID), nil
 		},
 	})
 }

@@ -13,7 +13,7 @@ export interface ModDownloadDisplay {
 }
 
 export function getModDownloadDisplay(transfer: TransferWithoutData): ModDownloadDisplay {
-  const progress = transfer.totalSize > 0 ? Math.max(0, Math.min(100, transfer.progress)) : null;
+  const progress = transfer.totalSize > 0 ? transfer.progress : null;
   if (transfer.status === "pending") {
     return { status: "queued", progress, speed: null, pulse: true };
   }

@@ -17,12 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import {
-    ALL_ZONES,
-    DEFAULT_MASK_STRENGTH,
-    DEFAULT_MASK_CURVE,
-    DEFAULT_MASK_RADIUS_SCALE,
-} from "./touch-profile-defaults";
+import { ALL_ZONES, DEFAULT_MASK_STRENGTH, DEFAULT_MASK_CURVE } from "./touch-profile-defaults";
 import { createTouchSettingsBatch } from "./touch-profile-settings-batch";
 import { useTouchProfilePreview } from "./use-touch-profile-preview";
 
@@ -38,12 +33,6 @@ type TouchDraft = {
     canAutoApply: boolean;
     warnings: string[];
     analysis: { supportGrade: string };
-    llm?: {
-        protocol: string;
-        endpoint: string;
-        model: string;
-        reasoning: string;
-    };
     components: TouchProfileComponentSummary[];
 };
 type TouchModInspection = {
@@ -494,7 +483,7 @@ export function useTouchProfileSession({
         options?: { zoneIds?: string[] },
     ) => {
         if (!Number.isFinite(delta)) return;
-        const current = zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE;
+        const current = zone.settings.maskRadiusScale;
         const next = Math.max(
             TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min,
             Math.min(

@@ -57,8 +57,5 @@ func (t *Tools) RunPreset(ctx context.Context, presetID, destPath string) error 
 }
 
 func (t *Tools) shutdownFixTool() error {
-	if t == nil || t.fixTool == nil {
-		return nil
-	}
 	return t.fixTool.Shutdown()
 }

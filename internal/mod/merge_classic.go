@@ -30,7 +30,7 @@ func (m *Mod) executeClassicMerge(
 	request MergeModsRequest,
 	created *[]mergeRollback,
 ) (string, error) {
-	container, err := createUniqueMergeFolder(request.GroupPath, mergeFolderName(node, request), created)
+	container, err := createUniqueMergeFolder(request.GroupPath, node.Name, created)
 	if err != nil {
 		return "", err
 	}

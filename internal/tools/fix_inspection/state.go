@@ -55,10 +55,6 @@ func (t *trackedFixInspection) warningHidden() bool {
 // DiagnoseModForFix runs a one-off inspection. Unlike InspectModForFix it keeps no state, so
 // read-only callers such as the agent neither register a fix warning nor start watchers.
 func (t *Service) DiagnoseModForFix(ctx context.Context, modPath, importer string) (*FixInspectionResult, error) {
-	if t == nil || t.inspectors == nil {
-		return &FixInspectionResult{Importer: strings.ToUpper(importer)}, nil
-	}
-
 	resolved, err := resolveFixInspectionTarget(modPath)
 	if err != nil {
 		return nil, err
@@ -68,10 +64,6 @@ func (t *Service) DiagnoseModForFix(ctx context.Context, modPath, importer strin
 
 // Only actionable results are retained and watched for changes.
 func (t *Service) InspectModForFix(ctx context.Context, modPath, importer string) (*FixInspectionResult, error) {
-	if t == nil || t.inspectors == nil {
-		return &FixInspectionResult{Importer: strings.ToUpper(importer)}, nil
-	}
-
 	resolved, err := resolveFixInspectionTarget(modPath)
 	if err != nil {
 		return nil, err
@@ -113,9 +105,6 @@ func (t *Service) InspectModForFix(ctx context.Context, modPath, importer string
 
 // Refresh also catches ancestor moves that Windows cannot report through an open child handle.
 func (t *Service) RefreshFixInspections(ctx context.Context) FixInspectionSnapshot {
-	if t == nil {
-		return FixInspectionSnapshot{Inspections: []FixInspectionRecord{}}
-	}
 	t.fixInspectionRunMu.Lock()
 	changed, stopped := t.refreshAllFixInspectionsLocked(ctx)
 	t.fixInspectionRunMu.Unlock()
@@ -129,10 +118,6 @@ func (t *Service) RefreshFixInspections(ctx context.Context) FixInspectionSnapsh
 // DismissFixInspection hides the warning for a mod until its inspection result changes.
 // The warning keeps being watched, so a mod that is repaired later stops being tracked.
 func (t *Service) DismissFixInspection(modPath string) {
-	if t == nil {
-		return
-	}
-
 	t.fixInspectionMu.Lock()
 	tracked := t.fixInspections[fixInspectionKey(modPath)]
 	if t.fixInspectionClosed || tracked == nil || tracked.warningHidden() {
@@ -164,9 +149,6 @@ func (t *Service) carryFixInspectionDismissal(key string, dismissed *FixInspecti
 
 //wails:ignore
 func (t *Service) QueueFixInspections(paths []string) {
-	if t == nil {
-		return
-	}
 	targets := lo.UniqBy(
 		lo.Filter(paths, func(path string, _ int) bool { return strings.TrimSpace(path) != "" }),
 		fixInspectionKey,
@@ -544,9 +526,6 @@ func (t *Service) removeFixInspectionWithDismissal(modPath string) (*FixInspecti
 
 // Dismissed warnings are tracked and watched like any other record, but stay out of the snapshot.
 func (t *Service) fixInspectionSnapshot() FixInspectionSnapshot {
-	if t == nil {
-		return FixInspectionSnapshot{Inspections: []FixInspectionRecord{}}
-	}
 	t.fixInspectionMu.Lock()
 	defer t.fixInspectionMu.Unlock()
 	items := make([]FixInspectionRecord, 0, len(t.fixInspections))
@@ -567,9 +546,6 @@ func (t *Service) emitFixInspectionSnapshot() {
 }
 
 func (t *Service) Shutdown() error {
-	if t == nil {
-		return nil
-	}
 	t.fixInspectionMu.Lock()
 	t.fixInspectionClosed = true
 	tracked := make([]*trackedFixInspection, 0, len(t.fixInspections))

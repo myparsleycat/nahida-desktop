@@ -935,7 +935,7 @@ function applyShapeTargets(
     deferGeometryUpdates: boolean,
 ): void {
     const userData = object.userData as PayloadMeshUserData;
-    const targets = userData.shapeTargets ?? [];
+    const targets = userData.shapeTargets;
     if (targets.length === 0) {
         return;
     }

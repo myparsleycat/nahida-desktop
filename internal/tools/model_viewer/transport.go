@@ -214,9 +214,6 @@ type ModelViewerForm struct {
 }
 
 func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tracked map[string]bool) {
-	if transport == nil {
-		return
-	}
 	for meshIndex := range transport.Meshes {
 		mesh := &transport.Meshes[meshIndex]
 		mesh.Conditions = normalizeModelViewerDNFWithTracked(mesh.Conditions, tracked)

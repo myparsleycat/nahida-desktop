@@ -141,9 +141,6 @@ func (d *ParallelDownloader) SetRequestConcurrency(concurrency int) {
 
 func (d *ParallelDownloader) acquireRequest(ctx context.Context) (chan struct{}, error) {
 	d.mu.Lock()
-	if d.requests == nil {
-		d.requests = make(chan struct{}, parallelRequestLimit)
-	}
 	requests := d.requests
 	d.mu.Unlock()
 	select {
@@ -167,9 +164,6 @@ func (d *ParallelDownloader) CheckRangeSupportWithHeader(
 	rawURL string,
 	caller http.Header,
 ) (bool, error) {
-	if d.cache == nil {
-		d.cache = map[string]rangeCacheEntry{}
-	}
 	key := rangeSupportCacheKey(rawURL)
 	d.mu.Lock()
 	if cached, ok := d.cache[key]; ok && cached.expiresAt.After(d.nowFn()) {
@@ -205,9 +199,6 @@ func (d *ParallelDownloader) CheckRangeSupportWithHeader(
 
 func (d *ParallelDownloader) requestRangeSupport(ctx context.Context, rawURL string, caller http.Header) (bool, error) {
 	d.mu.Lock()
-	if d.probes == nil {
-		d.probes = make(chan struct{}, rangeProbeLimit)
-	}
 	probes := d.probes
 	d.mu.Unlock()
 	select {
@@ -412,7 +403,6 @@ func (d *ParallelDownloader) Download(ctx context.Context, options ParallelDownl
 	if concurrency <= 0 {
 		concurrency = calculateParallelConcurrency(options.FileSize)
 	}
-	concurrency = max(1, concurrency)
 	segmentSize := max(int64(parallelMinSegmentSize), (options.FileSize+int64(concurrency*4)-1)/int64(concurrency*4))
 	chunkCount := int((options.FileSize + segmentSize - 1) / segmentSize)
 	concurrency = min(concurrency, chunkCount)

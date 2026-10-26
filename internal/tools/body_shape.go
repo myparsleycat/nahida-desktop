@@ -66,8 +66,5 @@ func (t *Tools) BodyShapeCloseSession(ctx context.Context, sessionID string) (Bo
 }
 
 func (t *Tools) shutdownBodyShape() error {
-	if t == nil || t.bodyShape == nil {
-		return nil
-	}
 	return t.bodyShape.Shutdown()
 }

@@ -45,9 +45,6 @@ func testUploadRules() UploadRules {
 // withUploadRules injects fixed upload rules so a test drive never asks the
 // server for them.
 func withUploadRules(drive *Drive, rules UploadRules) *Drive {
-	if drive == nil {
-		return drive
-	}
 	drive.fetchRules = func(context.Context) (UploadRules, any, error) {
 		raw, err := json.Marshal(rules)
 		if err != nil {

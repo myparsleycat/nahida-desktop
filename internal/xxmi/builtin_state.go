@@ -262,9 +262,7 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		x.removeDiagnosticsBundle(record)
 		x.emitDiagnosticsChanged(key)
 	}
-	if x.log != nil {
-		x.log.Info("Reset built-in XXMI runtime state", "XXMI.resetBuiltinRuntime")
-	}
+	x.log.Info("Reset built-in XXMI runtime state", "XXMI.resetBuiltinRuntime")
 	return nil
 }
 

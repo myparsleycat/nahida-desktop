@@ -36,14 +36,8 @@ func (x *XXMI) installBuiltinImporterPackage(
 			},
 		})
 	}()
-	if x.archive == nil || !x.github.Configured() {
-		return errors.New("XXMI install services are not configured")
-	}
 	if err := ValidateImporterSettings(spec.key, cfg); err != nil {
 		return err
-	}
-	if cfg.ImporterFolder == "" {
-		return errors.New("XXMI importer folder is not configured")
 	}
 	if err := validateImporterFolderTarget(cfg.ImporterFolder); err != nil {
 		return err
@@ -59,7 +53,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	}
 	var release *github.Release
 	for i := range releases {
-		if !releases[i].Draft && normalizeVersion(releases[i].TagName) == version {
+		if normalizeVersion(releases[i].TagName) == version {
 			release = &releases[i]
 			break
 		}

@@ -210,7 +210,7 @@ func verifyDigest(digest string, actual []byte) error {
 		return err
 	}
 
-	if len(actual) != sha256.Size || subtle.ConstantTimeCompare(expected, actual) != 1 {
+	if subtle.ConstantTimeCompare(expected, actual) != 1 {
 		return fmt.Errorf(
 			"digest mismatch: expected %s, got %s",
 			hex.EncodeToString(expected),
@@ -251,12 +251,7 @@ func parseSHA256Digest(digest string) ([]byte, error) {
 func resolveCacheDir() (string, error) {
 	baseDir, err := os.UserCacheDir()
 	if err != nil {
-		localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA"))
-		if localAppData == "" {
-			return "", err
-		}
-
-		baseDir = localAppData
+		return "", err
 	}
 
 	return filepath.Join(baseDir, cacheDirName), nil

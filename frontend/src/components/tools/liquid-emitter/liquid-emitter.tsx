@@ -95,9 +95,9 @@ export function LiquidEmitterTool({
 }: {
   modPath: string;
   /** Called when the tool moves to another folder: a new mod it created, or the restored original. */
-  onModPathChange?: (modPath: string) => void;
+  onModPathChange: (modPath: string) => void;
   /** Called with whether the anchor or look differs from what the mod has. */
-  onUnsavedChange?: (unsaved: boolean) => void;
+  onUnsavedChange: (unsaved: boolean) => void;
 }) {
   const { t } = useTranslation();
   const session = useLiquidEmitterSession(modPath);
@@ -121,7 +121,7 @@ export function LiquidEmitterTool({
   const emitters = inspection?.emitters ?? [];
   // Anchors are edited in the mesh's own units, which are not meters in every game.
   const meshUnit = inspection?.meshUnit || 1;
-  const down = inspection?.meshDown.length === 3 ? (inspection.meshDown as Vec3) : Z_DOWN;
+  const down = inspection ? (inspection.meshDown as Vec3) : Z_DOWN;
   const meshes = session.source?.transport.meshes;
   const forms = session.source?.transport.forms ?? [];
   const formOfMesh = (meshId: string) => meshes?.find((mesh) => mesh.id === meshId)?.form;
@@ -136,9 +136,9 @@ export function LiquidEmitterTool({
   const anchorDirty = !isEqual(anchor, current ? anchorFromEmitter(current) : null);
   const unsaved = anchorDirty || lookDirty;
   useEffect(() => {
-    onUnsavedChange?.(unsaved);
+    onUnsavedChange(unsaved);
   }, [onUnsavedChange, unsaved]);
-  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+  useEffect(() => () => onUnsavedChange(false), [onUnsavedChange]);
   const maxEmitters = inspection?.maxEmitters;
   const atLimit = maxEmitters !== undefined && emitters.length >= maxEmitters;
   const busy =
@@ -273,7 +273,7 @@ export function LiquidEmitterTool({
             return;
           }
           toast.success(t("page.tools.liquid_emitter.created"), { description: result.modPath });
-          onModPathChange?.(result.modPath);
+          onModPathChange(result.modPath);
         },
         onError: (error) => toast.error(liquidErrorMessage(t, error)),
       },
@@ -333,7 +333,7 @@ export function LiquidEmitterTool({
     session.restore.mutate(undefined, {
       onSuccess: (result) => {
         toast.success(t("page.tools.liquid_emitter.restored"), { description: result.modPath });
-        onModPathChange?.(result.modPath);
+        onModPathChange(result.modPath);
       },
       onError: (error) => toast.error(liquidErrorMessage(t, error)),
     });

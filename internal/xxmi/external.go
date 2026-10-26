@@ -184,12 +184,10 @@ func (x *XXMI) SetExternalImporterEnabled(ctx context.Context, key string, enabl
 		return err
 	}
 	changed = true
-	if x.log != nil {
-		x.log.Info(
-			fmt.Sprintf("Set external XXMI importer %s enabled=%t", spec.key, enabled),
-			"XXMI.setExternalImporterEnabled",
-		)
-	}
+	x.log.Info(
+		fmt.Sprintf("Set external XXMI importer %s enabled=%t", spec.key, enabled),
+		"XXMI.setExternalImporterEnabled",
+	)
 	return nil
 }
 
@@ -311,9 +309,7 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string, guards la
 	if info, err := os.Stat(executable); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("XXMI Launcher not found at %s", executable)
 	}
-	if x.log != nil {
-		x.log.Info("Starting game "+importer+" via XXMI Launcher", "XXMI.startGame")
-	}
+	x.log.Info("Starting game "+importer+" via XXMI Launcher", "XXMI.startGame")
 	if err := startLauncher(executable, importer); err != nil {
 		return err
 	}
@@ -326,9 +322,7 @@ func (x *XXMI) startExternalGame(ctx context.Context, importer string, guards la
 	if err != nil {
 		return err
 	}
-	if x.log != nil {
-		x.log.Info(fmt.Sprintf("Detected %s (PID: %d)", processName, pid), "XXMI.startGame")
-	}
+	x.log.Info(fmt.Sprintf("Detected %s (PID: %d)", processName, pid), "XXMI.startGame")
 	timer := time.NewTimer(time.Second)
 	select {
 	case <-ctx.Done():
@@ -461,9 +455,6 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 		return err
 	}
 	fields["xxmi_path"] = launcher.path
-	if x.archive == nil || !x.github.Configured() {
-		return errors.New("XXMI install services are not configured")
-	}
 
 	stage = "close-launcher"
 	if err := ensureLauncherClosed(ctx, x.findProcess); err != nil {
@@ -540,9 +531,7 @@ func (x *XXMI) InstallDLLVersion(ctx context.Context, input InstallDLLVersionInp
 	if err := copyTreeContext(ctx, stagingDir, destination); err != nil {
 		return fmt.Errorf("install XXMI package: %w", err)
 	}
-	if x.log != nil {
-		x.log.Info("Installed XXMI DLL version "+version+" to "+destination, "XXMI.installDllVersion")
-	}
+	x.log.Info("Installed XXMI DLL version "+version+" to "+destination, "XXMI.installDllVersion")
 	return nil
 }
 
@@ -583,9 +572,6 @@ func (x *XXMI) installExternalImporterPackage(
 	fields["xxmi_path"] = launcher.path
 	fields["importer_path"] = importerFolder
 	fields["config_path"] = configPath
-	if x.archive == nil || !x.github.Configured() {
-		return errors.New("XXMI install services are not configured")
-	}
 	if importerFolder == filepath.Clean(launcher.path) {
 		return errors.New("importer folder is not configured")
 	}
@@ -734,12 +720,10 @@ func (x *XXMI) installExternalImporterPackage(
 	committed = true
 	rollbackState = "committed"
 	x.reportCleanup(transaction.finish(), "InstallImporterPackage")
-	if x.log != nil {
-		x.log.Info(
-			"Installed "+spec.key+" package version "+version+" to "+importerFolder,
-			"XXMI.installExternalImporterPackage",
-		)
-	}
+	x.log.Info(
+		"Installed "+spec.key+" package version "+version+" to "+importerFolder,
+		"XXMI.installExternalImporterPackage",
+	)
 	return nil
 }
 

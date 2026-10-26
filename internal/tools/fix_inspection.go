@@ -37,8 +37,5 @@ func (t *Tools) QueueFixInspections(paths []string) {
 }
 
 func (t *Tools) shutdownFixInspections() error {
-	if t == nil || t.fixInspection == nil {
-		return nil
-	}
 	return t.fixInspection.Shutdown()
 }

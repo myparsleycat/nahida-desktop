@@ -17,9 +17,6 @@ func findFileAcrossRoots(
 	excludedDirs map[string]struct{},
 	reports ...func(error),
 ) (*string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	searchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	results := make(chan string, 1)

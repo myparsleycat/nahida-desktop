@@ -162,7 +162,7 @@ func (d *Drive) planUploadV2(
 	rules UploadRules,
 	onProgress func(UploadPlanProgress),
 ) (UploadPlan, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return UploadPlan{}, errDriveHTTPUnconfigured
 	}
 	for _, file := range files {
@@ -217,9 +217,6 @@ func (d *Drive) planUploadV2(
 		})
 		if fetchErr != nil {
 			return UploadPlan{}, fetchErr
-		}
-		if response.Body == nil {
-			return UploadPlan{}, errors.New("upload plan failed: empty response stream")
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			raw, readErr := io.ReadAll(response.Body)

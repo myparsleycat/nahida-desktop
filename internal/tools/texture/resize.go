@@ -337,19 +337,17 @@ func (t *Service) upscaleTextureFile(
 	expectedWidth := decoded.Width * settings.UpscaleScale
 	expectedHeight := decoded.Height * settings.UpscaleScale
 	if encoded.Width != expectedWidth || encoded.Height != expectedHeight {
-		if t.log != nil {
-			t.log.Warn(
-				fmt.Sprintf(
-					"%s output size %dx%d did not match expected %dx%d",
-					displayName,
-					encoded.Width,
-					encoded.Height,
-					expectedWidth,
-					expectedHeight,
-				),
-				"TextureResizer:upscale",
-			)
-		}
+		t.log.Warn(
+			fmt.Sprintf(
+				"%s output size %dx%d did not match expected %dx%d",
+				displayName,
+				encoded.Width,
+				encoded.Height,
+				expectedWidth,
+				expectedHeight,
+			),
+			"TextureResizer:upscale",
+		)
 	}
 	t.emitTextureUpscaleProgress("done", lo.ToPtr[float64](100), lo.ToPtr("Texture upscale completed"), path)
 	return TextureResizeResult{
@@ -388,7 +386,7 @@ func (t *Service) runNCNNUpscaler(
 		}
 		return err
 	}
-	if message := strings.TrimSpace(stdout.String()); message != "" && t.log != nil {
+	if message := strings.TrimSpace(stdout.String()); message != "" {
 		t.log.Info(message, "TextureResizer:upscale")
 	}
 	if !regularFile(outputPath) {

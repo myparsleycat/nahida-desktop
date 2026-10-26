@@ -615,7 +615,7 @@ export default function BodyShapeTool({
         previewPositions: selectedMesh.previewPositions,
         regions: activeRegions,
       });
-      const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions, {
+      const weights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions, {
         ignoreAmount: true,
       });
       const primary = activeRegions.find((r) => r.amount !== 0);
@@ -625,7 +625,6 @@ export default function BodyShapeTool({
         meshIds: selectedMesh.meshIds,
         includeWeights,
       });
-      const weights = displayWeights ?? new Float32Array(selectedMesh.vertexCount);
       const uploads = await Promise.allSettled(
         (upload.meshes ?? []).flatMap((target) => {
           const segment = selectedMesh.segments.find((entry) => entry.meshId === target.meshId);

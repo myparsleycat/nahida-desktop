@@ -11,18 +11,16 @@ func (d *Drive) listDestinationChildIDs(ctx context.Context, destinationID strin
 	ids := make(map[string]struct{})
 	item, err := d.GetItem(ctx, destinationID)
 	if err != nil {
-		if d.log != nil {
-			_ = infra.ReportError(
-				d.log,
-				err,
-				"Drive:CopyFromUrl:ListDestinationChildrenFailed",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticWarn,
-					Operation: "copy-from-url",
-					Fields:    map[string]any{"destinationId": destinationID},
-				},
-			)
-		}
+		_ = infra.ReportError(
+			d.log,
+			err,
+			"Drive:CopyFromUrl:ListDestinationChildrenFailed",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticWarn,
+				Operation: "copy-from-url",
+				Fields:    map[string]any{"destinationId": destinationID},
+			},
+		)
 		return ids
 	}
 	for _, child := range driveItemChildren(item) {
@@ -124,9 +122,6 @@ func driveItemChildren(value any) []map[string]any {
 }
 
 func (d *Drive) logImportVerificationFailure(destinationID, itemID string, expectedSize int64, err error) {
-	if d.log == nil {
-		return
-	}
 	d.log.Warn(map[string]any{
 		"destinationId": destinationID, "itemId": itemID, "expectedSize": expectedSize,
 		"error": err.Error(), "stage": "verify-server-copy",

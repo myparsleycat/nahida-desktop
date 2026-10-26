@@ -334,19 +334,9 @@ export function ModelViewerWorkspace({
       return;
     }
 
-    const iniPath = source.transport.iniPath;
-    if (!iniPath) {
-      toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"));
-      return;
-    }
-
-    const inis = source.transport.inis?.length
-      ? source.transport.inis
-      : [{ path: iniPath, prefix: "" }];
-
     try {
       const results = await Promise.all(
-        inis.map((ini) =>
+        source.transport.inis.map((ini) =>
           Tools.PersistModelViewerToggleState(
             ini.path,
             Object.fromEntries(

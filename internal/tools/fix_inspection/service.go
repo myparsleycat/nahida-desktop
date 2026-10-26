@@ -59,27 +59,24 @@ func (t *Service) UseClient(client *db.Client) {
 }
 
 func (t *Service) Register(inspector FixInspector) {
-	if t == nil || t.inspectors == nil {
-		return
-	}
 	t.inspectors.Register(inspector)
 }
 
 func (t *Service) requireClient() (*db.Client, error) {
-	if t == nil || t.client == nil {
+	if t.client == nil {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }
 
 func (t *Service) logError(err error, where string) {
-	if err != nil && t != nil && t.log != nil {
+	if err != nil {
 		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})

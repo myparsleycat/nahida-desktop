@@ -593,17 +593,6 @@ func TestSandboxResolveTargetAllowsMissingFileInsideRoot(t *testing.T) {
 	}
 }
 
-func TestSandboxResolversReportUnavailableSandbox(t *testing.T) {
-	t.Parallel()
-	var sandbox *Sandbox
-	if _, err := sandbox.ResolveExisting("root", "mod"); err == nil {
-		t.Fatal("nil sandbox unexpectedly resolved an existing path")
-	}
-	if _, err := sandbox.ResolveTarget("root", "output.ini"); err == nil {
-		t.Fatal("nil sandbox unexpectedly resolved a target path")
-	}
-}
-
 func TestDecodeTextDetectsCarriageReturnNewlines(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

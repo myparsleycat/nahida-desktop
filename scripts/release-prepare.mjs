@@ -10,7 +10,7 @@ await writeSourceVersion(process.cwd(), release.version);
 const result = spawnSync(
   'task',
   ['package', `APP_VERSION=${release.version}`, 'ARCH=amd64'],
-  { stdio: 'inherit', shell: process.platform === 'win32' },
+  { stdio: 'inherit', shell: true },
 );
 
 if (result.error) {

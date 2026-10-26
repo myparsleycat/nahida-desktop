@@ -57,21 +57,21 @@ func (t *Service) UseAppData(data *appdata.Store) {
 }
 
 func (t *Service) requireClient() (*db.Client, error) {
-	if t == nil || t.client == nil {
+	if t.client == nil {
 		return nil, errors.New("tools service is not bound to a database")
 	}
 	return t.client, nil
 }
 
 func (t *Service) appDataPath(relative string) (string, error) {
-	if t == nil || t.appData == nil {
+	if t.appData == nil {
 		return "", errors.New("tools service has no app data store")
 	}
 	return t.appData.Resolve(relative)
 }
 
 func (t *Service) emitEvent(name string, data any) {
-	if t != nil && t.emit != nil {
+	if t.emit != nil {
 		t.emit(name, data)
 	}
 }

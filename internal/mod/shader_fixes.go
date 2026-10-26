@@ -96,19 +96,15 @@ type ShaderFixes struct {
 	getImporters func() []shaderImporter
 	getGames     func() []shaderGame
 	hashFile     func(string) (string, error)
-	generateKey  func() string
 	logError     func(error, string)
 
-	globCalls             []shaderGlobCall
+	onGlob                func(shaderGlobCall)
 	ownerIndexWrites      int
 	failOwnerIndexWriteOn int
 }
 
 func newShaderFixes() *ShaderFixes {
-	return &ShaderFixes{
-		hashFile:    hashShaderFixesFile,
-		generateKey: newShaderFixesModKey,
-	}
+	return &ShaderFixes{hashFile: hashShaderFixesFile}
 }
 
 func (s *ShaderFixes) HandleShaders(modPath string, enable bool) ([]ShaderFixesProcessedFile, error) {
@@ -133,48 +129,36 @@ func (s *ShaderFixes) RollbackEnabledShaders(modPath string, processedShaders []
 	}
 	for i := len(processedShaders) - 1; i >= 0; i-- {
 		file := processedShaders[i]
-		func() {
-			defer func() {
-				if recovered := recover(); recovered != nil {
-					rollbackError = fmt.Errorf("%v", recovered)
-				}
-			}()
-			var targetKey string
-			if globalShaderPath != "" {
-				if key := s.getShaderFixesOwnerTargetKey(globalShaderPath, file.TargetPath); key != nil {
-					targetKey = *key
-				}
+		var targetKey string
+		if globalShaderPath != "" {
+			if key := s.getShaderFixesOwnerTargetKey(globalShaderPath, file.TargetPath); key != nil {
+				targetKey = *key
 			}
-			var target *shaderFixesOwnerIndexTarget
-			if ownerIndex != nil && targetKey != "" {
-				if indexed, ok := ownerIndex.Targets[targetKey]; ok {
-					copied := indexed
-					target = &copied
-				}
-			}
-			if targetKey != "" && target != nil && ownerIndex != nil {
+		}
+		if ownerIndex != nil && targetKey != "" {
+			if target, ok := ownerIndex.Targets[targetKey]; ok {
 				remaining := filterOwners(target.Owners, file.ModKey)
 				if len(remaining) > 0 {
 					ownerIndex.Targets[targetKey] = shaderFixesOwnerIndexTarget{Hash: target.Hash, Owners: remaining}
-					return
+					continue
 				}
 				delete(ownerIndex.Targets, targetKey)
 			}
-			if file.CreatedTarget {
-				if _, err := os.Stat(file.TargetPath); err == nil {
-					currentHash, err := s.hashFile(file.TargetPath)
-					if err != nil {
+		}
+		if file.CreatedTarget {
+			if _, err := os.Stat(file.TargetPath); err == nil {
+				currentHash, err := s.hashFile(file.TargetPath)
+				if err != nil {
+					rollbackError = err
+					continue
+				}
+				if currentHash == file.Hash {
+					if err := os.Remove(file.TargetPath); err != nil {
 						rollbackError = err
-						return
-					}
-					if currentHash == file.Hash {
-						if err := os.Remove(file.TargetPath); err != nil {
-							rollbackError = err
-						}
 					}
 				}
 			}
-		}()
+		}
 	}
 	if globalShaderPath != "" && ownerIndex != nil {
 		if err := s.writeShaderFixesOwnerIndex(globalShaderPath, *ownerIndex); err != nil {
@@ -584,7 +568,7 @@ func (s *ShaderFixes) getShaderFixesModKey(modPath string, create bool) (string,
 	if !create {
 		return "", nil
 	}
-	modKey := s.nextModKey()
+	modKey := newShaderFixesModKey()
 	if err := s.writeShaderFixesModManifest(modPath, shaderFixesModManifest{
 		Version: shaderFixesModMarkerVersion, ModKey: modKey, Files: []shaderFixesModManifestFile{},
 	}); err != nil {
@@ -842,7 +826,9 @@ type shaderGlobOptions struct {
 }
 
 func (s *ShaderFixes) glob(pattern, cwd string, opts shaderGlobOptions) ([]string, error) {
-	s.globCalls = append(s.globCalls, shaderGlobCall{Pattern: pattern, Cwd: cwd})
+	if s.onGlob != nil {
+		s.onGlob(shaderGlobCall{Pattern: pattern, Cwd: cwd})
+	}
 	info, err := os.Stat(cwd)
 	switch {
 	case err == nil && info.IsDir():
@@ -897,30 +883,23 @@ func (s *ShaderFixes) glob(pattern, cwd string, opts shaderGlobOptions) ([]strin
 }
 
 func (s *ShaderFixes) importers() []shaderImporter {
-	if s == nil || s.getImporters == nil {
+	if s.getImporters == nil {
 		return nil
 	}
 	return s.getImporters()
 }
 
 func (s *ShaderFixes) games() []shaderGame {
-	if s == nil || s.getGames == nil {
+	if s.getGames == nil {
 		return nil
 	}
 	return s.getGames()
 }
 
 func (s *ShaderFixes) log(err error, where string) {
-	if s != nil && s.logError != nil && err != nil {
+	if s.logError != nil && err != nil {
 		s.logError(err, where)
 	}
-}
-
-func (s *ShaderFixes) nextModKey() string {
-	if s != nil && s.generateKey != nil {
-		return s.generateKey()
-	}
-	return newShaderFixesModKey()
 }
 
 func hashShaderFixesFile(path string) (string, error) {
@@ -942,9 +921,7 @@ func hashShaderFixesString(value string) string {
 
 func newShaderFixesModKey() string {
 	buf := make([]byte, shaderFixesModKeyLength)
-	if _, err := rand.Read(buf); err != nil {
-		return fmt.Sprintf("%x", buf)
-	}
+	rand.Read(buf)
 	out := make([]byte, shaderFixesModKeyLength)
 	for i, b := range buf {
 		out[i] = shaderFixesModKeyAlphabet[int(b)%len(shaderFixesModKeyAlphabet)]

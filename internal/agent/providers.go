@@ -162,9 +162,6 @@ func catalog() *ModelCatalog {
 
 // useCatalog installs a refreshed catalog for the rest of the process lifetime.
 func useCatalog(snapshot *ModelCatalog) {
-	if snapshot == nil || len(snapshot.Providers) == 0 {
-		return
-	}
 	catalogCurrent.Store(snapshot)
 }
 

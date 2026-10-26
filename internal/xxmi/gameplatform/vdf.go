@@ -189,9 +189,6 @@ func quoteVDF(value string) string {
 // setVDFString returns data with the string key of block set to value. An existing value is replaced
 // in place; a missing key becomes the first entry of the block. Every other byte is kept.
 func setVDFString(data []byte, block *vdfNode, key, value string) ([]byte, error) {
-	if block == nil || !block.block {
-		return nil, errors.New("vdf: target is not a block")
-	}
 	if existing := block.child(key); existing != nil {
 		if existing.block {
 			return nil, fmt.Errorf("vdf: %q is a block", key)

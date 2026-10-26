@@ -843,7 +843,7 @@ func buildModelViewerDirectMeshPayload(
 					mesh.geometry.VertexCount,
 				)
 			}
-			low := append([]float32(nil), mesh.geometry.Position...)
+			low := mesh.geometry.Position
 			var lowErr error
 			if dimension.SmallerPath != "" {
 				low, lowErr = readModelViewerShapePositions(

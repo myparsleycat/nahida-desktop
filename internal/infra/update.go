@@ -124,7 +124,7 @@ func (u *Updater) UseGitHubRate(rate *GitHubRateCoordinator) {
 // CheckForUpdates, matching Electron's GitHubRateCoordinator.
 //
 //wails:ignore
-func (u *Updater) AttachGitHubRate(store githubRateStore, httpClient *Client, log *Log) {
+func (u *Updater) AttachGitHubRate(store githubRateStore, log *Log) {
 	if u == nil {
 		return
 	}
@@ -135,7 +135,6 @@ func (u *Updater) AttachGitHubRate(store githubRateStore, httpClient *Client, lo
 	rate := u.rate
 	u.mu.Unlock()
 	rate.UseAppState(store)
-	rate.UseHTTP(httpClient)
 	rate.UseLog(log)
 }
 
@@ -998,7 +997,7 @@ func (u *Updater) githubRateAllowsCheck(ctx context.Context, userInitiated bool)
 	if rate == nil {
 		return true, nil
 	}
-	allowed, state, err := rate.CanUseGitHubAPI(ctx, GitHubRateCheckOptions{})
+	allowed, state, err := rate.CanUseGitHubAPI(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -1065,11 +1064,9 @@ func (u *Updater) logError(err error, where string) {
 	u.mu.Lock()
 	log := u.log
 	u.mu.Unlock()
-	if log != nil {
-		_ = ReportError(log, err, "Updater", Diagnostic{
-			Severity: DiagnosticError, Operation: where, Stage: "background",
-		})
-	}
+	_ = ReportError(log, err, "Updater", Diagnostic{
+		Severity: DiagnosticError, Operation: where, Stage: "background",
+	})
 }
 
 func (u *Updater) ServiceShutdown() error {

@@ -53,10 +53,7 @@ func (s *Service) loadCatalogCache() {
 // newestCatalog returns the later publication among a cached snapshot and the embedded one, or nil
 // when the cached snapshot is not newer.
 func newestCatalog(cached, embedded *ModelCatalog) *ModelCatalog {
-	if cached == nil {
-		return nil
-	}
-	if embedded == nil || catalogTimestamp(cached).After(catalogTimestamp(embedded)) {
+	if catalogTimestamp(cached).After(catalogTimestamp(embedded)) {
 		return cached
 	}
 	return nil
@@ -149,9 +146,6 @@ func (s *Service) catalogCachePath() (string, error) {
 // catalogTimestamp reads the publication time of a catalog; an unparsable value sorts oldest so
 // the embedded fallback never wins over a real snapshot.
 func catalogTimestamp(snapshot *ModelCatalog) time.Time {
-	if snapshot == nil {
-		return time.Time{}
-	}
 	parsed, err := time.Parse(time.RFC3339, snapshot.UpdatedAt)
 	if err != nil {
 		return time.Time{}

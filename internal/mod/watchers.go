@@ -105,18 +105,11 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 }
 
 func (m *Mod) ServiceShutdown() error {
-	if m == nil {
-		return nil
-	}
 	m.watchMu.Lock()
 	game, character := m.gameWatcher, m.characterWatcher
 	m.gameWatcher, m.characterWatcher = nil, nil
 	m.watchMu.Unlock()
-	var compressionErr error
-	if m.compression != nil {
-		compressionErr = m.compression.stop()
-	}
-	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), compressionErr)
+	return errors.Join(closeManagedWatcher(game), closeManagedWatcher(character), m.compression.stop())
 }
 
 func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {

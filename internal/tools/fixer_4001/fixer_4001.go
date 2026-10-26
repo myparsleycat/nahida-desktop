@@ -254,10 +254,7 @@ func (t *Service) FourThousandOneFixerBuildDll(
 	if err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
-	buildID, err := newID()
-	if err != nil {
-		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
-	}
+	buildID := newID()
 	tempDir := filepath.Join(os.TempDir(), d3dBuildTempDirName, buildID)
 	defer func() {
 		t.reportCleanup(os.RemoveAll(tempDir), "FourThousandOneFixerBuildDll")
@@ -409,20 +406,18 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", err)
 	}
 	t.update4001Progress("XXMI_OBFUSCATE_SUCCESS", "")
-	if t.log != nil {
-		t.log.Info(
-			fmt.Sprintf(
-				"Successfully diversified padding in %s; backup=%s; candidates=%d; mutations=%d; hashBefore=%s; hashAfter=%s",
-				target,
-				backupPath,
-				report.DiscoveredRegions,
-				report.ModifiedRegions,
-				report.InputSHA256,
-				hashAfter,
-			),
-			"4001Fixer:diversifyD3D11DllPadding",
-		)
-	}
+	t.log.Info(
+		fmt.Sprintf(
+			"Successfully diversified padding in %s; backup=%s; candidates=%d; mutations=%d; hashBefore=%s; hashAfter=%s",
+			target,
+			backupPath,
+			report.DiscoveredRegions,
+			report.ModifiedRegions,
+			report.InputSHA256,
+			hashAfter,
+		),
+		"4001Fixer:diversifyD3D11DllPadding",
+	)
 	return Fixer4001Result{Success: true, BackupPath: lo.ToPtr(backupPath)}
 }
 

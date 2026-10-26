@@ -202,9 +202,6 @@ func (r *ReShade) Paths(ctx context.Context, importer string) (Paths, error) {
 type layout struct{ root string }
 
 func (r *ReShade) layout(ctx context.Context) (layout, error) {
-	if r.root == nil {
-		return layout{}, errors.New("ReShade data folder is not configured")
-	}
 	root, err := r.root(ctx)
 	if err != nil {
 		return layout{}, err

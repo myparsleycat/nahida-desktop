@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -153,7 +152,6 @@ func newRuntime() *runtime {
 	protocolService := infra.NewProtocol()
 	protocolService.Configure(httpClient, log)
 	githubRate := infra.NewGitHubRateCoordinator()
-	githubRate.UseHTTP(httpClient)
 	githubRate.UseLog(log)
 	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
 	var xxmiService *xxmi.XXMI
@@ -344,9 +342,6 @@ func newRuntime() *runtime {
 		Log:       log,
 		EventEmit: eventEmit,
 		LogPath: func() (string, error) {
-			if rt.appData == nil {
-				return "", os.ErrNotExist
-			}
 			logs, err := rt.appData.Resolve(appdata.LogsDir)
 			if err != nil {
 				return "", err
@@ -372,22 +367,11 @@ func newRuntime() *runtime {
 		Log:       log,
 		EventEmit: eventEmit,
 	})
-	if rt.mod != nil {
-		rt.mod.UseFocus(rt.window.Focus)
-		rt.mod.UseWindowReady(rt.window.WaitReady)
-	}
-	if rt.drive != nil && rt.mod != nil {
-		rt.drive.UsePathSelector(rt.mod)
-	}
-	if rt.tools != nil {
-		queueFixInspections := rt.tools.QueueFixInspections
-		if rt.mod != nil {
-			rt.mod.UseFixInspection(queueFixInspections)
-		}
-		if rt.drive != nil {
-			rt.drive.UseFixInspection(queueFixInspections)
-		}
-	}
+	rt.mod.UseFocus(rt.window.Focus)
+	rt.mod.UseWindowReady(rt.window.WaitReady)
+	rt.drive.UsePathSelector(rt.mod)
+	rt.mod.UseFixInspection(rt.tools.QueueFixInspections)
+	rt.drive.UseFixInspection(rt.tools.QueueFixInspections)
 	return rt
 }
 
@@ -464,8 +448,6 @@ func newLoggedServiceWithOptions[T any](
 	instance *T,
 	options application.ServiceOptions,
 ) application.Service {
-	if rt != nil && rt.log != nil {
-		options.MarshalError = rt.log.ServiceErrorMarshaler(name)
-	}
+	options.MarshalError = rt.log.ServiceErrorMarshaler(name)
 	return application.NewServiceWithOptions(instance, options)
 }

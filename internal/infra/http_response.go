@@ -32,7 +32,7 @@ var apiCBORDecMode = func() cbor.DecMode {
 // response contract consumed by the rest of the application. Keeping format
 // negotiation here prevents individual API callers from needing CBOR branches.
 func normalizeAPIResponse(response *http.Response) error {
-	if response == nil || response.Body == nil || !isCBORContentType(response.Header.Get("Content-Type")) {
+	if !isCBORContentType(response.Header.Get("Content-Type")) {
 		return nil
 	}
 	raw, err := io.ReadAll(response.Body)
@@ -51,9 +51,6 @@ func normalizeAPIResponse(response *http.Response) error {
 	response.Body = io.NopCloser(bytes.NewReader(encoded))
 	response.ContentLength = int64(len(encoded))
 	response.Header = response.Header.Clone()
-	if response.Header == nil {
-		response.Header = make(http.Header)
-	}
 	response.Header.Set("Content-Type", jsonContentType)
 	response.Header.Set("Content-Length", fmt.Sprintf("%d", len(encoded)))
 	return nil

@@ -81,7 +81,7 @@ func (t *Service) GetModelViewerIneffectiveValues(
 			)
 		}
 	}()
-	if session == nil || session.evaluator == nil {
+	if session == nil {
 		return nil, fmt.Errorf("model viewer session is unavailable")
 	}
 	for key, value := range state {

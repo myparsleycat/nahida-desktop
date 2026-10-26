@@ -2,7 +2,6 @@ package reshade
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,9 +14,6 @@ func (r *ReShade) runTransfer(
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	if r.transfer == nil {
-		return errors.New("transfer service is not configured")
 	}
 	pid := uuid.NewString()
 	_, err := r.transfer.Create(transfer.CreateParams{

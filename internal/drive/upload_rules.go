@@ -106,20 +106,11 @@ func (r UploadRules) MaxSizeFor(name string) (int64, bool) {
 
 //wails:ignore
 func (d *Drive) UploadRules(ctx context.Context) (UploadRules, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return UploadRules{}, errDriveHTTPUnconfigured
 	}
-	rules, _, err := d.rulesFetcher()(ctx)
+	rules, _, err := d.fetchRules(ctx)
 	return rules, err
-}
-
-// rulesFetcher returns the configured upload-rules fetch, defaulting to the
-// server. Production always asks the server; tests inject fixed rules.
-func (d *Drive) rulesFetcher() func(context.Context) (UploadRules, any, error) {
-	if d.fetchRules != nil {
-		return d.fetchRules
-	}
-	return d.fetchUploadRules
 }
 
 // fetchUploadRules asks the server for its upload rules and answers them with

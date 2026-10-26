@@ -204,7 +204,7 @@ function sanitizeGameBananaHtml(value: string) {
 }
 
 function hardenSanitizedGameBananaAnchors(value: string) {
-  if (!value || typeof document === "undefined") {
+  if (!value) {
     return value;
   }
 

@@ -238,9 +238,6 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if strings.HasPrefix(call.Name, "mcp__") {
-		if e.mcp == nil {
-			return toolExecution{}, fmt.Errorf("MCP tool %q is unavailable", call.Name)
-		}
 		result, err := e.mcp.Call(ctx, call)
 		output, images := splitImageContent(result)
 		return toolExecution{Output: output, Images: images}, err
@@ -401,16 +398,10 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
 		}
-		if e.desktop == nil {
-			return toolExecution{}, errors.New("desktop actions are unavailable")
-		}
 		return toolExecution{Output: e.desktop.DefinitionsFor(
 			e.scope.Type, input.Domain, input.Query, e.supportsImages,
 		)}, nil
 	case "run_desktop_action":
-		if e.desktop == nil {
-			return toolExecution{}, errors.New("desktop actions are unavailable")
-		}
 		var input agentactions.Call
 		if err := json.Unmarshal(call.Arguments, &input); err != nil {
 			return toolExecution{}, err
@@ -458,10 +449,6 @@ func (e *toolExecutor) Execute(ctx context.Context, call ToolCall) (toolExecutio
 		}
 		result, err := e.mcp.GetPrompt(ctx, input.Server, input.Name, input.Arguments)
 		return toolExecution{Output: result}, err
-	case "list_mod_actions":
-		return toolExecution{Output: e.modActions()}, nil
-	case "run_mod_action":
-		return toolExecution{}, errors.New("run_mod_action is deprecated; use run_desktop_action")
 	default:
 		return toolExecution{}, fmt.Errorf("unregistered tool %q", call.Name)
 	}
@@ -474,9 +461,6 @@ func (e *toolExecutor) ExecuteApproved(
 ) (toolExecution, error) {
 	switch kind {
 	case "desktop":
-		if e.desktop == nil {
-			return toolExecution{}, errors.New("desktop actions are unavailable")
-		}
 		output, err := e.desktop.ExecuteWithContext(
 			ctx, e.scope.Type, e.sandbox, actionID, arguments,
 			agentactions.ExecutionContext{
@@ -528,15 +512,4 @@ func (e *toolExecutor) ExecuteApproved(
 		}
 	}
 	return toolExecution{}, fmt.Errorf("unsupported approved action %q", actionID)
-}
-
-func (e *toolExecutor) modActions() []map[string]any {
-	return []map[string]any{
-		{"id": "inspect-fixes", "description": "Inspect the mod for applicable fixes"},
-		{"id": "run-fix-script", "description": "Run an already-installed fix script; requires scriptId"},
-		{"id": "run-fix-preset", "description": "Run an already-installed fix preset; requires presetId"},
-		{"id": "resize-textures", "description": "Resize mod textures with existing Nahida settings"},
-		{"id": "wuwa-fixer", "description": "Run an already-prepared Wuwa fixer"},
-		{"id": "zzmi-fixer", "description": "Run an already-prepared ZZMI fixer; requires tool"},
-	}
 }

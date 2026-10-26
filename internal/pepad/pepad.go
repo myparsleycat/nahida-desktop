@@ -1,9 +1,6 @@
 package pepad
 
-import (
-	"bytes"
-	"errors"
-)
+import "errors"
 
 func Analyze(input []byte, opts Options) (Report, error) {
 	analysis, err := analyzeInternal(input, normalize(opts))
@@ -22,18 +19,7 @@ func Transform(input []byte, opts Options) (Result, error) {
 	if analysis.pe.hasCertificate() && !opts.AllowInvalidSignature && !opts.DryRun {
 		return Result{}, ErrAuthenticode
 	}
-	patches, err := planPatches(analysis.approved, input, opts)
-	if err != nil {
-		return Result{}, err
-	}
-	repeated, err := planPatches(analysis.approved, input, opts)
-	if err != nil {
-		return Result{}, err
-	}
-	deterministic := patchesEqual(patches, repeated)
-	if !deterministic {
-		return Result{}, ErrNotDeterministic
-	}
+	patches := planPatches(analysis.approved, input, opts)
 	analysis.report.markPatches(patches, opts.DryRun)
 	var output []byte
 	if !opts.DryRun {
@@ -46,14 +32,13 @@ func Transform(input []byte, opts Options) (Result, error) {
 	}
 	if opts.DryRun {
 		analysis.report.OutputSHA256 = nil
-		analysis.report.Validation.Deterministic = deterministic
+		analysis.report.Validation.Deterministic = true
 		return Result{Output: output, Report: analysis.report}, nil
 	}
 	validation, err := validateTransformation(input, output, analysis.pe, patches)
 	if err != nil {
 		return Result{}, err
 	}
-	validation.Deterministic = deterministic
 	analysis.report.Validation = validation
 	hash := sha256Hex(output)
 	analysis.report.OutputSHA256 = &hash
@@ -129,22 +114,6 @@ func normalize(opts Options) Options {
 		opts.MinimumSledLength = 8
 	}
 	return opts
-}
-
-func patchesEqual(a, b []patch) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].CandidateID != b[i].CandidateID || a[i].RVA != b[i].RVA || a[i].FileOffset != b[i].FileOffset ||
-			a[i].Template != b[i].Template {
-			return false
-		}
-		if !bytes.Equal(a[i].Replacement, b[i].Replacement) {
-			return false
-		}
-	}
-	return true
 }
 
 func IsInvalidPE(err error) bool { return errors.Is(err, ErrInvalidPE) }

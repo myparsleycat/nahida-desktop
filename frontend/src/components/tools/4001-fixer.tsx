@@ -59,16 +59,15 @@ export default function FourThousandOneFixer() {
 
   useEffect(() => {
     void Tools.FourThousandOneFixerGetState().then((state) => {
-      if (!state) return;
-
       setActiveTask(state.activeTask as FixerTask | null);
-      setProgress(state.progress || "");
-      setErrorMessage(state.errorMessage || "");
+      setProgress(state.progress);
+      setErrorMessage(state.errorMessage);
     });
 
     void XXMI.GetXXMIData().then((data) => {
-      const gimiImporters =
-        data?.enabledImporters?.filter((importer) => importer.key.toUpperCase() === "GIMI") ?? [];
+      const gimiImporters = (data.enabledImporters ?? []).filter(
+        (importer) => importer.key.toUpperCase() === "GIMI",
+      );
       setImporters(gimiImporters);
 
       if (gimiImporters.length === 0) return;
@@ -164,14 +163,12 @@ export default function FourThousandOneFixer() {
         importerKey: selectedImporterKey,
         importerPath: selectedImporter,
       });
-      if (result?.success === false) {
-        setErrorMessage(result && typeof result === "object" ? result.errorMessage || "" : "");
+      if (!result.success) {
+        setErrorMessage(result.errorMessage ?? "");
         setActiveTask(null);
         return;
       }
-      if (result?.success) {
-        setBackupPath("");
-      }
+      setBackupPath("");
     } catch (error) {
       Logger.capture("components/tools/4001-fixer.tsx", error);
       setProgress(`Error: ${String(error)}`);
@@ -193,11 +190,11 @@ export default function FourThousandOneFixer() {
         importerKey: selectedImporterKey,
         importerPath: selectedImporter,
       });
-      if (result?.backupPath) {
+      if (result.backupPath) {
         setBackupPath(result.backupPath);
       }
-      if (result?.success === false) {
-        setErrorMessage(result && typeof result === "object" ? result.errorMessage || "" : "");
+      if (!result.success) {
+        setErrorMessage(result.errorMessage ?? "");
         setActiveTask(null);
       }
     } catch (error) {
@@ -219,14 +216,12 @@ export default function FourThousandOneFixer() {
       const result = await Tools.FourThousandOneFixerRestoreDiversifiedDll({
         importerPath: selectedImporter,
       });
-      if (result?.success === false) {
-        setErrorMessage(result && typeof result === "object" ? result.errorMessage || "" : "");
+      if (!result.success) {
+        setErrorMessage(result.errorMessage ?? "");
         setActiveTask(null);
         return;
       }
-      if (result?.success) {
-        setBackupPath("");
-      }
+      setBackupPath("");
     } catch (error) {
       Logger.capture("components/tools/4001-fixer.tsx", error);
       setProgress(`Error: ${String(error)}`);

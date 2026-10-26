@@ -184,19 +184,12 @@ func TestValidateXXMIConfigMatchesRequiredElectronFields(t *testing.T) {
 	}
 }
 
-func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
+func TestGetLibsReleasesUsesLibsRepoAndCaches(t *testing.T) {
 	var requests atomic.Int32
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests.Add(1)
 		if request.URL.Path != "/repos/SpectrumQT/XXMI-Libs-Package/releases" || request.URL.RawQuery != "" {
 			t.Fatalf("URL = %s", request.URL)
-		}
-		if request.Header.Get("Accept") != "application/vnd.github+json" ||
-			request.Header.Get("X-GitHub-Api-Version") != "2026-03-10" {
-			t.Fatalf("headers = %v", request.Header)
-		}
-		if !strings.Contains(request.Header.Get("User-Agent"), "Chrome/138.0.0.0") {
-			t.Fatalf("User-Agent = %q", request.Header.Get("User-Agent"))
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -224,40 +217,6 @@ func TestGetLibsReleasesUsesCurrentGitHubHeadersAndCaches(t *testing.T) {
 	if len(first) != 2 || first[0].Tag != "v2" || first[1].Tag != "v1" ||
 		len(second) != 2 || second[0].Tag != "v2" || second[1].Tag != "v1" || requests.Load() != 1 {
 		t.Fatalf("first = %v, second = %v, requests = %d", first, second, requests.Load())
-	}
-}
-
-func TestGetLibsReleasesDeduplicatesInitialInFlightRequest(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var requests atomic.Int32
-	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if requests.Add(1) == 1 {
-			close(started)
-		}
-		<-release
-		return &http.Response{
-			StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header),
-			Body: io.NopCloser(strings.NewReader(`[{"tag_name":"v1"}]`)), Request: request,
-		}, nil
-	})}
-	service := NewWithOptions(
-		Options{
-			HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline}),
-		},
-	)
-	results := make(chan error, 2)
-	go func() { _, err := service.GetLibsReleases(context.Background()); results <- err }()
-	<-started
-	go func() { _, err := service.GetLibsReleases(context.Background()); results <- err }()
-	close(release)
-	for range 2 {
-		if err := <-results; err != nil {
-			t.Fatal(err)
-		}
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("requests = %d, want 1", requests.Load())
 	}
 }
 

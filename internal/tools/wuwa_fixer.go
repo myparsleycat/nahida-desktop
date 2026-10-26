@@ -58,8 +58,5 @@ func (t *Tools) StartWuwaAutoUpdateCheck() {
 }
 
 func (t *Tools) stopWuwaAutoUpdateCheck() error {
-	if t == nil || t.wuwa == nil {
-		return nil
-	}
 	return t.wuwa.Shutdown()
 }

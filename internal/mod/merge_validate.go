@@ -57,7 +57,7 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 			return &mergeValidationError{message: outsideMergeGroupMessage}
 		}
 	}
-	return validateMergeOutputs(request.Root, group, request.PackName)
+	return validateMergeOutputs(request.Root, group)
 }
 
 func collectMergeLeafPaths(node MergePlanNode, leaves *[]string) {
@@ -118,23 +118,16 @@ func validateMergeNode(
 	return nil
 }
 
-func validateMergeOutputs(node MergePlanNode, group, packName string) error {
+func validateMergeOutputs(node MergePlanNode, group string) error {
 	if node.Kind == "leaf" {
 		return nil
 	}
-	name := strings.TrimSpace(node.Name)
-	if name == "" {
-		name = strings.TrimSpace(packName)
-	}
-	if name == "" {
-		name = "Merged"
-	}
-	output, err := resolveForCompare(filepath.Join(group, name), nil)
+	output, err := resolveForCompare(filepath.Join(group, strings.TrimSpace(node.Name)), nil)
 	if err != nil || !strictChildPath(group, output) {
 		return &mergeValidationError{message: outsideMergeGroupMessage}
 	}
 	for _, child := range node.Children {
-		if err := validateMergeOutputs(child, group, packName); err != nil {
+		if err := validateMergeOutputs(child, group); err != nil {
 			return err
 		}
 	}

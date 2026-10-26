@@ -69,7 +69,7 @@ func (d *Drive) CreateDirs(
 	parentID string,
 	directories []UploadDirectory,
 ) ([]CreatedUploadDirectory, error) {
-	if d == nil || d.http == nil {
+	if d.http == nil {
 		return nil, errDriveHTTPUnconfigured
 	}
 	if parentID == "" {
@@ -227,7 +227,7 @@ func decodeCreatedUploadDirectories(value any) ([]CreatedUploadDirectory, error)
 
 func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (result StartUploadResult, err error) {
 	defer normalizeDriveBoundaryError(&err, "fn:startUpload")
-	if d == nil || d.transfer == nil {
+	if d.transfer == nil {
 		return StartUploadResult{}, errors.New("upload transfer service is not configured")
 	}
 	if params.DestID == "" {

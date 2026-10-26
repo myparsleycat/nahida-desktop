@@ -25,7 +25,7 @@ func (c *Client) DownloadFile(ctx context.Context, request FileRequest) error {
 	if err := request.Repo.Validate(); err != nil {
 		return err
 	}
-	if c == nil || c.download == nil {
+	if c.download == nil {
 		return errors.New("GitHub download client is not configured")
 	}
 	download := infra.DownloadRequest{
@@ -53,7 +53,7 @@ func (c *Client) FetchFile(ctx context.Context, repo Repo, rawURL string, limit 
 	if err := repo.Validate(); err != nil {
 		return nil, err
 	}
-	if c == nil || c.http == nil {
+	if c.http == nil {
 		return nil, errHTTPNotConfigured
 	}
 	response, err := c.http.Fetch(
@@ -63,9 +63,6 @@ func (c *Client) FetchFile(ctx context.Context, repo Repo, rawURL string, limit 
 	)
 	if err != nil {
 		return nil, err
-	}
-	if response.Body == nil {
-		return nil, errors.New("empty GitHub file response")
 	}
 	defer func() { _ = response.Body.Close() }()
 	return readResponse(response, rawURL, limit)

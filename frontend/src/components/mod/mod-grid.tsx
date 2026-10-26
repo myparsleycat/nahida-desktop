@@ -13,7 +13,7 @@ import type { ModInfo } from "@renderer/types/mod";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { normalizeModGridLayoutSettings, resolveModGridLayout } from "./grid-layout";
+import { resolveModGridLayout } from "./grid-layout";
 import { GridModelPreviewProvider } from "./grid-model-preview";
 import { ModCard } from "./mod-card";
 
@@ -81,7 +81,7 @@ export function ModGrid(_props: ModGridProps) {
   }, [viewport]);
 
   const resolvedGridLayout = useMemo(
-    () => resolveModGridLayout(availableWidth, normalizeModGridLayoutSettings(gridLayoutSettings)),
+    () => resolveModGridLayout(availableWidth, gridLayoutSettings),
     [availableWidth, gridLayoutSettings],
   );
   const getModRenderKey = useCallback(
@@ -96,12 +96,12 @@ export function ModGrid(_props: ModGridProps) {
   }, [selectedGroupPath, searchQuery, viewport]);
 
   const handleToggle = useCallback(
-    (mod: ModInfo, event?: React.MouseEvent) => {
+    (mod: ModInfo, event: React.MouseEvent) => {
       if (isMergeMode) {
         toggleMergeSelection(mod.path);
         return;
       }
-      const isExclusive = event != null && (event.ctrlKey || event.metaKey);
+      const isExclusive = event.ctrlKey || event.metaKey;
       actions.confirmEnable(mod, () => {
         if (isExclusive) {
           exclusiveToggleModMutation.mutate(mod);

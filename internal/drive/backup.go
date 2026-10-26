@@ -98,7 +98,7 @@ type BackupRules struct {
 //
 //wails:ignore
 func (d *Drive) BackupRules(ctx context.Context) (BackupRules, error) {
-	rules, decoded, err := d.rulesFetcher()(ctx)
+	rules, decoded, err := d.fetchRules(ctx)
 	if err != nil {
 		return BackupRules{}, err
 	}
@@ -355,7 +355,7 @@ func (d *Drive) DownloadBackupFile(
 	destination string,
 	onProgress func(bytes int64),
 ) error {
-	if d == nil || d.download == nil {
+	if d.download == nil {
 		return errors.New("download service is not configured")
 	}
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {

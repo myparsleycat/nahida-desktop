@@ -108,9 +108,6 @@ func writeModelViewerPayload(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if t == nil || t.protocol == nil || transport == nil {
-		return fmt.Errorf("protocol service is unavailable")
-	}
 	textureKeys := make([]string, 0, len(textures))
 	for key := range textures {
 		textureKeys = append(textureKeys, key)
@@ -142,19 +139,17 @@ func writeModelViewerPayload(
 							previewLimit,
 						)
 						if loadErr != nil {
-							if t.log != nil {
-								t.log.Warn(
-									fmt.Sprintf(
-										"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
-										texture.Path,
-										texture.Role,
-										texture.DDS.Format,
-										time.Since(startedAt).Milliseconds(),
-										loadErr,
-									),
-									"StaticGlb.loadForViewer",
-								)
-							}
+							t.log.Warn(
+								fmt.Sprintf(
+									"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
+									texture.Path,
+									texture.Role,
+									texture.DDS.Format,
+									time.Since(startedAt).Milliseconds(),
+									loadErr,
+								),
+								"StaticGlb.loadForViewer",
+							)
 							return nil, fmt.Errorf(
 								"prepare DDS preview path=%q role=%q format=%q: %w",
 								texture.Path,
@@ -163,20 +158,18 @@ func writeModelViewerPayload(
 								loadErr,
 							)
 						}
-						if t.log != nil {
-							t.log.Info(
-								fmt.Sprintf(
-									"DDS preview prepared path=%q role=%q format=%q dimensions=%dx%d elapsed=%dms",
-									texture.Path,
-									texture.Role,
-									texture.DDS.Format,
-									plan.width,
-									plan.height,
-									time.Since(startedAt).Milliseconds(),
-								),
-								"StaticGlb.loadForViewer",
-							)
-						}
+						t.log.Info(
+							fmt.Sprintf(
+								"DDS preview prepared path=%q role=%q format=%q dimensions=%dx%d elapsed=%dms",
+								texture.Path,
+								texture.Role,
+								texture.DDS.Format,
+								plan.width,
+								plan.height,
+								time.Since(startedAt).Milliseconds(),
+							),
+							"StaticGlb.loadForViewer",
+						)
 						return data, nil
 					},
 				)
@@ -200,20 +193,18 @@ func writeModelViewerPayload(
 						options.ddsPreviewPreferredDimension,
 					)
 					if loadErr != nil {
-						if t.log != nil {
-							t.log.Warn(
-								fmt.Sprintf(
-									"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",
-									texture.Path,
-									texture.Role,
-									texture.DDS.Format,
-									materialProfile,
-									time.Since(startedAt).Milliseconds(),
-									loadErr,
-								),
-								"StaticGlb.loadForViewer",
-							)
-						}
+						t.log.Warn(
+							fmt.Sprintf(
+								"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",
+								texture.Path,
+								texture.Role,
+								texture.DDS.Format,
+								materialProfile,
+								time.Since(startedAt).Milliseconds(),
+								loadErr,
+							),
+							"StaticGlb.loadForViewer",
+						)
 						return nil, fmt.Errorf(
 							"prepare DDS fallback path=%q role=%q format=%q: %w",
 							texture.Path,
@@ -222,19 +213,17 @@ func writeModelViewerPayload(
 							loadErr,
 						)
 					}
-					if t.log != nil {
-						t.log.Info(
-							fmt.Sprintf(
-								"DDS fallback prepared path=%q role=%q format=%q materialProfile=%q elapsed=%dms",
-								texture.Path,
-								texture.Role,
-								texture.DDS.Format,
-								materialProfile,
-								time.Since(startedAt).Milliseconds(),
-							),
-							"StaticGlb.loadForViewer",
-						)
-					}
+					t.log.Info(
+						fmt.Sprintf(
+							"DDS fallback prepared path=%q role=%q format=%q materialProfile=%q elapsed=%dms",
+							texture.Path,
+							texture.Role,
+							texture.DDS.Format,
+							materialProfile,
+							time.Since(startedAt).Milliseconds(),
+						),
+						"StaticGlb.loadForViewer",
+					)
 					return data, nil
 				},
 			)

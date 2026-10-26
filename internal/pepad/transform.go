@@ -14,7 +14,7 @@ type patch struct {
 	Template    string
 }
 
-func planPatches(candidates []approvedCandidate, input []byte, opts Options) ([]patch, error) {
+func planPatches(candidates []approvedCandidate, input []byte, opts Options) []patch {
 	limit := len(candidates)
 	if opts.MaximumMutations != nil && *opts.MaximumMutations < limit {
 		limit = *opts.MaximumMutations
@@ -27,15 +27,12 @@ func planPatches(candidates []approvedCandidate, input []byte, opts Options) ([]
 		if !ok {
 			continue
 		}
-		if len(replacement) != candidate.Length {
-			return nil, validationErr("template length did not match candidate length")
-		}
 		patches = append(patches, patch{
 			CandidateID: candidate.ID, RVA: candidate.RVA, FileOffset: candidate.FileOffset,
 			Replacement: replacement, Template: template,
 		})
 	}
-	return patches, nil
+	return patches
 }
 
 func candidateSeed(seed uint64, inputHash []byte, candidate approvedCandidate) [32]byte {

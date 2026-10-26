@@ -305,5 +305,5 @@ export type ModViewerTransport = {
     /** Present with two or more entries when the mod's meshes come from several folders. */
     forms: ViewerForm[];
     /** The loaded INIs; a variable ID is the prefix of the INI declaring it followed by its INI name. */
-    inis?: ViewerINI[];
+    inis: ViewerINI[];
 };

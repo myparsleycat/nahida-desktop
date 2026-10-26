@@ -58,9 +58,7 @@ func (x *XXMI) DisableGenshinDynamicCharacterResolution(ctx context.Context) err
 	if err != nil {
 		return x.reportDCRFailure(err, "encode")
 	}
-	if x.log != nil {
-		x.log.Info("Disabling Genshin Impact Dynamic Character Resolution", xxmiDisableDCRWhere)
-	}
+	x.log.Info("Disabling Genshin Impact Dynamic Character Resolution", xxmiDisableDCRWhere)
 	if err := writeGenshinRegistryGeneralData(encoded); err != nil {
 		return x.reportDCRFailure(err, "write")
 	}

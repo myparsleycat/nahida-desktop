@@ -185,12 +185,11 @@ func (d *Download) downloadAttempt(ctx context.Context, request DownloadRequest,
 			return fmt.Errorf("%w of %d bytes", ErrDownloadTooLarge, request.MaxSize)
 		}
 		if request.Size > 0 && resumeFrom > request.Size {
-			resetBytes := min(resumeFrom, request.Size)
 			if err := os.Remove(temporaryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("remove oversized partial download: %w", err)
 			}
-			if request.Progress != nil && resetBytes > 0 {
-				request.Progress(-resetBytes)
+			if request.Progress != nil {
+				request.Progress(-request.Size)
 			}
 			resumeFrom = 0
 		}
@@ -306,12 +305,8 @@ func (d *Download) fetch(ctx context.Context, request DownloadRequest, resumeFro
 	if resumeFrom > 0 {
 		header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
 	}
-	client := d.client
-	if client == nil {
-		return nil, errors.New("download HTTP client is not configured")
-	}
 	noRetries := 0
-	return client.Fetch(ctx, request.URL, FetchOptions{
+	return d.client.Fetch(ctx, request.URL, FetchOptions{
 		Method:            http.MethodGet,
 		Header:            header,
 		DisableHTTPErrors: true,
@@ -395,9 +390,6 @@ func expectedContentRange(value string, resumeFrom, fileSize int64) bool {
 }
 
 func drainAndClose(body io.ReadCloser) {
-	if body == nil {
-		return
-	}
 	_, _ = io.Copy(io.Discard, body)
 	_ = body.Close()
 }

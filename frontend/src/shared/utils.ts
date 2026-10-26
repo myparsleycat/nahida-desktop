@@ -201,7 +201,7 @@ export function resolveTextureUpscaleScale(model: string, scale: number): Textur
         return scale as TextureUpscaleScale;
     }
 
-    return available[available.length - 1] ?? 4;
+    return available[available.length - 1];
 }
 
 export function getTextureUpscaleTarget(

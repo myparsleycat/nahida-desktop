@@ -14,8 +14,8 @@ export type FixToolPreset = {
     scripts: Array<{ order: number; presetId: string; scriptId: string }>;
 };
 
-export function mapFixToolScripts(scripts: ScriptBasicRow[] | null | undefined): FixToolScript[] {
-    return (scripts ?? []).map((script) => ({
+export function mapFixToolScripts(scripts: ScriptBasicRow[]): FixToolScript[] {
+    return scripts.map((script) => ({
         id: script.ID,
         name: script.Name,
         size: script.Size,
@@ -23,13 +23,11 @@ export function mapFixToolScripts(scripts: ScriptBasicRow[] | null | undefined):
     }));
 }
 
-export function mapFixToolPresets(
-    presets: ScriptPresetWithScripts[] | null | undefined,
-): FixToolPreset[] {
-    return (presets ?? []).map((preset) => ({
+export function mapFixToolPresets(presets: ScriptPresetWithScripts[]): FixToolPreset[] {
+    return presets.map((preset) => ({
         id: preset.ID,
         name: preset.Name,
-        scripts: (preset.Scripts ?? []).map((script) => ({
+        scripts: preset.Scripts!.map((script) => ({
             order: script.Order,
             presetId: script.PresetID,
             scriptId: script.ScriptID,
@@ -38,9 +36,9 @@ export function mapFixToolPresets(
 }
 
 export async function getFixToolScripts(): Promise<FixToolScript[]> {
-    return mapFixToolScripts(await Tools.GetScripts());
+    return mapFixToolScripts((await Tools.GetScripts())!);
 }
 
 export async function getFixToolPresets(): Promise<FixToolPreset[]> {
-    return mapFixToolPresets(await Tools.GetPresets());
+    return mapFixToolPresets((await Tools.GetPresets())!);
 }

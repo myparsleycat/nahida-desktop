@@ -70,12 +70,12 @@ export function ModList(_props: ModListProps) {
   }, [rowVirtualizer, searchQuery, selectedGroupPath, viewport]);
 
   const handleToggle = useCallback(
-    (mod: ModInfo, event?: React.MouseEvent) => {
+    (mod: ModInfo, event: React.MouseEvent) => {
       if (isMergeMode) {
         toggleMergeSelection(mod.path);
         return;
       }
-      const isExclusive = event != null && (event.ctrlKey || event.metaKey);
+      const isExclusive = event.ctrlKey || event.metaKey;
       actions.confirmEnable(mod, () => {
         if (isExclusive) {
           exclusiveToggleModMutation.mutate(mod);

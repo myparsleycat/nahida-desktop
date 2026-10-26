@@ -258,9 +258,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	}
 
 	secretBytes := make([]byte, 32)
-	if _, err := rand.Read(secretBytes); err != nil {
-		return fmt.Errorf("create elevated helper secret: %w", err)
-	}
+	rand.Read(secretBytes)
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	pipe := `\\.\pipe\nahida-elevated-` + strconv.FormatUint(uint64(os.Getpid()), 10) + "-" + secret[:16]
 	process, pid, err := launch(helper, pipe, secret, uint32(os.Getpid()), executable)

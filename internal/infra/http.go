@@ -214,9 +214,6 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 
 // BackendURL is the configured API origin.
 func (c *Client) BackendURL() string {
-	if c == nil || c.backendURL == "" {
-		return DefaultBackendURL
-	}
 	return c.backendURL
 }
 
@@ -236,9 +233,6 @@ func (c *Client) HTTPClient() *http.Client {
 //
 //wails:ignore
 func (c *Client) UseTransport(transport http.RoundTripper) {
-	if c == nil || c.http == nil {
-		return
-	}
 	c.http.Transport = transport
 }
 
@@ -249,45 +243,30 @@ func (unconfiguredHTTPTransport) RoundTrip(*http.Request) (*http.Response, error
 }
 
 func (c *Client) UseToken(fn TokenLookup) {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	c.token = fn
 	c.mu.Unlock()
 }
 
 func (c *Client) UseRefreshSession(fn SessionRefresh) {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	c.refreshSession = fn
 	c.mu.Unlock()
 }
 
 func (c *Client) UseLog(log *Log) {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	c.log = log
 	c.mu.Unlock()
 }
 
 func (c *Client) UseOnStatus(fn func(BackendStatus)) {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	c.onStatus = fn
 	c.mu.Unlock()
 }
 
 func (c *Client) GetStatus() BackendStatus {
-	if c == nil {
-		return BackendUnknown
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.backend
@@ -566,9 +545,6 @@ func (c *Client) Stream(
 // offline or maintenance. Auth starts one probe at boot; later probes are
 // on-demand from Fetch/Stream recovery or failure classification.
 func (c *Client) Probe(ctx context.Context) BackendStatus {
-	if c == nil {
-		return BackendUnknown
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -666,7 +642,7 @@ func (c *Client) resolveHeaders(rawURL string, caller http.Header) (http.Header,
 }
 
 func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.Response) {
-	if resp == nil || resp.StatusCode != 401 || !nhd || session {
+	if resp.StatusCode != 401 || !nhd || session {
 		return
 	}
 	body, err := peekBody(resp)
@@ -688,7 +664,7 @@ func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.
 	if refresh == nil {
 		return
 	}
-	if err := refresh(); err != nil && log != nil {
+	if err := refresh(); err != nil {
 		log.Warn(map[string]any{
 			"url":    SanitizeLogURL(rawURL),
 			"status": resp.StatusCode,
@@ -699,7 +675,7 @@ func (c *Client) afterUnauthorized(rawURL string, nhd, session bool, resp *http.
 }
 
 func (c *Client) recoverIfNeeded(ctx context.Context, nhd bool) error {
-	if c == nil || !nhd {
+	if !nhd {
 		return nil
 	}
 	switch c.GetStatus() {
@@ -721,9 +697,6 @@ func (c *Client) recoverIfNeeded(ctx context.Context, nhd bool) error {
 }
 
 func (c *Client) noteBackendFromResponse(resp *http.Response) {
-	if resp == nil {
-		return
-	}
 	if isBackendUnavailable(resp.StatusCode) {
 		c.triggerProbe()
 		return
@@ -735,9 +708,6 @@ func (c *Client) noteBackendFromResponse(resp *http.Response) {
 }
 
 func (c *Client) triggerProbe() {
-	if c == nil {
-		return
-	}
 	go c.Probe(context.Background())
 }
 
@@ -751,15 +721,12 @@ func (c *Client) finishProbe(err error, endpoint, stage string, resp *http.Respo
 }
 
 func (c *Client) logAPIResponseDecodeFailure(rawURL string, status int, err error) {
-	if c == nil || err == nil {
+	if err == nil {
 		return
 	}
 	c.mu.Lock()
 	log := c.log
 	c.mu.Unlock()
-	if log == nil {
-		return
-	}
 	path := ""
 	if parsed, parseErr := url.Parse(rawURL); parseErr == nil {
 		path = parsed.Path
@@ -952,9 +919,6 @@ func rewriteCloudflareTimeout(resp *http.Response) *http.Response {
 }
 
 func peekBody(resp *http.Response) (string, error) {
-	if resp == nil || resp.Body == nil {
-		return "", nil
-	}
 	raw, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(raw))

@@ -96,7 +96,7 @@ func (m *Mod) ensureNteBootstrapFiles(
 		m.emitNteBootstrapProgress("completed", lo.ToPtr[float64](100), "", "")
 		return nil, nil
 	}
-	if m == nil || m.archive == nil || m.http == nil {
+	if m.archive == nil || m.http == nil {
 		err := errors.New("NTE_BOOTSTRAP_SERVICE_NOT_CONFIGURED")
 		m.emitNteBootstrapProgress("failed", nil, "", err.Error())
 		return nil, err
@@ -188,7 +188,7 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, rawURL, archiv
 }
 
 func (m *Mod) emitNteBootstrapProgress(phase string, progress *float64, archiveName, message string) {
-	if m != nil && m.emit != nil {
+	if m.emit != nil {
 		m.emit(nteBootstrapEvent, NteBootstrapProgress{
 			Phase: phase, Progress: progress, ArchiveName: archiveName, Message: message,
 		})

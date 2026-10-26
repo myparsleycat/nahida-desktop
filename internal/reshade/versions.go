@@ -37,9 +37,6 @@ func sortVersions(versions []string) {
 // versions lists the supported ReShade versions, newest first. The repository tags versions without
 // publishing releases.
 func (r *ReShade) versions(ctx context.Context, refresh bool) ([]string, error) {
-	if r.github == nil {
-		return nil, errors.New("GitHub client is not configured")
-	}
 	ctx = infra.WithGitHubOperation(ctx, "reshade-list-versions")
 	ctx = infra.WithGitHubRefresh(infra.WithGitHubStaleFallback(ctx), refresh)
 	tags, err := r.github.Tags(ctx, repo)

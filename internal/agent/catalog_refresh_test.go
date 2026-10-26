@@ -62,9 +62,6 @@ func TestNewestCatalogPrefersNewerSnapshot(t *testing.T) {
 	if newestCatalog(&ModelCatalog{}, newer) != nil {
 		t.Fatal("an undated cache replaced a dated catalog")
 	}
-	if newestCatalog(nil, newer) != nil {
-		t.Fatal("a missing cache replaced the embedded catalog")
-	}
 }
 
 func TestStoreCatalogRoundTrip(t *testing.T) {

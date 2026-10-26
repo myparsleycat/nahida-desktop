@@ -67,7 +67,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 	rt.logStartupMilestone("essential-ready")
 
-	if err := platform.SetAppUserModelID("com.nahida"); err != nil && rt.log != nil {
+	if err := platform.SetAppUserModelID("com.nahida"); err != nil {
 		_ = infra.ReportError(
 			rt.log,
 			err,
@@ -76,19 +76,17 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		)
 	}
 	if executable, err := os.Executable(); err != nil {
-		if rt.log != nil {
-			_ = infra.ReportError(
-				rt.log,
-				err,
-				"App:registerURLProtocol",
-				infra.Diagnostic{
-					Severity:  infra.DiagnosticError,
-					Operation: "App:registerURLProtocol",
-					Stage:     "background",
-				},
-			)
-		}
-	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil && rt.log != nil {
+		_ = infra.ReportError(
+			rt.log,
+			err,
+			"App:registerURLProtocol",
+			infra.Diagnostic{
+				Severity:  infra.DiagnosticError,
+				Operation: "App:registerURLProtocol",
+				Stage:     "background",
+			},
+		)
+	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil {
 		_ = infra.ReportError(
 			rt.log,
 			err,
@@ -100,7 +98,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			},
 		)
 	}
-	if err := platform.SyncInstalledVersion(); err != nil && rt.log != nil {
+	if err := platform.SyncInstalledVersion(); err != nil {
 		_ = infra.ReportError(
 			rt.log,
 			err,
@@ -131,7 +129,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	)
 	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
 		syncModelViewerMenu(language)
-	} else if rt.log != nil {
+	} else {
 		_ = infra.ReportError(
 			rt.log,
 			langErr,
@@ -143,7 +141,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	if err == nil {
 		err = autostartSync(enabled)
 	}
-	if err != nil && rt.log != nil {
+	if err != nil {
 		_ = infra.ReportError(
 			rt.log,
 			err,
@@ -170,9 +168,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		})
 	})
 	viewers := newModelViewerWindows(app, rt)
-	if rt.gameBananaLogin != nil {
-		rt.gameBananaLogin.Configure(app, rt.window, rt.log)
-	}
+	rt.gameBananaLogin.Configure(app, rt.window, rt.log)
 	if err := rt.updater.Configure(infra.UpdaterOptions{
 		Engine:   app.Updater,
 		Settings: rt.setting,

@@ -517,7 +517,7 @@ func childDepth(parent, child string) (int, bool) {
 	if relative == "." {
 		return 0, true
 	}
-	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
 		return 0, false
 	}
 	return len(strings.Split(relative, string(os.PathSeparator))), true

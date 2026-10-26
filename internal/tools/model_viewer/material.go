@@ -616,27 +616,18 @@ func modelViewerTextureNameRequestsAlphaInvert(resourceName string) bool {
 }
 
 func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelViewerDecodedTexture) bool {
-	if decoded == nil {
-		return false
-	}
 	return modelViewerTextureNameRequestsAlphaInvert(resourceName) ||
 		decoded.lowRatio >= .95 && decoded.highRatio <= .03 && decoded.low > 0 &&
 			decoded.lowRGB/float64(decoded.low) >= 8
 }
 
 func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
-	if source == nil {
-		return nil
-	}
 	cloned := image.NewNRGBA(source.Rect)
 	copy(cloned.Pix, source.Pix)
 	return cloned
 }
 
 func reconstructModelViewerNormalZ(ctx context.Context, rgba *image.NRGBA) error {
-	if rgba == nil {
-		return ctx.Err()
-	}
 	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
 		if offset&0xffff == 0 {
 			if err := modelViewerTextureContextErr(ctx); err != nil {
@@ -682,9 +673,6 @@ func encodeModelViewerPreparedTextureWithAlpha(
 ) (*modelViewerPreparedTexture, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	if decoded == nil || decoded.rgba == nil {
-		return nil, fmt.Errorf("viewer texture decode produced an invalid image")
 	}
 	rgba := decoded.rgba
 	lowRatio, highRatio, partialRatio := decoded.lowRatio, decoded.highRatio, decoded.partialRatio

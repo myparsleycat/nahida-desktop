@@ -100,9 +100,7 @@ func (m *Mod) SaveClassification(
 		return Classification{}, errors.New("CLASSIFICATION_NOT_FOUND")
 	}
 	if row.ID == "" {
-		if row.ID, err = newPresetID(); err != nil {
-			return Classification{}, err
-		}
+		row.ID = newPresetID()
 	}
 
 	groupRows := make([]db.ModClassificationGroupRow, 0, len(groups))
@@ -118,9 +116,7 @@ func (m *Mod) SaveClassification(
 		names[groupName] = struct{}{}
 		groupID := group.ID
 		if groupID == "" {
-			if groupID, err = newPresetID(); err != nil {
-				return Classification{}, err
-			}
+			groupID = newPresetID()
 		} else if _, known := knownGroups[groupID]; !known {
 			return Classification{}, errors.New("CLASSIFICATION_NOT_FOUND")
 		}

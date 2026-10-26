@@ -2,7 +2,6 @@ package infra
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,13 +24,7 @@ func NewCDNTrace(httpClient *Client) *CDNTrace {
 }
 
 func (t *CDNTrace) Get(ctx context.Context) (raw string, returnErr error) {
-	if t == nil || t.http == nil {
-		return "", errors.New("http client unavailable")
-	}
 	c := t.http
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 

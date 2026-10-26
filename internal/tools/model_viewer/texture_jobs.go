@@ -226,9 +226,6 @@ func runModelViewerTextureJobs(
 	hashStartedAt := time.Now()
 	hashWork := make(chan int)
 	hashWorkers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(pathGroups))
-	if hashWorkers < 1 {
-		hashWorkers = 1
-	}
 	var hashGroup sync.WaitGroup
 	for range hashWorkers {
 		hashGroup.Add(1)
@@ -303,9 +300,6 @@ hashDispatch:
 	prepareStartedAt := time.Now()
 	prepareWork := make(chan int)
 	prepareWorkers := min(modelViewerTextureConcurrency, runtime.GOMAXPROCS(0), len(contentGroups))
-	if prepareWorkers < 1 {
-		prepareWorkers = 1
-	}
 	var prepareGroup sync.WaitGroup
 	for range prepareWorkers {
 		prepareGroup.Add(1)

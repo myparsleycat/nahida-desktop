@@ -85,7 +85,7 @@ func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) err
 	}
 	var release *github.Release
 	for i := range releases {
-		if normalizeVersion(releases[i].TagName) == version && !releases[i].Draft {
+		if normalizeVersion(releases[i].TagName) == version {
 			release = &releases[i]
 			break
 		}
@@ -380,10 +380,7 @@ func (x *XXMI) prepareFPSUnlocker(ctx context.Context, cfg ImporterConfig, gameE
 		"Windowed": {false, false, false}, "Borderless": {true, false, false},
 		"Fullscreen": {false, true, false}, "Exclusive Fullscreen": {false, true, true},
 	}
-	window, ok := windowModes[cfg.WindowMode]
-	if !ok {
-		return fmt.Errorf("invalid GI FPS Unlocker window mode %q", cfg.WindowMode)
-	}
+	window := windowModes[cfg.WindowMode]
 	if cfg.GIMI.UnlockFPSValue < 30 || cfg.GIMI.UnlockFPSValue > 1000 {
 		return fmt.Errorf("invalid Genshin FPS target %d", cfg.GIMI.UnlockFPSValue)
 	}

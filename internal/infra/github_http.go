@@ -186,7 +186,7 @@ func (t *githubTransport) RoundTrip(request *http.Request) (*http.Response, erro
 		// A joined automatic lookup may have used a longer TTL than this caller.
 		if result.cached {
 			if policy.refresh {
-				allowed, state, err := t.rate.CanUseGitHubAPI(request.Context(), GitHubRateCheckOptions{})
+				allowed, state, err := t.rate.CanUseGitHubAPI(request.Context())
 				if err != nil {
 					return nil, err
 				}
@@ -288,7 +288,7 @@ func (t *githubTransport) cachedMetadata(
 		}
 	}
 	if policy.refresh || entry.Failures > 0 {
-		allowed, state, err := c.CanUseGitHubAPI(request.Context(), GitHubRateCheckOptions{})
+		allowed, state, err := c.CanUseGitHubAPI(request.Context())
 		if err != nil {
 			return entry, githubTransportResult{err: err}, true
 		}
@@ -486,7 +486,7 @@ func (c *GitHubRateCoordinator) githubRoundTrip(request *http.Request, base http
 	if err := request.Context().Err(); err != nil {
 		return nil, err
 	}
-	allowed, state, err := c.CanUseGitHubAPI(request.Context(), GitHubRateCheckOptions{})
+	allowed, state, err := c.CanUseGitHubAPI(request.Context())
 	if err != nil {
 		return nil, err
 	}

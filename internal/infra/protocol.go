@@ -53,9 +53,6 @@ func NewProtocol() *Protocol {
 
 //wails:ignore
 func (p *Protocol) Configure(httpClient *Client, log *Log) {
-	if p == nil {
-		return
-	}
 	p.mu.Lock()
 	p.http, p.log = httpClient, log
 	p.mu.Unlock()
@@ -71,14 +68,8 @@ func (p *Protocol) LocalFileURL(path string, original bool) string {
 
 //wails:ignore
 func (p *Protocol) CreateMemorySession() string {
-	if p == nil {
-		return ""
-	}
 	id := uuid.NewString()
 	p.mu.Lock()
-	if p.sessions == nil {
-		p.sessions = make(map[string]*memoryProtocolSession)
-	}
 	p.sessions[id] = &memoryProtocolSession{
 		buffers: make(map[string]memoryProtocolEntry),
 		uploads: make(map[string]*memoryUploadEntry),
@@ -89,9 +80,6 @@ func (p *Protocol) CreateMemorySession() string {
 
 //wails:ignore
 func (p *Protocol) StoreMemoryBuffer(sessionID, bufferID string, data []byte, contentType string) (string, error) {
-	if p == nil {
-		return "", errors.New("protocol service is nil")
-	}
 	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(bufferID) == "" {
 		return "", errors.New("memory session and buffer ids are required")
 	}
@@ -108,7 +96,7 @@ func (p *Protocol) StoreMemoryBuffer(sessionID, bufferID string, data []byte, co
 
 //wails:ignore
 func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
-	if p == nil || sessionID == "" || bufferID == "" {
+	if sessionID == "" || bufferID == "" {
 		return
 	}
 	p.mu.Lock()
@@ -138,7 +126,7 @@ func (p *Protocol) StoreMemoryLoaderWithContentType(
 	sessionID, bufferID, contentType string,
 	load func(context.Context) ([]byte, error),
 ) (string, error) {
-	if p == nil || load == nil || bufferID == "" {
+	if load == nil || bufferID == "" {
 		return "", errors.New("memory loader and buffer id are required")
 	}
 	contentType = normalizeContentType(contentType)
@@ -157,9 +145,6 @@ func (p *Protocol) StoreMemoryLoaderWithContentType(
 
 //wails:ignore
 func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes int64) (string, error) {
-	if p == nil {
-		return "", errors.New("protocol service is nil")
-	}
 	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(uploadID) == "" {
 		return "", errors.New("memory session and upload ids are required")
 	}
@@ -183,9 +168,6 @@ func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes 
 
 //wails:ignore
 func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) {
-	if p == nil {
-		return nil, errors.New("protocol service is nil")
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	session := p.sessions[sessionID]
@@ -202,7 +184,7 @@ func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) 
 
 //wails:ignore
 func (p *Protocol) CleanupMemorySession(sessionID string) {
-	if p == nil || sessionID == "" {
+	if sessionID == "" {
 		return
 	}
 	p.mu.Lock()
@@ -215,10 +197,6 @@ func memoryProtocolURL(sessionID, entryID string) string {
 }
 
 func (p *Protocol) ServeHTTP(w http.ResponseWriter, request *http.Request) {
-	if p == nil || request == nil {
-		http.Error(w, "protocol service unavailable", http.StatusServiceUnavailable)
-		return
-	}
 	path := strings.TrimPrefix(request.URL.Path, "/")
 	path = strings.TrimPrefix(path, "protocol/")
 	switch {
@@ -568,9 +546,6 @@ func normalizeContentType(value string) string {
 }
 
 func (p *Protocol) ServiceShutdown() error {
-	if p == nil {
-		return nil
-	}
 	p.mu.Lock()
 	clear(p.sessions)
 	p.mu.Unlock()

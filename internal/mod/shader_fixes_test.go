@@ -33,13 +33,13 @@ func TestShaderFixesUsesOwnerIndexWithoutScanningWhenDisabling(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(modPath, "ShaderFixes")); err != nil {
 		t.Fatal(err)
 	}
-	h.service.globCalls = nil
+	h.globCalls = nil
 
 	if _, err := h.service.HandleShaders(modPath, false); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.service.globCalls) != 0 {
-		t.Fatalf("glob calls = %#v, want none", h.service.globCalls)
+	if len(h.globCalls) != 0 {
+		t.Fatalf("glob calls = %#v, want none", h.globCalls)
 	}
 	for _, file := range []string{"a.ini", filepath.Join("nested", "b.ini"), filepath.Join("nested", "c.ini")} {
 		if exists(filepath.Join(h.importerPath, "ShaderFixes", file)) {
@@ -141,14 +141,14 @@ func TestShaderFixesMigratesManifestsByScanningCurrentImporterMods(t *testing.T)
 	}
 	h.importers = append(h.importers, shaderImporter{Key: "OtherImporter", ImporterFolder: otherImporter})
 	h.games = append(h.games, shaderGame{Game: "Other", ModFolderPath: otherMods, Importer: "OtherImporter"})
-	h.service.globCalls = nil
+	h.globCalls = nil
 
 	if _, err := h.service.HandleShaders(first, false); err != nil {
 		t.Fatal(err)
 	}
 	assertGlobCalls(
 		t,
-		h.service.globCalls,
+		h.globCalls,
 		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
 	)
 	if !exists(target) {
@@ -159,12 +159,12 @@ func TestShaderFixesMigratesManifestsByScanningCurrentImporterMods(t *testing.T)
 		"targets": map[string]any{"shared.ini": map[string]any{"hash": hash, "owners": []any{"second"}}},
 	})
 
-	h.service.globCalls = nil
+	h.globCalls = nil
 	if _, err := h.service.HandleShaders(second, false); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.service.globCalls) != 0 {
-		t.Fatalf("second disable glob calls = %#v", h.service.globCalls)
+	if len(h.globCalls) != 0 {
+		t.Fatalf("second disable glob calls = %#v", h.globCalls)
 	}
 	if exists(target) {
 		t.Fatal("shared shader should be removed")
@@ -192,14 +192,14 @@ func TestShaderFixesCleansOriginalImporterAfterMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.Remove(filepath.Join(h.importerPath, "ShaderFixes", shaderFixesModMarkerFile))
-	h.service.globCalls = nil
+	h.globCalls = nil
 
 	if _, err := h.service.HandleShaders(moved, false); err != nil {
 		t.Fatal(err)
 	}
 	assertGlobCalls(
 		t,
-		h.service.globCalls,
+		h.globCalls,
 		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
 	)
 	if exists(originalTarget) {
@@ -260,14 +260,14 @@ func TestShaderFixesRebuildsCorruptedOwnerIndex(t *testing.T) {
 		}},
 	})
 	writeFile(t, filepath.Join(h.importerPath, "ShaderFixes", shaderFixesModMarkerFile), "invalid")
-	h.service.globCalls = nil
+	h.globCalls = nil
 
 	if _, err := h.service.HandleShaders(modPath, false); err != nil {
 		t.Fatal(err)
 	}
 	assertGlobCalls(
 		t,
-		h.service.globCalls,
+		h.globCalls,
 		[]shaderGlobCall{{Pattern: "**/" + shaderFixesModMarkerFile, Cwd: h.modsPath}},
 	)
 	if exists(target) {
@@ -359,12 +359,12 @@ func TestShaderFixesDoesNotScanWhenNoManifestExists(t *testing.T) {
 	h := newShaderFixesHarness(t)
 	modPath := filepath.Join(h.modsPath, "Group", "Mod")
 	writeFile(t, filepath.Join(modPath, "ShaderFixes", "unused.ini"), "unused")
-	h.service.globCalls = nil
+	h.globCalls = nil
 	if _, err := h.service.HandleShaders(modPath, false); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.service.globCalls) != 0 {
-		t.Fatalf("glob calls = %#v, want none", h.service.globCalls)
+	if len(h.globCalls) != 0 {
+		t.Fatalf("glob calls = %#v, want none", h.globCalls)
 	}
 }
 
@@ -375,6 +375,7 @@ type shaderFixesHarness struct {
 	importers    []shaderImporter
 	games        []shaderGame
 	service      *ShaderFixes
+	globCalls    []shaderGlobCall
 }
 
 func newShaderFixesHarness(t *testing.T) *shaderFixesHarness {
@@ -393,6 +394,7 @@ func newShaderFixesHarness(t *testing.T) *shaderFixesHarness {
 	h.service = newShaderFixes()
 	h.service.getImporters = func() []shaderImporter { return h.importers }
 	h.service.getGames = func() []shaderGame { return h.games }
+	h.service.onGlob = func(call shaderGlobCall) { h.globCalls = append(h.globCalls, call) }
 	return h
 }
 

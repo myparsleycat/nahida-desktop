@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"context"
-	"math"
 	"sync"
 	"time"
 )
@@ -37,7 +36,7 @@ func (l *BandwidthLimiter) SetRateBPS(rateBPS float64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.refillLocked(time.Now())
-	if rateBPS <= 0 || math.IsNaN(rateBPS) || math.IsInf(rateBPS, 0) {
+	if rateBPS <= 0 {
 		l.rateBPS = 0
 		l.tokens = 0
 		l.stopTimerLocked()

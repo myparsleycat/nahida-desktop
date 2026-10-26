@@ -2,7 +2,6 @@ package pepad
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -303,10 +302,4 @@ func containsReason(reasons []string, fragment string) bool {
 		}
 	}
 	return false
-}
-
-func TestErrorSentinels(t *testing.T) {
-	if !errors.Is(invalidPE("x"), ErrInvalidPE) {
-		t.Fatal("invalid PE sentinel")
-	}
 }

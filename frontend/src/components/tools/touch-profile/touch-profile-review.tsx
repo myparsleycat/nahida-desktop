@@ -28,19 +28,7 @@ import { Loader2Icon, Maximize2Icon, Minimize2Icon, RotateCcwIcon } from "lucide
 
 import type { TouchProfileSession } from "./use-touch-profile-session";
 
-import {
-  ALL_ZONES,
-  DEFAULT_MASK_STRENGTH,
-  DEFAULT_MASK_CURVE,
-  DEFAULT_MASK_RADIUS_SCALE,
-} from "./touch-profile-defaults";
-const DEFAULT_MASK_CORE_ATTENUATION = "off" as const;
-function sourceLabel(source: "vision" | "manual" | "bone", t: (key: string) => string) {
-  // vision-llm disabled — vision source branch kept for type completeness
-  if (source === "vision") return t("page.tools.touch_profile.vision_source");
-  if (source === "bone") return t("page.tools.touch_profile.mode_bone");
-  return t("page.tools.touch_profile.manual_source");
-}
+import { ALL_ZONES } from "./touch-profile-defaults";
 const advancedSettingEntries = [
   ["radius", "page.tools.touch_profile.advanced_radius"],
   ["strength", "page.tools.touch_profile.advanced_strength"],
@@ -127,16 +115,6 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
               : t("page.tools.touch_profile.no")}
           </span>
         </div>
-        {/* vision-llm disabled — LLM summary isolated */}
-        {/* {draft.llm ? (
-                      <div
-                        className="mt-2 truncate text-xs text-muted-foreground"
-                        title={draft.llm.endpoint}
-                      >
-                        {t("page.tools.touch_profile.llm_summary")}: {draft.llm.protocol} /{" "}
-                        {draft.llm.model}
-                      </div>
-                    ) : null} */}
       </div>
 
       <Field>
@@ -225,64 +203,12 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/40 p-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-foreground">
-                {t("page.tools.touch_profile.turn_label")}: Turn{" "}
-                {selectedComponent.currentTurn ?? 1}
-              </span>
-              {/* vision-llm disabled — turn history select isolated */}
-              {/* {selectedComponent.turnHistory &&
-                          selectedComponent.turnHistory.length > 1 ? (
-                            <Select
-                              value={String(selectedComponent.currentTurn ?? 1)}
-                              onValueChange={(val) => {
-                                if (val)
-                                  void selectTurn(selectedComponent.componentId, Number(val));
-                              }}
-                              disabled={reanalyzing || loading}
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectGroup>
-                                  {selectedComponent.turnHistory.map((item) => (
-                                    <SelectItem key={item.turn} value={String(item.turn)}>
-                                      Turn {item.turn} {item.approved ? " (LGTM)" : ""}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              </SelectContent>
-                            </Select>
-                          ) : null} */}
-            </div>
-            {/* vision-llm disabled — reanalyze button isolated */}
-            {/* <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => void reanalyzeTurn(selectedComponent.componentId)}
-                          disabled={reanalyzing || loading}
-                        >
-                          {reanalyzing ? (
-                            <Loader2Icon className="mr-1.5 size-3.5 animate-spin" />
-                          ) : (
-                            <SparklesIcon className="mr-1.5 size-3.5" />
-                          )}
-                          {reanalyzing
-                            ? t("page.tools.touch_profile.reanalyzing")
-                            : t("page.tools.touch_profile.reanalyze")}
-                        </Button> */}
-          </div>
           {selectedComponent.zones
             .filter(
               (_, index) =>
                 !(linkedComponents[selectedComponent.componentId] ?? true) || index === 0,
             )
             .map((zone) => {
-              const source = sourceLabel(zone.source, t);
               const isSelected = activeZoneId === zone.id;
               const isLinked = linkedComponents[selectedComponent.componentId] ?? true;
               const linkedZoneIds = isLinked
@@ -308,7 +234,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium">{zone.label || zone.id}</span>
-                        <Badge variant="outline">{source}</Badge>
+                        <Badge variant="outline">{t("page.tools.touch_profile.mode_bone")}</Badge>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {t("page.tools.touch_profile.confidence")}{" "}
@@ -401,9 +327,9 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                               createPresetSettings(
                                 value,
                                 zone.settings.strengthPreset,
-                                zone.settings.maskStrength ?? DEFAULT_MASK_STRENGTH,
-                                zone.settings.maskCurve ?? DEFAULT_MASK_CURVE,
-                                zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE,
+                                zone.settings.maskStrength,
+                                zone.settings.maskCurve,
+                                zone.settings.maskRadiusScale,
                               ),
                               { zoneIds: linkedZoneIds },
                             );
@@ -440,10 +366,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                         {t("page.tools.touch_profile.mask_radius")}
                       </span>
                       <span className="text-xs text-muted-foreground tabular-nums">
-                        {Math.round(
-                          (zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE) * 100,
-                        )}
-                        %
+                        {Math.round(zone.settings.maskRadiusScale * 100)}%
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -463,8 +386,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                         disabled={
                           applying ||
                           rollingBack ||
-                          (zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE) <=
-                            TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min
+                          zone.settings.maskRadiusScale <= TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min
                         }
                       >
                         <Minimize2Icon className="mr-1.5 size-3.5" />
@@ -486,8 +408,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                         disabled={
                           applying ||
                           rollingBack ||
-                          (zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE) >=
-                            TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max
+                          zone.settings.maskRadiusScale >= TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max
                         }
                       >
                         <Maximize2Icon className="mr-1.5 size-3.5" />
@@ -498,7 +419,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                   <Field className="mt-3">
                     <FieldLabel>{t("page.tools.touch_profile.mask_core_attenuation")}</FieldLabel>
                     <Select
-                      value={zone.settings.maskCoreAttenuation ?? DEFAULT_MASK_CORE_ATTENUATION}
+                      value={zone.settings.maskCoreAttenuation}
                       items={[
                         {
                           value: "off",
@@ -557,7 +478,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                       <FieldLabel>{t("page.tools.touch_profile.mask_strength")}</FieldLabel>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground tabular-nums">
-                          {Math.round((zone.settings.maskStrength ?? DEFAULT_MASK_STRENGTH) * 100)}%
+                          {Math.round(zone.settings.maskStrength * 100)}%
                         </span>
                         <Button
                           type="button"
@@ -580,7 +501,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                       min={TOUCH_PROFILE_MASK_STRENGTH_RANGE.min}
                       max={TOUCH_PROFILE_MASK_STRENGTH_RANGE.max}
                       step={TOUCH_PROFILE_MASK_STRENGTH_RANGE.step}
-                      value={zone.settings.maskStrength ?? DEFAULT_MASK_STRENGTH}
+                      value={zone.settings.maskStrength}
                       onValueChange={(next) => {
                         const nextValue = Array.isArray(next) ? next[0] : next;
                         if (typeof nextValue === "number") {
@@ -596,7 +517,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                       <FieldLabel>{t("page.tools.touch_profile.mask_curve")}</FieldLabel>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground tabular-nums">
-                          {formatTouchSettingValue(zone.settings.maskCurve ?? DEFAULT_MASK_CURVE)}x
+                          {formatTouchSettingValue(zone.settings.maskCurve)}x
                         </span>
                         <Button
                           type="button"
@@ -622,7 +543,7 @@ export function TouchProfileReview({ session }: { session: TouchProfileSession }
                       min={TOUCH_PROFILE_MASK_CURVE_RANGE.min}
                       max={TOUCH_PROFILE_MASK_CURVE_RANGE.max}
                       step={TOUCH_PROFILE_MASK_CURVE_RANGE.step}
-                      value={zone.settings.maskCurve ?? DEFAULT_MASK_CURVE}
+                      value={zone.settings.maskCurve}
                       onValueChange={(next) => {
                         const nextValue = Array.isArray(next) ? next[0] : next;
                         if (typeof nextValue === "number") {

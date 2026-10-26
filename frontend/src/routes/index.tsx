@@ -1,4 +1,3 @@
-import { Shell } from "@bindings/platform";
 import { Logger } from "@renderer/lib/logger";
 import { getSetting } from "@renderer/lib/settings";
 import { isStartPageSessionReady, resolveStartPage } from "@renderer/lib/start-page";
@@ -33,13 +32,12 @@ function RouteComponent() {
 
     let cancelled = false;
 
-    Promise.all([getSetting("general.defaultStartPage"), Shell.GetAppStatus()])
-      .then(([page, appStatus]) => {
+    getSetting("general.defaultStartPage")
+      .then((page) => {
         if (cancelled) return;
         void navi({
           to: resolveStartPage(page, {
             isLoggedIn: !!session,
-            platform: appStatus?.platform as "win32" | undefined,
             sessionRootId: session?.drive.rootId,
           }),
         });

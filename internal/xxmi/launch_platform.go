@@ -100,9 +100,7 @@ func (p platformLaunch) apply(spec *inject.LaunchSpec, cfg ImporterConfig) {
 // start, which for a hook launch is only after the hook is installed.
 func (x *XXMI) launchWithURI(ctx context.Context, spec inject.LaunchSpec, uri string) (inject.LaunchResult, error) {
 	var suffix [16]byte
-	if _, err := rand.Read(suffix[:]); err != nil {
-		return inject.LaunchResult{}, err
-	}
+	_, _ = rand.Read(suffix[:])
 	spec.ReadyEvent = inject.ReadyEventPrefix + hex.EncodeToString(suffix[:])
 	name, err := windows.UTF16PtrFromString(spec.ReadyEvent)
 	if err != nil {

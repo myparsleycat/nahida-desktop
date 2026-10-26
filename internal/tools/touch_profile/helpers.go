@@ -14,12 +14,10 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-func newTouchID() (string, error) {
+func newTouchID() string {
 	data := make([]byte, 16)
-	if _, err := rand.Read(data); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
+	rand.Read(data)
+	return base64.RawURLEncoding.EncodeToString(data)
 }
 
 func writeTouchFileAtomic(target string, data []byte, mode os.FileMode) (returnErr error) {

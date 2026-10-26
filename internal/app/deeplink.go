@@ -183,9 +183,6 @@ func parseAuthDeepLink(value string) (state, code string, ok bool) {
 // such a link, so one that no pending login asked for is dropped without a
 // trace.
 func (rt *runtime) dispatchDeepLinkLogin(args []string) {
-	if rt.auth == nil {
-		return
-	}
 	for _, arg := range args {
 		if state, code, ok := parseAuthDeepLink(arg); ok && rt.auth.CompleteLogin(state, code) {
 			return

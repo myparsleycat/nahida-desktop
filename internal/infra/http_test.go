@@ -131,9 +131,6 @@ func TestUseTransportReplacesSharedClientTransport(t *testing.T) {
 	if retained.Transport != blocked {
 		t.Fatal("transport not installed")
 	}
-	var unset *Client
-	unset.UseTransport(blocked)
-	(&Client{}).UseTransport(blocked)
 }
 
 func TestFetchRejectsInsecureRedirectWithoutSendingCredentials(t *testing.T) {

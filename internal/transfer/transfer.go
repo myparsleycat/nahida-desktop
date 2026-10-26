@@ -135,12 +135,8 @@ func (t *Transfer) ServiceShutdown() error {
 	if done != nil {
 		<-done
 	}
-	if t.downloadBandwidth != nil {
-		t.downloadBandwidth.Close()
-	}
-	if t.slowChunks != nil {
-		t.slowChunks.Close()
-	}
+	t.downloadBandwidth.Close()
+	t.slowChunks.Close()
 	t.emitMu.Lock()
 	if t.syncWindowProgress != nil {
 		t.syncWindowProgress(nil)
@@ -196,9 +192,6 @@ func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) (returnErr error) 
 
 //wails:ignore
 func (t *Transfer) SetDownloadBandwidthLimitMibps(mibps int) {
-	if t == nil || t.downloadBandwidth == nil {
-		return
-	}
 	if mibps <= 0 {
 		t.downloadBandwidth.SetRateBPS(0)
 		return
@@ -224,9 +217,6 @@ func (t *Transfer) ApplyBandwidthLimitsFromSettings(ctx context.Context) error {
 
 //wails:ignore
 func (t *Transfer) TakeDownloadBandwidth(ctx context.Context, bytes int64, onWait func()) error {
-	if t == nil || t.downloadBandwidth == nil {
-		return nil
-	}
 	return t.downloadBandwidth.Take(ctx, bytes, onWait)
 }
 
@@ -240,9 +230,6 @@ func (t *Transfer) Take(ctx context.Context, bytes int64, onWait func()) error {
 
 //wails:ignore
 func (t *Transfer) SlowChunks() *SlowChunkMonitor {
-	if t == nil {
-		return nil
-	}
 	return t.slowChunks
 }
 

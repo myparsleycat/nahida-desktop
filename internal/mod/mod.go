@@ -178,28 +178,16 @@ func (m *Mod) UseAppData(data *appdata.Store) { m.appData = data }
 func (m *Mod) UseSettings(settings Settings) { m.settings = settings }
 
 //wails:ignore
-func (m *Mod) UseFocus(fn func()) {
-	if m != nil && m.paths != nil {
-		m.paths.focus = fn
-	}
-}
+func (m *Mod) UseFocus(fn func()) { m.paths.focus = fn }
 
 //wails:ignore
-func (m *Mod) UseWindowReady(fn func(context.Context) (bool, error)) {
-	if m != nil && m.paths != nil {
-		m.paths.waitReady = fn
-	}
-}
+func (m *Mod) UseWindowReady(fn func(context.Context) (bool, error)) { m.paths.waitReady = fn }
 
 //wails:ignore
-func (m *Mod) UseFixInspection(fn func([]string)) {
-	if m != nil {
-		m.inspectAddedMods = fn
-	}
-}
+func (m *Mod) UseFixInspection(fn func([]string)) { m.inspectAddedMods = fn }
 
 func (m *Mod) queueFixInspection(paths ...string) {
-	if m != nil && m.inspectAddedMods != nil && len(paths) > 0 {
+	if m.inspectAddedMods != nil && len(paths) > 0 {
 		m.inspectAddedMods(paths)
 	}
 }
@@ -214,9 +202,6 @@ func (m *Mod) SelectDownloadPath(
 	suggestedNames []string,
 	selectFile bool,
 ) (*string, *string, error) {
-	if m == nil || m.paths == nil {
-		return nil, nil, errors.New("path selector is not configured")
-	}
 	result, err := m.paths.getSelectedPathWithModeModal(
 		ctx,
 		suggestedName,
@@ -233,7 +218,7 @@ func (m *Mod) SelectDownloadPath(
 }
 
 func (m *Mod) requireClient() (*db.Client, error) {
-	if m == nil || m.client == nil {
+	if m.client == nil {
 		return nil, errors.New("mod service is not bound to a database")
 	}
 	return m.client, nil
@@ -484,7 +469,7 @@ func (m *Mod) AddGame(
 		return err
 	}
 	if bootstrapInstall != nil {
-		if err := bootstrapInstall.Commit(); err != nil && m.log != nil {
+		if err := bootstrapInstall.Commit(); err != nil {
 			_ = infra.ReportError(
 				m.log,
 				err,
@@ -682,9 +667,7 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 	}
 	if len(changed) > 0 {
 		m.InvalidateLibraries()
-		if m.log != nil {
-			m.log.Info(map[string]any{"games": changed}, "Mod:syncImporterModFolders")
-		}
+		m.log.Info(map[string]any{"games": changed}, "Mod:syncImporterModFolders")
 	}
 	if len(conflicts) > 0 {
 		return infra.AnnotateError(errors.New("DUPLICATE_MOD_FOLDER_PATH"), infra.Diagnostic{
@@ -783,7 +766,7 @@ func xxmiImporterKey(importer *string) (string, bool) {
 
 func (m *Mod) rollbackNteDiskChanges(rollbacks []func() error) {
 	for index := len(rollbacks) - 1; index >= 0; index-- {
-		if err := rollbacks[index](); err != nil && m != nil && m.log != nil {
+		if err := rollbacks[index](); err != nil {
 			_ = infra.ReportError(
 				m.log,
 				err,
@@ -1388,7 +1371,7 @@ func fileMtimeMS(info fs.FileInfo) float64 {
 }
 
 func (m *Mod) shaderImporters() []shaderImporter {
-	if m == nil || m.xxmi == nil {
+	if m.xxmi == nil {
 		return nil
 	}
 	importers, err := m.xxmi.GetEnabledImporters(context.Background())
@@ -1404,7 +1387,7 @@ func (m *Mod) shaderImporters() []shaderImporter {
 }
 
 func (m *Mod) shaderGames() []shaderGame {
-	if m == nil || m.client == nil {
+	if m.client == nil {
 		return nil
 	}
 	games, err := m.listGames(context.Background())
@@ -1424,17 +1407,12 @@ func (m *Mod) shaderGames() []shaderGame {
 }
 
 func (m *Mod) logShaderError(err error, where string) {
-	if err != nil && m != nil && m.log != nil {
-		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
-			Severity: infra.DiagnosticError, Operation: where, Stage: "shader-fix",
-		})
-	}
+	_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+		Severity: infra.DiagnosticError, Operation: where, Stage: "shader-fix",
+	})
 }
 
 func (m *Mod) HasSingleTopLevelDirectory(ctx context.Context, archivePath string) (bool, error) {
-	if m == nil || m.archive == nil {
-		return false, errors.New("archive service is not configured")
-	}
 	return m.archive.HasSingleTopLevelDirectory(ctx, archivePath)
 }
 
@@ -1454,9 +1432,6 @@ func (m *Mod) PickFolder() (*string, error) {
 }
 
 func (m *Mod) PickExecutable() (*string, error) {
-	if m == nil || m.dialog == nil {
-		return nil, errors.New("dialog service is not configured")
-	}
 	result, err := m.dialog.ShowOpenDialog(platform.OpenDialogOptions{
 		Properties: []string{"openFile"},
 		Filters:    []platform.FileFilter{{Name: "Launcher", Extensions: []string{"exe"}}},
@@ -1473,9 +1448,6 @@ func (m *Mod) PickExecutable() (*string, error) {
 }
 
 func (m *Mod) pickDirectory(title, role string) (*string, error) {
-	if m == nil || m.dialog == nil {
-		return nil, errors.New("dialog service is not configured")
-	}
 	result, err := m.dialog.ShowOpenDialog(platform.OpenDialogOptions{
 		Title:      title,
 		Properties: []string{"openDirectory"},

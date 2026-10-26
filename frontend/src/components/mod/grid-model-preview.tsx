@@ -511,14 +511,9 @@ export function useGridModelPreview(mod: ModInfo, eligible: boolean) {
       unsubscribe = undefined;
     };
 
-    if (typeof IntersectionObserver === "undefined") {
-      subscribe();
-      return unsubscribeCurrent;
-    }
-
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) {
+        if (entry.isIntersecting) {
           subscribe();
         } else {
           unsubscribeCurrent();

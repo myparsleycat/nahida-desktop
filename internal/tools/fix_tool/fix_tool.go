@@ -100,14 +100,10 @@ func (t *Service) SaveScript(ctx context.Context, inputPath string) error {
 	if err != nil {
 		return err
 	}
-	id, err := newID()
-	if err != nil {
-		return err
-	}
 	zstdSize := int64(len(compressed))
 	zstdHash := sha256Hex(compressed)
 	return client.Scripts.Insert(ctx, db.ScriptRow{
-		ID: id, Name: name, Source: compressed, IsSrcZstd: true, Type: scriptType,
+		ID: newID(), Name: name, Source: compressed, IsSrcZstd: true, Type: scriptType,
 		Size: int64(len(data)), ZstdSize: &zstdSize, SHA256: fileHash, ZstdSHA256: &zstdHash,
 	})
 }
@@ -183,10 +179,7 @@ func (t *Service) CreatePreset(ctx context.Context, input CreateScriptPresetInpu
 		}
 	}
 
-	presetID, err := newID()
-	if err != nil {
-		return err
-	}
+	presetID := newID()
 	items := make([]db.ScriptPresetItemRow, len(input.ScriptIDs))
 	for i, scriptID := range input.ScriptIDs {
 		items[i] = db.ScriptPresetItemRow{PresetID: presetID, ScriptID: scriptID, Order: int64(i)}
@@ -210,9 +203,6 @@ func (t *Service) DeletePreset(ctx context.Context, presetID string) error {
 }
 
 func (t *Service) CancelRun() bool {
-	if t == nil {
-		return false
-	}
 	t.runMu.Lock()
 	run := t.run
 	if run != nil {
@@ -227,21 +217,14 @@ func (t *Service) CancelRun() bool {
 }
 
 func (t *Service) SendInput(input string) bool {
-	if t == nil {
-		return false
-	}
 	t.runMu.Lock()
 	run := t.run
 	t.runMu.Unlock()
-	if run == nil || run.executor == nil || !run.executor.sendInput(input) {
-		if t.log != nil {
-			t.log.Warn("Cannot send input: No active script running", "FixTool")
-		}
+	if run == nil || !run.executor.sendInput(input) {
+		t.log.Warn("Cannot send input: No active script running", "FixTool")
 		return false
 	}
-	if t.log != nil {
-		t.log.Info(fmt.Sprintf("Sent input: %q", input), "FixTool")
-	}
+	t.log.Info(fmt.Sprintf("Sent input: %q", input), "FixTool")
 	return true
 }
 
@@ -459,10 +442,8 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func newID() (string, error) {
+func newID() string {
 	data := make([]byte, 16)
-	if _, err := rand.Read(data); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
+	rand.Read(data)
+	return base64.RawURLEncoding.EncodeToString(data)
 }

@@ -323,9 +323,7 @@ func (x *XXMI) restoreImporterAccess(ctx context.Context, lease *elevated.FileLe
 			return err
 		}
 	}
-	if x.log != nil {
-		x.log.Warn(map[string]any{"paths": paths}, "XXMI.restoreImporterAccess")
-	}
+	x.log.Warn(map[string]any{"paths": paths}, "XXMI.restoreImporterAccess")
 	return nil
 }
 

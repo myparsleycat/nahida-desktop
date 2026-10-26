@@ -38,7 +38,7 @@ export async function pasteModPreview({
         }
 
         const text = await navigator.clipboard.readText();
-        if (text?.startsWith("http") && isPreviewImagePath(text)) {
+        if (text.startsWith("http") && isPreviewImagePath(text)) {
             // The download can take a while, so the loading toast stays until the preview itself shows the result.
             const id = toast.loading(i18n.t("page.mod.toast.paste-preview.downloading"));
             Mod.PastePreview(modPath, text, "url", null)
@@ -58,11 +58,7 @@ export async function pasteModPreview({
         const items = await navigator.clipboard.read();
         for (const item of items) {
             if (item.types.includes("image/png") || item.types.includes("image/jpeg")) {
-                const type = item.types.find((t) => t.startsWith("image/"));
-                if (!type) {
-                    continue;
-                }
-
+                const type = item.types.find((t) => t.startsWith("image/"))!;
                 const blob = await item.getType(type);
                 const reader = new FileReader();
                 reader.onerror = () => {
