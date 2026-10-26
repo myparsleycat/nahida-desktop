@@ -228,6 +228,10 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		if startErr == nil || process == 0 {
 			return
 		}
+
+		// This helper never got a connection, so it waits in Accept for its parent and would only
+		// use up the shutdown grace. stopHelperProcess still confirms the exit.
+		_ = windows.TerminateProcess(process, 1)
 		c.mu.Lock()
 		c.process, c.pid = process, pid
 		startErr = helperStartupError(startErr, c.closeLocked())
