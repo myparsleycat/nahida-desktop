@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -574,9 +575,19 @@ func readModelViewerTextureFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
 
+	// A file that shrank or grew after Stat would otherwise decode as a
+	// truncated prefix and fail later with an unrelated image error.
+	changed := fmt.Errorf("viewer texture file changed while reading: %s", path)
 	raw := make([]byte, info.Size())
 	if _, err := io.ReadFull(file, raw); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return nil, changed
+		}
 		return nil, err
+	}
+	var extra [1]byte
+	if _, err := io.ReadFull(file, extra[:]); !errors.Is(err, io.EOF) {
+		return nil, errors.Join(err, changed)
 	}
 	return raw, nil
 }

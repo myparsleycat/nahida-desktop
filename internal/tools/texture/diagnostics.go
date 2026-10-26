@@ -291,14 +291,19 @@ func readDiagnosticFile(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() > diagnosticFileLimit {
 		return nil, errors.New("diagnostic input must be a regular file no larger than 128 MiB")
 	}
+	// Change detection compares these bytes, so a file that shrank or grew
+	// after Stat must fail instead of reading as a different file.
+	changed := fmt.Errorf("diagnostic input changed while reading: %s", path)
 	data := make([]byte, info.Size())
 	if _, err := io.ReadFull(file, data); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return nil, changed
+		}
 		return nil, err
 	}
-	// Change detection compares these bytes, so a file that grew after Stat must not read as unchanged.
 	var extra [1]byte
 	if _, err := io.ReadFull(file, extra[:]); !errors.Is(err, io.EOF) {
-		return nil, errors.Join(err, errors.New("diagnostic input changed while reading"))
+		return nil, errors.Join(err, changed)
 	}
 	return data, nil
 }

@@ -206,25 +206,29 @@ func modelViewerHalfToFloat(value uint16) float32 {
 	return sign * float32(math.Ldexp(1, exponent-15)) * (1 + fraction/1024)
 }
 
-func modelViewerIndexBytes(format string) (int, error) {
+// modelViewerIndexBytes returns the size of one index of format and checks
+// that an index buffer of length bytes holds whole indices.
+func modelViewerIndexBytes(format string, length int64) (int, error) {
 	upper := strings.ToUpper(format)
+	width := 0
 	switch {
 	case strings.Contains(upper, "R16_UINT"):
-		return 2, nil
+		width = 2
 	case strings.Contains(upper, "R32_UINT"), strings.Contains(upper, "UNKNOWN"):
-		return 4, nil
+		width = 4
 	default:
 		return 0, fmt.Errorf("unsupported IB format: %s", format)
 	}
+	if length%int64(width) != 0 {
+		return 0, fmt.Errorf("%s index buffer byte length %d is not divisible by %d", format, length, width)
+	}
+	return width, nil
 }
 
 func modelViewerDecodeIndices(bytes []byte, format string) ([]uint32, error) {
-	width, err := modelViewerIndexBytes(format)
+	width, err := modelViewerIndexBytes(format, int64(len(bytes)))
 	if err != nil {
 		return nil, err
-	}
-	if len(bytes)%width != 0 {
-		return nil, fmt.Errorf("%s index buffer byte length %d is not divisible by %d", format, len(bytes), width)
 	}
 
 	out := make([]uint32, len(bytes)/width)

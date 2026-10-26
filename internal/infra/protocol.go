@@ -375,18 +375,30 @@ func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Reques
 	if upload.data == nil && expected > 0 {
 		upload.data = make([]byte, 0, expected)
 	}
+
 	// The uploading flag keeps other requests off the unfilled tail, so the
 	// chunk is read in place instead of through a temporary buffer.
 	target := upload.data[received:expected]
 	p.mu.Unlock()
 
-	read, err := io.ReadFull(request.Body, target)
+	// Only a clean io.EOF ends a short chunk: a body cut off before its
+	// declared length reports io.ErrUnexpectedEOF, which io.ReadFull would
+	// pass through indistinguishable from its own short-read signal.
+	read := 0
+	var err error
+	for read < len(target) && err == nil {
+		var n int
+		n, err = request.Body.Read(target[read:])
+		read += n
+	}
 	switch {
-	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+	case errors.Is(err, io.EOF):
 		err = nil
 	case err == nil:
 		var extra [1]byte
-		if _, extraErr := io.ReadFull(request.Body, extra[:]); extraErr == nil {
+		extraBytes, extraErr := io.ReadFull(request.Body, extra[:])
+		read += extraBytes
+		if extraErr == nil {
 			err = errors.New("memory upload length mismatch")
 		} else if !errors.Is(extraErr, io.EOF) {
 			err = extraErr
