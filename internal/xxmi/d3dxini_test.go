@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -117,7 +118,7 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 		"[System]\n; delay help\ndelay = 5 ; seconds\nkept = 7\n; disabled = 0\nfresh = 2\n;gone = 1\nlegacy = 3\n\n; constants\n" +
 		"[Constants]\n; declare globals\nglobal $x = 1\n\n; present\n[Present]\nrun = CommandListNew\n\n[Stereo]\nautomatic_mode = 0\n;unlock = 1\n"
 
-	doc, lost := rebuildINI(template, previous)
+	doc, lost := mergeINI(template, nil, previous)
 	if got := string(doc.Bytes()); got != want {
 		t.Fatalf("INI mismatch\n got %q\nwant %q", got, want)
 	}
@@ -125,7 +126,7 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 		t.Fatal("dropped comments of the previous file were not reported")
 	}
 
-	again, lost := rebuildINI(template, []byte(want))
+	again, lost := mergeINI(template, nil, []byte(want))
 	if got := string(again.Bytes()); got != want || lost {
 		t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
 	}
@@ -133,7 +134,7 @@ func TestRebuildINICarriesPreviousFile(t *testing.T) {
 	// An option that was off before the template knew it stays off once a later template sets it.
 	later := bytes.Replace(template, []byte("fresh = 2\n"), []byte("fresh = 2\ngone = 5\n"), 1)
 	later = append(later, "[Stereo]\nunlock = 9\n"...)
-	updated, _ := rebuildINI(later, []byte(want))
+	updated, _ := mergeINI(later, nil, []byte(want))
 	for _, option := range [][2]string{{"System", "gone"}, {"Stereo", "unlock"}} {
 		value, ok := updated.Option(option[0], option[1])
 		if ok || !updated.mentionsOption(option[0], option[1]) {
@@ -154,11 +155,11 @@ func TestRebuildINIPreservesCommentedValues(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			doc, lost := rebuildINI([]byte(tc.template), previous)
+			doc, lost := mergeINI([]byte(tc.template), nil, previous)
 			if got := doc.Bytes(); !bytes.Equal(got, previous) || lost {
 				t.Fatalf("commented value changed (lost = %t): got %q, want %q", lost, got, previous)
 			}
-			again, lost := rebuildINI([]byte(tc.template), doc.Bytes())
+			again, lost := mergeINI([]byte(tc.template), nil, doc.Bytes())
 			if got := again.Bytes(); !bytes.Equal(got, previous) || lost {
 				t.Fatalf("second rebuild changed the value (lost = %t): got %q, want %q", lost, got, previous)
 			}
@@ -173,19 +174,19 @@ func TestRebuildINIWritesValidUTF8(t *testing.T) {
 		"[Logging]\r\nshow_warnings = 0\r\n")
 	want := "[Rendering]\n; the game’s buffer\nresize = 0\nmine = café\n\n[Logging]\nshow_warnings = 0\n"
 
-	doc, lost := rebuildINI(template, previous)
+	doc, lost := mergeINI(template, nil, previous)
 	if got := string(doc.Bytes()); got != want || lost {
 		t.Fatalf("INI mismatch (lost = %t)\n got %q\nwant %q", lost, got, want)
 	}
 
-	again, lost := rebuildINI(template, []byte(want))
+	again, lost := mergeINI(template, nil, []byte(want))
 	if got := string(again.Bytes()); got != want || lost {
 		t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
 	}
 
 	// Windows-1252 leaves 0x81 undefined, so the original value survives only in a backup.
 	undefined := bytes.Replace(previous, []byte("caf\xe9"), []byte("caf\x81"), 1)
-	if _, lost := rebuildINI(template, undefined); !lost {
+	if _, lost := mergeINI(template, nil, undefined); !lost {
 		t.Fatal("a byte replaced without an equivalent was not reported")
 	}
 }
@@ -227,16 +228,99 @@ func TestRebuildINIKeepsOnlyFirstVerbatimSection(t *testing.T) {
 			if tc.previous != nil {
 				old = tc.previous
 			}
-			doc, lost := rebuildINI([]byte(tc.template), old)
+			doc, lost := mergeINI([]byte(tc.template), nil, old)
 			if got := string(doc.Bytes()); got != tc.want {
 				t.Fatalf("INI mismatch\n got %q\nwant %q", got, tc.want)
 			}
 			if !lost {
 				t.Fatal("discarded duplicate commands were not reported")
 			}
-			again, lost := rebuildINI([]byte(tc.template), doc.Bytes())
+			again, lost := mergeINI([]byte(tc.template), nil, doc.Bytes())
 			if got := string(again.Bytes()); got != tc.want || lost {
 				t.Fatalf("second rebuild changed the INI (lost = %t): %q", lost, got)
+			}
+		})
+	}
+}
+
+func TestMergeINIFollowsTemplateWhereFileKeepsBase(t *testing.T) {
+	t.Parallel()
+	// The banner of [Constants] ends [System], and the template rewords it.
+	base := "[System]\nkept = 0\nchanged = 0 ; old default\n;off = 1\ndropped = 1\n\n; old banner\n" +
+		"[Constants]\nglobal $a = 1\n\n[Present]\nrun = CommandListOld\n"
+	template := "[System]\nkept = 0\nchanged = 5\noff = 1\nfresh = 2\n\n; constants\n" +
+		"[Constants]\nglobal $a = 2\n\n[Present]\nrun = CommandListNew\n"
+	for _, tc := range []struct {
+		name, previous, want string
+		lost                 bool
+	}{
+		{
+			name:     "untouched file",
+			previous: base,
+			want:     template,
+		},
+		{
+			// The spacing and case of a line do not make it the user's.
+			name: "reformatted file",
+			previous: "[system]\r\nKEPT=0\r\nchanged  =  0\r\n; off = 1\r\ndropped = 1\r\n\r\n" +
+				"[Constants]\r\n  global $a = 1\r\n\r\n[Present]\r\nrun = CommandListOld\r\n",
+			want: template,
+		},
+		{
+			name: "edited file",
+			previous: "[System]\nkept = 7\nchanged = 0\n;off = 0\ndropped = 1\nmine = 3\n\n" +
+				"[Constants]\nglobal $a = 9\n\n[Present]\nrun = CommandListOld\n",
+			want: "[System]\nkept = 7\nchanged = 5\n;off = 0\nfresh = 2\nmine = 3\n\n; constants\n" +
+				"[Constants]\nglobal $a = 9\n\n[Present]\nrun = CommandListNew\n",
+		},
+		{
+			// A merge ignores the second section of commands of a name, also once the first is the template's.
+			name:     "duplicate command section",
+			previous: base + "\n[Present]\nrun = CommandListMine\n",
+			want:     template,
+			lost:     true,
+		},
+		{
+			// The value is the template's, but the comment after it is the user's.
+			name:     "comment after a value of base",
+			previous: strings.Replace(base, "kept = 0\n", "kept = 0 ; mine\n", 1),
+			want:     template,
+			lost:     true,
+		},
+		{
+			// 3DMigoto ignores a line after the first value of a key, so it must not replace the value of base.
+			name:     "duplicate after a value of base",
+			previous: strings.Replace(base, "kept = 0\n", "kept = 0\nkept = 1\n", 1),
+			want:     template,
+			lost:     true,
+		},
+		{
+			name:     "commented-out line next to a value of base",
+			previous: strings.Replace(base, "kept = 0\n", ";kept = 1\nkept = 0\n", 1),
+			want:     template,
+			lost:     true,
+		},
+		{
+			name:     "comment in unchanged commands",
+			previous: strings.Replace(base, "[Constants]\n", "[Constants]\n; mine\n", 1),
+			want:     template,
+			lost:     true,
+		},
+		{
+			name:     "section the template dropped",
+			previous: base + "\n[Stereo]\nmine = 1\n",
+			want:     template + "\n[Stereo]\nmine = 1\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, lost := mergeINI([]byte(template), []byte(base), []byte(tc.previous))
+			if got := string(doc.Bytes()); got != tc.want || lost != tc.lost {
+				t.Fatalf("INI mismatch (lost = %t)\n got %q\nwant %q", lost, got, tc.want)
+			}
+			again, lost := mergeINI([]byte(template), []byte(template), doc.Bytes())
+			if got := string(again.Bytes()); got != tc.want || lost {
+				t.Fatalf("second merge changed the INI (lost = %t): %q", lost, got)
 			}
 		})
 	}

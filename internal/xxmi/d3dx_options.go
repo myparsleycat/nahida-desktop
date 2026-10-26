@@ -32,16 +32,6 @@ type D3DXOption struct {
 	Managed D3DXOptionManaged `json:"managed"`
 }
 
-// d3dxLaunchOptions lists, as lowercase override keys, the options applySettingsINI writes from the importer
-// settings on every save and launch.
-var d3dxLaunchOptions = []string{
-	"hunting.hunting", "hunting.marking_actions",
-	"system.screen_width", "system.screen_height", "system.dll_initialization_delay",
-	"system.clear_unknown_settings",
-	"input.input", "input.input_disable_mode",
-	"logging.log_level", "logging.show_warnings", "logging.calls", "logging.debug",
-}
-
 func d3dxOverrideKey(section, key string) string { return section + "." + key }
 
 // splitD3DXOverrideKey returns the section and option an override key names. Only options of a settings section
@@ -63,10 +53,6 @@ func lookupD3DXOverride(overrides map[string]string, section, key string) (strin
 	return "", false
 }
 
-func d3dxLaunchOption(section, key string) bool {
-	return slices.Contains(d3dxLaunchOptions, strings.ToLower(d3dxOverrideKey(section, key)))
-}
-
 // validD3DXValue reports whether value stays one option value on its line: a comment character would cut it
 // short, and a line break would start another option or section.
 func validD3DXValue(value string) bool {
@@ -76,30 +62,13 @@ func validD3DXValue(value string) bool {
 		})
 }
 
-// enforcedRenderingOptions returns the [Rendering] values a launch writes for importer while its rendering
-// options are enforced.
-func enforcedRenderingOptions(importer string) map[string]string {
-	values := map[string]string{
-		"texture_hash": "0", "track_texture_updates": "0", "track_region_hashes": "0",
-		"allow_buffer_resize": "1",
-	}
-	switch importer {
-	case "WWMI":
-		values["texture_hash"], values["track_texture_updates"] = "1", "1"
-	case "SRMI":
-		values["track_implicit_index_buffers"] = "1"
-	case "EFMI":
-		values["track_region_hashes"], values["track_implicit_index_buffers"] = "1", "1"
-		values["allow_buffer_resize"] = "0"
-	}
-	return values
-}
-
+// validateD3DXOverrides checks that each override names one option of a settings section and stays one value on
+// its line. An override of an option the importer settings manage is accepted and has no effect, since the
+// settings are written after it.
 func validateD3DXOverrides(overrides map[string]string) error {
 	seen := make(map[string]bool, len(overrides))
 	for overrideKey, value := range overrides {
-		section, key, ok := splitD3DXOverrideKey(overrideKey)
-		if !ok || d3dxLaunchOption(section, key) {
+		if _, _, ok := splitD3DXOverrideKey(overrideKey); !ok {
 			return fmt.Errorf("invalid d3dx.ini option %q", overrideKey)
 		}
 		// d3dx.ini names are case-insensitive, so of two spellings a launch would write whichever sorts last.
@@ -120,7 +89,7 @@ func applyD3DXOverrides(doc *iniDocument, overrides map[string]string) {
 	for _, overrideKey := range slices.Sorted(maps.Keys(overrides)) {
 		section, key, ok := splitD3DXOverrideKey(overrideKey)
 		value := overrides[overrideKey]
-		if !ok || d3dxLaunchOption(section, key) || !validD3DXValue(value) {
+		if !ok || !validD3DXValue(value) {
 			continue
 		}
 		if _, present := doc.Option(section, key); present {
@@ -148,14 +117,26 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 			Fields: map[string]any{"importer": importer, "importerFolder": cfg.ImporterFolder},
 		})
 	}
-	doc := parseINI(data)
 
-	// The next launch rebuilds the file from the provider's d3dx.ini, so its options are listed, and can be
-	// overridden, before that launch has run.
-	if providerINI := x.pendingProviderINI(ctx, cfg); len(providerINI) > 0 {
-		doc, _ = rebuildINI(providerINI, data)
+	// The next launch deploys the provider's release and rebuilds the file from its d3dx.ini, so its options are
+	// listed, can be overridden, and are locked as that release reads them before that launch has run.
+	template, libsVersion := x.pendingProviderINI(ctx, cfg)
+	in := importerINIInput{key: importer, cfg: cfg, support: migotoINISupport(cfg, libsVersion), template: template}
+	if len(in.template) > 0 {
+		in.base = x.readINIBase(importer, cfg.ImporterFolder)
 	}
-	enforced := enforcedRenderingOptions(importer)
+	doc, _ := in.merge(data)
+
+	// Rendering options are marked while they are not enforced too: the settings page locks them as soon as
+	// enforcing is switched on, before that is saved.
+	enforced := cfg
+	enforced.Migoto.EnforceRendering = true
+	managed := map[string]D3DXOptionManaged{}
+	for _, write := range settingsINIWrites(importer, enforced, in.support) {
+		if !write.fallback {
+			managed[strings.ToLower(d3dxOverrideKey(write.section, write.key))] = write.managed
+		}
+	}
 
 	options, listed, section := []D3DXOption{}, map[string]bool{}, ""
 	for _, line := range doc.lines {
@@ -175,62 +156,39 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 		listed[strings.ToLower(overrideKey)] = true
 
 		value, _ := doc.Option(section, key)
-		managed := D3DXOptionUnmanaged
-		if d3dxLaunchOption(section, key) {
-			managed = D3DXOptionManagedLaunch
-		} else if _, ok := enforced[strings.ToLower(key)]; ok && strings.EqualFold(section, "Rendering") {
-			managed = D3DXOptionManagedRendering
-		}
-		options = append(options, D3DXOption{Section: section, Key: key, Value: value, Managed: managed})
+		options = append(options, D3DXOption{
+			Section: section, Key: key, Value: value, Managed: managed[strings.ToLower(overrideKey)],
+		})
 	}
 	return options, nil
 }
 
 // pendingProviderINI returns the cached d3dx.ini of the provider release the importer's next deployment
-// writes, or nil. Nothing is downloaded: a release that is not cached yet lists its options after the launch
-// that fetches it.
-func (x *XXMI) pendingProviderINI(ctx context.Context, cfg ImporterConfig) []byte {
+// writes, along with the XXMI libraries release deployed under it, or nil and "". Nothing is downloaded: a
+// release that is not cached yet lists its options after the launch that fetches it.
+func (x *XXMI) pendingProviderINI(ctx context.Context, cfg ImporterConfig) (providerINI []byte, libsVersion string) {
 	spec, err := x.deployedLibsProvider(ctx, cfg)
 	if err != nil || spec.overlayPackage == "" {
-		return nil
+		return nil, ""
 	}
 	pin, _, err := x.libsPin(ctx, cfg)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	version, err := x.resolveProviderDLLVersion(ctx, spec, pin, cfg.ImporterFolder)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	root, err := xxmiCacheRoot()
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	if _, _, err := x.readVerifiedProviderDLL(ctx, root, spec, version); err != nil {
-		return nil
+		return nil, ""
 	}
-	providerINI, err := x.readVerifiedProviderINI(ctx, root, spec, version)
+	providerINI, err = x.readVerifiedProviderINI(ctx, root, spec, version)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
-	return providerINI
-}
-
-func readImporterINI(folder string) ([]byte, error) {
-	root, err := openInstallRoot(folder)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = root.Close() }()
-	iniRoot, iniName, err := root.resolveUserFile("d3dx.ini")
-	if err != nil {
-		return nil, err
-	}
-	if iniRoot == nil {
-		iniRoot = root
-	} else {
-		defer func() { _ = iniRoot.Close() }()
-	}
-	data, _, err := iniRoot.readFile(iniName)
-	return data, err
+	return providerINI, signedLibsVersion(version)
 }

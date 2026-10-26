@@ -185,13 +185,28 @@ func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 	if saved := backups(); len(saved) != 1 {
 		t.Fatalf("second launch backed the file up again: %v", saved)
 	}
+
+	// A provider release that changes one of its defaults reaches the file, while the values the file chose stay.
+	provider = []byte(strings.Replace(string(provider), "fresh = 1", "fresh = 3", 1))
+	got = launch()
+	for _, want := range []string{"texture_hash = 1\n", "fresh = 3\n", "old_only = 4\n", "toggle_input = VK_F8\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("INI rebuilt from the next release is missing %q: %q", want, got)
+		}
+	}
+	if saved := backups(); len(saved) != 1 {
+		t.Fatalf("a changed provider default backed the file up again: %v", saved)
+	}
+	if base, err := os.ReadFile(filepath.Join(folder, iniBaseName)); err != nil || string(base) != string(provider) {
+		t.Fatalf("recorded base = %q, err = %v; want the provider's d3dx.ini", base, err)
+	}
 }
 
 func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
 	ctx := context.Background()
 	image := testCustomDLLImage("0.2.0")
 	ini := []byte("[Rendering]\nshader_regex_background = 0\ncache_shaders = 0\ntexture_hash = 1\nfuture_option = 3\n" +
-		"[TextureOverrideBody]\nhash = 1234abcd\n")
+		"[Logging]\nlog_level = disabled\n[TextureOverrideBody]\nhash = 1234abcd\n")
 	service, _, _ := newProviderTestService(t, []providerTestRelease{{
 		tag: "v0.2.0", data: image, digest: providerTestDigest(image), ini: ini, iniDigest: providerTestDigest(ini),
 	}})
@@ -204,6 +219,10 @@ func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Rendering]\n;cache_shaders = 0\n"))
+	// The libraries deployed now read log_level, and the provider's release the next launch deploys does not.
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, runtimeManifestName),
+		fmt.Appendf(nil, `{"mode":%q,"source":"xxmi-libs@1.2.0"}`, RuntimeXXMI))
+	managed := map[string]D3DXOptionManaged{}
 	listed := func() map[string]string {
 		t.Helper()
 		options, err := service.GetD3DXOptions(ctx, "GIMI")
@@ -212,7 +231,7 @@ func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
 		}
 		values := map[string]string{}
 		for _, option := range options {
-			values[option.Key] = option.Value
+			values[option.Key], managed[option.Key] = option.Value, option.Managed
 		}
 		return values
 	}
@@ -224,8 +243,12 @@ func TestGetD3DXOptionsListsOptionsTheNextLaunchAdds(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := listed()
-	if got["shader_regex_background"] != "0" || got["texture_hash"] != "1" || got["future_option"] != "3" {
+	if got["shader_regex_background"] != "0" || got["texture_hash"] != "1" || got["future_option"] != "3" ||
+		got["log_level"] != "disabled" {
 		t.Fatalf("options the next launch adds = %v", got)
+	}
+	if managed["log_level"] != D3DXOptionUnmanaged {
+		t.Fatalf("log_level managed = %q, want the lock of the release the next launch deploys", managed["log_level"])
 	}
 	if _, ok := got["cache_shaders"]; ok {
 		t.Fatalf("an option the file comments out was listed: %v", got)
@@ -311,6 +334,48 @@ func TestSaveImporterConfigLateINIWriteKeepsNewerSave(t *testing.T) {
 	}
 }
 
+func TestGetD3DXOptionsLocksOnlyOptionsTheDeployedDLLReads(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, runtimeManifestName),
+		fmt.Appendf(nil, `{"mode":%q,"source":"xxmi-libs@1.2.0"}`, RuntimeXXMI))
+	writeTestFile(
+		t,
+		filepath.Join(cfg.ImporterFolder, "d3dx.ini"),
+		[]byte(
+			"[Logging]\nlog_level = disabled\ncalls = 0\n[Input]\ntoggle_input = VK_F8\n[Rendering]\ntexture_hash = 0\n",
+		),
+	)
+
+	options, err := service.GetD3DXOptions(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed := map[string]D3DXOptionManaged{}
+	for _, option := range options {
+		managed[option.Key] = option.Managed
+	}
+	// A DLL that reads log_level ignores calls, which the settings therefore leave to the user, and the hotkey
+	// setting only fills in a missing one.
+	want := map[string]D3DXOptionManaged{
+		"log_level": D3DXOptionManagedLaunch, "calls": D3DXOptionUnmanaged, "toggle_input": D3DXOptionUnmanaged,
+		"texture_hash": D3DXOptionManagedRendering,
+	}
+	for key, value := range want {
+		if managed[key] != value {
+			t.Errorf("%s managed = %q, want %q (all: %v)", key, managed[key], value, managed)
+		}
+	}
+}
+
 func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("GIMI", filepath.Join(t.TempDir(), "xxmi"))
@@ -321,6 +386,8 @@ func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 		"Rendering.cache_shaders": "1", "Hunting.reload_config": "no_modifiers VK_F5",
 		"Hunting.analyse_options": "dump_rt dump_tex buf txt", "Hunting.monitor_performance_interval": "2.5",
 		"Device.get_resolution_from": "depth_stencil", "Rendering.future_option": "-1",
+		// The settings write an option they manage after the override, which therefore has no effect.
+		"Logging.log_level": "debug",
 	}
 	if err := ValidateImporterSettings("GIMI", cfg); err != nil {
 		t.Fatalf("valid overrides rejected: %v", err)
@@ -329,7 +396,6 @@ func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 	for name, overrides := range map[string]map[string]string{
 		"loader":          {"Loader.target": "evil.exe"},
 		"command section": {"TextureOverrideBody.hash": "1234abcd"},
-		"launch managed":  {"Logging.log_level": "debug"},
 		"new line":        {"Hunting.reload_config": "VK_F5\r\n[Loader]\r\ntarget = evil.exe"},
 		"comment":         {"Hunting.reload_config": "VK_F5 ; note"},
 		"empty":           {"Rendering.cache_shaders": ""},

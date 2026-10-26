@@ -35,7 +35,7 @@ func configureWWMIINIFiles(
 		if err := editWWMIINI(ctx,
 			filepath.Join(game, "Client", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini"), publish,
 			func(doc *iniDocument) {
-				doc.SetOptionUnique("/Script/Engine.GameUserSettings", "FrameRateLimit", "120.000000", false)
+				doc.SetOption("/Script/Engine.GameUserSettings", "FrameRateLimit", "120.000000", false)
 			}); err != nil {
 			return fmt.Errorf("edit WWMI GameUserSettings.ini: %w", err)
 		}
@@ -59,7 +59,7 @@ func configureWWMIINIFiles(
 	}
 	if err := editWWMIINI(ctx, filepath.Join(game, "Client", "Config", "UserEngine.ini"), publish,
 		func(doc *iniDocument) {
-			doc.SetOptionUnique(
+			doc.SetOption(
 				"ConsoleVariables",
 				"r.Kuro.SkeletalMesh.DistanceLODBaseFOV",
 				strconv.Itoa(options.MeshLODDistanceBaseFOV),

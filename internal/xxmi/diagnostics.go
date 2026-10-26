@@ -1,7 +1,6 @@
 package xxmi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -263,8 +262,9 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 	// The session is stored before the file changes, so a write that fails or a crash after it leaves a
 	// session whose end restores the values the file had.
 	stage = "write-ini"
-	_, logLevel := migotoINISupport(cfg)
-	_, err = editImporterINI(ctx, cfg.ImporterFolder, func(doc *iniDocument) error {
+	iniSupport := migotoINISupport(cfg, "")
+	err = writeImporterINI(ctx, key, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
+		doc := parseINI(data)
 		// A session stored before an option was restored has not read that option's value yet, which the
 		// session has not set either.
 		current := currentDiagnosticsOptions(doc)
@@ -278,10 +278,10 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 		}
 		records[key] = record
 		if err := x.storeDiagnostics(ctx, records); err != nil {
-			return err
+			return nil, false, err
 		}
-		applyDiagnosticsINI(doc, *record, logLevel)
-		return nil
+		applyDiagnosticsINI(doc, *record, iniSupport.logLevel)
+		return doc, false, nil
 	})
 	if err != nil {
 		if rollback != nil {
@@ -718,44 +718,7 @@ func restoreDiagnosticsOption(doc *iniDocument, option string, restore map[strin
 // restoreDiagnosticsINI puts back the values the file had before the session, then the options the
 // importer settings decide, which also returns the log level to the setting.
 func restoreDiagnosticsINI(ctx context.Context, key string, cfg ImporterConfig, record diagnosticsRecord) error {
-	_, err := editImporterINI(ctx, cfg.ImporterFolder, func(doc *iniDocument) error {
-		for _, option := range diagnosticsRestoredOptions {
-			restoreDiagnosticsOption(doc, option, record.Restore)
-		}
-		applySettingsINI(doc, key, cfg, true)
-		return nil
-	})
-	return err
-}
-
-// editImporterINI edits the importer's d3dx.ini in place and returns the bytes it read. The file is written
-// only when the edit changed it.
-func editImporterINI(ctx context.Context, folder string, edit func(*iniDocument) error) ([]byte, error) {
-	root, err := openInstallRoot(folder)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = root.Close() }()
-	iniRoot, iniName, err := root.resolveUserFile("d3dx.ini")
-	if err != nil {
-		return nil, err
-	}
-	if iniRoot == nil {
-		iniRoot = root
-	} else {
-		defer func() { _ = iniRoot.Close() }()
-	}
-	data, info, err := iniRoot.readFile(iniName)
-	if err != nil {
-		return nil, err
-	}
-
-	doc := parseINI(data)
-	if err := edit(doc); err != nil {
-		return data, err
-	}
-	if !doc.Changed() {
-		return data, nil
-	}
-	return data, iniRoot.writeFileAtomic(ctx, iniName, bytes.NewReader(doc.Bytes()), 0o600, info)
+	in := newImporterINIInput(key, cfg)
+	in.restore = record.Restore
+	return in.write(ctx)
 }

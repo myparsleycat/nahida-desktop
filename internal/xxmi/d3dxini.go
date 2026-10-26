@@ -164,21 +164,36 @@ func iniVerbatimSection(name string) bool {
 	return !iniSettingsSection(name) && !strings.EqualFold(name, "loader")
 }
 
-// rebuildINI returns template holding what previous set. An option both set takes the previous value in the
+// mergeINI returns template holding what previous set. An option both set takes the previous value in the
 // template's place, and one previous only has commented out keeps its line: it was turned off on purpose.
 // Options the template does not set, and commented-out ones it does not mention, are kept ahead of the banner
-// that ends their section. A section of
-// commands keeps its previous body, where a line means something only in its place, and sections the template
-// lacks follow at the end. Everything else of previous, its comments included, is dropped.
+// that ends their section. A section of commands keeps its previous body, where a line means something only in
+// its place, and sections the template lacks follow at the end. Everything else of previous, its comments
+// included, is dropped.
 //
-// The result rebuilds into itself, so a launch that repeats it leaves the file alone. lost reports whether a
-// line of previous is gone, which is when the caller backs the file up.
-func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
+// base is the template previous was last merged from, or nil when that is not known. What previous still holds
+// of it was never the user's, so the current template takes its place: an option line base has too, set or
+// commented out alike, and a section of commands base has with the same commands.
+//
+// The result merges into itself, so a launch that repeats it leaves the file alone. lost reports whether a line
+// of previous that base lacks is gone, which is when the caller backs the file up.
+func mergeINI(template, base, previous []byte) (doc *iniDocument, lost bool) {
 	template, _ = iniValidUTF8(template)
 	tpl := parseINI(template)
 	previous, lost = iniValidUTF8(previous)
 	// A file with mixed line endings would otherwise parse into lines that span several options.
 	prev := parseINI(bytes.ReplaceAll(previous, []byte("\r\n"), []byte("\n")))
+	// The loss is judged on the whole file: the filter also drops comments and ignored duplicates of the user's. A
+	// line base has word for word, such as a banner, is the template's.
+	original, inherited, baseText := prev, make([]bool, len(prev.lines)), map[string]bool{}
+	if len(base) > 0 {
+		base, _ = iniValidUTF8(base)
+		baseDoc := parseINI(bytes.ReplaceAll(base, []byte("\r\n"), []byte("\n")))
+		prev, inherited = withoutTemplateLines(prev, baseDoc)
+		for _, line := range baseDoc.lines {
+			baseText[strings.TrimSpace(line)] = true
+		}
+	}
 	out := &iniDocument{bom: tpl.bom, newline: tpl.newline, terminal: tpl.terminal}
 
 	prevBody, prevHeader, prevOrder := map[string][]string{}, map[string]string{}, []string{}
@@ -310,11 +325,160 @@ func rebuildINI(template, previous []byte) (doc *iniDocument, lost bool) {
 	for _, line := range out.lines {
 		kept[strings.TrimSpace(line)] = true
 	}
-	lost = lost || slices.ContainsFunc(prev.lines, func(line string) bool {
+	for index, line := range original.lines {
 		line = strings.TrimSpace(line)
-		return line != "" && !kept[line]
-	})
+		lost = lost || line != "" && !kept[line] && !inherited[index] && !baseText[line]
+	}
 	return out, lost
+}
+
+// withoutTemplateLines returns previous without what it still holds of base: the option lines base has too and,
+// where the first section of commands of a name has the commands base has, that section along with the duplicates
+// of it a merge ignores. A settings section left with nothing but its banner is dropped along with its header.
+//
+// inherited marks the lines of previous that are dropped as base's own, an option or command base has too, so
+// losing them loses nothing of the user's. Comments, an option line whose trailing comment base lacks, the other
+// lines of an option whose value is base's, and duplicate sections are dropped without that mark.
+func withoutTemplateLines(previous, base *iniDocument) (filtered *iniDocument, inherited []bool) {
+	// options holds, by section and state, the trailing comments base writes after the option.
+	options, commands := map[string][]string{}, map[string]string{}
+	for _, block := range base.blocks() {
+		key := strings.ToLower(block.name)
+		if block.name == "" {
+			continue
+		}
+		if iniVerbatimSection(block.name) {
+			if _, ok := commands[key]; !ok {
+				commands[key] = iniCommands(block.body)
+			}
+			continue
+		}
+		for _, line := range block.body {
+			if state, comment, ok := iniOptionState(line); ok {
+				options[key+"."+state] = append(options[key+"."+state], comment)
+			}
+		}
+	}
+
+	// 3DMigoto reads the first value a section sets for a key. Where that value is base's, the other lines of the key
+	// go with it: a later duplicate or a commented-out line left behind would take its place in the merge.
+	resolved, owned, section := map[string]bool{}, map[string]bool{}, ""
+	for _, line := range previous.lines {
+		if name, ok := iniSectionName(line); ok {
+			section = strings.ToLower(name)
+			continue
+		}
+		state, _, ok := iniOptionState(line)
+		if !ok || strings.HasPrefix(state, ";") {
+			continue
+		}
+		option, _, _ := strings.Cut(state, "=")
+		if id := section + "." + option; !resolved[id] {
+			resolved[id] = true
+			_, owned[id] = options[section+"."+state]
+		}
+	}
+
+	dropped, inherited := make([]bool, len(previous.lines)), make([]bool, len(previous.lines))
+	seen, matched := map[string]bool{}, map[string]bool{}
+	for start := 0; start < len(previous.lines); {
+		name, named := iniSectionName(previous.lines[start])
+		end := start + 1
+		for end < len(previous.lines) {
+			if _, ok := iniSectionName(previous.lines[end]); ok {
+				break
+			}
+			end++
+		}
+		if !named {
+			start = end
+			continue
+		}
+		key := strings.ToLower(name)
+
+		if iniVerbatimSection(name) {
+			first := !seen[key]
+			seen[key] = true
+			if first {
+				baseCommands, ok := commands[key]
+				matched[key] = ok && baseCommands == iniCommands(previous.lines[start+1:end])
+			}
+			for index := start; matched[key] && index < end; index++ {
+				line := strings.TrimSpace(previous.lines[index])
+				dropped[index] = true
+				inherited[index] = first && !strings.HasPrefix(line, ";")
+			}
+			start = end
+			continue
+		}
+
+		content := false
+		for index := start + 1; index < end; index++ {
+			state, comment, ok := iniOptionState(previous.lines[index])
+			option, _, _ := strings.Cut(strings.TrimPrefix(state, ";"), "=")
+			if comments, found := options[key+"."+state]; ok && found {
+				dropped[index] = true
+				inherited[index] = comment == "" || slices.Contains(comments, comment)
+			} else if ok && owned[key+"."+option] {
+				dropped[index] = true
+			} else if iniContentLine(previous.lines[index]) {
+				content = true
+			}
+		}
+		if !content && slices.Contains(dropped[start+1:end], true) {
+			for index := start; index < end; index++ {
+				dropped[index] = true
+			}
+			inherited[start] = true
+		}
+		start = end
+	}
+
+	filtered = &iniDocument{bom: previous.bom, newline: previous.newline, terminal: previous.terminal}
+	for index, line := range previous.lines {
+		if !dropped[index] {
+			filtered.lines = append(filtered.lines, line)
+		}
+	}
+	return filtered, inherited
+}
+
+// iniOptionState names what an option line sets, as "key=value" with the key in lowercase, or as ";key=value"
+// for a commented-out one, along with the comment that follows the value. Lines that differ only in spacing, the
+// case of the key, or the trailing comment name the same state.
+func iniOptionState(line string) (state, comment string, ok bool) {
+	trimmed := strings.TrimSpace(line)
+	match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(trimmed, " \t;#"))
+	if len(match) == 0 || !iniSettingKeyPattern.MatchString(match[2]) {
+		return "", "", false
+	}
+	comment = iniCommentSuffix(match[4])
+	state = strings.ToLower(match[2]) + "=" + strings.TrimSpace(strings.TrimSuffix(match[4], comment))
+	if trimmed[0] == ';' || trimmed[0] == '#' {
+		state = ";" + state
+	}
+	return state, strings.TrimSpace(comment), true
+}
+
+// iniCommands returns the lines of a section body that are neither blank nor comments.
+func iniCommands(body []string) string {
+	var commands []string
+	for _, line := range body {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, ";") {
+			commands = append(commands, line)
+		}
+	}
+	return strings.Join(commands, "\n")
+}
+
+// iniContentLine reports whether a line of a settings section is more than a blank line or prose: an option,
+// set or commented out, or any other line that is not a comment.
+func iniContentLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	return !strings.HasPrefix(trimmed, ";") || iniSettingKeyPattern.MatchString(iniMentionedKey(line))
 }
 
 // iniRestoreIncludes returns the previous [Include] body with each line the template sets and previous does not
@@ -468,10 +632,6 @@ func iniCommentSuffix(value string) string {
 		return value[start:]
 	}
 	return ""
-}
-
-func (d *iniDocument) SetOptionUnique(section, key, value string, spaced bool) {
-	d.SetOption(section, key, value, spaced)
 }
 
 func (d *iniDocument) RemoveOption(section, key string) {

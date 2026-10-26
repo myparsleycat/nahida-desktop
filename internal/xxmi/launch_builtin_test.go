@@ -385,8 +385,13 @@ func TestApplyMigotoINIUsesImporterRenderingProfile(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			doc := parseINI(nil)
-			applyMigotoINI(doc, tc.name, MigotoOptions{EnforceRendering: true}, false)
+			doc, _ := importerINIInput{
+				key: tc.name,
+				cfg: ImporterConfig{Migoto: MigotoOptions{EnforceRendering: true}},
+			}.
+				render(
+					nil,
+				)
 			data := string(doc.Bytes())
 			for _, option := range tc.want {
 				if !strings.Contains(data, option) {
@@ -803,8 +808,9 @@ func TestLogLevelReachesINI(t *testing.T) {
 	} {
 		t.Run(tc.level, func(t *testing.T) {
 			t.Parallel()
-			legacy := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
-			applyMigotoINI(legacy, "GIMI", MigotoOptions{LogLevel: tc.level}, false)
+			original := []byte("[Logging]\nshow_warnings = 1\n")
+			legacy, _ := importerINIInput{key: "GIMI", cfg: ImporterConfig{Migoto: MigotoOptions{LogLevel: tc.level}}}.
+				render(original)
 			data := string(legacy.Bytes())
 			for _, want := range []string{"calls = " + tc.calls, "debug = " + tc.debug, "show_warnings = 1"} {
 				if !strings.Contains(data, want) {
@@ -815,10 +821,9 @@ func TestLogLevelReachesINI(t *testing.T) {
 				t.Fatalf("legacy INI gained log_level: %s", data)
 			}
 
-			modern := parseINI([]byte("[Logging]\nshow_warnings = 1\n"))
-			applyMigotoINI(modern, "GIMI", MigotoOptions{
-				LogLevel: tc.level, Input: true, InputDisableMode: "Mods", ToggleInput: "VK_F8",
-			}, true)
+			modern, _ := importerINIInput{key: "GIMI", support: migotoSupport{logLevel: true}, cfg: ImporterConfig{
+				Migoto: MigotoOptions{LogLevel: tc.level, Input: true, InputDisableMode: "Mods", ToggleInput: "VK_F8"},
+			}}.render(original)
 			data = string(modern.Bytes())
 			for _, want := range []string{
 				"log_level = " + strings.ToLower(tc.level), "input = 1", "input_disable_mode = mods",

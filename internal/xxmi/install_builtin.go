@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
@@ -176,22 +175,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 		return err
 	}
 	if iniBackup != nil {
-		root, err := xxmiCacheRoot()
-		if err != nil {
-			_ = stageRoot.Close()
-			return err
-		}
-		backupRoot := filepath.Join(root, "backups")
-		if err := os.MkdirAll(backupRoot, 0o700); err != nil {
-			_ = stageRoot.Close()
-			return err
-		}
-		backupFolder, err := os.MkdirTemp(backupRoot, spec.key+" "+time.Now().Format("2006-01-02 15-04-05")+"-")
-		if err != nil {
-			_ = stageRoot.Close()
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(backupFolder, "d3dx.ini"), iniBackup, 0o600); err != nil {
+		if _, err := backupImporterINI(spec.key, iniBackup); err != nil {
 			_ = stageRoot.Close()
 			return err
 		}
