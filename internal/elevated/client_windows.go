@@ -25,6 +25,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -89,6 +90,10 @@ type Client struct {
 	// exchange; cancellation must not wait for that lock.
 	session atomic.Pointer[helperSession]
 
+	// appData locates the per-user folder the embedded helper is extracted into, shared by every
+	// distribution channel including portable runs.
+	appData *appdata.Store
+
 	// startMu serializes launch attempts. It is separate from mu because it is
 	// held across launch, and Close must stay reachable while ShellExecuteExW
 	// waits on a UAC prompt.
@@ -114,6 +119,14 @@ func (c *Client) UseDisconnect(fn func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.onDisconnect = fn
+}
+
+// UseAppData sets the app data root the helper is extracted under. It has to be set before the first
+// Start, which includes restoring the permissions of that root.
+func (c *Client) UseAppData(store *appdata.Store) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.appData = store
 }
 
 // Connected reports whether the authenticated helper pipe is live.
@@ -160,6 +173,7 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		}
 	}
 	generation := c.generation
+	appData := c.appData
 	c.mu.Unlock()
 
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
@@ -174,9 +188,9 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("resolve application executable: %w", err)
 	}
-	helperDir, err := defaultHelperDir()
+	helperDir, err := appData.Resolve(appdata.ElevatedDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve elevated helper directory: %w", err)
 	}
 	helperData, err := bundledHelper()
 	if err != nil {

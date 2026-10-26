@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -39,6 +40,29 @@ func FileHandler() Handler {
 			return nil, applyFileOps(ctx, ops, peer.UserSID)
 		},
 	}
+}
+
+// NewCopyOp describes replacing target with source, bound to the bytes source holds now.
+func NewCopyOp(ctx context.Context, source, target string) (FileOp, error) {
+	release, err := diskio.Acquire(ctx, source)
+	if err != nil {
+		return FileOp{}, err
+	}
+	defer release()
+
+	file, err := os.Open(source)
+	if err != nil {
+		return FileOp{}, err
+	}
+	defer func() { _ = file.Close() }()
+
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return FileOp{}, err
+	}
+	return FileOp{
+		Kind: FileOpCopy, Source: source, Target: target, SHA256: hex.EncodeToString(digest.Sum(nil)),
+	}, nil
 }
 
 // ApplyFiles has the helper run ops in order with administrator rights. They are not a

@@ -47,7 +47,7 @@ func TestNewCopyOpBindsSourceDigest(t *testing.T) {
 
 	source, digest := stagedFile(t, "new settings")
 	target := filepath.Join(t.TempDir(), "Engine.ini")
-	op, err := NewCopyOp(source, target)
+	op, err := NewCopyOp(t.Context(), source, target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,14 @@ func TestNewCopyOpBindsSourceDigest(t *testing.T) {
 		t.Fatalf("helper would refuse the operation: %v", err)
 	}
 
-	if _, err := NewCopyOp(filepath.Join(t.TempDir(), "missing.bin"), target); !errors.Is(err, os.ErrNotExist) {
+	if _, err := NewCopyOp(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.bin"),
+		target,
+	); !errors.Is(
+		err,
+		os.ErrNotExist,
+	) {
 		t.Fatalf("missing source error = %v", err)
 	}
 }

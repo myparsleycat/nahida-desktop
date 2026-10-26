@@ -19,7 +19,6 @@ import (
 const (
 	// helperExecutableName is the artifact the build task produces and embeds.
 	helperExecutableName = "nahida-elevated-helper.exe"
-	helperDirName        = "elevated"
 	// Extracted helpers are content-addressed, so a version change installs a
 	// new file instead of replacing an image a previous helper may still hold
 	// open.
@@ -38,21 +37,10 @@ var errHelperNotBundled = errors.New("elevated helper is not bundled in this bui
 //go:embed bundle
 var helperBundle embed.FS
 
-// defaultHelperDir resolves the per-user directory the embedded helper is
-// extracted into. It lives under the shared app data root so every distribution
-// channel uses the same path, including portable runs without an installer.
-func defaultHelperDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return filepath.Join(home, appdata.RootDirName, helperDirName), nil
-}
-
 // fallbackHelperDir is used when the account cannot write the app data directory, which is the
 // case restoring its permissions through the helper has to start from.
 func fallbackHelperDir() string {
-	return filepath.Join(os.TempDir(), "nahida-desktop-"+helperDirName)
+	return filepath.Join(os.TempDir(), "nahida-desktop-"+appdata.ElevatedDir)
 }
 
 // prepareHelper installs data under dir, or under fallback when dir cannot hold it. Besides a dir that
@@ -151,7 +139,7 @@ func installHelper(target, dir string, data []byte) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("close elevated helper: %w", err)
 	}
-	if err := os.Rename(tempPath, target); err != nil {
+	if err := platform.ReplaceAtomic(tempPath, target); err != nil {
 		return fmt.Errorf("install elevated helper: %w", err)
 	}
 	return nil
@@ -170,7 +158,7 @@ func removeStaleHelpers(dir, keep string) {
 			continue
 		}
 		candidate := filepath.Join(dir, name)
-		if strings.EqualFold(candidate, keep) {
+		if platform.SamePathFold(candidate, keep) {
 			continue
 		}
 		_ = os.Remove(candidate)
