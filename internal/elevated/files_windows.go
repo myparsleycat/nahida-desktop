@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -39,6 +40,29 @@ func FileHandler() Handler {
 			return nil, applyFileOps(ctx, ops, peer.UserSID)
 		},
 	}
+}
+
+// NewCopyOp describes replacing target with source, bound to the bytes source holds now.
+func NewCopyOp(ctx context.Context, source, target string) (FileOp, error) {
+	release, err := diskio.Acquire(ctx, source)
+	if err != nil {
+		return FileOp{}, err
+	}
+	defer release()
+
+	file, err := os.Open(source)
+	if err != nil {
+		return FileOp{}, err
+	}
+	defer func() { _ = file.Close() }()
+
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return FileOp{}, err
+	}
+	return FileOp{
+		Kind: FileOpCopy, Source: source, Target: target, SHA256: hex.EncodeToString(digest.Sum(nil)),
+	}, nil
 }
 
 // ApplyFiles has the helper run ops in order with administrator rights. They are not a
@@ -118,26 +142,33 @@ func validateFileOp(op FileOp) error {
 		if filepath.Dir(op.Target) == op.Target {
 			return errors.New("target cannot be a volume root")
 		}
-		if system, err := windows.GetSystemWindowsDirectory(); err != nil ||
-			platform.SameOrChildPath(system, op.Target) {
-			return errors.New("target cannot be in the Windows folder")
-		}
 	default:
 		return errors.New("operation is not allowed")
+	}
+	if system, err := windows.GetSystemWindowsDirectory(); err != nil || platform.SameOrChildPath(system, op.Target) {
+		return errors.New("target cannot be in the Windows folder")
 	}
 	return nil
 }
 
 // isLocalDrivePath rejects UNC and device paths and drive letters mapped to a share: a share is
-// resolved with the helper's credentials instead of the user's, a mapping the user made is
-// missing from the elevated logon session, and device paths bypass path normalization.
+// resolved with the helper's credentials instead of the user's, and device paths bypass path
+// normalization. Drive letters live in each logon session, so a mapped or subst drive of the user
+// does not resolve in the elevated session, where the same letter may even name another drive.
 func isLocalDrivePath(path string) bool {
 	volume := filepath.VolumeName(path)
 	if len(volume) != 2 || volume[1] != ':' || !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return false
 	}
 	root, err := windows.UTF16PtrFromString(volume + `\`)
-	return err == nil && windows.GetDriveType(root) != windows.DRIVE_REMOTE
+	if err != nil {
+		return false
+	}
+	switch windows.GetDriveType(root) {
+	case windows.DRIVE_REMOTE, windows.DRIVE_NO_ROOT_DIR, windows.DRIVE_UNKNOWN:
+		return false
+	}
+	return true
 }
 
 func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {

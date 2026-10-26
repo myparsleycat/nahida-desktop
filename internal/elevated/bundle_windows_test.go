@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -122,12 +123,12 @@ func TestPrepareHelperPicksRunnableDirectory(t *testing.T) {
 			}
 
 			fallback := filepath.Join(home, "fallback")
-			want := filepath.Join(folder, helperDirName)
+			want := filepath.Join(folder, appdata.ElevatedDir)
 			if test.fallback {
 				want = fallback
 			}
 			data := []byte("helper-binary")
-			path, err := prepareHelper(filepath.Join(root, helperDirName), fallback, data)
+			path, err := prepareHelper(filepath.Join(root, appdata.ElevatedDir), fallback, data)
 			if err != nil {
 				t.Fatalf("prepareHelper = %v", err)
 			}

@@ -86,6 +86,12 @@ func (l *FileLease) hold(ctx context.Context) error {
 	if !l.acquired {
 		l.acquired = true
 		release, err := l.gateway.Acquire(ctx)
+		if err != nil && ctx.Err() != nil {
+			// A failure the caller's own cancellation caused says nothing about consent, and a rollback
+			// under a fresh context still needs to start the helper.
+			l.acquired = false
+			return &AcquireError{Err: err}
+		}
 		if err != nil {
 			l.err = &AcquireError{Err: err}
 		} else {

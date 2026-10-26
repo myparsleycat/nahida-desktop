@@ -71,7 +71,7 @@ func cmdScript(ctx context.Context, script string) *exec.Cmd {
 func elevatedCopyFiles(ctx context.Context, lease *elevated.FileLease, copies []fileCopy) error {
 	ops := make([]elevated.FileOp, 0, len(copies))
 	for _, item := range copies {
-		op, err := elevated.NewCopyOp(item.Source, item.Target)
+		op, err := elevated.NewCopyOp(ctx, item.Source, item.Target)
 		if err != nil {
 			return fmt.Errorf("XXMI_ERR_ELEVATED_COPY_FAILED: %w", err)
 		}

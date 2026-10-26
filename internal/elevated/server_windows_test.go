@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -219,5 +220,24 @@ func TestHelperConnectionDispatchesRegisteredOperations(t *testing.T) {
 	_, err = client.Call(ctx, "test.unknown", nil)
 	if err == nil || !strings.Contains(err.Error(), "operation is not allowed") {
 		t.Fatalf("unregistered operation = %v, want it refused", err)
+	}
+}
+
+func TestServerExitCodesNameEachStartupFailure(t *testing.T) {
+	t.Parallel()
+
+	seen := map[int]bool{}
+	for _, exit := range serverExits {
+		code := ServerExitCode(fmt.Errorf("%w: detail", exit.err))
+		if code <= 1 || seen[code] {
+			t.Fatalf("exit code for %q = %d, want a distinct code above 1", exit.err, code)
+		}
+		seen[code] = true
+		if reason := serverExitReason(uint32(code)); reason != exit.err.Error() {
+			t.Fatalf("reason for exit code %d = %q, want %q", code, reason, exit.err)
+		}
+	}
+	if code := ServerExitCode(errors.New("unexpected")); code != 1 || serverExitReason(uint32(code)) != "" {
+		t.Fatalf("unknown failure exit code = %d, want 1 without a reason", code)
 	}
 }

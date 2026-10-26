@@ -104,6 +104,10 @@ const (
 	maxWindowLimit     = 200
 )
 
+// MaxKeySendDuration bounds the time a valid KeyRequest spends holding and spacing its keys, so a
+// transport that relays requests can give every accepted request enough time.
+const MaxKeySendDuration = maxKeyCount*maxKeyHold + (maxKeyCount-1)*maxKeyInterval
+
 // WindowTarget selects the window that receives the keys. Title, Process, and
 // PID are combined with AND, and at least one of them must be set.
 type WindowTarget struct {

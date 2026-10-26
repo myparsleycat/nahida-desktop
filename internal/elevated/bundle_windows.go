@@ -19,7 +19,6 @@ import (
 const (
 	// helperExecutableName is the artifact the build task produces and embeds.
 	helperExecutableName = "nahida-elevated-helper.exe"
-	helperDirName        = "elevated"
 	// Extracted helpers are content-addressed, so a version change installs a
 	// new file instead of replacing an image a previous helper may still hold
 	// open.
@@ -38,21 +37,10 @@ var errHelperNotBundled = errors.New("elevated helper is not bundled in this bui
 //go:embed bundle
 var helperBundle embed.FS
 
-// defaultHelperDir resolves the per-user directory the embedded helper is
-// extracted into. It lives under the shared app data root so every distribution
-// channel uses the same path, including portable runs without an installer.
-func defaultHelperDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return filepath.Join(home, appdata.RootDirName, helperDirName), nil
-}
-
 // fallbackHelperDir is used when the account cannot write the app data directory, which is the
 // case restoring its permissions through the helper has to start from.
 func fallbackHelperDir() string {
-	return filepath.Join(os.TempDir(), "nahida-desktop-"+helperDirName)
+	return filepath.Join(os.TempDir(), "nahida-desktop-"+appdata.ElevatedDir)
 }
 
 // prepareHelper installs data under dir, or under fallback when dir cannot hold it. Besides a dir that
@@ -94,9 +82,10 @@ func helperFileName(data []byte) string {
 }
 
 // writeHelper installs data under the path dir resolves to with a content-addressed
-// name and returns its path. Stale versions are removed best effort. Reparse points
-// in the helper directory chain are rejected so a same-user process cannot redirect
-// the elevated launch to a different binary.
+// name and returns its path. Stale versions are removed best effort. A same-user
+// process cannot redirect the elevated launch: start hashes the helper through a
+// handle that denies writes and deletes until launch, then checks the image path
+// Windows reports for the launched process.
 func writeHelper(dir string, data []byte) (string, error) {
 	if len(data) == 0 {
 		return "", errHelperNotBundled
@@ -113,9 +102,6 @@ func writeHelper(dir string, data []byte) (string, error) {
 		return "", fmt.Errorf("resolve elevated helper directory %q: %w", dir, err)
 	}
 	dir = final
-	if err := rejectHelperReparsePoints(dir); err != nil {
-		return "", err
-	}
 
 	target := filepath.Join(dir, helperFileName(data))
 	if !helperFileMatches(target, data) {
@@ -153,26 +139,8 @@ func installHelper(target, dir string, data []byte) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("close elevated helper: %w", err)
 	}
-	if err := os.Rename(tempPath, target); err != nil {
+	if err := platform.ReplaceAtomic(tempPath, target); err != nil {
 		return fmt.Errorf("install elevated helper: %w", err)
-	}
-	return nil
-}
-
-// rejectHelperReparsePoints refuses a helper directory chain that resolves
-// through a reparse point. A junction or symlink here would let a same-user
-// process show the genuine helper to verification while the elevated launch
-// resolves the path to a different binary. The user profile above the app data
-// root is out of scope because it can be legitimately redirected.
-func rejectHelperReparsePoints(dir string) error {
-	for _, path := range []string{filepath.Dir(dir), dir} {
-		info, err := os.Lstat(path)
-		if err != nil {
-			return fmt.Errorf("inspect helper path %q: %w", path, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("helper path %q is a reparse point", path)
-		}
 	}
 	return nil
 }
@@ -190,7 +158,7 @@ func removeStaleHelpers(dir, keep string) {
 			continue
 		}
 		candidate := filepath.Join(dir, name)
-		if strings.EqualFold(candidate, keep) {
+		if platform.SamePathFold(candidate, keep) {
 			continue
 		}
 		_ = os.Remove(candidate)

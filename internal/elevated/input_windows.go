@@ -12,11 +12,14 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
+// inputTimeout covers the longest valid key request plus the focus wait and restore around it.
+const inputTimeout = platform.MaxKeySendDuration + 5*time.Second
+
 var errInvalidInputRequest = errors.New("invalid input request")
 
 func InputHandler(sendKeys func(context.Context, platform.KeyRequest) (platform.KeyResult, error)) Handler {
 	return Handler{
-		Timeout: 15 * time.Second,
+		Timeout: inputTimeout,
 		Run: func(ctx context.Context, _ Peer, payload json.RawMessage) (json.RawMessage, error) {
 			var request platform.KeyRequest
 			if err := json.Unmarshal(payload, &request); err != nil {
@@ -48,7 +51,9 @@ func (c *Client) SendKeys(ctx context.Context, request platform.KeyRequest) (pla
 	if err != nil {
 		return platform.KeyResult{}, err
 	}
-	response, err := c.Call(ctx, OperationInputKeys, payload)
+	callCtx, cancel := context.WithTimeout(ctx, inputTimeout+10*time.Second)
+	defer cancel()
+	response, err := c.Call(callCtx, OperationInputKeys, payload)
 	if remote, ok := errors.AsType[*remoteError](err); ok {
 		if sentinel, ok := platform.InputErrorFromCode(remote.code); ok {
 			return platform.KeyResult{}, fmt.Errorf("%w: elevated helper: %s", sentinel, remote.message)

@@ -26,6 +26,6 @@ func main() {
 			inject.HelperOperation:      inject.HelperHandler(),
 		},
 	}); err != nil {
-		os.Exit(1)
+		os.Exit(elevated.ServerExitCode(err))
 	}
 }

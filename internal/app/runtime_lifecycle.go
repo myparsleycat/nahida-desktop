@@ -36,6 +36,9 @@ func bootRuntime(
 	if err != nil {
 		return runtimePaths{}, err
 	}
+	if rt.elevated != nil {
+		rt.elevated.UseAppData(data)
+	}
 	dbPath := in.DBOverride
 	if dbPath == "" {
 		if in.Packaged {

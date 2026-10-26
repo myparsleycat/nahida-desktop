@@ -17,7 +17,7 @@ func elevatedCopyNteBootstrapFiles(
 ) error {
 	ops := make([]elevated.FileOp, 0, len(copies))
 	for _, file := range copies {
-		op, err := elevated.NewCopyOp(file.sourcePath, file.targetPath)
+		op, err := elevated.NewCopyOp(ctx, file.sourcePath, file.targetPath)
 		if err != nil {
 			return fmt.Errorf("NTE_BOOTSTRAP_ELEVATED_COPY_FAILED: %w", err)
 		}
@@ -40,7 +40,7 @@ func elevatedRollbackNteBootstrapFiles(
 			ops = append(ops, elevated.FileOp{Kind: elevated.FileOpRemove, Target: snapshot.targetPath})
 			continue
 		}
-		op, err := elevated.NewCopyOp(snapshot.backupPath, snapshot.targetPath)
+		op, err := elevated.NewCopyOp(ctx, snapshot.backupPath, snapshot.targetPath)
 		if err != nil {
 			return fmt.Errorf("NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED: %w", err)
 		}
