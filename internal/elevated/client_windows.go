@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -26,7 +25,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/appdata"
-	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -82,6 +80,9 @@ type Client struct {
 	// onDisconnect is called after an unexpected connection loss. It must not
 	// take mu; the client invokes it after releasing the state lock.
 	onDisconnect func()
+	// annotate attaches diagnostic context to an error. It is injected because the helper process
+	// imports this package and must not link the logging gateway's dependencies.
+	annotate func(err error, stage string, fields map[string]any) error
 
 	// session is cancelled by Close without taking mu. Pipe reads watch it and
 	// expire the connection, so a manual game launch or a stalled helper
@@ -119,6 +120,21 @@ func (c *Client) UseDisconnect(fn func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.onDisconnect = fn
+}
+
+// UseAnnotate registers fn to attach diagnostic context to startup and teardown failures. Passing nil
+// returns those errors unchanged.
+func (c *Client) UseAnnotate(fn func(err error, stage string, fields map[string]any) error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.annotate = fn
+}
+
+func (c *Client) annotateLocked(err error, stage string, fields map[string]any) error {
+	if c.annotate == nil {
+		return err
+	}
+	return c.annotate(err, stage, fields)
 }
 
 // UseAppData sets the app data root the helper is extracted under. It has to be set before the first
@@ -262,11 +278,9 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 		c.mu.Lock()
 		c.process, c.pid = process, pid
 		startErr = helperStartupError(startErr, c.closeLocked())
+		startErr = c.annotateLocked(startErr, "startup-cleanup",
+			map[string]any{"helperPID": pid, "helperPath": helper, "parentPID": os.Getpid()})
 		c.mu.Unlock()
-		startErr = infra.AnnotateError(startErr, infra.Diagnostic{
-			Operation: "elevated-helper", Stage: "startup-cleanup",
-			Fields: map[string]any{"helperPID": pid, "helperPath": helper, "parentPID": os.Getpid()},
-		})
 	}()
 	if err != nil {
 		return err
@@ -597,10 +611,8 @@ func (c *Client) closeLocked() error {
 	c.conn, c.secret = nil, ""
 	if c.process != 0 {
 		if stopErr := stopHelperProcess(c.process); stopErr != nil {
-			err = errors.Join(err, infra.AnnotateError(stopErr, infra.Diagnostic{
-				Operation: "elevated-helper", Stage: "stop-process",
-				Fields: map[string]any{"helperPID": c.pid, "cleanupPending": true},
-			}))
+			err = errors.Join(err, c.annotateLocked(stopErr, "stop-process",
+				map[string]any{"helperPID": c.pid, "cleanupPending": true}))
 		} else {
 			err = errors.Join(err, windows.CloseHandle(c.process))
 			c.process, c.pid = 0, 0
@@ -636,7 +648,13 @@ func launch(helper, pipe, secret string, parentPID uint32, parentExe string) (wi
 			" --parent-pid " + strconv.FormatUint(uint64(parentPID), 10) +
 			" --parent-exe " + syscall.EscapeArg(parentExe),
 	)
-	directory, _ := syscall.UTF16PtrFromString(filepath.Dir(helper))
+	// The helper's own folder is writable by the unelevated user, so it must not become the elevated
+	// process's working directory.
+	system, err := windows.GetSystemDirectory()
+	if err != nil {
+		return 0, 0, fmt.Errorf("resolve system directory: %w", err)
+	}
+	directory, _ := syscall.UTF16PtrFromString(system)
 	info := shellExecuteInfoW{
 		fMask:        seeMaskNoCloseProcess,
 		lpVerb:       verb,

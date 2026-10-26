@@ -79,6 +79,7 @@ var serverExits = []struct {
 	{code: 5, err: errHelperAlreadyRunning},
 	{code: 6, err: errServerPipe},
 	{code: 7, err: errServerClient},
+	{code: 8, err: errServerHardening},
 }
 
 // ServerExitCode is the process exit code for a RunServer failure.

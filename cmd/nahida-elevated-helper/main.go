@@ -13,6 +13,10 @@ import (
 )
 
 func main() {
+	if err := elevated.HardenHelperProcess(); err != nil {
+		os.Exit(elevated.ServerExitCode(err))
+	}
+
 	pipe := flag.String("pipe", "", "private named pipe")
 	secret := flag.String("secret", "", "one-time session secret")
 	parentPID := flag.Uint("parent-pid", 0, "Nahida Desktop process ID")

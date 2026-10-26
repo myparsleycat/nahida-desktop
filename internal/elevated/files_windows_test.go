@@ -227,6 +227,59 @@ func TestApplyFileOpsRejectsUnsafeRequests(t *testing.T) {
 	})
 }
 
+func TestApplyFileOpsChecksTheFolderBehindAJunction(t *testing.T) {
+	windowsDir, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	createJunction(t, windowsDir, link)
+
+	// The file does not exist, so a regression reports success without touching the Windows folder.
+	op := FileOp{Kind: FileOpRemove, Target: filepath.Join(link, "nahida-missing.dll")}
+	if err := applyFileOps(t.Context(), []FileOp{op}, nil); err == nil {
+		t.Fatal("remove through a junction into the Windows folder was accepted")
+	}
+}
+
+func TestApplyFileOpsCopiesThroughAJunction(t *testing.T) {
+	t.Parallel()
+
+	source, digest := stagedFile(t, "new settings")
+	root := t.TempDir()
+	games := filepath.Join(root, "games")
+	if err := os.Mkdir(games, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	createJunction(t, games, link)
+
+	target := filepath.Join(link, "Genshin", "d3dx_user.ini")
+	if err := applyFileOps(t.Context(), []FileOp{
+		{Kind: FileOpCopy, Source: source, Target: target, SHA256: digest},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	written := filepath.Join(games, "Genshin", "d3dx_user.ini")
+	if data, err := os.ReadFile(written); err != nil || string(data) != "new settings" {
+		t.Fatalf("%s = %q, err = %v", written, data, err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(written))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("temporary files left behind: %v", entries)
+	}
+}
+
+func createJunction(t *testing.T, target, link string) {
+	t.Helper()
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+}
+
 func TestApplyFileOpsResetsAccessToInheritedPermissions(t *testing.T) {
 	root, err := platform.FinalPath(t.TempDir())
 	if err != nil {

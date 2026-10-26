@@ -8,7 +8,7 @@ import (
 )
 
 func TestGetAppStatus(t *testing.T) {
-	s := NewShell()
+	s := NewShell(ShellOptions{})
 	s.version = "0.1.0"
 
 	t.Setenv("NAHIDA_DEV", "1")
@@ -41,7 +41,7 @@ func TestOpenExternalChoosesURLOrPath(t *testing.T) {
 	t.Parallel()
 
 	var urls, paths []string
-	s := NewShell()
+	s := NewShell(ShellOptions{})
 	s.openURL = func(target string) error {
 		urls = append(urls, target)
 		return nil
@@ -72,7 +72,7 @@ func TestOpenExternalFallsBackToPathWhenURLHandlerFails(t *testing.T) {
 	t.Parallel()
 
 	var path string
-	s := NewShell()
+	s := NewShell(ShellOptions{})
 	s.openURL = func(string) error { return errors.New("no protocol handler") }
 	s.openPath = func(target string) error {
 		path = target
@@ -105,7 +105,7 @@ func TestTrashDelegates(t *testing.T) {
 	t.Parallel()
 
 	var got string
-	s := NewShell()
+	s := NewShell(ShellOptions{})
 	s.trashItem = func(path string) error {
 		got = path
 		return nil
@@ -119,7 +119,7 @@ func TestTrashDelegates(t *testing.T) {
 }
 
 func TestTrashMissingPath(t *testing.T) {
-	s := NewShell()
+	s := NewShell(ShellOptions{})
 	missing := filepath.Join(t.TempDir(), "missing.txt")
 	if err := s.Trash(missing); err == nil {
 		t.Fatal("missing path should fail")

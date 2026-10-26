@@ -4,6 +4,7 @@ package elevated
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -171,13 +172,101 @@ func isLocalDrivePath(path string) bool {
 	return true
 }
 
-func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
-	directory := filepath.Dir(op.Target)
-	if err := os.MkdirAll(directory, 0o755); err != nil {
+var errWindowsFolder = errors.New("target cannot be in the Windows folder")
+
+// openTargetDir opens the folder target is in and checks where it physically is, since a junction in the
+// requested path can lead anywhere. Every later step goes through the returned root, so a link swapped into
+// the path afterwards cannot move the operation. With create, missing folders are made below the deepest
+// existing one; without it, a missing folder reports os.ErrNotExist.
+func openTargetDir(target string, create bool) (*os.Root, error) {
+	ancestor := filepath.Dir(target)
+	var missing []string
+	for {
+		info, err := os.Stat(ancestor)
+		if err == nil {
+			if !info.IsDir() {
+				return nil, fmt.Errorf("%q is not a folder", ancestor)
+			}
+			break
+		}
+		parent := filepath.Dir(ancestor)
+		if !errors.Is(err, os.ErrNotExist) || parent == ancestor {
+			return nil, err
+		}
+		missing = append([]string{filepath.Base(ancestor)}, missing...)
+		ancestor = parent
+	}
+
+	root, err := os.OpenRoot(ancestor)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkPhysicalLocation(root); err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	if len(missing) == 0 {
+		return root, nil
+	}
+	defer func() { _ = root.Close() }()
+	if !create {
+		return nil, os.ErrNotExist
+	}
+
+	relative := filepath.Join(missing...)
+	if err := root.MkdirAll(relative, 0o755); err != nil {
+		return nil, err
+	}
+	dir, err := root.OpenRoot(relative)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkPhysicalLocation(dir); err != nil {
+		_ = dir.Close()
+		return nil, err
+	}
+	return dir, nil
+}
+
+func checkPhysicalLocation(dir *os.Root) error {
+	self, err := dir.Open(".")
+	if err != nil {
 		return err
 	}
+	defer func() { _ = self.Close() }()
+	final, err := platform.FinalPathOfHandle(windows.Handle(self.Fd()))
+	if err != nil {
+		return err
+	}
+	return checkOutsideWindowsFolder(final)
+}
+
+// checkOutsideWindowsFolder rejects a physical path, one with every link resolved, in the Windows folder.
+func checkOutsideWindowsFolder(path string) error {
+	system, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		return err
+	}
+	physical, err := platform.FinalPath(system)
+	if err != nil {
+		return err
+	}
+	if platform.SameOrChildPath(physical, path) {
+		return errWindowsFolder
+	}
+	return nil
+}
+
+func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
+	dir, err := openTargetDir(op.Target, true)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	name := filepath.Base(op.Target)
+
 	readOnly := false
-	switch info, err := os.Lstat(op.Target); {
+	switch info, err := dir.Lstat(name); {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
 		return err
@@ -192,14 +281,15 @@ func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
 	}
 	defer func() { _ = source.Close() }()
 
-	temporary, err := os.CreateTemp(directory, ".nahida-write-")
+	temporaryName := ".nahida-write-" + rand.Text()
+	temporary, err := dir.OpenFile(temporaryName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	replaced := false
 	defer func() {
 		if !replaced {
-			returnErr = errors.Join(returnErr, os.Remove(temporary.Name()))
+			returnErr = errors.Join(returnErr, dir.Remove(temporaryName))
 		}
 	}()
 	digest := sha256.New()
@@ -221,13 +311,13 @@ func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
 
 	// Windows refuses to replace a read-only file, and administrator rights do not override that.
 	if readOnly {
-		if err := os.Chmod(op.Target, 0o600); err != nil {
+		if err := dir.Chmod(name, 0o600); err != nil {
 			return err
 		}
 	}
-	if err := platform.ReplaceAtomic(temporary.Name(), op.Target); err != nil {
+	if err := platform.ReplaceAtomicAt(dir, temporaryName, name); err != nil {
 		if readOnly {
-			err = errors.Join(err, os.Chmod(op.Target, 0o400))
+			err = errors.Join(err, dir.Chmod(name, 0o400))
 		}
 		return err
 	}
@@ -235,7 +325,7 @@ func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
 
 	// The published file is the temporary one, which never carried the attribute.
 	if readOnly {
-		if err := os.Chmod(op.Target, 0o400); err != nil {
+		if err := dir.Chmod(name, 0o400); err != nil {
 			return fmt.Errorf("restore read-only attribute: %w", err)
 		}
 	}
@@ -243,7 +333,17 @@ func copyVerifiedFile(ctx context.Context, op FileOp) (returnErr error) {
 }
 
 func removeFile(_ context.Context, op FileOp) error {
-	info, err := os.Lstat(op.Target)
+	dir, err := openTargetDir(op.Target, false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	name := filepath.Base(op.Target)
+
+	info, err := dir.Lstat(name)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -253,7 +353,7 @@ func removeFile(_ context.Context, op FileOp) error {
 	if !info.Mode().IsRegular() {
 		return errors.New("target is not a regular file")
 	}
-	return os.Remove(op.Target)
+	return dir.Remove(name)
 }
 
 func resetFileAccess(target string, owner *windows.SID) error {
@@ -299,6 +399,9 @@ func resetFileAccess(target string, owner *windows.SID) error {
 		}
 		if !platform.SamePathFold(final, target) {
 			return errors.New("target is reached through a link")
+		}
+		if err := checkOutsideWindowsFolder(final); err != nil {
+			return err
 		}
 		return resetHandleAccess(handle, owner)
 	})

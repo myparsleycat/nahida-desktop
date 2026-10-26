@@ -782,7 +782,7 @@ func TestReserveDownloadNamesResolvesExistingDirectoryConflict(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(target, "Folder"), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			dialog := platform.NewDialog()
+			dialog := platform.NewDialog(platform.DialogBackend{})
 			var promptedName string
 			dialog.UseDirectoryConflictResolver(
 				func(opts platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
@@ -836,7 +836,7 @@ func TestReserveDownloadNamesUsesUniqueNameWhenConflictIsFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(target, "Folder"), []byte("file"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	dialog := platform.NewDialog()
+	dialog := platform.NewDialog(platform.DialogBackend{})
 	dialog.UseDirectoryConflictResolver(
 		func(platform.DirectoryConflictOptions) (platform.DirectoryConflictChoice, error) {
 			t.Error("file conflict should not prompt")

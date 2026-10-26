@@ -116,7 +116,7 @@ func NewWithOptions(opts Options) *Drive {
 	}
 	dialog := opts.Dialog
 	if dialog == nil {
-		dialog = platform.NewDialog()
+		dialog = platform.NewDialog(platform.DialogBackend{})
 	}
 	d := &Drive{
 		http:             opts.HTTP,

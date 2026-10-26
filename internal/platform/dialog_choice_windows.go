@@ -54,8 +54,14 @@ type taskDialogConfig struct {
 
 var taskDialogIndirect = windows.NewLazySystemDLL("comctl32.dll").NewProc("TaskDialogIndirect")
 
-func defaultDirectoryConflict(opts DirectoryConflictOptions) (DirectoryConflictChoice, error) {
-	win, err := requireMainWindow()
+func showDirectoryConflict(
+	ownerWindow func() (uintptr, error),
+	opts DirectoryConflictOptions,
+) (DirectoryConflictChoice, error) {
+	if ownerWindow == nil {
+		return "", ErrMainWindowNotFound
+	}
+	parent, err := ownerWindow()
 	if err != nil {
 		return "", err
 	}
@@ -91,10 +97,6 @@ func defaultDirectoryConflict(opts DirectoryConflictOptions) (DirectoryConflictC
 		{id: taskDialogOverwriteButton, text: overwrite},
 		{id: taskDialogRenameButton, text: rename},
 		{id: taskDialogCancelButton, text: cancel},
-	}
-	parent := uintptr(0)
-	if native := win.NativeWindow(); native != nil {
-		parent = uintptr(native)
 	}
 	config := taskDialogConfig{
 		size:            uint32(unsafe.Sizeof(taskDialogConfig{})),

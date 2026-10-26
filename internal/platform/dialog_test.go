@@ -3,17 +3,13 @@ package platform
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestSaveFileCanceledAndPath(t *testing.T) {
 	t.Parallel()
 
-	d := NewDialog()
+	d := NewDialog(DialogBackend{})
 	d.saveFile = func(opts SaveFileOptions) (string, error) {
 		if opts.SuggestedName != "out.txt" {
 			t.Fatalf("suggested = %q", opts.SuggestedName)
@@ -46,30 +42,10 @@ func TestSaveFileCanceledAndPath(t *testing.T) {
 	}
 }
 
-func TestOpenDialogDefaultDirectory(t *testing.T) {
-	root := t.TempDir()
-	file := filepath.Join(root, "preview.png")
-	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := openDialogDefaultDirectory(root); got != root {
-		t.Fatalf("directory = %q", got)
-	}
-	if got := openDialogDefaultDirectory(file); got != root {
-		t.Fatalf("file parent = %q", got)
-	}
-	if got := openDialogDefaultDirectory(filepath.Join(root, "future.png")); got != root {
-		t.Fatalf("missing file parent = %q", got)
-	}
-	if got := openDialogDefaultDirectory("  "); got != "" {
-		t.Fatalf("empty = %q", got)
-	}
-}
-
 func TestSelectDirectory(t *testing.T) {
 	t.Parallel()
 
-	d := NewDialog()
+	d := NewDialog(DialogBackend{})
 	d.selectDirectory = func(string) (string, error) {
 		return "", nil
 	}
@@ -100,22 +76,14 @@ func TestSelectDirectory(t *testing.T) {
 	}
 }
 
-func TestFileFilterPattern(t *testing.T) {
-	t.Parallel()
-
-	if got := fileFilterPattern([]string{"txt", ".png", "*.jpg", ""}); got != "*.txt;*.png;*.jpg" {
-		t.Fatalf("pattern = %q", got)
-	}
-}
-
 func TestDialogCancellationSentinel(t *testing.T) {
 	t.Parallel()
 
 	t.Run("save file", func(t *testing.T) {
 		t.Parallel()
-		d := NewDialog()
+		d := NewDialog(DialogBackend{})
 		d.saveFile = func(SaveFileOptions) (string, error) {
-			return "", fmt.Errorf("native dialog: %w", application.ErrDialogCancelled)
+			return "", fmt.Errorf("native dialog: %w", ErrDialogCancelled)
 		}
 		got, err := d.SaveFile(SaveFileOptions{})
 		if err != nil || !got.Canceled || got.FilePath != "" {
@@ -125,9 +93,9 @@ func TestDialogCancellationSentinel(t *testing.T) {
 
 	t.Run("directory", func(t *testing.T) {
 		t.Parallel()
-		d := NewDialog()
+		d := NewDialog(DialogBackend{})
 		d.selectDirectory = func(string) (string, error) {
-			return "", application.ErrDialogCancelled
+			return "", ErrDialogCancelled
 		}
 		got, err := d.SelectDirectory("")
 		if err != nil || !got.Canceled || got.FilePath != "" {
@@ -141,9 +109,9 @@ func TestDialogCancellationSentinel(t *testing.T) {
 			name = "multiple open"
 		}
 		t.Run(name, func(t *testing.T) {
-			d := NewDialog()
+			d := NewDialog(DialogBackend{})
 			d.openDialog = func(OpenDialogOptions) ([]string, error) {
-				return nil, application.ErrDialogCancelled
+				return nil, ErrDialogCancelled
 			}
 			got, err := d.ShowOpenDialog(OpenDialogOptions{Properties: properties})
 			if err != nil || !got.Canceled || got.FilePaths == nil || len(got.FilePaths) != 0 {
@@ -157,7 +125,7 @@ func TestDialogPreservesNonCancellationErrors(t *testing.T) {
 	t.Parallel()
 
 	dialogErr := errors.New("native dialog failed")
-	d := NewDialog()
+	d := NewDialog(DialogBackend{})
 	d.saveFile = func(SaveFileOptions) (string, error) { return "", dialogErr }
 	d.selectDirectory = func(string) (string, error) { return "", dialogErr }
 	d.openDialog = func(OpenDialogOptions) ([]string, error) { return nil, dialogErr }

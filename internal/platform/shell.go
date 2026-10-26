@@ -2,9 +2,6 @@ package platform
 
 import (
 	"net/url"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/w32"
 )
 
 // AppVersion is overridden for release builds with:
@@ -25,11 +22,20 @@ type AppStatus struct {
 }
 
 type Shell struct {
-	version    string
-	openURL    func(string) error
-	openPath   func(string) error
-	trashItem  func(string) error
-	diagnostic func(error, string, map[string]any)
+	version        string
+	openURL        func(string) error
+	openPath       func(string) error
+	trashItem      func(string) error
+	windowBackdrop func() bool
+	diagnostic     func(error, string, map[string]any)
+}
+
+// ShellOptions supplies the parts of Shell that come from the UI framework, which this package does not
+// import so the elevated helper does not link it. OpenURL defaults to the registered protocol handler, and
+// a missing WindowBackdrop reports no backdrop support.
+type ShellOptions struct {
+	OpenURL        func(string) error
+	WindowBackdrop func() bool
 }
 
 // ClipboardText is one atomic observation of the Windows text clipboard.
@@ -43,13 +49,18 @@ func (s *Shell) UseDiagnostic(report func(error, string, map[string]any)) {
 	s.diagnostic = report
 }
 
-func NewShell() *Shell {
-	return &Shell{
-		version:   AppVersion,
-		openURL:   defaultOpenURL,
-		openPath:  defaultOpenPath,
-		trashItem: trashItem,
+func NewShell(options ShellOptions) *Shell {
+	s := &Shell{
+		version:        AppVersion,
+		openURL:        options.OpenURL,
+		openPath:       defaultOpenPath,
+		trashItem:      trashItem,
+		windowBackdrop: options.WindowBackdrop,
 	}
+	if s.openURL == nil {
+		s.openURL = openWithHandler
+	}
+	return s
 }
 
 func (s *Shell) GetAppStatus() AppStatus {
@@ -59,7 +70,7 @@ func (s *Shell) GetAppStatus() AppStatus {
 		IsPackaged:             packaged,
 		IsDev:                  !packaged,
 		SupportsAutostart:      SupportsAutostart(),
-		SupportsWindowBackdrop: w32.SupportsBackdropTypes(),
+		SupportsWindowBackdrop: s.windowBackdrop != nil && s.windowBackdrop(),
 		Platform:               nodePlatform(),
 	}
 }
@@ -114,13 +125,6 @@ func parseExternalURL(str string) (string, bool) {
 // nodePlatform matches Electron's hardcoded "win32" (see PA-030).
 func nodePlatform() string {
 	return "win32"
-}
-
-func defaultOpenURL(target string) error {
-	if app := application.Get(); app != nil {
-		return app.Browser.OpenURL(target)
-	}
-	return openWithHandler(target)
 }
 
 func defaultOpenPath(target string) error {

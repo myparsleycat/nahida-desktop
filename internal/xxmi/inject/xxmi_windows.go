@@ -72,7 +72,7 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		warnings = append(warnings, "Could not set game process priority: "+err.Error())
 	}
 	if additional := slices.Concat(spec.PreloadDLLs, spec.ExtraDLLs); len(additional) > 0 {
-		library, err := windows.LoadDLL(spec.LoaderDLL.Path)
+		library, err := loadInjectorDLL(spec.LoaderDLL.Path)
 		if err != nil {
 			return LaunchResult{}, fmt.Errorf("load XXMI extra DLL injector: %w", err)
 		}
@@ -99,7 +99,7 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	} else if pid != 0 {
 		return LaunchResult{}, errors.New("XXMI_GAME_RUNNING")
 	}
-	library, err := windows.LoadDLL(spec.LoaderDLL.Path)
+	library, err := loadInjectorDLL(spec.LoaderDLL.Path)
 	if err != nil {
 		return LaunchResult{}, fmt.Errorf("load XXMI injector DLL: %w", err)
 	}
@@ -192,6 +192,18 @@ func summarizeHookVerification(earlyCode, lateCode uintptr) (bool, string) {
 		return true, ""
 	}
 	return false, fmt.Sprintf("Could not verify XXMI hook injection (early code %d, late code %d)", earlyCode, lateCode)
+}
+
+// loadInjectorDLL loads the injector by its absolute path. Its own folder is searched for its dependencies
+// alongside System32, which the elevated helper otherwise restricts every load to.
+func loadInjectorDLL(path string) (*windows.DLL, error) {
+	handle, err := windows.LoadLibraryEx(
+		path, 0, windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_SYSTEM32,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load %q: %w", path, err)
+	}
+	return &windows.DLL{Name: path, Handle: handle}, nil
 }
 
 func injectExtraDLLs(proc *windows.Proc, pid int, dlls []string, timeoutSeconds int) error {

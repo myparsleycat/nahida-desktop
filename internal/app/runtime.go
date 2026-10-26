@@ -74,7 +74,7 @@ func newRuntime() *runtime {
 	log := infra.NewLogWithOptions(infra.LogOptions{Dev: !platform.Packaged()})
 	httpClient := infra.NewClient()
 	httpClient.UseLog(log)
-	shell := platform.NewShell()
+	shell := platform.NewShell(newWailsShellOptions())
 	shell.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
 			log,
@@ -89,6 +89,9 @@ func newRuntime() *runtime {
 	})
 	input := platform.NewInput()
 	elevatedClient := elevated.NewClient()
+	elevatedClient.UseAnnotate(func(err error, stage string, fields map[string]any) error {
+		return infra.AnnotateError(err, infra.Diagnostic{Operation: "elevated-helper", Stage: stage, Fields: fields})
+	})
 	elevatedHelper := newElevatedLifecycle(elevatedClient, func(err error, stage string) {
 		reportElevatedHelperError(log, err, stage)
 	}, emitAppEvent)
@@ -177,7 +180,7 @@ func newRuntime() *runtime {
 		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
 		ReShade:  reshadeService,
 	})
-	dialog := platform.NewDialog()
+	dialog := platform.NewDialog(newWailsDialogBackend())
 	login := newGameBananaLogin()
 	gameBananaService := gamebanana.NewWithOptions(gamebanana.Options{
 		HTTP:              httpClient,
