@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 type GameFolderCandidate struct {
@@ -173,6 +175,73 @@ func validateGameFolder(
 		return GameFolderCandidate{}, fmt.Errorf("game executable for %s was not found", importer)
 	}
 	return GameFolderCandidate{Path: path, ExePath: executable, ModTime: info.ModTime().Unix()}, nil
+}
+
+// storeGameSearchDepth bounds how many folders below a store install the game executable may sit.
+const storeGameSearchDepth = 3
+
+// findStoreGameFolder locates the game in a folder reported by a store client, which may put the game's own
+// launcher at the top and the game in a subfolder. Like the reference launcher, an executable below the install
+// folder is used only when it is the only copy of that name.
+func findStoreGameFolder(
+	ctx context.Context,
+	importer, installDir string,
+	spec importerPackageSpec,
+) (GameFolderCandidate, error) {
+	if err := validateLocalFolder("game folder", installDir, true); err != nil {
+		return GameFolderCandidate{}, err
+	}
+	game, notFound := validateGameFolder(ctx, importer, installDir, spec)
+	if notFound == nil {
+		return game, nil
+	}
+
+	release, err := diskio.AcquireDir(ctx, installDir)
+	if err != nil {
+		return GameFolderCandidate{}, err
+	}
+	found := make(map[string][]string)
+	err = filepath.WalkDir(installDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			if path == installDir {
+				return walkErr
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			if rel, _ := filepath.Rel(installDir, path); rel != "." &&
+				strings.Count(rel, string(filepath.Separator)) >= storeGameSearchDepth {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		for _, name := range spec.gameExeNames {
+			if strings.EqualFold(entry.Name(), name) {
+				found[name] = append(found[name], path)
+			}
+		}
+		return nil
+	})
+	release()
+	if err != nil {
+		return GameFolderCandidate{}, err
+	}
+
+	for _, name := range spec.gameExeNames {
+		switch paths := found[name]; {
+		case len(paths) == 1:
+			return validateGameFolder(ctx, importer, filepath.Dir(paths[0]), spec)
+		case len(paths) > 1:
+			return GameFolderCandidate{}, fmt.Errorf("found %d copies of %s below %s", len(paths), name, installDir)
+		}
+	}
+	return GameFolderCandidate{}, notFound
 }
 
 func gameDetectionLogs(importer string) []string {

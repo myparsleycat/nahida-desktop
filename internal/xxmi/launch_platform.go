@@ -170,9 +170,9 @@ func openShellURI(uri string) error {
 func platformCommandLine(key string, cfg ImporterConfig, gameExe string) string {
 	var parts []string
 
-	// The Steam release of Zenless Zone Zero opens its own launcher first. Steam runs the text
-	// before %command% as the program, so naming the game executable there skips that launcher.
-	if cfg.GameLaunch == "Steam" && key == "ZZMI" && cfg.SkipPlatformGameLauncher && gameExe != "" {
+	// Steam runs the text before %command% as the program, so naming the game executable there
+	// skips the game's own launcher.
+	if skipsPlatformGameLauncher(key, cfg) && gameExe != "" {
 		parts = append(parts, `"`+gameExe+`" && %command%`)
 	}
 	if renderer := rendererSwitch(key, cfg); renderer != "" {
@@ -182,6 +182,13 @@ func platformCommandLine(key string, cfg ImporterConfig, gameExe string) string 
 		parts = append(parts, strings.ReplaceAll(options, `\`, "/"))
 	}
 	return strings.Join(parts, " ")
+}
+
+// skipsPlatformGameLauncher reports whether the Steam launch options should start the game executable
+// instead of the launcher the Steam release opens first. Like the reference launcher, Zenless Zone Zero
+// leaves this to the user and Arknights: Endfield always skips it.
+func skipsPlatformGameLauncher(key string, cfg ImporterConfig) bool {
+	return cfg.GameLaunch == "Steam" && (key == "EFMI" || key == "ZZMI" && cfg.SkipPlatformGameLauncher)
 }
 
 // prepareSteamLaunch stores the launch options in Steam and leaves a running, unelevated client behind.

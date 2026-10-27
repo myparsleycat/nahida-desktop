@@ -116,7 +116,7 @@ func TestPlatformCommandLine(t *testing.T) {
 		{
 			"renderer left to the game", "EFMI",
 			ImporterConfig{GameLaunch: "Steam", SkipD3D11Switch: true, UseLaunchOptions: true, LaunchOptions: "-a"},
-			"-a",
+			`"C:\Game\Game.exe" && %command% -a`,
 		},
 		{
 			"DirectX 12 named for Zenless Zone Zero", "ZZMI",
@@ -137,6 +137,10 @@ func TestPlatformCommandLine(t *testing.T) {
 		{
 			"game launcher skip is Steam only", "ZZMI",
 			ImporterConfig{GameLaunch: "Epic", SkipPlatformGameLauncher: true}, "-force-d3d11",
+		},
+		{
+			"Endfield launcher always skipped", "EFMI",
+			ImporterConfig{GameLaunch: "Steam"}, `"C:\Game\Game.exe" && %command% -force-d3d11`,
 		},
 	} {
 		if got := platformCommandLine(tc.key, tc.cfg, `C:\Game\Game.exe`); got != tc.want {

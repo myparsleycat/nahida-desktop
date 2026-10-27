@@ -2560,7 +2560,8 @@
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "Could not read the dynamic character resolution setting. If it is on, mods may not apply correctly; check the game's graphics settings.",
-            "XXMI_DX12_UNSUPPORTED": "The game is not forced to DirectX 11, but the current XXMI library applies mods only with DirectX 11. If the game starts with DirectX 12, mods will not load; switch to an XXMI library that supports DirectX 12 or set the renderer back to DirectX 11."
+            "XXMI_DX12_UNSUPPORTED": "The game is not forced to DirectX 11, but the current XXMI library applies mods only with DirectX 11. If the game starts with DirectX 12, mods will not load; switch to an XXMI library that supports DirectX 12 or set the renderer back to DirectX 11.",
+            "XXMI_GAME_LAUNCHER_NOT_SKIPPED": "The game executable was not found in the Steam installation, so the game's own launcher was not skipped."
           },
           "importerFolder": "Importer folder",
           "gameFolder": "Game folder",

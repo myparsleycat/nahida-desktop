@@ -2505,7 +2505,8 @@
           },
           "launchWarnings": {
             "GIMI_DCR_UNREADABLE": "動的キャラクター解像度の設定を確認できませんでした。有効になっていると MOD が正しく適用されない可能性があるため、ゲームのグラフィック設定を確認してください。",
-            "XXMI_DX12_UNSUPPORTED": "ゲームを DirectX 11 に固定していませんが、現在の XXMI ライブラリは DirectX 11 でのみ MOD を適用します。ゲームが DirectX 12 で起動すると MOD が適用されないため、DirectX 12 に対応した XXMI ライブラリに切り替えるか、レンダラーを DirectX 11 に戻してください。"
+            "XXMI_DX12_UNSUPPORTED": "ゲームを DirectX 11 に固定していませんが、現在の XXMI ライブラリは DirectX 11 でのみ MOD を適用します。ゲームが DirectX 12 で起動すると MOD が適用されないため、DirectX 12 に対応した XXMI ライブラリに切り替えるか、レンダラーを DirectX 11 に戻してください。",
+            "XXMI_GAME_LAUNCHER_NOT_SKIPPED": "Steam のインストールフォルダーでゲームの実行ファイルが見つからなかったため、ゲーム独自のランチャーをスキップしませんでした。"
           },
           "importerFolder": "インポーターフォルダー",
           "gameFolder": "ゲームフォルダー",

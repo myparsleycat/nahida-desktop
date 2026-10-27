@@ -50,6 +50,45 @@ func TestValidateWWMIGameFolderNormalizesChildAndAncestor(t *testing.T) {
 	}
 }
 
+func TestFindStoreGameFolder(t *testing.T) {
+	spec, _ := lookupImporterPackage("ZZMI")
+	for _, tc := range []struct {
+		name  string
+		exes  []string
+		found string
+	}{
+		{"game below the launcher", []string{"Game/ZenlessZoneZero.exe"}, "Game"},
+		{"game at the top", []string{"ZenlessZoneZero.exe", "Game/ZenlessZoneZero.exe"}, "."},
+		{"ambiguous copies", []string{"Game/ZenlessZoneZero.exe", "Backup/ZenlessZoneZero.exe"}, ""},
+		{"below the search depth", []string{"a/b/c/d/ZenlessZoneZero.exe"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range append([]string{"launcher.exe"}, tc.exes...) {
+				path := filepath.Join(root, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("game"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			candidate, err := findStoreGameFolder(context.Background(), "ZZMI", root, spec)
+			if tc.found == "" {
+				if err == nil {
+					t.Fatalf("candidate = %+v, want an error", candidate)
+				}
+				return
+			}
+			game := filepath.Join(root, tc.found)
+			if err != nil || candidate.Path != game || candidate.ExePath != filepath.Join(game, "ZenlessZoneZero.exe") {
+				t.Fatalf("candidate = %+v, err = %v, want %s", candidate, err, game)
+			}
+		})
+	}
+}
+
 func TestReadGamePathHints(t *testing.T) {
 	root := t.TempDir()
 	game := filepath.Join(root, "Genshin Impact game")

@@ -16,8 +16,9 @@ const (
 
 	// The renderer localizes a launch warning by this code. Keep it in sync with the launchWarnings keys in
 	// frontend/src/lib/i18n/locales.
-	launchWarningGimiDCRUnreadable = "GIMI_DCR_UNREADABLE"
-	launchWarningDX12Unsupported   = "XXMI_DX12_UNSUPPORTED"
+	launchWarningGimiDCRUnreadable  = "GIMI_DCR_UNREADABLE"
+	launchWarningDX12Unsupported    = "XXMI_DX12_UNSUPPORTED"
+	launchWarningLauncherNotSkipped = "XXMI_GAME_LAUNCHER_NOT_SKIPPED"
 
 	// Storage keys of the xxmi.launchGuard* settings. Keep them in sync with internal/setting/keys.go.
 	launchGuardKey             = "xxmi_launch_guard"

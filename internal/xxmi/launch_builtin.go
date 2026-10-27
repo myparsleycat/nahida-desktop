@@ -159,7 +159,11 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 		platform, cfg.GameFolder = resolved, resolved.installDir
 	}
-	game, err := validateGameFolder(ctx, key, cfg.GameFolder, packageSpec)
+	findGame := validateGameFolder
+	if usesPlatform {
+		findGame = findStoreGameFolder
+	}
+	game, err := findGame(ctx, key, cfg.GameFolder, packageSpec)
 	if err == nil {
 		cfg.GameFolder = game.Path
 		err = ValidateImporterSettings(key, cfg)
@@ -173,6 +177,10 @@ func (x *XXMI) launchBuiltinGameLocked(
 		// Only a direct launch runs the executable from the game folder. A store install with an
 		// unexpected layout, or one that overlaps the importer folder, still launches; it just
 		// skips the steps that edit game files.
+		x.log.Warn(map[string]any{
+			"importer": key, "stage": stage, "gameLaunch": cfg.GameLaunch, "gameFolder": cfg.GameFolder,
+			"error": err.Error(),
+		}, "XXMI.StartGame")
 		cfg.GameFolder = ""
 	}
 	parentExe, err := x.efmiParentExe(key, cfg, gameExe)
@@ -433,6 +441,12 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	if cfg.GameLaunch == "Steam" {
 		progress("platform-options")
+		if cfg.ConfigurePlatformLaunchOptions && skipsPlatformGameLauncher(key, cfg) && gameExe == "" {
+			x.notifyLaunchWarning(key, launchWarning{
+				code: launchWarningLauncherNotSkipped,
+				err:  errors.New("game executable was not found in the Steam installation"),
+			})
+		}
 		options := platformCommandLine(key, cfg, gameExe)
 		if err := x.prepareSteamLaunch(ctx, platform, options, cfg.ConfigurePlatformLaunchOptions); err != nil {
 			return err
