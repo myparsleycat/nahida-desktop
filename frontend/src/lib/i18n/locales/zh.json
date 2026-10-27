@@ -110,7 +110,7 @@
       "approval_status_failed": "失败",
       "approval_status_rejected": "已拒绝",
       "provider": "LLM 提供商",
-      "provider_hint": "配置用于对话和工具决策的模型。",
+      "provider_hint": "设置用于对话和工具使用的模型。",
       "provider_select": "提供商",
       "provider_custom": "自定义",
       "provider_connected": "已连接",
@@ -132,9 +132,9 @@
       "endpoint": "端点",
       "model": "模型",
       "supports_images": "模型支持图像输入",
-      "supports_images_hint": "当所配置的模型可以分析图像时启用。工具返回的截图和对话中附加的图片将以图像形式发送。",
+      "supports_images_hint": "模型支持图像输入时启用。附件图片和工具返回的截图会作为图像输入发送给模型。",
       "auto_run_scripts": "无需询问即可运行代理脚本",
-      "auto_run_scripts_hint": "代理可以编写并运行 Python 和 PowerShell 脚本。脚本以你的 Windows 账户权限运行，且不受代理文件夹的限制，因此除非开启此选项，否则每次运行都会请求批准。",
+      "auto_run_scripts_hint": "智能体可以编写并运行 Python 和 PowerShell 脚本。脚本以 Windows 账户权限运行，不受智能体文件夹限制。关闭此选项时，每次运行都会请求批准。",
       "api_key": "API 密钥",
       "api_key_value": "API 密钥值",
       "context_window": "上下文窗口",
@@ -150,9 +150,9 @@
       "replace": "替换",
       "clear": "清除",
       "custom_headers": "自定义请求头",
-      "custom_headers_hint": "仅随自定义端点的请求发送。机密值会被加密存储。",
+      "custom_headers_hint": "仅随自定义端点的请求发送。可为每个值选择是否加密保存。",
       "add_header": "添加请求头",
-      "secret": "机密",
+      "secret": "加密保存",
       "configured": "已配置",
       "mcp_warning": "启用的 MCP 工具会自动运行，并可能拥有 Nahida 文件沙箱之外的权限。",
       "enabled": "已启用",
@@ -247,8 +247,8 @@
       }
     },
     "drive": {
-      "title": "云端硬盘",
-      "title_server_error": "云端硬盘 (服务器错误)",
+      "title": "网盘",
+      "title_server_error": "网盘（服务器错误）",
       "share_drive": "共享云端硬盘",
       "storing_tooltip": "正在上传到文件服务器",
       "storing_download_excluded": "正在上传到文件服务器的文件已从下载中排除",
@@ -264,13 +264,13 @@
         "no_uploadable_files": "没有可上传的文件。"
       },
       "import": {
-        "title": "导入到云端硬盘",
-        "description": "输入共享文件夹或收藏集 URL，然后选择云端硬盘中的文件夹。",
+        "title": "导入到网盘",
+        "description": "输入共享文件夹或收藏集 URL，然后选择网盘中的文件夹。",
         "url_label": "Nahida URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "目标文件夹",
         "choose_destination": "选择文件夹",
-        "destination_description": "请选择云端硬盘根目录或用于保存导入项目的文件夹。",
+        "destination_description": "请选择网盘根目录或用于保存导入项目的文件夹。",
         "loading_folder": "正在加载文件夹...",
         "no_subfolders": "没有子文件夹",
         "destination_load_failed": "无法加载目标文件夹。",
@@ -282,18 +282,18 @@
         "create_collection_folder": "按收藏集名称创建文件夹",
         "authenticate": "验证密码",
         "retry": "重试",
-        "action": "导入到云端硬盘",
+        "action": "导入到网盘",
         "url_required": "请输入 Nahida URL。",
-        "login_required": "登录后才能导入到你的云端硬盘。",
+        "login_required": "登录后才能导入到网盘。",
         "password_required": "此链接需要密码。",
         "invalid_password": "共享链接密码不正确。",
-        "success": "已将 {{count}} 个项目导入到云端硬盘。",
+        "success": "已将 {{count}} 个项目导入到网盘。",
         "failed": "导入失败",
         "progress": {
           "preparing": "正在准备导入…",
           "copying": "正在由服务器导入到云端硬盘…",
           "downloading": "正在下载项目…",
-          "uploading": "正在上传到云端硬盘…",
+          "uploading": "正在上传到网盘...",
           "completed": "导入完成。",
           "canceled": "导入已停止。",
           "cancel": "停止导入",
@@ -335,10 +335,10 @@
         "paste": "粘贴"
       },
       "clipboard": {
-        "cut_single": "“{{name}}” 已设置为剪切状态",
-        "cut_multiple": "“{{name}}” 及其他 {{count}} 项已设置为剪切状态",
-        "copy_single": "“{{name}}” 已设置为复制状态",
-        "copy_multiple": "“{{name}}” 及其他 {{count}} 项已设置为复制状态",
+        "cut_single": "“{{name}}”将在粘贴时移动",
+        "cut_multiple": "“{{name}}”及其他 {{count}} 项将在粘贴时移动",
+        "copy_single": "已将“{{name}}”选为复制对象",
+        "copy_multiple": "已将“{{name}}”及其他 {{count}} 项选为复制对象",
         "move_loading": "正在移动文件...",
         "move_success": "文件移动成功",
         "move_error": "文件移动失败：{{message}}",
@@ -406,8 +406,8 @@
       }
     },
     "share_drive": {
-      "title": "共享驱动器",
-      "title_server_error": "共享驱动器 (服务器错误)",
+      "title": "共享网盘",
+      "title_server_error": "共享网盘（服务器错误）",
       "no_accessible_drives": "没有可访问的共享云端硬盘。"
     },
     "mod": {
@@ -608,7 +608,7 @@
         },
         "launch-blockers": {
           "title": "启动前需要关闭设置",
-          "description": "动态角色分辨率和平滑运动已开启，可能导致模组无法正常应用。您可以关闭两者，或仅忽略平滑运动并继续检查其他启动防护。",
+          "description": "动态角色分辨率和平滑运动已开启，可能导致模组无法正常生效。请关闭两者，或仅在本次启动中忽略平滑运动并继续其余启动前检查。",
           "confirm": "关闭并启动"
         },
         "wwmi-wounded": {
@@ -673,7 +673,7 @@
         },
         "texture-resize": {
           "title": "缩放模组纹理",
-          "description": "扫描“{{name}}”中的 DDS 文件并原地缩放。"
+          "description": "查找“{{name}}”中的 DDS 文件，调整尺寸后保存到原文件。"
         },
         "classification": {
           "title": "管理分类",
@@ -768,11 +768,11 @@
             },
             "rendering_33": {
               "label": "模组破洞/部位缺失修复",
-              "description": "修复在游戏 3.3 版本后因为旧Mod中Color1的脏数据导致身体部位未显示或破洞的问题。",
-              "warning": "仅在模组存在身体部位缺失或网格破洞时启用！"
+              "description": "修复游戏 3.3 及后续版本中，旧版 WWMI 导出数据的无效 Color1 值导致身体部位不显示或网格破洞的问题。",
+              "warning": "仅对存在身体部位缺失或网格破洞的模组启用。"
             },
             "aero_fix": {
-              "label": "Aero 女性漂泊者眼部 Fix",
+              "label": "Aero 女性漂泊者眼部修复",
               "description": "当共鸣能量充满时，如果眼部出现异常，可使用此选项。",
               "options": {
                 "none": "无",
@@ -785,7 +785,7 @@
             "run": "运行"
           },
           "rollback": {
-            "refresh": "同步",
+            "refresh": "刷新",
             "scanning": "正在扫描备份记录...",
             "no_backups": "未找到备份文件（.BAK）",
             "no_backups_short": "无备份",
@@ -798,7 +798,7 @@
             "backup_size_label": "备份大小：",
             "success": "回滚已完成。",
             "advanced": "高级",
-            "advanced_hint": "破坏性操作",
+            "advanced_hint": "备份恢复与删除",
             "restore_all": "还原到最早备份",
             "restore_all_desc": "将所有文件还原到最早记录状态，并移除所有中间备份。",
             "restore_all_action": "还原...",
@@ -964,7 +964,7 @@
       "log-dialog": {
         "title": "日志",
         "running": "运行中...",
-        "python-required": "运行 Python fix tool 需要安装 Python。请安装 Python，并确保 python 命令可用。"
+        "python-required": "运行 Python 修复工具需要 Python。请安装 Python，并确保 python 命令可用。"
       }
     },
     "gamebanana": {
@@ -982,7 +982,7 @@
         "unsupported_description": "当前环境无法打开 GameBanana 登录窗口。请手动输入 rmc Cookie 后继续。",
         "init_failed_title": "无法准备 GameBanana 登录",
         "init_failed_description": "无法准备登录窗口。请稍后重试。",
-        "check_failed_title": "无法验证 GameBanana 身份验证",
+        "check_failed_title": "无法确认 GameBanana 登录状态",
         "check_failed_description": "无法根据服务器响应确认登录状态。请稍后重试。",
         "unreachable_title": "无法连接 GameBanana",
         "unreachable_description": "无法访问 GameBanana。请检查网络后重试。",
@@ -1181,9 +1181,9 @@
         "scan_failed": "无法扫描 MOD 文件夹",
         "font_failed": "无法加载内置 Inter 字体，已停止导出",
         "source_changed": "源文件已在 Nahida Desktop 外部更改，请重新加载后再应用",
-        "apply_failed": "无法应用生成的文件包",
+        "apply_failed": "无法应用生成的文件",
         "applied": "INI 和资源已应用到 {{path}}",
-        "saved": "导出已保存",
+        "saved": "已保存导出的文件",
         "save_failed": "无法保存导出文件",
         "draft_restore_failed": "无法恢复草稿",
         "choose_file": "选择文件",
@@ -1229,15 +1229,15 @@
         "palette_panelBackground": "面板背景",
         "palette_panelBorder": "面板边框",
         "palette_slotBackground": "按钮背景",
-        "palette_slotHover": "按钮悬停",
+        "palette_slotHover": "按钮悬停颜色",
         "palette_slotBorder": "按钮边框",
         "palette_title": "标题",
         "palette_titleShadow": "标题阴影",
-        "palette_panelBackgroundAlpha": "面板透明度",
-        "palette_panelBorderAlpha": "面板边框透明度",
-        "palette_slotBackgroundAlpha": "按钮透明度",
-        "palette_slotHoverAlpha": "悬停透明度",
-        "palette_slotBorderAlpha": "按钮边框透明度",
+        "palette_panelBackgroundAlpha": "面板不透明度",
+        "palette_panelBorderAlpha": "面板边框不透明度",
+        "palette_slotBackgroundAlpha": "按钮不透明度",
+        "palette_slotHoverAlpha": "按钮悬停不透明度",
+        "palette_slotBorderAlpha": "按钮边框不透明度",
         "select_slot": "选择按钮",
         "restore": "恢复",
         "skip": "跳过",
@@ -1250,7 +1250,7 @@
         "icon_offline": "Iconify 不可用，仍可使用缓存与 Lucide 图标",
         "icon_cache": "Iconify 缓存：{{count}} 个 · {{size}}",
         "clear_cache": "清空缓存",
-        "collection_prefix": "图标集 prefix，例如 mdi",
+        "collection_prefix": "图标集前缀（例如 mdi）",
         "download_collection": "下载图标集",
         "collection_cached": "已缓存 {{count}} 个图标",
         "crop": "裁剪图片",
@@ -1323,12 +1323,12 @@
           "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
-          "realesr-animevideov3": "适合游戏和二次元纹理的默认模型，支持 2x、3x、4x。",
-          "realesrgan-x4plus-anime": "更高质量的二次元模型，倍率固定为 4x。",
-          "realesrgan-x4plus": "适合照片和写实纹理的模型，倍率固定为 4x。",
-          "realcugan-pro": "面向二次元的高质量模型，支持 2x、3x。",
-          "realcugan-se": "均衡的二次元模型，支持 2x、3x、4x。",
-          "realcugan-nose": "最轻量、最快的模型，倍率固定为 2x。"
+          "realesr-animevideov3": "适用于游戏和动画纹理的默认模型，支持 2 倍、3 倍和 4 倍放大。",
+          "realesrgan-x4plus-anime": "适用于动画纹理的模型，放大倍率固定为 4 倍。",
+          "realesrgan-x4plus": "适用于照片和写实纹理的模型，放大倍率固定为 4 倍。",
+          "realcugan-pro": "适用于动画纹理的模型，支持 2 倍和 3 倍放大。",
+          "realcugan-se": "适用于动画纹理的模型，支持 2 倍、3 倍和 4 倍放大。",
+          "realcugan-nose": "适用于动画纹理的模型，放大倍率固定为 2 倍。"
         },
         "upscale_scale": "倍率",
         "upscale_scale_option": "{{scale}}x",
@@ -1576,7 +1576,7 @@
         "analyze": "分析模组",
         "analyzing": "分析中",
         "turn_select": "选择轮次",
-        "turn_approved": "LLM 已批准 (LGTM)",
+        "turn_approved": "已通过模型检查",
         "turn_pending": "建议提供反馈",
         "max_turn_reached": "已达到最大轮次限制",
         "discard": "丢弃草稿",
@@ -1625,11 +1625,11 @@
         "input_error": {
           "already_touch": {
             "title": "此模组已经是 Touch 模组",
-            "description": "已生成的 Touch 模组不能再次转换。请选择原始 non-touch 模组，或先回滚现有转换后再试。"
+            "description": "已生成的 Touch 模组不能再次转换。请选择未应用 Touch 的原始模组，或先撤销现有转换后重试。"
           },
           "suspected_touch": {
             "title": "此模组可能是 Touch 模组",
-            "description": "检测到现有 Touch 运行时，无法安全转换。请选择原始 non-touch 模组。"
+            "description": "检测到现有 Touch 运行时，无法转换。请选择未应用 Touch 的原始模组。"
           }
         },
         "skipped": "已跳过",
@@ -1681,7 +1681,7 @@
         "advanced_damping": "阻尼",
         "advanced_spring": "回弹力",
         "advanced_max_offset": "最大位移",
-        "advanced_falloff": "衰减",
+        "advanced_falloff": "距离衰减指数",
         "mode_vision": "Vision LLM",
         "mode_bone": "骨骼/权重",
         "bone_select_title": "骨骼区域选择",
@@ -1842,45 +1842,45 @@
           "look_custom": "专用液体"
         },
         "look": {
-          "title": "该喷射点的液体",
-          "hint": "在运行时设置的基础上应用于所选喷射点。应用到游戏时会与喷射点一起保存。",
+          "title": "喷射点液体设置",
+          "hint": "覆盖所选喷射点的运行时设置。应用到游戏时会与喷射点一起保存。",
           "force": "喷射强度",
           "amount": "液体量",
           "viscosity": "粘度",
           "nozzle": {
             "title": "喷嘴",
             "spray": "普通喷射",
-            "spray_hint": "运行时默认的喷射 · 随强度呈扇形散开并分成液滴",
+            "spray_hint": "默认喷射方式，随喷射强度呈扇形扩散并分成液滴。",
             "jet": "细喷嘴",
-            "jet_hint": "细而直、射得很远的水柱 · 没有雾和扇形",
+            "jet_hint": "产生细直的水柱，不生成雾状或扇形扩散。",
             "ooze": "渗出",
-            "ooze_hint": "在出口聚成液滴，鼓起、拉长后断开，再顺着身体流下 · 没有空中路径预览"
+            "ooze_hint": "液体在出口积聚，拉长为液滴后分离并沿身体流动。不支持空中轨迹预览。"
           },
           "hints": {
             "spray": {
-              "force": "喷射速度与扩散 · 越高喷得越快、越远、越宽",
-              "amount": "流出的液体量，水流粗细也由此决定 · 减少则变细，极少时断成液滴落下 · 增加则变粗变密 · 强度越高越早达到上限",
-              "viscosity": "液体黏稠度的倍率 · 越高越聚拢、流下越慢、越不易飞溅"
+              "force": "调节喷射速度和扩散范围。数值越高，速度越快、距离越远、扩散越广。",
+              "amount": "调节流量和水柱粗细。数值较低时水柱变细，极低时形成独立液滴。数值较高时水柱更粗、更密集。喷射强度越高，越早达到流量上限。",
+              "viscosity": "调节液体粘度。数值越高，液体越聚拢、流动越慢、飞溅越少。"
             },
             "jet": {
-              "force": "水柱速度 · 强度 1 时 3 m/s，最高 5 m/s",
-              "amount": "水柱粗细 · 极少时断成液滴",
-              "viscosity": "落地后附着与飞溅的程度 · 不影响空中的水柱"
+              "force": "调节水柱速度。喷射强度为 1 时速度为 3 m/s，最高为 5 m/s。",
+              "amount": "调节水柱粗细。数值极低时水柱会分成独立液滴。",
+              "viscosity": "调节接触表面后的附着和飞溅，不影响空中的水柱。"
             },
             "ooze": {
-              "force": "液滴断开前长到多大以及离开的力度 · 越高液滴越小、越容易甩落",
-              "amount": "出口积液的速度 · 越多液滴断开得越频繁",
-              "viscosity": "液滴拉长断开和流下的速度 · 越高流得越慢、拖得越长"
+              "force": "调节液滴大小和分离力度。数值越高，液滴越小，分离力度越大。",
+              "amount": "调节出口积液速度。数值越高，液滴滴落越频繁。",
+              "viscosity": "调节液滴的拉伸、分离和流动。数值越高，液体流动越慢，液滴在分离前拉伸得越长。"
             }
           },
-          "custom_color": "使用专属颜色",
-          "custom_color_hint": "关闭时使用运行时设置中的液体颜色和颜色浓度。",
+          "custom_color": "使用自定义颜色",
+          "custom_color_hint": "关闭时使用运行时设置中的液体颜色和吸收深度。",
           "tint": "液体颜色",
-          "absorption": "颜色浓度",
-          "absorption_hint": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
+          "absorption": "吸收深度",
+          "absorption_hint": "液体颜色充分显现所需的厚度，单位为毫米。数值越低，颜色越浓。",
           "material": {
             "title": "材质",
-            "hint": "预设只改变散射和粗糙度，颜色、喷嘴和流量保持不变",
+            "hint": "预设仅更改散射和粗糙度，保留颜色、喷嘴和流动设置。",
             "preset": {
               "clear": "透明",
               "translucent": "半透明",
@@ -1888,9 +1888,9 @@
               "custom": "自定义"
             },
             "scattering": "散射",
-            "scattering_hint": "液体的浑浊程度 · 越高越遮住后方，并带上周围的光",
+            "scattering_hint": "调节液体中的光散射。数值越高，液体越浑浊，背景越不透明，环境光散射越强。",
             "roughness": "粗糙度",
-            "roughness_hint": "反射和高光的柔和程度 · 越高越宽、越暗淡"
+            "roughness_hint": "调节反射和高光。数值越高，反射和高光越宽，亮度越低。"
           },
           "reset": "跟随运行时设置",
           "summary": {
@@ -1925,7 +1925,7 @@
         "apply_new": "添加喷射点",
         "slots": {
           "title": "要增加可同时喷射的数量吗？",
-          "description": "该角色将有 {{count}} 个喷射点，但运行时只允许画面中所有角色的喷射点合计 {{current}} 个同时喷射。可以将这个对所有模组生效的值提高到 {{next}}，也可以不提高直接添加。不提高时，绘制的喷射点多于该值时，部分喷射点不会喷射。不会同时绘制的形态的喷射点不会合计。喷射点越多，GPU 负担越大。",
+          "description": "添加此喷射点后，该角色将有 {{count}} 个喷射点。当前画面内所有角色合计最多可同时使用 {{current}} 个喷射点。可将适用于所有模组的上限提高至 {{next}} 个。超过上限时，部分喷射点不会喷射。不会同时绘制的形态不合并计数。提高上限会增加 GPU 负载。",
           "keep": "不提高直接添加",
           "confirm": "提高到 {{next}} 并添加",
           "raised": "现在最多可同时喷射 {{count}} 个喷射点。"
@@ -1952,7 +1952,7 @@
         "selection_tool": "选择工具",
         "tool_mode_brush": "画笔",
         "tool_mode_component": "连通分量",
-        "brush_reach": "画笔范围",
+        "brush_reach": "画笔选择范围",
         "brush_reach_surface": "表面",
         "brush_reach_through": "穿透",
         "brush_reach_surface_hint": "沿网格表面扩展，并优先选择朝前的顶点。",
@@ -1967,7 +1967,7 @@
         "pick_bones_hint": "↑↓ 高亮预览权重 · Enter/点击确认",
         "no_regions": "没有匹配的部位",
         "no_bones": "没有匹配的骨骼",
-        "no_blend_fallback": "未找到 Blend 缓冲，回退到空间部位选择。",
+        "no_blend_fallback": "未找到 Blend 缓冲区，将按位置选择身体部位。",
         "bone_label": "骨骼 {{id}} ({{count}})",
         "bone_id": "骨骼 {{id}}",
         "segment_bone_label": "{{mesh}} · {{bone}}",
@@ -1990,7 +1990,7 @@
         "translate_z": "偏移 Z",
         "taper_factor": "锥形系数",
         "brush_menu": "画笔",
-        "brush_enable": "启用权重绘制",
+        "brush_enable": "绘制选区",
         "brush_mode": "模式",
         "brush_mode_paint": "绘制 (+)",
         "brush_mode_erase": "擦除 (-)",
@@ -2139,8 +2139,8 @@
         },
         "application": {
           "title": "应用程序",
-          "runOnStartup": "开机启动",
-          "runOnStartupDescription": "系统启动时自动运行应用。",
+          "runOnStartup": "登录时启动",
+          "runOnStartupDescription": "登录 Windows 时自动启动应用。",
           "elevatedHelper": "提权助手",
           "elevatedHelperDescription": "启动单独的管理员权限助手，以处理需要管理员权限的操作。应用启动时 Windows 会显示 UAC 提示。",
           "titlebarActivityBadgeClickNavigate": "点击标题栏活动徽章以打开",
@@ -2151,7 +2151,7 @@
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
           "runInBackgroundDisableConfirmTitle": "要关闭后台运行吗？",
-          "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 或 `Toggle Viewer` 时，保持后台运行会更安全、更稳定。如果关闭此选项，一旦关闭所有窗口，应用就会退出，因此在重新打开应用之前将无法使用这两个功能。\n\n仍然要关闭后台运行吗？",
+          "runInBackgroundDisableConfirmDescription": "关闭后台运行后，关闭所有窗口时应用会退出。重新打开应用之前，无法使用 Toggle Persist 和 Toggle Viewer。",
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
           "includePrerelease": "包含预发布版本",
@@ -2304,8 +2304,8 @@
           "builtin": "内置"
         },
         "launchGuard": {
-          "title": "启动防护",
-          "enabled": "使用启动防护",
+          "title": "启动前检查",
+          "enabled": "启用启动前检查",
           "enabledDescription": "启动游戏前检查会妨碍模组生效或降低性能的设置。关闭后将不检查以下项目，直接启动游戏。",
           "dcr": "动态角色分辨率",
           "dcrDescription": "原神的动态角色分辨率开启时，在启动前将其关闭。通过 XXMI Launcher 启动时会先询问。开启时模组无法正常应用。",
@@ -2547,9 +2547,9 @@
           "commands": "自定义命令",
           "injectMode": "注入方式",
           "injectionMethod": "DLL 注入器",
-          "injectionMethodDescription": "Native 使用 LoadLibraryW 将运行库和额外 DLL 直接注入 x64 游戏，替代钩子注入方式。Bypass 模式仅注入额外 DLL。",
+          "injectionMethodDescription": "Native 不使用钩子，而是将运行时和额外 DLL 直接注入 64 位游戏。Bypass 模式仅注入额外 DLL。",
           "injectionDefault": "现有启动器方式",
-          "injectionNative": "Native (Go)",
+          "injectionNative": "Native",
           "leaveTitle": "放弃更改？",
           "leaveDescription": "未保存的更改将会丢失。",
           "leaveConfirm": "放弃并离开",
@@ -2579,8 +2579,8 @@
           "launcherFolderDescription": "GRYPHLINK 启动器所在的文件夹。游戏若不经由官方启动器启动会自动退出，因此直接启动时会通过此启动器启动游戏。留空则自动检测。",
           "modeDescription": "通常使用 XXMI。仅在需要旧版 3DMigoto 构建时选择 3DMigoto。",
           "windowModeDescription": "仅在原神（GIMI）开启解除帧率限制时生效。",
-          "launchOptionsDescriptionWWMI": "使用这些参数直接启动 Client-Win64-Shipping.exe。游戏可能会崩溃，保持关闭最稳定。",
-          "startMethodDescription": "Native 直接启动游戏，最为稳定。遇到问题时可尝试 Shell。",
+          "launchOptionsDescriptionWWMI": "使用这些参数直接启动 Client-Win64-Shipping.exe，可能导致游戏崩溃。仅在需要时启用。",
+          "startMethodDescription": "Native 直接启动游戏可执行文件。启动失败时可选择 Shell。",
           "timeoutDescription": "等待游戏窗口出现的时间。超时未出现则视为启动失败。",
           "initDelayDescription": "注入的 DLL 开始工作前等待的时间。如果游戏在启动时崩溃，请尝试调整此值。",
           "overwriteINIDescription": "让 d3dx.ini 与软件包保持同步。如需保留自己的修改，请关闭。",
@@ -2660,7 +2660,7 @@
           "repairPackageDescription": "重新下载已安装版本的导入器包并覆盖已安装的文件。不会改动模组。",
           "createShortcutDescription": "创建桌面快捷方式，可直接以加载模组的方式启动此游戏。",
           "gameLaunch": "启动途径",
-          "gameLaunchDescription": "Direct 直接启动游戏可执行文件。Steam 和 Epic Games 通过对应客户端启动。Custom 运行你指定的命令。Manual 等待你自行启动游戏。",
+          "gameLaunchDescription": "直接启动会启动游戏可执行文件。Steam 和 Epic Games 使用对应客户端。自定义会运行指定命令。手动会等待用户启动游戏。",
           "gameLaunchDirect": "直接启动",
           "gameLaunchSteam": "Steam",
           "gameLaunchEpic": "Epic Games",
@@ -2686,7 +2686,7 @@
           "inputDisableModeDescription": "关闭按键绑定时失效的范围。",
           "inputDisableModeMods": "仅模组",
           "inputDisableModeAll": "全部",
-          "toggleInput": "按键绑定切换热键",
+          "toggleInput": "按键绑定开关键",
           "toggleInputDescription": "仅在 d3dx.ini 未指定时使用。",
           "resourceTier": "资源品质",
           "resourceTierDescription": "必须与游戏已下载的资源一致，否则会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。",
@@ -2826,7 +2826,7 @@
               "autoPulse": "以自动脉冲开始",
               "slotCount": "可同时喷射的喷射点数",
               "tint": "液体颜色",
-              "absorptionDepth": "颜色浓度",
+              "absorptionDepth": "吸收深度",
               "wetGround": "湿润地面亮度",
               "puddleReflection": "水洼反射",
               "puddleSize": "水洼最大尺寸",
@@ -2835,15 +2835,15 @@
               "scattering": "光散射",
               "refraction": "折射",
               "hints": {
-                "slotCount": "角色的每个喷射点都单独计数。喷射点越多，GPU 负担越大。",
-                "absorptionDepth": "完全呈现液体颜色所需的厚度（毫米） · 越小颜色越浓",
-                "wetGround": "水洼下方地面保留的亮度 · 设为 1 则不变暗",
-                "puddleReflection": "水洼反射的最低强度",
-                "puddleSize": "液体积得越多水洼扩展到的最大半径（厘米）",
-                "puddleLinger": "液体不再流入后大水洼退去所需的秒数 · 越大留存越久",
-                "streamReflection": "水流和水滴的反射强度",
-                "scattering": "在深色背景上液体自身颜色的显现程度",
-                "refraction": "背后景物被折射的程度"
+                "slotCount": "同一角色的喷射点也分别计数。喷射点越多，GPU 负载越高。",
+                "absorptionDepth": "液体颜色充分显现所需的厚度，单位为毫米。数值越低，颜色越浓。",
+                "wetGround": "调节水洼下方地面的亮度。设为 1 时不使地面变暗。",
+                "puddleReflection": "水洼反射的最低强度。",
+                "puddleSize": "液体积聚时水洼的最大半径，单位为厘米。",
+                "puddleLinger": "液体停止流入后，扩大的水洼缩小所需的时间，单位为秒。数值越高，保留时间越长。",
+                "streamReflection": "水柱和液滴的反射强度。",
+                "scattering": "调节液体自身颜色在深色背景上的可见程度。",
+                "refraction": "调节透过液体看到的背景折射程度。"
               }
             }
           }
@@ -2865,7 +2865,7 @@
           "noticeCollected": "收集的日志正在等待发送",
           "noticeOpen": "打开日志模式",
           "armedTitle": "日志模式已开启（{{level}}）",
-          "armedReady": "启动游戏并重现问题，然后关闭游戏。如果游戏崩溃，会自行关闭。",
+          "armedReady": "启动游戏并重现问题，然后关闭游戏。如果游戏因崩溃退出，可直接收集日志。",
           "armedRunning": "游戏正在运行。重现问题后请关闭游戏。",
           "armedRelaunch": "游戏在开启日志模式之前就已启动，因此不会记录日志。请关闭游戏后重新启动。",
           "armedLaunched": "如果问题已重现，请收集日志并发送。否则请再次启动游戏。",
@@ -2895,7 +2895,7 @@
             },
             "debug": {
               "label": "详细",
-              "description": "详细记录所有内容。游戏可能明显变慢，日志可能增大到数百 MB。仅在被要求时使用。"
+              "description": "记录库的详细日志。游戏可能明显变慢，日志可能达到数百 MB。仅在排查问题时按要求使用。"
             }
           },
           "recommended": "推荐",
@@ -3107,7 +3107,7 @@
           }
         },
         "on_startup": {
-          "title": "启动时补做",
+          "title": "启动时执行错过的备份",
           "description": "应用启动时若错过了计划备份，立即执行。"
         },
         "watch_changes": {
@@ -3116,7 +3116,7 @@
         },
         "keep_count": {
           "title": "保留数量",
-          "description": "此电脑较旧的备份会从服务器删除（1–30）。"
+          "description": "保留此电脑指定数量的备份，并从服务器删除超出的旧备份。范围：1–30 个。"
         },
         "device_name": {
           "title": "电脑名称",
@@ -3230,7 +3230,7 @@
       },
       "fixer4001": {
         "building": "正在构建 DLL",
-        "diversifying": "正在混淆 DLL",
+        "diversifying": "正在多样化 DLL 填充",
         "restoring": "正在还原 DLL"
       },
       "modBisect": {
@@ -3263,7 +3263,7 @@
   },
   "updater": {
     "titlebar": {
-      "action": "点击以重启并更新",
+      "action": "查看更新",
       "downloadAction": "下载更新",
       "downloading": "正在下载更新",
       "downloadingProgress": "正在下载更新 ({{percent}}%)"

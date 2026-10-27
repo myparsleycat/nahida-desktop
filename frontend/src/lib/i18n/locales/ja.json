@@ -110,7 +110,7 @@
       "approval_status_failed": "失敗",
       "approval_status_rejected": "拒否済み",
       "provider": "LLM プロバイダー",
-      "provider_hint": "会話とツール判断に使用するモデルを設定します。",
+      "provider_hint": "会話とツールの使用に用いるモデルを設定します。",
       "provider_select": "プロバイダー",
       "provider_custom": "カスタム",
       "provider_connected": "接続済み",
@@ -132,7 +132,7 @@
       "endpoint": "エンドポイント",
       "model": "モデル",
       "supports_images": "モデルが画像入力に対応",
-      "supports_images_hint": "設定したモデルが画像を解析できる場合に有効にします。ツールが返したスクリーンショットやチャットに添付した画像が画像として送信されます。",
+      "supports_images_hint": "モデルが画像入力に対応している場合に有効にしてください。添付画像とツールが返したスクリーンショットを画像入力としてモデルに送信します。",
       "auto_run_scripts": "エージェントのスクリプトを確認なしで実行",
       "auto_run_scripts_hint": "エージェントは Python と PowerShell のスクリプトを作成して実行できます。スクリプトは Windows アカウントの権限で実行され、エージェントのフォルダーに制限されないため、このオプションをオンにしない限り実行のたびに承認を求めます。",
       "api_key": "API キー",
@@ -150,9 +150,9 @@
       "replace": "置換",
       "clear": "クリア",
       "custom_headers": "カスタムヘッダー",
-      "custom_headers_hint": "カスタムエンドポイントへのリクエストにのみ送信されます。シークレット値は暗号化して保存されます。",
+      "custom_headers_hint": "カスタムエンドポイントへのリクエストにのみ送信します。値ごとに暗号化して保存するか選択できます。",
       "add_header": "ヘッダーを追加",
-      "secret": "シークレット",
+      "secret": "暗号化して保存",
       "configured": "設定済み",
       "mcp_warning": "有効な MCP ツールは自動実行され、Nahida のファイルサンドボックス外の権限を持つ場合があります。",
       "enabled": "有効",
@@ -228,12 +228,12 @@
           "processing": "ファイルを処理中"
         },
         "error": {
-          "invalid_nte_mod_file": "有効なNTE Modファイルではありません。",
-          "nte_client_upgrade_required": "NTE Modをアップロードするにはデスクトップアプリを更新してください。",
-          "nte_bundle_incomplete": "NTE Modに必要なファイルがすべてアップロードされていません。",
-          "bundle_cleanup_failed": "NTE Modの一時アップロードファイルを削除できませんでした。",
+          "invalid_nte_mod_file": "有効なNTE MODファイルではありません。",
+          "nte_client_upgrade_required": "NTE MODをアップロードするにはデスクトップアプリを更新してください。",
+          "nte_bundle_incomplete": "NTE MODに必要なファイルがすべてアップロードされていません。",
+          "bundle_cleanup_failed": "NTE MODの一時アップロードファイルを削除できませんでした。",
           "upload_file_too_large": "1つのファイルは1 GiBを超えることができません。",
-          "nte_bundle_too_large": "このNTE Modはファイル数が多すぎて1つのグループとしてアップロードできません。"
+          "nte_bundle_too_large": "このNTE MODはファイル数が多すぎて1つのグループとしてアップロードできません。"
         },
         "time_remaining": "残り {{time}}",
         "time_elapsed": "経過 {{time}}",
@@ -302,8 +302,8 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
-        "search_in_subdirs_placeholder": "サブフォルダ内を検索...",
-        "search_include_subdirs": "サブフォルダを含める",
+        "search_in_subdirs_placeholder": "サブフォルダー内を検索...",
+        "search_include_subdirs": "サブフォルダーを含める",
         "search_no_results": "検索結果がありません",
         "search_load_more": "もっと見る",
         "search_unavailable": "検索を利用できません",
@@ -335,10 +335,10 @@
         "paste": "貼り付け"
       },
       "clipboard": {
-        "cut_single": "「{{name}}」を切り取り状態に設定しました",
-        "cut_multiple": "「{{name}}」ほか{{count}}件を切り取り状態に設定しました",
-        "copy_single": "「{{name}}」をコピー状態に設定しました",
-        "copy_multiple": "「{{name}}」ほか{{count}}件をコピー状態に設定しました",
+        "cut_single": "貼り付け時に「{{name}}」を移動します",
+        "cut_multiple": "貼り付け時に「{{name}}」とほか{{count}}件を移動します",
+        "copy_single": "「{{name}}」をコピー対象に選択しました",
+        "copy_multiple": "「{{name}}」とほか{{count}}件をコピー対象に選択しました",
         "move_loading": "ファイルを移動しています...",
         "move_success": "ファイルを移動しました",
         "move_error": "ファイルの移動に失敗しました: {{message}}",
@@ -608,7 +608,7 @@
         },
         "launch-blockers": {
           "title": "起動前にオフにする設定があります",
-          "description": "キャラクター動的解像度とスムーズモーションがオンのため、MODが正常に適用されない場合があります。両方をオフにするか、スムーズモーションだけを無視して他の起動ガードの確認を続けられます。",
+          "description": "キャラクター動的解像度とスムーズモーションがオンのため、MOD が正常に適用されない場合があります。両方をオフにするか、今回の起動ではスムーズモーションを無視して残りの起動前確認を続けてください。",
           "confirm": "オフにして起動"
         },
         "wwmi-wounded": {
@@ -673,7 +673,7 @@
         },
         "texture-resize": {
           "title": "MOD テクスチャをリサイズ",
-          "description": "\"{{name}}\" 内の DDS ファイルを検索してその場でリサイズします。"
+          "description": "「{{name}}」内の DDS ファイルを検索し、サイズを変更して元のファイルに保存します。"
         },
         "classification": {
           "title": "分類の管理",
@@ -767,12 +767,12 @@
               "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用してはいけません。"
             },
             "rendering_33": {
-              "label": "Modのメッシュ穴/部位欠損修正",
-              "description": "ゲーム3.3バージョン以降、旧Mod内のColor1ゴミデータによって発生する身体部位の非表示や穴の問題を修正します。",
-              "warning": "身体部位の欠損やメッシュの穴がある MOD でのみ有効にしてください！"
+              "label": "MODのメッシュ穴/部位欠損修正",
+              "description": "ゲームのバージョン3.3以降で、古いWWMIエクスポートデータの不正なColor1値により身体部位が表示されなくなったり、メッシュに穴が開いたりする問題を修正します。",
+              "warning": "身体部位の欠損やメッシュの穴があるMODでのみ有効にしてください。"
             },
             "aero_fix": {
-              "label": "Aero 女性漂泊者の目 Fix",
+              "label": "Aero 女性漂泊者の目を修正",
               "description": "共鳴エネルギーが最大のときに目が崩れる問題がある場合に使用します。",
               "options": {
                 "none": "なし",
@@ -785,7 +785,7 @@
             "run": "実行"
           },
           "rollback": {
-            "refresh": "同期",
+            "refresh": "更新",
             "scanning": "バックアップ履歴をスキャン中...",
             "no_backups": "バックアップ（.BAK）が見つかりません",
             "no_backups_short": "バックアップなし",
@@ -798,13 +798,13 @@
             "backup_size_label": "バックアップ容量:",
             "success": "ロールバックが完了しました。",
             "advanced": "高度な設定",
-            "advanced_hint": "破壊的な操作",
+            "advanced_hint": "バックアップの復元と削除",
             "restore_all": "最古のバックアップへ復元",
             "restore_all_desc": "すべてのファイルを最古の記録状態へ戻し、途中のバックアップをすべて削除します。",
             "restore_all_action": "復元...",
             "warn_delete_all": "バックアップ {{n}} 件がすべて削除されます",
             "clean_backups": "すべてのバックアップを削除",
-            "clean_backups_desc": "対象フォルダ内のすべての .BAK ファイルを完全に削除します。この操作は元に戻せません。",
+            "clean_backups_desc": "対象フォルダー内のすべての .BAK ファイルを完全に削除します。この操作は元に戻せません。",
             "clean_action": "削除...",
             "warn_clean": "確認のため WIPE と入力:"
           },
@@ -900,15 +900,15 @@
             "failed": "ランチャーの起動に失敗しました。"
           },
           "toggle-mutation": {
-            "0": "{{name}} フォルダはすでに存在します",
+            "0": "{{name}} フォルダーはすでに存在します",
             "1": "{{processes}} がフォルダーを使用中のため変更できません",
-            "1-fallback": "フォルダがロックされており変更できません",
+            "1-fallback": "フォルダーがロックされており変更できません",
             "2": "MODの状態変更に失敗しました"
           },
           "rename-mutation": {
-            "0": "{{name}} フォルダはすでに存在します",
+            "0": "{{name}} フォルダーはすでに存在します",
             "1": "{{processes}} がフォルダーを使用中のため名前を変更できません",
-            "1-fallback": "フォルダがロックされており名前を変更できません",
+            "1-fallback": "フォルダーがロックされており名前を変更できません",
             "2": "有効なMOD名を入力してください",
             "3": "MOD名の変更に失敗しました"
           },
@@ -924,7 +924,7 @@
           }
         }
       },
-      "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
+      "empty_selection": "サイドバーからグループまたはキャラクターフォルダーを選択してください。",
       "no-preview": "プレビューなし",
       "previous-preview": "前のプレビュー画像",
       "next-preview": "次のプレビュー画像",
@@ -934,7 +934,7 @@
         "open-preview-lightbox": "拡大表示",
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
-        "group-mod": "Mod",
+        "group-mod": "MOD",
         "group-tools": "ツール",
         "open-cmd": "CMDを開く",
         "open-folder": "フォルダーを開く",
@@ -964,7 +964,7 @@
       "log-dialog": {
         "title": "ログ",
         "running": "実行中...",
-        "python-required": "Python fix tool を実行するには Python のインストールが必要です。Python をインストールし、python コマンドを使用できるようにしてください。"
+        "python-required": "Python 修正ツールの実行には Python が必要です。Python をインストールし、python コマンドを使用できるように設定してください。"
       }
     },
     "gamebanana": {
@@ -1027,9 +1027,9 @@
       "open_profile": "Webで開く",
       "open_mod_url": {
         "button": "URL を開く",
-        "title": "Mod URLで開く",
+        "title": "MOD URLで開く",
         "placeholder": "https://gamebanana.com/mods/...",
-        "invalid": "有効な GameBanana Mod URL を入力してください。",
+        "invalid": "有効な GameBanana MOD URL を入力してください。",
         "confirm": "開く"
       },
       "logout": "ログアウト",
@@ -1181,9 +1181,9 @@
         "scan_failed": "MOD フォルダーをスキャンできませんでした",
         "font_failed": "同梱の Inter フォントを読み込めないため、エクスポートを中止しました",
         "source_changed": "ソースが Nahida Desktop の外部で変更されました。再読み込みしてから適用してください",
-        "apply_failed": "生成したバンドルを適用できませんでした",
+        "apply_failed": "生成したファイルを適用できませんでした",
         "applied": "{{path}} に INI とリソースを適用しました",
-        "saved": "エクスポートを保存しました",
+        "saved": "エクスポートしたファイルを保存しました",
         "save_failed": "エクスポートを保存できませんでした",
         "draft_restore_failed": "下書きを復元できませんでした",
         "choose_file": "ファイルを選択",
@@ -1229,19 +1229,19 @@
         "palette_panelBackground": "パネル背景",
         "palette_panelBorder": "パネル枠",
         "palette_slotBackground": "スロット背景",
-        "palette_slotHover": "スロットホバー",
+        "palette_slotHover": "ホバー時のスロット色",
         "palette_slotBorder": "スロット枠",
         "palette_title": "タイトル",
         "palette_titleShadow": "タイトル影",
-        "palette_panelBackgroundAlpha": "パネル透明度",
-        "palette_panelBorderAlpha": "パネル枠の透明度",
-        "palette_slotBackgroundAlpha": "スロット透明度",
-        "palette_slotHoverAlpha": "ホバー透明度",
-        "palette_slotBorderAlpha": "スロット枠の透明度",
+        "palette_panelBackgroundAlpha": "パネルの不透明度",
+        "palette_panelBorderAlpha": "パネル枠の不透明度",
+        "palette_slotBackgroundAlpha": "スロットの不透明度",
+        "palette_slotHoverAlpha": "ホバー時のスロットの不透明度",
+        "palette_slotBorderAlpha": "スロット枠の不透明度",
         "select_slot": "スロットを選択",
         "restore": "復元",
         "skip": "スキップ",
-        "multi_key_locked": "複数キーを持つ handler は単一スロットのキー変更では分割できません",
+        "multi_key_locked": "複数のキーを持つ処理項目は、1つのスロットのキー変更では分割できません",
         "upload_icon": "アイコンをアップロード",
         "icon_picker": "アイコンを選択",
         "icon_search": "Lucide アイコンをオフライン検索",
@@ -1250,7 +1250,7 @@
         "icon_offline": "Iconify を利用できません。キャッシュと Lucide は引き続き利用できます",
         "icon_cache": "Iconify キャッシュ: {{count}} 件 · {{size}}",
         "clear_cache": "キャッシュを消去",
-        "collection_prefix": "コレクション prefix（例: mdi）",
+        "collection_prefix": "アイコンコレクションの接頭辞（例: mdi）",
         "download_collection": "コレクションをダウンロード",
         "collection_cached": "{{count}} 件のアイコンをキャッシュしました",
         "crop": "画像をクロップ",
@@ -1267,7 +1267,7 @@
         "hotkey": "Toggle Viewer ホットキー",
         "batch_generate": "一括生成",
         "batch_delete": "一括削除",
-        "batch_generate_done_other": "{{count}} 個の Mod フォルダーに Toggle Viewer を生成しました",
+        "batch_generate_done_other": "{{count}} 個の MOD フォルダーに Toggle Viewer を生成しました",
         "batch_delete_done_other": "Toggle Viewer ファイルを {{count}} 個削除しました",
         "batch_cancelled": "Toggle Viewer の処理がキャンセルされました",
         "stop": "停止",
@@ -1323,12 +1323,12 @@
           "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
-          "realesr-animevideov3": "ゲーム・アニメテクスチャ向けの標準モデルです。2x、3x、4x に対応します。",
-          "realesrgan-x4plus-anime": "高品質なアニメ向けモデルです。倍率は 4x 固定です。",
-          "realesrgan-x4plus": "写真・実写向けモデルです。倍率は 4x 固定です。",
-          "realcugan-pro": "アニメ向け高品質モデルです。2x、3x をサポートします。",
-          "realcugan-se": "バランスの良いアニメモデルです。2x、3x、4x をサポートします。",
-          "realcugan-nose": "最も軽量で高速なモデルです。倍率は 2x に固定されます。"
+          "realesr-animevideov3": "ゲーム・アニメのテクスチャ向けの標準モデルです。2倍、3倍、4倍に対応します。",
+          "realesrgan-x4plus-anime": "アニメのテクスチャ向けモデルです。倍率は4倍固定です。",
+          "realesrgan-x4plus": "写真・実写のテクスチャ向けモデルです。倍率は4倍固定です。",
+          "realcugan-pro": "アニメのテクスチャ向けモデルです。2倍、3倍に対応します。",
+          "realcugan-se": "アニメのテクスチャ向けモデルです。2倍、3倍、4倍に対応します。",
+          "realcugan-nose": "アニメのテクスチャ向けモデルです。倍率は2倍固定です。"
         },
         "upscale_scale": "倍率",
         "upscale_scale_option": "{{scale}}倍",
@@ -1517,7 +1517,7 @@
         "description": "MODを半分ずつ無効化しながら、問題の原因となっているMODを素早く特定します。",
         "start": "開始",
         "cancel": "キャンセル",
-        "scanning": "MODフォルダをスキャンしています...",
+        "scanning": "MODフォルダーをスキャンしています...",
         "bisect_inconclusive": "原因を特定できませんでした。回答を確認してください。",
         "no_inis_found": "有効なiniファイルが見つかりません。",
         "all_excluded": "除外パスにより、探索対象の有効なiniファイルが残っていません。",
@@ -1538,24 +1538,24 @@
         "keep_disabled": "このMODを無効のままにする",
         "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
         "re_enable_all": "すべてのMODを再度有効化",
-        "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
+        "new_bisect_hint": "新しい二分探索を開始すると、一時的に無効化したMODをすべて元の状態に戻します。",
         "preserve_d3dx": "d3dx_user.ini を保護",
         "preserve_d3dx_description": "二分探索中に d3dx_user.ini を元の状態に保ち、トグル値のリセットを防ぎます",
         "recover_disabled": "無効化MODを復元",
-        "recover_disabled_hint": "選択したゲームのMODフォルダに残った .mod-bisect-disabled ファイルを復元します。",
+        "recover_disabled_hint": "選択したゲームのMODフォルダーに残った .mod-bisect-disabled ファイルを復元します。",
         "recover_disabled_success": "無効化されたMODファイル {{count}} 件を復元しました。",
         "recover_disabled_none": "残留した無効化ファイルは見つかりませんでした。",
         "exclude_paths": "無効化から除外するパス",
         "exclude_paths_description": "指定したパスとその配下のファイルは二分探索中も有効のままになります。",
-        "exclude_paths_placeholder": "MODフォルダからの相対パス",
+        "exclude_paths_placeholder": "MODフォルダーからの相対パス",
         "exclude_paths_add": "追加",
         "exclude_paths_remove": "削除",
         "exclude_count": "{{count}}件のパスを無効化から除外しています",
         "exclude_empty": "パスを入力してください。",
-        "exclude_outside": "選択したImporterのMODフォルダ内のパスのみ指定できます。",
-        "exclude_root": "MODフォルダのルートは除外できません。",
+        "exclude_outside": "選択したImporterのMODフォルダー内のパスのみ指定できます。",
+        "exclude_root": "MODフォルダーのルートは除外できません。",
         "exclude_missing": "そのパスは存在しません。",
-        "exclude_invalid": "選択したゲームのMODフォルダ内の正しいパスを入力してください。",
+        "exclude_invalid": "選択したゲームのMODフォルダー内の正しいパスを入力してください。",
         "exclude_duplicate": "すでに指定されているパスです。",
         "exclude_no_game": "先にゲームを選択してください。",
         "status": {
@@ -1569,25 +1569,25 @@
       },
       "touch_profile": {
         "title": "タッチプロファイル",
-        "mod_path": "Mod フォルダ",
-        "mod_path_placeholder": "Mod フォルダ_PH",
+        "mod_path": "MOD フォルダー",
+        "mod_path_placeholder": "MOD フォルダー_PH",
         "use_vision": "Vision LLM を使用",
         "vision_cache_clear_button": "キャッシュを消去",
-        "analyze": "Mod を解析",
+        "analyze": "MOD を解析",
         "analyzing": "解析中",
         "turn_select": "ターン選択",
-        "turn_approved": "LLM 承認済み (LGTM)",
+        "turn_approved": "モデルの確認に合格",
         "turn_pending": "フィードバック推奨",
         "max_turn_reached": "最大ターン数に達しました",
         "discard": "下書きを破棄",
-        "create": "Touch Mod を作成",
+        "create": "Touch MOD を作成",
         "force_create": "強制作成",
         "regenerate": "設定で再生成",
-        "open_folder": "フォルダを開く",
+        "open_folder": "フォルダーを開く",
         "rollback": "ロールバック",
         "rolling_back": "ロールバック中",
-        "result": "作成された Touch Mod",
-        "source": "元の Mod",
+        "result": "作成された Touch MOD",
+        "source": "元の MOD",
         "support_grade": "対応グレード",
         "auto_apply": "自動適用可能",
         "interactive": "インタラクティブ",
@@ -1606,13 +1606,13 @@
           "complete": "完了"
         },
         "toast": {
-          "load_failed": "Mod の解析に失敗",
-          "created": "Touch Mod を作成しました",
-          "create_failed": "Touch Mod の作成に失敗",
-          "regenerated": "Touch Mod を再生成しました",
-          "regenerate_failed": "Touch Mod の再生成に失敗",
-          "rolled_back": "Touch Mod をロールバックしました",
-          "rollback_failed": "Touch Mod のロールバックに失敗",
+          "load_failed": "MOD の解析に失敗",
+          "created": "Touch MOD を作成しました",
+          "create_failed": "Touch MOD の作成に失敗",
+          "regenerated": "Touch MOD を再生成しました",
+          "regenerate_failed": "Touch MOD の再生成に失敗",
+          "rolled_back": "Touch MOD をロールバックしました",
+          "rollback_failed": "Touch MOD のロールバックに失敗",
           "settings_save_failed": "タッチ設定の保存に失敗しました",
           "reanalyzed": "LLM 再解析完了（ターン {{turn}}）",
           "reanalyze_failed": "LLM 再解析失敗",
@@ -1624,12 +1624,12 @@
         },
         "input_error": {
           "already_touch": {
-            "title": "すでに Touch Mod です",
-            "description": "生成済みの Touch Mod を再変換することはできません。元の non-touch Mod を選択するか、既存の変換をロールバックしてから再試行してください。"
+            "title": "すでに Touch MOD です",
+            "description": "生成済みの Touch MOD は再変換できません。Touch を適用していない元の MOD を選択するか、既存の変換を元に戻してから再試行してください。"
           },
           "suspected_touch": {
-            "title": "Touch Mod の可能性があります",
-            "description": "既存の Touch ランタイムが検出されたため、安全に変換できません。元の non-touch Mod を選択してください。"
+            "title": "Touch MOD の可能性があります",
+            "description": "既存の Touch ランタイムが検出されたため変換できません。Touch を適用していない元の MOD を選択してください。"
           }
         },
         "skipped": "除外",
@@ -1681,7 +1681,7 @@
         "advanced_damping": "減衰",
         "advanced_spring": "復元力",
         "advanced_max_offset": "最大変位",
-        "advanced_falloff": "減衰範囲",
+        "advanced_falloff": "距離減衰指数",
         "mode_vision": "Vision LLM",
         "mode_bone": "ボーン/ウェイト",
         "bone_select_title": "ボーンゾーン選択",
@@ -1738,9 +1738,9 @@
       },
       "liquid_emitter": {
         "title": "液体噴射ポイント",
-        "load_error": "このModのモデルを読み込めませんでした。",
-        "applied": "噴射ポイントを適用しました。ゲーム内でF10を押してModを再読み込みしてください。",
-        "removed": "噴射ポイントを削除しました。ゲーム内でF10を押してModを再読み込みしてください。",
+        "load_error": "このMODのモデルを読み込めませんでした。",
+        "applied": "噴射ポイントを適用しました。ゲーム内でF10を押してMODを再読み込みしてください。",
+        "removed": "噴射ポイントを削除しました。ゲーム内でF10を押してMODを再読み込みしてください。",
         "apply": "ゲームに適用",
         "remove": "ポイントを削除",
         "unsaved": {
@@ -1748,21 +1748,21 @@
           "description": "ゲームに適用していない噴射ポイントと液体の変更は失われます。閉じますか？",
           "confirm": "破棄して閉じる"
         },
-        "created": "新しいModを作成し、元のModを無効にしました。ゲーム内で F10 を押してModを再読み込みしてください。",
-        "restored": "作成したModを削除し、元のModを再び有効にしました。",
+        "created": "新しいMODを作成し、元のMODを無効にしました。ゲーム内で F10 を押してMODを再読み込みしてください。",
+        "restored": "作成したMODを削除し、元のMODを再び有効にしました。",
         "mode": {
           "title": "適用方法",
-          "in_place": "このModを編集",
-          "in_place_hint": "このModのINIに直接フックを入れ、元のINIは .nhd-liquid-orig としてバックアップします。",
-          "new_mod": "新しいModとして作成",
-          "new_mod_hint": "このModを「(Liquid)」付きの新しいModにコピーしてそこに適用し、元のModは無効にします。"
+          "in_place": "このMODを編集",
+          "in_place_hint": "このMODのINIに直接フックを入れ、元のINIは .nhd-liquid-orig としてバックアップします。",
+          "new_mod": "新しいMODとして作成",
+          "new_mod_hint": "このMODを「(Liquid)」付きの新しいMODにコピーしてそこに適用し、元のMODは無効にします。"
         },
         "generated": {
-          "title": "このツールで作成したMod",
-          "description": "元のModは {{path}} に無効のまま残っています。",
+          "title": "このツールで作成したMOD",
+          "description": "元のMODは {{path}} に無効のまま残っています。",
           "restore": "元に戻す",
-          "restore_title": "元のModに戻しますか？",
-          "restore_description": "このModフォルダーと噴射設定を削除し、元のModを再び有効にします。このModで直接変更したファイルも削除されます。",
+          "restore_title": "元のMODに戻しますか？",
+          "restore_description": "このMODフォルダーと噴射設定を削除し、元のMODを再び有効にします。このMODで直接変更したファイルも削除されます。",
           "restore_confirm": "元に戻す"
         },
         "runtime": {
@@ -1801,7 +1801,7 @@
           "hidden": "現在の表示では描画されていないパーツです。トグルを切り替えた場合は、表示中の面を選び直してください。",
           "new": "新しい噴射ポイント",
           "adding": "新しい噴射ポイント",
-          "limit": "1つのModに置ける噴射ポイントは{{max}}個までです。追加するには1つ削除してください。"
+          "limit": "1つのMODに置ける噴射ポイントは{{max}}個までです。追加するには1つ削除してください。"
         },
         "history": {
           "undo": "元に戻す",
@@ -1829,7 +1829,7 @@
         },
         "remove_all": {
           "button": "すべて削除",
-          "title": "このModの噴射ポイントをすべて削除しますか?",
+          "title": "このMODの噴射ポイントをすべて削除しますか?",
           "description": "INIファイルからフックを取り除き、保存した噴射ポイントを削除します。",
           "confirm": "すべて削除"
         },
@@ -1842,45 +1842,45 @@
           "look_custom": "専用の液体"
         },
         "look": {
-          "title": "この噴射ポイントの液体",
-          "hint": "ランタイム設定に加えて、選択した噴射ポイントに適用されます。ゲームに適用するとポイントと一緒に保存されます。",
+          "title": "噴射ポイントの液体設定",
+          "hint": "選択した噴射ポイントのランタイム設定を上書きします。ゲームに適用すると、噴射ポイントとともに保存されます。",
           "force": "噴射の強さ",
           "amount": "液体の量",
           "viscosity": "粘度",
           "nozzle": {
             "title": "ノズル",
             "spray": "通常の噴射",
-            "spray_hint": "ランタイム標準の噴射 · 強さに応じて扇状に広がり滴に分かれる",
+            "spray_hint": "標準の噴射方式です。噴射の強さに応じて扇状に広がり、液滴に分かれます。",
             "jet": "細いノズル",
-            "jet_hint": "細くまっすぐ遠くまで伸びるジェット · 霧や扇状の広がりなし",
+            "jet_hint": "霧や扇状の広がりのない、細く直線的な水流を噴射します。",
             "ooze": "にじみ出し",
-            "ooze_hint": "出口に滴として溜まり、膨らみ伸びてちぎれた後に体を伝って流れる · 空中の経路プレビューなし"
+            "ooze_hint": "出口に溜まった液体が液滴として伸び、分離して身体に沿って流れます。空中の軌跡プレビューには対応していません。"
           },
           "hints": {
             "spray": {
-              "force": "噴射の速さと広がり · 高いほど速く遠くまで広く飛ぶ",
-              "amount": "出る液体の量で、水流の太さもこれで決まる · 減らすと細くなり、ごく少ないと滴になって落ちる · 増やすと太く密になる · 強さが高いと早く上限に達する",
-              "viscosity": "液体の粘り気の倍率 · 高いほどまとまり、ゆっくり流れ落ち、飛び散りにくい"
+              "force": "噴射速度と広がりを調整します。値を上げると速度、飛距離、広がりが増します。",
+              "amount": "流量と水流の太さを調整します。値を下げると細くなり、非常に低い値では液滴になります。値を上げると太く密度の高い水流になります。噴射の強さが高いほど、流量の上限に早く達します。",
+              "viscosity": "液体の粘度を調整します。値を上げると液体がまとまりやすく、流下が遅くなり、飛び散りにくくなります。"
             },
             "jet": {
-              "force": "ジェットの速さ · 強さ1で3 m/s、最大5 m/s",
-              "amount": "水流の太さ · ごく少ないと滴に途切れる",
-              "viscosity": "着地後の付着と飛び散り · 空中のジェットには影響なし"
+              "force": "水流の速度を調整します。噴射の強さが1のときは3 m/s、最大5 m/sです。",
+              "amount": "水流の太さを調整します。非常に低い値では水流が液滴に分かれます。",
+              "viscosity": "表面に接触した後の付着と飛び散りを調整します。空中の水流には影響しません。"
             },
             "ooze": {
-              "force": "ちぎれるまでに滴が育つ大きさと離れる勢い · 高いほど小さな滴が勢いよく落ちる",
-              "amount": "出口に液体が溜まる速さ · 多いほど滴が頻繁にちぎれる",
-              "viscosity": "滴が伸びてちぎれ、流れ落ちる速さ · 高いほどゆっくり長く尾を引く"
+              "force": "液滴の大きさと分離時の勢いを調整します。値を上げると小さな液滴がより強く分離します。",
+              "amount": "出口に液体が溜まる速度を調整します。値を上げると液滴が落ちる頻度が増します。",
+              "viscosity": "液滴の伸び、分離、流下を調整します。値を上げると流れが遅くなり、液滴が長く伸びてから分離します。"
             }
           },
-          "custom_color": "専用の色を使う",
-          "custom_color_hint": "オフのときはランタイム設定の液体の色と色の濃さを使います。",
+          "custom_color": "カスタム色を使用",
+          "custom_color_hint": "オフの場合、ランタイムに設定された液体の色と吸収深度を使用します。",
           "tint": "液体の色",
-          "absorption": "色の濃さ",
-          "absorption_hint": "液体の色が完全に現れる厚さ（mm） · 小さいほど濃い",
+          "absorption": "吸収深度",
+          "absorption_hint": "液体の色が十分に濃くなる厚さ（mm）です。値を下げると色が濃くなります。",
           "material": {
             "title": "質感",
-            "hint": "プリセットは散乱と粗さだけを変え、色・ノズル・流れはそのまま",
+            "hint": "プリセットは散乱と粗さのみを変更します。色、ノズル、流れの設定は維持されます。",
             "preset": {
               "clear": "透明",
               "translucent": "半透明",
@@ -1888,9 +1888,9 @@
               "custom": "カスタム"
             },
             "scattering": "散乱",
-            "scattering_hint": "液体の濁り具合 · 高いほど背後が透けにくく、周囲の光を帯びる",
+            "scattering_hint": "液体内の光の散乱を調整します。値を上げると濁りが増して背景が透けにくくなり、周囲の光の散乱が増します。",
             "roughness": "粗さ",
-            "roughness_hint": "反射とハイライトの柔らかさ · 高いほど広くぼんやり広がる"
+            "roughness_hint": "反射とハイライトを調整します。値を上げると広がりが増し、明るさが下がります。"
           },
           "reset": "ランタイム設定に従う",
           "summary": {
@@ -1900,32 +1900,32 @@
           }
         },
         "error": {
-          "unsupported_game": "このツールはまだこのゲームのModに対応していません。",
+          "unsupported_game": "このツールはまだこのゲームのMODに対応していません。",
           "runtime_foreign": "{{detail}}に別のLiquidGravityProbeがインストールされています。先に無効化または削除してください。",
-          "runtime_disabled": "噴射ランタイムが無効になっています。Modライブラリで有効にしてください。",
+          "runtime_disabled": "噴射ランタイムが無効になっています。MODライブラリで有効にしてください。",
           "viewer_session": "モデル表示が古くなっています。ツールを閉じて開き直してください。",
           "unsupported_draw": "このパーツは独自の描画呼び出しを持たず、インデックスバッファの後に頂点バッファをバインドするため、噴射ポイントを追加できません。",
-          "draw_mismatch": "選択した面がModファイルと一致しません。ツールを閉じて開き直してください。",
+          "draw_mismatch": "選択した面がMODファイルと一致しません。ツールを閉じて開き直してください。",
           "draw_not_found": "INIでこのパーツの描画呼び出しが見つかりませんでした。変数を使っているか、ファイルが変更された可能性があります。",
           "shared_draw": "このパーツの描画呼び出しは別のインデックスバッファの他のパーツでも実行されるため、噴射ポイントを追加できません。",
           "invalid_anchor": "噴射ポイントが正しくありません。表面を選び直してください。",
           "offset_limit": "噴射ポイントは表面から最大250mmまでしか移動できません。",
-          "slots_exhausted": "噴射ポイントの枠4096個をすべて使用しています。先に他のModのポイントを削除してください。",
-          "unsupported_ini": "このModのINIはサポートされていないエンコーディングです。",
+          "slots_exhausted": "噴射ポイントの枠4096個をすべて使用しています。先に他のMODのポイントを削除してください。",
+          "unsupported_ini": "このMODのINIはサポートされていないエンコーディングです。",
           "damaged_hook": "{{detail}} の噴射フックに開始または終了マーカーがないため、何も変更しませんでした。マーカーを修正するか、.nhd-liquid-orig バックアップからファイルを復元してください。",
           "invalid_mode": "不明な適用方法です: {{detail}}",
-          "generated_mod": "このツールで作成済みのModです。このModの噴射設定はこのMod内で直接編集されます。",
-          "not_generated": "このツールで作成したModではないため、戻す元のModがありません。",
-          "source_missing": "元のModが {{detail}} にありません。元の場所に戻してから再試行してください。",
+          "generated_mod": "このツールで作成済みのMODです。このMODの噴射設定はこのMOD内で直接編集されます。",
+          "not_generated": "このツールで作成したMODではないため、戻す元のMODがありません。",
+          "source_missing": "元のMODが {{detail}} にありません。元の場所に戻してから再試行してください。",
           "invalid_look": "液体の設定値が範囲外です。",
           "no_emitters": "液体を設定する前に噴射ポイントを適用してください。",
-          "emitter_limit": "1つのModに置ける噴射ポイントは{{detail}}個までです。先に1つ削除してください。",
+          "emitter_limit": "1つのMODに置ける噴射ポイントは{{detail}}個までです。先に1つ削除してください。",
           "emitter_not_found": "この噴射ポイントはもうありません。ツールを閉じて開き直してください。"
         },
         "apply_new": "ポイントを追加",
         "slots": {
           "title": "同時に放出できる数を増やしますか？",
-          "description": "このキャラクターの噴射ポイントは{{count}}個になりますが、ランタイムは画面上のすべてのキャラクターの噴射ポイントを合わせて{{current}}個までしか同時に放出しません。すべてのModに適用されるこの値を{{next}}個に上げるか、上げずに追加できます。上げない場合、この値より多くのポイントが描画されると一部は放出しません。同時に描画されないフォームのポイントは合算されません。ポイントが増えるほどGPU負荷が増えます。",
+          "description": "この噴射ポイントを追加すると、キャラクターの噴射ポイントは{{count}}個になります。現在の同時噴射上限は、画面内の全キャラクターを合わせて{{current}}個です。すべてのMODに適用される上限を{{next}}個に増やせます。上限を超えると一部のポイントは噴射しません。同時に描画されないフォームのポイントは合算しません。上限を増やすとGPU負荷が増加します。",
           "keep": "上げずに追加",
           "confirm": "{{next}}個に上げて追加",
           "raised": "噴射ポイント{{count}}個まで同時に放出できるようになりました。"
@@ -1933,8 +1933,8 @@
       },
       "body_shape": {
         "title": "体型変更",
-        "mod_path": "MODフォルダ",
-        "mod_path_placeholder": "mod.ini / Position.buf があるフォルダ",
+        "mod_path": "MODフォルダー",
+        "mod_path_placeholder": "mod.ini / Position.buf があるフォルダー",
         "load": "メッシュを読み込む",
         "loading": "読み込み中",
         "mesh": "位置バッファ",
@@ -1952,7 +1952,7 @@
         "selection_tool": "選択ツール",
         "tool_mode_brush": "ブラシ",
         "tool_mode_component": "連結要素",
-        "brush_reach": "ブラシ到達",
+        "brush_reach": "ブラシの選択範囲",
         "brush_reach_surface": "表面",
         "brush_reach_through": "貫通",
         "brush_reach_surface_hint": "メッシュ表面に沿って進み、手前向きの頂点を優先します。",
@@ -1967,7 +1967,7 @@
         "pick_bones_hint": "↑↓ でウェイトプレビュー · Enter/クリックで確定",
         "no_regions": "一致する部位がありません",
         "no_bones": "一致するボーンがありません",
-        "no_blend_fallback": "Blendバッファがないため空間部位選択にフォールバックします。",
+        "no_blend_fallback": "Blend バッファーがないため、位置を基準に身体部位を選択します。",
         "bone_label": "ボーン {{id}} ({{count}})",
         "bone_id": "ボーン {{id}}",
         "segment_bone_label": "{{mesh}} · {{bone}}",
@@ -1990,7 +1990,7 @@
         "translate_z": "オフセット Z",
         "taper_factor": "テーパー係数",
         "brush_menu": "ブラシ",
-        "brush_enable": "ウェイトペイント有効化",
+        "brush_enable": "選択範囲をペイント",
         "brush_mode": "モード",
         "brush_mode_paint": "塗り (+)",
         "brush_mode_erase": "消し (-)",
@@ -2011,7 +2011,7 @@
         },
         "export": "体型変更",
         "exporting": "適用中",
-        "empty": "MODフォルダを読み込んで体型を調整してください。",
+        "empty": "MODフォルダーを読み込んで体型を調整してください。",
         "metrics": {
           "vertices": "頂点数",
           "moved": "移動した頂点",
@@ -2140,7 +2140,7 @@
         "application": {
           "title": "アプリケーション",
           "runOnStartup": "ログイン時に実行",
-          "runOnStartupDescription": "システム起動時にアプリを自動的に実行します。",
+          "runOnStartupDescription": "Windows へのログイン時にアプリを自動起動します。",
           "elevatedHelper": "昇格ヘルパー",
           "elevatedHelperDescription": "管理者権限が必要な操作を処理するため、アプリ起動時に別のヘルパーを管理者権限で起動します。Windows の UAC 確認が表示されます。",
           "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
@@ -2151,7 +2151,7 @@
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
           "runInBackgroundDisableConfirmTitle": "バックグラウンド実行を無効にしますか？",
-          "runInBackgroundDisableConfirmDescription": "Toggle Persist と Toggle Viewer は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じた時点でアプリが終了するため、アプリを再度開くまでこれらの機能は使えなくなります。それでもバックグラウンド実行をオフにしますか？",
+          "runInBackgroundDisableConfirmDescription": "バックグラウンド実行をオフにすると、すべてのウィンドウを閉じたときにアプリが終了します。アプリを再度開くまで Toggle Persist と Toggle Viewer は使用できません。",
           "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
           "includePrerelease": "プレリリースを含める",
@@ -2247,8 +2247,8 @@
             "space": "DISABLED (スペース)",
             "underscore": "DISABLED_ (アンダースコア)"
           },
-          "searchModPreview": "サブフォルダからモッドプレビューを検索",
-          "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
+          "searchModPreview": "サブフォルダーからMODプレビューを検索",
+          "searchModPreviewDescription": "キャラクター フォルダーにプレビュー画像がない場合、MOD フォルダー内からプレビュー画像を検索します。",
           "autoInspectFix": "MODに必要な修正を自動検査",
           "autoInspectFixDescription": "新しくダウンロードまたは追加したMODをバックグラウンドで検査し、修正が推奨される場合に通知します。",
           "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",
@@ -2292,7 +2292,7 @@
           "title": "パフォーマンス",
           "backdrop-blur": {
             "title": "ブラー使用",
-            "description": "Mod を探索する際にパフォーマンス問題が発生する場合は、このオプションを無効にしてください。"
+            "description": "MOD を探索する際にパフォーマンス問題が発生する場合は、このオプションを無効にしてください。"
           }
         }
       },
@@ -2304,8 +2304,8 @@
           "builtin": "内蔵"
         },
         "launchGuard": {
-          "title": "起動ガード",
-          "enabled": "起動ガードを使用",
+          "title": "起動前の確認",
+          "enabled": "起動前の確認を有効にする",
           "enabledDescription": "ゲームを起動する前に、MODの適用を妨げたりパフォーマンスを低下させたりする設定を確認します。オフにすると、以下の項目を確認せずにそのまま起動します。",
           "dcr": "キャラクター動的解像度",
           "dcrDescription": "原神のキャラクター動的解像度がオンの場合、起動前にオフにします。XXMI Launcher で起動する場合は、オフにする前に確認します。オンのままではMODが正常に適用されません。",
@@ -2547,9 +2547,9 @@
           "commands": "カスタムコマンド",
           "injectMode": "注入方式",
           "injectionMethod": "DLL インジェクター",
-          "injectionMethodDescription": "Native は LoadLibraryW で x64 ゲームにランタイムと追加 DLL を直接注入します。フック方式を置き換え、Bypass では追加 DLL のみ注入します。",
+          "injectionMethodDescription": "Native はフック方式を使わず、64ビットのゲームにランタイムと追加DLLを直接注入します。Bypass では追加DLLのみを注入します。",
           "injectionDefault": "従来のランチャー方式",
-          "injectionNative": "Native (Go)",
+          "injectionNative": "Native",
           "leaveTitle": "変更を破棄しますか？",
           "leaveDescription": "保存されていない変更は失われます。",
           "leaveConfirm": "破棄して戻る",
@@ -2579,8 +2579,8 @@
           "launcherFolderDescription": "GRYPHLINK ランチャーのフォルダーです。ゲームは公式ランチャーを経由しないと終了するため、直接起動ではこのランチャーを通してゲームを起動します。空欄の場合は自動で検出します。",
           "modeDescription": "通常は XXMI を使います。従来の 3DMigoto ビルドが必要な場合のみ 3DMigoto を選んでください。",
           "windowModeDescription": "原神（GIMI）で FPS 制限の解除をオンにした場合のみ適用されます。",
-          "launchOptionsDescriptionWWMI": "Client-Win64-Shipping.exe をこの引数で直接起動します。ゲームがクラッシュすることがあり、オフのままが最も安定します。",
-          "startMethodDescription": "Native はゲームを直接起動し、最も安定しています。問題がある場合は Shell を試してください。",
+          "launchOptionsDescriptionWWMI": "Client-Win64-Shipping.exe を指定した引数で直接起動します。ゲームがクラッシュする場合があるため、必要な場合のみ有効にしてください。",
+          "startMethodDescription": "Native はゲームの実行ファイルを直接起動します。起動に失敗する場合は Shell を選択してください。",
           "timeoutDescription": "ゲームウィンドウが表示されるまで待つ時間です。時間内に表示されない場合は起動失敗として扱います。",
           "initDelayDescription": "注入された DLL が動作を開始するまで待つ時間です。起動時にゲームがクラッシュする場合は値を変えてみてください。",
           "overwriteINIDescription": "d3dx.ini をパッケージに合わせて最新の状態に保ちます。自分の編集内容を残したい場合はオフにしてください。",
@@ -2660,7 +2660,7 @@
           "repairPackageDescription": "インストール済みバージョンのインポーターパッケージを再ダウンロードし、インストール済みファイルに上書きします。MOD には触れません。",
           "createShortcutDescription": "MOD を適用した状態でこのゲームを直接起動するデスクトップショートカットを作成します。",
           "gameLaunch": "起動経路",
-          "gameLaunchDescription": "Direct はゲームの実行ファイルを直接起動します。Steam と Epic Games は各クライアント経由で起動します。Custom は指定したコマンドを実行します。Manual はユーザーがゲームを起動するまで待機します。",
+          "gameLaunchDescription": "直接起動はゲームの実行ファイルを起動します。Steam と Epic Games は各クライアントを使用します。カスタムは指定したコマンドを実行します。手動はユーザーがゲームを起動するまで待機します。",
           "gameLaunchDirect": "直接起動",
           "gameLaunchSteam": "Steam",
           "gameLaunchEpic": "Epic Games",
@@ -2686,7 +2686,7 @@
           "inputDisableModeDescription": "キー割り当てをオフにしたときに無効になる範囲です。",
           "inputDisableModeMods": "MOD のみ",
           "inputDisableModeAll": "すべて",
-          "toggleInput": "キー割り当ての切り替えホットキー",
+          "toggleInput": "キー操作の有効・無効を切り替えるキー",
           "toggleInputDescription": "d3dx.ini に指定がない場合のみ使用します。",
           "resourceTier": "リソース品質",
           "resourceTierDescription": "ゲームがダウンロードしたリソースと一致している必要があり、異なると読み込み中にクラッシュします。Steam と Epic Games 版は HD を使用します。",
@@ -2763,7 +2763,7 @@
         "modRuntimes": {
           "tab": "ランタイム",
           "title": "ランタイム",
-          "description": "ツールがこのゲームの Mods フォルダー内の {{folder}} グループにインストールするグローバル Mod",
+          "description": "ツールがこのゲームの Mods フォルダー内の {{folder}} グループにインストールするグローバル MOD",
           "noModsFolder": "このインポーターを使うゲームがまだないため、ランタイムをインストールする Mods フォルダーがありません。",
           "versions": "インストール済み {{installed}} · 同梱 {{bundled}}",
           "bundled": "同梱 {{bundled}}",
@@ -2796,7 +2796,7 @@
           "remove": "削除",
           "removed": "{{name}} をごみ箱に移動しました。",
           "removeTitle": "{{name}} を削除しますか？",
-          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体エミッターのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う Mod は再インストールするまで動作しません。一時的に止めるには無効化を使ってください。",
+          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体エミッターのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う MOD は再インストールするまで動作しません。一時的に止めるには無効化を使ってください。",
           "foreignDescription": "{{path}} で別の {{name}} のコピーが有効になっています。ゲームが両方を読み込むため、先にそのコピーを無効化または削除してください。",
           "usedBy": {
             "LiquidGravityProbe": "液体エミッターツールで使用"
@@ -2826,7 +2826,7 @@
               "autoPulse": "自動パルスで開始",
               "slotCount": "同時に放出できる噴射ポイント数",
               "tint": "液体の色",
-              "absorptionDepth": "色の濃さ",
+              "absorptionDepth": "吸収深度",
               "wetGround": "濡れた地面の明るさ",
               "puddleReflection": "水たまりの反射",
               "puddleSize": "水たまりの最大サイズ",
@@ -2835,15 +2835,15 @@
               "scattering": "光の散乱",
               "refraction": "屈折",
               "hints": {
-                "slotCount": "1人のキャラクターの噴射ポイントもそれぞれ1つと数えます。増えるほどGPU負荷が増えます。",
-                "absorptionDepth": "液体の色が完全に現れる厚さ（mm） · 小さいほど濃い",
-                "wetGround": "水たまりの下の地面に残る明るさ · 1で暗くならない",
-                "puddleReflection": "水たまりの反射の最小の強さ",
-                "puddleSize": "液体がたまるほど水たまりが広がる最大の半径（cm）",
-                "puddleLinger": "液体が届かなくなってから大きな水たまりが引いていく秒数 · 大きいほど長く残る",
-                "streamReflection": "水流と水滴の反射の強さ",
-                "scattering": "暗い背景の上で液体そのものの色が見える度合い",
-                "refraction": "背後の景色が屈折して見える度合い"
+                "slotCount": "同じキャラクターの噴射ポイントも個別に数えます。ポイントが増えるとGPU負荷が増加します。",
+                "absorptionDepth": "液体の色が十分に濃くなる厚さ（mm）です。値を下げると色が濃くなります。",
+                "wetGround": "水たまりの下の地面の明るさを調整します。1にすると地面を暗くしません。",
+                "puddleReflection": "水たまりの反射の最小強度です。",
+                "puddleSize": "液体が溜まったときの水たまりの最大半径（cm）です。",
+                "puddleLinger": "液体の流入が止まってから、広がった水たまりが縮小するまでの時間（秒）です。値を上げると長く残ります。",
+                "streamReflection": "水流と液滴の反射強度です。",
+                "scattering": "暗い背景で液体自体の色が見える度合いを調整します。",
+                "refraction": "液体を通して見える背景の屈折を調整します。"
               }
             }
           }
@@ -2865,7 +2865,7 @@
           "noticeCollected": "収集したログが送信待ちです",
           "noticeOpen": "ログモードを開く",
           "armedTitle": "ログモード オン（{{level}}）",
-          "armedReady": "ゲームを起動して問題を再現し、ゲームを終了してください。クラッシュした場合は自動的に終了します。",
+          "armedReady": "ゲームを起動して問題を再現した後、終了してください。クラッシュで終了した場合は、そのままログを収集できます。",
           "armedRunning": "ゲームが実行中です。問題を再現してからゲームを終了してください。",
           "armedRelaunch": "ログモードを有効にする前に起動したゲームのため、ログは記録されていません。ゲームを終了してから、もう一度起動してください。",
           "armedLaunched": "問題が再現できたらログを収集して送信してください。できなかった場合はもう一度ゲームを起動してください。",
@@ -2895,7 +2895,7 @@
             },
             "debug": {
               "label": "詳細",
-              "description": "すべてを詳細に記録します。ゲームが大幅に遅くなり、ログが数百 MB になることがあります。依頼された場合のみ使用してください。"
+              "description": "ライブラリの詳細ログを記録します。ゲームの動作が大幅に遅くなり、ログが数百MBになる場合があるため、問題の診断で依頼された場合のみ使用してください。"
             }
           },
           "recommended": "推奨",
@@ -2960,12 +2960,12 @@
           "label": "添付",
           "description": "画像・動画・テキストファイルと zip を添付できます。",
           "add_files": "ファイルを追加",
-          "add_mod": "Mod フォルダーを追加",
+          "add_mod": "MOD フォルダーを追加",
           "filter": "画像、動画、テキスト",
           "remove": "添付を削除",
           "file_count": "{{count}} 個のファイル",
-          "mod_description": "問題のある Mod フォルダーをまるごと添付できます。ドライブにアップロードできない形式のファイルは除外されます。",
-          "mod_login_required": "Mod フォルダーを添付するにはログインが必要です。"
+          "mod_description": "問題のある MOD フォルダーをまるごと添付できます。ドライブにアップロードできない形式のファイルは除外されます。",
+          "mod_login_required": "MOD フォルダーを添付するにはログインが必要です。"
         },
         "log": {
           "label": "ログを添付",
@@ -2976,7 +2976,7 @@
         "cancel": "キャンセル",
         "sent": "報告を受け付けました。ありがとうございます。",
         "failed": "報告を送信できませんでした。",
-        "skipped_mod_files": "対応していない形式の Mod ファイル {{count}} 個は除外されました。",
+        "skipped_mod_files": "対応していない形式の MOD ファイル {{count}} 個は除外されました。",
         "retry_rules": "再試行",
         "error": {
           "body_too_long": "内容は {{max}} 文字を超えられません。",
@@ -2984,8 +2984,8 @@
           "empty_file": "空のファイルは添付できません: {{name}}",
           "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキスト・zip の添付は合計 {{size}} を超えられません。",
           "FEEDBACK_TOO_MANY_MEDIA": "画像・動画・テキスト・zip ファイルは {{count}} 個まで添付できます。",
-          "FEEDBACK_TOO_MANY_MOD_FILES": "Mod ファイルは合計 {{count}} 個まで添付できます。",
-          "FEEDBACK_EMPTY_MOD": "Mod フォルダーに添付できるファイルがありません。",
+          "FEEDBACK_TOO_MANY_MOD_FILES": "MOD ファイルは合計 {{count}} 個まで添付できます。",
+          "FEEDBACK_EMPTY_MOD": "MOD フォルダーに添付できるファイルがありません。",
           "FEEDBACK_BUSY": "送信中の報告がすでにあります。",
           "rules_unavailable": "添付ルールを読み込めませんでした。しばらくしてから再度お試しください。"
         }
@@ -3052,7 +3052,7 @@
     },
     "backup": {
       "title": "バックアップ",
-      "description": "登録したゲームのModフォルダーと追加したフォルダーを自動でバックアップします。サーバーが許可するファイル形式のみアップロードされ、変更のないファイルは再アップロードされません。",
+      "description": "登録したゲームのMODフォルダーと追加したフォルダーを自動でバックアップします。サーバーが許可するファイル形式のみアップロードされ、変更のないファイルは再アップロードされません。",
       "loading": "読み込み中…",
       "nav": {
         "sections": "セクション",
@@ -3107,7 +3107,7 @@
           }
         },
         "on_startup": {
-          "title": "起動時に追いつく",
+          "title": "起動時に未実行のバックアップを実行",
           "description": "起動時に予約バックアップを逃していればすぐに実行します。"
         },
         "watch_changes": {
@@ -3116,7 +3116,7 @@
         },
         "keep_count": {
           "title": "保持数",
-          "description": "このPCの古いバックアップはサーバーから削除されます（1–30）。"
+          "description": "このPCのバックアップを指定した数だけ保持し、超過した古いバックアップをサーバーから削除します。範囲: 1～30個。"
         },
         "device_name": {
           "title": "PC名",
@@ -3125,7 +3125,7 @@
       },
       "targets": {
         "title": "バックアップ対象",
-        "description": "登録したゲームのModフォルダーは既定で含まれます。",
+        "description": "登録したゲームのMODフォルダーは既定で含まれます。",
         "add_folder": "フォルダーを追加",
         "empty": "登録したゲームや追加したフォルダーがありません。",
         "include": "{{name}} をバックアップ",
@@ -3230,7 +3230,7 @@
       },
       "fixer4001": {
         "building": "DLLをビルド中",
-        "diversifying": "DLLを難読化中",
+        "diversifying": "DLL パディングを多様化中",
         "restoring": "DLLを復元中"
       },
       "modBisect": {
@@ -3263,7 +3263,7 @@
   },
   "updater": {
     "titlebar": {
-      "action": "クリックして再起動し、アップデート",
+      "action": "更新内容を確認",
       "downloadAction": "アップデートをダウンロード",
       "downloading": "アップデートをダウンロード中",
       "downloadingProgress": "アップデートをダウンロード中 ({{percent}}%)"

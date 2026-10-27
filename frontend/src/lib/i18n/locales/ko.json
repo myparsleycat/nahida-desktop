@@ -13,7 +13,7 @@
     "delete": "삭제",
     "add": "추가",
     "create": "생성",
-    "unknown": "알 수 없는",
+    "unknown": "알 수 없음",
     "save": "저장",
     "close": "닫기",
     "rename": "이름 변경",
@@ -110,7 +110,7 @@
       "approval_status_failed": "실패",
       "approval_status_rejected": "거절됨",
       "provider": "LLM 공급자",
-      "provider_hint": "대화와 도구 결정을 수행할 모델을 설정합니다.",
+      "provider_hint": "대화와 도구 사용에 사용할 모델을 설정합니다.",
       "provider_select": "공급자",
       "provider_custom": "사용자 지정",
       "provider_connected": "연결됨",
@@ -132,7 +132,7 @@
       "endpoint": "엔드포인트",
       "model": "모델",
       "supports_images": "모델이 이미지 입력을 지원",
-      "supports_images_hint": "설정한 모델이 이미지를 분석할 수 있을 때 켭니다. 그러면 도구가 반환한 스크린샷과 대화에 첨부한 이미지가 그림으로 전송됩니다.",
+      "supports_images_hint": "모델이 이미지 입력을 지원할 때 켜세요. 첨부 이미지와 도구가 반환한 스크린샷을 모델에 이미지 입력으로 전송합니다.",
       "auto_run_scripts": "에이전트 스크립트를 묻지 않고 실행",
       "auto_run_scripts_hint": "에이전트는 Python과 PowerShell 스크립트를 작성해 실행할 수 있습니다. 스크립트는 Windows 계정 권한으로 실행되며 에이전트 폴더로 제한되지 않으므로, 이 옵션을 켜지 않으면 실행할 때마다 승인을 요청합니다.",
       "api_key": "API 키",
@@ -150,9 +150,9 @@
       "replace": "교체",
       "clear": "삭제",
       "custom_headers": "사용자 지정 헤더",
-      "custom_headers_hint": "사용자 지정 엔드포인트 요청에만 전송됩니다. 비밀 값은 암호화되어 저장됩니다.",
+      "custom_headers_hint": "사용자 지정 엔드포인트 요청에만 전송됩니다. 값마다 암호화 저장 여부를 선택할 수 있습니다.",
       "add_header": "헤더 추가",
-      "secret": "비밀",
+      "secret": "암호화하여 저장",
       "configured": "설정됨",
       "mcp_warning": "활성화된 MCP 도구는 자동 실행되며 나히다 파일 샌드박스 밖의 권한을 가질 수 있습니다.",
       "enabled": "활성화",
@@ -181,7 +181,7 @@
         "upload": "업로드",
         "download": "다운로드",
         "total_transferred": "전체 전송량",
-        "active_transfers": "진행중인 전송"
+        "active_transfers": "진행 중인 전송"
       },
       "toolbar": {
         "all": "전체",
@@ -191,7 +191,7 @@
           "title": "상태 필터",
           "uploading": "업로드 중",
           "downloading": "다운로드 중",
-          "paused": "일시정지됨",
+          "paused": "일시 정지됨",
           "completed": "완료됨",
           "failed": "실패",
           "queued": "대기열"
@@ -203,7 +203,7 @@
         "downloading": "다운로드 중인 파일이 없습니다",
         "completed": "완료된 전송이 없습니다",
         "failed": "실패한 전송이 없습니다",
-        "paused": "일시정지된 전송이 없습니다",
+        "paused": "일시 정지된 전송이 없습니다",
         "search_results": "검색 결과가 없습니다"
       },
       "item": {
@@ -212,7 +212,7 @@
         "downloading": "다운로드 중",
         "completed": "완료",
         "failed": "실패",
-        "paused": "일시정지",
+        "paused": "일시 정지",
         "queued": "대기 중",
         "preparing": "준비 중",
         "discovering": "항목 확인 중 ({{count}}개)",
@@ -248,13 +248,13 @@
     },
     "drive": {
       "title": "드라이브",
-      "title_server_error": "드라이브 (서버 에러)",
+      "title_server_error": "드라이브 (서버 오류)",
       "share_drive": "공유 드라이브",
       "storing_tooltip": "파일 서버에 업로드 중",
       "storing_download_excluded": "파일 서버에 업로드 중인 파일은 다운로드에서 제외되었습니다",
       "no_contents_section_message": {
         "0": "이 폴더에 파일이나 폴더가 없습니다",
-        "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
+        "1": "여기로 파일이나 폴더를 드래그해 업로드하세요"
       },
       "dad_section": {
         "title": "{{name}}에 업로드",
@@ -335,10 +335,10 @@
         "paste": "붙여넣기"
       },
       "clipboard": {
-        "cut_single": "{{name, josa(pair: 이/가)}} 잘라내기 상태로 설정되었습니다",
-        "cut_multiple": "\"{{name}}\"외 {{count}}개가 잘라내기 상태로 설정되었습니다",
-        "copy_single": "{{name, josa(pair: 이/가)}} 복사 상태로 설정되었습니다",
-        "copy_multiple": "\"{{name}}\"외 {{count}}개가 복사 상태로 설정되었습니다",
+        "cut_single": "{{name, josa(pair: 은/는)}} 붙여넣을 때 이동합니다",
+        "cut_multiple": "\"{{name}}\" 외 {{count}}개 항목은 붙여넣을 때 이동합니다",
+        "copy_single": "{{name, josa(pair: 을/를)}} 복사 대상으로 선택했습니다",
+        "copy_multiple": "\"{{name}}\" 외 {{count}}개 항목을 복사 대상으로 선택했습니다",
         "move_loading": "파일 이동 중...",
         "move_success": "파일을 이동했습니다",
         "move_error": "파일 이동 실패: {{message}}",
@@ -348,18 +348,18 @@
       },
       "dialog": {
         "common": {
-          "invalid_dir_name": "유효하지 않은 디렉토리 이름입니다.",
+          "invalid_dir_name": "유효하지 않은 폴더 이름입니다.",
           "invalid_file_name": "유효하지 않은 파일 이름입니다."
         },
         "create_dir": {
           "title": "폴더 생성",
           "name_input_placeholder": "폴더 이름",
           "#": {
-            "0": "디렉토리 이름 형식이 유효하지 않습니다",
-            "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
+            "0": "폴더 이름 형식이 유효하지 않습니다",
+            "1": "대상 폴더 정보를 불러오지 못했습니다",
             "2": "동일한 이름의 폴더가 이미 존재합니다.",
             "toast-promise": {
-              "loading": "디렉토리를 생성하고 있습니다..."
+              "loading": "폴더를 생성하고 있습니다..."
             }
           }
         },
@@ -369,7 +369,7 @@
           "extension": "확장자",
           "#": {
             "0": "이름은 비워둘 수 없습니다",
-            "1": "디렉토리 이름 형식이 유효하지 않습니다",
+            "1": "폴더 이름 형식이 유효하지 않습니다",
             "toast-promise": {
               "loading": "이름을 변경하고 있습니다...",
               "success": "이름이 변경되었습니다."
@@ -387,8 +387,8 @@
           "action_suffix": "이름 변경"
         },
         "unsupported_extensions": {
-          "title": "업로드 할 수 없는 파일이 있습니다.",
-          "description": "아래 확장자들은 현재 업로드 할 수 없는 파일 형식입니다. 이 파일들을 제외하고 업로드 진행하거나 업로드 취소할 수 있습니다.",
+          "title": "업로드할 수 없는 파일이 있습니다",
+          "description": "다음 확장자의 파일은 업로드할 수 없습니다. 해당 파일을 제외하고 계속하거나 업로드를 취소하세요.",
           "none": "확장자 없음",
           "action_proceed": "제외하고 진행"
         },
@@ -398,8 +398,8 @@
           "action": "삭제",
           "#": {
             "toast": {
-              "partial": "{{accepted}}개 삭제 요청이 접수되었고, {{failed}}개는 실패했어요",
-              "error": "삭제 요청에 실패했어요"
+              "partial": "{{accepted}}개 항목의 삭제 요청이 접수되었으며, {{failed}}개는 실패했습니다",
+              "error": "삭제 요청에 실패했습니다"
             }
           }
         }
@@ -407,7 +407,7 @@
     },
     "share_drive": {
       "title": "공유 드라이브",
-      "title_server_error": "공유 드라이브 (서버 에러)",
+      "title_server_error": "공유 드라이브 (서버 오류)",
       "no_accessible_drives": "접근 가능한 공유 드라이브가 없습니다."
     },
     "mod": {
@@ -427,7 +427,7 @@
         "preparing": "준비 중",
         "downloading": "다운로드 중",
         "finalizing": "마무리 중",
-        "paused": "일시정지"
+        "paused": "일시 정지"
       },
       "all_enabled": "모두 활성화",
       "all_disabled": "모두 비활성화",
@@ -502,11 +502,11 @@
         "hide-empty-folders": "빈 폴더 숨기기",
         "toggle-layout": "{{mode, josa(pair: 으로/로)}} 전환",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
-        "collapse-subgroups": "서브폴더 접기",
-        "expand-subgroups": "서브폴더로 탐색",
-        "unpersist-subgroups": "서브폴더 지정 해제",
-        "persist-subgroups": "서브폴더로 지정",
-        "unmark-manual-subgroup": "수동 서브그룹 지정 해제",
+        "collapse-subgroups": "하위 폴더 접기",
+        "expand-subgroups": "하위 폴더로 탐색",
+        "unpersist-subgroups": "하위 폴더 지정 해제",
+        "persist-subgroups": "하위 폴더로 지정",
+        "unmark-manual-subgroup": "수동 하위 그룹 지정 해제",
         "classification": {
           "label": "분류 기준",
           "none": "폴더",
@@ -539,7 +539,7 @@
         }
       },
       "play": {
-        "no_importer": "게임을 실행하려면 먼저 Importer를 설정해 주세요."
+        "no_importer": "게임을 실행하려면 먼저 임포터를 설정해 주세요."
       },
       "dialog": {
         "extract_archive_path": {
@@ -553,7 +553,7 @@
         },
         "add-game": {
           "title": "게임 추가",
-          "name_input_placeholder": "게임 이름 (예: 원공노)",
+          "name_input_placeholder": "게임 이름 (예: 원신)",
           "path_input_placeholder": "모드 폴더 경로",
           "nte_game_name": "이환",
           "nte_install_path": "NTE 설치 폴더",
@@ -562,8 +562,8 @@
           "nte_system_folder_warning_description": "Windows 관리자 권한 확인이 표시될 수 있습니다.",
           "nte_custom_mod_folder": "사용자 지정 모드 폴더",
           "nte_custom_mod_folder_description": "선택 사항입니다. 게임 Mods 폴더가 이 폴더에 연결됩니다.",
-          "xxmi_path_required": "Importer를 가져오려면 먼저 XXMI 경로를 설정해야 합니다.",
-          "open_xxmi_settings": "Importer 설정 열기",
+          "xxmi_path_required": "임포터를 가져오려면 먼저 XXMI 경로를 설정해야 합니다.",
+          "open_xxmi_settings": "임포터 설정 열기",
           "nte_bootstrap_progress": {
             "checking": "NTE 부트스트랩 파일 준비 중...",
             "fetching-release": "{{archiveName}} 릴리즈 확인 중...",
@@ -576,15 +576,15 @@
             "percent": "{{value}}%"
           },
           "#": {
-            "0": "게임 이름을 입력해주세요",
-            "1": "모드 폴더 경로를 선택해주세요",
-            "2": "NTE 설치 폴더를 선택해주세요"
+            "0": "게임 이름을 입력해 주세요",
+            "1": "모드 폴더 경로를 선택해 주세요",
+            "2": "NTE 설치 폴더를 선택해 주세요"
           }
         },
         "edit-game": {
           "title": "게임 설정",
           "path_label": "모드 폴더 경로",
-          "importer_label": "Importer",
+          "importer_label": "임포터",
           "no_importer": "없음",
           "order_label": "표시 순서",
           "order_value": "{{total}}개 중 {{current}}번째",
@@ -608,7 +608,7 @@
         },
         "launch-blockers": {
           "title": "실행 전에 끌 설정이 있습니다",
-          "description": "캐릭터 동적 해상도와 부드러운 모션이 켜져 있어 모드가 정상적으로 적용되지 않을 수 있습니다. 둘 다 끄거나, 부드러운 모션만 무시하고 다른 실행 가드를 계속 확인할 수 있습니다.",
+          "description": "캐릭터 동적 해상도와 부드러운 모션이 켜져 있어 모드가 정상적으로 적용되지 않을 수 있습니다. 둘 다 끄거나, 이번 실행에서 부드러운 모션을 무시하고 나머지 실행 전 검사를 계속하세요.",
           "confirm": "끄고 실행"
         },
         "wwmi-wounded": {
@@ -673,7 +673,7 @@
         },
         "texture-resize": {
           "title": "모드 텍스처 리사이즈",
-          "description": "\"{{name}}\" 아래의 DDS 파일을 찾아 제자리에서 리사이즈합니다."
+          "description": "\"{{name}}\" 아래의 DDS 파일을 찾아 크기를 변경하고 원본 파일에 저장합니다."
         },
         "classification": {
           "title": "분류 관리",
@@ -707,12 +707,12 @@
           }
         },
         "delete-preview": {
-          "title": "프리뷰를 삭제할까요?",
-          "description": "\"{{name}}\"의 프리뷰를 삭제할까요? 삭제한 프리뷰는 휴지통에서 복원할 수 있습니다."
+          "title": "미리보기를 삭제할까요?",
+          "description": "\"{{name}}\"의 미리보기를 삭제할까요? 삭제한 미리보기는 휴지통에서 복원할 수 있습니다."
         },
         "overwrite-preview": {
-          "title": "기존 프리뷰를 덮어쓸까요?",
-          "description": "\"{{name}}\"에는 이미 프리뷰가 있습니다. 계속하면 기존 프리뷰를 새 파일로 덮어씁니다.",
+          "title": "기존 미리보기를 덮어쓸까요?",
+          "description": "\"{{name}}\"에는 이미 미리보기가 있습니다. 계속하면 기존 미리보기를 새 파일로 덮어씁니다.",
           "confirm": "덮어쓰기"
         },
         "add-preset": {
@@ -728,7 +728,7 @@
             "action": "비활성 중복 폴더 이름 변경 후 계속"
           },
           "#": {
-            "0": "프리셋 이름을 입력해주세요"
+            "0": "프리셋 이름을 입력해 주세요"
           }
         },
         "wuwa-fix-runner": {
@@ -767,12 +767,12 @@
               "description": "이미 정상인 에이메스 메카 모드에는 이 옵션을 켜지 마세요. 같은 수정을 다시 적용하면 안 됩니다."
             },
             "rendering_33": {
-              "label": "3.3 버전 이후 모드 수정 (메쉬 구멍/부위 누락)",
-              "description": "게임 3.3+ 이후 구 WWMI 내보내기 데이터의 Color1 더티데이터로 인해 신체 부위가 표시되지 않거나 파손되는 문제를 수정합니다.",
-              "warning": "신체 부위 누락이나 메쉬 구멍이 있는 모드에서만 활성화하세요!"
+              "label": "3.3 버전 이후 모드 수정 (메시 구멍/부위 누락)",
+              "description": "게임 3.3 버전 이후 이전 WWMI 내보내기 데이터의 잘못된 Color1 값으로 인해 신체 부위가 표시되지 않거나 메시에 구멍이 생기는 문제를 수정합니다.",
+              "warning": "신체 부위가 표시되지 않거나 메시에 구멍이 있는 모드에서만 켜세요."
             },
             "aero_fix": {
-              "label": "Aero 여성 방랑자 눈 Fix",
+              "label": "Aero 여성 방랑자 눈 수정",
               "description": "공명 에너지가 가득 찼을 때 눈이 깨지는 문제가 있는 경우 사용합니다.",
               "options": {
                 "none": "사용 안 함",
@@ -785,7 +785,7 @@
             "run": "실행"
           },
           "rollback": {
-            "refresh": "동기화",
+            "refresh": "새로고침",
             "scanning": "백업 기록을 스캔하는 중...",
             "no_backups": "백업 파일(.BAK)을 찾을 수 없습니다",
             "no_backups_short": "백업 없음",
@@ -798,7 +798,7 @@
             "backup_size_label": "백업 용량:",
             "success": "롤백이 완료되었습니다.",
             "advanced": "고급",
-            "advanced_hint": "파괴적 작업",
+            "advanced_hint": "백업 복원 및 삭제",
             "restore_all": "가장 오래된 백업으로 복원",
             "restore_all_desc": "모든 파일을 가장 오래된 기록 상태로 되돌리고 중간 백업을 모두 제거합니다.",
             "restore_all_action": "복원...",
@@ -879,9 +879,9 @@
           "add-game-mutation": {
             "duplicate-game-name": "이미 존재하는 게임 이름입니다.",
             "duplicate-mod-folder-path": "이미 사용 중인 모드 폴더 경로입니다.",
-            "invalid-params": "게임 이름과 모드 폴더 경로를 입력해주세요.",
-            "invalid-mod-folder-path": "모드 폴더를 찾을 수 없습니다. 경로를 확인해주세요.",
-            "importer-not-available": "Importer가 설치되지 않았거나 활성화되지 않았습니다. Importer 설정을 확인해주세요.",
+            "invalid-params": "게임 이름과 모드 폴더 경로를 입력해 주세요.",
+            "invalid-mod-folder-path": "모드 폴더를 찾을 수 없습니다. 경로를 확인해 주세요.",
+            "importer-not-available": "임포터가 설치되지 않았거나 활성화되지 않았습니다. 임포터 설정을 확인해 주세요.",
             "failed": "게임 추가에 실패했습니다.",
             "nte_mods_link_conflict": "게임 Mods 폴더와 사용자 지정 모드 폴더 모두에 파일이 있습니다. 연결하기 전에 한쪽을 비워주세요.",
             "nte_mods_link_path_occupied": "게임 Mods 폴더 경로가 사용 중이어서 연결할 수 없습니다.",
@@ -907,9 +907,9 @@
           },
           "rename-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
-            "1": "{{processes, josa(pair: 이/가)}} 해당 폴더를 사용 중이기 때문에 이름을 변경할 수 없습니다",
+            "1": "{{processes, josa(pair: 이/가)}} 폴더를 사용 중이어서 이름을 변경할 수 없습니다",
             "1-fallback": "폴더가 잠겨있어 이름을 변경할 수 없습니다",
-            "2": "올바른 모드 이름을 입력해주세요",
+            "2": "올바른 모드 이름을 입력해 주세요",
             "3": "모드 이름 변경에 실패했습니다"
           },
           "locked-description": "다음 프로세스에서 해당 폴더를 사용 중입니다: {{processes}}",
@@ -924,47 +924,47 @@
           }
         }
       },
-      "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
-      "no-preview": "프리뷰 없음",
-      "previous-preview": "이전 프리뷰 이미지",
-      "next-preview": "다음 프리뷰 이미지",
+      "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해 주세요.",
+      "no-preview": "미리보기 없음",
+      "previous-preview": "이전 미리보기 이미지",
+      "next-preview": "다음 미리보기 이미지",
       "context-menu": {
         "open-model-viewer": "모델 뷰어로 열기",
         "paste-preview": "붙여넣기",
         "open-preview-lightbox": "크게 보기",
         "open-preview-viewer": "뷰어로 열기",
-        "delete-preview": "프리뷰 삭제",
+        "delete-preview": "미리보기 삭제",
         "group-mod": "모드",
         "group-tools": "도구",
         "open-cmd": "CMD 열기",
         "open-folder": "폴더 열기",
         "open-gamebanana": "GameBanana에서 보기",
-        "mark-manual-subgroup": "서브그룹으로 지정",
+        "mark-manual-subgroup": "하위 그룹으로 지정",
         "rename": "이름 변경",
         "find-conflict": "충돌 모드 찾기"
       },
       "toast": {
         "trash-error": "삭제 실패",
-        "change-preview-error": "기본 프리뷰 이미지를 변경하지 못했습니다.",
-        "value-required": "값을 입력해주세요.",
+        "change-preview-error": "기본 미리보기 이미지를 변경하지 못했습니다.",
+        "value-required": "값을 입력해 주세요.",
         "paste-preview": {
-          "copy-error": "프리뷰 복사에 실패했습니다",
-          "downloading": "프리뷰 다운로드 중...",
-          "download-error": "프리뷰 다운로드에 실패했습니다",
-          "save-error": "프리뷰 저장에 실패했습니다",
+          "copy-error": "미리보기 복사에 실패했습니다",
+          "downloading": "미리보기 다운로드 중...",
+          "download-error": "미리보기 다운로드에 실패했습니다",
+          "save-error": "미리보기 저장에 실패했습니다",
           "no-image": "클립보드에 이미지, 이미지 URL 또는 이미지 파일이 없습니다.",
           "clipboard-error": "클립보드를 읽지 못했습니다."
         },
         "preview-drop": {
-          "error": "프리뷰 저장에 실패했습니다",
-          "unsupported": "사이드바에는 이미지 또는 동영상 파일 1개만 프리뷰로 드롭할 수 있습니다.",
+          "error": "미리보기 저장에 실패했습니다",
+          "unsupported": "사이드바에는 이미지 또는 동영상 파일 1개만 미리보기로 드롭할 수 있습니다.",
           "path-error": "파일 경로를 확인할 수 없습니다."
         }
       },
       "log-dialog": {
         "title": "로그",
         "running": "실행 중...",
-        "python-required": "Python fix tool을 실행하려면 Python 설치가 필요합니다. Python을 설치하고 python 명령을 사용할 수 있게 해 주세요."
+        "python-required": "Python 수정 도구를 실행하려면 Python이 필요합니다. Python을 설치하고 python 명령을 사용할 수 있도록 설정하세요."
       }
     },
     "gamebanana": {
@@ -1023,7 +1023,7 @@
       "error_description_auth": "이 콘텐츠를 불러오려면 GameBanana 로그인이 필요합니다.",
       "error_description_http": "GameBanana가 HTTP {{status}}{{statusText}} 응답을 반환했습니다.",
       "error_description_schema": "GameBanana가 {{context}}에 대해 예상과 다른 데이터를 반환했습니다.",
-      "game_overview_description": "선택한 게임의 개요와 주요 제출물을 확인합니다.",
+      "game_overview_description": "선택한 게임의 개요와 주요 게시물을 확인합니다.",
       "open_profile": "웹에서 열기",
       "open_mod_url": {
         "button": "URL 열기",
@@ -1040,7 +1040,7 @@
       "stats": {
         "subscribers": "구독자",
         "sections": "섹션",
-        "top_submissions": "주요 제출물",
+        "top_submissions": "주요 게시물",
         "likes": "좋아요",
         "posts": "댓글",
         "views": "조회수",
@@ -1053,9 +1053,9 @@
       "like_sign_in_required": "좋아요를 누르려면 로그인이 필요합니다.",
       "like_failed": "좋아요 상태를 변경하지 못했습니다.",
       "download_failed": "GameBanana 다운로드에 실패했습니다.",
-      "top_submissions": "주요 제출물",
+      "top_submissions": "주요 게시물",
       "latest_feed": "최신 피드",
-      "latest_feed_description": "선택한 게임의 최근 제출물입니다.",
+      "latest_feed_description": "선택한 게임의 최근 게시물입니다.",
       "category_loading": "카테고리 불러오는 중...",
       "category_description": "하위 카테고리와 모드를 탐색합니다.",
       "game_page": "게임 페이지",
@@ -1076,7 +1076,7 @@
       "no_results": "일치하는 모드가 없습니다.",
       "mod_details": "모드 상세",
       "mod_details_description": "모드를 선택하면 파일, 통계, 링크를 확인할 수 있습니다.",
-      "no_preview_image": "프리뷰 이미지가 없습니다.",
+      "no_preview_image": "미리보기 이미지가 없습니다.",
       "comments": "댓글",
       "comment_sort": {
         "popular": "인기순",
@@ -1123,15 +1123,15 @@
         "loading": "불러오는 중...",
         "load_failed": "버전을 불러오지 못했습니다.",
         "no_versions": "사용 가능한 버전이 없습니다.",
-        "target_importer": "대상 GIMI Importer",
-        "no_importer": "사용 가능한 GIMI Importer가 없습니다",
-        "select_importer_msg": "대상 GIMI Importer를 선택해주세요.",
-        "building": "빌드 진행중",
+        "target_importer": "대상 GIMI 임포터",
+        "no_importer": "사용 가능한 GIMI 임포터가 없습니다",
+        "select_importer_msg": "대상 GIMI 임포터를 선택해 주세요.",
+        "building": "빌드 진행 중",
         "start_build": "빌드 시작",
-        "obfuscate_description": "선택한 Importer의 d3d11.dll을 백업한 뒤 안전한 PE 패딩 바이트를 다양화합니다.",
-        "restore_description": "pe-padding-diversifier 백업 파일이 있어 이 Importer는 이미 패딩 다양화가 적용된 상태로 간주됩니다. 다시 적용하려면 먼저 백업을 복원하세요.",
-        "obfuscating": "패딩 다양화 진행중",
-        "restoring": "복원 진행중",
+        "obfuscate_description": "선택한 임포터의 d3d11.dll을 백업한 뒤 안전한 PE 패딩 바이트를 다양화합니다.",
+        "restore_description": "pe-padding-diversifier 백업 파일이 있어 이 임포터는 이미 패딩 다양화가 적용된 상태로 간주됩니다. 다시 적용하려면 먼저 백업을 복원하세요.",
+        "obfuscating": "패딩 다양화 진행 중",
+        "restoring": "복원 진행 중",
         "start_obfuscate": "패딩 다양화 시작",
         "start_restore": "백업 복원",
         "backup_path": "백업: {{path}}",
@@ -1141,7 +1141,7 @@
           "XXMI_INIT": "초기화 중...",
           "XXMI_OBFUSCATE_INIT": "DLL 패딩 다양화 준비 중...",
           "XXMI_RESTORE_INIT": "DLL 복원 준비 중...",
-          "XXMI_ERR_GIMI_NOT_FOUND": "Importer를 찾을 수 없습니다.",
+          "XXMI_ERR_GIMI_NOT_FOUND": "임포터를 찾을 수 없습니다.",
           "XXMI_FIND_VS": "Visual Studio 빌드 도구 찾는 중...",
           "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 환경(vcvars64.bat)을 찾을 수 없습니다. C++ 빌드 도구가 설치되어 있는지 확인하세요.",
           "XXMI_ERR_SDK_NOT_FOUND": "선택된 Visual Studio 환경에서 Windows SDK/UCRT 헤더를 찾을 수 없습니다. Visual Studio Installer에서 C++ 데스크톱 개발 도구와 Windows 10/11 SDK를 설치하거나 복구하세요. 다른 빌드 도구를 사용하려면 위의 경로를 직접 지정하세요.",
@@ -1149,11 +1149,11 @@
           "XXMI_OBFUSCATING": "D3D11 DLL 패딩 다양화 중...",
           "XXMI_RESTORING": "백업에서 D3D11 DLL 복원 중...",
           "XXMI_ERR_DLL_NOT_FOUND": "빌드된 d3d11.dll 파일을 찾을 수 없습니다.",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "대상 Importer에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하거나 관리자 권한 요청을 허용하세요.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "대상 임포터에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하거나 관리자 권한 요청을 허용하세요.",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll을 교체할 수 없습니다. 게임을 먼저 종료한 뒤 다시 시도하세요.",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요.",
-          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "선택한 Importer가 내장 XXMI 런타임에서 활성화되어 있지 않거나 폴더가 일치하지 않습니다. XXMI 설정을 확인한 뒤 다시 시도하세요.",
-          "XXMI_ERR_LEGACY_RUNTIME": "선택한 Importer가 3DMigoto 런타임을 사용하고 있습니다. XXMI 설정에서 XXMI 런타임으로 전환한 뒤 다시 시도하세요.",
+          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "선택한 임포터가 내장 XXMI 런타임에서 활성화되어 있지 않거나 폴더가 일치하지 않습니다. XXMI 설정을 확인한 뒤 다시 시도하세요.",
+          "XXMI_ERR_LEGACY_RUNTIME": "선택한 임포터가 3DMigoto 런타임을 사용하고 있습니다. XXMI 설정에서 XXMI 런타임으로 전환한 뒤 다시 시도하세요.",
           "XXMI_ERR_ELEVATION_FAILED": "관리자 권한이 거부되었거나 권한 상승 후 쓰기에 실패했습니다. UAC 확인을 허용한 뒤 다시 시도하세요.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 패딩 다양화가 완료되었습니다.",
@@ -1181,9 +1181,9 @@
         "scan_failed": "MOD 폴더를 스캔하지 못했습니다",
         "font_failed": "내장 Inter 폰트를 불러오지 못해 내보내기를 중단했습니다",
         "source_changed": "Nahida Desktop 외부에서 원본이 변경되었습니다. 다시 불러온 뒤 적용하세요",
-        "apply_failed": "생성 번들을 적용하지 못했습니다",
+        "apply_failed": "생성한 파일을 적용하지 못했습니다",
         "applied": "{{path}}에 INI와 리소스를 적용했습니다",
-        "saved": "내보내기를 저장했습니다",
+        "saved": "내보낸 파일을 저장했습니다",
         "save_failed": "내보내기를 저장하지 못했습니다",
         "draft_restore_failed": "초안을 복원하지 못했습니다",
         "choose_file": "파일 선택",
@@ -1211,7 +1211,7 @@
         "menu_title": "제목",
         "menu_title_placeholder": "비워 두면 제목을 숨깁니다",
         "menu_key": "메뉴 키",
-        "click_modifier": "클릭 modifier",
+        "click_modifier": "클릭 보조 키",
         "columns": "열",
         "gap": "간격",
         "scale": "배율",
@@ -1229,19 +1229,19 @@
         "palette_panelBackground": "패널 배경",
         "palette_panelBorder": "패널 테두리",
         "palette_slotBackground": "슬롯 배경",
-        "palette_slotHover": "슬롯 hover",
+        "palette_slotHover": "슬롯 마우스 오버 색상",
         "palette_slotBorder": "슬롯 테두리",
         "palette_title": "제목",
         "palette_titleShadow": "제목 그림자",
-        "palette_panelBackgroundAlpha": "패널 투명도",
-        "palette_panelBorderAlpha": "패널 테두리 투명도",
-        "palette_slotBackgroundAlpha": "슬롯 투명도",
-        "palette_slotHoverAlpha": "hover 투명도",
-        "palette_slotBorderAlpha": "슬롯 테두리 투명도",
+        "palette_panelBackgroundAlpha": "패널 불투명도",
+        "palette_panelBorderAlpha": "패널 테두리 불투명도",
+        "palette_slotBackgroundAlpha": "슬롯 불투명도",
+        "palette_slotHoverAlpha": "슬롯 마우스 오버 불투명도",
+        "palette_slotBorderAlpha": "슬롯 테두리 불투명도",
         "select_slot": "슬롯 선택",
         "restore": "복원",
         "skip": "건너뛰기",
-        "multi_key_locked": "여러 키를 가진 handler는 단일 슬롯 키 변경으로 분할할 수 없습니다",
+        "multi_key_locked": "키가 여러 개인 처리 항목은 슬롯 하나의 키를 변경해 분할할 수 없습니다",
         "upload_icon": "아이콘 업로드",
         "icon_picker": "아이콘 선택",
         "icon_search": "오프라인 Lucide 아이콘 검색",
@@ -1250,11 +1250,11 @@
         "icon_offline": "Iconify를 사용할 수 없습니다. 캐시와 Lucide 아이콘은 계속 사용할 수 있습니다",
         "icon_cache": "Iconify 캐시: {{count}}개 · {{size}}",
         "clear_cache": "캐시 전체 삭제",
-        "collection_prefix": "컬렉션 prefix (예: mdi)",
+        "collection_prefix": "아이콘 컬렉션 접두사 (예: mdi)",
         "download_collection": "컬렉션 다운로드",
         "collection_cached": "아이콘 {{count}}개를 캐시했습니다",
         "crop": "이미지 크롭",
-        "crop_hint": "드래그로 위치를 옮기고 마우스 휠로 확대하세요",
+        "crop_hint": "드래그하여 위치를 조절하고 마우스 휠로 확대하거나 축소하세요",
         "delete_all": "초안 전체 삭제",
         "original_logic": "원본 로직",
         "generated_logic": "생성 로직"
@@ -1323,12 +1323,12 @@
           "realcugan-nose": "Nose"
         },
         "upscale_model_descriptions": {
-          "realesr-animevideov3": "게임·애니 텍스처에 가장 무난한 기본 모델입니다. 2x, 3x, 4x를 지원합니다.",
-          "realesrgan-x4plus-anime": "품질이 더 높은 애니 모델입니다. 배율은 4x로 고정됩니다.",
-          "realesrgan-x4plus": "실사·사진용 모델입니다. 배율은 4x로 고정됩니다.",
-          "realcugan-pro": "애니 특화 고품질 모델입니다. 2x, 3x를 지원합니다.",
-          "realcugan-se": "균형 잡힌 애니 모델입니다. 2x, 3x, 4x를 지원합니다.",
-          "realcugan-nose": "가장 가볍고 빠른 모델입니다. 배율은 2x로 고정됩니다."
+          "realesr-animevideov3": "게임·애니메이션 텍스처용 기본 모델입니다. 2배, 3배, 4배를 지원합니다.",
+          "realesrgan-x4plus-anime": "애니메이션 텍스처용 모델입니다. 배율은 4배로 고정됩니다.",
+          "realesrgan-x4plus": "사진·실사 텍스처용 모델입니다. 배율은 4배로 고정됩니다.",
+          "realcugan-pro": "애니메이션 텍스처용 모델입니다. 2배, 3배를 지원합니다.",
+          "realcugan-se": "애니메이션 텍스처용 모델입니다. 2배, 3배, 4배를 지원합니다.",
+          "realcugan-nose": "애니메이션 텍스처용 모델입니다. 배율은 2배로 고정됩니다."
         },
         "upscale_scale": "배율",
         "upscale_scale_option": "{{scale}}배",
@@ -1441,7 +1441,7 @@
         "animation_frame": "프레임 {{current}} / {{end}}",
         "animation_frame_slider": "애니메이션 프레임",
         "animation_play": "재생",
-        "animation_pause": "일시정지",
+        "animation_pause": "일시 정지",
         "fps_control": "재생 속도(FPS) 변경",
         "fps_apply": "적용",
         "fps_default": "기본 {{fps}} FPS",
@@ -1454,14 +1454,14 @@
           "rotate": "회전",
           "reset": "초기화",
           "toggle": "토글",
-          "capture_set_preview": "캡처 후 프리뷰 지정",
+          "capture_set_preview": "캡처 후 미리보기 지정",
           "save_to_ini": "INI에 저장"
         },
         "dialog": {
           "overwrite_preview": {
-            "title": "프리뷰 교체",
-            "description": "\"{{name}}\"에 이미 프리뷰가 있습니다. 현재 뷰어 캡처로 교체할까요?",
-            "confirm": "프리뷰 교체"
+            "title": "미리보기 교체",
+            "description": "\"{{name}}\"에 이미 미리보기가 있습니다. 현재 뷰어 캡처로 교체할까요?",
+            "confirm": "미리보기 교체"
           }
         },
         "toast": {
@@ -1486,10 +1486,10 @@
         "builder": {
           "left": {
             "title": "추가된 스크립트",
-            "description": "드래그 드랍해 스크립트를 추가하거나 + 버튼을 눌러 우측으로 이동할 수 있습니다",
+            "description": "파일을 끌어다 놓아 스크립트를 추가하거나 + 버튼을 눌러 프리셋에 추가하세요",
             "noScripts": {
               "title": "사용할 수 있는 스크립트가 없습니다",
-              "description": "python 파일(.py) 또는 실행 파일(.exe)을 여기로 드래그 드랍해 추가할 수 있습니다"
+              "description": "Python 파일(.py) 또는 실행 파일(.exe)을 여기로 끌어다 놓으세요"
             },
             "dropToAdd": "드롭하여 추가"
           },
@@ -1518,7 +1518,7 @@
         "start": "시작",
         "cancel": "취소",
         "scanning": "모드 폴더를 스캔하는 중입니다...",
-        "bisect_inconclusive": "결정적인 원인을 찾지 못했습니다. 응답을 다시 확인해 주세요.",
+        "bisect_inconclusive": "원인을 특정하지 못했습니다. 각 단계에서 선택한 결과를 확인하세요.",
         "no_inis_found": "활성화된 ini 파일이 없습니다.",
         "all_excluded": "제외한 경로 때문에 탐색할 활성화된 ini가 남지 않았습니다.",
         "cancelled": "이진 탐색이 취소되었습니다.",
@@ -1526,19 +1526,19 @@
         "no_games": "선택 가능한 게임이 없습니다",
         "select_game": "게임을 선택하세요",
         "nte_unsupported": "NTE 미지원",
-        "nte_tooltip": "이 게임의 Importer는 아직 지원되지 않습니다.",
-        "round_title": "라운드 {{round}} · 배치 {{batchSize}} · 남은 후보 {{remaining}}",
+        "nte_tooltip": "이 게임의 임포터는 아직 지원되지 않습니다.",
+        "round_title": "단계 {{round}} · 비활성화 {{batchSize}}개 · 남은 후보 {{remaining}}개",
         "round_description": "아래 모드들이 비활성화 되었습니다. F10으로 리로드 후 문제가 해결되었는지 확인하세요.",
         "disabled_count": "{{count}}개 비활성화됨",
-        "undo": "이전 라운드 되돌리기",
+        "undo": "이전 단계 되돌리기",
         "still_broken": "여전히 문제 발생",
         "problem_fixed": "문제 해결됨",
         "done_title": "이진 탐색 완료",
         "done_description": "{{path}} 모드가 문제의 원인으로 의심됩니다.",
         "keep_disabled": "이 모드 비활성화 유지",
-        "keep_disabled_hint": "{{from, josa(pair: 은/는)}} 파일이 비활성화를 유지하기 위해 {{to, josa(pair: 으로/로)}} 이름이 변경됩니다.",
+        "keep_disabled_hint": "비활성 상태를 유지하도록 {{from}}의 이름을 {{to, josa(pair: 으로/로)}} 변경합니다.",
         "re_enable_all": "모든 모드 다시 활성화",
-        "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
+        "new_bisect_hint": "새 이진 탐색을 시작하면 임시로 비활성화한 모드를 모두 원래 상태로 되돌립니다.",
         "preserve_d3dx": "d3dx_user.ini 보호",
         "preserve_d3dx_description": "이진 탐색 중 d3dx_user.ini를 원래 상태로 유지하여 토글 값 초기화를 방지합니다",
         "recover_disabled": "비활성화된 모드 복구",
@@ -1552,7 +1552,7 @@
         "exclude_paths_remove": "삭제",
         "exclude_count": "{{count}}개 경로를 비활성화에서 제외함",
         "exclude_empty": "경로를 입력해 주세요.",
-        "exclude_outside": "선택한 importer의 모드 폴더 안 경로만 지정할 수 있습니다.",
+        "exclude_outside": "선택한 임포터의 모드 폴더 안 경로만 지정할 수 있습니다.",
         "exclude_root": "모드 폴더 루트는 제외할 수 없습니다.",
         "exclude_missing": "해당 경로가 존재하지 않습니다.",
         "exclude_invalid": "선택한 게임의 모드 폴더 안에 있는 경로를 입력해 주세요.",
@@ -1561,7 +1561,7 @@
         "status": {
           "idle": "대기 중",
           "scanning": "스캔 중",
-          "round": "라운드 진행 중",
+          "round": "탐색 단계 진행 중",
           "done": "완료",
           "reverting": "되돌리는 중",
           "cancelled": "취소됨"
@@ -1576,7 +1576,7 @@
         "analyze": "모드 분석",
         "analyzing": "분석 중",
         "turn_select": "턴 선택",
-        "turn_approved": "LLM 승인됨 (LGTM)",
+        "turn_approved": "모델 검토 통과",
         "turn_pending": "피드백 권장",
         "max_turn_reached": "최대 턴 수 도달",
         "discard": "초안 폐기",
@@ -1598,7 +1598,7 @@
         "no": "아니오",
         "stage": {
           "scan": "스캔",
-          "preview": "프리뷰",
+          "preview": "미리보기",
           "vision": "Vision",
           "assets": "에셋",
           "ini": "INI",
@@ -1625,11 +1625,11 @@
         "input_error": {
           "already_touch": {
             "title": "이미 Touch 모드입니다",
-            "description": "이미 생성된 Touch 모드는 다시 변환할 수 없습니다. 원본 non-touch 모드를 선택하거나 기존 변환을 롤백한 뒤 다시 시도하세요."
+            "description": "생성된 Touch 모드는 다시 변환할 수 없습니다. Touch를 적용하지 않은 원본 모드를 선택하거나 기존 변환을 되돌린 뒤 다시 시도하세요."
           },
           "suspected_touch": {
             "title": "Touch 모드로 추정됩니다",
-            "description": "기존 Touch 런타임이 감지되어 안전하게 변환할 수 없습니다. 원본 non-touch 모드를 선택하세요."
+            "description": "기존 Touch 런타임이 감지되어 변환할 수 없습니다. Touch를 적용하지 않은 원본 모드를 선택하세요."
           }
         },
         "skipped": "제외됨",
@@ -1647,12 +1647,12 @@
         "zone": "영향 영역",
         "zone_placeholder": "영역 선택",
         "all_zones": "모든 영역",
-        "preview_loading": "3D 프리뷰 준비 중",
-        "preview_empty": "프리뷰할 상호작용 메시가 없습니다.",
-        "preview_failed": "프리뷰를 불러오지 못했습니다",
+        "preview_loading": "3D 미리보기 준비 중",
+        "preview_empty": "미리 볼 수 있는 상호작용 메시가 없습니다.",
+        "preview_failed": "미리보기를 불러오지 못했습니다",
         "no_interactive_components": "상호작용 가능한 메시 구성 요소가 없습니다.",
-        "mask_strength": "Touch mask 강도",
-        "mask_strength_reset": "Touch mask 강도 초기화",
+        "mask_strength": "터치 마스크 강도",
+        "mask_strength_reset": "터치 마스크 강도 초기화",
         "mask_curve": "영향 분포",
         "mask_curve_reset": "영향 분포 초기화",
         "mask_curve_hint": "낮을수록 약한 영역을 평탄화하고, 높을수록 강한 중심 영역에 집중합니다.",
@@ -1681,7 +1681,7 @@
         "advanced_damping": "감쇠",
         "advanced_spring": "복원력",
         "advanced_max_offset": "최대 변위",
-        "advanced_falloff": "낙차",
+        "advanced_falloff": "거리 감쇠 지수",
         "mode_vision": "Vision LLM",
         "mode_bone": "본/가중치",
         "bone_select_title": "본 영역 선택",
@@ -1842,45 +1842,45 @@
           "look_custom": "전용 액체"
         },
         "look": {
-          "title": "이 부착점의 액체",
-          "hint": "런타임 설정에 더해 선택한 부착점에 적용됩니다. 게임에 적용할 때 부착점과 함께 저장됩니다.",
+          "title": "부착점 액체 설정",
+          "hint": "선택한 부착점의 런타임 설정을 재정의합니다. 게임에 적용하면 부착점과 함께 저장됩니다.",
           "force": "분사 세기",
           "amount": "액체량",
           "viscosity": "점도",
           "nozzle": {
             "title": "노즐",
             "spray": "일반 분사",
-            "spray_hint": "런타임 기본 분사 · 세기에 따라 부채꼴로 퍼지고 방울로 갈라짐",
+            "spray_hint": "기본 분사 방식입니다. 분사 세기에 따라 부채꼴로 퍼지고 방울로 나뉩니다.",
             "jet": "좁은 노즐",
-            "jet_hint": "가늘고 곧게 멀리 뻗는 제트 · 안개·부채꼴 없음",
+            "jet_hint": "안개나 부채꼴 확산 없이 가늘고 곧은 물줄기를 분사합니다.",
             "ooze": "흘러나옴",
-            "ooze_hint": "출구에 방울로 모였다가 부풀고 늘어나 떨어진 뒤 몸을 타고 흐름 · 공중 경로 미리보기 없음"
+            "ooze_hint": "출구에 모인 액체가 방울로 늘어난 뒤 분리되어 몸을 따라 흐릅니다. 공중 궤적 미리보기는 지원하지 않습니다."
           },
           "hints": {
             "spray": {
-              "force": "분사 속도와 퍼짐 · 높을수록 빠르고 멀리 뻗으며 넓게 퍼짐",
-              "amount": "나오는 액체의 양으로, 물줄기 굵기도 여기서 정해짐 · 줄이면 가늘어지고 아주 적으면 방울져 떨어짐 · 늘리면 굵고 빽빽해짐 · 세기가 높으면 더 일찍 한도에 닿음",
-              "viscosity": "액체 끈적임 배율 · 높을수록 뭉치고 천천히 흘러내리며 덜 튐"
+              "force": "분사 속도와 확산을 조절합니다. 값이 높을수록 빠르고 멀리 분사되며 넓게 퍼집니다.",
+              "amount": "분사량과 물줄기 굵기를 조절합니다. 값이 낮으면 물줄기가 가늘어지고, 매우 낮으면 방울로 분사됩니다. 값이 높으면 물줄기가 굵고 조밀해집니다. 분사 세기가 높을수록 분사량 한도에 빨리 도달합니다.",
+              "viscosity": "액체 점도를 조절합니다. 값이 높을수록 액체가 뭉치고 천천히 흘러내리며 덜 튑니다."
             },
             "jet": {
-              "force": "제트 속도 · 세기 1에서 3 m/s, 최대 5 m/s",
-              "amount": "물줄기 굵기 · 아주 적으면 방울로 끊김",
-              "viscosity": "착지 뒤 붙는 정도와 튐 · 공중 제트에는 영향 없음"
+              "force": "물줄기 속도를 조절합니다. 분사 세기 1에서 3 m/s이며 최대 5 m/s입니다.",
+              "amount": "물줄기 굵기를 조절합니다. 값이 매우 낮으면 물줄기가 방울로 나뉩니다.",
+              "viscosity": "표면에 닿은 뒤의 부착과 튐을 조절합니다. 공중의 물줄기에는 영향을 주지 않습니다."
             },
             "ooze": {
-              "force": "떨어지기 전까지 방울이 커지는 정도와 떨어지는 힘 · 높을수록 작은 방울이 튕겨 떨어짐",
-              "amount": "출구에 액체가 차오르는 속도 · 많을수록 방울이 자주 떨어짐",
-              "viscosity": "방울이 늘어나 떨어지고 흘러내리는 속도 · 높을수록 천천히 길게 끌림"
+              "force": "방울 크기와 분리되는 힘을 조절합니다. 값이 높을수록 작은 방울이 더 강하게 분리됩니다.",
+              "amount": "출구에 액체가 모이는 속도를 조절합니다. 값이 높을수록 방울이 자주 떨어집니다.",
+              "viscosity": "방울의 늘어남과 분리, 흐름을 조절합니다. 값이 높을수록 천천히 흐르고, 길게 늘어난 뒤 분리됩니다."
             }
           },
-          "custom_color": "전용 색 사용",
-          "custom_color_hint": "끄면 런타임 설정의 액체 색과 색 진하기를 씁니다.",
+          "custom_color": "사용자 지정 색상 사용",
+          "custom_color_hint": "끄면 런타임에 설정된 액체 색상과 흡수 깊이를 사용합니다.",
           "tint": "액체 색",
-          "absorption": "색 진하기",
-          "absorption_hint": "액체 색이 온전히 나타나는 두께(mm) · 낮을수록 진함",
+          "absorption": "흡수 깊이",
+          "absorption_hint": "액체 색상이 충분히 진해지는 두께(mm)입니다. 값이 낮을수록 색상이 진해집니다.",
           "material": {
             "title": "재질",
-            "hint": "프리셋은 산란과 거칠기만 바꾸며 색·노즐·흐름은 그대로 둠",
+            "hint": "프리셋은 산란과 거칠기만 변경합니다. 색상, 노즐, 흐름 설정은 유지됩니다.",
             "preset": {
               "clear": "투명",
               "translucent": "반투명",
@@ -1888,9 +1888,9 @@
               "custom": "사용자 지정"
             },
             "scattering": "산란",
-            "scattering_hint": "액체가 뿌연 정도 · 높을수록 뒤가 덜 비치고 주변 빛을 머금음",
+            "scattering_hint": "액체의 빛 산란을 조절합니다. 값이 높을수록 액체가 탁해지고 배경이 덜 비치며 주변광의 산란이 증가합니다.",
             "roughness": "거칠기",
-            "roughness_hint": "반사와 하이라이트의 부드러움 · 높을수록 넓고 흐리게 퍼짐"
+            "roughness_hint": "반사와 하이라이트를 조절합니다. 값이 높을수록 넓게 퍼지고 밝기가 낮아집니다."
           },
           "reset": "런타임 설정 따르기",
           "summary": {
@@ -1925,7 +1925,7 @@
         "apply_new": "부착점 추가",
         "slots": {
           "title": "동시에 분사할 수 있는 수를 늘릴까요?",
-          "description": "이 캐릭터의 부착점이 {{count}}개가 되지만, 런타임은 화면에 있는 모든 캐릭터의 부착점을 합쳐 {{current}}개까지만 동시에 분사합니다. 모든 모드에 적용되는 이 값을 {{next}}개로 올리거나, 올리지 않고 추가할 수 있습니다. 올리지 않으면 이 값보다 많은 부착점이 그려질 때 일부는 분사하지 않습니다. 함께 그려지지 않는 폼의 부착점은 서로 합산되지 않습니다. 부착점이 늘수록 GPU 부담이 커집니다.",
+          "description": "이 부착점을 추가하면 캐릭터의 부착점이 {{count}}개가 됩니다. 현재 화면 내 모든 캐릭터를 합쳐 {{current}}개까지 동시에 분사할 수 있습니다. 모든 모드에 적용되는 한도를 {{next}}개로 늘릴 수 있습니다. 한도를 초과하면 일부 부착점은 분사하지 않습니다. 동시에 표시되지 않는 형태의 부착점은 합산하지 않습니다. 한도가 높을수록 GPU 부하가 증가합니다.",
           "keep": "올리지 않고 추가",
           "confirm": "{{next}}개로 올리고 추가",
           "raised": "이제 부착점 {{count}}개까지 동시에 분사합니다."
@@ -1952,7 +1952,7 @@
         "selection_tool": "선택 도구",
         "tool_mode_brush": "브러시",
         "tool_mode_component": "연결 요소",
-        "brush_reach": "브러시 도달",
+        "brush_reach": "브러시 선택 범위",
         "brush_reach_surface": "표면",
         "brush_reach_through": "관통",
         "brush_reach_surface_hint": "메시 표면을 따라가며 앞면 정점을 우선 선택합니다.",
@@ -1967,7 +1967,7 @@
         "pick_bones_hint": "↑↓ 가선택 시 가중치 미리보기 · Enter/클릭으로 등록",
         "no_regions": "일치하는 부위 없음",
         "no_bones": "일치하는 본 없음",
-        "no_blend_fallback": "Blend 버퍼가 없어 기존 공간 부위 선택을 사용합니다.",
+        "no_blend_fallback": "Blend 버퍼가 없어 위치를 기준으로 신체 부위를 선택합니다.",
         "bone_label": "본 {{id}} ({{count}})",
         "bone_id": "본 {{id}}",
         "segment_bone_label": "{{mesh}} · {{bone}}",
@@ -1990,7 +1990,7 @@
         "translate_z": "이동 Z",
         "taper_factor": "테이퍼 계수",
         "brush_menu": "브러시",
-        "brush_enable": "브러시 페인팅 활성화",
+        "brush_enable": "선택 영역 칠하기",
         "brush_mode": "모드",
         "brush_mode_paint": "칠하기 (+)",
         "brush_mode_erase": "지우기 (-)",
@@ -2140,7 +2140,7 @@
         "application": {
           "title": "애플리케이션",
           "runOnStartup": "로그인할 때 실행",
-          "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
+          "runOnStartupDescription": "Windows에 로그인할 때 앱을 자동으로 실행합니다.",
           "elevatedHelper": "권한 상승 헬퍼",
           "elevatedHelperDescription": "관리자 권한이 필요한 작업을 처리하기 위해 앱 시작 시 별도 헬퍼를 관리자 권한으로 실행합니다. 시작할 때 Windows UAC 확인이 표시됩니다.",
           "titlebarActivityBadgeClickNavigate": "타이틀바 작업 배지 클릭으로 이동",
@@ -2151,7 +2151,7 @@
           "runInBackground": "백그라운드 실행",
           "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
           "runInBackgroundDisableConfirmTitle": "백그라운드 실행을 끌까요?",
-          "runInBackgroundDisableConfirmDescription": "Toggle Persist 또는 Toggle Viewer를 사용할 때는 백그라운드 실행을 유지하는 편이 더 안전하고 안정적입니다. 이 기능을 끄면 모든 창을 닫는 순간 앱이 종료되므로, 앱을 다시 열기 전까지 해당 기능들을 사용할 수 없습니다. 그래도 백그라운드 실행을 끄시겠어요?",
+          "runInBackgroundDisableConfirmDescription": "백그라운드 실행을 끄면 모든 창을 닫을 때 앱이 종료됩니다. Toggle Persist와 Toggle Viewer는 앱을 다시 실행할 때까지 사용할 수 없습니다.",
           "runInBackgroundDisableConfirmAction": "그래도 끄기",
           "autoUpdate": "자동 업데이트",
           "includePrerelease": "사전 릴리스 포함",
@@ -2188,7 +2188,7 @@
           "select": "시작 페이지 선택"
         },
         "logLevel": {
-          "title": "로그 레벨",
+          "title": "로그 수준",
           "select": "레벨 선택"
         },
         "other": {
@@ -2240,7 +2240,7 @@
           "moveFolderInsteadOfCopy": "폴더 복사 대신 이동",
           "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)",
           "copyShaderFixesOnEnable": "활성화 시 ShaderFixes 복사",
-          "copyShaderFixesOnEnableDescription": "모드를 활성화할 때 모드 안의 ShaderFixes 파일을 활성 Importer의 ShaderFixes 폴더로 복사합니다.",
+          "copyShaderFixesOnEnableDescription": "모드를 활성화할 때 모드 안의 ShaderFixes 파일을 활성 임포터의 ShaderFixes 폴더로 복사합니다.",
           "disabledPrefixStyle": "비활성 모드 접두사 형식",
           "disabledPrefixStyleDescription": "모드 비활성화 시 사용할 접두사를 선택합니다. 활성화 시 두 형식 모두 항상 인식됩니다.",
           "disabledPrefixStyles": {
@@ -2248,7 +2248,7 @@
             "underscore": "DISABLED_ (밑줄)"
           },
           "searchModPreview": "하위 폴더에서 미리보기 검색",
-          "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다.",
+          "searchModPreviewDescription": "캐릭터 폴더에 미리보기 이미지가 없는 경우, 모드 폴더 내부에서 미리보기 이미지를 검색합니다.",
           "autoInspectFix": "모드 추가 시 Fix 필요 여부 자동 검사",
           "autoInspectFixDescription": "모드를 다운로드하거나 추가할 때 수정(Fix)이 필요한지 백그라운드에서 검사하고 알립니다.",
           "autoResolveDownloadTarget": "다운로드 대상 폴더 자동 선택",
@@ -2262,14 +2262,14 @@
         },
         "layout": {
           "title": "레이아웃",
-          "gridModelPreview": "프리뷰가 없는 모드에 모델 프리뷰 표시",
+          "gridModelPreview": "미리보기가 없는 모드에 모델 미리보기 표시",
           "gridModelPreviewDescription": "모드 그리드에서 이미지나 동영상이 없는 모드의 현재 토글 상태를 정적 모델 이미지로 표시합니다.",
           "sidebar": {
             "mode": "사이드바 레이아웃",
-            "modeDescription": "캐릭터 사이드바를 행 목록 또는 정사각형 프리뷰 그리드로 표시합니다.",
+            "modeDescription": "캐릭터 사이드바를 행 목록 또는 정사각형 미리보기 그리드로 표시합니다.",
             "modes": {
               "row": "행 목록",
-              "grid": "프리뷰 그리드"
+              "grid": "미리보기 그리드"
             }
           },
           "grid": {
@@ -2292,7 +2292,7 @@
           "title": "성능",
           "backdrop-blur": {
             "title": "블러 사용",
-            "description": "모드 탐색시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
+            "description": "모드 탐색 시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
           }
         }
       },
@@ -2304,8 +2304,8 @@
           "builtin": "내장"
         },
         "launchGuard": {
-          "title": "실행 가드",
-          "enabled": "실행 가드 사용",
+          "title": "실행 전 검사",
+          "enabled": "실행 전 검사 사용",
           "enabledDescription": "게임을 실행하기 전에 모드 적용을 방해하거나 성능을 떨어뜨리는 설정을 확인합니다. 끄면 아래 항목을 모두 확인하지 않고 바로 실행합니다.",
           "dcr": "캐릭터 동적 해상도",
           "dcrDescription": "원신의 캐릭터 동적 해상도가 켜져 있으면 실행 전에 끕니다. XXMI 런처로 실행할 때는 끄기 전에 먼저 묻습니다. 켜져 있으면 모드가 정상적으로 적용되지 않습니다.",
@@ -2547,9 +2547,9 @@
           "commands": "사용자 명령",
           "injectMode": "주입 방식",
           "injectionMethod": "DLL 인젝터",
-          "injectionMethodDescription": "Native는 x64 게임에 LoadLibraryW로 런타임과 추가 DLL을 직접 주입합니다. 기존 훅 방식을 대체하며, Bypass에서는 추가 DLL만 주입합니다.",
+          "injectionMethodDescription": "Native는 훅 방식 대신 64비트 게임에 런타임과 추가 DLL을 직접 주입합니다. Bypass에서는 추가 DLL만 주입합니다.",
           "injectionDefault": "기존 런처 방식",
-          "injectionNative": "Native (Go)",
+          "injectionNative": "Native",
           "leaveTitle": "변경 사항을 버릴까요?",
           "leaveDescription": "저장하지 않은 변경 사항은 사라집니다.",
           "leaveConfirm": "버리고 나가기",
@@ -2570,17 +2570,17 @@
           "modFolderUnlinked": "모드 폴더 링크를 해제했습니다",
           "modFolderErrors": {
             "XXMI_MOD_FOLDER_TARGET_NOT_EMPTY": "현재 Mods 폴더와 선택한 폴더 모두에 모드가 있습니다. 한쪽을 먼저 비워주세요.",
-            "XXMI_MOD_FOLDER_INVALID_TARGET": "임포터 폴더 밖의 로컬 드라이브 폴더를 선택해주세요.",
+            "XXMI_MOD_FOLDER_INVALID_TARGET": "임포터 폴더 밖의 로컬 드라이브 폴더를 선택해 주세요.",
             "XXMI_IMPORT_NO_SPACE": "선택한 드라이브의 여유 공간이 부족합니다.",
             "XXMI_GAME_RUNNING": "모드 폴더를 변경하기 전에 게임을 종료해주세요.",
-            "XXMI_BUSY": "임포터가 다른 작업 중입니다. 작업이 끝난 뒤 다시 시도해주세요."
+            "XXMI_BUSY": "임포터가 다른 작업 중입니다. 작업이 끝난 뒤 다시 시도해 주세요."
           },
           "gameFolderDescription": "게임 실행 파일이 들어 있는 폴더입니다.",
           "launcherFolderDescription": "GRYPHLINK 런처 폴더입니다. 게임은 공식 런처를 거치지 않으면 종료되므로, 직접 실행할 때 이 런처를 통해 게임을 시작합니다. 비워 두면 자동으로 찾습니다.",
           "modeDescription": "일반적으로 XXMI를 사용합니다. 레거시 3DMigoto 빌드가 필요한 경우에만 3DMigoto를 선택하세요.",
           "windowModeDescription": "원신(GIMI)에서 FPS 제한 해제를 켰을 때만 적용됩니다.",
-          "launchOptionsDescriptionWWMI": "Client-Win64-Shipping.exe를 이 인자와 함께 직접 실행합니다. 게임이 충돌할 수 있으며, 꺼 두는 편이 가장 안정적입니다.",
-          "startMethodDescription": "Native는 게임을 직접 실행하며 가장 안정적입니다. 문제가 있으면 Shell을 시도하세요.",
+          "launchOptionsDescriptionWWMI": "Client-Win64-Shipping.exe를 이 인자와 함께 직접 실행합니다. 게임이 충돌할 수 있으므로 필요한 경우에만 켜세요.",
+          "startMethodDescription": "Native는 게임 실행 파일을 직접 실행합니다. 실행에 실패하면 Shell을 선택하세요.",
           "timeoutDescription": "게임 창이 나타나기를 기다리는 시간입니다. 시간 안에 나타나지 않으면 실행 실패로 처리합니다.",
           "initDelayDescription": "주입된 DLL이 동작을 시작하기 전에 기다리는 시간입니다. 게임이 시작 중에 충돌하면 값을 바꿔 보세요.",
           "overwriteINIDescription": "d3dx.ini를 패키지에 맞춰 최신 상태로 유지합니다. 직접 수정한 내용을 지키려면 끄세요.",
@@ -2660,7 +2660,7 @@
           "repairPackageDescription": "설치된 버전의 임포터 패키지를 다시 내려받아 설치된 파일에 덮어씁니다. 모드는 건드리지 않습니다.",
           "createShortcutDescription": "모드를 적용한 상태로 이 게임을 바로 실행하는 바탕 화면 바로가기를 만듭니다.",
           "gameLaunch": "실행 경로",
-          "gameLaunchDescription": "Direct는 게임 실행 파일을 직접 시작합니다. Steam과 Epic Games는 해당 클라이언트를 통해 시작합니다. Custom은 지정한 명령을 실행합니다. Manual은 사용자가 게임을 직접 시작할 때까지 기다립니다.",
+          "gameLaunchDescription": "직접 실행은 게임 실행 파일을 시작합니다. Steam과 Epic Games는 해당 클라이언트를 사용합니다. 사용자 지정은 지정한 명령을 실행합니다. 수동은 사용자가 게임을 시작할 때까지 기다립니다.",
           "gameLaunchDirect": "직접 실행",
           "gameLaunchSteam": "Steam",
           "gameLaunchEpic": "Epic Games",
@@ -2686,7 +2686,7 @@
           "inputDisableModeDescription": "단축키를 껐을 때 동작하지 않는 단축키의 범위입니다.",
           "inputDisableModeMods": "모드만",
           "inputDisableModeAll": "전체",
-          "toggleInput": "단축키 전환 단축키",
+          "toggleInput": "단축키 사용 전환 키",
           "toggleInputDescription": "d3dx.ini에 이미 지정된 값이 없을 때만 사용합니다.",
           "resourceTier": "리소스 품질",
           "resourceTierDescription": "게임이 내려받은 리소스와 일치해야 하며, 다르면 로딩 중 충돌합니다. Steam과 Epic Games 설치본은 HD를 사용합니다.",
@@ -2710,8 +2710,8 @@
         },
         "xxmiPath": "XXMI 경로",
         "autoScan": "자동 탐색",
-        "activeImporter": "활성화된 Importer",
-        "showDisabledImporters": "비활성화된 Importer 표시",
+        "activeImporter": "활성화된 임포터",
+        "showDisabledImporters": "비활성화된 임포터 표시",
         "disableImporter": "비활성화",
         "enableImporter": "활성화",
         "persistToggles": "토글 영구 저장",
@@ -2727,7 +2727,7 @@
         "dllVersionEmpty": "사용 가능한 버전이 없습니다.",
         "dllVersionCurrent": "현재: {{version}}",
         "dllVersionUnknown": "알 수 없음",
-        "packageVersion": "Importer 패키지 버전",
+        "packageVersion": "임포터 패키지 버전",
         "packageVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다.",
         "packageVersionLoading": "버전을 불러오는 중...",
         "packageVersionLoadFailed": "버전을 불러오지 못했습니다.",
@@ -2740,7 +2740,7 @@
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
             "alert": {
               "title": "주의",
-              "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요."
+              "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해 주세요."
             }
           },
           "saveXXMIPath": {
@@ -2751,7 +2751,7 @@
             "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
           },
           "installImporterPackage": {
-            "failed": "선택한 importer 패키지 버전을 적용하지 못했습니다",
+            "failed": "선택한 임포터 패키지 버전을 적용하지 못했습니다",
             "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요.",
             "errors": {
               "XXMI_IMPORTER_FILE_ACCESS_DENIED": "임포터 폴더의 \"{{detail}}\" 파일에 접근할 수 없고 권한을 복구하지 못했습니다. 다시 시도해 관리자 권한 요청을 허용하거나, 파일 소유권을 가져와 권한을 직접 재설정하세요.",
@@ -2826,7 +2826,7 @@
               "autoPulse": "자동 펄스로 시작",
               "slotCount": "동시에 분사할 수 있는 부착점 수",
               "tint": "액체 색",
-              "absorptionDepth": "색 진하기",
+              "absorptionDepth": "흡수 깊이",
               "wetGround": "젖은 바닥 밝기",
               "puddleReflection": "웅덩이 반사",
               "puddleSize": "웅덩이 최대 크기",
@@ -2835,15 +2835,15 @@
               "scattering": "빛 산란",
               "refraction": "굴절",
               "hints": {
-                "slotCount": "한 캐릭터의 부착점도 각각 하나씩 셉니다. 늘수록 GPU 부담이 커집니다.",
-                "absorptionDepth": "액체 색이 온전히 나타나는 두께(mm) · 낮을수록 진함",
-                "wetGround": "웅덩이 아래 바닥이 유지하는 밝기 · 1이면 어두워지지 않음",
-                "puddleReflection": "웅덩이 반사의 최소 세기",
-                "puddleSize": "액체가 많이 고일수록 웅덩이가 넓어지는 최대 반경(cm)",
-                "puddleLinger": "액체가 더 닿지 않을 때 커진 웅덩이가 빠지는 시간(초) · 클수록 오래 남음",
-                "streamReflection": "줄기와 방울의 반사 세기",
-                "scattering": "어두운 배경 위에서 액체 자체의 색이 보이는 정도",
-                "refraction": "뒤쪽 장면이 굴절되어 보이는 정도"
+                "slotCount": "같은 캐릭터에 있는 부착점도 개별적으로 계산합니다. 부착점이 많을수록 GPU 부하가 증가합니다.",
+                "absorptionDepth": "액체 색상이 충분히 진해지는 두께(mm)입니다. 값이 낮을수록 색상이 진해집니다.",
+                "wetGround": "웅덩이 아래 바닥의 밝기를 조절합니다. 1로 설정하면 바닥이 어두워지지 않습니다.",
+                "puddleReflection": "웅덩이 반사의 최소 세기입니다.",
+                "puddleSize": "액체가 모일 때 웅덩이가 커질 수 있는 최대 반경(cm)입니다.",
+                "puddleLinger": "액체 유입이 멈춘 뒤 커진 웅덩이가 줄어드는 시간(초)입니다. 값이 높을수록 오래 유지됩니다.",
+                "streamReflection": "물줄기와 방울의 반사 세기입니다.",
+                "scattering": "어두운 배경에서 액체 자체의 색상이 보이는 정도를 조절합니다.",
+                "refraction": "액체를 통해 보이는 배경의 굴절 정도를 조절합니다."
               }
             }
           }
@@ -2865,7 +2865,7 @@
           "noticeCollected": "수집한 로그가 전송을 기다리고 있습니다",
           "noticeOpen": "로깅 모드 열기",
           "armedTitle": "로깅 모드 켜짐 ({{level}})",
-          "armedReady": "게임을 실행해 문제를 재현한 뒤 게임을 종료하세요. 크래시가 나면 게임이 알아서 종료됩니다.",
+          "armedReady": "게임을 실행해 문제를 재현한 뒤 종료하세요. 충돌로 종료된 경우에는 바로 로그를 수집할 수 있습니다.",
           "armedRunning": "게임이 실행 중입니다. 문제를 재현한 뒤 게임을 종료하세요.",
           "armedRelaunch": "로깅 모드를 켜기 전에 실행된 게임이라 로그가 기록되지 않습니다. 게임을 종료한 뒤 다시 실행하세요.",
           "armedLaunched": "문제가 재현됐다면 로그를 수집해 보내세요. 아니라면 게임을 다시 실행하세요.",
@@ -2895,7 +2895,7 @@
             },
             "debug": {
               "label": "상세",
-              "description": "모든 것을 자세히 기록합니다. 게임이 크게 느려지고 로그가 수백 MB까지 커질 수 있으니 요청받은 경우에만 사용하세요."
+              "description": "라이브러리의 상세 로그를 기록합니다. 게임이 크게 느려지고 로그가 수백 MB까지 커질 수 있으므로 문제 진단을 위해 요청받은 경우에만 사용하세요."
             }
           },
           "recommended": "권장",
@@ -2993,9 +2993,9 @@
       "adv": {
         "title": "고급",
         "warning_title": "주의",
-        "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다.",
-        "search_placeholder": "설정 key 검색...",
-        "no_results": "일치하는 설정 key가 없습니다."
+        "warning_description": "고급 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다.",
+        "search_placeholder": "설정 키 검색...",
+        "no_results": "일치하는 설정 키가 없습니다."
       },
       "transfer": {
         "title": "전송",
@@ -3107,7 +3107,7 @@
           }
         },
         "on_startup": {
-          "title": "앱 시작 시 따라잡기",
+          "title": "앱 시작 시 누락된 백업 실행",
           "description": "앱을 켰을 때 놓친 예약 백업이 있으면 바로 실행합니다."
         },
         "watch_changes": {
@@ -3116,7 +3116,7 @@
         },
         "keep_count": {
           "title": "보관 개수",
-          "description": "이 PC의 오래된 백업은 서버에서 삭제됩니다(1–30)."
+          "description": "이 PC의 백업을 지정한 개수만큼 보관하고, 초과한 오래된 백업은 서버에서 삭제합니다. 범위: 1~30개."
         },
         "device_name": {
           "title": "PC 이름",
@@ -3223,14 +3223,14 @@
         "uploading": "업로드 중",
         "transferring": "전송 중",
         "finalizing": "마무리 중",
-        "paused": "일시정지",
+        "paused": "일시 정지",
         "download_error": "다운로드 오류",
         "upload_error": "업로드 오류",
         "transfer_error": "전송 오류"
       },
       "fixer4001": {
         "building": "DLL 빌드 중",
-        "diversifying": "DLL 난독화 중",
+        "diversifying": "DLL 패딩 다양화 중",
         "restoring": "DLL 복원 중"
       },
       "modBisect": {
@@ -3263,7 +3263,7 @@
   },
   "updater": {
     "titlebar": {
-      "action": "업데이트 확인",
+      "action": "업데이트 보기",
       "downloadAction": "업데이트 다운로드",
       "downloading": "업데이트 다운로드 중",
       "downloadingProgress": "업데이트 다운로드 중 ({{percent}}%)"
