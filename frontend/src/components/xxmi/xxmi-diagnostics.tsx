@@ -277,6 +277,7 @@ export function XXMIDiagnostics({
         <StartDialog
           importer={importer}
           current={armed ? session : null}
+          hashDumpsAvailable={support?.hashDumps === true}
           canLaunch={!running && !launchDisabled}
           onClose={() => setStarting(false)}
           onStarted={async (launchNow) => {
@@ -303,12 +304,14 @@ export function XXMIDiagnostics({
 function StartDialog({
   importer,
   current,
+  hashDumpsAvailable,
   canLaunch,
   onClose,
   onStarted,
 }: {
   importer: string;
   current: DiagnosticsSession | null;
+  hashDumpsAvailable: boolean;
   canLaunch: boolean;
   onClose: () => void;
   onStarted: (launchNow: boolean) => Promise<void>;
@@ -320,12 +323,18 @@ function StartDialog({
   );
   const [debugLocks, setDebugLocks] = useState(current?.debugLocks ?? false);
   const [frameTimes, setFrameTimes] = useState(current?.frameTimes ?? false);
+  const [hashDumps, setHashDumps] = useState(current ? current.hashDumps : true);
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
     setBusy(true);
     try {
-      await XXMI.StartDiagnostics(importer, { level, debugLocks, frameTimes });
+      await XXMI.StartDiagnostics(importer, {
+        level,
+        debugLocks,
+        frameTimes,
+        hashDumps: hashDumpsAvailable && hashDumps,
+      });
       toast.success(t("page.setting.xxmi.diagnostics.started"));
       await onStarted(!current && canLaunch);
     } catch (error) {
@@ -384,6 +393,14 @@ function StartDialog({
           checked={frameTimes}
           onCheckedChange={setFrameTimes}
         />
+        {hashDumpsAvailable ? (
+          <ToggleRow
+            label={t("page.setting.xxmi.diagnostics.hashDumps")}
+            description={t("page.setting.xxmi.diagnostics.hashDumpsDescription")}
+            checked={hashDumps}
+            onCheckedChange={setHashDumps}
+          />
+        ) : null}
         <p className="text-xs text-muted-foreground">
           {t("page.setting.xxmi.diagnostics.alwaysOn")}
         </p>

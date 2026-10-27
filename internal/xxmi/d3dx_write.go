@@ -77,8 +77,8 @@ func (in importerINIInput) render(data []byte) (doc *iniDocument, lost bool) {
 	before := parseINI(data)
 	doc, lost = in.merge(data)
 
-	for _, option := range diagnosticsRestoredOptions {
-		restoreDiagnosticsOption(doc, option, in.restore)
+	for _, restored := range diagnosticsRestoredOptions {
+		restoreDiagnosticsOption(doc, restored.section, restored.option, in.restore)
 	}
 	if in.loader != nil {
 		doc.SetOption("Loader", "target", in.loader.target, true)

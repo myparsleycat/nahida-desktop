@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -19,6 +20,15 @@ import (
 
 func newDiagnosticsTestService(t *testing.T, ini string) (*XXMI, ImporterConfig) {
 	t.Helper()
+	return newImporterDiagnosticsTestService(t, "GIMI", ini, func(*ImporterConfig) {})
+}
+
+func newImporterDiagnosticsTestService(
+	t *testing.T,
+	key, ini string,
+	edit func(*ImporterConfig),
+) (*XXMI, ImporterConfig) {
+	t.Helper()
 	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
@@ -27,11 +37,12 @@ func newDiagnosticsTestService(t *testing.T, ini string) (*XXMI, ImporterConfig)
 	service.crashEvents = func(context.Context, time.Time, []string) (string, int, error) { return "", 0, nil }
 	useBuiltinLauncher(t, service)
 
-	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	cfg, err := DefaultImporterConfig(key, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Enabled = true
+	edit(&cfg)
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte(ini))
 	manifest, err := json.Marshal(runtimeManifest{
 		Mode: RuntimeXXMI, Source: "xxmi-libs@1.2.2", Provider: "xxmi-libs-myparsleycat@1.2.2-nhd.13",
@@ -40,7 +51,7 @@ func newDiagnosticsTestService(t *testing.T, ini string) (*XXMI, ImporterConfig)
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, runtimeManifestName), manifest)
-	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+	if err := service.SaveImporterConfig(ctx, key, cfg); err != nil {
 		t.Fatal(err)
 	}
 	return service, cfg
@@ -57,13 +68,18 @@ func readTestINI(t *testing.T, cfg ImporterConfig) *iniDocument {
 
 func assertLoggingOptions(t *testing.T, step string, doc *iniDocument, want map[string]string) {
 	t.Helper()
+	assertINIOptions(t, step, doc, "Logging", want)
+}
+
+func assertINIOptions(t *testing.T, step string, doc *iniDocument, section string, want map[string]string) {
+	t.Helper()
 	for option, value := range want {
-		got, ok := doc.Option("Logging", option)
+		got, ok := doc.Option(section, option)
 		switch {
 		case value == "" && ok:
-			t.Errorf("%s: [Logging] %s = %q, want it absent", step, option, got)
+			t.Errorf("%s: [%s] %s = %q, want it absent", step, section, option, got)
 		case value != "" && got != value:
-			t.Errorf("%s: [Logging] %s = %q (set %t), want %q", step, option, got, ok, value)
+			t.Errorf("%s: [%s] %s = %q (set %t), want %q", step, section, option, got, ok, value)
 		}
 	}
 }
@@ -270,6 +286,132 @@ func TestCollectDiagnosticsBundlesOnlyTheSessionFiles(t *testing.T) {
 	if _, err := os.Stat(bundle.Path); !os.IsNotExist(err) {
 		t.Fatalf("bundle after end: stat err = %v, want it removed", err)
 	}
+}
+
+func TestDiagnosticsHashDumpsFollowTheRenderer(t *testing.T) {
+	ctx := context.Background()
+	service, cfg := newImporterDiagnosticsTestService(t, "ZZMI",
+		"[Logging]\r\nlog_level = disabled\r\n[Hunting]\r\nvk_dump_hashes = 0\r\n",
+		func(cfg *ImporterConfig) { cfg.SkipD3D11Switch = true })
+	support, err := service.DiagnosticsSupport(ctx, "ZZMI")
+	if err != nil || !support.Supported || !support.HashDumps {
+		t.Fatalf("support with DirectX 12 = %+v, err = %v", support, err)
+	}
+	if err := service.StartDiagnostics(ctx, "ZZMI", DiagnosticsOptions{
+		Level: DiagnosticsInfo, HashDumps: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertINIOptions(t, "start", readTestINI(t, cfg), "Hunting", map[string]string{
+		"dx12_dump_hashes": "1", "vk_dump_hashes": "1",
+	})
+
+	// A game switched to DirectX 11 has nothing to dump, so applying the session again takes the options out.
+	cfg.SkipD3D11Switch = false
+	if err := service.SaveImporterConfig(ctx, "ZZMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	support, err = service.DiagnosticsSupport(ctx, "ZZMI")
+	if err != nil || !support.Supported || support.HashDumps {
+		t.Fatalf("support with DirectX 11 = %+v, err = %v", support, err)
+	}
+	if err := service.StartDiagnostics(ctx, "ZZMI", DiagnosticsOptions{
+		Level: DiagnosticsInfo, HashDumps: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertINIOptions(t, "DirectX 11", readTestINI(t, cfg), "Hunting", map[string]string{
+		"dx12_dump_hashes": "", "vk_dump_hashes": "0",
+	})
+	if session, err := service.GetDiagnostics(ctx, "ZZMI"); err != nil || session == nil || session.HashDumps {
+		t.Fatalf("session with DirectX 11 = %+v, err = %v", session, err)
+	}
+}
+
+func TestCollectDiagnosticsBundlesSessionHashDumps(t *testing.T) {
+	ctx := context.Background()
+	service, cfg := newImporterDiagnosticsTestService(t, "ZZMI", "[Logging]\r\nlog_level = disabled\r\n",
+		func(cfg *ImporterConfig) { cfg.SkipD3D11Switch = true })
+	stale := filepath.Join(cfg.ImporterFolder, "dx12_report.txt")
+	writeTestFile(t, stale, []byte("report of an earlier launch\n"))
+	past := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.StartDiagnostics(ctx, "ZZMI", DiagnosticsOptions{
+		Level: DiagnosticsInfo, HashDumps: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, diagnosticsLogName), []byte("session line\n"))
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "vk_draws.csv"), []byte("frame,cmd\n1,2\n"))
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, diagnosticsVKShadersFolder, "0123456789abcdef-vs.spv"),
+		[]byte{0x03, 0x02, 0x23, 0x07})
+	bundle, err := service.CollectDiagnostics(ctx, "ZZMI", 100<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"d3d11_log.txt", "d3dx.ini", "hash-dumps/vk_draws.csv", "hash-dumps/vk_shaders/0123456789abcdef-vs.spv",
+		"session.json",
+	}
+	if names := diagnosticsBundleEntries(t, bundle.Path); !slices.Equal(names, want) {
+		t.Fatalf("bundle entries = %q, want %q", names, want)
+	}
+
+	// A bundle over its bound leaves out the shaders before it cuts the log.
+	folder := t.TempDir()
+	logPath := filepath.Join(folder, diagnosticsLogName)
+	writeTestFile(
+		t,
+		logPath,
+		bytes.Repeat([]byte("draw call line\n"), (diagnosticsLogHead+diagnosticsLogMinTail)/15+1024),
+	)
+	csvPath := filepath.Join(folder, "vk_draws.csv")
+	writeTestFile(t, csvPath, []byte("frame,cmd\n1,2\n"))
+	shaderPath := filepath.Join(folder, diagnosticsVKShadersFolder, "fedcba9876543210-ps.spv")
+	noise := make([]byte, 2<<20)
+	_, _ = rand.Read(noise)
+	writeTestFile(t, shaderPath, noise)
+	file := func(path string) diagnosticsFile {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return diagnosticsFile{path: path, size: info.Size(), modified: info.ModTime()}
+	}
+	log := file(logPath)
+	bound, err := writeDiagnosticsBundle(ctx, filepath.Join(t.TempDir(), "bundle.zip"), "ZZMI",
+		diagnosticsRecord{Level: DiagnosticsInfo, HashDumps: true}, diagnosticsSources{
+			log: &log, hashDumps: []diagnosticsFile{file(csvPath)}, vkShaders: []diagnosticsFile{file(shaderPath)},
+			collectedAt: time.Now(),
+		}, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound.LogTruncated {
+		t.Fatalf("bundle over its bound = %+v, want the log whole", bound)
+	}
+	want = []string{"d3d11_log.txt", "hash-dumps/vk_draws.csv", "session.json"}
+	if names := diagnosticsBundleEntries(t, bound.Path); !slices.Equal(names, want) {
+		t.Fatalf("bundle over its bound entries = %q, want %q", names, want)
+	}
+}
+
+func diagnosticsBundleEntries(t *testing.T, path string) []string {
+	t.Helper()
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = archive.Close() }()
+	names := make([]string, 0, len(archive.File))
+	for _, file := range archive.File {
+		names = append(names, file.Name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func TestCollectDiagnosticsLeavesOtherSessionsReadable(t *testing.T) {

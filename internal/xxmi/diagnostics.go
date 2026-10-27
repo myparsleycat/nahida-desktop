@@ -38,10 +38,13 @@ const (
 	diagnosticsNotInstalled       = "not-installed"
 )
 
-// diagnosticsRestoredOptions are the [Logging] options a session sets that no importer setting decides, so
-// ending the session puts back the values the file had. The settings write the rest of [Logging] again.
-var diagnosticsRestoredOptions = []string{
-	"unbuffered", "crash", "debug_locks", "spike_log_threshold", "spike_log_relative",
+// diagnosticsRestoredOptions are the options a session sets that no importer setting decides, so ending the
+// session puts back the values the file had. The settings write the rest of [Logging] again. A session's Restore
+// is keyed by the option name alone, so the names stay distinct across sections.
+var diagnosticsRestoredOptions = []struct{ section, option string }{
+	{"Logging", "unbuffered"}, {"Logging", "crash"}, {"Logging", "debug_locks"},
+	{"Logging", "spike_log_threshold"}, {"Logging", "spike_log_relative"},
+	{"Hunting", "dx12_dump_hashes"}, {"Hunting", "vk_dump_hashes"},
 }
 
 type DiagnosticsLevel string
@@ -66,11 +69,17 @@ type DiagnosticsOptions struct {
 	// FrameTimes has the DLL write d3d11_spike_log.txt: what slow frames spent their time on, and a summary of
 	// the frame times every few seconds.
 	FrameTimes bool `json:"frameTimes"`
+	// HashDumps has the DLL write the hashes a DirectX 12 or Vulkan game draws with, for checking them against
+	// the installed mods. It applies only while DiagnosticsSupport.HashDumps holds.
+	HashDumps bool `json:"hashDumps"`
 }
 
 type DiagnosticsSupport struct {
 	Supported bool   `json:"supported"`
 	Reason    string `json:"reason"`
+	// HashDumps is whether the game may render with DirectX 12 or Vulkan, where DiagnosticsOptions.HashDumps
+	// applies.
+	HashDumps bool `json:"hashDumps"`
 }
 
 // DiagnosticsSession is an importer's logging session. The times are RFC 3339; LaunchedAt is empty until a
@@ -80,6 +89,7 @@ type DiagnosticsSession struct {
 	Level      DiagnosticsLevel   `json:"level"`
 	DebugLocks bool               `json:"debugLocks"`
 	FrameTimes bool               `json:"frameTimes"`
+	HashDumps  bool               `json:"hashDumps"`
 	StartedAt  string             `json:"startedAt"`
 	LaunchedAt string             `json:"launchedAt"`
 	Bundle     *DiagnosticsBundle `json:"bundle"`
@@ -104,6 +114,7 @@ type diagnosticsRecord struct {
 	Level      DiagnosticsLevel `json:"level"`
 	DebugLocks bool             `json:"debugLocks"`
 	FrameTimes bool             `json:"frameTimes,omitempty"`
+	HashDumps  bool             `json:"hashDumps,omitempty"`
 	StartedAt  time.Time        `json:"startedAt"`
 	LaunchedAt time.Time        `json:"launchedAt,omitzero"`
 	// ImporterFolder is the folder whose d3dx.ini the session changed and Restore was read from.
@@ -119,7 +130,7 @@ type diagnosticsRecord struct {
 
 func (r diagnosticsRecord) session() *DiagnosticsSession {
 	session := &DiagnosticsSession{
-		State: r.State, Level: r.Level, DebugLocks: r.DebugLocks, FrameTimes: r.FrameTimes,
+		State: r.State, Level: r.Level, DebugLocks: r.DebugLocks, FrameTimes: r.FrameTimes, HashDumps: r.HashDumps,
 		StartedAt: r.StartedAt.Format(time.RFC3339), Bundle: r.Bundle,
 	}
 	if !r.LaunchedAt.IsZero() {
@@ -174,7 +185,7 @@ func (x *XXMI) diagnosticsSupport(ctx context.Context, key string) (DiagnosticsS
 	if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini")); err != nil {
 		return DiagnosticsSupport{Reason: diagnosticsNotInstalled}, cfg, nil //nolint:nilerr // Reported as a reason.
 	}
-	return DiagnosticsSupport{Supported: true}, cfg, nil
+	return DiagnosticsSupport{Supported: true, HashDumps: rendererBeyondD3D11(key, cfg)}, cfg, nil
 }
 
 // GetDiagnostics returns the importer's logging session, or nil when it has none.
@@ -201,7 +212,7 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 			Operation: "start-diagnostics", Stage: stage,
 			Fields: map[string]any{
 				"importer": key, "level": options.Level, "debugLocks": options.DebugLocks,
-				"frameTimes": options.FrameTimes, "importerFolder": cfg.ImporterFolder,
+				"frameTimes": options.FrameTimes, "hashDumps": options.HashDumps, "importerFolder": cfg.ImporterFolder,
 			},
 		})
 	}()
@@ -258,6 +269,7 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 		rollback = &saved
 	}
 	record.Level, record.DebugLocks, record.FrameTimes = options.Level, options.DebugLocks, options.FrameTimes
+	record.HashDumps = options.HashDumps && support.HashDumps
 
 	// The session is stored before the file changes, so a write that fails or a crash after it leaves a
 	// session whose end restores the values the file had.
@@ -662,11 +674,11 @@ func diagnosticsFolder() (string, error) {
 // currentDiagnosticsOptions reads the values of diagnosticsRestoredOptions the file sets.
 func currentDiagnosticsOptions(doc *iniDocument) map[string]*string {
 	values := make(map[string]*string, len(diagnosticsRestoredOptions))
-	for _, option := range diagnosticsRestoredOptions {
-		if value, ok := doc.Option("Logging", option); ok {
-			values[option] = &value
+	for _, restored := range diagnosticsRestoredOptions {
+		if value, ok := doc.Option(restored.section, restored.option); ok {
+			values[restored.option] = &value
 		} else {
-			values[option] = nil
+			values[restored.option] = nil
 		}
 	}
 	return values
@@ -690,29 +702,37 @@ func applyDiagnosticsINI(doc *iniDocument, record diagnosticsRecord, logLevel bo
 	if record.DebugLocks {
 		doc.SetOption("Logging", "debug_locks", "1", true)
 	} else {
-		restoreDiagnosticsOption(doc, "debug_locks", record.Restore)
+		restoreDiagnosticsOption(doc, "Logging", "debug_locks", record.Restore)
 	}
 	// Twice the recent average frame time, as the frame rate of the game is not known beforehand
 	if record.FrameTimes {
 		doc.SetOption("Logging", "spike_log_threshold", "0", true)
 		doc.SetOption("Logging", "spike_log_relative", "2", true)
 	} else {
-		restoreDiagnosticsOption(doc, "spike_log_threshold", record.Restore)
-		restoreDiagnosticsOption(doc, "spike_log_relative", record.Restore)
+		restoreDiagnosticsOption(doc, "Logging", "spike_log_threshold", record.Restore)
+		restoreDiagnosticsOption(doc, "Logging", "spike_log_relative", record.Restore)
+	}
+	// The DLL reads only the option of the API the game renders with.
+	for _, option := range []string{"dx12_dump_hashes", "vk_dump_hashes"} {
+		if record.HashDumps {
+			doc.SetOption("Hunting", option, "1", true)
+		} else {
+			restoreDiagnosticsOption(doc, "Hunting", option, record.Restore)
+		}
 	}
 }
 
 // restoreDiagnosticsOption puts back the value the file had, or leaves an option the session never read alone.
-func restoreDiagnosticsOption(doc *iniDocument, option string, restore map[string]*string) {
+func restoreDiagnosticsOption(doc *iniDocument, section, option string, restore map[string]*string) {
 	value, read := restore[option]
 	if !read {
 		return
 	}
 	if value != nil {
-		doc.SetOption("Logging", option, *value, true)
+		doc.SetOption(section, option, *value, true)
 		return
 	}
-	doc.RemoveOption("Logging", option)
+	doc.RemoveOption(section, option)
 }
 
 // restoreDiagnosticsINI puts back the values the file had before the session, then the options the
