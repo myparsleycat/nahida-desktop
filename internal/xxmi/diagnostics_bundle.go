@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -40,7 +41,21 @@ const (
 	diagnosticsDumpLimit = 512 << 20
 	// diagnosticsAnonymizeChunk bounds the text anonymized at once, which is cut at line ends.
 	diagnosticsAnonymizeChunk = 1 << 20
+	// A hash dump keeps its head, where a CSV has its header, and the frames last dumped.
+	diagnosticsHashDumpHead = 1 << 20
+	diagnosticsHashDumpTail = 7 << 20
+	// diagnosticsVKShadersFolder is where a DLL with vk_dump_hashes writes the SPIR-V of the game's shaders.
+	diagnosticsVKShadersFolder = "vk_shaders"
 )
+
+// diagnosticsHashDumpNames are the files a DLL with dx12_dump_hashes or vk_dump_hashes writes next to itself.
+var diagnosticsHashDumpNames = []string{
+	"dx12_shaders.csv", "dx12_textures.csv", "dx12_buffers.csv", "dx12_draws.csv", "dx12_report.txt",
+	"vk_shaders.csv", "vk_pipelines.csv", "vk_buffers.csv", "vk_buffer_objects.csv", "vk_draws.csv",
+	"vk_probe.csv", "vk_frames.csv", "vk_report.txt",
+}
+
+var diagnosticsVKShaderPattern = regexp.MustCompile(`(?i)^[0-9a-f]{16}-[a-z]{2}\.spv$`)
 
 // DiagnosticsBundle is the zip a collected session wrote for a report.
 type DiagnosticsBundle struct {
@@ -60,16 +75,20 @@ type diagnosticsFile struct {
 
 // diagnosticsSources are the files and records of a session that go into its bundle.
 type diagnosticsSources struct {
-	log         *diagnosticsFile
-	spikeLog    *diagnosticsFile
-	dumps       []diagnosticsFile
-	ini         []byte
-	events      string
-	eventCount  int
-	runtime     runtimeManifest
-	dllSHA256   string
-	dllSize     int64
-	collectedAt time.Time
+	log       *diagnosticsFile
+	spikeLog  *diagnosticsFile
+	dumps     []diagnosticsFile
+	hashDumps []diagnosticsFile
+	vkShaders []diagnosticsFile
+	// The hash dumps a bundle over its bound left out.
+	hashDumpsOmitted, vkShadersOmitted bool
+	ini                                []byte
+	events                             string
+	eventCount                         int
+	runtime                            runtimeManifest
+	dllSHA256                          string
+	dllSize                            int64
+	collectedAt                        time.Time
 }
 
 // CollectDiagnostics writes the log, crash dumps, d3dx.ini, and crash records of the session into a zip of
@@ -185,6 +204,16 @@ func (x *XXMI) diagnosticsSources(
 		sources.spikeLog = sessionLog(filepath.Join(cfg.ImporterFolder, diagnosticsSpikeLogName), record.StartedAt)
 	}
 	sources.dumps = sessionDumps(slices.Concat(record.DumpDirs, []string{cfg.ImporterFolder}), record.StartedAt)
+	if record.HashDumps {
+		for _, name := range diagnosticsHashDumpNames {
+			if file := sessionLog(filepath.Join(cfg.ImporterFolder, name), record.StartedAt); file != nil {
+				sources.hashDumps = append(sources.hashDumps, *file)
+			}
+		}
+		sources.vkShaders = sessionVKShaders(
+			filepath.Join(cfg.ImporterFolder, diagnosticsVKShadersFolder), record.StartedAt,
+		)
+	}
 
 	ini, err := readImporterINI(cfg.ImporterFolder)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -259,6 +288,29 @@ func sessionDumps(dirs []string, since time.Time) []diagnosticsFile {
 	return dumps[:min(len(dumps), diagnosticsMaxDumps)]
 }
 
+// sessionVKShaders returns the SPIR-V files the DLL wrote to dir since the session started. Each launch writes
+// the shaders it sees again, so an older one belongs to an earlier launch.
+func sessionVKShaders(dir string, since time.Time) []diagnosticsFile {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var shaders []diagnosticsFile
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() || !diagnosticsVKShaderPattern.MatchString(entry.Name()) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().Before(since) || info.Size() == 0 {
+			continue
+		}
+		shaders = append(shaders, diagnosticsFile{
+			path: filepath.Join(dir, entry.Name()), size: info.Size(), modified: info.ModTime(),
+		})
+	}
+	return shaders
+}
+
 // writeDiagnosticsBundle writes the bundle to destination. A bundle over maxBytes is written again with less
 // of the log's end, then with only the newest dump, before it is refused.
 func writeDiagnosticsBundle(
@@ -278,8 +330,12 @@ func writeDiagnosticsBundle(
 	if sources.spikeLog != nil {
 		paths = append(paths, sources.spikeLog.path)
 	}
-	for _, dump := range sources.dumps {
+	for _, dump := range slices.Concat(sources.dumps, sources.hashDumps) {
 		paths = append(paths, dump.path)
+	}
+	// The shaders share one folder, which one of them stands for.
+	if len(sources.vkShaders) > 0 {
+		paths = append(paths, sources.vkShaders[0].path)
 	}
 	release, err := diskio.Acquire(ctx, paths...)
 	if err != nil {
@@ -304,10 +360,15 @@ func writeDiagnosticsBundle(
 			return DiagnosticsBundle{}, err
 		}
 
+		// The shaders go first, as the CSVs still name them by hash.
 		switch {
+		case len(sources.vkShaders) > 0:
+			sources.vkShaders, sources.vkShadersOmitted = nil, true
 		case sources.log != nil && tail > diagnosticsLogMinTail &&
 			sources.log.size > diagnosticsLogHead+diagnosticsLogMinTail:
 			tail = max(min(tail, sources.log.size-diagnosticsLogHead)/2, diagnosticsLogMinTail)
+		case len(sources.hashDumps) > 0:
+			sources.hashDumps, sources.hashDumpsOmitted = nil, true
 		case len(sources.dumps) > 1:
 			sources.dumps = sources.dumps[:1]
 		default:
@@ -380,6 +441,31 @@ func writeDiagnosticsZip(
 		})
 	}
 	bundle.Dumps = len(sources.dumps)
+	for _, dump := range sources.hashDumps {
+		name := "hash-dumps/" + filepath.Base(dump.path)
+		entry, err := archive.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: dump.modified})
+		if err != nil {
+			return "", bundle, err
+		}
+		_, omitted, err := copyLogWindow(ctx, entry, dump.path, diagnosticsHashDumpHead, diagnosticsHashDumpTail)
+		if err != nil {
+			return "", bundle, fmt.Errorf("add %s: %w", dump.path, err)
+		}
+		manifest.HashDumpFiles = append(manifest.HashDumpFiles, diagnosticsManifestFile{
+			Name: name, Size: dump.size, Modified: dump.modified.Format(time.RFC3339), OmittedBytes: omitted,
+		})
+	}
+	for _, shader := range sources.vkShaders {
+		name := "hash-dumps/" + diagnosticsVKShadersFolder + "/" + filepath.Base(shader.path)
+		entry, err := archive.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: shader.modified})
+		if err != nil {
+			return "", bundle, err
+		}
+		if err := copyFile(ctx, entry, shader.path); err != nil {
+			return "", bundle, fmt.Errorf("add %s: %w", shader.path, err)
+		}
+	}
+	manifest.VKShaders = len(sources.vkShaders)
 	if len(sources.ini) > 0 {
 		if err := addZipText(archive, "d3dx.ini", infra.AnonymizeLogText(string(sources.ini))); err != nil {
 			return "", bundle, err
@@ -531,6 +617,12 @@ type diagnosticsManifest struct {
 	SpikeLog        *diagnosticsManifestLog   `json:"spikeLog,omitempty"`
 	Dumps           []diagnosticsManifestFile `json:"dumps,omitempty"`
 	CrashEvents     int                       `json:"crashEvents"`
+	HashDumps       bool                      `json:"hashDumps,omitempty"`
+	HashDumpFiles   []diagnosticsManifestFile `json:"hashDumpFiles,omitempty"`
+	// The Omitted fields mark the hash dumps a bundle over its bound left out.
+	HashDumpsOmitted bool `json:"hashDumpsOmitted,omitempty"`
+	VKShaders        int  `json:"vkShaders,omitempty"`
+	VKShadersOmitted bool `json:"vkShadersOmitted,omitempty"`
 }
 
 type diagnosticsManifestLog struct {
@@ -539,9 +631,10 @@ type diagnosticsManifestLog struct {
 }
 
 type diagnosticsManifestFile struct {
-	Name     string `json:"name"`
-	Size     int64  `json:"size"`
-	Modified string `json:"modified"`
+	Name         string `json:"name"`
+	Size         int64  `json:"size"`
+	Modified     string `json:"modified"`
+	OmittedBytes int64  `json:"omittedBytes,omitempty"`
 }
 
 func diagnosticsManifestFor(key string, record diagnosticsRecord, sources diagnosticsSources) diagnosticsManifest {
@@ -554,6 +647,8 @@ func diagnosticsManifestFor(key string, record diagnosticsRecord, sources diagno
 		DeployedAt:  sources.runtime.DeployedAt,
 		D3D11SHA256: sources.dllSHA256, D3D11Size: sources.dllSize,
 		CrashEvents: sources.eventCount,
+		HashDumps:   record.HashDumps, HashDumpsOmitted: sources.hashDumpsOmitted,
+		VKShadersOmitted: sources.vkShadersOmitted,
 	}
 	if !record.LaunchedAt.IsZero() {
 		manifest.LaunchedAt = record.LaunchedAt.Format(time.RFC3339)

@@ -2902,6 +2902,8 @@
           "debugLocksDescription": "게임이 크래시 없이 멈출 때 교착 상태를 감지합니다. 게임이 약간 느려질 수 있습니다.",
           "frameTimes": "프레임 시간 기록",
           "frameTimesDescription": "느린 프레임의 소요 시간 내역과 5초 단위 프레임 시간 통계를 기록합니다. 끊김이나 입력 지연을 진단할 때 사용합니다. 지원하는 런타임이 필요합니다.",
+          "hashDumps": "DirectX 12·Vulkan 해시 덤프",
+          "hashDumpsDescription": "DirectX 12나 Vulkan 게임에서 셰이더·텍스처·버퍼 해시와 드로우 목록을 기록하고, 설치된 모드와 일치하는 해시 수를 보고합니다. 모드가 적용되지 않을 때 사용합니다. 게임이 느려지며 지원하는 런타임이 필요합니다.",
           "alwaysOn": "로깅 모드에서는 버퍼 없는 로깅과 크래시 덤프가 항상 켜집니다.",
           "reportTitle": "라이브러리 문제 신고",
           "reportDescription": "수집한 로그를 XXMI 라이브러리 분류의 신고와 함께 보냅니다. 로그의 PC 사용자 이름은 익명화됩니다.",

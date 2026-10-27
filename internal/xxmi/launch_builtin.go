@@ -810,6 +810,12 @@ func rendererSwitch(key string, cfg ImporterConfig) string {
 	return ""
 }
 
+// rendererBeyondD3D11 reports whether the importer's game is left to pick its renderer, or asked for DirectX 12,
+// so it may render with DirectX 12 or Vulkan.
+func rendererBeyondD3D11(key string, cfg ImporterConfig) bool {
+	return cfg.SkipD3D11Switch && (key == "WWMI" || key == "EFMI" || key == "ZZMI")
+}
+
 // wwmiResourceTierArgument returns the resource quality argument Wuthering Waves needs to load, or ""
 // when the launch does not pass one. Launch options that already name a quality are left alone.
 func wwmiResourceTierArgument(key string, cfg ImporterConfig) string {
