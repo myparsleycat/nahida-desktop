@@ -158,7 +158,7 @@ func (x *XXMI) CollectDiagnostics(
 	if err != nil {
 		return bundle, err
 	}
-	if sources.log == nil && len(sources.dumps) == 0 {
+	if sources.log == nil && len(sources.dumps) == 0 && len(sources.hashDumps) == 0 && len(sources.vkShaders) == 0 {
 		return bundle, errors.New(errDiagnosticsEmpty)
 	}
 
@@ -345,7 +345,9 @@ func writeDiagnosticsBundle(
 
 	tail := int64(diagnosticsLogTail)
 	for {
-		temporary, bundle, err := writeDiagnosticsZip(ctx, filepath.Dir(destination), key, record, sources, tail)
+		temporary, bundle, err := writeDiagnosticsZip(
+			ctx, filepath.Dir(destination), key, record, sources, tail, maxBytes,
+		)
 		if err != nil {
 			return DiagnosticsBundle{}, err
 		}
@@ -382,7 +384,7 @@ func writeDiagnosticsZip(
 	folder, key string,
 	record diagnosticsRecord,
 	sources diagnosticsSources,
-	tail int64,
+	tail, maxBytes int64,
 ) (_ string, bundle DiagnosticsBundle, returnErr error) {
 	file, err := os.CreateTemp(folder, key+"-*.zip.tmp")
 	if err != nil {
@@ -456,6 +458,19 @@ func writeDiagnosticsZip(
 		})
 	}
 	for _, shader := range sources.vkShaders {
+		// A zip already over its bound is written again without the shaders, so the rest are not copied.
+		if err := archive.Flush(); err != nil {
+			return "", bundle, err
+		}
+		written, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return "", bundle, err
+		}
+		if written > maxBytes {
+			break
+		}
+		manifest.VKShaders++
+
 		name := "hash-dumps/" + diagnosticsVKShadersFolder + "/" + filepath.Base(shader.path)
 		entry, err := archive.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: shader.modified})
 		if err != nil {
@@ -465,7 +480,6 @@ func writeDiagnosticsZip(
 			return "", bundle, fmt.Errorf("add %s: %w", shader.path, err)
 		}
 	}
-	manifest.VKShaders = len(sources.vkShaders)
 	if len(sources.ini) > 0 {
 		if err := addZipText(archive, "d3dx.ini", infra.AnonymizeLogText(string(sources.ini))); err != nil {
 			return "", bundle, err
