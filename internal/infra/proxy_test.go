@@ -576,3 +576,42 @@ func TestProxyRelayCloseTerminatesBothTunnelEnds(t *testing.T) {
 		t.Fatal("downstream tunnel remained open")
 	}
 }
+
+func TestProxyRelayRecordsUpstreamFailuresOnly(t *testing.T) {
+	relay, err := StartProxyRelay(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = relay.Close() }()
+	relay.dial = func(ctx context.Context, _, address string) (net.Conn, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: err}
+		}
+		host, _, _ := net.SplitHostPort(address)
+		return nil, &net.OpError{
+			Op:  "dial",
+			Net: "tcp",
+			Err: &net.DNSError{Err: "no such host", Name: host, IsNotFound: true},
+		}
+	}
+	connect := func(ctx context.Context, host string) {
+		request := httptest.NewRequestWithContext(ctx, http.MethodConnect, host+":443", nil)
+		relay.ServeHTTP(httptest.NewRecorder(), request)
+	}
+
+	started := time.Now()
+	for range proxyFailureHistory + 2 {
+		connect(context.Background(), "challenges.cloudflare.com")
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	connect(cancelled, "abandoned.example")
+
+	got := relay.FailuresSince(started)
+	want := []ProxyFailureSummary{
+		{Host: "challenges.cloudflare.com", Kind: "dns-not-found", Count: proxyFailureHistory},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("failures = %+v, want %+v", got, want)
+	}
+}

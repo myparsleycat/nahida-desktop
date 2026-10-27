@@ -76,7 +76,7 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		if stored == "" {
 			break
 		}
-		valid, merged, err := g.validateStoredRMCCookie(ctx, stored)
+		valid, session, err := g.validateStoredRMCCookie(ctx, stored)
 		_, latest, snapshotErr := g.cookieSnapshot(ctx)
 		if snapshotErr != nil {
 			call.err = snapshotErr
@@ -94,7 +94,9 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 			)
 			return
 		}
+		merged := session.cookie
 		if !valid {
+			g.reportCookieRejection(session.rejection, "reject-stored-cookie")
 			merged = ""
 		}
 		applied, err := g.updateCookie(ctx, revision, merged)
@@ -120,8 +122,12 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 	var validatedMu sync.Mutex
 	validatedCookies := make(map[string]string)
 	cookie, err := openLogin(ctx, func(vctx context.Context, candidate string) (bool, error) {
-		valid, merged, verr := g.validateCandidateRMCCookie(vctx, candidate)
+		valid, session, verr := g.validateCandidateRMCCookie(vctx, candidate)
+		if !valid && verr == nil {
+			g.reportCookieRejection(session.rejection, "reject-candidate-cookie")
+		}
 		if valid && verr == nil {
+			merged := session.cookie
 			if merged == "" {
 				merged = candidate
 			}
@@ -172,6 +178,18 @@ func (g *GameBanana) runLogin(ctx context.Context, call *loginCall, openLogin Op
 		return
 	}
 	call.cookie = merged
+}
+
+// reportCookieRejection records why GameBanana refused a session cookie. The
+// rejection is an expected answer, so the login flow continues; the log keeps
+// the response status and reason that the boolean result drops.
+func (g *GameBanana) reportCookieRejection(rejection error, stage string) {
+	if rejection == nil {
+		rejection = ErrAuthRequired
+	}
+	g.rejectionDiagnostic.Report(g.log, rejection, "GameBananaService.login", infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "login", Stage: stage,
+	})
 }
 
 func (g *GameBanana) warnLoginFailure(stage string, err error) {

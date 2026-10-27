@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ const (
 	gameBananaReadyWait      = 100 * time.Millisecond
 	gameBananaLogoutWait     = 15 * time.Second
 	gameBananaCleanupWait    = 5 * time.Second
+	gameBananaCookieNameCap  = 32
 )
 
 var gameBananaAuthCookieNames = []string{"rmc", "sess"}
@@ -61,6 +63,7 @@ type gameBananaLogin struct {
 	logoutWait     time.Duration
 	cleanupWait    time.Duration
 	pollDiagnostic infra.DiagnosticThrottle
+	proxyFailures  func(time.Time) []infra.ProxyFailureSummary
 	profile        loginWindow
 	window         loginWindow
 	cancel         context.CancelFunc
@@ -78,6 +81,33 @@ type gameBananaLogin struct {
 	call           *loginWindowResult
 	unsub          func()
 	readyUnsub     func()
+	stats          loginSessionStats
+}
+
+// loginSessionStats describes one login window session for the summary that is
+// logged when the session ends without a validated cookie.
+type loginSessionStats struct {
+	startedAt       time.Time
+	logoutElapsed   time.Duration
+	logoutRecovered bool
+	readyAt         time.Time
+	navigations     int
+	polls           int
+	pollErrors      int
+	cookieNames     map[string]struct{}
+	candidates      int
+	rejected        int
+	deleteFailed    bool
+}
+
+type loginSessionReport struct {
+	log      *infra.Log
+	fields   map[string]any
+	since    time.Time
+	failures func(time.Time) []infra.ProxyFailureSummary
+	// quiet marks a cancellation that observed no failure; it is logged only
+	// when the proxy saw upstream failures during the session.
+	quiet bool
 }
 
 func newGameBananaLogin() *gameBananaLogin {
@@ -88,6 +118,7 @@ func (l *gameBananaLogin) Configure(
 	app *application.App,
 	parent *Window,
 	log *infra.Log,
+	proxyFailures func(time.Time) []infra.ProxyFailureSummary,
 ) {
 	if l == nil {
 		return
@@ -96,6 +127,7 @@ func (l *gameBananaLogin) Configure(
 	l.app = app
 	l.parent = parent
 	l.log = log
+	l.proxyFailures = proxyFailures
 	if l.factory == nil {
 		l.factory = l.createNativeWindow
 	}
@@ -155,7 +187,10 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 
 		// Prefer the browser's server logout transition; a bounded local cookie
 		// cleanup can recover when that transition stalls.
-		if err := l.resetWebSession(ctx); err != nil {
+		started := time.Now()
+		logoutRecovered, err := l.resetWebSession(ctx)
+		logoutElapsed := time.Since(started)
+		if err != nil {
 			l.mu.Lock()
 			l.opening = false
 			l.mu.Unlock()
@@ -208,6 +243,11 @@ func (l *gameBananaLogin) Open(ctx context.Context, validate gamebanana.CookieVa
 		l.pollDiagnostic.Report(l.log, nil, "GameBananaLogin", infra.Diagnostic{})
 		l.result = ""
 		l.err = nil
+		l.stats = loginSessionStats{
+			startedAt:       started,
+			logoutElapsed:   logoutElapsed,
+			logoutRecovered: logoutRecovered,
+		}
 		l.opening = false
 		l.unsub = window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 			l.handleWindowClosing(window)
@@ -232,6 +272,18 @@ func (l *gameBananaLogin) handleNavigationCompleted(
 	ctx context.Context,
 	validate gamebanana.CookieValidator,
 ) {
+	l.mu.Lock()
+	if l.settled || l.closed || ctx.Err() != nil {
+		l.mu.Unlock()
+		return
+	}
+	l.stats.navigations++
+	ready := l.ready
+	l.mu.Unlock()
+	if ready {
+		return
+	}
+
 	timer := time.NewTimer(gameBananaReadyWait)
 	defer timer.Stop()
 	select {
@@ -245,11 +297,8 @@ func (l *gameBananaLogin) handleNavigationCompleted(
 		return
 	}
 	l.ready = true
+	l.stats.readyAt = time.Now()
 	window := l.window
-	if l.readyUnsub != nil {
-		l.readyUnsub()
-		l.readyUnsub = nil
-	}
 	l.mu.Unlock()
 	if window != nil {
 		go l.poll(ctx, validate)
@@ -264,13 +313,15 @@ func (l *gameBananaLogin) ClearCookies(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	l.Close()
-	if err := l.resetWebSession(ctx); err != nil {
+	if _, err := l.resetWebSession(ctx); err != nil {
 		return infra.WithCause(gamebanana.ErrLoginInitFailed, err)
 	}
 	return nil
 }
 
-func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
+// resetWebSession reports whether the local cookie fallback replaced a stalled
+// server logout.
+func (l *gameBananaLogin) resetWebSession(ctx context.Context) (bool, error) {
 	l.mu.Lock()
 	factory, profile, parent := l.logoutFactory, l.profile, l.parent
 	navigationWait, cleanupWait := l.logoutWait, l.cleanupWait
@@ -287,22 +338,22 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	if factory == nil {
 		if profile == nil {
-			return nil
+			return false, nil
 		}
-		return clearGameBananaCookies(ctx, profile)
+		return false, clearGameBananaCookies(ctx, profile)
 	}
 	started := time.Now()
 	stage := "create-logout-window"
 	window, err := factory()
 	if err != nil {
-		return infra.AnnotateError(err, infra.Diagnostic{Operation: "login", Stage: stage})
+		return false, infra.AnnotateError(err, infra.Diagnostic{Operation: "login", Stage: stage})
 	}
 	if window == nil {
-		return gamebanana.ErrAutoLoginUnsupported
+		return false, gamebanana.ErrAutoLoginUnsupported
 	}
 	defer window.Close()
 	completed := make(chan struct{})
@@ -339,7 +390,7 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 		closeCtx, closeCancel := context.WithTimeout(ctx, cleanupWait)
 		defer closeCancel()
 		window.Close()
-		return infra.AnnotateError(window.WaitClosed(closeCtx), infra.Diagnostic{
+		return false, infra.AnnotateError(window.WaitClosed(closeCtx), infra.Diagnostic{
 			Operation: "login",
 			Stage:     "close-logout-window",
 			Fields: map[string]any{
@@ -358,7 +409,7 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 	if ctx.Err() != nil {
 		fields["contextError"] = ctx.Err().Error()
 		fields["elapsedMs"] = time.Since(started).Milliseconds()
-		return infra.AnnotateError(original, infra.Diagnostic{Operation: "login", Stage: stage, Fields: fields})
+		return false, infra.AnnotateError(original, infra.Diagnostic{Operation: "login", Stage: stage, Fields: fields})
 	}
 	fields["fallbackAttempted"] = true
 	fallbackCtx, fallbackCancel := context.WithTimeout(ctx, cleanupWait)
@@ -387,10 +438,10 @@ func (l *gameBananaLogin) resetWebSession(ctx context.Context) error {
 		Causes:    []error{original},
 	}
 	if err != nil {
-		return infra.AnnotateError(err, diagnostic)
+		return false, infra.AnnotateError(err, diagnostic)
 	}
 	_ = infra.ReportError(l.log, original, "GameBananaLogin.recover", diagnostic)
-	return nil
+	return true, nil
 }
 
 func clearGameBananaCookies(ctx context.Context, window loginWindow) error {
@@ -430,8 +481,12 @@ func (l *gameBananaLogin) Close() {
 }
 
 func (l *gameBananaLogin) handleWindowClosing(window loginWindow) {
+	var report *loginSessionReport
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	defer func() {
+		l.mu.Unlock()
+		report.emit()
+	}()
 	if l.closed || l.window != window {
 		return
 	}
@@ -449,11 +504,14 @@ func (l *gameBananaLogin) handleWindowClosing(window loginWindow) {
 	}
 	if !l.settled {
 		l.settled = true
+		outcome := "user-closed"
 		if l.programmatic {
 			l.err = gamebanana.ErrAuthFailed
+			outcome = "closed-by-app"
 		} else {
 			l.err = gamebanana.ErrLoginCancelled
 		}
+		report = l.sessionReportLocked(window, outcome, nil)
 		l.finishLocked()
 	}
 	l.window = nil
@@ -482,6 +540,10 @@ func (l *gameBananaLogin) settle(window loginWindow, cookie string, err error) {
 	l.settled = true
 	l.result = cookie
 	l.err = err
+	var report *loginSessionReport
+	if err != nil {
+		report = l.sessionReportLocked(window, settleOutcome(err), err)
+	}
 	l.programmatic = true
 	l.window = nil
 	l.closed = true
@@ -498,9 +560,75 @@ func (l *gameBananaLogin) settle(window loginWindow, cookie string, err error) {
 	}
 	l.finishLocked()
 	l.mu.Unlock()
+	report.emit()
 	if window != nil {
 		window.Close()
 	}
+}
+
+func settleOutcome(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	default:
+		return "error"
+	}
+}
+
+func (l *gameBananaLogin) sessionReportLocked(window loginWindow, outcome string, err error) *loginSessionReport {
+	stats := l.stats
+	fields := map[string]any{
+		"operation":       "login",
+		"stage":           "session-summary",
+		"outcome":         outcome,
+		"elapsedMs":       time.Since(stats.startedAt).Milliseconds(),
+		"logoutElapsedMs": stats.logoutElapsed.Milliseconds(),
+		"logoutRecovered": stats.logoutRecovered,
+		"navigationCount": stats.navigations,
+		"ready":           l.ready,
+		"pollCount":       stats.polls,
+		"pollErrorCount":  stats.pollErrors,
+		"cookieNames":     slices.Sorted(maps.Keys(stats.cookieNames)),
+		"candidateCount":  stats.candidates,
+		"rejectedCount":   stats.rejected,
+		"deleteFailed":    stats.deleteFailed,
+	}
+	if window != nil {
+		fields["windowID"] = window.ID()
+	}
+	if !stats.readyAt.IsZero() {
+		fields["readyMs"] = stats.readyAt.Sub(stats.startedAt).Milliseconds()
+	}
+	if outcome == "error" {
+		fields["errorCode"] = gamebanana.ClassifyLoginError(err).Error()
+	}
+	// closed-by-app comes only from Close, which shutdown and logout call.
+	cancelled := outcome == "user-closed" || outcome == "closed-by-app" || outcome == "cancelled"
+	return &loginSessionReport{
+		log:      l.log,
+		fields:   fields,
+		since:    stats.startedAt,
+		failures: l.proxyFailures,
+		quiet:    cancelled && stats.rejected == 0 && stats.pollErrors == 0 && !stats.deleteFailed,
+	}
+}
+
+// emit runs outside the login lock because the proxy summary takes the relay lock.
+func (r *loginSessionReport) emit() {
+	if r == nil || r.log == nil {
+		return
+	}
+	var failures []infra.ProxyFailureSummary
+	if r.failures != nil {
+		failures = r.failures(r.since)
+	}
+	if r.quiet && len(failures) == 0 {
+		return
+	}
+	r.fields["proxyFailures"] = failures
+	r.log.Warn(r.fields, "GameBananaLogin.session")
 }
 
 func (l *gameBananaLogin) poll(ctx context.Context, validate gamebanana.CookieValidator) {
@@ -545,6 +673,7 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 	l.mu.Lock()
 	if l.window == window && ctx.Err() == nil {
 		l.pollInFlight = false
+		l.recordPollLocked(cookies, err)
 	}
 	if l.settled || l.closed || ctx.Err() != nil {
 		l.mu.Unlock()
@@ -613,6 +742,12 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 		valid, verr := validate(ctx, candidate)
 		l.mu.Lock()
 		alreadyDone := l.settled || l.closed || ctx.Err() != nil
+		if !alreadyDone {
+			l.stats.candidates++
+			if !valid && verr == nil {
+				l.stats.rejected++
+			}
+		}
 		l.mu.Unlock()
 		if alreadyDone {
 			return false
@@ -639,12 +774,32 @@ func (l *gameBananaLogin) pollOnce(ctx context.Context, validate gamebanana.Cook
 		}
 		l.mu.Unlock()
 	} else if !errors.Is(err, context.Canceled) {
+		l.mu.Lock()
+		l.stats.deleteFailed = true
+		l.mu.Unlock()
 		diagnostic := l.cookieDiagnostic(ctx, "delete-invalid-cookie")
 		diagnostic.Fields["cleanupFailed"] = true
 		diagnostic.Fields["candidateCount"] = len(untried)
 		_ = infra.ReportError(l.log, err, "GameBananaLogin", diagnostic)
 	}
 	return true
+}
+
+// recordPollLocked keeps cookie names only; values are session secrets.
+func (l *gameBananaLogin) recordPollLocked(cookies []application.WebviewCookie, err error) {
+	l.stats.polls++
+	if err != nil {
+		l.stats.pollErrors++
+		return
+	}
+	if l.stats.cookieNames == nil {
+		l.stats.cookieNames = make(map[string]struct{})
+	}
+	for _, cookie := range cookies {
+		if cookie.Name != "" && len(l.stats.cookieNames) < gameBananaCookieNameCap {
+			l.stats.cookieNames[cookie.Name] = struct{}{}
+		}
+	}
 }
 
 func (l *gameBananaLogin) cookieDiagnostic(ctx context.Context, stage string) infra.Diagnostic {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -29,4 +30,13 @@ func (rt *runtime) initProxy(ctx context.Context, configureBrowserArguments func
 	args := windowsApplicationOptions().AdditionalBrowserArgs
 	args = append(args, relay.BrowserArguments()...)
 	return configureBrowserArguments(args)
+}
+
+// proxyFailureSource binds the relay now: Close clears rt.proxyRelay while
+// window callbacks may still be reading failures on another goroutine.
+func (rt *runtime) proxyFailureSource() func(time.Time) []infra.ProxyFailureSummary {
+	if rt.proxyRelay == nil {
+		return nil
+	}
+	return rt.proxyRelay.FailuresSince
 }
