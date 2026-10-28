@@ -30,6 +30,7 @@ type modelViewerDirectMesh struct {
 	textureAssignments     []modelViewerDirectTextureAssignment
 	positionAssignments    []modelViewerDirectPositionAssignment
 	textureAuthored        bool
+	textureDumpInferred    bool
 	textureDefaultFile     string
 	nonDiffuseTextureFiles []string
 	slotTextureCandidates  []modelViewerDirectTextureAssignment

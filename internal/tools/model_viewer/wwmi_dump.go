@@ -39,13 +39,15 @@ var (
 )
 
 type wwmiTextureHint struct {
-	SRGB           bool
-	ColorSpace     string
-	Area           int
-	Bytes          int64
-	IsLikelyFlat   bool
-	IsLikelyNormal bool
-	IsLikelyPacked bool
+	SRGB                 bool
+	ColorSpace           string
+	Area                 int
+	Bytes                int64
+	IsLikelyFlat         bool
+	IsLikelyNormal       bool
+	IsLikelyPacked       bool
+	Analyzed             bool
+	PrimaryColorFraction float64
 }
 
 type wwmiDumpCandidate struct {
@@ -57,12 +59,13 @@ type wwmiDumpCandidate struct {
 }
 
 type wwmiRGBAAnalysis struct {
-	channelRangeMax uint32
-	luminanceStdDev float64
-	meanR           float64
-	meanG           float64
-	meanB           float64
-	blueDominance   float64
+	channelRangeMax      uint32
+	luminanceStdDev      float64
+	meanR                float64
+	meanG                float64
+	meanB                float64
+	blueDominance        float64
+	primaryColorFraction float64
 }
 
 func isLikelyWwmiDiffuse(hint wwmiTextureHint) bool {
@@ -282,6 +285,7 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		})
 		mesh.textureAssignments = kept
 		mesh.textureDefaultFile = dumpPick
+		mesh.textureDumpInferred = true
 	}
 }
 
@@ -435,7 +439,9 @@ func hintFromAnalysis(analysis wwmiRGBAAnalysis, colorSpace string, area int, si
 			analysis.blueDominance >= 0.12 &&
 			analysis.channelRangeMax <= 72 &&
 			analysis.luminanceStdDev <= 0.12,
-		IsLikelyPacked: packed,
+		IsLikelyPacked:       packed,
+		Analyzed:             true,
+		PrimaryColorFraction: analysis.primaryColorFraction,
 	}
 }
 
@@ -467,6 +473,7 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 	var minR, minG, minB byte = 255, 255, 255
 	var maxR, maxG, maxB byte
 	sampleCount := 0
+	var primaryCounts [3]int
 	sumR, sumG, sumB := 0.0, 0.0, 0.0
 	luminanceSum, luminanceSquareSum := 0.0, 0.0
 	stride := int(math.Floor(math.Sqrt(float64(width*height) / 4096.0)))
@@ -477,6 +484,14 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 		for x := 0; x < width; x += stride {
 			offset := (y*width + x) * 4
 			r, g, b := data[offset], data[offset+1], data[offset+2]
+			switch {
+			case r >= 243 && g <= 12 && b <= 12:
+				primaryCounts[0]++
+			case g >= 243 && r <= 12 && b <= 12:
+				primaryCounts[1]++
+			case b >= 243 && r <= 12 && g <= 12:
+				primaryCounts[2]++
+			}
 			if r < minR {
 				minR = r
 			}
@@ -531,6 +546,11 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 		meanG:           meanG,
 		meanB:           meanB,
 		blueDominance:   meanB - maxFloat(meanR, meanG),
+		primaryColorFraction: float64(
+			max(primaryCounts[0], primaryCounts[1], primaryCounts[2]),
+		) / float64(
+			max(1, sampleCount),
+		),
 	}
 }
 

@@ -413,6 +413,7 @@ func (t *Service) prepareModelViewerGeometry(
 		resources []modelViewerResource
 	}
 	built := make([]builtUnit, len(units))
+	var declaredResourcePaths []string
 	for unitIndex, unit := range units {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -435,6 +436,14 @@ func (t *Service) prepareModelViewerGeometry(
 			sections,
 			collectModelViewerResources(sections),
 		)
+		for _, resource := range resources {
+			if resource.Filename != "" {
+				declaredResourcePaths = append(
+					declaredResourcePaths,
+					filepath.Join(folder, filepath.FromSlash(slashPath(resource.Filename))),
+				)
+			}
+		}
 		prepared.scans = append(prepared.scans, modelViewerGeometryScan{sections: sections, resources: resources})
 		stageStartedAt = time.Now()
 		referenced := collectModelViewerReferencedResources(sections)
@@ -469,6 +478,13 @@ func (t *Service) prepareModelViewerGeometry(
 		)
 		if buildErr != nil {
 			return nil, buildErr
+		}
+		if slices.ContainsFunc(unit.members, func(member int) bool {
+			return detectModelViewerLayout(parsedINIs[member].Sections, resources) == "wwmi"
+		}) {
+			if err := recoverWwmiDumpTextures(ctx, folder, meshes, resources, declaredResourcePaths); err != nil {
+				return nil, err
+			}
 		}
 		attributeModelViewerDrawSources(meshes, built[unitIndex].scoped, iniPaths)
 		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], folder)

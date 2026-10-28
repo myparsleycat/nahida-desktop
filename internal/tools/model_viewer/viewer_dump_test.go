@@ -342,6 +342,139 @@ this = ResourceTexture0
 	}
 }
 
+func TestLoadModViewerRecoversUnreferencedWWMIDiffuse(t *testing.T) {
+	const (
+		maskFile  = "Textures/Components-0-1-2 t=11111111.dds"
+		colorFile = "Textures/Components-0-1-2 t=22222222.dds"
+	)
+	for _, tc := range []struct {
+		name             string
+		binding          string
+		candidate        string
+		red              bool
+		recolor          bool
+		nonWWMI          bool
+		invalidCandidate bool
+		helperCandidate  bool
+		helperINI        string
+		helperNamespace  string
+		variants         bool
+		want             string
+	}{
+		{name: "green channel mask", candidate: colorFile, want: colorFile},
+		{name: "transparent red channel mask", candidate: colorFile, red: true, want: colorFile},
+		{name: "authored diffuse", binding: `Resource\RabbitFX\Diffuse = ref ResourceTexture0`, candidate: colorFile, want: maskFile},
+		{name: "explicit slot", binding: "ps-t0 = ResourceTexture0", candidate: colorFile, want: maskFile},
+		{name: "conditional diffuse", binding: "if $skin == 0\nResource\\RabbitFX\\Diffuse = ref ResourceTexture0\nelse\nResource\\RabbitFX\\Diffuse = ref ResourceTexture1\nendif", candidate: colorFile, variants: true, want: maskFile},
+		{name: "shaded red diffuse", candidate: colorFile, recolor: true, want: maskFile},
+		{name: "no alternative", want: maskFile},
+		{name: "different component", candidate: "Textures/Components-4 t=22222222.dds", want: maskFile},
+		{name: "nested mod", candidate: "Textures/Other/Components-0 t=22222222.dds", want: maskFile},
+		{name: "alternate variant", candidate: "Textures/Components-0 t=22222222 B.dds", want: maskFile},
+		{name: "invalid DDS", candidate: colorFile, invalidCandidate: true, want: maskFile},
+		{name: "declared helper", binding: "ps-t1 = ResourceBodyLightMap", candidate: colorFile, helperCandidate: true, want: maskFile},
+		{name: "helper in separate INI", candidate: colorFile, helperCandidate: true, helperINI: "helper.ini", want: maskFile},
+		{name: "helper in another namespace", candidate: colorFile, helperCandidate: true, helperINI: "helper.ini", helperNamespace: "Other", want: maskFile},
+		{name: "helper in nested INI", candidate: colorFile, helperCandidate: true, helperINI: "Parts/helper.ini", want: maskFile},
+		{name: "non WWMI", candidate: colorFile, nonWWMI: true, want: maskFile},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			maskPixels := make([]color.NRGBA, 16*16)
+			colorPixels := make([]color.NRGBA, 16*16)
+			for i := range maskPixels {
+				shade := uint8(i % 128)
+				maskPixels[i] = color.NRGBA{G: 255, A: 255}
+				if tc.red {
+					maskPixels[i] = color.NRGBA{R: 255}
+				}
+				if i%4 == 0 || tc.recolor {
+					maskPixels[i] = color.NRGBA{R: 128 + shade, G: 10, B: 10, A: 255}
+				}
+				colorPixels[i] = color.NRGBA{R: 100 + shade, G: 110 + shade, B: 120 + shade, A: 255}
+			}
+			writeTextureFile(t, dir, maskFile, encodeWwmiUncompressedDDS(16, 16, maskPixels))
+			if tc.candidate != "" {
+				candidateBytes := encodeWwmiUncompressedDDS(16, 16, colorPixels)
+				if tc.invalidCandidate {
+					candidateBytes = []byte("invalid DDS")
+				}
+				writeTextureFile(t, dir, tc.candidate, candidateBytes)
+			}
+			variantFile := maskFile
+			if tc.variants {
+				variantFile = "Textures/Components-0-1-2 t=33333333.dds"
+				writeTextureFile(t, dir, variantFile, encodeWwmiUncompressedDDS(16, 16, colorPixels))
+			}
+			helperResource := ""
+			if tc.helperCandidate {
+				helperResource = "[ResourceBodyLightMap]\nfilename = textures/./" + filepath.Base(colorFile)
+			}
+			if tc.helperINI != "" {
+				helperPath := filepath.Join(dir, filepath.FromSlash(tc.helperINI))
+				relative, err := filepath.Rel(
+					filepath.Dir(helperPath),
+					filepath.Join(dir, filepath.FromSlash(colorFile)),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(filepath.Dir(helperPath), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(
+					helperPath,
+					[]byte(
+						fmt.Sprintf(
+							"namespace = %s\n[ResourceBodyLightMap]\nfilename = %s\n",
+							tc.helperNamespace,
+							relative,
+						),
+					),
+					0o600,
+				); err != nil {
+					t.Fatal(err)
+				}
+				helperResource = ""
+			}
+			marker := "global $required_wwmi_version = 0.77"
+			if tc.nonWWMI {
+				marker = ""
+			}
+			result := loadViewerMod(t, dir, fmt.Sprintf(`[Constants]
+%s
+global persist $skin = 0
+[TextureOverrideComponent0]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+%s
+drawindexed = 3, 0, 0
+%s
+[ResourceTexture0]
+filename = %s
+[ResourceTexture1]
+filename = %s
+; [ResourceUnusedColor]
+; filename = %s
+%s
+`, marker, tc.binding, viewerBodyResources, maskFile, variantFile, colorFile, helperResource))
+			if len(result.Meshes) != 1 {
+				t.Fatalf("meshes = %d, want 1", len(result.Meshes))
+			}
+			mesh := result.Meshes[0]
+			if key := "diffuse::" + tc.want; texKey(mesh) != key {
+				t.Fatalf("diffuse = %q, want %q", texKey(mesh), key)
+			}
+			if tc.variants {
+				if len(mesh.TextureVariants) != 2 || mesh.TextureVariants[1].TexKey != "diffuse::"+variantFile {
+					t.Fatalf("texture variants = %+v, want both conditional bindings", mesh.TextureVariants)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadModViewerDoesNotBindWWMIDumpOntoNonComponentMesh(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
