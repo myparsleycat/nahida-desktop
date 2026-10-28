@@ -840,6 +840,43 @@ func TestLogLevelReachesINI(t *testing.T) {
 	}
 }
 
+func TestDesktopChannelFollowsDLLSupport(t *testing.T) {
+	t.Parallel()
+	cfg := ImporterConfig{Migoto: MigotoOptions{InspectKey: "ctrl alt I"}}
+	original := []byte("[Desktop]\nchannel = 1\ninspect_key = VK_F9\n")
+
+	served, _ := importerINIInput{key: "GIMI", support: migotoSupport{desktopChannel: true}, cfg: cfg}.render(nil)
+	data := string(served.Bytes())
+	for _, want := range []string{"channel = 1", "inspect_key = ctrl alt I"} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("INI is missing %q: %s", want, data)
+		}
+	}
+
+	for name, key := range map[string]string{"empty": "", "whitespace": " \t"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			clearedConfig := cfg
+			clearedConfig.Migoto.InspectKey = key
+			cleared, _ := importerINIInput{
+				key: "GIMI", support: migotoSupport{desktopChannel: true}, cfg: clearedConfig,
+			}.render(original)
+			if len(cleared.optionIndexes("Desktop", "inspect_key")) != 0 {
+				t.Fatalf("INI kept the cleared inspect key: %s", cleared.Bytes())
+			}
+			if !strings.Contains(string(cleared.Bytes()), "channel = 1") {
+				t.Fatalf("clearing the inspect key disabled the desktop channel: %s", cleared.Bytes())
+			}
+		})
+	}
+
+	// A DLL without the channel warns about the options, so a switch to one takes them out.
+	unserved, _ := importerINIInput{key: "GIMI", cfg: cfg}.render(original)
+	if data := string(unserved.Bytes()); strings.Contains(data, "channel") || strings.Contains(data, "inspect_key") {
+		t.Fatalf("INI kept the desktop channel options: %s", data)
+	}
+}
+
 func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

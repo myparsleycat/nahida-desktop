@@ -69,6 +69,9 @@ type libsProviderSpec struct {
 	// shader sampler slots (ps-s#, cs-s#); empty when no release does. An older build warns on the overlay
 	// and drops those lines, so the feature counts as present only from this release on.
 	shaderSamplerSlotsSince string
+	// desktopChannelSince is the first provider release whose d3d11.dll serves the desktop channel of
+	// internal/gamelink and reads the [Desktop] section; empty when no release does.
+	desktopChannelSince string
 	// legacyCompanions are the libraries a release without a dependency manifest, or with one of a newer schema
 	// than this build reads, may ship for its d3d11.dll to load, as releases did before the manifest.
 	legacyCompanions []string
@@ -498,10 +501,11 @@ func (x *XXMI) dllFeatureSupport(
 type DLLFeatures struct {
 	ShaderSamplerSlots bool
 	DX12               bool
+	DesktopChannel     bool
 }
 
-// customDLLFeaturesEnv lists, comma-separated, the features a user-provided d3d11.dll has: "sampler_slots"
-// and "dx12". It stands in for the provider release check when a provider build runs before its release;
+// customDLLFeaturesEnv lists, comma-separated, the features a user-provided d3d11.dll has: "sampler_slots",
+// "dx12", and "desktop_channel". It stands in for the provider release check when a provider build runs before its release;
 // nothing reads the DLL itself.
 const customDLLFeaturesEnv = "NHD_CUSTOM_DLL_FEATURES"
 
@@ -522,7 +526,7 @@ func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFea
 		return DLLFeatures{}, nil
 	}
 	features := DLLFeatures{DX12: spec.dx12}
-	if spec.shaderSamplerSlotsSince == "" {
+	if spec.shaderSamplerSlotsSince == "" && spec.desktopChannelSince == "" {
 		return features, nil
 	}
 	// The release the next deployment writes decides, as the deployment resolves it: a pin to an older release
@@ -535,8 +539,13 @@ func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFea
 	if err != nil {
 		return DLLFeatures{}, err
 	}
-	features.ShaderSamplerSlots = providerVersionAtLeast(spec, version, spec.shaderSamplerSlotsSince)
+	features.ShaderSamplerSlots = providerFeatureAt(spec, version, spec.shaderSamplerSlotsSince)
+	features.DesktopChannel = providerFeatureAt(spec, version, spec.desktopChannelSince)
 	return features, nil
+}
+
+func providerFeatureAt(spec libsProviderSpec, version, since string) bool {
+	return since != "" && providerVersionAtLeast(spec, version, since)
 }
 
 func customDLLFeatures(declared string) DLLFeatures {
@@ -547,6 +556,8 @@ func customDLLFeatures(declared string) DLLFeatures {
 			features.ShaderSamplerSlots = true
 		case "dx12":
 			features.DX12 = true
+		case "desktop_channel":
+			features.DesktopChannel = true
 		}
 	}
 	return features

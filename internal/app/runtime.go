@@ -17,6 +17,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/feedback"
 	"nahida.live/desktop/internal/gamebanana"
+	"nahida.live/desktop/internal/gamelink"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
@@ -54,6 +55,7 @@ type runtime struct {
 	gamebanana        *gamebanana.GameBanana
 	mod               *mod.Mod
 	modRuntime        *modruntime.Manager
+	gameLink          *gamelink.Manager
 	xxmi              *xxmi.XXMI
 	reshade           *reshade.ReShade
 	tools             *tools.Tools
@@ -180,6 +182,7 @@ func newRuntime() *runtime {
 		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
 		ReShade:  reshadeService,
 	})
+	gameLink := gamelink.NewManager(gamelink.Options{Log: log, Processes: xxmiService})
 	dialog := platform.NewDialog(newWailsDialogBackend())
 	login := newGameBananaLogin()
 	gameBananaService := gamebanana.NewWithOptions(gamebanana.Options{
@@ -242,6 +245,7 @@ func newRuntime() *runtime {
 		gamebanana: gameBananaService,
 		mod:        modService,
 		modRuntime: modRuntime,
+		gameLink:   gameLink,
 		xxmi:       xxmiService,
 		reshade:    reshadeService,
 		tools: tools.NewWithOptions(tools.Options{
@@ -259,6 +263,7 @@ func newRuntime() *runtime {
 			GitHub:                 githubClient,
 			Mod:                    modService,
 			Runtimes:               modRuntime,
+			GameLink:               gameLink,
 			Elevated:               elevatedFiles,
 			Notify: func(title, body string) error {
 				return notifier.SendNotification(notifications.NotificationOptions{
@@ -311,6 +316,7 @@ func newRuntime() *runtime {
 		}
 	})
 	rt.xxmi.UseModRuntimeUpdate(rt.modRuntime.Refresh)
+	rt.xxmi.UseRunningChanged(rt.gameLink.Wake)
 	rt.xxmi.UseImporterMaintenance(func(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
 		resumeTools, err := rt.tools.SuspendImporterWatchers(ctx)
 		if err != nil {

@@ -79,7 +79,9 @@ type MigotoOptions struct {
 	// InputDisableMode selects what turning Input off disables: "Mods" or "All".
 	InputDisableMode string `json:"inputDisableMode"`
 	ToggleInput      string `json:"toggleInput"`
-	UnsafeMode       bool   `json:"unsafeMode"`
+	// InspectKey starts a hash inspector pick in game; empty leaves it to the desktop.
+	InspectKey string `json:"inspectKey"`
+	UnsafeMode bool   `json:"unsafeMode"`
 }
 
 type IniOptimizerOptions struct {
@@ -224,6 +226,7 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 		Migoto: MigotoOptions{
 			LogLevel: "Disabled", EnforceRendering: true, MuteWarnings: true, ClearUnknownSettings: true,
 			Input: true, InputDisableMode: "Mods", ToggleInput: "ctrl alt shift VK_END",
+			InspectKey: "ctrl alt I",
 		},
 		AutoUpdateModRuntimes: true,
 		LaunchCount:           -1,

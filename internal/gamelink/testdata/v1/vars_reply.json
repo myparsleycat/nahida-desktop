@@ -1,0 +1,1 @@
+{"type": "VarsReply", "requestId": 2, "message": {"values": [{"name": "$\\Mods\\Foo\\foo.ini\\enabled", "exists": true, "value": 1}, {"name": "$\\global\\missing", "exists": false, "value": 0}]}}

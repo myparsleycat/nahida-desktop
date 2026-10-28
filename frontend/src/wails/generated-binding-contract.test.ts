@@ -10,6 +10,7 @@ describe("generated Wails binding contract", () => {
             "bindings/nahida.live/desktop/internal/tools/fix_inspection/models.ts",
             "bindings/nahida.live/desktop/internal/tools/fix_tool/models.ts",
             "bindings/nahida.live/desktop/internal/tools/fixer_4001/models.ts",
+            "bindings/nahida.live/desktop/internal/tools/hash_inspector/models.ts",
             "bindings/nahida.live/desktop/internal/tools/mod_bisect/models.ts",
             "bindings/nahida.live/desktop/internal/tools/model_viewer/models.ts",
             "bindings/nahida.live/desktop/internal/tools/modmesh/models.ts",

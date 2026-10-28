@@ -69,6 +69,7 @@ const config = {
     input: true,
     inputDisableMode: "Mods",
     toggleInput: "ctrl alt shift VK_END",
+    inspectKey: "ctrl alt I",
     unsafeMode: false,
   },
   runPreLaunch: { enabled: false, command: "", wait: false },

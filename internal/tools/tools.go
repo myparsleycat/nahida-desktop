@@ -16,6 +16,7 @@ import (
 	fixinspection "nahida.live/desktop/internal/tools/fix_inspection"
 	fixtool "nahida.live/desktop/internal/tools/fix_tool"
 	fixer4001 "nahida.live/desktop/internal/tools/fixer_4001"
+	hashinspector "nahida.live/desktop/internal/tools/hash_inspector"
 	liquidemitter "nahida.live/desktop/internal/tools/liquid_emitter"
 	"nahida.live/desktop/internal/tools/menumaker"
 	modbisect "nahida.live/desktop/internal/tools/mod_bisect"
@@ -65,6 +66,8 @@ type Options struct {
 	Elevated elevated.FileGateway
 	// Runtimes installs the global mods the tools depend on; nil gives each tool its own.
 	Runtimes *modruntime.Manager
+	// GameLink is the desktop channel to running games; nil leaves the hash inspector unsupported.
+	GameLink hashinspector.Link
 }
 
 // ModRuntimes lists the global mods the tools install through modruntime.
@@ -84,6 +87,7 @@ type Tools struct {
 	fixInspection *fixinspection.Service
 	fixTool       *fixtool.Service
 	fixer4001     *fixer4001.Service
+	hashInspector *hashinspector.Service
 	liquidEmitter *liquidemitter.Service
 	menuMaker     *menumaker.MenuMaker
 	modelViewer   *modelviewer.Service
@@ -136,8 +140,10 @@ func NewWithOptions(opts Options) *Tools {
 	})
 	toggleViewerSettings, _ := opts.Settings.(toggleviewer.Settings)
 	var toggleViewerImporters toggleviewer.Importers
+	var hashInspectorImporters hashinspector.Importers
 	if opts.XXMI != nil {
 		toggleViewerImporters = opts.XXMI
+		hashInspectorImporters = opts.XXMI
 	}
 	return &Tools{
 		modFilesChanged: modFilesChanged,
@@ -168,6 +174,12 @@ func NewWithOptions(opts Options) *Tools {
 			PEDiversifier: opts.PEDiversifier,
 			GitHub:        opts.GitHub,
 			Elevated:      opts.Elevated,
+		}),
+		hashInspector: hashinspector.NewWithOptions(hashinspector.Options{
+			Log:       opts.Log,
+			EventEmit: opts.EventEmit,
+			Link:      opts.GameLink,
+			Importers: hashInspectorImporters,
 		}),
 		liquidEmitter: liquidemitter.NewWithOptions(liquidemitter.Options{
 			Log:      opts.Log,
@@ -237,6 +249,7 @@ func (t *Tools) UseClient(client *db.Client) {
 func (t *Tools) UseAppData(data *appdata.Store) {
 	t.bisect.UseAppData(data)
 	t.fixer4001.UseAppData(data)
+	t.hashInspector.UseAppData(data)
 	t.texture.UseAppData(data)
 	t.touchProfile.UseAppData(data)
 	t.wuwa.UseAppData(data)
@@ -255,5 +268,6 @@ func (t *Tools) ServiceShutdown() error {
 		t.shutdownModelViewer(),
 		t.shutdownPersistWatcher(),
 		t.shutdownToggleViewer(),
+		t.shutdownHashInspector(),
 	)
 }

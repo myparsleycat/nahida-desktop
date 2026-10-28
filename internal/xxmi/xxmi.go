@@ -159,6 +159,7 @@ type XXMI struct {
 	runningWake         chan struct{}
 	processSnapshot     func(context.Context) (map[string]bool, error)
 	importersChanged    func(context.Context)
+	runningChanged      func()
 	dllChanged          func(context.Context, string)
 	modRuntimeUpdate    func(context.Context, string) error
 	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
@@ -238,6 +239,15 @@ func (x *XXMI) UseClient(client *db.Client) {
 func (x *XXMI) UseImportersChanged(changed func(context.Context)) {
 	x.mu.Lock()
 	x.importersChanged = changed
+	x.mu.Unlock()
+}
+
+// UseRunningChanged registers the hook the running-games watcher calls after a game starts or stops.
+//
+//wails:ignore
+func (x *XXMI) UseRunningChanged(changed func()) {
+	x.mu.Lock()
+	x.runningChanged = changed
 	x.mu.Unlock()
 }
 

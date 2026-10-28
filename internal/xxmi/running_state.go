@@ -105,6 +105,12 @@ func (x *XXMI) watchRunning(ctx context.Context, read func(context.Context) (map
 				if x.eventEmit != nil {
 					x.eventEmit("xxmi:running-changed", current)
 				}
+				x.mu.RLock()
+				changed := x.runningChanged
+				x.mu.RUnlock()
+				if changed != nil {
+					changed()
+				}
 			}
 
 			// Nothing is watched in external launcher mode or without enabled importers. Mode switches and

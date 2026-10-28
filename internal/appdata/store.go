@@ -16,6 +16,7 @@ const (
 	DatabaseFile     = "data.db"
 	LogsDir          = "logs"
 	ToolsDir         = "tools"
+	HashInspectorDir = ToolsDir + string(filepath.Separator) + "hash-inspector"
 	ModBisectDir     = "mod-bisect"
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"

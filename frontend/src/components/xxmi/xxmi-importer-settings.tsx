@@ -1290,6 +1290,24 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                         }
                       />
                     </div>
+                    <div className="space-y-1.5">
+                      <SectionRow
+                        title={t("page.setting.xxmi.builtin.inspectKey")}
+                        description={t("page.setting.xxmi.builtin.inspectKeyDescription")}
+                      />
+                      <Input
+                        aria-label={t("page.setting.xxmi.builtin.inspectKey")}
+                        className="font-mono"
+                        spellCheck={false}
+                        value={config.migoto.inspectKey}
+                        onChange={(event) =>
+                          setConfig({
+                            ...config,
+                            migoto: { ...config.migoto, inspectKey: event.target.value },
+                          })
+                        }
+                      />
+                    </div>
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.unsafeMode")}
                       description={

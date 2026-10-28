@@ -1,0 +1,1 @@
+{"type": "GetVars", "requestId": 2, "message": {"names": ["$\\Mods\\Foo\\foo.ini\\enabled", "$\\global\\missing"]}}

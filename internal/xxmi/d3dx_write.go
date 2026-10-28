@@ -23,9 +23,10 @@ import (
 const migotoLogLevelVersion = "v1.1.7"
 
 // migotoSupport names the options the deployed d3d11.dll reads: the [System] options a launch sets, which every
-// XXMI libraries release has, and the ones migotoLogLevelVersion names.
+// XXMI libraries release has, the ones migotoLogLevelVersion names, and the [Desktop] section of a provider
+// release with the desktop channel.
 type migotoSupport struct {
-	system, logLevel bool
+	system, logLevel, desktopChannel bool
 }
 
 // iniWrite is one option the importer settings write into d3dx.ini.
@@ -98,6 +99,13 @@ func (in importerINIInput) render(data []byte) (doc *iniDocument, lost bool) {
 		}
 		doc.SetOption(write.section, write.key, write.value, true)
 	}
+	// A DLL without the channel warns about options it does not know, so they leave with a provider switch.
+	if !in.support.desktopChannel {
+		doc.RemoveOption("Desktop", "channel")
+	}
+	if !in.support.desktopChannel || strings.TrimSpace(in.cfg.Migoto.InspectKey) == "" {
+		doc.RemoveOption("Desktop", "inspect_key")
+	}
 	if in.diagnostics != nil {
 		applyDiagnosticsINI(doc, *in.diagnostics, in.support.logLevel)
 	}
@@ -164,6 +172,12 @@ func settingsINIWrites(key string, cfg ImporterConfig, support migotoSupport) []
 	boolean("Logging", "show_warnings", migoto.MuteWarnings, "0", "1")
 	boolean("Hunting", "hunting", migoto.EnableHunting, "2", "0")
 	boolean("Hunting", "marking_actions", migoto.DumpShaders, "clipboard hlsl asm regex", "clipboard")
+	if support.desktopChannel {
+		set("Desktop", "channel", "1")
+		if key := strings.TrimSpace(migoto.InspectKey); key != "" {
+			set("Desktop", "inspect_key", key)
+		}
+	}
 	return writes
 }
 
@@ -205,6 +219,7 @@ func migotoINISupport(cfg ImporterConfig, libsVersion string) migotoSupport {
 			system: true,
 			logLevel: semver.IsValid("v"+libsVersion) &&
 				semver.Compare("v"+libsVersion, migotoLogLevelVersion) >= 0,
+			desktopChannel: deployedDesktopChannel(manifest),
 		}
 	}
 
@@ -230,7 +245,23 @@ func migotoINISupport(cfg ImporterConfig, libsVersion string) migotoSupport {
 	return migotoSupport{
 		system:   names("dll_initialization_delay"),
 		logLevel: cfg.Mode == RuntimeXXMI && names("log_level"),
+		desktopChannel: cfg.Mode == RuntimeXXMI &&
+			customDLLFeatures(os.Getenv(customDLLFeaturesEnv)).DesktopChannel,
 	}
+}
+
+// deployedDesktopChannel reports whether the provider d3d11.dll a deployment wrote serves the desktop channel.
+func deployedDesktopChannel(manifest runtimeManifest) bool {
+	overlay, version, ok := strings.Cut(manifest.Provider, "@")
+	if !ok {
+		return false
+	}
+	for _, spec := range libsProviders {
+		if spec.overlayPackage != "" && spec.overlayPackage == overlay {
+			return providerFeatureAt(spec, version, spec.desktopChannelSince)
+		}
+	}
+	return false
 }
 
 // updateLaunchINI writes the options this launch decides into the importer's d3dx.ini. providerINI is the

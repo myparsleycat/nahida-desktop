@@ -1,0 +1,1 @@
+{"type": "SetVars", "requestId": 3, "message": {"vars": [{"name": "$\\Mods\\Foo\\foo.ini\\enabled", "value": 0.5}]}}

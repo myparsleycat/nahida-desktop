@@ -150,6 +150,7 @@ func (rt *runtime) Close() error {
 	var err error
 	rt.githubRate.Close()
 	rt.startup.stop()
+	rt.gameLink.Shutdown()
 	rt.elevatedLifecycle.shutdown()
 	err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
 	rt.gameBananaLogin.Close()

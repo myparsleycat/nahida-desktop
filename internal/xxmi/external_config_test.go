@@ -188,7 +188,7 @@ func TestMapModernExternalLaunchSettings(t *testing.T) {
 			wantMode := map[string]string{"HOOK": "Hook", "DIRECT": "Inject", "SKIP": "Bypass"}[tc.mode]
 			wantMigoto := MigotoOptions{
 				LogLevel: "Info", EnforceRendering: true, MuteWarnings: true,
-				InputDisableMode: "All", ToggleInput: "VK_F9",
+				InputDisableMode: "All", ToggleInput: "VK_F9", InspectKey: "ctrl alt I",
 			}
 			if cfg.GameLaunch != tc.want || cfg.ProcessStartMethod != "Shell" || cfg.ProcessPriority != "AboveNormal" ||
 				cfg.WindowMode != "Exclusive Fullscreen" || cfg.CustomLaunch.Command != "custom-command" ||

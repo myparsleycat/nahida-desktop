@@ -1,5 +1,6 @@
 import FourThousandOneFixer from "@renderer/components/tools/4001-fixer";
 import BodyShapeTool from "@renderer/components/tools/body-shape/body-shape";
+import HashInspector from "@renderer/components/tools/hash-inspector/hash-inspector";
 import ModBisect from "@renderer/components/tools/mod-bisect";
 import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
@@ -77,6 +78,12 @@ const toolPages: ToolPage[] = [
     initials: "AT",
     beta: true,
     component: () => <TouchProfileTool />,
+  },
+  {
+    nameKey: "page.tools.hash_inspector.title",
+    initials: "HI",
+    beta: true,
+    component: () => <HashInspector />,
   },
 ];
 

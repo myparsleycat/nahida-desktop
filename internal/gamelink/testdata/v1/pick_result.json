@@ -1,0 +1,84 @@
+{
+  "type": "PickResult",
+  "requestId": 0,
+  "message": {
+    "captureId": 17,
+    "frame": 9002,
+    "trigger": 1,
+    "windowWidth": 1920,
+    "windowHeight": 1080,
+    "cursorX": 0.25,
+    "cursorY": 0.75,
+    "flags": 2,
+    "hitTotal": 3,
+    "hits": [
+      {"record": 3, "primitive": 120, "depth": 0.5, "flags": 0},
+      {"record": 3, "primitive": 120, "depth": 0.5, "flags": 3},
+      {"record": 9, "primitive": 7, "depth": 0.25, "flags": 2}
+    ],
+    "records": [
+      {
+        "id": 3,
+        "origin": 2,
+        "drawNumber": 811,
+        "call": 2,
+        "count": 3072,
+        "instances": 1,
+        "start": 9216,
+        "baseVertex": 0,
+        "startInstance": 0,
+        "topology": 4,
+        "depthFunc": 7,
+        "ib": null,
+        "vbs": [],
+        "shaders": [
+          {"hash": 1311768467294899695, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 18364758544493064720, "replaced": true}
+        ],
+        "srvs": [],
+        "rts": [],
+        "ds": null,
+        "overrides": [
+          {"kind": 1, "section": "TextureOverrideBodyIB", "iniPath": "E:\\XXMI\\GIMI\\Mods\\캐릭터\\mod.ini"}
+        ],
+        "commandList": {"section": "TextureOverrideBodyIB", "iniPath": "E:\\XXMI\\GIMI\\Mods\\캐릭터\\mod.ini", "line": "drawindexed = 3072, 9216, 0"}
+      },
+      {
+        "id": 9,
+        "origin": 1,
+        "drawNumber": 1204,
+        "call": 4,
+        "count": 6,
+        "instances": 2,
+        "start": 0,
+        "baseVertex": -4,
+        "startInstance": 1,
+        "topology": 4,
+        "depthFunc": 0,
+        "ib": {"hash": 2864434397, "origHash": 2864434397, "hasRegion": true, "regionHash": 305419896, "offset": 1024, "formatOrStride": 57},
+        "vbs": [
+          {"slot": 0, "hash": 3735928559, "origHash": 3735928559, "hasRegion": false, "regionHash": 0, "offset": 0, "formatOrStride": 40}
+        ],
+        "shaders": [
+          {"hash": 81985529216486895, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 0, "replaced": false},
+          {"hash": 1147797409030816545, "replaced": false}
+        ],
+        "srvs": [
+          {"stage": 4, "slot": 0, "hash": 4277009102, "origHash": 4277009102, "dimension": 4, "width": 2048, "height": 1024, "format": 71}
+        ],
+        "rts": [
+          {"slot": 0, "hash": 0, "width": 1920, "height": 1080, "format": 10}
+        ],
+        "ds": {"hash": 0, "width": 1920, "height": 1080, "format": 40},
+        "overrides": [],
+        "commandList": null
+      }
+    ]
+  }
+}
