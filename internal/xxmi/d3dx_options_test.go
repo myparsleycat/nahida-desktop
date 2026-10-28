@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,92 +11,6 @@ import (
 	"sync"
 	"testing"
 )
-
-func TestUpdateLaunchINIAppliesOverridesOnlyToOptionsTheFileSets(t *testing.T) {
-	t.Parallel()
-	folder := t.TempDir()
-	path := filepath.Join(folder, "d3dx.ini")
-	original := "[Hunting]\r\nhunting = 0\r\nreload_config = no_modifiers VK_F10 ; reload\r\n\r\n" +
-		"[Device]\r\n;refresh_rate=60\r\nfull_screen = 0\r\n\r\n" +
-		"[Rendering]\r\ncache_shaders = 0\r\ntexture_hash = 0\r\n"
-	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
-	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
-		Migoto: MigotoOptions{LogLevel: "Disabled", EnforceRendering: true, EnableHunting: true},
-		D3DXOverrides: map[string]string{
-			"Rendering.cache_shaders": "1", "Hunting.reload_config": "no_modifiers VK_F5",
-			"Device.refresh_rate": "144", "Device.hide_cursor": "1",
-			"Rendering.texture_hash": "1", "Hunting.hunting": "0",
-		}}
-	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", nil); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(data)
-
-	for _, want := range []string{
-		"cache_shaders = 1\r\n", "reload_config = no_modifiers VK_F5 ; reload\r\n", ";refresh_rate=60\r\n",
-		// The launch settings win over an override of an option they manage.
-		"texture_hash = 0\r\n", "hunting = 2\r\n",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("updated INI is missing %q: %q", want, got)
-		}
-	}
-	for _, unwanted := range []string{"refresh_rate = 144", "refresh_rate=144", "hide_cursor"} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("updated INI gained %q, which the file did not set: %q", unwanted, got)
-		}
-	}
-}
-
-func TestUpdateLaunchINIAppliesOverridesToOptionsTheProviderAdds(t *testing.T) {
-	t.Parallel()
-	folder := t.TempDir()
-	path := filepath.Join(folder, "d3dx.ini")
-	original := "[Rendering]\n;cache_shaders = 0\ntexture_hash = 1\n"
-	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	// The launch writes its own toggle_input default only for libraries that read log_level.
-	manifest := fmt.Sprintf(`{"mode":%q,"source":"xxmi-libs@1.2.0"}`, RuntimeXXMI)
-	if err := os.WriteFile(filepath.Join(folder, runtimeManifestName), []byte(manifest), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
-	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
-		Migoto: MigotoOptions{LogLevel: "Disabled", EnforceRendering: true, ToggleInput: "VK_F8"},
-		D3DXOverrides: map[string]string{
-			"Rendering.prefetch_resource_files": "0", "Rendering.cache_shaders": "1", "Rendering.texture_hash": "1",
-			"input.TOGGLE_INPUT": "VK_F9",
-		}}
-	provider := []byte("[Rendering]\nprefetch_resource_files = 1\ncache_shaders = 0\ntexture_hash = 1\n" +
-		"[Input]\ntoggle_input = VK_F10\n")
-	if err := service.updateLaunchINI(context.Background(), "GIMI", cfg, "Game.exe", provider); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(data)
-
-	for _, want := range []string{
-		"prefetch_resource_files = 0\n", ";cache_shaders = 0\n", "texture_hash = 0\n", "toggle_input = VK_F9\n",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("updated INI is missing %q: %q", want, got)
-		}
-	}
-	if strings.Contains(got, "cache_shaders = 1") {
-		t.Errorf("override enabled an option the file comments out: %q", got)
-	}
-}
 
 func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 	t.Setenv("USERPROFILE", t.TempDir())
@@ -269,7 +184,6 @@ func TestSaveImporterConfigWritesSettingsToD3DXINI(t *testing.T) {
 		[]byte("[Hunting]\nhunting = 0\n[Rendering]\ncache_shaders = 0\n"))
 	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
 	cfg.Migoto.EnableHunting = true
-	cfg.D3DXOverrides = map[string]string{"Rendering.cache_shaders": "1"}
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +196,7 @@ func TestSaveImporterConfigWritesSettingsToD3DXINI(t *testing.T) {
 	for _, option := range options {
 		values[option.Key] = option.Value
 	}
-	if values["hunting"] != "2" || values["cache_shaders"] != "1" {
+	if values["hunting"] != "2" {
 		t.Fatalf("options after saving = %v, want the saved settings without a launch", values)
 	}
 }
@@ -376,24 +290,22 @@ func TestGetD3DXOptionsLocksOnlyOptionsTheDeployedDLLReads(t *testing.T) {
 	}
 }
 
-func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
-	t.Parallel()
-	cfg, err := DefaultImporterConfig("GIMI", filepath.Join(t.TempDir(), "xxmi"))
+func TestSetD3DXOptionsWritesValuesInPlace(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.D3DXOverrides = map[string]string{
-		"Rendering.cache_shaders": "1", "Hunting.reload_config": "no_modifiers VK_F5",
-		"Hunting.analyse_options": "dump_rt dump_tex buf txt", "Hunting.monitor_performance_interval": "2.5",
-		"Device.get_resolution_from": "depth_stencil", "Rendering.future_option": "-1",
-		// The settings write an option they manage after the override, which therefore has no effect.
-		"Logging.log_level": "debug",
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
 	}
-	if err := ValidateImporterSettings("GIMI", cfg); err != nil {
-		t.Fatalf("valid overrides rejected: %v", err)
-	}
+	path := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	original := "[Hunting]\nreload_config = no_modifiers VK_F10 ; reload\n[Rendering]\ncache_shaders = 0\n"
+	writeTestFile(t, path, []byte(original))
 
-	for name, overrides := range map[string]map[string]string{
+	for name, values := range map[string]map[string]string{
 		"loader":          {"Loader.target": "evil.exe"},
 		"command section": {"TextureOverrideBody.hash": "1234abcd"},
 		"new line":        {"Hunting.reload_config": "VK_F5\r\n[Loader]\r\ntarget = evil.exe"},
@@ -402,10 +314,102 @@ func TestImporterSettingsRejectUnsafeD3DXOverrides(t *testing.T) {
 		"padded":          {"Rendering.cache_shaders": " 1"},
 		"case duplicate":  {"Rendering.cache_shaders": "1", "rendering.CACHE_SHADERS": "0"},
 	} {
-		cfg.D3DXOverrides = overrides
-		if err := ValidateImporterSettings("GIMI", cfg); err == nil {
-			t.Errorf("%s override accepted: %v", name, overrides)
+		if err := service.SetD3DXOptions(ctx, "GIMI", values); err == nil {
+			t.Errorf("%s value accepted: %v", name, values)
 		}
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != original {
+		t.Fatalf("rejected values changed d3dx.ini: %q, err = %v", data, err)
+	}
+
+	// An option the next launch adds from the provider's d3dx.ini is listed before the file sets it.
+	if err := service.SetD3DXOptions(ctx, "GIMI", map[string]string{
+		"Hunting.reload_config": "no_modifiers VK_F5", "rendering.CACHE_SHADERS": "1",
+		"Rendering.prefetch_resource_files": "0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := "[Hunting]\nreload_config = no_modifiers VK_F5 ; reload\n[Rendering]\ncache_shaders = 1\n" +
+		"prefetch_resource_files = 0\n"
+	if data, err := os.ReadFile(path); err != nil || string(data) != want {
+		t.Fatalf("d3dx.ini = %q, err = %v; want %q", data, err, want)
+	}
+}
+
+func TestSetD3DXOptionsKeepsAPreviousProviderDefault(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.XXMIVersion = true, VersionPin{Follow: "latest"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, iniBaseName), []byte("[Rendering]\nfresh = 1\n"))
+	writeTestFile(t, path, []byte("[Rendering]\nfresh = 1\n"))
+
+	// The next release changes the default, and the user keeps the one the file holds from the previous release.
+	if err := service.SetD3DXOptions(ctx, "GIMI", map[string]string{"Rendering.fresh": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Mode = RuntimeLegacy
+	if err := service.updateLaunchINI(ctx, "GIMI", cfg, "Game.exe", []byte("[Rendering]\nfresh = 3\n")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || !strings.Contains(string(data), "fresh = 1\n") {
+		t.Fatalf("d3dx.ini after the rebuild = %q, err = %v; want the value the user set", data, err)
+	}
+}
+
+func TestMigrateD3DXOverridesWritesStoredOverrides(t *testing.T) {
+	ctx := context.Background()
+	service, client, _ := newProviderTestService(t, nil)
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.XXMIVersion = VersionPin{Follow: "latest"}
+	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	writeTestFile(t, path, []byte("[Hunting]\nhunting = 0\n[Rendering]\ncache_shaders = 0\n"))
+
+	// A save of a disabled importer stored overrides without writing them.
+	row, err := client.XXMIImporters.Get(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored map[string]any
+	if err := json.Unmarshal([]byte(row.Config), &stored); err != nil {
+		t.Fatal(err)
+	}
+	stored["d3dxOverrides"] = map[string]string{
+		"rendering.CACHE_SHADERS": "1", "Hunting.hunting": "1", "Device.hide_cursor": "1",
+	}
+	data, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIImporters.Upsert(ctx, "GIMI", string(data)); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := service.MigrateD3DXOverrides(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The settings manage hunting, and the file does not set hide_cursor.
+	want := "[Hunting]\nhunting = 0\n[Rendering]\ncache_shaders = 1\n"
+	if got, err := os.ReadFile(path); err != nil || string(got) != want {
+		t.Fatalf("d3dx.ini = %q, err = %v; want %q", got, err, want)
+	}
+	if row, err = client.XXMIImporters.Get(ctx, "GIMI"); err != nil || strings.Contains(row.Config, "d3dxOverrides") {
+		t.Fatalf("config after the migration = %v, err = %v; want the overrides removed", row, err)
 	}
 }
 

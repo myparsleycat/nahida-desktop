@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -27,30 +28,20 @@ const (
 type D3DXOption struct {
 	Section string `json:"section"`
 	Key     string `json:"key"`
-	// Value is what the file holds now; saving the importer settings and every launch write their overrides.
+	// Value is what the file holds now.
 	Value   string            `json:"value"`
 	Managed D3DXOptionManaged `json:"managed"`
 }
 
-func d3dxOverrideKey(section, key string) string { return section + "." + key }
+func d3dxOptionKey(section, key string) string { return section + "." + key }
 
-// splitD3DXOverrideKey returns the section and option an override key names. Only options of a settings section
-// can be overridden: the others are commands, where a line means something only in its place, or [Loader] and
-// [Include], which a launch and mod loading own.
-func splitD3DXOverrideKey(overrideKey string) (section, key string, ok bool) {
-	section, key, ok = strings.Cut(overrideKey, ".")
+// splitD3DXOptionKey returns the section and option an option key names. Only options of a settings section can
+// be edited: the others are commands, where a line means something only in its place, or [Loader] and [Include],
+// which a launch and mod loading own.
+func splitD3DXOptionKey(optionKey string) (section, key string, ok bool) {
+	section, key, ok = strings.Cut(optionKey, ".")
 	return section, key, ok && iniSettingKeyPattern.MatchString(section) && iniSettingKeyPattern.MatchString(key) &&
 		iniSettingsSection(section)
-}
-
-// lookupD3DXOverride returns the saved override of an option under any spelling of its name, as d3dx.ini does.
-func lookupD3DXOverride(overrides map[string]string, section, key string) (string, bool) {
-	for overrideKey, value := range overrides {
-		if strings.EqualFold(overrideKey, d3dxOverrideKey(section, key)) {
-			return value, true
-		}
-	}
-	return "", false
 }
 
 // validD3DXValue reports whether value stays one option value on its line: a comment character would cut it
@@ -62,40 +53,148 @@ func validD3DXValue(value string) bool {
 		})
 }
 
-// validateD3DXOverrides checks that each override names one option of a settings section and stays one value on
-// its line. An override of an option the importer settings manage is accepted and has no effect, since the
-// settings are written after it.
-func validateD3DXOverrides(overrides map[string]string) error {
-	seen := make(map[string]bool, len(overrides))
-	for overrideKey, value := range overrides {
-		if _, _, ok := splitD3DXOverrideKey(overrideKey); !ok {
-			return fmt.Errorf("invalid d3dx.ini option %q", overrideKey)
+// validateD3DXValues checks that each value names one option of a settings section and stays one value on its
+// line.
+func validateD3DXValues(values map[string]string) error {
+	seen := make(map[string]bool, len(values))
+	for optionKey, value := range values {
+		if _, _, ok := splitD3DXOptionKey(optionKey); !ok {
+			return fmt.Errorf("invalid d3dx.ini option %q", optionKey)
 		}
-		// d3dx.ini names are case-insensitive, so of two spellings a launch would write whichever sorts last.
-		if seen[strings.ToLower(overrideKey)] {
-			return fmt.Errorf("duplicate d3dx.ini option %q", overrideKey)
+		// d3dx.ini names are case-insensitive, so of two spellings the file would get whichever sorts last.
+		if seen[strings.ToLower(optionKey)] {
+			return fmt.Errorf("duplicate d3dx.ini option %q", optionKey)
 		}
-		seen[strings.ToLower(overrideKey)] = true
+		seen[strings.ToLower(optionKey)] = true
 		if !validD3DXValue(value) {
-			return fmt.Errorf("invalid d3dx.ini value %q for %s", value, overrideKey)
+			return fmt.Errorf("invalid d3dx.ini value %q for %s", value, optionKey)
 		}
 	}
 	return nil
 }
 
-// applyD3DXOverrides writes the saved overrides of options the file already sets. An option the importer
-// package leaves out or commented out stays that way.
-func applyD3DXOverrides(doc *iniDocument, overrides map[string]string) {
-	for _, overrideKey := range slices.Sorted(maps.Keys(overrides)) {
-		section, key, ok := splitD3DXOverrideKey(overrideKey)
-		value := overrides[overrideKey]
-		if !ok || !validD3DXValue(value) {
+// SetD3DXOptions writes values, keyed "Section.key", into the importer's d3dx.ini in place. An option the file
+// does not set yet, such as one the next launch adds from the provider's d3dx.ini, is added to its section. The
+// next save or launch writes the options the importer settings manage over these values.
+func (x *XXMI) SetD3DXOptions(ctx context.Context, importer string, values map[string]string) error {
+	importer = strings.ToUpper(strings.TrimSpace(importer))
+	if err := validateD3DXValues(values); err != nil {
+		return err
+	}
+	// Taken before the importer, as syncSettingsINI does, so a save meanwhile waits instead of skipping its write.
+	x.settingsINIMu.Lock()
+	defer x.settingsINIMu.Unlock()
+	if !x.acquireImporter(importer) {
+		return errors.New("XXMI_BUSY")
+	}
+	defer x.releaseImporter(importer)
+
+	stage := "read-config"
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err == nil {
+		stage = "write-ini"
+		err = writeImporterINI(ctx, importer, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
+			doc := parseINI(data)
+			for _, optionKey := range slices.Sorted(maps.Keys(values)) {
+				section, key, _ := splitD3DXOptionKey(optionKey)
+				doc.SetOption(section, key, values[optionKey], true)
+			}
+			return doc, false, nil
+		})
+	}
+	if err == nil {
+		stage = "release-base"
+		err = releaseINIBaseOptions(ctx, cfg.ImporterFolder, values)
+	}
+	if err == nil || infra.IsCancellationError(err) {
+		return err
+	}
+	return infra.ReportError(x.log, err, "XXMI.SetD3DXOptions", infra.Diagnostic{
+		Operation: "write-d3dx-options", Stage: stage,
+		Fields: map[string]any{
+			"importer": importer, "importerFolder": cfg.ImporterFolder, "options": slices.Sorted(maps.Keys(values)),
+		},
+	})
+}
+
+// MigrateD3DXOverrides writes the d3dx.ini overrides importer configs stored before the d3dx.ini tab wrote the file
+// directly, then removes them from the configs. Saves and launches wrote most of them already; this reaches the
+// ones saved for a disabled importer or with a release that wrote them only on launch. An importer whose write
+// fails keeps its overrides for the next start.
+//
+//wails:ignore
+func (x *XXMI) MigrateD3DXOverrides(ctx context.Context) error {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return errors.New("XXMI settings store is not configured")
+	}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+	for _, row := range rows {
+		var stored struct {
+			D3DXOverrides map[string]string `json:"d3dxOverrides"`
+		}
+		// A config that cannot be read is reported by the reads that need it.
+		if json.Unmarshal([]byte(row.Config), &stored) != nil || stored.D3DXOverrides == nil {
 			continue
 		}
-		if _, present := doc.Option(section, key); present {
-			doc.SetOption(section, key, value, true)
+		if err := x.applyStoredD3DXOverrides(ctx, row.Key, stored.D3DXOverrides); err != nil {
+			errs = append(errs, infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "migrate-d3dx-overrides", Stage: "write-ini", Fields: map[string]any{"importer": row.Key},
+			}))
+			continue
+		}
+		if err := client.XXMIImporters.RemoveConfigValue(ctx, row.Key, "$.d3dxOverrides"); err != nil {
+			errs = append(errs, infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "migrate-d3dx-overrides",
+				Stage:     "remove-overrides",
+				Fields:    map[string]any{"importer": row.Key},
+			}))
 		}
 	}
+	return errors.Join(errs...)
+}
+
+// applyStoredD3DXOverrides writes the overrides of the options the d3dx.ini tab lists as editable, as a launch
+// applied them: an option the importer settings manage keeps their value, and one the file and the next provider
+// release leave out or comment out stays that way.
+func (x *XXMI) applyStoredD3DXOverrides(ctx context.Context, importer string, overrides map[string]string) error {
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil {
+		return err
+	}
+	options, err := x.GetD3DXOptions(ctx, importer)
+	if err != nil {
+		return err
+	}
+
+	// An override could spell the option differently than the file does, as d3dx.ini names are case-insensitive.
+	stored := make(map[string]string, len(overrides))
+	for optionKey, value := range overrides {
+		stored[strings.ToLower(optionKey)] = value
+	}
+	values := map[string]string{}
+	for _, option := range options {
+		if option.Managed == D3DXOptionManagedLaunch ||
+			option.Managed == D3DXOptionManagedRendering && cfg.Migoto.EnforceRendering {
+			continue
+		}
+		// An override the file already holds is written too, so the base stops claiming it as a provider default.
+		optionKey := d3dxOptionKey(option.Section, option.Key)
+		if value, ok := stored[strings.ToLower(optionKey)]; ok && validD3DXValue(value) {
+			values[optionKey] = value
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return x.SetD3DXOptions(ctx, importer, values)
 }
 
 // GetD3DXOptions lists the options the settings sections of the importer's d3dx.ini set, in file order, or none
@@ -119,7 +218,7 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 	}
 
 	// The next launch deploys the provider's release and rebuilds the file from its d3dx.ini, so its options are
-	// listed, can be overridden, and are locked as that release reads them before that launch has run.
+	// listed, can be edited, and are locked as that release reads them before that launch has run.
 	template, libsVersion := x.pendingProviderINI(ctx, cfg)
 	in := importerINIInput{key: importer, cfg: cfg, support: migotoINISupport(cfg, libsVersion), template: template}
 	if len(in.template) > 0 {
@@ -134,7 +233,7 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 	managed := map[string]D3DXOptionManaged{}
 	for _, write := range settingsINIWrites(importer, enforced, in.support) {
 		if !write.fallback {
-			managed[strings.ToLower(d3dxOverrideKey(write.section, write.key))] = write.managed
+			managed[strings.ToLower(d3dxOptionKey(write.section, write.key))] = write.managed
 		}
 	}
 
@@ -149,15 +248,15 @@ func (x *XXMI) GetD3DXOptions(ctx context.Context, importer string) ([]D3DXOptio
 			continue
 		}
 		key := match[2]
-		overrideKey := d3dxOverrideKey(section, key)
-		if _, _, ok := splitD3DXOverrideKey(overrideKey); !ok || listed[strings.ToLower(overrideKey)] {
+		optionKey := d3dxOptionKey(section, key)
+		if _, _, ok := splitD3DXOptionKey(optionKey); !ok || listed[strings.ToLower(optionKey)] {
 			continue
 		}
-		listed[strings.ToLower(overrideKey)] = true
+		listed[strings.ToLower(optionKey)] = true
 
 		value, _ := doc.Option(section, key)
 		options = append(options, D3DXOption{
-			Section: section, Key: key, Value: value, Managed: managed[strings.ToLower(overrideKey)],
+			Section: section, Key: key, Value: value, Managed: managed[strings.ToLower(optionKey)],
 		})
 	}
 	return options, nil

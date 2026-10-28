@@ -153,20 +153,17 @@ type ImporterConfig struct {
 	ProcessTimeout     int    `json:"processTimeout"`
 	XXMIDLLInitDelay   int    `json:"xxmiDLLInitDelay"`
 	// XXMIDLLInjectMode is "Hook", "Inject", or "Bypass" and applies to every GameLaunch.
-	XXMIDLLInjectMode string         `json:"xxmiDLLInjectMode"`
-	WindowMode        string         `json:"windowMode"`
-	RunPreLaunch      CommandHook    `json:"runPreLaunch"`
-	CustomLaunch      CustomLaunch   `json:"customLaunch"`
-	RunPostLoad       CommandHook    `json:"runPostLoad"`
-	ExtraLibraries    ExtraLibraries `json:"extraLibraries"`
-	ReShade           ReShadeOptions `json:"reshade"`
-	OverwriteINI      bool           `json:"overwriteINI"`
-	ConfigureGame     bool           `json:"configureGame"`
-	Migoto            MigotoOptions  `json:"migoto"`
-	// D3DXOverrides holds d3dx.ini values keyed "Section.key". A launch writes them, so they outlive an
-	// importer package update that replaces the file.
-	D3DXOverrides map[string]string   `json:"d3dxOverrides,omitempty"`
-	IniOptimizer  IniOptimizerOptions `json:"iniOptimizer"`
+	XXMIDLLInjectMode string              `json:"xxmiDLLInjectMode"`
+	WindowMode        string              `json:"windowMode"`
+	RunPreLaunch      CommandHook         `json:"runPreLaunch"`
+	CustomLaunch      CustomLaunch        `json:"customLaunch"`
+	RunPostLoad       CommandHook         `json:"runPostLoad"`
+	ExtraLibraries    ExtraLibraries      `json:"extraLibraries"`
+	ReShade           ReShadeOptions      `json:"reshade"`
+	OverwriteINI      bool                `json:"overwriteINI"`
+	ConfigureGame     bool                `json:"configureGame"`
+	Migoto            MigotoOptions       `json:"migoto"`
+	IniOptimizer      IniOptimizerOptions `json:"iniOptimizer"`
 	// AutoUpdateModRuntimes makes a launch update the importer's installed mod runtimes that are older than the
 	// versions bundled with the app.
 	AutoUpdateModRuntimes bool `json:"autoUpdateModRuntimes"`

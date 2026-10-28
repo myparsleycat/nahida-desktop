@@ -90,6 +90,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 	})
 	rt.runStartupSteps(ctx, []startupStep{
 		{"importer-links", rt.xxmi.RepairImporterLinks},
+		{"d3dx-overrides", rt.xxmi.MigrateD3DXOverrides},
 		{"bisect-recovery", rt.tools.RecoverBisects},
 		{"compression", rt.runCompressionMaintenance},
 		{"persist-watcher", rt.tools.StartPersistWatcher},

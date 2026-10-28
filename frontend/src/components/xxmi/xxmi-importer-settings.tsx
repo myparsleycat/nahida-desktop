@@ -123,8 +123,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const sharedLibsVersion = overview?.sharedLibsVersion;
   const libsProviders = overview?.libsProviders ?? [];
   const [draft, setConfig] = useState<ImporterConfig | null>(null);
+  const [d3dxEdits, setD3DXEdits] = useState<Record<string, string>>({});
   const config = draft ?? saved ?? null;
-  const dirty = draft !== null && !isEqual(draft, saved);
+  const dirty = (draft !== null && !isEqual(draft, saved)) || Object.keys(d3dxEdits).length > 0;
   // A legacy runtime and a user-provided DLL deploy the first provider's signed libraries, so that is the
   // provider whose releases their libraries version names.
   // The importer's own DLL comes first; the shared one reaches importers that follow the shared provider.
@@ -201,6 +202,13 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
   const persist = async (next: ImporterConfig, install?: PackageInstall) => {
     setIsSaving(true);
     try {
+      // The values go in first, so the settings this save writes win over one for an option they manage, and an
+      // install that replaces d3dx.ini replaces them as its setting says.
+      if (Object.keys(d3dxEdits).length > 0) {
+        await XXMI.SetD3DXOptions(importer, d3dxEdits);
+        setD3DXEdits({});
+        void queryClient.invalidateQueries({ queryKey: ["xxmi:d3dx-options", importer] });
+      }
       if (install) {
         await XXMI.InstallImporterPackage({ importer, ...install, config: next });
       } else {
@@ -228,12 +236,15 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
       return true;
     } catch (error) {
       const folderError = importerFolderError(error);
+      const message = toErrorMessage(error);
       toast.error(
         folderError
           ? t(`page.setting.xxmi.fn.installImporterPackage.errors.${folderError.code}`, {
               detail: folderError.detail,
             })
-          : toErrorMessage(error),
+          : message.includes("XXMI_BUSY")
+            ? t("page.setting.xxmi.builtin.d3dx.busy")
+            : message,
       );
       return false;
     } finally {
@@ -370,6 +381,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     size="xs"
                     onClick={() => {
                       setConfig(null);
+                      setD3DXEdits({});
                       setPickingCustomDll(false);
                     }}
                   >
@@ -1309,9 +1321,9 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <TabsContent value="d3dx" className="flex flex-col gap-6">
                 <XXMID3DXSettings
                   importer={importer}
-                  config={config}
-                  savedOverrides={saved?.d3dxOverrides}
-                  onChange={setConfig}
+                  enforceRendering={config.migoto.enforceRendering}
+                  edits={d3dxEdits}
+                  onEditsChange={setD3DXEdits}
                 />
               </TabsContent>
 

@@ -46,7 +46,7 @@ type loaderINI struct {
 
 // importerINIInput is what one write puts into an importer's d3dx.ini. render applies it in a fixed order, each
 // layer over the one before: the provider's template, the values a logging session puts back, the [Loader] of a
-// launch, the saved overrides, the importer settings, and the options of a running logging session.
+// launch, the importer settings, and the options of a running logging session.
 type importerINIInput struct {
 	key     string
 	cfg     ImporterConfig
@@ -91,7 +91,6 @@ func (in importerINIInput) render(data []byte) (doc *iniDocument, lost bool) {
 			doc.RemoveOption("Loader", "loader")
 		}
 	}
-	applyD3DXOverrides(doc, in.cfg.D3DXOverrides)
 	for _, write := range settingsINIWrites(in.key, in.cfg, in.support) {
 		if write.fallback && len(before.optionIndexes(write.section, write.key)) > 0 {
 			continue
@@ -111,8 +110,7 @@ func (in importerINIInput) write(ctx context.Context) error {
 	})
 }
 
-// settingsINIWrites lists the options the importer settings decide, in the order they are written. Saved
-// overrides are written before them, so a setting wins over an override of the option it manages.
+// settingsINIWrites lists the options the importer settings decide, in the order they are written.
 func settingsINIWrites(key string, cfg ImporterConfig, support migotoSupport) []iniWrite {
 	var writes []iniWrite
 	set := func(section, option, value string) {
@@ -149,13 +147,10 @@ func settingsINIWrites(key string, cfg ImporterConfig, support migotoSupport) []
 		boolean("Input", "input", migoto.Input, "1", "0")
 		set("Input", "input_disable_mode", strings.ToLower(migoto.InputDisableMode))
 
-		// The hotkey setting is a default, and a saved override takes its place.
-		hotkey := migoto.ToggleInput
-		if value, ok := lookupD3DXOverride(cfg.D3DXOverrides, "Input", "toggle_input"); ok && validD3DXValue(value) {
-			hotkey = value
-		}
-		if hotkey != "" {
-			writes = append(writes, iniWrite{section: "Input", key: "toggle_input", value: hotkey, fallback: true})
+		if migoto.ToggleInput != "" {
+			writes = append(writes, iniWrite{
+				section: "Input", key: "toggle_input", value: migoto.ToggleInput, fallback: true,
+			})
 		}
 	} else {
 		boolean("Logging", "calls", migoto.LogLevel == "Info" || migoto.LogLevel == "Debug", "1", "0")
@@ -311,6 +306,37 @@ func storeINIBase(ctx context.Context, folder string, template []byte) error {
 		return err
 	}
 	return root.writeFileAtomic(ctx, iniBaseName, bytes.NewReader(template), 0o600, snapshot)
+}
+
+// releaseINIBaseOptions removes from the base the options values sets to the value the base has. A rebuild takes an
+// option line that matches the base as the provider's, so a value the user chose that equals the previous provider
+// default would otherwise give way to a new default.
+func releaseINIBaseOptions(ctx context.Context, folder string, values map[string]string) error {
+	root, err := openInstallRoot(folder)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	data, snapshot, err := root.readFile(iniBaseName)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// mergeINI reads the base with its line endings normalized the same way.
+	doc := parseINI(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")))
+	for optionKey, value := range values {
+		section, key, _ := splitD3DXOptionKey(optionKey)
+		if current, ok := doc.Option(section, key); ok && current == value {
+			doc.RemoveOption(section, key)
+		}
+	}
+	if !doc.Changed() {
+		return nil
+	}
+	return root.writeFileAtomic(ctx, iniBaseName, bytes.NewReader(doc.Bytes()), 0o600, snapshot)
 }
 
 // writeSettingsINI writes the options the saved settings decide into the importer's d3dx.ini in place, so the

@@ -115,6 +115,14 @@ SET "config" = json_set("config", ?, json(?)), "updated_at" = ?
 WHERE "key" = ?`, path, flag, time.Now().UTC().Format(time.RFC3339Nano), key)
 }
 
+// RemoveConfigValue deletes one value from an importer's config without rewriting the rest of it.
+// path is a JSON path such as "$.d3dxOverrides"; a missing importer or value is left alone.
+func (s XXMIImportersStore) RemoveConfigValue(ctx context.Context, key, path string) error {
+	return s.c.exec(ctx, `UPDATE "xxmi_importers"
+SET "config" = json_remove("config", ?), "updated_at" = ?
+WHERE "key" = ? AND json_type("config", ?) IS NOT NULL`, path, time.Now().UTC().Format(time.RFC3339Nano), key, path)
+}
+
 func (s XXMIImportersStore) Delete(ctx context.Context, key string) error {
 	return s.c.exec(ctx, `DELETE FROM "xxmi_importers" WHERE "key" = ?`, key)
 }

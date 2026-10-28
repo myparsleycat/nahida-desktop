@@ -1,5 +1,5 @@
 import { XXMI } from "@bindings/xxmi";
-import { D3DXOptionManaged, type D3DXOption, type ImporterConfig } from "@bindings/xxmi/models";
+import { D3DXOptionManaged, type D3DXOption } from "@bindings/xxmi/models";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -21,24 +21,24 @@ import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { groupBy, omit } from "es-toolkit";
 import { SearchIcon } from "lucide-react";
-import { useId, useRef, useState, type FocusEvent } from "react";
+import { useId, useState, type FocusEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-type StatusFilter = "all" | "overridden" | "editable" | "managed";
+type StatusFilter = "all" | "editable" | "managed";
 
 // Base UI selects cannot represent an empty string as a regular option value.
 const ALL_SECTIONS = "__all__";
 
 export function XXMID3DXSettings({
   importer,
-  config,
-  savedOverrides,
-  onChange,
+  enforceRendering,
+  edits,
+  onEditsChange,
 }: {
   importer: string;
-  config: ImporterConfig;
-  savedOverrides: ImporterConfig["d3dxOverrides"];
-  onChange: (next: ImporterConfig) => void;
+  enforceRendering: boolean;
+  edits: Record<string, string>;
+  onEditsChange: (next: Record<string, string>) => void;
 }) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
@@ -75,28 +75,16 @@ export function XXMID3DXSettings({
     );
   }
 
-  const setOverrides = (overrides: Record<string, string>) =>
-    // The saved config has no field without overrides, so an empty one would read as an unsaved change.
-    onChange(
-      Object.keys(overrides).length === 0
-        ? omit(config, ["d3dxOverrides"])
-        : { ...config, d3dxOverrides: overrides },
+  const setValue = (option: D3DXOption, value: string) =>
+    onEditsChange(
+      value === option.value
+        ? omit(edits, [optionId(option)])
+        : { ...edits, [optionId(option)]: value },
     );
-  const setValue = (option: D3DXOption, value: string) => {
-    const id = overrideId(config.d3dxOverrides, option);
-    // A saved override stays even when the file already holds its value: the launch that wrote it there is
-    // also what restores it after a package update replaces d3dx.ini. Only clearing it removes it.
-    const untouched =
-      value === option.value && savedOverrides?.[overrideId(savedOverrides, option)] === undefined;
-    setOverrides(
-      untouched ? omit(config.d3dxOverrides ?? {}, [id]) : { ...config.d3dxOverrides, [id]: value },
-    );
-  };
 
   const isLocked = (option: D3DXOption) =>
     option.managed === D3DXOptionManaged.D3DXOptionManagedLaunch ||
-    (option.managed === D3DXOptionManaged.D3DXOptionManagedRendering &&
-      config.migoto.enforceRendering);
+    (option.managed === D3DXOptionManaged.D3DXOptionManagedRendering && enforceRendering);
 
   const sections = Object.entries(groupBy(options, (option) => option.section.toLowerCase()));
   // A section a refetch no longer lists falls back to showing every section.
@@ -105,16 +93,16 @@ export function XXMID3DXSettings({
   const matches = (option: D3DXOption) => {
     // The search and status filters read the value being typed, so the row being edited stays until focus leaves
     // it instead of unmounting under the cursor.
-    if (focusedRow === rowId(option)) return true;
-    const override = config.d3dxOverrides?.[overrideId(config.d3dxOverrides, option)];
+    if (focusedRow === optionId(option)) return true;
     const matchesStatus =
       status === "all" ||
-      (status === "overridden" && override !== undefined) ||
       (status === "editable" && !isLocked(option)) ||
       (status === "managed" && isLocked(option));
     return (
       matchesStatus &&
-      `${option.section}.${option.key}\n${override ?? option.value}`.toLowerCase().includes(needle)
+      `${optionId(option)}\n${edits[optionId(option)] ?? option.value}`
+        .toLowerCase()
+        .includes(needle)
     );
   };
   const shown = sections
@@ -144,7 +132,6 @@ export function XXMID3DXSettings({
           value={status}
           items={[
             { value: "all", label: t("page.setting.xxmi.builtin.d3dx.statusAll") },
-            { value: "overridden", label: t("page.setting.xxmi.builtin.d3dx.statusOverridden") },
             { value: "editable", label: t("page.setting.xxmi.builtin.d3dx.statusEditable") },
             { value: "managed", label: t("page.setting.xxmi.builtin.d3dx.statusManaged") },
           ]}
@@ -174,29 +161,21 @@ export function XXMID3DXSettings({
             <SectionTitle className="font-mono">[{entries[0].section}]</SectionTitle>
           </SectionHeader>
           <SectionContent>
-            {entries.map((option) => {
-              const id = overrideId(config.d3dxOverrides, option);
-              const override = config.d3dxOverrides?.[id];
-              return (
-                <OptionRow
-                  key={option.key}
-                  option={option}
-                  value={override ?? option.value}
-                  locked={isLocked(option)}
-                  onFocus={() => setFocusedRow(rowId(option))}
-                  onBlur={(event) => {
-                    if (event.currentTarget.contains(event.relatedTarget)) return;
-                    setFocusedRow((current) => (current === rowId(option) ? null : current));
-                  }}
-                  onValueChange={(value) => setValue(option, value)}
-                  onClear={
-                    override === undefined
-                      ? undefined
-                      : () => setOverrides(omit(config.d3dxOverrides ?? {}, [id]))
-                  }
-                />
-              );
-            })}
+            {entries.map((option) => (
+              <OptionRow
+                key={option.key}
+                option={option}
+                // A locked option shows what the settings write, not an edit made before it was locked.
+                value={isLocked(option) ? option.value : (edits[optionId(option)] ?? option.value)}
+                locked={isLocked(option)}
+                onFocus={() => setFocusedRow(optionId(option))}
+                onBlur={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget)) return;
+                  setFocusedRow((current) => (current === optionId(option) ? null : current));
+                }}
+                onValueChange={(value) => setValue(option, value)}
+              />
+            ))}
           </SectionContent>
         </Section>
       ))}
@@ -239,14 +218,9 @@ function FilterSelect<T extends string>({
   );
 }
 
-function rowId(option: D3DXOption) {
-  return `${option.section}.${option.key}`.toLowerCase();
-}
-
-// d3dx.ini names are case-insensitive, and a saved override can spell the option differently than the file does.
-function overrideId(overrides: ImporterConfig["d3dxOverrides"], option: D3DXOption) {
-  const id = `${option.section}.${option.key}`;
-  return Object.keys(overrides ?? {}).find((key) => key.toLowerCase() === id.toLowerCase()) ?? id;
+// The backend lists an option once under any spelling, so the name as the file spells it identifies the option.
+function optionId(option: D3DXOption) {
+  return `${option.section}.${option.key}`;
 }
 
 function OptionRow({
@@ -256,7 +230,6 @@ function OptionRow({
   onFocus,
   onBlur,
   onValueChange,
-  onClear,
 }: {
   option: D3DXOption;
   value: string;
@@ -264,11 +237,9 @@ function OptionRow({
   onFocus: () => void;
   onBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onValueChange: (value: string) => void;
-  onClear?: () => void;
 }) {
   const { t } = useTranslation();
   const labelId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <SectionRow
@@ -277,7 +248,7 @@ function OptionRow({
       onFocus={onFocus}
       onBlur={onBlur}
       description={
-        locked ? (
+        locked && (
           <span className="text-foreground/70">
             {t(
               option.managed === D3DXOptionManaged.D3DXOptionManagedRendering
@@ -285,30 +256,10 @@ function OptionRow({
                 : "page.setting.xxmi.builtin.d3dx.managedHint",
             )}
           </span>
-        ) : (
-          onClear && (
-            <span className="flex items-center gap-1 text-foreground/70">
-              {t("page.setting.xxmi.builtin.d3dx.overrideHint")}
-              <Button
-                variant="link"
-                size="xs"
-                className="h-auto px-0"
-                onClick={() => {
-                  // Clearing removes this button, and a removed element fires no blur, so the row would keep
-                  // bypassing the filters. Focus moves to the input first, which still blurs later.
-                  inputRef.current?.focus();
-                  onClear();
-                }}
-              >
-                {t("page.setting.xxmi.builtin.d3dx.clearOverride")}
-              </Button>
-            </span>
-          )
         )
       }
     >
       <Input
-        ref={inputRef}
         aria-labelledby={labelId}
         className="w-72 shrink-0 font-mono"
         spellCheck={false}
