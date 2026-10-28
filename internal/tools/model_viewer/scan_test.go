@@ -443,7 +443,11 @@ func TestModelViewerWWMIDirectGeometryUsesVectorAndVB2Texcoord(t *testing.T) {
 	dir := t.TempDir()
 	iniText := `[Constants]
 global $required_wwmi_version = 0.70
-[TextureOverrideComponent]
+global persist $color = 1
+[KeyColor]
+type = cycle
+$color = 1,2,3
+[TextureOverrideNormalComponent3]
 run = CommandListOverrideSharedResources
 drawindexed = 3, 0, 0
 [CommandListOverrideSharedResources]
@@ -451,6 +455,27 @@ ib = ResourceIndexBuffer
 vb0 = ResourcePositionBuffer
 vb1 = ResourceVectorBuffer
 vb2 = ResourceTexCoordBuffer
+ps-t0 = ResourceC1
+ps-t1 = ResourceB1
+ps-t2 = ResourceA1
+if $color == 2
+ps-t2 = ResourceA2
+elif $color == 3
+ps-t2 = ResourceA3
+endif
+ps-t3 = ResourceD1
+[ResourceC1]
+filename = Textures/C1.dds
+[ResourceB1]
+filename = Textures/B1.dds
+[ResourceA1]
+filename = Textures/A1.dds
+[ResourceA2]
+filename = Textures/A2.dds
+[ResourceA3]
+filename = Textures/A3.dds
+[ResourceD1]
+filename = Textures/D1.dds
 [ResourceIndexBuffer]
 filename = index.buf
 format = DXGI_FORMAT_R32_UINT
@@ -495,13 +520,24 @@ stride = 16`
 			t.Fatal(err)
 		}
 	}
+	available := make(map[string]modelViewerTexturePayload)
+	for _, name := range []string{"C1", "B1", "A1", "A2", "A3", "D1"} {
+		format := uint32(99)
+		if name == "C1" || name == "B1" {
+			format = 98
+		}
+		writeTextureFile(t, dir, "Textures/"+name+".dds", encodeDX10HeaderDDS(8192, 8192, format))
+		available[modelViewerNormalizeKey(name)] = modelViewerTexturePayload{Key: name}
+	}
 	sections := parseModINI(iniText)
+	cache := newModelViewerBufferCache()
+	defer cache.releaseAll()
 	meshes, err := buildModelViewerDirectScannedMeshesAt(
 		iniPath,
 		dir,
 		sections,
 		collectModelViewerDefaultVariables(sections),
-		newModelViewerBufferCache(),
+		cache,
 		nil,
 	)
 	if err != nil {
@@ -523,6 +559,16 @@ stride = 16`
 	}
 	if len(geometry.Tangent) != 0 {
 		t.Fatalf("WWMI tangent should use Three.js derivative frame: %v", geometry.Tangent)
+	}
+	item, _ := buildModelViewerDirectMeshPayload(meshes[0], nil, available, nil, cache)
+	for _, value := range []string{"1", "2", "3"} {
+		if got := viewerEvalResolveTexture(
+			item.TextureVariants,
+			item.TexKey,
+			map[string]any{"color": value},
+		); got != "A"+value {
+			t.Fatalf("color=%s texture = %q, want A%s", value, got, value)
+		}
 	}
 }
 

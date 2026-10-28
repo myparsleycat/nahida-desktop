@@ -47,7 +47,7 @@ func modelViewerSlotTextureNumber(role string) (int, bool) {
 // diffuse-first slot order, and keeps every conditional assignment of that
 // slot so texture toggles still switch. Each mesh drops its candidates either
 // way, so slot roles never reach the payload.
-func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, efmi bool) {
+func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi, efmi bool) {
 	hints := make(map[string]*wwmiTextureHint)
 	hintOf := func(file string) *wwmiTextureHint {
 		// The hint reads any other file as an unknown color space, which counts as diffuse.
@@ -96,7 +96,7 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, efmi 
 			if !efmi {
 				continue
 			}
-		case wwmiComponentIndex(mesh.component) != "" && !mesh.textureAuthored &&
+		case (wwmi || wwmiComponentIndex(mesh.component) != "") && !mesh.textureAuthored &&
 			meshDiffuseIsDeclaredLinear(mesh, declaredColorSpace):
 			fits, replace = srgbDiffuse, true
 		default:
