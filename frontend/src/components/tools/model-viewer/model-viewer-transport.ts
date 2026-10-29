@@ -269,7 +269,11 @@ export function normalizeModelViewerTransport(
                 },
             ];
         }),
-        forms: (value.forms ?? []).map((form) => ({ id: form.id, label: form.label })),
+        forms: (value.forms ?? []).map((form) => ({
+            id: form.id,
+            label: form.label,
+            group: form.group,
+        })),
         inis: (value.inis ?? []).map((ini) => ({ path: ini.path, prefix: ini.prefix })),
     };
 }

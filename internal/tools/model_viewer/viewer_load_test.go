@@ -142,6 +142,25 @@ drawindexed = 3, 0, 0
 	}
 }
 
+func TestQualifyModelViewerFormGroupsSeparatesINIsSharingAFolderName(t *testing.T) {
+	forms := []ModelViewerForm{
+		{ID: "Raiden::body.ini::Default", Group: "Raiden"},
+		{ID: "Raiden::weapon.ini::Default", Group: "Raiden"},
+		{ID: "Skin1/Body::a.ini::Default", Group: "Body"},
+		{ID: "Skin2/Body::a.ini::Default", Group: "Body"},
+		{ID: "Ei::ei.ini::Default", Group: "Ei"},
+		{ID: "Ei::ei.ini::Swim", Group: "Ei"},
+		{ID: "Folder", Label: "Folder"},
+	}
+	qualifyModelViewerFormGroups(forms)
+	want := []string{"Raiden/body.ini", "Raiden/weapon.ini", "Skin1/Body/a.ini", "Skin2/Body/a.ini", "Ei", "Ei", ""}
+	for index, form := range forms {
+		if form.Group != want[index] {
+			t.Fatalf("form %q group = %q; want %q", form.ID, form.Group, want[index])
+		}
+	}
+}
+
 func TestLoadModViewerInitializesEmptyTransportCollections(t *testing.T) {
 	dir := t.TempDir()
 	result := loadViewerMod(t, dir, `[TextureOverrideBody]

@@ -117,6 +117,8 @@ export type ViewerINI = {
 export type ViewerForm = {
     id: string;
     label: string;
+    /** Heading of a named draw group: its folder name, or its INI path when that name is shared. */
+    group?: string;
 };
 
 export type ViewerStateRule = {

@@ -1424,7 +1424,8 @@
         "title": "Model Viewer",
         "forms": {
           "label": "Forms",
-          "all": "All"
+          "all": "All",
+          "grouped": "{{group}} › {{label}}"
         },
         "toggle_viewer": "Toggle Viewer",
         "ineffective_blocked_by": "This value cannot be used with the current combination: {{variables}}",

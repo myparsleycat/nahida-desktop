@@ -17,10 +17,11 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -35,10 +36,11 @@ import {
   evaluateViewerState,
   isViewerFormVisible,
 } from "@shared/mod-viewer/eval";
-import type { ViewerVariable } from "@shared/mod-viewer/types";
+import type { ViewerForm, ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
 import {
+  Fragment,
   type ReactNode,
   useCallback,
   useEffect,
@@ -889,41 +891,85 @@ export function ModelViewerWorkspace({
   );
 }
 
+// base-ui treats a value serializing to "" as no selection and styles the
+// trigger as a placeholder, so ALL_FORMS is selected under this value.
+const ALL_FORMS_OPTION = "*";
+
 function FormSwitcher({
   forms,
   value,
   onChange,
 }: {
-  forms: Array<{ id: string; label: string }>;
+  forms: ViewerForm[];
   value: string;
   onChange: (form: string) => void;
 }) {
   const { t } = useTranslation();
+
+  const groups = new Map<string, ViewerForm[]>();
+  for (const form of forms) {
+    const entries = groups.get(form.group ?? "");
+    if (entries) entries.push(form);
+    else groups.set(form.group ?? "", [form]);
+  }
+  const selected = forms.find((form) => form.id === value);
+  const selectedName = !selected
+    ? t("page.tools.model_viewer.forms.all")
+    : selected.group
+      ? t("page.tools.model_viewer.forms.grouped", {
+          group: selected.group,
+          label: selected.label,
+        })
+      : selected.label;
+
   return (
-    <Tabs
-      value={value}
-      onValueChange={(next) => onChange(String(next))}
-      className="absolute top-3 left-3 z-[5] max-w-[calc(100%-1.5rem)]"
-    >
-      <TabsList
-        aria-label={t("page.tools.model_viewer.forms.label")}
-        className="max-w-full justify-start overflow-x-auto bg-background/75 shadow-sm ring-1 ring-border/60 backdrop-blur-md"
+    <div className="absolute top-3 left-3 z-[5] max-w-[calc(100%-1.5rem)]">
+      <Select
+        value={value || ALL_FORMS_OPTION}
+        onValueChange={(next) =>
+          onChange(next === ALL_FORMS_OPTION || next == null ? ALL_FORMS : String(next))
+        }
       >
-        <TabsTrigger value={ALL_FORMS} className="flex-none px-2.5">
-          {t("page.tools.model_viewer.forms.all")}
-        </TabsTrigger>
-        {forms.map((form) => (
-          <TabsTrigger
-            key={form.id}
-            value={form.id}
-            title={form.label}
-            className="max-w-44 min-w-0 flex-none px-2.5"
-          >
-            <span className="truncate">{form.label}</span>
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
+        <SelectTrigger
+          aria-label={t("page.tools.model_viewer.forms.label")}
+          title={selectedName}
+          className="h-8 max-w-full min-w-0 bg-background/75 shadow-sm ring-1 ring-border/60 backdrop-blur-md dark:bg-background/75 dark:hover:bg-background/90"
+        >
+          <SelectValue className="min-w-0">
+            <span className="truncate">{selectedName}</span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent align="start">
+          <SelectGroup>
+            <SelectItem value={ALL_FORMS_OPTION}>
+              {t("page.tools.model_viewer.forms.all")}
+            </SelectItem>
+          </SelectGroup>
+          {[...groups].map(([group, entries]) => (
+            <Fragment key={group}>
+              <SelectSeparator />
+              <SelectGroup>
+                {group ? (
+                  <SelectLabel title={group} className="truncate">
+                    {group}
+                  </SelectLabel>
+                ) : null}
+                {entries.map((form) => (
+                  <SelectItem
+                    key={form.id}
+                    value={form.id}
+                    title={form.label}
+                    className="*:first:min-w-0 *:first:shrink"
+                  >
+                    <span className="truncate">{form.label}</span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </Fragment>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

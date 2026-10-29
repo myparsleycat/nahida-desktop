@@ -1422,7 +1422,8 @@
         "title": "モデルビューアー",
         "forms": {
           "label": "フォーム",
-          "all": "すべて"
+          "all": "すべて",
+          "grouped": "{{group}} › {{label}}"
         },
         "toggle_viewer": "トグルビューアー",
         "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",

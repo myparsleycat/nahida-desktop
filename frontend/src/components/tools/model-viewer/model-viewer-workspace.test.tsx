@@ -364,7 +364,14 @@ it("keeps the selected form for the frames the viewer evaluates", async () => {
     />,
   );
 
-  fireEvent.click(await screen.findByRole("tab", { name: "Ult" }));
+  const formSelect = await screen.findByRole("combobox", {
+    name: "page.tools.model_viewer.forms.label",
+  });
+  expect(formSelect.hasAttribute("data-placeholder")).toBe(false);
+  fireEvent.click(formSelect);
+  const ult = await screen.findByRole("option", { name: "Ult" });
+  fireEvent.pointerDown(ult, { pointerType: "mouse" });
+  fireEvent.click(ult);
   await waitFor(() => expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult"));
   expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
     { id: "base", visible: false },

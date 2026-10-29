@@ -529,6 +529,7 @@ func (t *Service) prepareModelViewerGeometry(
 	if len(prepared.forms) < 2 {
 		prepared.dropForms()
 	}
+	qualifyModelViewerFormGroups(prepared.forms)
 	keep = true
 	return prepared, nil
 }

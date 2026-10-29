@@ -1422,7 +1422,8 @@
         "title": "模型查看器",
         "forms": {
           "label": "形态",
-          "all": "全部"
+          "all": "全部",
+          "grouped": "{{group}} › {{label}}"
         },
         "toggle_viewer": "切换查看器",
         "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",

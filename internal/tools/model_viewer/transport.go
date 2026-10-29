@@ -206,10 +206,13 @@ type ModelViewerINI struct {
 
 // ModelViewerForm identifies a folder or a named draw group. Named groups
 // extend their folder ID with ::INI::label; meshes and variables belonging
-// to that folder remain shared by its named groups.
+// to that folder remain shared by its named groups. Group is the heading a
+// named group is listed under: its folder's name, or its INI path where that
+// name alone would also cover another INI's groups.
 type ModelViewerForm struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+	Group string `json:"group,omitempty"`
 }
 
 func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tracked map[string]bool) {
