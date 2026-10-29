@@ -9,7 +9,7 @@ import (
 //	-ldflags "-X nahida.live/desktop/internal/platform.AppVersion=<version>"
 //
 // Development builds intentionally keep the next stable line as their default.
-var AppVersion = "3.42.1"
+var AppVersion = "3.42.2"
 
 // AppStatus is the Electron util:getAppStatus payload.
 type AppStatus struct {
