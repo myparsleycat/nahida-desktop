@@ -29,6 +29,7 @@ import {
   directionToAngles,
 } from "@shared/liquid-emitter/direction-angles";
 import type { Vec3 } from "@shared/liquid-emitter/flow-trajectory";
+import { isViewerFormVisible } from "@shared/mod-viewer/eval";
 import type { ViewerForm, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { clamp, isEqual } from "es-toolkit";
@@ -168,8 +169,11 @@ export function LiquidEmitterTool({
     }
     // A bundle of forms opens on the form being edited, or its first, so the
     // forms drawn over one another do not hide each other's surfaces.
+    const savedForm = saved ? meshes.find((mesh) => mesh.id === saved.meshId)?.form : undefined;
     setForm(
-      (saved && meshes.find((mesh) => mesh.id === saved.meshId)?.form) ?? forms[0]?.id ?? ALL_FORMS,
+      forms.find((entry) => isViewerFormVisible(savedForm, entry.id))?.id ??
+        forms[0]?.id ??
+        ALL_FORMS,
     );
   }
 
@@ -386,7 +390,7 @@ export function LiquidEmitterTool({
   const anchorMesh = anchor ? meshes?.find((mesh) => mesh.id === anchor.meshId) : undefined;
   const meshLabel = anchorMesh ? partLabel(anchorMesh, meshes) : (anchor?.meshId ?? "");
   const anchorForm = anchorMesh?.form;
-  const anchorInForm = form === ALL_FORMS || !anchorForm || anchorForm === form;
+  const anchorInForm = isViewerFormVisible(anchorForm, form);
   // A frame animation shows one mesh per frame, all of them the same draw for
   // the game, so a part counts as drawn while any mesh of its draw is visible.
   const visibleDraws = new Set(
@@ -424,7 +428,7 @@ export function LiquidEmitterTool({
     : undefined;
   const shown = (meshId: string) => {
     const meshForm = formOfMesh(meshId);
-    return (form === ALL_FORMS || !meshForm || meshForm === form) && drawn(meshId);
+    return isViewerFormVisible(meshForm, form) && drawn(meshId);
   };
   const others = emitters.flatMap((emitter) => {
     const saved = emitter.pid === current?.pid ? null : anchorFromEmitter(emitter);
@@ -506,7 +510,11 @@ export function LiquidEmitterTool({
             if (!saved) return;
             select(emitter.pid, saved);
             const savedForm = formOfMesh(saved.meshId);
-            if (savedForm && form !== ALL_FORMS) setForm(savedForm);
+            if (savedForm && form !== ALL_FORMS && !isViewerFormVisible(savedForm, form)) {
+              setForm(
+                forms.find((entry) => isViewerFormVisible(savedForm, entry.id))?.id ?? ALL_FORMS,
+              );
+            }
           }}
           onRemove={(emitter) => handleRemove([emitter.pid])}
           onRemoveAll={() => setConfirmRemoveAll(true)}

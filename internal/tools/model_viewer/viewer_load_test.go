@@ -24,6 +24,60 @@ filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 `
 
+func TestLoadModViewerRecoversCopiedVertexBuffers(t *testing.T) {
+	for _, binding := range []string{"", "vb0 = ResourcePos"} {
+		t.Run(binding, func(t *testing.T) {
+			fixture := loadViewerFixture(t, t.TempDir(), `[Constants]
+global $generation = 0
+global $previous = -1
+[TextureOverrideBodyPosition]
+vb0 = ResourcePos
+[TextureOverrideBodyTexcoord]
+vb1 = ResourceTc
+[TextureOverrideBodyA]
+ib = ResourceBodyAIB
+`+binding+`
+if $generation != $previous
+run = CustomShaderPhysics
+endif
+if $generation == $previous
+vb0 = ResourceTemp
+endif
+drawindexed = 3, 0, 0
+[TextureOverrideOther]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[CustomShaderPhysics]
+ResourceTemp = vb0
+cs-u5 = copy ResourceTemp
+vb0 = null
+ResourceTemp = copy cs-u5
+cs-u5 = null
+[ResourceTemp]
+type = RWBuffer
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`+viewerBodyResources)
+			body := meshesNamed(fixture.result, "BodyA")
+			if len(body) != 1 {
+				t.Fatalf("copied body meshes = %d; all meshes = %#v", len(body), fixture.result.Meshes)
+			}
+			positions := readViewerMesh(t, fixture.protocol, body[0].GeometryURL).Positions
+			if len(positions) != 9 {
+				t.Fatalf("recovered positions = %v", positions)
+			}
+			source, ok := fixture.service.DrawSource(fixture.result.MemorySessionID, body[0].ID)
+			if !ok || source.Section != "BodyA" || source.IB != "BodyAIB" || source.StartIndex != 0 ||
+				source.IndexCount != 3 {
+				t.Fatalf("recovered surface draw source = %#v, found = %t", source, ok)
+			}
+		})
+	}
+}
+
 func TestLoadModViewerLoadsINIBuffersAndTexturesWithoutAssetLayout(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "diffuse.png", encodeTinyPNG())
@@ -48,6 +102,43 @@ filename = diffuse.png
 	}
 	if texKey(mesh) == "" || fixture.result.Textures[texKey(mesh)].Role != "diffuse" {
 		t.Fatalf("texKey=%q textures=%#v", texKey(mesh), fixture.result.Textures)
+	}
+}
+
+func TestLoadModViewerSeparatesCommandListForms(t *testing.T) {
+	fixture := loadViewerFixture(t, t.TempDir(), `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+run = CommandListBody_HumanSub
+run = CommandListBody_MermaidSub
+run = CommandListBodyBaseSub
+[CommandListBody_HumanSub]
+run = CommandListHumanDraw
+[CommandListHumanDraw]
+drawindexed = 3, 0, 0
+[CommandListBody_MermaidSub]
+drawindexed = 3, 0, 0
+[CommandListBodyBaseSub]
+drawindexed = 3, 0, 0
+`+viewerBodyResources)
+	if len(fixture.result.Forms) != 2 || len(fixture.result.Meshes) != 3 {
+		t.Fatalf("forms = %#v; mesh count = %d", fixture.result.Forms, len(fixture.result.Meshes))
+	}
+	for index, label := range []string{"Human", "Mermaid"} {
+		form := fixture.result.Forms[index]
+		if form.Label != label || fixture.result.Meshes[index].Form != form.ID {
+			t.Fatalf("form %d = %#v; mesh form = %q", index, form, fixture.result.Meshes[index].Form)
+		}
+	}
+	if fixture.result.Meshes[2].Form != "" {
+		t.Fatalf("shared mesh has exclusive form %q", fixture.result.Meshes[2].Form)
+	}
+	for _, mesh := range fixture.result.Meshes {
+		source, ok := fixture.service.DrawSource(fixture.result.MemorySessionID, mesh.ID)
+		if !ok || source.Section != "Body" || source.IndexCount != 3 {
+			t.Fatalf("form surface draw source = %#v, found = %t", source, ok)
+		}
 	}
 }
 

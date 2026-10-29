@@ -21,8 +21,9 @@ import (
 
 type modelViewerDirectMesh struct {
 	id, component, sectionName, ibName string
-	// form is the folder of the INI drawing the mesh when the folder holds
-	// several forms; see ModelViewerForm.
+	// commandForm comes from an authored _<form>Sub draw wrapper. It becomes
+	// selectable only when the INI draws at least two distinct named forms.
+	commandForm            string
 	form                   string
 	positionFile           string
 	geometry               *modelViewerGeometry

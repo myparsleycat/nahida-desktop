@@ -30,7 +30,11 @@ import {
 import { Logger } from "@renderer/lib/logger";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
-import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
+import {
+  applyVariableSelection,
+  evaluateViewerState,
+  isViewerFormVisible,
+} from "@shared/mod-viewer/eval";
 import type { ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
@@ -394,8 +398,7 @@ export function ModelViewerWorkspace({
     setOwnForm(next);
     onFormChange?.(next);
   };
-  const inActiveForm = (entry: { form?: string }) =>
-    activeForm === ALL_FORMS || !entry.form || entry.form === activeForm;
+  const inActiveForm = (entry: { form?: string }) => isViewerFormVisible(entry.form, activeForm);
 
   const effectiveState = previewState ?? activeState;
   const payloadEval = useMemo(

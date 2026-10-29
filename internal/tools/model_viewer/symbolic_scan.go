@@ -40,6 +40,7 @@ type modelViewerSymbolicScanContext struct {
 	draws         int
 	seq           int
 	sectionName   string
+	commandForm   string
 	resourcesOnly bool
 }
 
@@ -213,21 +214,28 @@ func (c *modelViewerSymbolicScanContext) scan(
 			c.expansions++
 			next := cloneModelViewerVisited(visiting)
 			next[name] = true
+			previousForm := c.commandForm
+			if strings.EqualFold(section.Header, "CommandList") {
+				if match := modelViewerCommandFormRE.FindStringSubmatch(section.Name); match != nil {
+					c.commandForm = match[1]
+				}
+			}
 			if err := c.scan(section.Lines, state, stack, next); err != nil {
 				return err
 			}
+			c.commandForm = previousForm
 			continue
 		}
 		switch strings.ToLower(key) {
-		case "ib", "vb0", "vb1", "vb2":
+		case "vb0":
+			state.copyBuffer(key, value, conditions, sequence)
+		case "ib", "vb1", "vb2":
 			resource := modelViewerTrimResourcePrefix(value)
 			if resource != "" && !strings.EqualFold(resource, "null") {
 				state.buffers[strings.ToLower(key)] = append(
 					state.buffers[strings.ToLower(key)],
 					modelViewerSymbolicAssignment{
-						resource:   resource,
-						conditions: cloneModelViewerDNF(conditions),
-						sequence:   sequence,
+						resource: resource, conditions: cloneModelViewerDNF(conditions), sequence: sequence,
 					},
 				)
 				delete(state.resolvedBuffers, strings.ToLower(key))
@@ -248,6 +256,9 @@ func (c *modelViewerSymbolicScanContext) scan(
 				state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
 			}
 		default:
+			if strings.HasPrefix(strings.ToLower(key), "resource") || modelViewerUAVSlotRE.MatchString(key) {
+				state.copyBuffer(key, value, conditions, sequence)
+			}
 			resource := modelViewerTrimTextureValue(value)
 			if resource == "" {
 				continue
@@ -289,6 +300,53 @@ func (c *modelViewerSymbolicScanContext) scan(
 		}
 	}
 	return nil
+}
+
+// Copies through a compute UAV keep the input's bind-pose vertex addresses.
+// An empty resource represents the inherited vertex buffer, which the draw's
+// component overrides resolve after scanning; it must not become a file name.
+func (s *modelViewerSymbolicSectionState) copyBuffer(key, value string, conditions ModelViewerDNF, sequence int) {
+	key = strings.ToLower(key)
+	value = strings.TrimSpace(value)
+	for _, prefix := range []string{"copy ", "ref "} {
+		if strings.HasPrefix(strings.ToLower(value), prefix) {
+			value = strings.TrimSpace(value[len(prefix):])
+			break
+		}
+	}
+	source := strings.ToLower(value)
+	if source == "" {
+		return
+	}
+	if source == "null" {
+		if key == "vb0" {
+			return
+		}
+		s.buffers[key] = append(s.buffers[key], modelViewerSymbolicAssignment{
+			resource: "null", conditions: cloneModelViewerDNF(conditions), sequence: sequence,
+		})
+		delete(s.resolvedBuffers, key)
+		return
+	}
+	assignments := s.bufferAssignments(source)
+	if len(assignments) == 0 {
+		resource := modelViewerResourceToken(value)
+		if key == "vb0" && source != "vb0" {
+			resource = modelViewerTrimResourcePrefix(value)
+		}
+		if source != "vb0" && resource == "" {
+			return
+		}
+		assignments = []modelViewerSymbolicAssignment{{resource: resource, conditions: modelViewerDNFTrue()}}
+	}
+	for _, assignment := range assignments {
+		assignment.conditions = modelViewerDNFAnd(conditions, assignment.conditions)
+		assignment.sequence = sequence
+		if len(assignment.conditions) > 0 {
+			s.buffers[key] = append(s.buffers[key], assignment)
+		}
+	}
+	delete(s.resolvedBuffers, key)
 }
 
 func (c *modelViewerSymbolicScanContext) snapshotRecords(
@@ -355,6 +413,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 		recordDraw.IBResourceName = variant.state.ib
 		records = append(records, modelViewerDirectDrawRecord{
 			sectionName:     c.sectionName,
+			commandForm:     c.commandForm,
 			state:           variant.state,
 			textureHistory:  append([]modelViewerDirectTextureAssignment(nil), textures...),
 			slotTextures:    append([]modelViewerDirectTextureAssignment(nil), slotTextures...),

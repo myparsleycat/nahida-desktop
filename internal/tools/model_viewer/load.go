@@ -488,6 +488,7 @@ func (t *Service) prepareModelViewerGeometry(
 		}
 		attributeModelViewerDrawSources(meshes, built[unitIndex].scoped, iniPaths)
 		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], folder)
+		prepared.scopeCommandForms(meshes, iniPath, scopes[unit.primary])
 		computeScopeID := ""
 		if len(units) > 1 {
 			computeScopeID = modelViewerString(unitIndex)
@@ -519,6 +520,12 @@ func (t *Service) prepareModelViewerGeometry(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	forms := prepared.forms
+	prepared.forms = lo.Filter(forms, func(form ModelViewerForm, _ int) bool {
+		return !slices.ContainsFunc(forms, func(other ModelViewerForm) bool {
+			return strings.HasPrefix(other.ID, form.ID+"::")
+		})
+	})
 	if len(prepared.forms) < 2 {
 		prepared.dropForms()
 	}

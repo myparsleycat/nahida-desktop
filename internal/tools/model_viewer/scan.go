@@ -25,6 +25,7 @@ type modelViewerDirectBufferState struct{ ib, vb0, vb1, vb2 string }
 
 type modelViewerDirectDrawRecord struct {
 	sectionName     string
+	commandForm     string
 	state           modelViewerDirectBufferState
 	textureHistory  []modelViewerDirectTextureAssignment
 	slotTextures    []modelViewerDirectTextureAssignment
@@ -202,8 +203,9 @@ func dedupeModelViewerDirectDrawRecords(records []modelViewerDirectDrawRecord) [
 	output := make([]modelViewerDirectDrawRecord, 0, len(records))
 	for _, record := range records {
 		key := fmt.Sprintf(
-			"%s|%#v|%#v|%#v|%#v|%#v|%t",
+			"%s|%s|%#v|%#v|%#v|%#v|%#v|%t",
 			record.sectionName,
+			record.commandForm,
 			record.state,
 			record.draw,
 			record.conditions,
@@ -483,6 +485,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	var output []modelViewerDirectMesh
 	type geometryIndexKey struct {
 		sectionName string
+		commandForm string
 		source      modelViewerDrawGeometryKey
 	}
 	geometryIndexes := make(map[geometryIndexKey]int)
@@ -530,7 +533,11 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			indexCount:             record.draw.IndexCount, startIndex: record.draw.StartIndex,
 			baseVertex: record.draw.BaseVertex, auto: record.auto,
 		}
-		geometryKey := geometryIndexKey{sectionName: record.sectionName, source: sourceKey}
+		geometryKey := geometryIndexKey{
+			sectionName: record.sectionName,
+			commandForm: record.commandForm,
+			source:      sourceKey,
+		}
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, draw.conditions)
@@ -647,6 +654,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			id:                     id,
 			component:              component,
 			sectionName:            record.sectionName,
+			commandForm:            record.commandForm,
 			ibName:                 draw.state.ib,
 			positionFile:           position.Filename,
 			geometry:               geometry,

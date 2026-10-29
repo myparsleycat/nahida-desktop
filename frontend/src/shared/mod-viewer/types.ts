@@ -113,7 +113,7 @@ export type ViewerINI = {
     prefix: string;
 };
 
-/** One folder of a mod bundling several, such as a character's forms with one INI each. */
+/** A folder or named INI draw group; :: separates a group from its shared parent folder. */
 export type ViewerForm = {
     id: string;
     label: string;

@@ -191,8 +191,7 @@ type ModelViewerTransport struct {
 	UIAssets         ModelViewerUIAssets                    `json:"uiAssets"`
 	Animations       []ModelViewerAnimationClip             `json:"animations"`
 	ComputeDeformers []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
-	// Forms lists the folders of a mod bundling several, such as a character's
-	// forms with one INI each, when its meshes come from more than one.
+	// Forms includes folder groups and named draw groups within one INI.
 	Forms []ModelViewerForm `json:"forms"`
 	INIs  []ModelViewerINI  `json:"inis"`
 }
@@ -205,9 +204,9 @@ type ModelViewerINI struct {
 	Prefix string `json:"prefix"`
 }
 
-// ModelViewerForm is one folder of a bundled mod. ID is its path relative to
-// the mod folder, "." for the mod folder itself, and the Form of its meshes
-// and variables.
+// ModelViewerForm identifies a folder or a named draw group. Named groups
+// extend their folder ID with ::INI::label; meshes and variables belonging
+// to that folder remain shared by its named groups.
 type ModelViewerForm struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
