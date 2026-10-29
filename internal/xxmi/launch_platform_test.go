@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -232,20 +233,20 @@ func TestPlatformLaunchReplacesGameStart(t *testing.T) {
 		epicApp: gameplatform.EpicApp{NamespaceID: "ns", ItemID: "item", ArtifactID: "art"},
 	}
 	direct := inject.LaunchSpec{
-		StartExe: `C:\Game\Game.exe`, StartArgs: []string{"-dx11"}, WorkDir: `C:\Game`, CustomLaunchCmd: "start",
+		StartExe: `C:\Game\Game.exe`, StartArgs: []string{"-dx11"}, WorkDir: `C:\Game`,
 	}
 
 	spec := direct
 	platform.apply(&spec, ImporterConfig{GameLaunch: "Steam"})
 	if spec.StartExe != steam.Exe || strings.Join(spec.StartArgs, " ") != "-silent -applaunch 3513350" ||
-		spec.WorkDir != filepath.Dir(steam.Exe) || spec.CustomLaunchCmd != "" {
+		spec.WorkDir != filepath.Dir(steam.Exe) {
 		t.Fatalf("Steam launch spec = %+v", spec)
 	}
 
 	// The Epic Games request is opened by this process, so the helper is left nothing to start.
 	spec = direct
 	platform.apply(&spec, ImporterConfig{GameLaunch: "Epic"})
-	if spec.StartExe != "" || spec.StartArgs != nil || spec.CustomLaunchCmd != "" {
+	if spec.StartExe != "" || spec.StartArgs != nil {
 		t.Fatalf("Epic launch spec = %+v", spec)
 	}
 }
@@ -254,14 +255,19 @@ func TestPlatformLaunchReplacesGameStart(t *testing.T) {
 // ready event the way the helper does once the game may start.
 type readyLaunchHelper struct {
 	recordingLaunchHelper
-	fail error
+	fail        error
+	beforeReady func(context.Context)
+	afterReady  func(context.Context)
 }
 
-func (h *readyLaunchHelper) LaunchXXMI(_ context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
+func (h *readyLaunchHelper) LaunchXXMI(ctx context.Context, spec inject.LaunchSpec) (inject.LaunchResult, error) {
 	h.spec = spec
 	h.calls++
 	if h.fail != nil {
 		return inject.LaunchResult{}, h.fail
+	}
+	if h.beforeReady != nil {
+		h.beforeReady(ctx)
 	}
 	name, err := windows.UTF16PtrFromString(spec.ReadyEvent)
 	if err != nil {
@@ -275,7 +281,153 @@ func (h *readyLaunchHelper) LaunchXXMI(_ context.Context, spec inject.LaunchSpec
 	if err := windows.SetEvent(event); err != nil {
 		return inject.LaunchResult{}, err
 	}
+	if h.afterReady != nil {
+		h.afterReady(ctx)
+	}
 	return inject.LaunchResult{PID: 42}, nil
+}
+
+func TestCallerLaunchReadinessAndCancellation(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"Hook", "Legacy", "Native", "Bypass"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			started := make(chan struct{})
+			helper := &readyLaunchHelper{
+				beforeReady: func(context.Context) {
+					if calls.Load() != 0 {
+						t.Error("game started before helper readiness")
+					}
+				},
+				afterReady: func(ctx context.Context) {
+					select {
+					case <-started:
+					case <-ctx.Done():
+						t.Error("game was not started")
+					}
+				},
+			}
+			service := NewWithOptions(Options{Elevated: helper})
+			spec := inject.LaunchSpec{
+				Mode:        inject.ModeXXMI,
+				StartMethod: "Manual",
+				WorkDir:     t.TempDir(),
+				InjectMode:  "Inject",
+			}
+			switch mode {
+			case "Hook":
+				spec.InjectMode, spec.UseHook = "Hook", true
+			case "Legacy":
+				spec.Mode = inject.ModeLegacy
+			case "Native":
+				spec.InjectionMethod = "Native"
+			case "Bypass":
+				spec.InjectMode = "Bypass"
+			}
+			_, err := service.launchWhenReady(t.Context(), spec, func(context.Context) error {
+				calls.Add(1)
+				close(started)
+				return nil
+			})
+			if err != nil || calls.Load() != 1 {
+				t.Fatalf("calls = %d, error = %v", calls.Load(), err)
+			}
+			if helper.spec.StartExe != "" || helper.spec.ParentExe != "" || helper.spec.StartMethod != "Native" {
+				t.Fatalf("helper was given a process to start: %+v", helper.spec)
+			}
+		})
+	}
+	for _, failure := range []string{"cancelled before request", "cancelled before readiness", "command failed"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var calls atomic.Int32
+			commandError := errors.New("command start failed")
+			want := context.Canceled
+			helper := &readyLaunchHelper{}
+			if failure == "cancelled before request" {
+				cancel()
+			}
+			if failure == "cancelled before readiness" {
+				helper.beforeReady = func(context.Context) { cancel() }
+			}
+			if failure == "command failed" {
+				want = commandError
+				helper.afterReady = func(ctx context.Context) { <-ctx.Done() }
+			}
+			service := NewWithOptions(Options{Elevated: helper})
+			_, err := service.launchWhenReady(ctx, inject.LaunchSpec{}, func(context.Context) error {
+				calls.Add(1)
+				return commandError
+			})
+			if !errors.Is(err, want) {
+				t.Fatalf("error = %v, want %v", err, want)
+			}
+			wantCalls := int32(0)
+			if failure == "command failed" {
+				wantCalls = 1
+			}
+			if calls.Load() != wantCalls {
+				t.Fatalf("command calls = %d, want %d", calls.Load(), wantCalls)
+			}
+		})
+	}
+}
+
+func TestCustomBypassLaunchRunsCommandInApp(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	root := t.TempDir()
+	cfg, err := DefaultImporterConfig("EFMI", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.GameLaunch, cfg.XXMIDLLInjectMode = true, "Custom", "Bypass"
+	cfg.CustomLaunch.Command = "private user command"
+	cfg.D3D11ModeNoticeShown = true
+	cfg.GameFolder = filepath.Join(root, "game")
+	for _, dir := range []string{cfg.ImporterFolder, cfg.GameFolder} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cfg.GameFolder, "Endfield.exe"), []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	helper := &readyLaunchHelper{}
+	service := NewWithOptions(Options{Elevated: helper})
+	client := newXXMITestClient(t)
+	service.UseClient(client)
+	disabled := "false"
+	if err := client.Settings.Upsert(t.Context(), "xxmi_auto_update", &disabled); err != nil {
+		t.Fatal(err)
+	}
+	service.findProcess = noGameProcess
+	service.launchSettings = &fakeLaunch{}
+	service.gryphlinkFolders = func() []string { return nil }
+	calls := 0
+	service.runCustomCommand = func(_ context.Context, command, workDir string) error {
+		calls++
+		if command != cfg.CustomLaunch.Command || workDir != cfg.GameFolder {
+			t.Errorf("command or directory changed: %q", workDir)
+		}
+		return nil
+	}
+	if err := service.launchBuiltinGameLocked(t.Context(), "EFMI", cfg, LaunchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("command calls = %d", calls)
+	}
+	payload, err := json.Marshal(helper.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), cfg.CustomLaunch.Command) ||
+		strings.Contains(string(payload), "customLaunchCmd") {
+		t.Fatalf("command reached helper: %s", payload)
+	}
 }
 
 func TestLaunchWithURIWaitsForTheHelper(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	protocolVersion        = 1
+	protocolVersion        = 2
 	maxMessageSize         = 64 * 1024
 	sessionOperationPrefix = "session."
 	operationHello         = sessionOperationPrefix + "hello"

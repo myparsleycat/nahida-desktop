@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -229,31 +230,13 @@ func (c *Client) start(ctx context.Context) (startErr error) {
 	if err != nil {
 		return fmt.Errorf("prepare elevated helper: %w", err)
 	}
-	info, err := os.Lstat(helper)
-	if err != nil {
-		return fmt.Errorf("locate elevated helper %q: %w", helper, err)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("elevated helper is not a regular file: %q", helper)
-	}
-	helperPath, err := windows.UTF16PtrFromString(helper)
-	if err != nil {
-		return fmt.Errorf("encode elevated helper path: %w", err)
-	}
-	helperFile, err := windows.CreateFile(
-		helperPath,
-		windows.GENERIC_READ,
-		windows.FILE_SHARE_READ,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
-		0,
-	)
+	helperFile, err := platform.LockExecutable(helper)
 	if err != nil {
 		return fmt.Errorf("lock elevated helper executable: %w", err)
 	}
-	defer func() { _ = windows.CloseHandle(helperFile) }()
-	if err := verifyHelperHandle(helperFile, helperData); err != nil {
+	defer func() { _ = helperFile.Close() }()
+	helper = helperFile.Path
+	if err := verifyHelperHandle(ctx, windows.Handle(helperFile.File.Fd()), helperData); err != nil {
 		return err
 	}
 
@@ -410,10 +393,22 @@ func equalPath(left, right string) bool {
 // compares them with want. Verification is bound to the file object the caller
 // holds open without write or delete sharing, so a successful check cannot be
 // invalidated by re-resolving the path before the helper is launched.
-func verifyHelperHandle(handle windows.Handle, want []byte) error {
+func verifyHelperHandle(ctx context.Context, handle windows.Handle, want []byte) error {
+	path, err := platform.FinalPathOfHandle(handle)
+	if err != nil {
+		return err
+	}
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return err
+	}
+	defer release()
 	digest := sha256.New()
 	buffer := make([]byte, 64*1024)
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var read uint32
 		if err := windows.ReadFile(handle, buffer, &read, nil); err != nil {
 			return fmt.Errorf("read elevated helper: %w", err)

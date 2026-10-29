@@ -3,10 +3,12 @@
 package inject
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"nahida.live/desktop/internal/elevated"
@@ -25,7 +27,12 @@ func HelperHandler() elevated.Handler {
 		Timeout: helperTimeout(maxTimeoutSeconds),
 		Run: func(ctx context.Context, _ elevated.Peer, payload json.RawMessage) (json.RawMessage, error) {
 			var spec LaunchSpec
-			if err := json.Unmarshal(payload, &spec); err != nil {
+			decoder := json.NewDecoder(bytes.NewReader(payload))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&spec); err != nil {
+				return nil, errInvalidHelperLaunch
+			}
+			if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 				return nil, errInvalidHelperLaunch
 			}
 			ctx, cancel := context.WithTimeout(ctx, helperTimeout(spec.TimeoutSeconds))

@@ -2654,7 +2654,7 @@
           "meshLODDistanceBaseFOVDescription": "Camera FOV at which the active character starts switching to a simplified model. The FOV widens as the camera moves away. Default: 165",
           "preLaunchDescription": "A Windows console command to run before the game starts.",
           "postLoadDescription": "A Windows console command to run after the game has started and the DLL is injected.",
-          "customLaunchDescription": "Runs this command instead of the game executable; launch arguments are ignored.",
+          "customLaunchDescription": "Runs this command instead of the game executable, with the same privileges as the app. Launch arguments are ignored.",
           "injectModeDescription": "Hook loads the DLL through a window hook. Inject loads it into the game directly. Bypass skips the importer DLL and injects only the extra DLLs.",
           "extraLibrariesDescription": "Additional DLLs to inject into the game, such as ReShade.",
           "reshade": {

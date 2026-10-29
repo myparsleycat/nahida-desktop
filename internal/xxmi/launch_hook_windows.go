@@ -6,8 +6,29 @@ import (
 	"context"
 	"strings"
 
+	"golang.org/x/sys/windows"
+
 	"nahida.live/desktop/internal/xxmi/inject"
 )
+
+func startCustomCommand(ctx context.Context, text, workDir string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	command, err := inject.ShellCommand(context.Background(), text)
+	if err != nil {
+		return err
+	}
+	command.Dir = workDir
+	command.SysProcAttr.CreationFlags = windows.CREATE_NEW_CONSOLE
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
+}
 
 // runLaunchHook runs a user command through cmd.exe. The reference launcher ignores the command's exit code,
 // so a non-zero exit is returned as *exec.ExitError for the caller to downgrade to a warning. An enabled but

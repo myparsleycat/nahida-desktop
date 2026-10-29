@@ -83,7 +83,6 @@ func (x *XXMI) resolvePlatformLaunch(key string, cfg ImporterConfig) (platformLa
 
 // apply turns a launch spec built for the game executable into one that asks the store client instead.
 func (p platformLaunch) apply(spec *inject.LaunchSpec, cfg ImporterConfig) {
-	spec.CustomLaunchCmd = ""
 	if cfg.GameLaunch == "Steam" {
 		// Steam applies the stored launch options itself, so none are passed on the command line.
 		spec.StartExe, spec.StartArgs = p.steam.Exe, p.steam.LaunchArgs(p.steamApp.ID)
@@ -95,10 +94,24 @@ func (p platformLaunch) apply(spec *inject.LaunchSpec, cfg ImporterConfig) {
 	spec.StartExe, spec.StartArgs = "", nil
 }
 
-// launchWithURI has the elevated helper wait for the game while this process opens uri, so the
-// store client that answers it does not start elevated. The helper signals when the game may
-// start, which for a hook launch is only after the hook is installed.
 func (x *XXMI) launchWithURI(ctx context.Context, spec inject.LaunchSpec, uri string) (inject.LaunchResult, error) {
+	return x.launchWhenReady(ctx, spec, func(context.Context) error {
+		if err := x.openLaunchURI(uri); err != nil {
+			return fmt.Errorf("open the store launch request: %w", err)
+		}
+		return nil
+	})
+}
+
+// Hook installation and legacy loader preparation must precede caller-side game creation.
+func (x *XXMI) launchWhenReady(
+	ctx context.Context, spec inject.LaunchSpec, start func(context.Context) error,
+) (inject.LaunchResult, error) {
+	if err := ctx.Err(); err != nil {
+		return inject.LaunchResult{}, err
+	}
+	spec.StartMethod = "Native"
+	spec.StartExe, spec.StartArgs, spec.ParentExe = "", nil, ""
 	var suffix [16]byte
 	_, _ = rand.Read(suffix[:])
 	spec.ReadyEvent = inject.ReadyEventPrefix + hex.EncodeToString(suffix[:])
@@ -135,7 +148,10 @@ func (x *XXMI) launchWithURI(ctx context.Context, spec inject.LaunchSpec, uri st
 				opened <- err
 				return
 			case state == windows.WAIT_OBJECT_0:
-				if err = x.openLaunchURI(uri); err != nil {
+				if err = ctx.Err(); err == nil {
+					err = start(ctx)
+				}
+				if err != nil {
 					cancel()
 				}
 				opened <- err
@@ -148,9 +164,17 @@ func (x *XXMI) launchWithURI(ctx context.Context, spec inject.LaunchSpec, uri st
 	}()
 
 	result, err := x.elevated.LaunchXXMI(ctx, spec)
-	cancel()
+	if err == nil {
+		err = ctx.Err()
+	}
+	if err != nil || ctx.Err() != nil {
+		cancel()
+	} else if state, waitErr := windows.WaitForSingleObject(event, 0); waitErr != nil || state != windows.WAIT_OBJECT_0 {
+		cancel()
+		err = errors.New("helper completed without launch readiness")
+	}
 	if openErr := <-opened; openErr != nil {
-		return inject.LaunchResult{}, fmt.Errorf("open the store launch request: %w", openErr)
+		return inject.LaunchResult{}, openErr
 	}
 	return result, err
 }

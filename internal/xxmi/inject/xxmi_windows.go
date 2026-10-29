@@ -19,9 +19,11 @@ import (
 )
 
 func Launch(ctx context.Context, spec LaunchSpec) (_ LaunchResult, err error) {
-	if err := ValidateLaunchSpec(spec); err != nil {
+	closeFiles, err := prepareLaunch(ctx, &spec)
+	if err != nil {
 		return LaunchResult{}, err
 	}
+	defer closeFiles()
 	if spec.ParentExe != "" {
 		spec.parent = &parentProcess{path: spec.ParentExe}
 		defer func() { spec.parent.stop(ctx, err == nil) }()
@@ -194,11 +196,10 @@ func summarizeHookVerification(earlyCode, lateCode uintptr) (bool, string) {
 	return false, fmt.Sprintf("Could not verify XXMI hook injection (early code %d, late code %d)", earlyCode, lateCode)
 }
 
-// loadInjectorDLL loads the injector by its absolute path. Its own folder is searched for its dependencies
-// alongside System32, which the elevated helper otherwise restricts every load to.
+// The injector directory is user-writable; only System32 may supply its dependencies.
 func loadInjectorDLL(path string) (*windows.DLL, error) {
 	handle, err := windows.LoadLibraryEx(
-		path, 0, windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_SYSTEM32,
+		path, 0, windows.LOAD_LIBRARY_SEARCH_SYSTEM32,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load %q: %w", path, err)
@@ -224,18 +225,6 @@ func injectExtraDLLs(proc *windows.Proc, pid int, dlls []string, timeoutSeconds 
 func startGameProcess(spec LaunchSpec) error {
 	if spec.StartMethod == "Manual" {
 		return nil
-	}
-	if spec.CustomLaunchCmd != "" {
-		command, err := ShellCommand(context.Background(), spec.CustomLaunchCmd)
-		if err != nil {
-			return err
-		}
-		command.Dir = spec.WorkDir
-		command.SysProcAttr.CreationFlags = windows.CREATE_NEW_CONSOLE
-		if err := command.Start(); err != nil {
-			return err
-		}
-		return command.Process.Release()
 	}
 	if spec.ReadyEvent != "" {
 		name, err := windows.UTF16PtrFromString(spec.ReadyEvent)

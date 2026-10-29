@@ -115,11 +115,14 @@ func TestHelperConnectionRejectsUnauthenticatedOperation(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
-		name   string
-		secret string
+		name      string
+		secret    string
+		version   int
+		operation string
 	}{
-		{name: "missing handshake", secret: "secret"},
-		{name: "wrong secret", secret: "wrong"},
+		{name: "missing handshake", secret: "secret", version: protocolVersion, operation: testOperation},
+		{name: "wrong secret", secret: "wrong", version: protocolVersion, operation: testOperation},
+		{name: "previous protocol", secret: "secret", version: protocolVersion - 1, operation: operationHello},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -130,7 +133,7 @@ func TestHelperConnectionRejectsUnauthenticatedOperation(t *testing.T) {
 			done := make(chan error, 1)
 			go func() { done <- serveHelperConnection(ctx, server, "secret", Peer{}, nil) }()
 			if err := writeMessage(client, message{
-				Version: protocolVersion, ID: 1, Operation: testOperation, Secret: test.secret,
+				Version: test.version, ID: 1, Operation: test.operation, Secret: test.secret,
 			}); err != nil {
 				t.Fatal(err)
 			}

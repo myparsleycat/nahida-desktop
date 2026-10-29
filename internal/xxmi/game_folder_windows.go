@@ -86,7 +86,7 @@ func editGameFolder(
 		if !entry.Type().IsRegular() {
 			continue
 		}
-		file, err := verifiedLaunchFile(filepath.Join(staging, entry.Name()))
+		file, err := verifiedLaunchFile(ctx, filepath.Join(staging, entry.Name()))
 		if err != nil {
 			return err
 		}

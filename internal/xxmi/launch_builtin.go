@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -475,6 +476,11 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if usesPlatform {
 		platform.apply(&launchSpec, cfg)
 	}
+	closeFiles, err := protectLaunchFiles(ctx, &launchSpec)
+	if err != nil {
+		return err
+	}
+	defer closeFiles()
 	if migotoDLLUsed {
 		gameDir := ""
 		if gameExe != "" {
@@ -487,10 +493,18 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	progress("inject-launch")
 	var result inject.LaunchResult
-	if cfg.GameLaunch == "Epic" {
+	switch cfg.GameLaunch {
+	case "Epic":
 		uri := platform.epicApp.LaunchURI(platformCommandLine(key, cfg, gameExe))
 		result, err = x.launchWithURI(ctx, launchSpec, uri)
-	} else {
+	case "Custom":
+		result, err = x.launchWhenReady(ctx, launchSpec, func(ctx context.Context) error {
+			if err := x.runCustomCommand(ctx, cfg.CustomLaunch.Command, launchSpec.WorkDir); err != nil {
+				return fmt.Errorf("start custom game command: %w", err)
+			}
+			return nil
+		})
+	default:
 		result, err = x.elevated.LaunchXXMI(ctx, launchSpec)
 	}
 	if err != nil {
@@ -679,7 +693,8 @@ func (x *XXMI) builtinLaunchSpec(
 	}
 	switch cfg.GameLaunch {
 	case "Custom":
-		spec.CustomLaunchCmd = cfg.CustomLaunch.Command
+		spec.StartMethod, spec.StartExe, spec.ParentExe = "Manual", "", ""
+		spec.StartArgs = nil
 	case "Manual":
 		// The helper starts nothing and waits for the user to launch the game.
 		spec.StartMethod = "Manual"
@@ -708,7 +723,7 @@ func (x *XXMI) builtinLaunchSpec(
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
-		spec.LoaderDLL, err = verifiedLaunchFile(
+		spec.LoaderDLL, err = verifiedLaunchFile(ctx,
 			filepath.Join(cacheRoot, "packages", "xxmi-libs", version, "3dmloader.dll"),
 		)
 		if err != nil {
@@ -717,7 +732,7 @@ func (x *XXMI) builtinLaunchSpec(
 		return spec, nil
 	}
 	if cfg.Mode != RuntimeXXMI && spec.InjectMode != "Bypass" {
-		spec.LegacyLoader, err = verifiedLaunchFile(filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
+		spec.LegacyLoader, err = verifiedLaunchFile(ctx, filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe"))
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
@@ -786,7 +801,7 @@ func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec
 		}
 		return err
 	}
-	spec.LoaderDLL, err = verifiedLaunchFile(filepath.Join(cacheFolder, "3dmloader.dll"))
+	spec.LoaderDLL, err = verifiedLaunchFile(ctx, filepath.Join(cacheFolder, "3dmloader.dll"))
 	return err
 }
 
@@ -904,15 +919,26 @@ func (x *XXMI) migotoDLLUsed(ctx context.Context, cfg ImporterConfig) (bool, err
 	return false, nil
 }
 
-func verifiedLaunchFile(path string) (inject.VerifiedFile, error) {
-	file, err := os.Open(path)
+func verifiedLaunchFile(ctx context.Context, path string) (inject.VerifiedFile, error) {
+	if err := ctx.Err(); err != nil {
+		return inject.VerifiedFile{}, err
+	}
+	file, err := platform.LockExecutable(path)
 	if err != nil {
 		return inject.VerifiedFile{}, err
 	}
 	defer func() { _ = file.Close() }()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	release, err := diskio.Acquire(ctx, file.Path)
+	if err != nil {
 		return inject.VerifiedFile{}, err
 	}
-	return inject.VerifiedFile{Path: path, SHA256: hex.EncodeToString(hash.Sum(nil))}, nil
+	defer release()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file.File); err != nil {
+		return inject.VerifiedFile{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return inject.VerifiedFile{}, err
+	}
+	return inject.VerifiedFile{Path: file.Path, SHA256: hex.EncodeToString(hash.Sum(nil))}, nil
 }

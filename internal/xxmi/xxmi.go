@@ -184,6 +184,7 @@ type XXMI struct {
 	epicManifest      func() string
 	runPlatformClient func(exe string, args ...string) error
 	openLaunchURI     func(uri string) error
+	runCustomCommand  func(context.Context, string, string) error
 	// gryphlinkFolders lists installed GRYPHLINK launcher folders from the registry and known paths; tests
 	// replace it so the host installation is not read.
 	gryphlinkFolders func() []string
@@ -203,7 +204,8 @@ func NewWithOptions(opts Options) *XXMI {
 		githubClient = github.New(github.Options{HTTP: opts.HTTP, Download: opts.Download, Log: opts.Log})
 	}
 	x := &XXMI{
-		log: opts.Log, github: githubClient, archive: opts.Archive,
+		runCustomCommand: startCustomCommand,
+		log:              opts.Log, github: githubClient, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated, reshade: opts.ReShade,
 		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
 	}

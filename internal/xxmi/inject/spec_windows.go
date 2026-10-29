@@ -3,6 +3,7 @@
 package inject
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,6 +16,9 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/platform"
 )
 
 type RuntimeMode string
@@ -33,14 +37,13 @@ type VerifiedFile struct {
 const ReadyEventPrefix = `Local\nahida-xxmi-launch-`
 
 type LaunchSpec struct {
-	Mode            RuntimeMode `json:"mode"`
-	ProcessName     string      `json:"processName"`
-	StartExe        string      `json:"startExe"`
-	StartArgs       []string    `json:"startArgs"`
-	WorkDir         string      `json:"workDir"`
-	StartMethod     string      `json:"startMethod"`
-	Priority        string      `json:"priority"`
-	CustomLaunchCmd string      `json:"customLaunchCmd"`
+	Mode        RuntimeMode `json:"mode"`
+	ProcessName string      `json:"processName"`
+	StartExe    string      `json:"startExe"`
+	StartArgs   []string    `json:"startArgs"`
+	WorkDir     string      `json:"workDir"`
+	StartMethod string      `json:"startMethod"`
+	Priority    string      `json:"priority"`
 	// ParentExe is started suspended and hidden for the length of the launch so the game process is created as
 	// its child, for games that exit unless their official launcher started them.
 	ParentExe string `json:"parentExe"`
@@ -93,22 +96,19 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	if _, err := priorityClass(spec.Priority); err != nil {
 		return err
 	}
-	if spec.CustomLaunchCmd != "" && spec.StartMethod == "Manual" {
-		return errors.New("custom launch cannot use manual start")
-	}
 	if spec.ReadyEvent != "" {
 		// The helper only signals events this app names itself.
 		suffix, ok := strings.CutPrefix(spec.ReadyEvent, ReadyEventPrefix)
 		if !ok || suffix == "" || strings.Trim(suffix, "0123456789abcdef") != "" {
 			return errors.New("invalid ready event")
 		}
-		if spec.CustomLaunchCmd != "" || spec.StartMethod == "Manual" {
+		if spec.StartMethod == "Manual" {
 			return errors.New("ready event cannot be combined with another launch")
 		}
 	}
 
 	if spec.ParentExe != "" {
-		if spec.StartMethod != "Native" || spec.CustomLaunchCmd != "" || spec.ReadyEvent != "" {
+		if spec.StartMethod != "Native" || spec.ReadyEvent != "" {
 			return errors.New("parent executable requires a native start of the game")
 		}
 		if err := validateRegularLocalFile(spec.ParentExe); err != nil {
@@ -116,8 +116,8 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 		}
 	}
 
-	// A custom command, a caller-started game, and a manual start launch the game without the start executable.
-	if spec.StartMethod != "Manual" && spec.CustomLaunchCmd == "" && spec.ReadyEvent == "" {
+	// Caller-started games and manual starts do not use a start executable.
+	if spec.StartMethod != "Manual" && spec.ReadyEvent == "" {
 		if err := validateRegularLocalFile(spec.StartExe); err != nil {
 			return fmt.Errorf("start executable: %w", err)
 		}
@@ -181,26 +181,73 @@ func priorityClass(priority string) (uint32, error) {
 }
 
 func verifyFile(file VerifiedFile) error {
-	if err := validateRegularLocalFile(file.Path); err != nil {
-		return err
-	}
-	want, err := hex.DecodeString(file.SHA256)
-	if err != nil || len(want) != sha256.Size {
-		return errors.New("invalid SHA-256 hash")
-	}
-	handle, err := os.Open(file.Path)
+	locked, err := LockVerifiedFile(context.Background(), file)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = handle.Close() }()
+	return locked.Close()
+}
+
+func LockVerifiedFile(ctx context.Context, file VerifiedFile) (*platform.LockedExecutable, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := validateRegularLocalFile(file.Path); err != nil {
+		return nil, err
+	}
+	want, err := hex.DecodeString(file.SHA256)
+	if err != nil || len(want) != sha256.Size {
+		return nil, errors.New("invalid SHA-256 hash")
+	}
+	handle, err := platform.LockExecutable(file.Path)
+	if err != nil {
+		return nil, err
+	}
+	release, err := diskio.Acquire(ctx, handle.Path)
+	if err != nil {
+		return nil, errors.Join(err, handle.Close())
+	}
+	defer release()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, handle); err != nil {
-		return err
+	if _, err := io.Copy(hash, handle.File); err != nil {
+		return nil, errors.Join(err, handle.Close())
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, handle.Close())
 	}
 	if !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), file.SHA256) {
-		return errors.New("file SHA-256 mismatch")
+		return nil, errors.Join(errors.New("file SHA-256 mismatch"), handle.Close())
 	}
-	return nil
+	return handle, nil
+}
+
+func prepareLaunch(ctx context.Context, spec *LaunchSpec) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var locked []*platform.LockedExecutable
+	closeFiles := func() {
+		for _, file := range locked {
+			_ = file.Close()
+		}
+	}
+	for _, file := range []*VerifiedFile{&spec.LoaderDLL, &spec.LegacyLoader} {
+		if file.Path == "" {
+			continue
+		}
+		handle, err := LockVerifiedFile(ctx, *file)
+		if err != nil {
+			closeFiles()
+			return nil, fmt.Errorf("protect launch file %q: %w", file.Path, err)
+		}
+		locked = append(locked, handle)
+		file.Path = handle.Path
+	}
+	if err := ValidateLaunchSpec(*spec); err != nil {
+		closeFiles()
+		return nil, err
+	}
+	return closeFiles, nil
 }
 
 // validateRegularLocalFile follows links like the reference launcher: game and importer folders are often

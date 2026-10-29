@@ -2599,7 +2599,7 @@
           "meshLODDistanceBaseFOVDescription": "操作キャラクターが簡略化モデルに切り替わり始めるカメラの視野角です。カメラが離れるほど視野角は大きくなります。既定値: 165",
           "preLaunchDescription": "ゲームの起動前に実行する Windows コンソールコマンドです。",
           "postLoadDescription": "ゲームが起動し、DLL の注入が終わった後に実行する Windows コンソールコマンドです。",
-          "customLaunchDescription": "ゲームの実行ファイルの代わりにこのコマンドを実行します。起動引数は無視されます。",
+          "customLaunchDescription": "ゲームの実行ファイルの代わりに、アプリと同じ権限でこのコマンドを実行します。起動引数は無視されます。",
           "injectModeDescription": "Hook はウィンドウフック経由で DLL を読み込みます。Inject は DLL をゲームに直接読み込みます。Bypass はインポーター DLL を飛ばし、追加 DLL のみを注入します。",
           "extraLibrariesDescription": "ReShade など、ゲームに一緒に注入する追加 DLL です。",
           "reshade": {

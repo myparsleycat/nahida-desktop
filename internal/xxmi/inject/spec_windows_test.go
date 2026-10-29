@@ -123,8 +123,7 @@ func TestValidateLaunchSpecLimitsReadyEvent(t *testing.T) {
 		}
 	}
 	for name, change := range map[string]func(*LaunchSpec){
-		"custom command": func(s *LaunchSpec) { s.CustomLaunchCmd = "start game" },
-		"manual start":   func(s *LaunchSpec) { s.StartMethod = "Manual" },
+		"manual start": func(s *LaunchSpec) { s.StartMethod = "Manual" },
 	} {
 		combined := spec
 		change(&combined)

@@ -2599,7 +2599,7 @@
           "meshLODDistanceBaseFOVDescription": "조작 캐릭터가 단순화된 모델로 바뀌기 시작하는 카메라 시야각입니다. 카메라가 멀어질수록 시야각이 커집니다. 기본값: 165",
           "preLaunchDescription": "게임을 시작하기 전에 실행할 Windows 콘솔 명령입니다.",
           "postLoadDescription": "게임이 시작되고 DLL 주입이 끝난 뒤에 실행할 Windows 콘솔 명령입니다.",
-          "customLaunchDescription": "게임 실행 파일 대신 이 명령을 실행하며, 실행 인자는 무시됩니다.",
+          "customLaunchDescription": "게임 실행 파일 대신 앱과 같은 권한으로 이 명령을 실행합니다. 실행 인자는 무시됩니다.",
           "injectModeDescription": "Hook은 윈도우 훅을 통해 DLL을 로드합니다. Inject는 DLL을 게임에 직접 로드합니다. Bypass는 임포터 DLL을 건너뛰고 추가 DLL만 주입합니다.",
           "extraLibrariesDescription": "ReShade처럼 게임에 함께 주입할 추가 DLL입니다.",
           "reshade": {

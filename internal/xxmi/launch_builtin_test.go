@@ -693,7 +693,7 @@ func TestLegacyBypassLaunchSpecDoesNotRequireLoader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" || spec.CustomLaunchCmd != "start game" {
+	if spec.InjectMode != "Bypass" || spec.LegacyLoader.Path != "" || spec.StartMethod != "Manual" {
 		t.Fatalf("legacy bypass spec = %+v", spec)
 	}
 
@@ -843,11 +843,10 @@ func TestLogLevelReachesINI(t *testing.T) {
 func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		launch  string
-		method  string
-		command string
+		launch string
+		method string
 	}{
-		{"Direct", "Shell", ""}, {"Custom", "Shell", "start game"}, {"Manual", "Manual", ""},
+		{"Direct", "Shell"}, {"Custom", "Manual"}, {"Manual", "Manual"},
 	} {
 		t.Run(tc.launch, func(t *testing.T) {
 			t.Parallel()
@@ -872,7 +871,7 @@ func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 			spec, err := New().builtinLaunchSpec(
 				context.Background(), "GIMI", cfg, filepath.Join(root, "game.exe"), "game.exe", "", true,
 			)
-			if err != nil || spec.StartMethod != tc.method || spec.CustomLaunchCmd != tc.command {
+			if err != nil || spec.StartMethod != tc.method {
 				t.Fatalf("launch spec = %+v, %v", spec, err)
 			}
 			if err := inject.ValidateLaunchSpec(spec); err != nil {

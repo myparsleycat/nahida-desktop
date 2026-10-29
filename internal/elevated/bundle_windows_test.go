@@ -188,7 +188,7 @@ func TestVerifyHelperHandleDetectsTampering(t *testing.T) {
 			t.Fatalf("open helper: %v", openErr)
 		}
 		defer func() { _ = file.Close() }()
-		return verifyHelperHandle(windows.Handle(file.Fd()), data)
+		return verifyHelperHandle(t.Context(), windows.Handle(file.Fd()), data)
 	}
 	if err := verify(); err != nil {
 		t.Fatalf("verifyHelperHandle = %v", err)

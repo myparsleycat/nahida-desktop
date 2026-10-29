@@ -2599,7 +2599,7 @@
           "meshLODDistanceBaseFOVDescription": "当前角色开始切换为简化模型时的镜头视野角。镜头越远，视野角越大。默认值：165",
           "preLaunchDescription": "在游戏启动前运行的 Windows 控制台命令。",
           "postLoadDescription": "在游戏启动并完成 DLL 注入后运行的 Windows 控制台命令。",
-          "customLaunchDescription": "运行此命令以代替游戏可执行文件，启动参数会被忽略。",
+          "customLaunchDescription": "以与应用相同的权限运行此命令，代替游戏可执行文件。启动参数会被忽略。",
           "injectModeDescription": "Hook 通过窗口钩子加载 DLL。Inject 将 DLL 直接加载到游戏中。Bypass 跳过导入器 DLL，只注入附加 DLL。",
           "extraLibrariesDescription": "一并注入游戏的附加 DLL，例如 ReShade。",
           "reshade": {
