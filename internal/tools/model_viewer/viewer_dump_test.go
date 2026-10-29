@@ -672,6 +672,113 @@ filename = Textures/Components-3 t=beef001cA.png
 	}
 }
 
+func TestLoadModViewerPrefersWWMISRGBSlotsOverHelperMaps(t *testing.T) {
+	t.Parallel()
+	colors := make([]color.NRGBA, 64)
+	helper := make([]color.NRGBA, 64)
+	primary := make([]color.NRGBA, 64)
+	for index := range colors {
+		colors[index] = color.NRGBA{R: uint8(32 + index%8*20), G: uint8(32 + index/8*20), B: 90, A: 255}
+		helper[index] = color.NRGBA{R: uint8(128 + index%8*16), B: uint8(80 + index/8*10), A: 255}
+		primary[index] = colors[index]
+		if index%2 == 0 {
+			primary[index] = color.NRGBA{G: 255, A: 255}
+		}
+	}
+	srgb := encodeWwmiBC1MipDDS(t, 8, 8, colors)
+	primarySRGB := encodeWwmiBC1MipDDS(t, 8, 8, primary)
+	linear := append([]byte(nil), srgb...)
+	binary.LittleEndian.PutUint32(linear[128:132], 71)
+	for _, tt := range []struct {
+		name        string
+		ps0         string
+		want        string
+		onlyMask    bool
+		partialSlot bool
+	}{
+		{name: "legacy packed hair map", ps0: "ResourceA0", want: "color"},
+		{name: "linear map before shared dump", ps0: "ResourceA3", want: "color"},
+		{name: "missing ps-t0 with primary mask", want: "color"},
+		{name: "primary mask with unbound color dump", want: "shared", onlyMask: true},
+		{name: "conditional slot preserves default dump", want: "color", partialSlot: true},
+		{name: "valid legacy diffuse", ps0: "ResourceA4", want: "legacy"},
+		{name: "authored diffuse", ps0: "ResourceAuthoredDiffuse", want: "helper"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "Textures/helper.dds", encodeWwmiUncompressedDDS(8, 8, helper))
+			writeTextureFile(t, dir, "Textures/legacy.dds", encodeWwmiUncompressedDDS(8, 8, colors))
+			writeTextureFile(t, dir, "Textures/linear.dds", linear)
+			writeTextureFile(t, dir, "Textures/primary.dds", primarySRGB)
+			writeTextureFile(t, dir, "Textures/color0.dds", srgb)
+			writeTextureFile(t, dir, "Textures/color1.dds", srgb)
+			writeTextureFile(t, dir, "Textures/Components-2-6 t=beef0012.png", encodeColorPNG(32, 32))
+			ps0 := ""
+			if tt.ps0 != "" {
+				ps0 = "ps-t0 = ref " + tt.ps0 + "\n"
+			}
+			colorSlots := `if $skin == 0
+ps-t2 = ref ResourceA2
+else
+ps-t2 = ref ResourceB2
+endif
+`
+			if tt.onlyMask {
+				colorSlots = ""
+			}
+			if tt.partialSlot {
+				colorSlots = "if $skin == 1\nps-t2 = ref ResourceB2\nendif\n"
+			}
+			result := loadViewerMod(t, dir, `[Constants]
+global persist $skin = 0
+[KeySkin]
+type = cycle
+$skin = 0, 1
+[TextureOverrideComponent2]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+`+ps0+`ps-t1 = ref ResourceA1
+`+colorSlots+`drawindexed = 3, 0, 0
+[ResourceA0]
+filename = Textures/helper.dds
+[ResourceA1]
+filename = Textures/primary.dds
+[ResourceA2]
+filename = Textures/color0.dds
+[ResourceB2]
+filename = Textures/color1.dds
+[ResourceA3]
+filename = Textures/linear.dds
+[ResourceA4]
+filename = Textures/legacy.dds
+[ResourceAuthoredDiffuse]
+filename = Textures/helper.dds
+[ResourceShared]
+filename = Textures/Components-2-6 t=beef0012.png
+`+viewerBodyResources)
+			if len(result.Meshes) != 1 {
+				t.Fatalf("meshes = %d, want 1", len(result.Meshes))
+			}
+			mesh := result.Meshes[0]
+			for _, state := range []string{"0", "1"} {
+				want := "diffuse::Textures/" + tt.want + ".dds"
+				if tt.want == "color" {
+					want = "diffuse::Textures/color" + state + ".dds"
+				}
+				if tt.want == "shared" || tt.partialSlot && state == "0" {
+					want = "diffuse::Textures/Components-2-6 t=beef0012.png"
+				}
+				got := viewerEvalResolveTexture(mesh.TextureVariants, mesh.TexKey, map[string]any{"skin": state})
+				if got != want {
+					t.Errorf("skin=%s texture = %q, want %q", state, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadModViewerBindsSharedWWMIComponentDumps(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "Textures/Components-0-1-2-3-4-5 t=beef0012.png", encodeColorPNG(16, 16))

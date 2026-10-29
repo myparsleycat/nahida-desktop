@@ -39,10 +39,9 @@ func modelViewerSlotTextureNumber(role string) (int, bool) {
 // that carry no role (Resource_A1), and the diffuse slot differs per shader, so
 // an EFMI mesh every other source left untextured takes a slot texture.
 // WWMI and EFMI shaders do not keep the diffuse at ps-t0 either: a component
-// whose unnamed ps-t0 file is a helper map, such as a linear mask bound beside
-// an sRGB diffuse at ps-t3, swaps it for an sRGB slot texture. Only DDS headers
-// declare a color space, so the swap needs both files to declare theirs; a
-// guessed one, as for PNG, keeps the ps-t0 file.
+// whose unnamed ps-t0 DDS is a linear, packed, flat, or normal map swaps it for
+// an sRGB slot texture. Legacy DDS files can lack a declared color space, so
+// decoded hints also identify helper maps; PNG bindings keep their ps-t0 file.
 // The lowest slot holding a fitting file wins, matching the game's
 // diffuse-first slot order, and keeps every conditional assignment of that
 // slot so texture toggles still switch. Each mesh drops its candidates either
@@ -91,13 +90,17 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 		}
 
 		fits, replace := likelyDiffuse, false
+		wwmiMesh := wwmi || wwmiComponentIndex(mesh.component) != ""
 		switch {
 		case !meshHasDiffuseTexture(mesh):
-			if !efmi {
+			if !efmi && !wwmiMesh {
 				continue
 			}
-		case (wwmi || wwmiComponentIndex(mesh.component) != "") && !mesh.textureAuthored &&
-			meshDiffuseIsDeclaredLinear(mesh, declaredColorSpace):
+			if wwmiMesh && !efmi {
+				fits = srgbDiffuse
+			}
+		case wwmiMesh && !mesh.textureAuthored &&
+			(meshDiffuseIsHelper(mesh, hintOf) || !efmi && mesh.textureDumpInferred):
 			fits, replace = srgbDiffuse, true
 		default:
 			continue
@@ -117,14 +120,30 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 		}
 		sort.Ints(slots)
 
+		// Keep an inferred dump over a primary-color slot mask. Without a dump,
+		// a primary channel alone does not invalidate the only fitting texture.
+		avoidPrimaryMask := mesh.textureDumpInferred || wwmiMesh && !efmi &&
+			lo.SomeBy(candidates, func(candidate modelViewerDirectTextureAssignment) bool {
+				hint := hintOf(candidate.file)
+				return fits(candidate.file) && hint != nil && hint.Analyzed && hint.PrimaryColorFraction < 0.05
+			})
 		for _, slot := range slots {
 			if !lo.SomeBy(bySlot[slot], func(candidate modelViewerDirectTextureAssignment) bool {
-				return fits(candidate.file)
+				if !fits(candidate.file) {
+					return false
+				}
+				hint := hintOf(candidate.file)
+				return !avoidPrimaryMask || hint == nil || !hint.Analyzed || hint.PrimaryColorFraction < 0.5
 			}) {
 				continue
 			}
 
-			if replace {
+			// Conditional slots need the inferred dump outside their binding conditions.
+			preserveDump := mesh.textureDumpInferred &&
+				!lo.SomeBy(bySlot[slot], func(candidate modelViewerDirectTextureAssignment) bool {
+					return modelViewerDNFIsTrue(candidate.conditions)
+				})
+			if replace && !preserveDump {
 				mesh.textureAssignments = lo.Reject(
 					mesh.textureAssignments,
 					func(assignment modelViewerDirectTextureAssignment, _ int) bool {
@@ -133,6 +152,7 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 				)
 				mesh.textureDefaultFile = ""
 			}
+			mesh.textureDumpInferred = false
 			for _, candidate := range bySlot[slot] {
 				candidate.role = "diffuse"
 				mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, candidate)
@@ -145,13 +165,20 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 	}
 }
 
-func meshDiffuseIsDeclaredLinear(mesh *modelViewerDirectMesh, declaredColorSpace func(string) string) bool {
-	if declaredColorSpace(mesh.textureDefaultFile) != "linear" {
+func meshDiffuseIsHelper(mesh *modelViewerDirectMesh, hintOf func(string) *wwmiTextureHint) bool {
+	isHelper := func(file string) bool {
+		if !strings.EqualFold(filepath.Ext(file), ".dds") {
+			return false
+		}
+		hint := hintOf(file)
+		return hint != nil && !isLikelyWwmiDiffuse(*hint)
+	}
+	if !isHelper(mesh.textureDefaultFile) {
 		return false
 	}
 	return lo.EveryBy(mesh.textureAssignments, func(assignment modelViewerDirectTextureAssignment) bool {
 		return assignment.role != "diffuse" || assignment.file == "" ||
-			declaredColorSpace(assignment.file) == "linear"
+			isHelper(assignment.file)
 	})
 }
 

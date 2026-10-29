@@ -316,7 +316,7 @@ func TestLoadModViewerPicksEFMIDiffuseFromUnnamedSlotBinding(t *testing.T) {
 	writeEFMIComponentBuffers(t, dir, "Component3")
 	writeTextureFile(t, dir, "Textures/Mask.png", encodeFlatPNG(32, 32))
 	writeTextureFile(t, dir, "Textures/A1.png", encodeColorPNG(32, 32))
-	writeTextureFile(t, dir, "Textures/A2.png", encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "Textures/A2.png", encodeFlatPNG(16, 16))
 	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[Constants]
 global $mod_enabled = 0
 global persist $T = 1
