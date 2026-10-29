@@ -823,10 +823,58 @@ func attachModelViewerDirectPositionOverrides(
 	}
 	for meshIndex := range meshes {
 		mesh := &meshes[meshIndex]
+		basePath, baseErr := resolveModelViewerResourcePath(modDir, modDir, mesh.positionFile)
+		targets := make(map[string]bool)
+		for _, assignment := range assignments {
+			target := modelViewerNormalizeKey(assignment.target)
+			resource := resourceMap[modelViewerNormalizeKey(assignment.resource)]
+			if baseErr != nil || resource.Filename == "" {
+				continue
+			}
+			sourcePath, err := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
+			if err == nil && platform.SamePathFold(basePath, sourcePath) {
+				targets[target] = true
+			}
+		}
+
+		// A single draw section can switch between unrelated vertex buffers.
+		// Prefer the draw's position source over its section's component name.
+		selectedTarget := ""
+		if len(targets) == 1 {
+			for target := range targets {
+				selectedTarget = target
+			}
+		} else {
+			component := modelViewerNormalizeKey(mesh.component)
+			bestMatch, bestLength := 0, 0
+			ambiguous := false
+			for _, assignment := range assignments {
+				target := modelViewerNormalizeKey(assignment.target)
+				if target == "" || len(targets) > 0 && !targets[target] ||
+					!modelViewerKeyMatches(assignment.target, mesh.component, false) {
+					continue
+				}
+				match := 1
+				if strings.HasPrefix(component, target) {
+					match = 2
+				}
+				if match > bestMatch || match == bestMatch && len(target) > bestLength {
+					selectedTarget = target
+					bestMatch, bestLength = match, len(target)
+					ambiguous = false
+				} else if match == bestMatch && len(target) == bestLength && target != selectedTarget {
+					ambiguous = true
+				}
+			}
+			if ambiguous {
+				selectedTarget = ""
+			}
+		}
+
 		var variants []modelViewerDirectPositionAssignment
 		files := make(map[string]int)
 		for _, assignment := range assignments {
-			if !modelViewerKeyMatches(assignment.target, mesh.component, false) ||
+			if selectedTarget == "" || modelViewerNormalizeKey(assignment.target) != selectedTarget ||
 				!modelViewerDNFIntersects(mesh.conditions, assignment.conditions) {
 				continue
 			}
@@ -866,8 +914,7 @@ func attachModelViewerDirectPositionOverrides(
 			)
 		}
 		if len(variants) == 1 {
-			basePath, err := resolveModelViewerResourcePath(modDir, modDir, mesh.positionFile)
-			if err == nil && platform.SamePathFold(basePath, variants[0].sourcePath) {
+			if baseErr == nil && platform.SamePathFold(basePath, variants[0].sourcePath) {
 				continue
 			}
 		}

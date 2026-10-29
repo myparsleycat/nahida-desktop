@@ -218,6 +218,156 @@ func TestModelViewerPositionOverridesPruneMutuallyExclusiveMeshes(t *testing.T) 
 	}
 }
 
+func TestLoadModViewerPositionOverridesKeepDrawBufferFamilies(t *testing.T) {
+	for _, otherVertices := range []int{3, 6} {
+		t.Run(fmt.Sprint(otherVertices), func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometryN(t, dir, 6)
+			for name, count := range map[string]int{"a1.buf": 6, "c.buf": otherVertices} {
+				positions := make([]byte, count*40)
+				for vertex := range count {
+					binary.LittleEndian.PutUint32(positions[vertex*40:], math.Float32bits(float32(10+vertex)))
+				}
+				writeTextureFile(t, dir, name, positions)
+			}
+			writeTextureFile(t, dir, "c-tc.buf", make([]byte, otherVertices*20))
+			writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $frame = 0
+[KeyFrame]
+type = cycle
+$frame = 0, 1
+[TextureOverrideSkirkBodyAPosition]
+if $frame == 0
+vb0 = ResourcePos
+else
+vb0 = ResourceA1
+endif
+[TextureOverrideSkirkBodyCPosition]
+vb0 = ResourceC
+[TextureOverrideSkirkBodyAHead]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 3
+vb0 = ResourceC
+vb1 = ResourceCTc
+drawindexed = 3, 0, 0
+[ResourceA1]
+filename = a1.buf
+stride = 40
+[ResourceC]
+filename = c.buf
+stride = 40
+[ResourceCTc]
+filename = c-tc.buf
+stride = 20
+`+viewerBodyResources))
+			fixture := loadViewerDir(t, dir)
+			if len(fixture.result.Meshes) != 2 {
+				t.Fatalf("meshes = %d", len(fixture.result.Meshes))
+			}
+			bodyA, bodyC := fixture.result.Meshes[0], fixture.result.Meshes[1]
+			if len(bodyA.PositionVariants) != 2 || len(bodyC.PositionVariants) != 0 {
+				t.Fatalf("position variants: A=%d C=%d", len(bodyA.PositionVariants), len(bodyC.PositionVariants))
+			}
+			for index, variant := range bodyA.PositionVariants {
+				data := readModelViewerProtocolBytes(t, fixture.protocol, variant.GeometryURL)
+				got := math.Float32frombits(binary.LittleEndian.Uint32(data[80:]))
+				want := float32(3)
+				if index == 1 {
+					want = 13
+				}
+				if got != want {
+					t.Fatalf("frame %d first position = %v, want %v", index, got, want)
+				}
+			}
+			if got := readViewerMesh(t, fixture.protocol, bodyC.GeometryURL).Positions[0]; got != 10 {
+				t.Fatalf("body C first position = %v, want 10", got)
+			}
+		})
+	}
+}
+
+func TestLoadModViewerPositionOverridesSelectOneTarget(t *testing.T) {
+	for _, test := range []struct {
+		component string
+		variable  string
+		position  float32
+	}{
+		{component: "Body", variable: "body", position: 10},
+		{component: "Hair", variable: "hair", position: 20},
+	} {
+		t.Run(test.component, func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometry(t, dir)
+			for name, x := range map[string]float32{"body1.buf": 10, "hair1.buf": 20} {
+				positions := make([]byte, 3*40)
+				for vertex := range 3 {
+					binary.LittleEndian.PutUint32(positions[vertex*40:], math.Float32bits(x))
+				}
+				writeTextureFile(t, dir, name, positions)
+			}
+			writeTextureFile(t, dir, "mod.ini", []byte(fmt.Sprintf(`[Constants]
+global $body = 0
+global $hair = 0
+[KeyBody]
+type = cycle
+$body = 0, 1
+[KeyHair]
+type = cycle
+$hair = 0, 1
+[TextureOverrideBodyPosition]
+if $body == 0
+vb0 = ResourcePos
+else
+vb0 = ResourceBody1
+endif
+[TextureOverrideHairPosition]
+if $hair == 0
+vb0 = ResourcePos
+else
+vb0 = ResourceHair1
+endif
+[TextureOverride%s]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceBody1]
+filename = body1.buf
+stride = 40
+[ResourceHair1]
+filename = hair1.buf
+stride = 40
+`, test.component)+viewerBodyResources))
+			fixture := loadViewerDir(t, dir)
+			if len(fixture.result.Meshes) != 1 {
+				t.Fatalf("meshes = %d", len(fixture.result.Meshes))
+			}
+			mesh := fixture.result.Meshes[0]
+			for body := range 2 {
+				for hair := range 2 {
+					state := map[string]any{"body": body, "hair": hair}
+					evaluated := evaluateViewerTransport(fixture.result, state).Meshes[0]
+					if evaluated.PositionVariantIndex == nil {
+						t.Fatalf("body=%d hair=%d: missing position variant", body, hair)
+					}
+					variant := mesh.PositionVariants[*evaluated.PositionVariantIndex]
+					data := readModelViewerProtocolBytes(t, fixture.protocol, variant.GeometryURL)
+					got := math.Float32frombits(binary.LittleEndian.Uint32(data[80:]))
+					want := float32(0)
+					if state[test.variable] == 1 {
+						want = test.position
+					}
+					if got != want {
+						t.Fatalf("body=%d hair=%d: first position = %v, want %v", body, hair, got, want)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestReadModelViewerShapePositionsMatchesIdentityAndCompactSources(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "positions.buf")
@@ -321,7 +471,7 @@ filename = ab/pos.buf
 stride = 40`)
 	variables := map[string]any{"frame": float64(0), "__domain:frame": []any{float64(0), float64(1)}}
 	meshes := []modelViewerDirectMesh{{
-		component:    "Body",
+		component:    "CharacterBody",
 		positionFile: "base.buf",
 		conditions:   modelViewerDNFTrue(),
 		geometry:     &modelViewerGeometry{Position: make([]float32, 3), VertexCount: 1},
