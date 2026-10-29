@@ -171,6 +171,12 @@ func (w *fakeLoginWindow) emit(eventType events.WindowEventType) {
 	}
 }
 
+func (w *fakeLoginWindow) deletedNames() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.deleted)
+}
+
 func (w *fakeLoginWindow) setCookies(cookies ...application.WebviewCookie) {
 	w.mu.Lock()
 	w.cookies = append([]application.WebviewCookie(nil), cookies...)
