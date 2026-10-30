@@ -485,6 +485,9 @@ func (t *Service) prepareModelViewerGeometry(
 			if err := recoverWwmiDumpTextures(ctx, folder, meshes, resources, declaredResourcePaths); err != nil {
 				return nil, err
 			}
+			if err := refineWwmiDumpAtlases(ctx, folder, meshes, resources); err != nil {
+				return nil, err
+			}
 		}
 		attributeModelViewerDrawSources(meshes, built[unitIndex].scoped, iniPaths)
 		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], folder)

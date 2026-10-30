@@ -116,7 +116,7 @@ func TestInferModelViewerWWMILayoutUsesInterleaveOrder(t *testing.T) {
 	}
 	normal := findModelViewerElement(layout, "NORMAL", -1)
 	texcoord := findModelViewerElement(layout, "TEXCOORD", 0)
-	if normal == nil || normal.AlignedByteOffset != 12 || normal.Format != "DXGI_FORMAT_R8G8B8A8_SNORM" {
+	if normal == nil || normal.AlignedByteOffset != 16 || normal.Format != "DXGI_FORMAT_R8G8B8A8_SNORM" {
 		t.Fatalf("normal = %#v", normal)
 	}
 	if texcoord == nil || texcoord.AlignedByteOffset != 32 {

@@ -503,7 +503,7 @@ stride = 16`
 	}
 	vectors := make([]byte, 3*8)
 	for vertex := range 3 {
-		vectors[vertex*8+2] = 127
+		copy(vectors[vertex*8:], []byte{127, 0, 0, 127, 0, 0, 127, 129})
 	}
 	texcoords := make([]byte, 3*16)
 	for vertex, uv := range [][2]float32{{0, .25}, {1, .75}, {.5, .5}} {
@@ -554,7 +554,7 @@ stride = 16`
 	if !slices.Equal(geometry.Texcoord0, wantUVs) {
 		t.Fatalf("uvs = %v, want %v", geometry.Texcoord0, wantUVs)
 	}
-	if len(geometry.Normal) != 9 || geometry.Normal[2] != 1 || geometry.Normal[5] != 1 || geometry.Normal[8] != 1 {
+	if !slices.Equal(geometry.Normal, []float32{0, 0, 1, 0, 0, 1, 0, 0, 1}) {
 		t.Fatalf("normals = %v", geometry.Normal)
 	}
 	if len(geometry.Tangent) != 0 {

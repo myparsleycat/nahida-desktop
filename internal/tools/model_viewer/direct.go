@@ -576,9 +576,10 @@ func inferModelViewerFmtLayout(
 				layout.Elements = append(
 					layout.Elements,
 					modelViewerFmtElement{
-						SemanticName:      "NORMAL",
-						Format:            lo.CoalesceOrEmpty(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"),
-						AlignedByteOffset: offset,
+						SemanticName: "NORMAL",
+						Format:       lo.CoalesceOrEmpty(resource.Format, "DXGI_FORMAT_R8G8B8A8_SNORM"),
+						// WWMI packs the tangent before the normal and bitangent sign.
+						AlignedByteOffset: offset + 4,
 						InputSlotClass:    "per-vertex",
 					},
 				)

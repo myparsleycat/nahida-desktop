@@ -607,9 +607,10 @@ func loadModelViewerDrawVertexBuffers(
 								InputSlotClass:    "per-vertex",
 							},
 							{
-								SemanticName:      "NORMAL",
-								Format:            vectorFormat,
-								AlignedByteOffset: posStride,
+								SemanticName: "NORMAL",
+								Format:       vectorFormat,
+								// WWMI packs the tangent before the normal and bitangent sign.
+								AlignedByteOffset: posStride + 4,
 								InputSlotClass:    "per-vertex",
 							},
 							{
