@@ -438,8 +438,19 @@ func TestLoadModViewerRecoversUnreferencedWWMIDiffuse(t *testing.T) {
 				helperResource = ""
 			}
 			marker := "global $required_wwmi_version = 0.77"
+			vertexBindings := "vb1 = ResourceVector\nvb2 = ResourceTc"
+			resources := viewerBodyResources + `
+[ResourceVector]
+filename = vector.buf
+format = DXGI_FORMAT_R8G8B8A8_SNORM
+stride = 8
+`
 			if tc.nonWWMI {
 				marker = ""
+				vertexBindings = "vb1 = ResourceTc"
+				resources = viewerBodyResources
+			} else if err := os.WriteFile(filepath.Join(dir, "vector.buf"), make([]byte, 8*8), 0o600); err != nil {
+				t.Fatal(err)
 			}
 			result := loadViewerMod(t, dir, fmt.Sprintf(`[Constants]
 %s
@@ -447,7 +458,7 @@ global persist $skin = 0
 [TextureOverrideComponent0]
 ib = ResourceBodyIB
 vb0 = ResourcePos
-vb1 = ResourceTc
+%s
 %s
 drawindexed = 3, 0, 0
 %s
@@ -458,7 +469,7 @@ filename = %s
 ; [ResourceUnusedColor]
 ; filename = %s
 %s
-`, marker, tc.binding, viewerBodyResources, maskFile, variantFile, colorFile, helperResource))
+`, marker, vertexBindings, tc.binding, resources, maskFile, variantFile, colorFile, helperResource))
 			if len(result.Meshes) != 1 {
 				t.Fatalf("meshes = %d, want 1", len(result.Meshes))
 			}

@@ -82,18 +82,21 @@ func pickWwmiDumpDiffuse(candidates []wwmiDumpCandidate) string {
 	ranked := append([]wwmiDumpCandidate(nil), candidates...)
 	sort.SliceStable(ranked, func(i, j int) bool {
 		left, right := ranked[i], ranked[j]
-		if leftShare, rightShare := wwmiDumpShareCount(
-			left.File,
-		), wwmiDumpShareCount(
-			right.File,
-		); leftShare != rightShare {
-			return leftShare < rightShare
+		leftShare, rightShare := wwmiDumpShareCount(left.File), wwmiDumpShareCount(right.File)
+		if (leftShare == 1) != (rightShare == 1) {
+			return leftShare == 1
 		}
+
+		// Shared effect maps can cover fewer components than the diffuse atlas.
+		// Prefer color space and resolution before comparing their component counts.
 		if left.SRGB != right.SRGB {
 			return left.SRGB
 		}
 		if left.Area != right.Area {
 			return left.Area > right.Area
+		}
+		if leftShare != rightShare {
+			return leftShare < rightShare
 		}
 		if left.Bytes != right.Bytes {
 			return left.Bytes > right.Bytes

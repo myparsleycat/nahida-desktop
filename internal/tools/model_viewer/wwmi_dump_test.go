@@ -42,6 +42,19 @@ func TestPickWwmiDumpDiffusePrefersExclusiveOverShared(t *testing.T) {
 	}
 }
 
+func TestPickWwmiDumpDiffusePrefersSharedAtlasOverSmallerSharedEffect(t *testing.T) {
+	t.Parallel()
+	got := pickWwmiDumpDiffuse([]wwmiDumpCandidate{
+		{File: "Textures/Components-3-4 t=beef0001.dds", SRGB: true, Area: 512 * 512},
+		{File: "Textures/Components-0-1-3-4 t=beef0002.dds", SRGB: true, Area: 4096 * 4096},
+		{File: "Textures/Components-0-1-3 t=beef0003.dds", SRGB: true, Area: 4096 * 4096},
+		{File: "Textures/Components-3-4 t=beef0004.dds", Area: 8192 * 8192},
+	})
+	if got != "Textures/Components-0-1-3 t=beef0003.dds" {
+		t.Fatalf("pickWwmiDumpDiffuse = %q", got)
+	}
+}
+
 func TestIsLikelyWwmiDiffuseRejectsLinearFlatPackedAndNormal(t *testing.T) {
 	t.Parallel()
 	ok := wwmiTextureHint{SRGB: true, ColorSpace: "srgb", Area: 1024, Bytes: 100}

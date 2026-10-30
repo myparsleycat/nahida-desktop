@@ -65,7 +65,9 @@ func detectModelViewerLayout(sections []modINISection, resources []modelViewerRe
 	for _, section := range sections {
 		if strings.EqualFold(section.Header, "Constants") {
 			for _, line := range section.Lines {
-				if strings.Contains(strings.ToLower(line), "$required_wwmi_version") {
+				match := modelViewerVariableDeclRE.FindStringSubmatch(strings.TrimSpace(line))
+				if len(match) == 2 &&
+					unscopedModelViewerVariable(modelViewerNormalizeKey(match[1])) == "requiredwwmiversion" {
 					return "wwmi"
 				}
 			}

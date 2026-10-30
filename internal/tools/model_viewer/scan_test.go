@@ -570,6 +570,27 @@ stride = 16`
 			t.Fatalf("color=%s texture = %q, want A%s", value, got, value)
 		}
 	}
+
+	t.Run("scoped suffixed buffers", func(t *testing.T) {
+		scoped, _ := scopeModelViewerSections(parseModINI(strings.ReplaceAll(iniText, "Buffer", "Buffer.0")), 0, "", "")
+		meshes, err := buildModelViewerDirectScannedMeshesAt(
+			iniPath,
+			dir,
+			scoped,
+			collectModelViewerDefaultVariables(scoped),
+			cache,
+			nil,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(meshes) != 1 {
+			t.Fatalf("meshes = %#v", meshes)
+		}
+		if got := meshes[0].geometry.Texcoord0; !slices.Equal(got, wantUVs) {
+			t.Fatalf("scoped WWMI uvs = %v, want %v", got, wantUVs)
+		}
+	})
 }
 
 func TestModelViewerScannedMeshesSkipInterleaveValidationErrors(t *testing.T) {
