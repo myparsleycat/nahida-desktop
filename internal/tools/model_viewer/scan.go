@@ -37,6 +37,8 @@ type modelViewerDirectDrawRecord struct {
 	auto            bool
 	implicit        bool
 	copies          int
+	shaderFiltered  bool
+	foreignIB       bool
 }
 
 type modelViewerDirectConditionalBranch struct {

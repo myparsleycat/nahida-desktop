@@ -2,11 +2,16 @@ package modelviewer
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
 )
+
+// A leading $ would make this a mod variable rather than the bound vertex shader.
+var modelViewerShaderFilterGuardRE = regexp.MustCompile(`(?i)(?:^|[^$\w])vs\s*==`)
 
 type modelViewerSymbolicAssignment struct {
 	resource   string
@@ -16,9 +21,10 @@ type modelViewerSymbolicAssignment struct {
 }
 
 type modelViewerSymbolicBranchFrame struct {
-	current ModelViewerDNF
-	seen    ModelViewerDNF
-	seq     int
+	current      ModelViewerDNF
+	seen         ModelViewerDNF
+	seq          int
+	shaderFilter bool
 }
 
 type modelViewerSymbolicSectionState struct {
@@ -126,7 +132,8 @@ func collectModelViewerSymbolicDrawRecords(
 		}
 		output = append(output, state.draws...)
 	}
-	return dedupeModelViewerDirectDrawRecords(keepModelViewerPreviewLODRecords(output)), fallback, nil
+	output = dropModelViewerCrossIBSourceDraws(keepModelViewerPreviewLODRecords(output))
+	return dedupeModelViewerDirectDrawRecords(output), fallback, nil
 }
 
 // modelViewerNestedSectionName returns a section to scan as a nested draw
@@ -167,7 +174,10 @@ func (c *modelViewerSymbolicScanContext) scan(
 				c.variables,
 			)
 			c.seq++
-			stack = append(stack, modelViewerSymbolicBranchFrame{current: branch, seen: branch, seq: c.seq})
+			stack = append(stack, modelViewerSymbolicBranchFrame{
+				current: branch, seen: branch, seq: c.seq,
+				shaderFilter: modelViewerShaderFilterGuardRE.MatchString(line[3:]),
+			})
 			continue
 		case strings.HasPrefix(lower, "elif ") || strings.HasPrefix(lower, "else if "):
 			if len(stack) == 0 {
@@ -253,7 +263,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 				)
 			}
 			if !c.resourcesOnly {
-				state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions)...)
+				state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions, stack)...)
 			}
 		default:
 			if strings.HasPrefix(strings.ToLower(key), "resource") || modelViewerUAVSlotRE.MatchString(key) {
@@ -354,6 +364,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 	draw modelViewerDrawInstruction,
 	auto bool,
 	drawConditions ModelViewerDNF,
+	stack []modelViewerSymbolicBranchFrame,
 ) []modelViewerDirectDrawRecord {
 	states := []modelViewerSymbolicBufferVariant{{conditions: cloneModelViewerDNF(drawConditions)}}
 	for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
@@ -407,6 +418,9 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 		state.resolvedThis = effectiveModelViewerSymbolicAssignments(state.thisHistory)
 	}
 	thisFiles := modelViewerSymbolicResolvedResourceFiles(state.resolvedThis, drawConditions)
+	shaderFiltered := slices.ContainsFunc(stack, func(frame modelViewerSymbolicBranchFrame) bool {
+		return frame.shaderFilter
+	})
 	records := make([]modelViewerDirectDrawRecord, 0, len(states))
 	for _, variant := range states {
 		recordDraw := draw
@@ -423,9 +437,55 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 			conditions:      cloneModelViewerDNF(variant.conditions),
 			draw:            recordDraw,
 			auto:            auto,
+			shaderFiltered:  shaderFiltered,
+			foreignIB: len(state.buffers["ib"]) > 0 && modelViewerNormalizeKey(variant.state.ib) !=
+				modelViewerNormalizeKey(state.buffers["ib"][0].resource),
 		})
 	}
 	return records
+}
+
+// dropModelViewerCrossIBSourceDraws resolves cross-IB mods, which draw one mesh
+// from two overrides behind different `vs ==` guards. The section owning the
+// buffers only records bones in its pass; the section that rebinds them to a
+// foreign IB draws with the textures the mesh is authored for. The viewer ignores
+// those guards, so keeping both would let INI order pick the texture.
+func dropModelViewerCrossIBSourceDraws(records []modelViewerDirectDrawRecord) []modelViewerDirectDrawRecord {
+	drawKey := func(record modelViewerDirectDrawRecord) string {
+		return strings.Join([]string{
+			modelViewerNormalizeKey(record.state.ib),
+			modelViewerNormalizeKey(record.state.vb0),
+			modelViewerNormalizeKey(record.state.vb1),
+			fmt.Sprint(record.draw.StartIndex, record.draw.IndexCount, record.draw.BaseVertex),
+		}, "|")
+	}
+	targets := make(map[string][]modelViewerDirectDrawRecord)
+	for _, record := range records {
+		if record.shaderFiltered && record.foreignIB {
+			targets[drawKey(record)] = append(targets[drawKey(record)], record)
+		}
+	}
+	if len(targets) == 0 {
+		return records
+	}
+	return slices.DeleteFunc(slices.Clone(records), func(record modelViewerDirectDrawRecord) bool {
+		if !record.shaderFiltered || record.foreignIB {
+			return false
+		}
+		return slices.ContainsFunc(targets[drawKey(record)], func(target modelViewerDirectDrawRecord) bool {
+			if target.sectionName == record.sectionName {
+				return false
+			}
+			// modelViewerDNFCovers accepts a match on any one group, but a source
+			// group the target misses would leave the mesh undrawn in that state.
+			for _, group := range record.conditions {
+				if !modelViewerDNFCovers(ModelViewerDNF{group}, target.conditions) {
+					return false
+				}
+			}
+			return true
+		})
+	})
 }
 
 type modelViewerSymbolicBufferVariant struct {
@@ -439,7 +499,7 @@ func (c *modelViewerSymbolicScanContext) implicitRecords(
 	if len(state.buffers["ib"]) == 0 {
 		return nil
 	}
-	records := c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue())
+	records := c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue(), nil)
 	for index := range records {
 		records[index].implicit = true
 	}

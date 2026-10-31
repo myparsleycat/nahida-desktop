@@ -579,6 +579,21 @@ func TestDetectModelViewerUVBestChoosesFloat32AndOffsetFour(t *testing.T) {
 	}
 }
 
+func TestDetectModelViewerUVBestKeepsTiledFloat32(t *testing.T) {
+	const stride, vertices = 8, 256
+	data := make([]byte, vertices*stride)
+	for index := range vertices {
+		_, u := math.Modf(float64(index) * 0.6180339)
+		_, v := math.Modf(float64(index) * 0.7548776)
+		binary.LittleEndian.PutUint32(data[index*stride:], math.Float32bits(float32(u)))
+		binary.LittleEndian.PutUint32(data[index*stride+4:], math.Float32bits(float32(v*1.5-.5)))
+	}
+	offset, format := detectModelViewerUVBest(data, stride, 0, stride)
+	if offset != 0 || format != "DXGI_FORMAT_R32G32_FLOAT" {
+		t.Fatalf("offset=%d format=%s", offset, format)
+	}
+}
+
 func TestModelViewerDirectToggleEffectsStayOffPanel(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $outfit = 0

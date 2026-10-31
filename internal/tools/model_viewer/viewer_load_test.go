@@ -345,6 +345,69 @@ endif
 	}
 }
 
+func TestLoadModViewerKeepsCrossIBTargetDraw(t *testing.T) {
+	const skinIB = `
+[ResourceSkinIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`
+	const draw = "drawindexed = 3, 0, 0\n"
+	for _, test := range []struct {
+		name, targetDraw, sourceDraw string
+		wantCloth                    int
+	}{
+		{
+			name:       "shader filtered source",
+			targetDraw: draw,
+			sourceDraw: "if vs == 201\n" + draw + "endif\n",
+			wantCloth:  0,
+		},
+		{
+			name:       "toggled source",
+			targetDraw: draw,
+			sourceDraw: "if $shared == 0\n" + draw + "endif\n",
+			wantCloth:  1,
+		},
+		{
+			name:       "source visible where target is hidden",
+			targetDraw: "if $shared == 0\n" + draw + "endif\n",
+			sourceDraw: "if vs == 201\nif $shared == 0 || $other == 0\n" + draw + "endif\nendif\n",
+			wantCloth:  1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := loadViewerMod(t, t.TempDir(), `[Constants]
+global persist $shared = 0
+global persist $other = 0
+[KeyShared]
+type = cycle
+$shared = 0, 1
+[KeyOther]
+type = cycle
+$other = 0, 1
+[TextureOverrideSkin]
+ib = ResourceSkinIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if vs == 202 || vs == 203
+ib = ResourceBodyIB
+`+test.targetDraw+`endif
+[TextureOverrideCloth]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+`+test.sourceDraw+viewerBodyResources+skinIB)
+
+			if got := len(meshesNamed(result, "Skin")); got != 1 {
+				t.Fatalf("target meshes = %d: %#v", got, result.Meshes)
+			}
+			if got := len(meshesNamed(result, "Cloth")); got != test.wantCloth {
+				t.Fatalf("source meshes = %d, want %d", got, test.wantCloth)
+			}
+		})
+	}
+}
+
 func TestLoadModViewerLoadsMeshINIsFromSubfolders(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(
