@@ -110,6 +110,17 @@ describe("packed dual-quaternion kernel", () => {
         );
     });
 
+    it("rotates compact EFMI normals through the same axes as positions", () => {
+        const q = Math.SQRT1_2;
+        const pose = [1, 1, 1, 0, 0, 0, 0, 0, q, q, 0, 0, 0, 0];
+        const { deformer, buffers } = fixture([...pose, ...pose]);
+        deformer.base = { url: "/base", byteLength: 28, stride: 28, encoding: "packed_f32_v1" };
+        deformer.pose!.dualQuaternionVariant = "efmi_compact";
+        buffers.base = new Float32Array([1, 0, 0, 1, 1, 0, 0]).buffer;
+        const result = computePackedDualQuaternionFrame(deformer, buffers, 0);
+        expectVector(result.normals, Array.from(result.positions));
+    });
+
     it("applies direct object positions while preserving the shader's normal axis conversion", () => {
         const pose = [2, 3, 4, 5, 6, 7, 0, 0, 0, 1, 1, 2, 3, 0];
         const { deformer, buffers } = fixture([...pose, ...pose]);

@@ -220,7 +220,8 @@ export function normalizeModelViewerTransport(
                 (dualQuaternionVariant &&
                     dualQuaternionVariant !== "object" &&
                     dualQuaternionVariant !== "object_direct" &&
-                    dualQuaternionVariant !== "efmi_typed") ||
+                    dualQuaternionVariant !== "efmi_typed" &&
+                    dualQuaternionVariant !== "efmi_compact") ||
                 (deformer.kind !== "gimi_shape_pose_v1" &&
                     deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
                     deformer.kind !== "gimi_cyclic_packed_v1" &&
@@ -262,7 +263,8 @@ export function normalizeModelViewerTransport(
                         ? {
                               dualQuaternionVariant:
                                   dualQuaternionVariant === "object_direct" ||
-                                  dualQuaternionVariant === "efmi_typed"
+                                  dualQuaternionVariant === "efmi_typed" ||
+                                  dualQuaternionVariant === "efmi_compact"
                                       ? dualQuaternionVariant
                                       : dualQuaternionVariant
                                         ? ("object" as const)

@@ -16,37 +16,66 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-// EFMI armature mods skin several components in draw-time compute passes that
-// share one pose buffer: t110 holds float position plus a packed normal per
-// vertex, t111 raw 16-bit weights and bone indices, t112 the pose frames, and u5
-// the result the draw binds as vb0. All components must advance together, and a
-// clip drives a single deformer, so their records merge into one vertex range.
+// EFMI armature mods skin several components in draw-time compute passes: t110
+// holds float position plus a packed normal per vertex, t111 weights and bone
+// indices, t112 the pose frames, and u5 the result the draw binds as vb0. All
+// components must advance together, and a clip drives a single deformer, so
+// their records merge into one vertex range. Components with their own pose
+// buffer merge those buffers into one palette, each after the previous bones.
 
 const (
-	modelViewerEFMIArmatureVariant  = "efmi_typed"
-	modelViewerEFMIVertexStride     = 16
-	modelViewerEFMIBlendStride      = 16
-	modelViewerEFMIDecodedBlend     = 32
-	modelViewerEFMIDecodedVertex    = 28
-	modelViewerEFMIShapeConfigBytes = (2 + 33) * 16
-	modelViewerEFMIShapeKeyLimit    = 127
+	modelViewerEFMIArmatureVariant    = "efmi_typed"
+	modelViewerEFMICompactVariant     = "efmi_compact"
+	modelViewerEFMIVertexStride       = 16
+	modelViewerEFMIBlendStride        = 16
+	modelViewerEFMICompactBlendStride = 12
+	modelViewerEFMIPoseStride         = 56
+	modelViewerEFMIDecodedBlend       = 32
+	modelViewerEFMIDecodedVertex      = 28
+	modelViewerEFMIShapeConfigBytes   = (2 + 33) * 16
+	modelViewerEFMIShapeKeyLimit      = 127
 )
+
+type modelViewerEFMIArmatureKernel struct {
+	variant     string
+	blendStride int
+	signatures  []string
+}
 
 var (
 	modelViewerEFMIArmatureSignatures = []string{
 		"structposeattributes{float3s;float3t;float4qr;float4qd;}",
 		"rwbuffer<float4>rw_buffer:register(u5)",
 		"buffer<float>base:register(t110)",
-		"buffer<uint4>blend:register(t111)",
 		"structuredbuffer<poseattributes>pose:register(t112)",
 		"#definetimeiniparams[88].x", "#definevg_countiniparams[89].x",
 		"pos=float4(in_position.x,in_position.z,-in_position.y,1.0f)",
-		"norm=float3(norm.x,-norm.z,norm.y)",
 		"idx_prev=frame*vg_count+indices", "idx_next=(frame+1)*vg_count+indices",
 		"pos.xyz=pos.xyz*scale+bias", "sign(dot(p0_prev.qr,",
 		"qr/=qr_len", "qd/=qr_len", "-qdw*qx+qdx*qw-qdy*qz+qdz*qy",
 		"rw_buffer[i]=float4(pos_result.x,-pos_result.z,pos_result.y,",
-		"norm2packed(float3(norm_result.x,norm_result.z,-norm_result.y)",
+	}
+	modelViewerEFMIArmatureKernels = []modelViewerEFMIArmatureKernel{
+		{
+			variant:     modelViewerEFMIArmatureVariant,
+			blendStride: modelViewerEFMIBlendStride,
+			signatures: []string{
+				"buffer<uint4>blend:register(t111)",
+				"norm=float3(norm.x,-norm.z,norm.y)",
+				"norm2packed(float3(norm_result.x,norm_result.z,-norm_result.y)",
+			},
+		},
+		{
+			variant:     modelViewerEFMICompactVariant,
+			blendStride: modelViewerEFMICompactBlendStride,
+			signatures: []string{
+				"structblendattributes{uintweights01;uintweights23;uintindices;}",
+				"structuredbuffer<blendattributes>blend:register(t111)",
+				"float(b.weights01&0xffffu)", "int(b.indices&0xffu)",
+				"norm=float3(norm.x,norm.z,-norm.y)",
+				"norm2packed(float3(norm_result.x,-norm_result.z,norm_result.y)",
+			},
+		},
 	}
 	modelViewerPoolCopyRE = regexp.MustCompile(
 		`(?i)^(pool\w+)\s*\[[^\]]*\]\s*=\s*(?:copy|ref)\s+(resource\w+)\s*$`,
@@ -146,14 +175,101 @@ func (a modelViewerResourceAliases) addEFMIArmatureInputs(sections []modINISecti
 	}
 }
 
-func isKnownModelViewerEFMIArmatureShader(shader string) bool {
-	return modelViewerShaderContainsAll(compactModelViewerShader(shader), modelViewerEFMIArmatureSignatures)
+func modelViewerEFMIArmatureKernelForShader(shader string) (modelViewerEFMIArmatureKernel, bool) {
+	compact := compactModelViewerShader(shader)
+	if !modelViewerShaderContainsAll(compact, modelViewerEFMIArmatureSignatures) {
+		return modelViewerEFMIArmatureKernel{}, false
+	}
+	index := slices.IndexFunc(modelViewerEFMIArmatureKernels, func(kernel modelViewerEFMIArmatureKernel) bool {
+		return modelViewerShaderContainsAll(compact, kernel.signatures)
+	})
+	if index < 0 {
+		return modelViewerEFMIArmatureKernel{}, false
+	}
+	return modelViewerEFMIArmatureKernels[index], true
 }
 
 type modelViewerEFMISegment struct {
 	base, blend ModelViewerComputeBinarySource
 	vertexCount int
 	offset      int
+	boneOffset  int
+}
+
+type modelViewerEFMIPose struct {
+	source     ModelViewerComputeBinarySource
+	boneCountX string
+	boneCount  int
+	boneOffset int
+	frameCount int
+}
+
+// addModelViewerEFMIPose returns the palette entry for a pass, adding its pose
+// buffer unless an earlier pass shares it. A shared palette needs one frame count.
+func addModelViewerEFMIPose(
+	poses []modelViewerEFMIPose,
+	source ModelViewerComputeBinarySource,
+	boneCountX string,
+	defaults map[string]any,
+) ([]modelViewerEFMIPose, modelViewerEFMIPose, bool) {
+	index := slices.IndexFunc(poses, func(pose modelViewerEFMIPose) bool {
+		return platform.SamePathFold(pose.source.sourcePath, source.sourcePath)
+	})
+	if index >= 0 {
+		return poses, poses[index], poses[index].boneCountX == boneCountX
+	}
+	boneCountValue, ok := resolveModelViewerNumericToken(boneCountX, defaults)
+	if !ok || boneCountValue != math.Trunc(boneCountValue) || boneCountValue <= 0 ||
+		boneCountValue > float64(math.MaxInt/modelViewerEFMIPoseStride) {
+		return poses, modelViewerEFMIPose{}, false
+	}
+	pose := modelViewerEFMIPose{source: source, boneCountX: boneCountX, boneCount: int(boneCountValue)}
+	frameBytes := int64(pose.boneCount * modelViewerEFMIPoseStride)
+	pose.frameCount = int(source.ByteLength / frameBytes)
+	if pose.frameCount < 2 || source.ByteLength%frameBytes != 0 {
+		return poses, modelViewerEFMIPose{}, false
+	}
+	if len(poses) > 0 {
+		last := poses[len(poses)-1]
+		pose.boneOffset = last.boneOffset + last.boneCount
+		if pose.frameCount != last.frameCount {
+			return poses, modelViewerEFMIPose{}, false
+		}
+	}
+	return append(poses, pose), pose, true
+}
+
+func mergeModelViewerEFMIPoses(deformerID string, poses []modelViewerEFMIPose) (ModelViewerComputeBinarySource, int) {
+	last := poses[len(poses)-1]
+	boneCount := last.boneOffset + last.boneCount
+	if len(poses) == 1 {
+		return last.source, boneCount
+	}
+	return ModelViewerComputeBinarySource{
+		ByteLength: int64(boneCount) * int64(last.frameCount) * modelViewerEFMIPoseStride,
+		Stride:     modelViewerEFMIPoseStride,
+		sourcePath: deformerID + ":pose",
+		load: func(ctx context.Context) ([]byte, error) {
+			return readModelViewerEFMIPoses(ctx, poses, boneCount)
+		},
+	}, boneCount
+}
+
+func readModelViewerEFMIPoses(ctx context.Context, poses []modelViewerEFMIPose, boneCount int) ([]byte, error) {
+	frameCount := poses[0].frameCount
+	output := make([]byte, boneCount*frameCount*modelViewerEFMIPoseStride)
+	for _, pose := range poses {
+		raw, err := readModelViewerEFMIFile(ctx, pose.source)
+		if err != nil {
+			return nil, err
+		}
+		frameBytes := pose.boneCount * modelViewerEFMIPoseStride
+		for frame := range frameCount {
+			target := (frame*boneCount + pose.boneOffset) * modelViewerEFMIPoseStride
+			copy(output[target:], raw[frame*frameBytes:(frame+1)*frameBytes])
+		}
+	}
+	return output, ctx.Err()
 }
 
 // modelViewerEFMISegmentMeshIDs prefers exact path matches because mesh matching
@@ -186,8 +302,9 @@ func detectModelViewerEFMIArmature(
 ) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
 	runTargets := collectModelViewerRunTargets(sections)
 	var first modelViewerEFMIArmaturePass
+	var firstKernel modelViewerEFMIArmatureKernel
 	var poseSection modINISection
-	var poseSource ModelViewerComputeBinarySource
+	var poses []modelViewerEFMIPose
 	var segments []modelViewerEFMISegment
 	var meshIDs []string
 	offsets := make(map[string]uint32)
@@ -202,23 +319,22 @@ func detectModelViewerEFMIArmature(
 			continue
 		}
 		shader, shaderOK := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
-		if !shaderOK || !isKnownModelViewerEFMIArmatureShader(shader) {
+		if !shaderOK {
+			continue
+		}
+		kernel, known := modelViewerEFMIArmatureKernelForShader(shader)
+		if !known {
 			continue
 		}
 		base := effective[modelViewerNormalizeKey(pass.out)]
-		pose := raw[modelViewerNormalizeKey(pass.pose)]
 		baseSource, baseOK := modelViewerComputeSource(root, base)
 		blendSource, blendOK := modelViewerComputeSource(root, raw[modelViewerNormalizeKey(pass.blend)])
-		currentPose, poseOK := modelViewerComputeSource(root, pose)
+		currentPose, poseOK := modelViewerComputeSource(root, raw[modelViewerNormalizeKey(pass.pose)])
 		if raw[modelViewerNormalizeKey(pass.out)].Filename != "" || !baseOK || !blendOK || !poseOK ||
-			baseSource.Stride != modelViewerEFMIVertexStride || blendSource.Stride != modelViewerEFMIBlendStride ||
-			blendSource.ByteLength != baseSource.ByteLength || currentPose.Stride != 56 {
+			baseSource.Stride != modelViewerEFMIVertexStride || blendSource.Stride != kernel.blendStride ||
+			blendSource.ByteLength/int64(kernel.blendStride) != baseSource.ByteLength/modelViewerEFMIVertexStride ||
+			currentPose.Stride != modelViewerEFMIPoseStride {
 			continue
-		}
-		if len(segments) == 0 {
-			first, poseSection, poseSource = pass, section, currentPose
-		} else if pass.x88 != first.x88 || pass.x89 != first.x89 || currentPose.sourcePath != poseSource.sourcePath {
-			return nil, nil
 		}
 		ids := modelViewerEFMISegmentMeshIDs(meshes, base.Filename, offsets)
 		if len(ids) == 0 || slices.ContainsFunc(segments, func(segment modelViewerEFMISegment) bool {
@@ -226,31 +342,34 @@ func detectModelViewerEFMIArmature(
 		}) {
 			continue
 		}
+		if len(segments) == 0 {
+			first, firstKernel, poseSection = pass, kernel, section
+		} else if pass.x88 != first.x88 || kernel.variant != firstKernel.variant {
+			return nil, nil
+		}
+		var pose modelViewerEFMIPose
+		var poseAdded bool
+		if poses, pose, poseAdded = addModelViewerEFMIPose(poses, currentPose, pass.x89, defaults); !poseAdded {
+			return nil, nil
+		}
 		vertexCount := int(baseSource.ByteLength / modelViewerEFMIVertexStride)
 		for _, id := range ids {
 			offsets[id] = uint32(total)
 		}
 		meshIDs = append(meshIDs, ids...)
 		segments = append(segments, modelViewerEFMISegment{
-			base: baseSource, blend: blendSource, vertexCount: vertexCount, offset: total,
+			base: baseSource, blend: blendSource, vertexCount: vertexCount, offset: total, boneOffset: pose.boneOffset,
 		})
 		total += vertexCount
 	}
 	if len(segments) == 0 {
 		return nil, nil
 	}
-	boneCountValue, boneCountOK := resolveModelViewerNumericToken(first.x89, defaults)
-	if !boneCountOK || boneCountValue != math.Trunc(boneCountValue) || boneCountValue <= 0 ||
-		boneCountValue > float64(math.MaxInt/56) {
-		return nil, nil
-	}
-	boneCount := int(boneCountValue)
-	frameCount := int(poseSource.ByteLength / int64(boneCount*56))
-	if frameCount < 2 || poseSource.ByteLength%int64(boneCount*56) != 0 {
-		return nil, nil
-	}
 	slices.Sort(meshIDs)
 	deformerID := modelViewerComputeDeformerID(scopeID, "efmi-armature")
+	frames, boneCount := mergeModelViewerEFMIPoses(deformerID, poses)
+	frameCount := poses[0].frameCount
+	poseSource := poses[0].source
 	deformer := &ModelViewerComputeDeformerTransport{
 		Kind:              modelViewerPackedDualQuaternionKind,
 		ID:                deformerID,
@@ -267,7 +386,7 @@ func detectModelViewerEFMIArmature(
 			},
 		},
 		Pose: &ModelViewerComputePoseSource{
-			DualQuaternionVariant: modelViewerEFMIArmatureVariant,
+			DualQuaternionVariant: firstKernel.variant,
 			Blend: ModelViewerComputeBinarySource{
 				ByteLength: int64(total) * modelViewerEFMIDecodedBlend,
 				Stride:     modelViewerEFMIDecodedBlend,
@@ -276,7 +395,7 @@ func detectModelViewerEFMIArmature(
 					return readModelViewerEFMIBlend(ctx, segments, total)
 				},
 			},
-			Frames:     poseSource,
+			Frames:     frames,
 			BoneCount:  boneCount,
 			FrameCount: frameCount,
 		},
@@ -397,13 +516,16 @@ func readModelViewerEFMIBlend(ctx context.Context, segments []modelViewerEFMISeg
 			return nil, err
 		}
 		for vertex := range segment.vertexCount {
-			record := raw[vertex*modelViewerEFMIBlendStride:]
+			record := raw[vertex*segment.blend.Stride:]
 			target := output[(segment.offset+vertex)*modelViewerEFMIDecodedBlend:]
 			for influence := range 4 {
 				weight := float32(binary.LittleEndian.Uint16(record[influence*2:])) / 65535
 				binary.LittleEndian.PutUint32(target[influence*4:], math.Float32bits(weight))
-				bone := binary.LittleEndian.Uint16(record[8+influence*2:])
-				binary.LittleEndian.PutUint32(target[16+influence*4:], uint32(bone))
+				bone := uint32(record[8+influence])
+				if segment.blend.Stride == modelViewerEFMIBlendStride {
+					bone = uint32(binary.LittleEndian.Uint16(record[8+influence*2:]))
+				}
+				binary.LittleEndian.PutUint32(target[16+influence*4:], bone+uint32(segment.boneOffset))
 			}
 		}
 	}

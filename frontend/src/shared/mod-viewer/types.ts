@@ -201,7 +201,7 @@ export type ViewerComputeDeformer = {
     shapePasses: ViewerComputeShapePass[];
     shapeStages: ViewerComputeShapeStage[];
     pose?: {
-        dualQuaternionVariant?: "object" | "object_direct" | "efmi_typed";
+        dualQuaternionVariant?: "object" | "object_direct" | "efmi_typed" | "efmi_compact";
         blend: ViewerComputeBinarySource;
         frames: ViewerComputeBinarySource;
         boneCount: number;

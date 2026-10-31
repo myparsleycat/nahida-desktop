@@ -146,7 +146,8 @@ export class ModelViewerComputeController {
     // EFMI shape keys run on their own timer in game, so a pose clip restarting
     // must not rewind them.
     private phaseSeconds(request: ComputeFrameRequest, frameTime: number): number {
-        if (this.deformer.pose?.dualQuaternionVariant !== "efmi_typed") {
+        const variant = this.deformer.pose?.dualQuaternionVariant;
+        if (variant !== "efmi_typed" && variant !== "efmi_compact") {
             return frameTime;
         }
         // A step back of under half the clip is a seek rather than a wrap.

@@ -344,6 +344,166 @@ func TestLoadModViewerMergesEFMIDrawTimeArmatureComponents(t *testing.T) {
 	}
 }
 
+// Each component's indices address only its own pose buffer, so a wrong palette
+// offset would skin one component with another component's bones.
+func TestLoadModViewerMergesEFMICompactComponentPoses(t *testing.T) {
+	dir := t.TempDir()
+	shader := strings.NewReplacer(
+		"Buffer<uint4> blend : register(t111);",
+		"struct BlendAttributes { uint weights01; uint weights23; uint indices; };\n"+
+			"StructuredBuffer<BlendAttributes> blend : register(t111);\n"+
+			"float w = float(b.weights01 & 0xffffu); int n = int(b.indices & 0xffu);",
+		"norm = float3(norm.x, -norm.z, norm.y)",
+		"norm = float3(norm.x, norm.z, -norm.y)",
+		"float3(norm_result.x, norm_result.z, -norm_result.y)",
+		"float3(norm_result.x, -norm_result.z, norm_result.y)",
+	).Replace(efmiArmatureShader)
+	var ini strings.Builder
+	ini.WriteString(`[Constants]
+global $required_efmi_version = 1.46
+global $dt
+global $Freq_armature = 0
+[Present]
+$Freq_armature = $Freq_armature + 20 * $dt
+[CommandList_Component_DrawInstances]
+handling = skip
+run = CommandList\EFMIv1\Component_DrawInstances
+`)
+	files := map[string][]byte{"anim.hlsl": []byte(shader)}
+	for component, bones := range []int{1, 2} {
+		name := "Component" + strconv.Itoa(component)
+		writeEFMIComponentBuffers(t, dir, name)
+		blend := make([]byte, 3*12)
+		binary.LittleEndian.PutUint16(blend, 65535)
+		blend[8] = byte(bones - 1)
+		files["Meshes/"+name+"_VB2.buf"] = blend
+
+		pose := make([]byte, 2*bones*56)
+		for record := range 2 * bones {
+			pose[record*56] = byte(10*component + record)
+		}
+		files[name+"_pose.buf"] = pose
+		fmt.Fprintf(&ini, `[CommandList_Draw_%[1]s]
+ib = ref Resource_%[1]s_IB
+run = CustomShaderArmature_%[1]s
+vb0 = ref Resource_%[1]s_anim
+vb1 = ref Resource_%[1]s_VB1
+drawindexed = 3, 0, 0
+[TextureOverride_EntryPoint_%[1]s]
+hash = %08[3]x
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_%[1]s
+    run = CommandList_Component_DrawInstances
+endif
+[Resource_%[1]s_anim]
+type = RWBuffer
+format = R32G32B32A32_FLOAT
+stride = 16
+array = 3
+[Resource_%[1]s_input]
+type = Buffer
+stride = 16
+filename = Meshes/%[1]s_VB0.buf
+[CustomShaderArmature_%[1]s]
+cs = ./anim.hlsl
+    x88 = $Freq_armature
+    x89 = %[2]d
+    cs-t110 = ref Resource_%[1]s_input
+    cs-t111 = ref Resource_%[1]s_VB2
+    cs-t112 = ref Resource_%[1]s_pose
+    cs-u5 = ref Resource_%[1]s_anim
+    Dispatch = 1, 1, 1
+    cs-u5 = null
+[Resource_%[1]s_pose]
+type = StructuredBuffer
+stride = 56
+filename = %[1]s_pose.buf
+[Resource_%[1]s_IB]
+type = Buffer
+format = DXGI_FORMAT_R16_UINT
+filename = Meshes/%[1]s_IB.buf
+[Resource_%[1]s_VB1]
+type = Buffer
+stride = 12
+filename = Meshes/%[1]s_VB1.buf
+[Resource_%[1]s_VB2]
+type = StructuredBuffer
+stride = 12
+filename = Meshes/%[1]s_VB2.buf
+`, name, bones, component+1)
+	}
+
+	// A pass no draw uses must not join the palette or reject it with its frame count.
+	writeEFMIComponentBuffers(t, dir, "Component2")
+	files["unused_pose.buf"] = make([]byte, 3*56)
+	ini.WriteString(`[CommandList_Unused]
+run = CustomShaderArmature_Unused
+[Resource_Unused_anim]
+type = RWBuffer
+format = R32G32B32A32_FLOAT
+stride = 16
+array = 3
+[Resource_Unused_input]
+type = Buffer
+stride = 16
+filename = Meshes/Component2_VB0.buf
+[Resource_Unused_blend]
+type = StructuredBuffer
+stride = 12
+filename = Meshes/Component2_VB2.buf
+[Resource_Unused_pose]
+type = StructuredBuffer
+stride = 56
+filename = unused_pose.buf
+[CustomShaderArmature_Unused]
+cs = ./anim.hlsl
+    x88 = $Freq_armature
+    x89 = 1
+    cs-t110 = ref Resource_Unused_input
+    cs-t111 = ref Resource_Unused_blend
+    cs-t112 = ref Resource_Unused_pose
+    cs-u5 = ref Resource_Unused_anim
+    Dispatch = 1, 1, 1
+    cs-u5 = null
+`)
+	files["mod.ini"] = []byte(ini.String())
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.ComputeDeformers) != 1 {
+		t.Fatalf("deformers = %#v", fixture.result.ComputeDeformers)
+	}
+	deformer := fixture.result.ComputeDeformers[0]
+	if deformer.VertexCount != 6 || deformer.Pose == nil ||
+		deformer.Pose.DualQuaternionVariant != modelViewerEFMICompactVariant ||
+		deformer.Pose.BoneCount != 3 || deformer.Pose.FrameCount != 2 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+
+	blend := readModelViewerProtocolBytes(t, fixture.protocol, deformer.Pose.Blend.URL)
+	if first, second := binary.LittleEndian.Uint32(
+		blend[16:],
+	), binary.LittleEndian.Uint32(
+		blend[3*32+16:],
+	); first != 0 ||
+		second != 2 {
+		t.Fatalf("first bones = %d, %d, want 0 and 2", first, second)
+	}
+	frames := readModelViewerProtocolBytes(t, fixture.protocol, deformer.Pose.Frames.URL)
+	if len(frames) != 2*3*56 {
+		t.Fatalf("frames = %d bytes", len(frames))
+	}
+	for record, want := range []byte{0, 10, 11, 1, 12, 13} {
+		if frames[record*56] != want {
+			t.Fatalf("palette record %d = %d, want %d", record, frames[record*56], want)
+		}
+	}
+}
+
 func TestModelViewerScannerParsesDrawIndexedInstanced(t *testing.T) {
 	sections := parseModINI(`[TextureOverrideBody]
 ib = ResourceBodyIB

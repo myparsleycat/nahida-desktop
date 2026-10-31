@@ -20,14 +20,16 @@ export function validatePackedDualQuaternionBuffers(
     buffers: GIMIShapePoseBuffers,
 ): void {
     const pose = deformer.pose;
-    const shapePassesAllowed = pose?.dualQuaternionVariant === "efmi_typed";
+    const shapePassesAllowed =
+        pose?.dualQuaternionVariant === "efmi_typed" ||
+        pose?.dualQuaternionVariant === "efmi_compact";
     if (
         deformer.kind !== "gimi_packed_dual_quaternion_v1" ||
         !pose ||
         (pose.dualQuaternionVariant !== undefined &&
             pose.dualQuaternionVariant !== "object" &&
             pose.dualQuaternionVariant !== "object_direct" &&
-            pose.dualQuaternionVariant !== "efmi_typed") ||
+            !shapePassesAllowed) ||
         !buffers.pose ||
         !buffers.blend ||
         !Number.isSafeInteger(deformer.vertexCount) ||
@@ -112,7 +114,8 @@ function computeValidatedPackedDualQuaternionFrame(
     const directPositionAxes = pose.dualQuaternionVariant === "object_direct";
     // EFMI stores float positions and unit normals, so nothing is quantized to
     // the 16-bit and 8-bit records the other variants write back.
-    const efmiTyped = pose.dualQuaternionVariant === "efmi_typed";
+    const efmiCompact = pose.dualQuaternionVariant === "efmi_compact";
+    const efmiTyped = pose.dualQuaternionVariant === "efmi_typed" || efmiCompact;
     const unsignedSeed = directPositionAxes || efmiTyped;
     const outputPosition = efmiTyped ? (value: number) => value : roundPackedPosition;
     const outputNormal = efmiTyped
@@ -221,9 +224,10 @@ function computeValidatedPackedDualQuaternionFrame(
         const z =
             (directPositionAxes ? baseZ : efmiTyped ? -baseY : baseY) * accumulated[2]! +
             accumulated[5]!;
+        // Compact EFMI shaders rotate normals with the positions; the older ones do not.
         const nx = base[source + 4]!;
-        const ny = -base[source + 6]!;
-        const nz = base[source + 5]!;
+        const ny = efmiCompact ? base[source + 6]! : -base[source + 6]!;
+        const nz = efmiCompact ? -base[source + 5]! : base[source + 5]!;
         const destination = destIndex * 3;
         positions[destination] = outputPosition(
             m00 * x + m01 * y + m02 * z + 2 * (-dw * qx + dx * qw - dy * qz + dz * qy),
@@ -239,8 +243,12 @@ function computeValidatedPackedDualQuaternionFrame(
         normals[destination] = outputNormal(m00 * nx + m01 * ny + m02 * nz);
         const normalY = m10 * nx + m11 * ny + m12 * nz;
         const normalZ = m20 * nx + m21 * ny + m22 * nz;
-        normals[destination + 1] = outputNormal(directPositionAxes ? normalY : normalZ);
-        normals[destination + 2] = outputNormal(directPositionAxes ? normalZ : -normalY);
+        normals[destination + 1] = outputNormal(
+            directPositionAxes ? normalY : efmiCompact ? -normalZ : normalZ,
+        );
+        normals[destination + 2] = outputNormal(
+            directPositionAxes ? normalZ : efmiCompact ? normalY : -normalY,
+        );
     });
     normalizePackedVectors(normals);
     return { positions, normals };

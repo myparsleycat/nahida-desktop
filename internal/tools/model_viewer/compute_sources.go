@@ -98,6 +98,38 @@ func (t *Service) prepareModelViewerComputeSources(
 		} else {
 			sources = nil
 		}
+		storeLoader := func(
+			bufferID string,
+			original ModelViewerComputeBinarySource,
+			read func(context.Context) ([]byte, error),
+		) (string, error) {
+			return t.protocol.StoreMemoryLoader(
+				sessionID,
+				bufferID,
+				func(ctx context.Context) (data []byte, err error) {
+					defer func() {
+						if err != nil && ctx.Err() == nil {
+							err = infra.ReportError(
+								t.log,
+								err,
+								"Tools.ModelViewerComputeSource",
+								infra.Diagnostic{
+									Operation: "prepare-compute-source",
+									Stage:     "decode",
+									Fields: map[string]any{
+										"memorySessionId": sessionID,
+										"sourcePath":      original.sourcePath,
+										"sourceBytes":     original.ByteLength,
+										"bufferId":        bufferID,
+									},
+								},
+							)
+						}
+					}()
+					return cache.load(ctx, bufferID, read)
+				},
+			)
+		}
 		registered := make(map[string]ModelViewerComputeBinarySource)
 		register := func(source *ModelViewerComputeBinarySource, packed bool) error {
 			original := *source
@@ -123,34 +155,9 @@ func (t *Service) prepareModelViewerComputeSources(
 			source.Stride, source.ByteLength = stride, int64(deformer.VertexCount)*int64(stride)
 			bufferID := fmt.Sprintf("%s.source.%d", deformer.ID, len(registered))
 			vertexCount := deformer.VertexCount
-			url, err := t.protocol.StoreMemoryLoader(
-				sessionID,
-				bufferID,
-				func(ctx context.Context) (data []byte, err error) {
-					defer func() {
-						if err != nil && ctx.Err() == nil {
-							err = infra.ReportError(
-								t.log,
-								err,
-								"Tools.ModelViewerComputeSource",
-								infra.Diagnostic{
-									Operation: "prepare-compute-source",
-									Stage:     "decode",
-									Fields: map[string]any{
-										"memorySessionId": sessionID,
-										"sourcePath":      original.sourcePath,
-										"sourceBytes":     original.ByteLength,
-										"bufferId":        bufferID,
-									},
-								},
-							)
-						}
-					}()
-					return cache.load(ctx, bufferID, func(ctx context.Context) ([]byte, error) {
-						return readModelViewerComputeRecords(ctx, original, sources, vertexCount, packed)
-					})
-				},
-			)
+			url, err := storeLoader(bufferID, original, func(ctx context.Context) ([]byte, error) {
+				return readModelViewerComputeRecords(ctx, original, sources, vertexCount, packed)
+			})
 			if err != nil {
 				return err
 			}
@@ -179,7 +186,16 @@ func (t *Service) prepareModelViewerComputeSources(
 			if err := register(&deformer.Pose.Blend, false); err != nil {
 				return err
 			}
-			deformer.Pose.Frames.URL = t.protocol.LocalFileURL(deformer.Pose.Frames.sourcePath, true)
+			frames := &deformer.Pose.Frames
+			if frames.load == nil {
+				frames.URL = t.protocol.LocalFileURL(frames.sourcePath, true)
+			} else {
+				url, err := storeLoader(deformer.ID+".frames", *frames, frames.load)
+				if err != nil {
+					return err
+				}
+				frames.URL = url
+			}
 		}
 		t.log.Info(
 			fmt.Sprintf(
