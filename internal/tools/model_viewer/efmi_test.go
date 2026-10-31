@@ -70,6 +70,280 @@ func writeEFMIDumpBuffers(t *testing.T, dir string) {
 	}
 }
 
+const efmiArmatureShader = `
+struct PoseAttributes { float3 S; float3 T; float4 QR; float4 QD; };
+RWBuffer<float4> rw_buffer : register(u5);
+Buffer<float> base : register(t110);
+Buffer<uint4> blend : register(t111);
+StructuredBuffer<PoseAttributes> pose : register(t112);
+#define TIME IniParams[88].x
+#define VG_COUNT IniParams[89].x
+void main() {
+    float4 pos = float4(in_position.x, in_position.z, -in_position.y, 1.0f);
+    norm = float3(norm.x, -norm.z, norm.y);
+    int4 idx_prev = frame * vg_count + indices;
+    int4 idx_next = (frame + 1) * vg_count + indices;
+    pos.xyz = pos.xyz * scale + bias;
+    float sign1 = sign(dot(p0_prev.QR, p1_prev.QR));
+    qr /= qr_len;
+    qd /= qr_len;
+    float t0 = 2.0f*(-qdw*qx + qdx*qw - qdy*qz + qdz*qy);
+    rw_buffer[i] = float4(pos_result.x, -pos_result.z, pos_result.y,
+        asfloat(norm2packed(float3(norm_result.x, norm_result.z, -norm_result.y), in_normal)));
+}`
+
+const efmiArmatureINI = `
+[Constants]
+global $required_efmi_version = 1.46
+global $mod_enabled = 0
+global $lod_level = 0
+global $dt
+global $Freq_shape = 0
+global $Freq_armature = 0
+global $VG_count = 2
+global persist $anime_state = 1
+global $start_frame = 0
+global $end_frame = 2
+run = CommandListInitShapes
+[Present]
+$Freq_shape = $Freq_shape + 3* $dt
+$Freq_armature = $Freq_armature +20* $dt
+if $Freq_armature > $end_frame - 1
+    $Freq_armature = $start_frame
+endif
+if $anime_state == 0
+    $start_frame = 0
+    $end_frame = 2
+elif $anime_state == 1
+    $start_frame = 1
+    $end_frame = 3
+endif
+run = CommandListShapeAnim
+[CommandListShapeAnim]
+if $Freq_shape > 31.4
+    $Freq_shape = 0
+endif
+$component_id = 0
+$shapekey_id = 1
+$shapekey_value = (sin($Freq_shape+1.57)+1)/2
+run = CommandListSetShapeKey
+[CommandListInitShapes]
+$component_id = 0
+Pool_ShapeKeyBatchConfigs[$component_id] = ref Resource_Component0_Configs
+Pool_ShapeKeyVertexIds[$component_id] = ref Resource_Component0_Ids
+Pool_ShapeKeyVertexOffsets[$component_id] = ref Resource_Component0_Deltas
+Pool_VertexPositions[$component_id] = copy Resource_Component0_VB0
+Pool_ShapeKeyedPositionsRW[$component_id] = copy Resource_Component0_VB0
+$component_id = 9
+Pool_ShapeKeyedPositionsRW[$component_id] = copy Resource_Component9_VB0
+[CommandList_Component_DrawInstances]
+handling = skip
+run = CommandList\EFMIv1\Component_DrawInstances
+[CommandList_Draw_Component0]
+ib = ref Resource_Component0_IB
+run = CustomShaderArmature_C0
+vb0 = ref Resource_Component0_VB0_anim
+vb1 = ref Resource_Component0_VB1
+drawindexed = 6, 0, 0
+[CommandList_Draw_Component1]
+ib = ref Resource_Component1_IB
+run = CustomShaderArmature_C1
+vb0 = ref Resource_Component1_VB0_anim
+vb1 = ref Resource_Component1_VB1
+drawindexed = 3, 0, 0
+[CommandList_Draw_Component2]
+ib = ref Resource_Component2_IB
+vb0 = ref Resource_Component2_VB0
+vb1 = ref Resource_Component2_VB1
+;drawindexed = 3, 0, 0
+[TextureOverride_EntryPoint_Component0]
+hash = 11111111
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component0
+    run = CommandList_Component_DrawInstances
+endif
+[TextureOverride_EntryPoint_Component1]
+hash = 22222222
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component1
+    run = CommandList_Component_DrawInstances
+endif
+[TextureOverride_EntryPoint_Component2]
+hash = 33333333
+if $mod_enabled && DRAW_TYPE == 4
+    CommandList\EFMIv1\Callback_Component_DrawCustom = ref CommandList_Draw_Component2
+    run = CommandList_Component_DrawInstances
+endif
+[Resource_Component0_VB0_anim]
+type = RWBuffer
+format = R32G32B32A32_FLOAT
+stride = 16
+array = 3
+[CustomShaderArmature_C0]
+cs = ./anim.hlsl
+    x88 = $Freq_armature
+    x89 = $VG_count
+    cs-t110 = copy Pool_ShapeKeyedPositionsRW[$uid]
+    cs-t111 = ref Resource_Component0_VB2
+    cs-t112 = ref Resource_pose
+    cs-u5 = ref Resource_Component0_VB0_anim
+    Dispatch = 1, 1, 1
+    cs-u5 = null
+    cs-t110 = null
+    cs-t111 = null
+    cs-t112 = null
+[Resource_Component1_VB0_anim]
+type = RWBuffer
+format = R32G32B32A32_FLOAT
+stride = 16
+array = 3
+[CustomShaderArmature_C1]
+cs = ./anim.hlsl
+    x88 = $Freq_armature
+    x89 = $VG_count
+    cs-t110 = copy Resource_Component1_VB0
+    cs-t111 = ref Resource_Component1_VB2
+    cs-t112 = ref Resource_pose
+    cs-u5 = ref Resource_Component1_VB0_anim
+    Dispatch = 1, 1, 1
+    cs-u5 = null
+[Resource_pose]
+type = StructuredBuffer
+stride = 56
+filename = pose.buf
+[Resource_Component0_Configs]
+type = Buffer
+stride = 16
+filename = Meshes/Component0_Configs.buf
+[Resource_Component0_Ids]
+type = Buffer
+stride = 4
+filename = Meshes/Component0_Ids.buf
+[Resource_Component0_Deltas]
+type = Buffer
+format = DXGI_FORMAT_R16_FLOAT
+stride = 2
+filename = Meshes/Component0_Deltas.buf
+`
+
+func writeEFMIArmatureFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	var ini strings.Builder
+	ini.WriteString(efmiArmatureINI)
+	for _, component := range []string{"Component0", "Component1", "Component2", "Component9"} {
+		writeEFMIComponentBuffers(t, dir, component)
+		// The blend record is four 16-bit weights and four 16-bit bones.
+		blend := make([]byte, 3*16)
+		for vertex := range 3 {
+			binary.LittleEndian.PutUint16(blend[vertex*16:], 65535)
+			binary.LittleEndian.PutUint16(blend[vertex*16+8:], 1)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "Meshes", component+"_VB2.buf"), blend, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(&ini, `[Resource_%[1]s_IB]
+type = Buffer
+format = DXGI_FORMAT_R16_UINT
+filename = Meshes/%[1]s_IB.buf
+[Resource_%[1]s_VB0]
+type = Buffer
+stride = 16
+filename = Meshes/%[1]s_VB0.buf
+[Resource_%[1]s_VB1]
+type = Buffer
+stride = 12
+filename = Meshes/%[1]s_VB1.buf
+[Resource_%[1]s_VB2]
+type = Buffer
+stride = 16
+filename = Meshes/%[1]s_VB2.buf
+`, component)
+	}
+
+	// Shape key 1 moves vertex 2 by +1 on X; key 0 holds no entries.
+	config := make([]byte, modelViewerEFMIShapeConfigBytes)
+	for key := 2; key < 128; key++ {
+		binary.LittleEndian.PutUint32(config[3*16+key*4:], 1)
+	}
+	deltas := make([]byte, 6)
+	binary.LittleEndian.PutUint16(deltas, 0x3c00)
+	ids := make([]byte, 4)
+	binary.LittleEndian.PutUint32(ids, 2)
+	pose := make([]byte, 4*2*56)
+	for name, data := range map[string][]byte{
+		"mod.ini":                       []byte(ini.String()),
+		"anim.hlsl":                     []byte(efmiArmatureShader),
+		"pose.buf":                      pose,
+		"Meshes/Component0_Configs.buf": config,
+		"Meshes/Component0_Ids.buf":     ids,
+		"Meshes/Component0_Deltas.buf":  deltas,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// Components skinned by one pose buffer must form one deformer: a clip drives a
+// single deformer, so a split or misplaced vertex range would tear them apart.
+func TestLoadModViewerMergesEFMIDrawTimeArmatureComponents(t *testing.T) {
+	fixture := loadViewerDir(t, writeEFMIArmatureFixture(t))
+	result := fixture.result
+
+	if len(result.Meshes) != 2 {
+		t.Fatalf("meshes = %#v, want the two drawn components", result.Meshes)
+	}
+	if indices := readViewerMesh(t, fixture.protocol, result.Meshes[0].GeometryURL).Indices; len(indices) != 3 {
+		t.Fatalf("overflowing draw indices = %v, want the 3 the buffer holds", indices)
+	}
+	if len(result.ComputeDeformers) != 1 {
+		t.Fatalf("deformers = %#v", result.ComputeDeformers)
+	}
+	deformer := result.ComputeDeformers[0]
+	if deformer.VertexCount != 6 || len(deformer.MeshIDs) != 2 || deformer.Pose == nil ||
+		deformer.Pose.DualQuaternionVariant != modelViewerEFMIArmatureVariant ||
+		deformer.Pose.BoneCount != 2 || deformer.Pose.FrameCount != 4 {
+		t.Fatalf("deformer = %+v", deformer)
+	}
+
+	second := readModelViewerProtocolBytes(t, fixture.protocol, deformer.MeshSourceIndices[deformer.MeshIDs[1]])
+	if got := binary.LittleEndian.Uint32(second); got != 3 {
+		t.Fatalf("second component starts at record %d, want 3", got)
+	}
+	base := readModelViewerProtocolBytes(t, fixture.protocol, deformer.Base.URL)
+	if len(base) != 6*28 || math.Float32frombits(binary.LittleEndian.Uint32(base[12:])) != 1 {
+		t.Fatalf("base records = %d bytes", len(base))
+	}
+	blend := readModelViewerProtocolBytes(t, fixture.protocol, deformer.Pose.Blend.URL)
+	if len(blend) != 6*32 || math.Float32frombits(binary.LittleEndian.Uint32(blend)) != 1 ||
+		binary.LittleEndian.Uint32(blend[16:]) != 1 {
+		t.Fatalf("blend records = %v", blend[:32])
+	}
+
+	if len(deformer.ShapePasses) != 1 {
+		t.Fatalf("shape passes = %+v", deformer.ShapePasses)
+	}
+	pass := deformer.ShapePasses[0]
+	if pass.PhaseRate != 3 || pass.WrapAt != 31.4 || pass.PhaseOffset != 1.57 || pass.Amplitude != 0.5 {
+		t.Fatalf("shape pass = %+v", pass)
+	}
+	target := readModelViewerProtocolBytes(t, fixture.protocol, pass.Target.URL)
+	for vertex := range 6 {
+		delta := math.Float32frombits(binary.LittleEndian.Uint32(target[vertex*28:])) -
+			math.Float32frombits(binary.LittleEndian.Uint32(base[vertex*28:]))
+		if want := float32(map[bool]int{true: 1, false: 0}[vertex == 2]); delta != want {
+			t.Fatalf("vertex %d shape delta = %v, want %v", vertex, delta, want)
+		}
+	}
+
+	if len(result.Animations) != 2 || result.Animations[0].FrameStart != 0 || result.Animations[0].FrameEnd != 1 ||
+		result.Animations[1].FrameStart != 1 || result.Animations[1].FrameEnd != 2 || result.Animations[1].FPS != 20 {
+		t.Fatalf("clips = %+v", result.Animations)
+	}
+}
+
 func TestModelViewerScannerParsesDrawIndexedInstanced(t *testing.T) {
 	sections := parseModINI(`[TextureOverrideBody]
 ib = ResourceBodyIB
@@ -193,6 +467,42 @@ endif`)
 		record.state.vb1 != "_Component0_VB1" ||
 		record.draw.IndexCount != 3 {
 		t.Fatalf("record = %#v", record)
+	}
+}
+
+func TestModelViewerScannerScopesEFMINestedSkipToItsBranch(t *testing.T) {
+	ini := func(body string) []modINISection {
+		return parseModINI(`[Constants]
+global $required_efmi_version = 1.46
+global $hide = 0
+[CommandList_Hide]
+handling = skip
+[TextureOverride_EntryPoint_Component0]
+hash = deffba8c
+ib = ref Resource_Component0_IB
+vb0 = ref Resource_Component0_VB0
+vb1 = ref Resource_Component0_VB1
+` + body)
+	}
+	load := func(sections []modINISection) []modelViewerDirectDrawRecord {
+		records, err := collectModelViewerDirectDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return records
+	}
+
+	if records := load(ini("run = CommandList_Hide\n")); len(records) != 0 {
+		t.Fatalf("unconditional skip kept records = %#v", records)
+	}
+
+	records := load(ini("if $hide == 1\n    run = CommandList_Hide\nendif\n"))
+	if len(records) != 1 || !records[0].implicit {
+		t.Fatalf("conditional skip records = %#v", records)
+	}
+	if !modelViewerDNFSatisfied(records[0].conditions, map[string]string{"hide": "0"}) ||
+		modelViewerDNFSatisfied(records[0].conditions, map[string]string{"hide": "1"}) {
+		t.Fatalf("conditions = %#v", records[0].conditions)
 	}
 }
 

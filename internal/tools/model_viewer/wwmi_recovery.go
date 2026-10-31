@@ -130,6 +130,7 @@ func recoverWwmiDumpTextures(
 				}
 				candidates = append(candidates, wwmiDumpCandidate{
 					File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: len(candidates),
+					Analyzed: hint.Analyzed, ColorBlocks: hint.ColorBlockFraction,
 				})
 			}
 		}

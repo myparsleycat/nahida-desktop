@@ -107,6 +107,11 @@ func detectModelViewerComputeAnimation(
 	rawResources := modelViewerResourceMap(collectModelViewerResources(sections))
 	effective := modelViewerResourceMap(effectiveResources)
 	defaults := collectModelViewerDefaultVariables(sections)
+	if deformer, clips := detectModelViewerEFMIArmature(
+		root, shaderBaseDir, scopeID, sections, effective, rawResources, defaults, names, meshes, warn,
+	); deformer != nil {
+		return deformer, clips
+	}
 	reachable := collectModelViewerReachableComputeSections(sections)
 	shapeOnly := func() (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip) {
 		if deformer, clips := detectModelViewerShapeOnlyAnimation(
@@ -792,6 +797,12 @@ func parseModelViewerPhaseExpression(expression string) (string, float64, bool) 
 	return modelViewerNormalizeKey(match[1]), offset, true
 }
 
+// modelViewerVariablePattern matches a normalized variable under the spelling an
+// INI gives it, which may separate its characters with underscores or dots.
+func modelViewerVariablePattern(variable string) string {
+	return strings.Join(strings.Split(regexp.QuoteMeta(variable), ""), `[_.]*`)
+}
+
 func findModelViewerAccumulatorRate(
 	sections []modINISection,
 	variable string,
@@ -809,8 +820,8 @@ func findModelViewerAccumulatorRateInLines(lines []string, variable string, defa
 	pattern := regexp.MustCompile(
 		fmt.Sprintf(
 			`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`,
-			regexp.QuoteMeta(variable),
-			regexp.QuoteMeta(variable),
+			modelViewerVariablePattern(variable),
+			modelViewerVariablePattern(variable),
 		),
 	)
 	for _, raw := range lines {
@@ -826,8 +837,12 @@ func findModelViewerAccumulatorLoop(
 	variable string,
 	defaults map[string]any,
 ) (float64, float64) {
-	guardPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
-	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(\$?[\w.-]+)\s*$`, regexp.QuoteMeta(variable)))
+	guardPattern := regexp.MustCompile(
+		fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(\$?[\w.-]+)\s*$`, modelViewerVariablePattern(variable)),
+	)
+	resetPattern := regexp.MustCompile(
+		fmt.Sprintf(`(?i)^\$%s\s*=\s*(\$?[\w.-]+)\s*$`, modelViewerVariablePattern(variable)),
+	)
 	for _, section := range sections {
 		depth, guardDepth := 0, 0
 		wrap := 0.0
@@ -940,8 +955,10 @@ func detectModelViewerGIMIShapePoseClips(
 	endVariable, startVariable := "", ""
 	endOffset, startOffset := 0.0, 0.0
 	explicitRange, hasReset := false, false
-	endPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
-	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(.+)$`, regexp.QuoteMeta(frameVariable)))
+	endPattern := regexp.MustCompile(
+		fmt.Sprintf(`(?i)^if\s+\$%s\s*>\s*(.+)$`, modelViewerVariablePattern(frameVariable)),
+	)
+	resetPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\$%s\s*=\s*(.+)$`, modelViewerVariablePattern(frameVariable)))
 	for _, lines := range modelViewerPoseFrameLogicLines(poseSection, sections) {
 		depth, rangeDepth := 0, 0
 		for _, raw := range lines {

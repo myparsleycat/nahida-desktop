@@ -81,6 +81,35 @@ describe("packed dual-quaternion kernel", () => {
         expectVector(result.normals, [1, 0, 0]);
     });
 
+    it("skins EFMI records through the shader's axes after applying shape passes", () => {
+        const pose = [2, 3, 4, 5, 6, 7, 0, 0, 0, 1, 1, 2, 3, 0];
+        const { deformer, buffers } = fixture([...pose, ...pose]);
+        const source = { url: "/base", byteLength: 28, stride: 28, encoding: "packed_f32_v1" };
+        deformer.base = source;
+        deformer.pose!.dualQuaternionVariant = "efmi_typed";
+        buffers.base = new Float32Array([1, 2, 3, 1, 0, 0, 1]).buffer;
+        // (1,3,-2) -> scale+bias (7,15,-1) -> translation (9,19,5).
+        const unmorphed = computePackedDualQuaternionFrame(deformer, buffers, 0);
+        expectVector(unmorphed.positions, [9, -5, 19]);
+        expectVector(unmorphed.normals, [0, 0, 1]);
+
+        deformer.shapePasses = [
+            {
+                target: { ...source, url: "/target" },
+                phaseRate: 1,
+                phaseOffset: Math.PI / 2,
+                angularScale: 1,
+                amplitude: 0.5,
+                bias: 0.5,
+            },
+        ];
+        buffers.shapeTargets = [new Float32Array([2, 2, 3, 1, 0, 0, 1]).buffer];
+        expectVector(
+            computePackedDualQuaternionFrame(deformer, buffers, 0).positions,
+            [11, -5, 19],
+        );
+    });
+
     it("applies direct object positions while preserving the shader's normal axis conversion", () => {
         const pose = [2, 3, 4, 5, 6, 7, 0, 0, 0, 1, 1, 2, 3, 0];
         const { deformer, buffers } = fixture([...pose, ...pose]);

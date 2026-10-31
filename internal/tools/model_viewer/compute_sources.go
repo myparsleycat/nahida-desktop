@@ -50,6 +50,7 @@ func (t *Service) prepareModelViewerComputeSources(
 					}
 					source = mesh.SourceIndices[vertex]
 				}
+				source += deformer.meshSourceOffsets[id]
 				if uint64(source) >= uint64(deformer.VertexCount) {
 					return fmt.Errorf("compute mesh %s index %d exceeds %d vertices", id, source, deformer.VertexCount)
 				}
@@ -66,7 +67,7 @@ func (t *Service) prepareModelViewerComputeSources(
 			}
 		}
 		originalCount := deformer.VertexCount
-		if len(sources) < originalCount {
+		if len(sources) < originalCount || len(deformer.meshSourceOffsets) > 0 {
 			lookup := make([]uint32, originalCount)
 			for vertex, source := range sources {
 				lookup[source] = uint32(vertex)
@@ -80,7 +81,7 @@ func (t *Service) prepareModelViewerComputeSources(
 					if mesh.SourceIndices != nil {
 						source = mesh.SourceIndices[vertex]
 					}
-					remapped[vertex] = lookup[source]
+					remapped[vertex] = lookup[source+deformer.meshSourceOffsets[id]]
 				}
 				url, err := t.protocol.StoreMemoryBuffer(
 					sessionID,
@@ -100,6 +101,7 @@ func (t *Service) prepareModelViewerComputeSources(
 		registered := make(map[string]ModelViewerComputeBinarySource)
 		register := func(source *ModelViewerComputeBinarySource, packed bool) error {
 			original := *source
+			packed = packed && original.load == nil
 			if original.Stride <= 0 || original.ByteLength != int64(originalCount)*int64(original.Stride) {
 				return fmt.Errorf("compute source dimensions changed: %s", original.sourcePath)
 			}
@@ -108,7 +110,7 @@ func (t *Service) prepareModelViewerComputeSources(
 				*source = hit
 				return nil
 			}
-			if sources == nil && !packed {
+			if sources == nil && !packed && original.load == nil {
 				source.URL = t.protocol.LocalFileURL(original.sourcePath, true)
 				registered[key] = *source
 				return nil
@@ -193,6 +195,29 @@ func (t *Service) prepareModelViewerComputeSources(
 	return ctx.Err()
 }
 
+func selectModelViewerComputeRecords(
+	ctx context.Context,
+	source ModelViewerComputeBinarySource,
+	sources []uint32,
+	vertexCount int,
+) ([]byte, error) {
+	raw, err := source.load(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) != source.ByteLength {
+		return nil, fmt.Errorf("compute records size changed: expected %d, received %d", source.ByteLength, len(raw))
+	}
+	if sources == nil || len(sources) == vertexCount && int64(vertexCount)*int64(source.Stride) == source.ByteLength {
+		return raw, nil
+	}
+	output := make([]byte, 0, vertexCount*source.Stride)
+	for _, index := range sources {
+		output = append(output, raw[int(index)*source.Stride:(int(index)+1)*source.Stride]...)
+	}
+	return output, nil
+}
+
 func readModelViewerComputeRecords(
 	ctx context.Context,
 	source ModelViewerComputeBinarySource,
@@ -203,6 +228,9 @@ func readModelViewerComputeRecords(
 	if source.Stride <= 0 || source.Stride > 64<<10 ||
 		(packed && !isModelViewerPackedObjectStride(source.Stride)) || vertexCount < 0 {
 		return nil, fmt.Errorf("invalid compute source stride")
+	}
+	if source.load != nil {
+		return selectModelViewerComputeRecords(ctx, source, sources, vertexCount)
 	}
 	file, err := os.Open(source.sourcePath)
 	if err != nil {

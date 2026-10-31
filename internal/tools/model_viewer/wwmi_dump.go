@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,6 +22,9 @@ const (
 	maxHintDecodeBytes   = 32 * 1024 * 1024
 	maxHintDecodeArea    = 4096 * 4096
 	maxHintAnalyzePixels = int64(256 * 256)
+
+	wwmiPaletteColorBlocks = 0.75
+	wwmiPaintedColorBlocks = 0.5
 )
 
 var (
@@ -52,17 +56,21 @@ type wwmiTextureHint struct {
 	IsLikelyPacked       bool
 	Analyzed             bool
 	PrimaryColorFraction float64
+	ColorBlockFraction   float64
 }
 
 type wwmiDumpCandidate struct {
-	File  string
-	SRGB  bool
-	Area  int
-	Bytes int64
-	Order int
+	File        string
+	SRGB        bool
+	Area        int
+	Bytes       int64
+	Order       int
+	Analyzed    bool
+	ColorBlocks float64
 }
 
 type wwmiRGBAAnalysis struct {
+	colorBlockFraction   float64
 	channelRangeMax      uint32
 	luminanceStdDev      float64
 	meanR                float64
@@ -84,8 +92,24 @@ func pickWwmiDumpDiffuse(candidates []wwmiDumpCandidate) string {
 		return ""
 	}
 	ranked := append([]wwmiDumpCandidate(nil), candidates...)
+
+	// Games reuse small palettes of solid colors across characters, so one can be
+	// dumped for a single component. It only yields to a painted map that could
+	// be the same part's atlas, because a flat-shaded diffuse has no better rival.
+	palette := func(candidate wwmiDumpCandidate) bool {
+		return candidate.ColorBlocks >= wwmiPaletteColorBlocks && slices.ContainsFunc(
+			candidates,
+			func(other wwmiDumpCandidate) bool {
+				return other.Analyzed && other.SRGB && other.Area >= candidate.Area &&
+					other.ColorBlocks < wwmiPaintedColorBlocks
+			},
+		)
+	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		left, right := ranked[i], ranked[j]
+		if leftPalette, rightPalette := palette(left), palette(right); leftPalette != rightPalette {
+			return rightPalette
+		}
 		leftShare, rightShare := wwmiDumpShareCount(left.File), wwmiDumpShareCount(right.File)
 		if (leftShare == 1) != (rightShare == 1) {
 			return leftShare == 1
@@ -359,7 +383,10 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 			}
 			scored = append(
 				scored,
-				wwmiDumpCandidate{File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: order},
+				wwmiDumpCandidate{
+					File: file, SRGB: hint.SRGB, Area: hint.Area, Bytes: hint.Bytes, Order: order,
+					Analyzed: hint.Analyzed, ColorBlocks: hint.ColorBlockFraction,
+				},
 			)
 		}
 		return pickWwmiDumpDiffuse(scored)
@@ -572,6 +599,7 @@ func hintFromAnalysis(analysis wwmiRGBAAnalysis, colorSpace string, area int, si
 		IsLikelyPacked:       packed,
 		Analyzed:             true,
 		PrimaryColorFraction: analysis.primaryColorFraction,
+		ColorBlockFraction:   analysis.colorBlockFraction,
 	}
 }
 
@@ -604,6 +632,7 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 	var maxR, maxG, maxB byte
 	sampleCount := 0
 	var primaryCounts [3]int
+	colorCounts := make(map[uint32]int)
 	sumR, sumG, sumB := 0.0, 0.0, 0.0
 	luminanceSum, luminanceSquareSum := 0.0, 0.0
 	stride := int(math.Floor(math.Sqrt(float64(width*height) / 4096.0)))
@@ -614,6 +643,7 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 		for x := 0; x < width; x += stride {
 			offset := (y*width + x) * 4
 			r, g, b := data[offset], data[offset+1], data[offset+2]
+			colorCounts[uint32(r)<<16|uint32(g)<<8|uint32(b)]++
 			switch {
 			case r >= 243 && g <= 12 && b <= 12:
 				primaryCounts[0]++
@@ -669,13 +699,20 @@ func analyzeRGBA(data []byte, width, height int) wwmiRGBAAnalysis {
 	if bRange := uint32(maxB) - uint32(minB); bRange > rangeMax {
 		rangeMax = bRange
 	}
+	counts := slices.Collect(maps.Values(colorCounts))
+	slices.SortFunc(counts, func(left, right int) int { return right - left })
+	dominant := 0
+	for _, count := range counts[:min(3, len(counts))] {
+		dominant += count
+	}
 	return wwmiRGBAAnalysis{
-		channelRangeMax: rangeMax,
-		luminanceStdDev: math.Sqrt(variance),
-		meanR:           meanR,
-		meanG:           meanG,
-		meanB:           meanB,
-		blueDominance:   meanB - maxFloat(meanR, meanG),
+		colorBlockFraction: float64(dominant) / float64(max(1, sampleCount)),
+		channelRangeMax:    rangeMax,
+		luminanceStdDev:    math.Sqrt(variance),
+		meanR:              meanR,
+		meanG:              meanG,
+		meanB:              meanB,
+		blueDominance:      meanB - maxFloat(meanR, meanG),
 		primaryColorFraction: float64(
 			max(primaryCounts[0], primaryCounts[1], primaryCounts[2]),
 		) / float64(

@@ -37,6 +37,7 @@ type modelViewerSymbolicSectionState struct {
 	nonDiffuse       []string
 	draws            []modelViewerDirectDrawRecord
 	explicitDraw     bool
+	nestedSkip       ModelViewerDNF
 }
 
 type modelViewerSymbolicScanContext struct {
@@ -91,6 +92,7 @@ func collectModelViewerSymbolicDrawRecords(
 	var output []modelViewerDirectDrawRecord
 	var fallback []modelViewerSymbolicAssignment
 	seenFallback := map[string]bool{}
+	efmi := isModelViewerEFMI(sections)
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") {
 			continue
@@ -111,8 +113,15 @@ func collectModelViewerSymbolicDrawRecords(
 		); err != nil {
 			return nil, nil, err
 		}
+		// EFMI overrides skip through their shared dispatcher, so a draw callback
+		// with its drawindexed removed hides the component instead of drawing it.
+		// The implicit draw survives only in states where that skip is not reached.
 		if !state.explicitDraw && !sectionHandlingSkip(section) {
-			records := ctx.implicitRecords(state)
+			conditions := modelViewerDNFTrue()
+			if efmi {
+				conditions = modelViewerDNFNot(state.nestedSkip)
+			}
+			records := ctx.implicitRecords(state, conditions)
 			if len(records) > 0 {
 				ctx.draws += len(records)
 				if ctx.draws > maxModelViewerDraws {
@@ -237,6 +246,10 @@ func (c *modelViewerSymbolicScanContext) scan(
 			continue
 		}
 		switch strings.ToLower(key) {
+		case "handling":
+			if len(visiting) > 1 && strings.EqualFold(value, "skip") {
+				state.nestedSkip = modelViewerDNFOr(state.nestedSkip, conditions)
+			}
 		case "vb0":
 			state.copyBuffer(key, value, conditions, sequence)
 		case "ib", "vb1", "vb2":
@@ -495,11 +508,12 @@ type modelViewerSymbolicBufferVariant struct {
 
 func (c *modelViewerSymbolicScanContext) implicitRecords(
 	state *modelViewerSymbolicSectionState,
+	conditions ModelViewerDNF,
 ) []modelViewerDirectDrawRecord {
 	if len(state.buffers["ib"]) == 0 {
 		return nil
 	}
-	records := c.snapshotRecords(state, modelViewerDrawInstruction{}, true, modelViewerDNFTrue(), nil)
+	records := c.snapshotRecords(state, modelViewerDrawInstruction{}, true, conditions, nil)
 	for index := range records {
 		records[index].implicit = true
 	}

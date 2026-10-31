@@ -1,6 +1,7 @@
 import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
 import {
+    computeShapePassWeight,
     ensureGIMIShapePoseFrame,
     forEachComputeVertex,
     type GIMIComputeOptions,
@@ -19,12 +20,14 @@ export function validatePackedDualQuaternionBuffers(
     buffers: GIMIShapePoseBuffers,
 ): void {
     const pose = deformer.pose;
+    const shapePassesAllowed = pose?.dualQuaternionVariant === "efmi_typed";
     if (
         deformer.kind !== "gimi_packed_dual_quaternion_v1" ||
         !pose ||
         (pose.dualQuaternionVariant !== undefined &&
             pose.dualQuaternionVariant !== "object" &&
-            pose.dualQuaternionVariant !== "object_direct") ||
+            pose.dualQuaternionVariant !== "object_direct" &&
+            pose.dualQuaternionVariant !== "efmi_typed") ||
         !buffers.pose ||
         !buffers.blend ||
         !Number.isSafeInteger(deformer.vertexCount) ||
@@ -33,9 +36,9 @@ export function validatePackedDualQuaternionBuffers(
         pose.boneCount <= 0 ||
         !Number.isSafeInteger(pose.frameCount) ||
         pose.frameCount < 2 ||
-        deformer.shapePasses.length !== 0 ||
+        (!shapePassesAllowed && deformer.shapePasses.length !== 0) ||
         deformer.shapeStages.length !== 0 ||
-        buffers.shapeTargets.length !== 0
+        buffers.shapeTargets.length !== deformer.shapePasses.length
     ) {
         throw new Error("Packed dual-quaternion descriptor is invalid.");
     }
@@ -45,6 +48,14 @@ export function validatePackedDualQuaternionBuffers(
         buffers.base,
         deformer.vertexCount,
     );
+    deformer.shapePasses.forEach((pass, index) => {
+        validatePackedVertexSource(
+            `Packed dual-quaternion shape target ${index}`,
+            pass.target,
+            buffers.shapeTargets[index]!,
+            deformer.vertexCount,
+        );
+    });
     for (const [label, source, buffer, stride, count] of [
         ["blend", pose.blend, buffers.blend, 32, deformer.vertexCount],
         ["pose", pose.frames, buffers.pose, 56, pose.boneCount * pose.frameCount],
@@ -77,21 +88,40 @@ export function createPackedDualQuaternionComputer(
     buffers: GIMIShapePoseBuffers,
 ) {
     validatePackedDualQuaternionBuffers(deformer, buffers);
-    return (poseFrame: number, options?: GIMIComputeOptions) =>
-        computeValidatedPackedDualQuaternionFrame(deformer, buffers, poseFrame, options);
+    return (poseFrame: number, options?: GIMIComputeOptions, phaseSeconds = 0) =>
+        computeValidatedPackedDualQuaternionFrame(
+            deformer,
+            buffers,
+            poseFrame,
+            options,
+            phaseSeconds,
+        );
 }
 
 function computeValidatedPackedDualQuaternionFrame(
     deformer: ViewerComputeDeformer,
     buffers: GIMIShapePoseBuffers,
     poseFrame: number,
-    options?: GIMIComputeOptions,
+    options: GIMIComputeOptions | undefined,
+    phaseSeconds: number,
 ): GIMIShapePoseFrame {
     if (!Number.isFinite(poseFrame) || poseFrame < 0) {
         throw new Error(`Invalid packed dual-quaternion frame: ${poseFrame}`);
     }
     const pose = deformer.pose!;
     const directPositionAxes = pose.dualQuaternionVariant === "object_direct";
+    // EFMI stores float positions and unit normals, so nothing is quantized to
+    // the 16-bit and 8-bit records the other variants write back.
+    const efmiTyped = pose.dualQuaternionVariant === "efmi_typed";
+    const unsignedSeed = directPositionAxes || efmiTyped;
+    const outputPosition = efmiTyped ? (value: number) => value : roundPackedPosition;
+    const outputNormal = efmiTyped
+        ? (value: number) => value
+        : (value: number) => Math.max(-128, Math.min(127, Math.trunc(value)));
+    const shapes = deformer.shapePasses.map((pass, index) => ({
+        target: new Float32Array(buffers.shapeTargets[index]!),
+        weight: computeShapePassWeight(pass, phaseSeconds),
+    }));
     const frame = Math.min(poseFrame, pose.frameCount - 1);
     const frame0 = Math.floor(frame);
     const frame1 = Math.min(frame0 + 1, pose.frameCount - 1);
@@ -136,7 +166,7 @@ function computeValidatedPackedDualQuaternionFrame(
                 // The direct shader seeds its first contribution without a sign.
                 const signedFactor =
                     pose.dualQuaternionVariant === "object" ||
-                    (directPositionAxes && (influence !== 0 || sample !== 0))
+                    (unsignedSeed && (influence !== 0 || sample !== 0))
                         ? factor * Math.sign(dot)
                         : dot < 0
                           ? -factor
@@ -153,13 +183,10 @@ function computeValidatedPackedDualQuaternionFrame(
             accumulated[8]!,
             accumulated[9]!,
         );
-        if (
-            (!directPositionAxes && quaternionLength < 1e-8) ||
-            !accumulated.every(Number.isFinite)
-        ) {
+        if ((!unsignedSeed && quaternionLength < 1e-8) || !accumulated.every(Number.isFinite)) {
             throw new Error(`Invalid packed dual-quaternion pose at vertex ${vertex}`);
         }
-        const length = directPositionAxes ? Math.max(1e-6, quaternionLength) : quaternionLength;
+        const length = unsignedSeed ? Math.max(1e-6, quaternionLength) : quaternionLength;
         const qx = accumulated[6]! / length;
         const qy = accumulated[7]! / length;
         const qz = accumulated[8]! / length;
@@ -177,39 +204,43 @@ function computeValidatedPackedDualQuaternionFrame(
         const m20 = 2 * (qx * qz - qw * qy);
         const m21 = 2 * (qy * qz + qw * qx);
         const m22 = 1 - 2 * qx * qx - 2 * qy * qy;
+        let baseX = base[source]!;
+        let baseY = base[source + 1]!;
+        let baseZ = base[source + 2]!;
+        for (const shape of shapes) {
+            baseX += (shape.target[source]! - base[source]!) * shape.weight;
+            baseY += (shape.target[source + 1]! - base[source + 1]!) * shape.weight;
+            baseZ += (shape.target[source + 2]! - base[source + 2]!) * shape.weight;
+        }
         // Direct exports keep game position axes but still convert input normals.
-        const x = base[source]! * accumulated[0]! + accumulated[3]!;
+        // EFMI rotates positions the opposite way around X from the legacy shaders.
+        const x = baseX * accumulated[0]! + accumulated[3]!;
         const y =
-            (directPositionAxes ? base[source + 1]! : -base[source + 2]!) * accumulated[1]! +
+            (directPositionAxes ? baseY : efmiTyped ? baseZ : -baseZ) * accumulated[1]! +
             accumulated[4]!;
         const z =
-            (directPositionAxes ? base[source + 2]! : base[source + 1]!) * accumulated[2]! +
+            (directPositionAxes ? baseZ : efmiTyped ? -baseY : baseY) * accumulated[2]! +
             accumulated[5]!;
         const nx = base[source + 4]!;
         const ny = -base[source + 6]!;
         const nz = base[source + 5]!;
         const destination = destIndex * 3;
-        positions[destination] = roundPackedPosition(
+        positions[destination] = outputPosition(
             m00 * x + m01 * y + m02 * z + 2 * (-dw * qx + dx * qw - dy * qz + dz * qy),
         );
         const posedY = m10 * x + m11 * y + m12 * z + 2 * (-dw * qy + dx * qz + dy * qw - dz * qx);
         const posedZ = m20 * x + m21 * y + m22 * z + 2 * (-dw * qz - dx * qy + dy * qx + dz * qw);
-        positions[destination + 1] = roundPackedPosition(directPositionAxes ? posedY : posedZ);
-        positions[destination + 2] = roundPackedPosition(directPositionAxes ? posedZ : -posedY);
-        normals[destination] = Math.max(
-            -128,
-            Math.min(127, Math.trunc(m00 * nx + m01 * ny + m02 * nz)),
+        positions[destination + 1] = outputPosition(
+            directPositionAxes ? posedY : efmiTyped ? -posedZ : posedZ,
         );
+        positions[destination + 2] = outputPosition(
+            directPositionAxes ? posedZ : efmiTyped ? posedY : -posedY,
+        );
+        normals[destination] = outputNormal(m00 * nx + m01 * ny + m02 * nz);
         const normalY = m10 * nx + m11 * ny + m12 * nz;
         const normalZ = m20 * nx + m21 * ny + m22 * nz;
-        normals[destination + 1] = Math.max(
-            -128,
-            Math.min(127, Math.trunc(directPositionAxes ? normalY : normalZ)),
-        );
-        normals[destination + 2] = Math.max(
-            -128,
-            Math.min(127, Math.trunc(directPositionAxes ? normalZ : -normalY)),
-        );
+        normals[destination + 1] = outputNormal(directPositionAxes ? normalY : normalZ);
+        normals[destination + 2] = outputNormal(directPositionAxes ? normalZ : -normalY);
     });
     normalizePackedVectors(normals);
     return { positions, normals };

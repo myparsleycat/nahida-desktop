@@ -18,6 +18,8 @@ type modelViewerResourceAliases struct {
 	// shader blends into; the preview shows the copied source unblended.
 	defaultCopies map[string][]string
 	copies        map[string][]string
+	// Bind-pose inputs of compute outputs a draw binds directly.
+	computeInputs map[string][]string
 	resources     map[string]modelViewerResource
 }
 
@@ -84,6 +86,7 @@ func collectModelViewerResourceAliases(
 		outputs:       make(map[string][]string),
 		defaultCopies: make(map[string][]string),
 		copies:        make(map[string][]string),
+		computeInputs: make(map[string][]string),
 		resources:     make(map[string]modelViewerResource, len(resources)),
 	}
 	for _, resource := range resources {
@@ -185,6 +188,7 @@ func collectModelViewerResourceAliases(
 			}
 		}
 	}
+	aliases.addEFMIArmatureInputs(sections)
 	return aliases
 }
 
@@ -252,7 +256,10 @@ func (a modelViewerResourceAliases) resolveAt(
 	); status != modelViewerResourceUnresolved {
 		return resolved, status
 	}
-	return a.resolveUnique(a.copies[key], visiting, depth+1)
+	if resolved, status := a.resolveUnique(a.copies[key], visiting, depth+1); status != modelViewerResourceUnresolved {
+		return resolved, status
+	}
+	return a.resolveUnique(a.computeInputs[key], visiting, depth+1)
 }
 
 func modelViewerResourceIsTexture(resource modelViewerResource) bool {

@@ -29,6 +29,9 @@ export class ModelViewerComputeController {
     private latest?: ComputeFrameRequest;
     private activeRequest?: ComputeFrameRequest;
     private nextId = 1;
+    private phaseOffset = 0;
+    private previousFrameTime = 0;
+    private previousClipId?: string;
     private disposed = false;
     private reportedError = false;
 
@@ -136,8 +139,27 @@ export class ModelViewerComputeController {
             generation: this.generation,
             id: this.nextId++,
             poseFrame: frame.index,
-            phaseSeconds: frame.time,
+            phaseSeconds: this.phaseSeconds(request, frame.time),
         });
+    }
+
+    // EFMI shape keys run on their own timer in game, so a pose clip restarting
+    // must not rewind them.
+    private phaseSeconds(request: ComputeFrameRequest, frameTime: number): number {
+        if (this.deformer.pose?.dualQuaternionVariant !== "efmi_typed") {
+            return frameTime;
+        }
+        // A step back of under half the clip is a seek rather than a wrap.
+        const duration = request.clip.frames.length / request.clip.fps;
+        if (
+            request.clip.id === this.previousClipId &&
+            this.previousFrameTime - frameTime >= duration / 2
+        ) {
+            this.phaseOffset += duration;
+        }
+        this.previousClipId = request.clip.id;
+        this.previousFrameTime = frameTime;
+        return frameTime + this.phaseOffset;
     }
 
     private handleMessage(message: unknown): void {

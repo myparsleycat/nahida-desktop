@@ -568,8 +568,14 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		if !record.auto {
 			end = record.draw.StartIndex + record.draw.IndexCount
 		}
-		if record.draw.StartIndex < 0 || end < record.draw.StartIndex || end > len(indices) {
+		if record.draw.StartIndex < 0 || end < record.draw.StartIndex || record.draw.StartIndex >= len(indices) {
 			continue
+		}
+		// D3D reads indices past the end of the buffer as zero, which only adds
+		// degenerate triangles to a draw whose count outlived a mesh re-export.
+		if end > len(indices) {
+			end = len(indices) - (len(indices)-record.draw.StartIndex)%3
+			record.draw.IndexCount = end - record.draw.StartIndex
 		}
 		active := make([]uint32, 0, end-record.draw.StartIndex)
 		for _, index := range indices[record.draw.StartIndex:end] {

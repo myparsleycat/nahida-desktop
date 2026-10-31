@@ -154,15 +154,7 @@ function computeValidatedGIMIShapePoseFrame(
     for (let passIndex = 0; passIndex < deformer.shapePasses.length; passIndex += 1) {
         const pass = deformer.shapePasses[passIndex]!;
         const target = new Float32Array(buffers.shapeTargets[passIndex]!);
-        const rawPhase = Math.max(phaseSeconds, 0) * pass.phaseRate;
-        const phaseStart = pass.phaseStart ?? 0;
-        const wrapAt = pass.wrapAt ?? 0;
-        const phase =
-            wrapAt !== 0 && wrapAt > phaseStart
-                ? phaseStart + (rawPhase % (wrapAt - phaseStart))
-                : phaseStart + rawPhase;
-        const weight =
-            pass.amplitude * Math.sin((phase + pass.phaseOffset) * pass.angularScale) + pass.bias;
+        const weight = computeShapePassWeight(pass, phaseSeconds);
         forEachComputeVertex(deformer.vertexCount, vertices, (vertex, dest) => {
             const source = vertex * strideFloats;
             const position = dest * 3;
@@ -199,6 +191,20 @@ function computeValidatedGIMIShapePoseFrame(
         vertices,
     );
     return { positions, normals, tangents };
+}
+
+export function computeShapePassWeight(
+    pass: ViewerComputeDeformer["shapePasses"][number],
+    phaseSeconds: number,
+): number {
+    const rawPhase = Math.max(phaseSeconds, 0) * pass.phaseRate;
+    const phaseStart = pass.phaseStart ?? 0;
+    const wrapAt = pass.wrapAt ?? 0;
+    const phase =
+        wrapAt !== 0 && wrapAt > phaseStart
+            ? phaseStart + (rawPhase % (wrapAt - phaseStart))
+            : phaseStart + rawPhase;
+    return pass.amplitude * Math.sin((phase + pass.phaseOffset) * pass.angularScale) + pass.bias;
 }
 
 export function compactGIMIShapePoseFrame(

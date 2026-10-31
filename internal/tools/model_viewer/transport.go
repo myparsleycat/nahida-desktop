@@ -1,5 +1,7 @@
 package modelviewer
 
+import "context"
+
 type ModelViewerDNFClause struct {
 	Var    string `json:"var"`
 	Value  string `json:"value"`
@@ -129,6 +131,8 @@ type ModelViewerComputeBinarySource struct {
 	Stride     int    `json:"stride"`
 	Encoding   string `json:"encoding,omitempty"`
 	sourcePath string
+	// load builds records that no single file holds; sourcePath then only names them.
+	load func(context.Context) ([]byte, error)
 }
 
 type ModelViewerComputeShapePass struct {
@@ -174,6 +178,8 @@ type ModelViewerComputeDeformerTransport struct {
 	ShapePasses       []ModelViewerComputeShapePass  `json:"shapePasses"`
 	ShapeStages       []ModelViewerComputeShapeStage `json:"shapeStages,omitempty"`
 	Pose              *ModelViewerComputePoseSource  `json:"pose,omitempty"`
+	// meshSourceOffsets places a mesh's vertices inside records merged from several buffers.
+	meshSourceOffsets map[string]uint32
 }
 
 type ModelViewerTransport struct {

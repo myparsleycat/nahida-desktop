@@ -236,7 +236,7 @@ async function bindDeformerCompute(
             validatePackedDualQuaternionBuffers(deformer, buffers);
             const prepared = prepareShapePoseBuffers(deformer, buffers);
             const compute = createPackedDualQuaternionComputer(prepared.deformer, prepared.buffers);
-            return (poseFrame, _phaseSeconds, options) => compute(poseFrame, options);
+            return (poseFrame, phaseSeconds, options) => compute(poseFrame, options, phaseSeconds);
         }
         case "gimi_shape_pose_v1": {
             const buffers = await loadShapePoseBuffers(deformer);

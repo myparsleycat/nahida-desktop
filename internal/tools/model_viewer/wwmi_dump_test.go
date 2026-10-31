@@ -55,6 +55,57 @@ func TestPickWwmiDumpDiffusePrefersSharedAtlasOverSmallerSharedEffect(t *testing
 	}
 }
 
+func TestPickWwmiDumpDiffuseSkipsSolidPaletteOnlyForPaintedRival(t *testing.T) {
+	t.Parallel()
+	const (
+		palette = "Textures/Components-1 t=9750205d.dds"
+		atlas   = "Textures/Components-1-10-11 t=b78ceea6.dds"
+	)
+	area := 1024 * 1024
+	tests := []struct {
+		name       string
+		dedicated  float64
+		shared     float64
+		sharedArea int
+		analyzed   bool
+		want       string
+	}{
+		{"painted shared atlas wins", 0.83, 0.1, area, true, atlas},
+		{"smaller painted atlas loses", 0.83, 0.1, area / 4, true, palette},
+		{"flat-shaded rival loses", 0.83, 0.8, area, true, palette},
+		{"soft skin map stays", 0.46, 0.1, area, true, palette},
+		{"unanalyzed rival loses", 0.83, 0, area, false, palette},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := pickWwmiDumpDiffuse([]wwmiDumpCandidate{
+				{File: palette, SRGB: true, Area: area, Analyzed: true, ColorBlocks: test.dedicated},
+				{File: atlas, SRGB: true, Area: test.sharedArea, Analyzed: test.analyzed, ColorBlocks: test.shared},
+			})
+			if got != test.want {
+				t.Fatalf("pickWwmiDumpDiffuse = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestAnalyzeRGBAColorBlockFractionSeparatesSolidFromGradient(t *testing.T) {
+	t.Parallel()
+	const size = 64
+	solid, gradient := make([]byte, size*size*4), make([]byte, size*size*4)
+	for index := range size * size {
+		copy(solid[index*4:], []byte{byte(index % 3 * 80), 40, 40, 255})
+		copy(gradient[index*4:], []byte{byte(200 + index%50), byte(150 + index%37), byte(140 + index%29), 255})
+	}
+	if got := analyzeRGBA(solid, size, size).colorBlockFraction; got < wwmiPaletteColorBlocks {
+		t.Fatalf("solid fraction = %v", got)
+	}
+	if got := analyzeRGBA(gradient, size, size).colorBlockFraction; got >= wwmiPaintedColorBlocks {
+		t.Fatalf("gradient fraction = %v", got)
+	}
+}
+
 func TestIsLikelyWwmiDiffuseRejectsLinearFlatPackedAndNormal(t *testing.T) {
 	t.Parallel()
 	ok := wwmiTextureHint{SRGB: true, ColorSpace: "srgb", Area: 1024, Bytes: 100}

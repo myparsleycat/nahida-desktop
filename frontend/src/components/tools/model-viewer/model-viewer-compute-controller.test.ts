@@ -104,6 +104,44 @@ describe("ModelViewerComputeController", () => {
         controller.dispose();
     });
 
+    it("keeps EFMI shape phase continuous across wraps, seeks, and clip switches", () => {
+        const worker = new FakeWorker();
+        const controller = new ModelViewerComputeController(
+            fixtureRoot(),
+            {
+                ...deformer,
+                pose: { dualQuaternionVariant: "efmi_typed" },
+            } as ViewerComputeDeformer,
+            [],
+            vi.fn(),
+            vi.fn(),
+            worker,
+        );
+        const { generation } = worker.messages[0] as { generation: number };
+        worker.onmessage?.(new MessageEvent("message", { data: { type: "ready", generation } }));
+        const frames = Array.from({ length: 10 }, (_, index) => ({
+            index,
+            time: index / 10,
+            values: {},
+        }));
+        const first = { ...clip, id: "first", fps: 10, frames };
+        const second = { ...clip, id: "second", fps: 5, frames };
+        const phaseAt = (next: ViewerAnimationClip, frameIndex: number) => {
+            controller.request({ clip: next, frameIndex });
+            const sent = worker.messages.at(-1) as { phaseSeconds: number };
+            worker.onmessage?.(
+                new MessageEvent("message", { data: { type: "frame", generation, meshes: [] } }),
+            );
+            return sent.phaseSeconds;
+        };
+        expect(phaseAt(first, 9)).toBeCloseTo(0.9);
+        expect(phaseAt(first, 0)).toBeCloseTo(1);
+        expect(phaseAt(first, 5)).toBeCloseTo(1.5);
+        expect(phaseAt(first, 4)).toBeCloseTo(1.4);
+        expect(phaseAt(second, 1)).toBeCloseTo(1.1);
+        controller.dispose();
+    });
+
     it.each(["gimi_shape_pose_v1", "gimi_packed_dual_quaternion_v1"] as const)(
         "restores the static baseline for %s after a worker error and reports it once",
         (kind) => {
