@@ -1425,6 +1425,7 @@
           "all": "全部",
           "grouped": "{{group}} › {{label}}"
         },
+        "overlay_switch_page": "切换菜单页面",
         "toggle_viewer": "切换查看器",
         "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",
         "ineffective_suggestion": "要使用此值，请更改以下变量:",

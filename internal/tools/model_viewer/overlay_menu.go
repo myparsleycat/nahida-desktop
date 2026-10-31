@@ -39,6 +39,8 @@ type ModelViewerOverlayQuad struct {
 	Width    float64                       `json:"width"`
 	Height   float64                       `json:"height"`
 	Opacity  float64                       `json:"opacity"`
+	FlipX    bool                          `json:"flipX,omitempty"`
+	FlipY    bool                          `json:"flipY,omitempty"`
 	Flipbook *ModelViewerOverlayFlipbook   `json:"flipbook,omitempty"`
 	States   []ModelViewerOverlayQuadState `json:"states,omitempty"`
 }
@@ -54,24 +56,35 @@ type ModelViewerOverlayHover struct {
 	Path string `json:"path"`
 }
 
+// ModelViewerOverlayButton changes a model variable, moves the menu to another
+// page, or both.
 type ModelViewerOverlayButton struct {
 	X           float64                        `json:"x"`
 	Y           float64                        `json:"y"`
 	Width       float64                        `json:"width"`
 	Height      float64                        `json:"height"`
-	Variable    string                         `json:"variable"`
-	Transitions []ModelViewerOverlayTransition `json:"transitions"`
+	Variable    string                         `json:"variable,omitempty"`
+	Transitions []ModelViewerOverlayTransition `json:"transitions,omitempty"`
+	Page        *int                           `json:"page,omitempty"`
 	Hover       []ModelViewerOverlayHover      `json:"hover,omitempty"`
 }
 
-// ModelViewerOverlayMenu is a menu a mod draws over the game and operates with
-// the mouse, in pixels at the reference resolution with its corner at the origin.
-type ModelViewerOverlayMenu struct {
-	Width   float64                    `json:"width"`
-	Height  float64                    `json:"height"`
-	Form    string                     `json:"form,omitempty"`
+// ModelViewerOverlayPage is what a menu shows in one state of its own variables.
+type ModelViewerOverlayPage struct {
 	Quads   []ModelViewerOverlayQuad   `json:"quads"`
 	Buttons []ModelViewerOverlayButton `json:"buttons"`
+}
+
+// ModelViewerOverlayMenu is a menu a mod draws over the game and operates with
+// the mouse, in pixels at the reference resolution with the corner shared by its
+// pages at the origin. The first page is the one the mod opens on.
+type ModelViewerOverlayMenu struct {
+	Width  float64                  `json:"width"`
+	Height float64                  `json:"height"`
+	Form   string                   `json:"form,omitempty"`
+	Pages  []ModelViewerOverlayPage `json:"pages"`
+	// stateVariables are the listed variables that only page this menu.
+	stateVariables []string
 }
 
 const (
@@ -87,6 +100,7 @@ const (
 	maxModelViewerOverlayRange = 256
 	// A menu tells a toggle's values apart; a long slider would only spend the step budget.
 	maxModelViewerOverlayStateValues = 16
+	maxModelViewerOverlayPages       = 16
 
 	modelViewerOverlaySampleRate    = 120
 	modelViewerOverlaySampleSeconds = 10
@@ -109,6 +123,7 @@ var (
 	modelViewerOverlayColumnsRE = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_COLS\s+(\d+)\b`)
 	modelViewerOverlayRowsRE    = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_ROWS\s+(\d+)\b`)
 	modelViewerOverlayTextureRE = regexp.MustCompile(`Texture2D\s*(?:<[^>]*>)?\s+\w+\s*:\s*register\(\s*t(\d+)\s*\)`)
+	modelViewerOverlayNameRE    = regexp.MustCompile(`\$?[A-Za-z_\\][\w.\\]*`)
 )
 
 type modelViewerOverlayShader struct {
@@ -128,8 +143,10 @@ type modelViewerOverlayProgram struct {
 	missingTextures   map[string]bool
 	shaders           map[string]*modelViewerOverlayShader
 	initial           map[string]any
-	unsupported       bool
-	steps             int
+	// menuKeys are the variables found to select a page.
+	menuKeys    map[string]bool
+	unsupported bool
+	steps       int
 }
 
 type modelViewerOverlayRun struct {
@@ -148,6 +165,7 @@ type modelViewerOverlayTracedQuad struct {
 	path                string
 	x, y, width, height float64
 	opacity             float64
+	flipX, flipY        bool
 	shader              *modelViewerOverlayShader
 	frameSource         string
 	frame               float64
@@ -163,6 +181,7 @@ func buildModelViewerOverlayMenus(
 	scans []modelViewerGeometryScan,
 	variables []ModelViewerVariable,
 	names map[string]modelViewerVariableName,
+	menuOnly map[string]bool,
 ) []ModelViewerOverlayMenu {
 	var menus []ModelViewerOverlayMenu
 	for _, scan := range scans {
@@ -170,7 +189,7 @@ func buildModelViewerOverlayMenus(
 		if program == nil {
 			continue
 		}
-		if menu := program.build(ctx, variables, names); menu != nil {
+		if menu := program.build(ctx, variables, names, menuOnly); menu != nil {
 			menus = append(menus, *menu)
 		}
 	}
@@ -187,6 +206,7 @@ func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *
 		shaders:         make(map[string]*modelViewerOverlayShader),
 		missingTextures: make(map[string]bool),
 		initial:         modelViewerOverlayInitialState(scan.sections),
+		menuKeys:        make(map[string]bool),
 	}
 	var clickKey *modINISection
 	for index := range scan.sections {
@@ -294,53 +314,147 @@ func modelViewerOverlayIsClickKey(lines []string) bool {
 	})
 }
 
+type modelViewerOverlayVariable struct {
+	variable ModelViewerVariable
+	internal string
+}
+
+// modelViewerOverlayExplorer walks the pages of one menu, starting from the one
+// the mod opens on.
+type modelViewerOverlayExplorer struct {
+	ctx     context.Context
+	program *modelViewerOverlayProgram
+	tracked map[string]modelViewerOverlayVariable
+	// candidates maps listed variables that may turn out to page the menu to their IDs.
+	candidates map[string]string
+	// states holds what differs from [Constants] on each page found so far.
+	states []map[string]any
+	form   string
+}
+
+// modelViewerOverlayPageBuild holds a page in the window coordinates the mod drew it in.
+type modelViewerOverlayPageBuild struct {
+	page  ModelViewerOverlayPage
+	drawn []modelViewerOverlayTracedQuad
+}
+
 func (p *modelViewerOverlayProgram) build(
 	ctx context.Context,
 	variables []ModelViewerVariable,
 	names map[string]modelViewerVariableName,
+	menuOnly map[string]bool,
 ) *ModelViewerOverlayMenu {
-	idle := p.trace(-1, -1, nil)
-	if p.unsupported || len(idle.quads) < 2 {
+	initial := p.trace(-1, -1, nil)
+	if p.unsupported || len(initial.quads) < 2 {
 		return nil
 	}
-	backdrop, order := modelViewerOverlaySmallestFirst(idle.quads)
 
 	publicToInternal := make(map[string]string, len(names))
 	for internal, name := range names {
 		publicToInternal[name.PublicID] = internal
 	}
-	type located struct {
-		variable ModelViewerVariable
-		internal string
+	explorer := &modelViewerOverlayExplorer{
+		ctx:        ctx,
+		program:    p,
+		tracked:    make(map[string]modelViewerOverlayVariable, len(variables)),
+		candidates: make(map[string]string),
+		states:     []map[string]any{{}},
 	}
-	tracked := make(map[string]located, len(variables))
 	for _, variable := range variables {
 		internal, ok := publicToInternal[variable.ID]
 		if !ok {
 			internal = modelViewerNormalizeKey(variable.ID)
 		}
-		tracked[internal] = located{variable: variable, internal: internal}
+		explorer.tracked[internal] = modelViewerOverlayVariable{variable: variable, internal: internal}
+	}
+	explorer.findPageCandidates(initial, menuOnly)
+
+	var pages []*modelViewerOverlayPageBuild
+	for index := 0; index < len(explorer.states); index++ {
+		knownKeys := len(p.menuKeys)
+		page := explorer.buildPage(explorer.states[index])
+		if ctx.Err() != nil {
+			return nil
+		}
+		// A later page that cannot be reproduced costs only that page.
+		if p.unsupported {
+			if index == 0 {
+				return nil
+			}
+			p.unsupported = false
+			page = nil
+		}
+		pages = append(pages, page)
+
+		// A page condition just stopped opening the menu by force; see chooseBranch.
+		// Each restart needs a new key, and the step budget still bounds them.
+		if len(p.menuKeys) != knownKeys && explorer.drawsDifferently(pages) {
+			pages = nil
+			explorer.states = explorer.states[:1]
+			index = -1
+		}
 	}
 
-	originX, originY := math.Inf(1), math.Inf(1)
-	maxX, maxY := math.Inf(-1), math.Inf(-1)
-	for _, quad := range idle.quads {
-		originX, originY = min(originX, quad.x), min(originY, quad.y)
-		maxX, maxY = max(maxX, quad.x+quad.width), max(maxY, quad.y+quad.height)
+	var stateVariables []string
+	for key, id := range explorer.candidates {
+		if p.menuKeys[key] {
+			stateVariables = append(stateVariables, id)
+		}
 	}
-	menu := &ModelViewerOverlayMenu{
-		Width:  roundModelViewerOverlay(maxX - originX),
-		Height: roundModelViewerOverlay(maxY - originY),
-	}
-	place := func(quad modelViewerOverlayTracedQuad) (float64, float64, float64, float64) {
-		return roundModelViewerOverlay(quad.x - originX), roundModelViewerOverlay(quad.y - originY),
-			roundModelViewerOverlay(quad.width), roundModelViewerOverlay(quad.height)
-	}
+	return assembleModelViewerOverlayMenu(pages, explorer.form, stateVariables)
+}
 
-	buttonIndex := make(map[string]int)
-	var buttonVariables []located
+// drawsDifferently reports whether a page built so far would now come out otherwise.
+// A state the budget no longer reaches keeps the page already built.
+func (e *modelViewerOverlayExplorer) drawsDifferently(pages []*modelViewerOverlayPageBuild) bool {
+	for index, page := range pages {
+		if page == nil {
+			continue
+		}
+		run := e.program.tryTrace(e.states[index])
+		if run != nil && !modelViewerOverlaySameQuads(run.quads, page.drawn, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// findPageCandidates marks the listed variables that move the menu's elements and
+// that nothing in the model reads, as a page number does when the click list steps
+// it through a slot the variable scan recognizes. clickTarget decides which are one.
+func (e *modelViewerOverlayExplorer) findPageCandidates(initial *modelViewerOverlayRun, menuOnly map[string]bool) {
+	for key, entry := range e.tracked {
+		if !menuOnly[modelViewerNormalizeKey(entry.variable.ID)] {
+			continue
+		}
+		domain := modelViewerOverlayDomain(entry.variable)
+		if len(domain) > maxModelViewerOverlayStateValues {
+			continue
+		}
+		for _, value := range domain {
+			run := e.program.tryTrace(map[string]any{key: value})
+			if run != nil && !modelViewerOverlaySameQuads(run.quads, initial.quads, true) {
+				e.candidates[key] = entry.variable.ID
+				break
+			}
+		}
+	}
+}
+
+func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewerOverlayPageBuild {
+	p := e.program
+	idle := p.trace(-1, -1, state)
+	if p.unsupported || len(idle.quads) == 0 {
+		p.unsupported = true
+		return nil
+	}
+	backdrop, order := modelViewerOverlaySmallestFirst(idle.quads)
+
+	var buttons []ModelViewerOverlayButton
+	var buttonKeys []string
+	var buttonVariables []modelViewerOverlayVariable
 	for _, quadIndex := range order {
-		if ctx.Err() != nil || p.unsupported {
+		if e.ctx.Err() != nil || p.unsupported {
 			return nil
 		}
 		if quadIndex == backdrop {
@@ -350,16 +464,17 @@ func (p *modelViewerOverlayProgram) build(
 		hovered := p.trace(
 			(quad.x+quad.width/2)/modelViewerOverlayWidth,
 			(quad.y+quad.height/2)/modelViewerOverlayHeight,
-			nil,
+			state,
 		)
 		clicked := hovered.click(hovered.state)
+		target := e.clickTarget(state, idle, hovered, clicked)
 
 		// Prefer the first changed toggle over unchanged initializers. Keep a
 		// clamped toggle as a fallback when the default is already at its bound.
-		var hit *located
+		var hit *modelViewerOverlayVariable
 		var transitions []ModelViewerOverlayTransition
 		for _, key := range clicked.assigned {
-			if entry, ok := tracked[key]; ok {
+			if entry, ok := e.tracked[key]; ok && !p.menuKeys[key] {
 				candidate := hovered.transitions(entry.internal, entry.variable)
 				if len(candidate) == 0 {
 					continue
@@ -374,39 +489,53 @@ func (p *modelViewerOverlayProgram) build(
 				}
 			}
 		}
-		if hit == nil {
+		if hit == nil && target < 0 {
 			continue
 		}
-		key := fmt.Sprintf("%s:%v", hit.variable.ID, transitions)
-		x, y, width, height := place(quad)
-		if existing, ok := buttonIndex[key]; ok {
+
+		button := ModelViewerOverlayButton{
+			X: quad.x, Y: quad.y, Width: quad.width, Height: quad.height,
+			Transitions: transitions,
+			Hover:       modelViewerOverlayHoverChanges(idle.quads, hovered.quads),
+		}
+		if hit != nil {
+			button.Variable = hit.variable.ID
+		}
+		if target >= 0 {
+			button.Page = &target
+		}
+		key := fmt.Sprintf("%s:%v:%d", button.Variable, transitions, target)
+		existing := -1
+		for index := range buttons {
+			// The two arrows of a two-page menu lead to one page from different places.
+			if buttonKeys[index] == key && (target < 0 || modelViewerOverlayRectsOverlap(buttons[index], button)) {
+				existing = index
+				break
+			}
+		}
+		if existing >= 0 {
 			// A slot is usually an icon inside a frame; the frame takes the clicks.
-			button := &menu.Buttons[existing]
-			if width*height <= button.Width*button.Height*4 {
-				button.X, button.Y, button.Width, button.Height = x, y, width, height
+			kept := &buttons[existing]
+			if quad.width*quad.height <= kept.Width*kept.Height*4 {
+				kept.X, kept.Y, kept.Width, kept.Height = quad.x, quad.y, quad.width, quad.height
 			}
 			continue
 		}
-		buttonIndex[key] = len(menu.Buttons)
-		buttonVariables = append(buttonVariables, *hit)
-		menu.Buttons = append(menu.Buttons, ModelViewerOverlayButton{
-			X: x, Y: y, Width: width, Height: height,
-			Variable:    hit.variable.ID,
-			Transitions: transitions,
-			Hover:       modelViewerOverlayHoverChanges(idle.quads, hovered.quads),
-		})
-		if menu.Form == "" {
-			menu.Form = hit.variable.Form
+		buttons = append(buttons, button)
+		buttonKeys = append(buttonKeys, key)
+		if hit != nil {
+			buttonVariables = append(buttonVariables, *hit)
+			if e.form == "" {
+				e.form = hit.variable.Form
+			}
 		}
 	}
-	if len(menu.Buttons) == 0 {
-		return nil
-	}
 
+	quads := make([]ModelViewerOverlayQuad, 0, len(idle.quads))
 	for _, quad := range idle.quads {
-		x, y, width, height := place(quad)
-		menu.Quads = append(menu.Quads, ModelViewerOverlayQuad{
-			Path: quad.path, X: x, Y: y, Width: width, Height: height, Opacity: quad.opacity,
+		quads = append(quads, ModelViewerOverlayQuad{
+			Path: quad.path, X: quad.x, Y: quad.y, Width: quad.width, Height: quad.height, Opacity: quad.opacity,
+			FlipX: quad.flipX, FlipY: quad.flipY,
 			Flipbook: idle.flipbook(quad),
 		})
 	}
@@ -417,30 +546,252 @@ func (p *modelViewerOverlayProgram) build(
 			continue
 		}
 		for _, value := range domain {
-			if ctx.Err() != nil {
+			if e.ctx.Err() != nil {
 				return nil
 			}
 			current, err := modelViewerNumber(idle.state[entry.internal])
 			if err == nil && current == value {
 				continue
 			}
-			changed := p.trace(-1, -1, map[string]any{entry.internal: value})
+			overrides := maps.Clone(state)
+			overrides[entry.internal] = value
+			changed := p.trace(-1, -1, overrides)
 			if len(changed.quads) != len(idle.quads) {
 				continue
 			}
 			for index, quad := range changed.quads {
 				if quad.path != idle.quads[index].path || quad.opacity != idle.quads[index].opacity {
-					menu.Quads[index].States = append(menu.Quads[index].States, ModelViewerOverlayQuadState{
+					quads[index].States = append(quads[index].States, ModelViewerOverlayQuadState{
 						Variable: entry.variable.ID, Value: value, Path: quad.path, Opacity: quad.opacity,
 					})
 				}
 			}
 		}
 	}
-	if p.unsupported {
+	return &modelViewerOverlayPageBuild{
+		page:  ModelViewerOverlayPage{Quads: quads, Buttons: buttons},
+		drawn: idle.quads,
+	}
+}
+
+func modelViewerOverlayRectsOverlap(a, b ModelViewerOverlayButton) bool {
+	return a.X < b.X+b.Width && b.X < a.X+a.Width && a.Y < b.Y+b.Height && b.Y < a.Y+a.Height
+}
+
+// clickTarget returns the index of the page a click leads to, or -1, registering
+// the page when it is new.
+//
+// A menu variable keeps what the click gave it and changes what is drawn. Its value
+// comes from nothing but itself and constants, which sets a page number apart from
+// a click marker copied from the hovered slot: that redraws the menu too, but it
+// describes the click instead of a place in the menu.
+func (e *modelViewerOverlayExplorer) clickTarget(
+	state map[string]any,
+	idle, hovered, clicked *modelViewerOverlayRun,
+) int {
+	p := e.program
+	next := maps.Clone(state)
+	changed := false
+	visited := make(map[string]bool, len(clicked.assigned))
+	for _, key := range clicked.assigned {
+		if visited[key] {
+			continue
+		}
+		visited[key] = true
+		_, isListed := e.tracked[key]
+		_, isCandidate := e.candidates[key]
+		if isListed && !isCandidate || !modelViewerOverlaySelfContained(clicked.sources[key], key) {
+			continue
+		}
+		value, err := modelViewerNumber(clicked.state[key])
+		if err != nil || modelViewerOverlaySameValue(clicked.state[key], hovered.state[key]) {
+			continue
+		}
+		probe := maps.Clone(state)
+		probe[key] = value
+		run := p.tryTrace(probe)
+		if run == nil || !modelViewerOverlaySameValue(run.state[key], value) ||
+			modelViewerOverlaySameQuads(run.quads, idle.quads, false) {
+			continue
+		}
+		p.menuKeys[key] = true
+		changed = true
+		if initial, declared := p.initial[key]; modelViewerOverlaySameValue(initial, value) ||
+			!declared && value == 0 {
+			delete(next, key)
+		} else {
+			next[key] = value
+		}
+	}
+	if !changed {
+		return -1
+	}
+
+	index := slices.IndexFunc(e.states, func(known map[string]any) bool {
+		return maps.EqualFunc(known, next, modelViewerOverlaySameValue)
+	})
+	if index < 0 {
+		if len(e.states) >= maxModelViewerOverlayPages {
+			return -1
+		}
+		index = len(e.states)
+		e.states = append(e.states, next)
+	}
+	return index
+}
+
+func modelViewerOverlaySameValue(a, b any) bool {
+	return modelViewerString(a) == modelViewerString(b)
+}
+
+func modelViewerOverlaySelfContained(source, key string) bool {
+	if source == "" {
+		return false
+	}
+	for _, name := range modelViewerOverlayNameRE.FindAllString(source, -1) {
+		if modelViewerNormalizeKey(name) != key {
+			return false
+		}
+	}
+	return true
+}
+
+func modelViewerOverlaySameQuads(a, b []modelViewerOverlayTracedQuad, layoutOnly bool) bool {
+	return slices.EqualFunc(a, b, func(left, right modelViewerOverlayTracedQuad) bool {
+		return left.x == right.x && left.y == right.y && left.width == right.width && left.height == right.height &&
+			(layoutOnly || left.path == right.path && left.opacity == right.opacity)
+	})
+}
+
+// assembleModelViewerOverlayMenu moves the pages to their shared corner and closes
+// the gaps of dropped ones. Without a toggle on any page the menu operates nothing
+// in the viewer, and the regular controls stay on their own.
+func assembleModelViewerOverlayMenu(
+	pages []*modelViewerOverlayPageBuild,
+	form string,
+	stateVariables []string,
+) *ModelViewerOverlayMenu {
+	originX, originY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	kept := make([]int, len(pages))
+	count := 0
+	hasToggle := false
+	for index, page := range pages {
+		kept[index] = -1
+		if page == nil {
+			continue
+		}
+		kept[index] = count
+		count++
+		for _, quad := range page.drawn {
+			originX, originY = min(originX, quad.x), min(originY, quad.y)
+			maxX, maxY = max(maxX, quad.x+quad.width), max(maxY, quad.y+quad.height)
+		}
+		hasToggle = hasToggle || slices.ContainsFunc(page.page.Buttons, func(button ModelViewerOverlayButton) bool {
+			return button.Variable != ""
+		})
+	}
+	if !hasToggle {
 		return nil
 	}
+
+	menu := &ModelViewerOverlayMenu{
+		Width:  roundModelViewerOverlay(maxX - originX),
+		Height: roundModelViewerOverlay(maxY - originY),
+		Form:   form,
+		Pages:  make([]ModelViewerOverlayPage, 0, count),
+	}
+	if count > 1 {
+		menu.stateVariables = stateVariables
+	}
+	for _, build := range pages {
+		if build == nil {
+			continue
+		}
+		page := build.page
+		for index := range page.Quads {
+			quad := &page.Quads[index]
+			quad.X, quad.Y = roundModelViewerOverlay(quad.X-originX), roundModelViewerOverlay(quad.Y-originY)
+			quad.Width, quad.Height = roundModelViewerOverlay(quad.Width), roundModelViewerOverlay(quad.Height)
+		}
+		buttons := make([]ModelViewerOverlayButton, 0, len(page.Buttons))
+		for _, button := range page.Buttons {
+			if button.Page != nil {
+				target := kept[*button.Page]
+				button.Page = &target
+				if target < 0 {
+					button.Page = nil
+					if button.Variable == "" {
+						continue
+					}
+				}
+			}
+			button.X, button.Y = roundModelViewerOverlay(button.X-originX), roundModelViewerOverlay(button.Y-originY)
+			button.Width, button.Height = roundModelViewerOverlay(button.Width), roundModelViewerOverlay(button.Height)
+			buttons = append(buttons, button)
+		}
+		page.Buttons = buttons
+		menu.Pages = append(menu.Pages, page)
+	}
 	return menu
+}
+
+// modelViewerOverlayMenuOnlyVariables returns the listed variables nothing in the
+// model reads, so that a menu may claim them as its own state.
+func modelViewerOverlayMenuOnlyVariables(transport *ModelViewerTransport) map[string]bool {
+	used := modelViewerDirectGatingVariables(transport.Meshes, nil)
+	mark := func(id string) { used[modelViewerNormalizeKey(id)] = true }
+	for _, mesh := range transport.Meshes {
+		for _, target := range mesh.ShapeTargets {
+			mark(target.Var)
+		}
+	}
+	for _, rule := range transport.StateRules {
+		mark(rule.Var)
+		for _, group := range rule.Conditions {
+			for _, clause := range group {
+				mark(clause.Var)
+			}
+		}
+	}
+	for _, clip := range transport.Animations {
+		for _, id := range clip.VariableIDs {
+			mark(id)
+		}
+	}
+	for _, variable := range transport.Variables {
+		for _, effect := range variable.Effects {
+			mark(effect.Var)
+			if effect.When != nil {
+				mark(effect.When.Var)
+			}
+			for _, guard := range effect.Also {
+				mark(guard.Var)
+			}
+		}
+	}
+
+	menuOnly := make(map[string]bool)
+	for _, variable := range transport.Variables {
+		id := modelViewerNormalizeKey(variable.ID)
+		if !used[id] && len(variable.Effects) == 0 {
+			menuOnly[id] = true
+		}
+	}
+	return menuOnly
+}
+
+// withoutModelViewerOverlayStateVariables removes what the served menus keep as
+// their own state from the regular controls.
+func withoutModelViewerOverlayStateVariables(
+	variables []ModelViewerVariable,
+	menus []ModelViewerOverlayMenu,
+) []ModelViewerVariable {
+	return slices.DeleteFunc(variables, func(variable ModelViewerVariable) bool {
+		return slices.ContainsFunc(menus, func(menu ModelViewerOverlayMenu) bool {
+			return slices.Contains(menu.stateVariables, variable.ID)
+		})
+	})
 }
 
 func modelViewerOverlaySmallestFirst(quads []modelViewerOverlayTracedQuad) (int, []int) {
@@ -515,16 +866,19 @@ func (t *Service) serveModelViewerOverlayTextures(
 				*path, failure = serve(*path)
 			}
 		}
-		for quadIndex := range menu.Quads {
-			quad := &menu.Quads[quadIndex]
-			rewrite(&quad.Path)
-			for stateIndex := range quad.States {
-				rewrite(&quad.States[stateIndex].Path)
+		for pageIndex := range menu.Pages {
+			page := &menu.Pages[pageIndex]
+			for quadIndex := range page.Quads {
+				quad := &page.Quads[quadIndex]
+				rewrite(&quad.Path)
+				for stateIndex := range quad.States {
+					rewrite(&quad.States[stateIndex].Path)
+				}
 			}
-		}
-		for buttonIndex := range menu.Buttons {
-			for hoverIndex := range menu.Buttons[buttonIndex].Hover {
-				rewrite(&menu.Buttons[buttonIndex].Hover[hoverIndex].Path)
+			for buttonIndex := range page.Buttons {
+				for hoverIndex := range page.Buttons[buttonIndex].Hover {
+					rewrite(&page.Buttons[buttonIndex].Hover[hoverIndex].Path)
+				}
 			}
 		}
 		if failure != nil {
@@ -589,6 +943,19 @@ func (r *modelViewerOverlayRun) flipbook(quad modelViewerOverlayTracedQuad) *Mod
 
 func roundModelViewerOverlay(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+// tryTrace draws a state that may not be reproducible, without giving up on the
+// page it is explored from. It returns nil for such a state.
+func (p *modelViewerOverlayProgram) tryTrace(overrides map[string]any) *modelViewerOverlayRun {
+	before := p.unsupported
+	run := p.trace(-1, -1, overrides)
+	failed := p.unsupported
+	p.unsupported = before
+	if failed {
+		return nil
+	}
+	return run
 }
 
 func (p *modelViewerOverlayProgram) trace(
@@ -717,7 +1084,8 @@ func (p *modelViewerOverlayProgram) spendStep() bool {
 }
 
 // chooseBranch forces a way into the menu only on the path leading to it. Once
-// inside, and in the click list, a failed condition such as a hit test is real.
+// inside, in the click list, or on a condition made only of page variables, a failed
+// condition such as a hit test is real.
 func (r *modelViewerOverlayRun) chooseBranch(
 	branches []modelViewerDirectConditionalBranch,
 ) *modelViewerDirectConditionalBranch {
@@ -730,11 +1098,23 @@ func (r *modelViewerOverlayRun) chooseBranch(
 		return nil
 	}
 	for index := range branches {
+		if branches[index].expression != nil && r.program.selectsPage(*branches[index].expression) {
+			return nil
+		}
+	}
+	for index := range branches {
 		if r.program.linesReachMenu(branches[index].lines) {
 			return &branches[index]
 		}
 	}
 	return nil
+}
+
+func (p *modelViewerOverlayProgram) selectsPage(expression string) bool {
+	names := modelViewerOverlayNameRE.FindAllString(expression, -1)
+	return len(names) > 0 && !slices.ContainsFunc(names, func(name string) bool {
+		return !p.menuKeys[modelViewerNormalizeKey(name)]
+	})
 }
 
 func (p *modelViewerOverlayProgram) linesReachMenu(lines []string) bool {
@@ -796,8 +1176,15 @@ func (r *modelViewerOverlayRun) recordQuad(list string) {
 		opacity: shader.opacity,
 		shader:  shader,
 	}
-	if quad.width <= 0 || quad.height <= 0 {
+	if quad.width == 0 || quad.height == 0 {
 		return
+	}
+	// A negative size draws away from the corner with the texture mirrored.
+	if quad.width < 0 {
+		quad.x, quad.width, quad.flipX = quad.x+quad.width, -quad.width, true
+	}
+	if quad.height < 0 {
+		quad.y, quad.height, quad.flipY = quad.y+quad.height, -quad.height, true
 	}
 	if shader.frameRegister != "" {
 		quad.frame = number("x" + shader.frameRegister)

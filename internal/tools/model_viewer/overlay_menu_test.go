@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -160,7 +161,7 @@ func buildOverlayTestMenuFrom(
 		{ID: "hair", Label: "Hair", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}, {Value: 2.0}}},
 		{ID: "chest", Label: "Chest", Slider: &ModelViewerSlider{Min: 0, Max: 10, Step: 1}},
 	}
-	return buildModelViewerOverlayMenus(ctx, dir, []modelViewerGeometryScan{scan}, variables, nil)
+	return buildModelViewerOverlayMenus(ctx, dir, []modelViewerGeometryScan{scan}, variables, nil, nil)
 }
 
 func TestModelViewerOverlayMenuReproducesLayoutAndClicks(t *testing.T) {
@@ -173,16 +174,16 @@ func TestModelViewerOverlayMenuReproducesLayoutAndClicks(t *testing.T) {
 		t.Fatalf("size = %vx%v, want 200x300", menu.Width, menu.Height)
 	}
 	// The closed-menu gates are passed, and the list drawn outside the menu stays out.
-	if len(menu.Quads) != 5 {
-		t.Fatalf("quads = %d, want the backdrop, three slots and a decoration", len(menu.Quads))
+	if len(menu.Pages[0].Quads) != 5 {
+		t.Fatalf("quads = %d, want the backdrop, three slots and a decoration", len(menu.Pages[0].Quads))
 	}
 
-	// The slot changing a variable outside the toggles, like a page button, is no button.
+	// The slot changing a variable that nothing draws from leads nowhere, so it is no button.
 	// Neither is the decoration, where no click branch matches.
-	if len(menu.Buttons) != 2 {
-		t.Fatalf("buttons = %+v, want hair and chest", menu.Buttons)
+	if len(menu.Pages[0].Buttons) != 2 {
+		t.Fatalf("buttons = %+v, want hair and chest", menu.Pages[0].Buttons)
 	}
-	hair, chest := menu.Buttons[0], menu.Buttons[1]
+	hair, chest := menu.Pages[0].Buttons[0], menu.Pages[0].Buttons[1]
 	if hair.Variable != "hair" || hair.X != 20 || hair.Y != 20 || hair.Width != 64 {
 		t.Fatalf("hair button = %+v", hair)
 	}
@@ -204,6 +205,402 @@ func TestModelViewerOverlayMenuReproducesLayoutAndClicks(t *testing.T) {
 	}
 }
 
+const overlayPagedTestINI = `
+[Constants]
+global $hovering
+global $hoveredSlot
+global $clickedSlot
+global $slot
+global $hair = 0
+global $chest = 0
+global $page = 0
+[KeyClick]
+condition = $hovering == 1
+key = VK_LBUTTON
+run = CommandListClicked
+[Present]
+run = CommandListMenu
+[CommandListClicked]
+$clickedSlot = $hoveredSlot
+if $clickedSlot == 1
+  $hair = ($hair + 1) % 3
+elif $clickedSlot == 2
+  $chest = $chest + 1
+elif $clickedSlot == -2
+  $page = ($page - 1 + 3) % 3
+elif $clickedSlot == -1
+  $page = ($page + 1) % 3
+endif
+[CommandListMenu]
+ps-t100 = ResourceBack
+x87 = 200 / window_width
+y87 = 300 / window_height
+z87 = 100 / window_width
+w87 = 50 / window_height
+run = CustomShaderElement
+$hovering = 0
+if $page == 0
+  run = CommandListPageZero
+elif $page == 1
+  run = CommandListPageOne
+elif $page == 2
+  run = CommandListPageTwo
+endif
+run = CommandListArrows
+[CommandListPageZero]
+$slot = 1
+x87 = 64 / window_width
+y87 = 64 / window_height
+z87 = 120 / window_width
+w87 = 70 / window_height
+run = CommandListSlot
+[CommandListPageOne]
+$slot = 2
+x87 = 64 / window_width
+y87 = 64 / window_height
+z87 = 180 / window_width
+w87 = 170 / window_height
+run = CommandListSlot
+[CommandListPageTwo]
+ps-t100 = ResourceCredit
+x87 = 32 / window_width
+y87 = 32 / window_height
+z87 = 140 / window_width
+w87 = 100 / window_height
+run = CustomShaderElement
+[CommandListSlot]
+if cursor_x > z87 && cursor_x < z87 + x87 && cursor_y > w87 && cursor_y < w87 + y87
+    $hovering = 1
+    $hoveredSlot = $slot
+    ps-t100 = ResourceHover
+else
+    ps-t100 = ResourceFrame
+endif
+run = CustomShaderElement
+if $clickedSlot == $slot
+    ps-t100 = ResourceHover
+    run = CustomShaderElement
+    $clickedSlot = 0
+endif
+[CommandListArrows]
+ps-t100 = ResourceFrame
+x87 = -32 / window_width
+y87 = 32 / window_height
+z87 = 100 / window_width
+w87 = 200 / window_height
+if cursor_x < z87 && cursor_x > z87 + x87 && cursor_y > w87 && cursor_y < w87 + y87
+    $hovering = 1
+    $hoveredSlot = -2
+    ps-t100 = ResourceHover
+endif
+run = CustomShaderElement
+ps-t100 = ResourceFrame
+x87 = 32 / window_width
+z87 = 300 / window_width
+if cursor_x > z87 && cursor_x < z87 + x87 && cursor_y > w87 && cursor_y < w87 + y87
+    $hovering = 1
+    $hoveredSlot = -1
+    ps-t100 = ResourceHover
+endif
+run = CustomShaderElement
+[CustomShaderElement]
+ps = .\ui.hlsl
+Draw = 4,0
+`
+
+func overlayTestPageButtons(page ModelViewerOverlayPage) (back, forward int, toggles []ModelViewerOverlayButton) {
+	back, forward = -1, -1
+	for _, button := range page.Buttons {
+		switch {
+		case button.Page != nil && button.X == 0:
+			back = *button.Page
+		case button.Page != nil:
+			forward = *button.Page
+		default:
+			toggles = append(toggles, button)
+		}
+	}
+	return back, forward, toggles
+}
+
+func TestModelViewerOverlayMenuFollowsPageArrows(t *testing.T) {
+	menus := buildOverlayTestMenuFrom(t, context.Background(), overlayPagedTestINI, "frame.png")
+	if len(menus) != 1 || len(menus[0].Pages) != 3 {
+		t.Fatalf("menus = %+v, want one with three pages despite the click marker", menus)
+	}
+	menu := menus[0]
+	// The left arrow extends past the backdrop, and the corner is shared by all pages.
+	if menu.Width != 264 || menu.Height != 300 {
+		t.Fatalf("size = %vx%v, want 264x300", menu.Width, menu.Height)
+	}
+
+	// Walk forward from the first page: the mod numbers its pages hair, chest, decoration.
+	first, forward, firstToggles := overlayTestPageButtons(menu.Pages[0])
+	if len(firstToggles) != 1 || firstToggles[0].Variable != "hair" || firstToggles[0].X != 52 {
+		t.Fatalf("first page toggles = %+v, want hair alone", firstToggles)
+	}
+	want := []ModelViewerOverlayTransition{{From: 0, To: 1}, {From: 1, To: 2}, {From: 2, To: 0}}
+	if !slices.Equal(firstToggles[0].Transitions, want) {
+		t.Fatalf("hair transitions = %v, want %v", firstToggles[0].Transitions, want)
+	}
+	back2, forward2, chestToggles := overlayTestPageButtons(menu.Pages[forward])
+	if len(chestToggles) != 1 || chestToggles[0].Variable != "chest" || chestToggles[0].X != 112 ||
+		chestToggles[0].Y != 120 {
+		t.Fatalf("second page toggles = %+v, want chest alone at its own place", chestToggles)
+	}
+	back3, forward3, decorationToggles := overlayTestPageButtons(menu.Pages[forward2])
+	if len(decorationToggles) != 0 {
+		t.Fatalf("third page toggles = %+v, want none", decorationToggles)
+	}
+	if forward3 != 0 || back2 != 0 || back3 != forward || first != forward2 {
+		t.Fatalf(
+			"pages do not cycle: forward %d %d %d, back %d %d %d",
+			forward,
+			forward2,
+			forward3,
+			first,
+			back2,
+			back3,
+		)
+	}
+
+	paths := func(page ModelViewerOverlayPage) []string {
+		names := make([]string, 0, len(page.Quads))
+		for _, quad := range page.Quads {
+			names = append(names, filepath.Base(quad.Path))
+		}
+		return names
+	}
+	if got, wantPaths := paths(menu.Pages[forward2]), []string{
+		"back.png", "credit.png", "frame.png", "frame.png",
+	}; !slices.Equal(got, wantPaths) {
+		t.Fatalf("third page draws %v, want %v", got, wantPaths)
+	}
+
+	// The left arrow is drawn with a negative width: mirrored, placed left of its corner.
+	arrow := menu.Pages[0].Quads[2]
+	if !arrow.FlipX || arrow.X != 0 || arrow.Width != 32 {
+		t.Fatalf("left arrow = %+v, want it mirrored at the menu corner", arrow)
+	}
+	for _, button := range menu.Pages[0].Buttons {
+		if button.Page != nil && (len(button.Hover) != 1 || filepath.Base(button.Hover[0].Path) != "hover.png") {
+			t.Fatalf("arrow hover = %+v", button.Hover)
+		}
+	}
+}
+
+func TestModelViewerOverlayMenuPageVariations(t *testing.T) {
+	replace := func(t *testing.T, ini, old, updated string) string {
+		t.Helper()
+		if !strings.Contains(ini, old) {
+			t.Fatalf("fixture has no %q", old)
+		}
+		return strings.ReplaceAll(ini, old, updated)
+	}
+
+	t.Run("separate page conditions do not stack", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "elif $page == 1", "endif\nif $page == 1")
+		ini = replace(t, ini, "elif $page == 2", "endif\nif $page == 2")
+		// Lists that do not assign what the click key tests leave the menu's entry unmarked.
+		ini = replace(t, ini, "$hovering = 0\nif $page == 0", "if $page == 0")
+		ini = replace(t, ini, "condition = $hovering == 1\n", "")
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != 3 {
+			t.Fatalf("menus = %+v, want three pages", menus)
+		}
+		for index, page := range menus[0].Pages {
+			if len(page.Quads) != 4 {
+				t.Fatalf("page %d quads = %d, want the backdrop, one element and two arrows", index, len(page.Quads))
+			}
+		}
+	})
+
+	t.Run("a first page opened by force is rebuilt", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "elif $page == 1", "endif\nif $page == 1")
+		ini = replace(t, ini, "elif $page == 2", "endif\nif $page == 2")
+		ini = replace(t, ini, "$hovering = 0\nif $page == 0", "if $page == 0")
+		ini = replace(t, ini, "condition = $hovering == 1\n", "")
+		// The first page's list marks nothing, so the page 1 condition is forced open at first.
+		ini = replace(t, ini, "run = CommandListPageZero", "run = CommandListSwap")
+		ini = replace(t, ini, "run = CommandListPageTwo", "run = CommandListPageZero")
+		ini = replace(t, ini, "run = CommandListSwap", "run = CommandListPageTwo")
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != 3 {
+			t.Fatalf("menus = %+v, want three pages", menus)
+		}
+		for index, page := range menus[0].Pages {
+			if len(page.Quads) != 4 {
+				t.Fatalf("page %d quads = %d, want the backdrop, one element and two arrows", index, len(page.Quads))
+			}
+		}
+	})
+
+	t.Run("finding the page number does not spend the budget again", func(t *testing.T) {
+		busy := strings.Repeat("$slot = 1\n", 85000)
+		ini := replace(t, overlayPagedTestINI, "[CommandListPageZero]\n", "[CommandListPageZero]\n"+busy)
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != 3 {
+			t.Fatalf("menus = %d, want one with three pages", len(menus))
+		}
+	})
+
+	t.Run("a selection copied from the hovered slot is no page", func(t *testing.T) {
+		ini := replace(
+			t,
+			overlayPagedTestINI,
+			"$clickedSlot = $hoveredSlot\n",
+			"$clickedSlot = $hoveredSlot\n$selected = $hoveredSlot\n",
+		)
+		ini = replace(
+			t,
+			ini,
+			"[CommandListArrows]\n",
+			"[CommandListArrows]\nif $selected == 1\n    ps-t100 = ResourceHover\n    run = CustomShaderElement\nendif\n",
+		)
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != 3 {
+			t.Fatalf("menus = %+v, want the three pages alone", menus)
+		}
+	})
+
+	t.Run("two pages keep both arrows", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "% 3", "% 2")
+		ini = replace(t, ini, "- 1 + 3", "- 1 + 2")
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != 2 {
+			t.Fatalf("menus = %+v, want two pages", menus)
+		}
+		back, forward, _ := overlayTestPageButtons(menus[0].Pages[0])
+		if back != 1 || forward != 1 {
+			t.Fatalf("arrows lead to %d and %d, want the other page from both", back, forward)
+		}
+	})
+
+	t.Run("a page that cannot be drawn only loses its way in", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "ps-t100 = ResourceCredit", "ps-t100 = ResourceLive")
+		ini += "[ResourceLive]\n"
+		dir := t.TempDir()
+		for name, content := range map[string]string{
+			"ui.hlsl": overlayTestShader, "back.png": "x", "frame.png": "x", "hover.png": "x",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		scan := modelViewerGeometryScan{
+			sections: parseModINI(ini),
+			resources: []modelViewerResource{
+				{Name: "Back", Filename: "back.png"},
+				{Name: "Frame", Filename: "frame.png"},
+				{Name: "Hover", Filename: "hover.png"},
+				{Name: "Live"},
+			},
+			iniDir: dir,
+		}
+		variables := []ModelViewerVariable{
+			{ID: "hair", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}, {Value: 2.0}}},
+			{ID: "chest", Slider: &ModelViewerSlider{Min: 0, Max: 3, Step: 1}},
+		}
+		menus := buildModelViewerOverlayMenus(
+			context.Background(), dir, []modelViewerGeometryScan{scan}, variables, nil, nil,
+		)
+		if len(menus) != 1 || len(menus[0].Pages) != 2 {
+			t.Fatalf("menus = %+v, want the two pages that can be drawn", menus)
+		}
+		for index, page := range menus[0].Pages {
+			for _, button := range page.Buttons {
+				if button.Page != nil && (*button.Page < 0 || *button.Page >= len(menus[0].Pages)) {
+					t.Fatalf("page %d button leads to %d", index, *button.Page)
+				}
+			}
+		}
+	})
+
+	t.Run("unbounded stepping stops at the page limit", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "$page = ($page + 1) % 3", "$page = $page + 1")
+		ini = replace(t, ini, "$page = ($page - 1 + 3) % 3", "$page = $page + 1")
+		ini = replace(t, ini, "z87 = 300 / window_width", "z87 = (300 + $page) / window_width")
+		menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+		if len(menus) != 1 || len(menus[0].Pages) != maxModelViewerOverlayPages {
+			t.Fatalf("pages = %d, want the limit %d", len(menus[0].Pages), maxModelViewerOverlayPages)
+		}
+	})
+
+	buildListed := func(
+		t *testing.T,
+		ini string,
+		variables []ModelViewerVariable,
+		menuOnly map[string]bool,
+	) []ModelViewerOverlayMenu {
+		t.Helper()
+		dir := t.TempDir()
+		for name, content := range map[string]string{
+			"ui.hlsl": overlayTestShader, "back.png": "x", "frame.png": "x", "hover.png": "x", "credit.png": "x",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		scan := modelViewerGeometryScan{
+			sections: parseModINI(ini),
+			resources: []modelViewerResource{
+				{Name: "Back", Filename: "back.png"},
+				{Name: "Frame", Filename: "frame.png"},
+				{Name: "Hover", Filename: "hover.png"},
+				{Name: "Credit", Filename: "credit.png"},
+			},
+			iniDir: dir,
+		}
+		return buildModelViewerOverlayMenus(
+			context.Background(), dir, []modelViewerGeometryScan{scan}, variables, nil, menuOnly,
+		)
+	}
+
+	t.Run("a listed variable the draw overwrites stays a toggle", func(t *testing.T) {
+		ini := replace(t, overlayPagedTestINI, "z87 = 120 / window_width", "z87 = (120 + $hair) / window_width")
+		ini = replace(t, ini, "[CustomShaderElement]\n", "$hair = 0\n[CustomShaderElement]\n")
+		variables := []ModelViewerVariable{
+			{ID: "hair", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}, {Value: 2.0}}},
+		}
+		menus := buildListed(t, ini, variables, map[string]bool{"hair": true})
+		if len(menus) != 1 || len(menus[0].stateVariables) != 0 {
+			t.Fatalf("menus = %+v, want one claiming no listed variable", menus)
+		}
+		_, _, toggles := overlayTestPageButtons(menus[0].Pages[0])
+		if len(toggles) != 1 || toggles[0].Variable != "hair" {
+			t.Fatalf("toggles = %+v, want hair", toggles)
+		}
+	})
+
+	t.Run("a listed page number leaves the toggles", func(t *testing.T) {
+		variables := []ModelViewerVariable{
+			{ID: "hair", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}, {Value: 2.0}}},
+			{ID: "page", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}, {Value: 2.0}}},
+		}
+		menuOnly := modelViewerOverlayMenuOnlyVariables(&ModelViewerTransport{
+			Variables: variables,
+			Meshes: []ModelViewerMeshTransport{
+				{Conditions: ModelViewerDNF{{{Var: "hair", Value: "1"}}}},
+			},
+		})
+		menus := buildListed(t, overlayPagedTestINI, variables, menuOnly)
+		if len(menus) != 1 || len(menus[0].Pages) != 3 {
+			t.Fatalf("menus = %+v, want three pages", menus)
+		}
+		for _, page := range menus[0].Pages {
+			for _, button := range page.Buttons {
+				if button.Variable == "page" {
+					t.Fatalf("button = %+v, want the page number kept out of the toggles", button)
+				}
+			}
+		}
+		remaining := withoutModelViewerOverlayStateVariables(slices.Clone(variables), menus)
+		if len(remaining) != 1 || remaining[0].ID != "hair" {
+			t.Fatalf("variables = %+v, want hair alone", remaining)
+		}
+	})
+}
+
 func TestModelViewerOverlayMenuSkipsTexturesTheRendererCannotShow(t *testing.T) {
 	if menus := buildOverlayTestMenu(t, "frame.tga"); len(menus) != 0 {
 		t.Fatalf("menus = %+v, want none", menus)
@@ -221,7 +618,7 @@ func TestModelViewerOverlayMenuKeepsClampedButtonsAtDefaultBounds(t *testing.T) 
 				t.Fatalf("menus = %d, want 1", len(menus))
 			}
 			var buttons []ModelViewerOverlayButton
-			for _, button := range menus[0].Buttons {
+			for _, button := range menus[0].Pages[0].Buttons {
 				if button.Variable == "chest" {
 					buttons = append(buttons, button)
 				}
@@ -250,10 +647,10 @@ func TestModelViewerOverlayMenuKeepsClampedButtonsAtDefaultBounds(t *testing.T) 
 func TestModelViewerOverlayMenuPrefersChangedVariableOverInitialization(t *testing.T) {
 	ini := strings.Replace(overlayTestINI, "$chest = $chest + 1", "$hair = 0\n  $chest = $chest + 1", 1)
 	menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
-	if len(menus) != 1 || len(menus[0].Buttons) != 2 {
+	if len(menus) != 1 || len(menus[0].Pages[0].Buttons) != 2 {
 		t.Fatalf("menus = %+v, want hair and chest buttons", menus)
 	}
-	chest := menus[0].Buttons[1]
+	chest := menus[0].Pages[0].Buttons[1]
 	if chest.Variable != "chest" {
 		t.Fatalf("second button = %+v, want chest instead of the unchanged hair initializer", chest)
 	}
@@ -358,14 +755,21 @@ filename = icon.dds
 		{ID: "armbinder", Values: binary},
 	}
 
-	menus := buildModelViewerOverlayMenus(context.Background(), dir, []modelViewerGeometryScan{scan}, variables, nil)
-	if len(menus) != 1 || len(menus[0].Buttons) != 1 {
+	menus := buildModelViewerOverlayMenus(
+		context.Background(),
+		dir,
+		[]modelViewerGeometryScan{scan},
+		variables,
+		nil,
+		nil,
+	)
+	if len(menus) != 1 || len(menus[0].Pages[0].Buttons) != 1 {
 		t.Fatalf("menus = %+v, want one with one button", menus)
 	}
-	if button := menus[0].Buttons[0]; button.Variable != "armbinder" {
+	if button := menus[0].Pages[0].Buttons[0]; button.Variable != "armbinder" {
 		t.Fatalf("button = %+v, want the variable the click sets first", button)
 	}
-	icon := menus[0].Quads[1]
+	icon := menus[0].Pages[0].Quads[1]
 	if icon.X != 0 {
 		t.Fatalf("icon = %+v, want it placed as if no key were held", icon)
 	}
@@ -434,14 +838,21 @@ ps-t0 = ResourceIcon
 			iniDir: dir,
 		}
 		variables := []ModelViewerVariable{{ID: "on", Values: []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}}}}
-		return buildModelViewerOverlayMenus(context.Background(), dir, []modelViewerGeometryScan{scan}, variables, nil)
+		return buildModelViewerOverlayMenus(
+			context.Background(),
+			dir,
+			[]modelViewerGeometryScan{scan},
+			variables,
+			nil,
+			nil,
+		)
 	}
 
 	menus := build(ini)
-	if len(menus) != 1 || len(menus[0].Quads) != 2 || len(menus[0].Buttons) != 1 {
+	if len(menus) != 1 || len(menus[0].Pages[0].Quads) != 2 || len(menus[0].Pages[0].Buttons) != 1 {
 		t.Fatalf("menus = %+v, want two quads and one button", menus)
 	}
-	if button := menus[0].Buttons[0]; button.Width != 192 || button.Height != 108 {
+	if button := menus[0].Pages[0].Buttons[0]; button.Width != 192 || button.Height != 108 {
 		t.Fatalf("button = %+v, want the size set through x0 and y0", button)
 	}
 
@@ -455,7 +866,7 @@ ps-t0 = ResourceIcon
 	// The game draws nothing for a file the mod does not ship, so the rest still reproduces it.
 	notShipped := strings.Replace(ini, "run = CustomShaderIcon", "run = CustomShaderGone\nrun = CustomShaderIcon", 1) +
 		"[CustomShaderGone]\nps = ui.hlsl\nps-t0 = ResourceNotShipped\n"
-	if menus := build(notShipped); len(menus) != 1 || len(menus[0].Quads) != 2 {
+	if menus := build(notShipped); len(menus) != 1 || len(menus[0].Pages[0].Quads) != 2 {
 		t.Fatalf("menus = %+v, want the menu without the missing file", menus)
 	}
 }

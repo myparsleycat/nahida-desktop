@@ -124,6 +124,8 @@ export type ViewerOverlayQuad = {
     width: number;
     height: number;
     opacity: number;
+    flipX?: boolean;
+    flipY?: boolean;
     flipbook?: {
         columns: number;
         rows: number;
@@ -140,9 +142,16 @@ export type ViewerOverlayButton = {
     y: number;
     width: number;
     height: number;
-    variable: string;
+    variable?: string;
     transitions: Array<{ from: number; to: number }>;
+    /** The index in ViewerOverlayMenu.pages this button leads to. */
+    page?: number;
     hover?: Array<{ quad: number; path: string }>;
+};
+
+export type ViewerOverlayPage = {
+    quads: ViewerOverlayQuad[];
+    buttons: ViewerOverlayButton[];
 };
 
 export type ViewerOverlayMenu = {
@@ -150,8 +159,8 @@ export type ViewerOverlayMenu = {
     height: number;
     /** The form whose INI declares the menu; see ModViewerTransport.forms. */
     form?: string;
-    quads: ViewerOverlayQuad[];
-    buttons: ViewerOverlayButton[];
+    /** The first page is the one the mod opens on. */
+    pages: ViewerOverlayPage[];
 };
 
 export type ViewerINI = {

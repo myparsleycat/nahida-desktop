@@ -691,7 +691,7 @@ export function ModelViewerWorkspace({
     <div className="p-4">
       {payloadTransport?.overlayMenus?.filter(inActiveForm).map((menu, index) => (
         <ModelViewerOverlayMenuPanel
-          key={index}
+          key={`${payloadTransport?.memorySessionId}:${menu.form ?? ""}:${index}`}
           menu={menu}
           variables={variables}
           activeState={activeState}

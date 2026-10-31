@@ -5,6 +5,7 @@ import type {
 } from "@shared/mod-viewer/types";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { VariableStateValue } from "./model-viewer-dialog-types";
 
@@ -21,8 +22,11 @@ export function ModelViewerOverlayMenuPanel({
   activeState: Record<string, VariableStateValue>;
   onSelect: (variableId: string, value: VariableStateValue) => void;
 }) {
+  const { t } = useTranslation();
+  const [pageIndex, setPageIndex] = useState(0);
   const [hovered, setHovered] = useState<number | null>(null);
-  const hover = hovered === null ? undefined : menu.buttons[hovered]?.hover;
+  const page = menu.pages[pageIndex] ?? menu.pages[0];
+  const hover = hovered === null ? undefined : page?.buttons[hovered]?.hover;
   const percent = (value: number, total: number) => `${(value / total) * 100}%`;
   const place = (rect: { x: number; y: number; width: number; height: number }) => ({
     left: percent(rect.x, menu.width),
@@ -36,11 +40,18 @@ export function ModelViewerOverlayMenuPanel({
       className="relative mx-auto mb-4 w-full select-none"
       style={{ maxWidth: menu.width, aspectRatio: `${menu.width} / ${menu.height}` }}
     >
-      {menu.quads.map((quad, index) => {
+      {page?.quads.map((quad, index) => {
         const state = quad.states?.find(
           (entry) => Number(activeState[entry.variable]) === entry.value,
         );
-        const style = { ...place(quad), opacity: state?.opacity ?? quad.opacity };
+        const style = {
+          ...place(quad),
+          opacity: state?.opacity ?? quad.opacity,
+          transform:
+            quad.flipX || quad.flipY
+              ? `scale(${quad.flipX ? -1 : 1}, ${quad.flipY ? -1 : 1})`
+              : undefined,
+        };
         const url = modelViewerSourceToUrl(
           hover?.find((change) => change.quad === index)?.path ?? state?.path ?? quad.path,
         );
@@ -57,11 +68,13 @@ export function ModelViewerOverlayMenuPanel({
           />
         );
       })}
-      {menu.buttons.map((button, index) => {
-        const label = variables.find((variable) => variable.id === button.variable)?.label;
+      {page?.buttons.map((button, index) => {
+        const label = button.variable
+          ? variables.find((variable) => variable.id === button.variable)?.label
+          : t("page.tools.model_viewer.overlay_switch_page");
         return (
           <button
-            key={index}
+            key={`${pageIndex}:${index}`}
             type="button"
             title={label}
             aria-label={label}
@@ -70,9 +83,15 @@ export function ModelViewerOverlayMenuPanel({
             onPointerEnter={() => setHovered(index)}
             onPointerLeave={() => setHovered(null)}
             onClick={() => {
-              const current = Number(activeState[button.variable]);
-              const next = button.transitions.find((entry) => entry.from === current);
-              if (next) onSelect(button.variable, next.to);
+              if (button.variable) {
+                const current = Number(activeState[button.variable]);
+                const next = button.transitions.find((entry) => entry.from === current);
+                if (next) onSelect(button.variable, next.to);
+              }
+              if (button.page !== undefined) {
+                setPageIndex(button.page);
+                setHovered(null);
+              }
             }}
           />
         );
