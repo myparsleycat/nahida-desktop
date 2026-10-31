@@ -40,6 +40,7 @@ type modelViewerDDSMetadata struct {
 	MipCount         uint32
 	AutoInvertAlpha  bool
 	AutoCoverageMask bool
+	AutoOutlineMask  bool
 }
 
 func prepareModelViewerDDSFallback(ctx context.Context, path string, maxDimension uint32) ([]byte, error) {
@@ -396,13 +397,14 @@ func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMeta
 	if metadata.Depth != 1 || metadata.Layers != 1 {
 		format = ""
 	}
-	autoInvertAlpha, autoCoverageMask := false, false
+	autoInvertAlpha, autoCoverageMask, autoOutlineMask := false, false, false
 	if modelViewerDDSFormatHasAlpha(format) {
 		mipmap, width, height := wwmiHintMipmap(metadata.Width, metadata.Height, metadata.Mipmaps)
 		rgba, decodeErr := decodeModelViewerDDSMip(reader, mipmap, width, height)
 		if decodeErr == nil {
 			autoInvertAlpha = modelViewerTextureShouldInvertAlpha("", analyzeModelViewerTexture(rgba))
 			autoCoverageMask = modelViewerTextureIsCoverageMask(rgba)
+			autoOutlineMask = modelViewerTextureIsOutlineMask(rgba)
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -415,6 +417,7 @@ func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMeta
 		MipCount:         metadata.Mipmaps,
 		AutoInvertAlpha:  autoInvertAlpha,
 		AutoCoverageMask: autoCoverageMask,
+		AutoOutlineMask:  autoOutlineMask,
 	}, nil
 }
 

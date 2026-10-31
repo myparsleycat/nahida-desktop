@@ -38,6 +38,7 @@ import {
 } from "@shared/mod-viewer/eval";
 import type { ViewerForm, ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
+import { debounce } from "es-toolkit";
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
 import {
   Fragment,
@@ -63,6 +64,9 @@ import {
   type ModelViewerSurfaceProps,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
+  type ModelViewerToonStyle,
+  DEFAULT_MODEL_VIEWER_TOON_STYLE,
+  parseModelViewerToonStyle,
 } from "./model-viewer-contract";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
@@ -156,6 +160,20 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
+  const [toonStyle, setToonStyle] = useState(DEFAULT_MODEL_VIEWER_TOON_STYLE);
+  const [persistToonStyle] = useState(() =>
+    debounce((value: ModelViewerToonStyle) => {
+      void setSetting("modelViewer.toonStyle", JSON.stringify(value)).catch((error) => {
+        Logger.capture(
+          "components/tools/model-viewer/model-viewer-workspace.tsx",
+          "Failed to persist model viewer toon style",
+          error,
+        );
+        toast.error("Failed to save toon style setting.");
+      });
+    }, 400),
+  );
+  useEffect(() => () => persistToonStyle.flush(), [persistToonStyle]);
   const [normalMaps, setNormalMaps] = useState(true);
   const [highlightGameTextures, setHighlightGameTextures] = useState(false);
   const [ownForm, setOwnForm] = useState(ALL_FORMS);
@@ -225,8 +243,9 @@ export function ModelViewerWorkspace({
       getSetting("modelViewer.environment"),
       getSetting("modelViewer.exposure"),
       getSetting("modelViewer.toonShadows"),
+      getSetting("modelViewer.toonStyle"),
     ])
-      .then(([toneMapping, environment, exposure, storedToonShadows]) => {
+      .then(([toneMapping, environment, exposure, storedToonShadows, storedToonStyle]) => {
         if (cancelled) {
           return;
         }
@@ -235,6 +254,7 @@ export function ModelViewerWorkspace({
         setThreeEnvironment(normalizeThreeEnvironment(environment));
         setThreeExposure(clampThreeExposure(exposure));
         setToonShadows(storedToonShadows === true);
+        setToonStyle(parseModelViewerToonStyle(storedToonStyle));
       })
       .catch((error) => {
         Logger.capture(
@@ -769,9 +789,18 @@ export function ModelViewerWorkspace({
           exposure={threeExposure}
           onExposureDraftChange={(v) => setThreeExposure(v)}
           onExposureCommit={updateThreeExposure}
-          showToonShadows={payloadTransport?.materialProfile === "wuwa:rabbitfx"}
+          showToonShadows={
+            payloadTransport?.materialProfile === "wuwa:rabbitfx" ||
+            payloadTransport?.materialProfile === "efmi"
+          }
           toonShadows={toonShadows}
           onToonShadowsChange={updateToonShadows}
+          showToonStyle={payloadTransport?.materialProfile === "efmi" && toonShadows}
+          toonStyle={toonStyle}
+          onToonStyleChange={(value) => {
+            setToonStyle(value);
+            persistToonStyle(value);
+          }}
           showNormalMaps={payloadTransport?.meshes.some(
             (mesh) => mesh.normalMapKey || mesh.normalMapVariants.length > 0,
           )}
@@ -806,6 +835,7 @@ export function ModelViewerWorkspace({
                   threeEnvironment={threeEnvironment}
                   threeExposure={threeExposure}
                   toonShadows={toonShadows}
+                  toonStyle={toonStyle}
                   normalMaps={normalMaps}
                   highlightGameTextures={highlightGameTextures}
                   onLoad={handleViewerLoad}

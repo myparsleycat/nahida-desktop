@@ -528,6 +528,12 @@ func buildSpecs() map[string]spec {
 			},
 		},
 		KeyModelViewerToonShadows: boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
+		KeyModelViewerToonStyle: {
+			def:        definitionsByKey[KeyModelViewerToonStyle],
+			getDefault: func(*Setting) any { return "" },
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
 
 		KeyXXMIPersistToggles: {
 			def:        definitionsByKey[KeyXXMIPersistToggles],

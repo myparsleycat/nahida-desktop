@@ -72,6 +72,7 @@ type ModelViewerTextureTransport struct {
 	MipCount     uint32 `json:"mipCount,omitempty"`
 	InvertAlpha  bool   `json:"invertAlpha,omitempty"`
 	CoverageMask bool   `json:"coverageMask,omitempty"`
+	OutlineMask  bool   `json:"outlineMask,omitempty"`
 }
 
 type ModelViewerVariableValue struct {

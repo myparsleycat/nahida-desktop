@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"image"
 	"image/color"
 	"image/png"
 	"net/http"
@@ -345,6 +346,33 @@ func TestWriteModelViewerPayloadDecodesMiplessEFMIDDS(t *testing.T) {
 	}
 	if texture := transport.Textures["mipped"]; texture.URL == texture.FallbackURL || texture.MipCount != 5 {
 		t.Fatalf("mipped texture = %#v", texture)
+	}
+}
+
+func TestModelViewerTextureIsOutlineMask(t *testing.T) {
+	filled := func(pixels ...[4]uint8) *image.NRGBA {
+		rgba := image.NewNRGBA(image.Rect(0, 0, len(pixels), 1))
+		for index, pixel := range pixels {
+			copy(rgba.Pix[index*4:], pixel[:])
+		}
+		return rgba
+	}
+	white := [4]uint8{255, 255, 255, 255}
+	green := [4]uint8{0, 255, 0, 255}
+	tests := []struct {
+		name  string
+		image *image.NRGBA
+		want  bool
+	}{
+		{"flat white with off regions", filled(white, white, white, green), true},
+		{"gradient", filled(white, [4]uint8{128, 200, 90, 255}), false},
+		{"authored alpha", filled(white, [4]uint8{255, 255, 255, 40}), false},
+		{"mostly off", filled(green, green, green, white), false},
+	}
+	for _, test := range tests {
+		if got := modelViewerTextureIsOutlineMask(test.image); got != test.want {
+			t.Errorf("%s: got %t, want %t", test.name, got, test.want)
+		}
 	}
 }
 

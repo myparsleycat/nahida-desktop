@@ -191,6 +191,7 @@ func runModelViewerTextureJobs(
 			// black-and-white diffuse.
 			CoverageMask: job.role == "diffuse" && metadata.AutoCoverageMask &&
 				wwmiDumpTexRE.MatchString(slashPath(job.path)),
+			OutlineMask: job.role == efmiLightMapRole && metadata.AutoOutlineMask,
 		}
 		for _, key := range job.keys {
 			outputs[job.batchIndex][key] = item

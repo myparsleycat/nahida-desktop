@@ -38,6 +38,7 @@ const renderSettings = {
     environment: "studio" as const,
     exposure: 0.7,
     toonShadows: false,
+    toonStyle: "",
 };
 
 class VisibleIntersectionObserver {

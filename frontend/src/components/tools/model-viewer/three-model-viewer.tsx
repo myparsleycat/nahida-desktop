@@ -22,6 +22,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   type Camera,
+  type DirectionalLight,
   DoubleSide,
   Euler,
   FrontSide,
@@ -46,6 +47,7 @@ import type {
   ModelViewerHandle,
   ModelViewerRealtimeShapeKey,
   ModelViewerSurfaceProps,
+  ModelViewerToonStyle,
 } from "./model-viewer-contract";
 
 import {
@@ -54,7 +56,7 @@ import {
   type ModelViewerAxisView,
 } from "./model-viewer-axis-gizmo";
 import { ModelViewerComputeController } from "./model-viewer-compute-controller";
-import { parseOrientation } from "./model-viewer-contract";
+import { DEFAULT_MODEL_VIEWER_TOON_STYLE, parseOrientation } from "./model-viewer-contract";
 import { getModelViewerTextureCapabilities } from "./model-viewer-dds";
 import {
   buildPayloadModel,
@@ -66,16 +68,21 @@ import {
   setPayloadGameTextureHighlight,
   setPayloadNormalMaps,
   setPayloadToonShadows,
+  setPayloadToonStyle,
 } from "./model-viewer-payload";
 import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
 import {
+  aimKeyLight,
   createModelViewerEnvironment,
+  fitKeyLightShadowToObject,
   frameCameraOnObject,
   MODEL_VIEWER_FILL_LIGHT_POSITION,
   MODEL_VIEWER_HEMISPHERE_GROUND_COLOR,
   MODEL_VIEWER_KEY_LIGHT_POSITION,
+  modelViewerKeyLightDirection,
   modelViewerLighting,
   modelViewerToneMapping,
+  modelViewerToonLightDirection,
 } from "./model-viewer-scene";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import {
@@ -103,6 +110,8 @@ type AxisViewTurn = {
 };
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
+const toonForward = new Vector3();
+const toonDirection = new Vector3();
 const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
@@ -110,6 +119,8 @@ const SMOOTH_ZOOM_MAX_DELTA = 1 / 30;
 const AXIS_VIEW_TURN_DAMPING = 0.2;
 const AXIS_VIEW_TURN_EPSILON = 0.001;
 const INTERACTIVE_COMMIT_WINDOW_MS = 150;
+const MODEL_VIEWER_FIELD_OF_VIEW = 45;
+
 const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
   alpha: true,
@@ -158,6 +169,7 @@ export const ThreeModelViewer = memo(
       threeExposure = 1,
       threeToneMapping = "neutral",
       toonShadows = false,
+      toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
       normalMaps = true,
       highlightGameTextures = false,
       variantState,
@@ -168,6 +180,7 @@ export const ThreeModelViewer = memo(
     ref,
   ) {
     const controllerRef = useRef<ThreeModelController | null>(null);
+    const keyLightRef = useRef<DirectionalLight | null>(null);
     const axisGizmoRef = useRef<ModelViewerAxisGizmoHandle | null>(null);
 
     useImperativeHandle(
@@ -200,7 +213,7 @@ export const ThreeModelViewer = memo(
           style={{ background: "transparent" }}
           camera={{
             far: 1000,
-            fov: 45,
+            fov: MODEL_VIEWER_FIELD_OF_VIEW,
             near: 0.01,
             position: DEFAULT_CAMERA_POSITION.toArray(),
           }}
@@ -216,6 +229,7 @@ export const ThreeModelViewer = memo(
             />
           ) : null}
           <directionalLight
+            ref={keyLightRef}
             intensity={lighting.directionalKey}
             position={MODEL_VIEWER_KEY_LIGHT_POSITION}
           />
@@ -226,6 +240,7 @@ export const ThreeModelViewer = memo(
           <ThreeModelScene
             axisGizmoRef={axisGizmoRef}
             controllerRef={controllerRef}
+            keyLightRef={keyLightRef}
             animationClip={animationClip}
             animationFrame={animationFrame}
             bodyShapeOverrides={bodyShapeOverrides}
@@ -236,6 +251,7 @@ export const ThreeModelViewer = memo(
             threeExposure={threeExposure}
             threeToneMapping={threeToneMapping}
             toonShadows={toonShadows}
+            toonStyle={toonStyle}
             normalMaps={normalMaps}
             highlightGameTextures={highlightGameTextures}
             onError={onError}
@@ -257,6 +273,7 @@ export const ThreeModelViewer = memo(
 function ThreeModelScene({
   axisGizmoRef,
   controllerRef,
+  keyLightRef,
   animationClip,
   animationFrame,
   bodyShapeOverrides,
@@ -272,6 +289,7 @@ function ThreeModelScene({
   threeExposure = 1,
   threeToneMapping = "neutral",
   toonShadows = false,
+  toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
   normalMaps = true,
   highlightGameTextures = false,
   variantState,
@@ -281,6 +299,8 @@ function ThreeModelScene({
 }: ModelViewerSurfaceProps & {
   axisGizmoRef: MutableRefObject<ModelViewerAxisGizmoHandle | null>;
   controllerRef: MutableRefObject<ThreeModelController | null>;
+  keyLightRef: MutableRefObject<DirectionalLight | null>;
+  toonStyle?: ModelViewerToonStyle;
 }) {
   const { camera, gl, invalidate, scene } = useThree();
   const axisViewTurnRef = useRef<AxisViewTurn | null>(null);
@@ -719,6 +739,84 @@ function ThreeModelScene({
     setPayloadToonShadows(modelRoot, toonShadows);
     invalidate();
   }, [invalidate, modelRoot, toonShadows]);
+
+  useEffect(() => {
+    if (!modelRoot) {
+      return;
+    }
+    setPayloadToonStyle(modelRoot, toonStyle);
+    invalidate();
+  }, [invalidate, modelRoot, toonStyle]);
+
+  const efmiToon = toonShadows && payloadTransport?.materialProfile === "efmi";
+  const selfShadow = efmiToon && toonStyle.selfShadow;
+  useEffect(() => {
+    const light = keyLightRef.current;
+    if (!efmiToon || !modelRoot || !light) {
+      return;
+    }
+    fitKeyLightShadowToObject(light, modelRoot);
+    invalidate();
+    return () => {
+      light.target.position.set(0, 0, 0);
+      light.target.updateMatrixWorld();
+      light.position.set(...MODEL_VIEWER_KEY_LIGHT_POSITION);
+      invalidate();
+    };
+  }, [efmiToon, invalidate, keyLightRef, modelRoot, orientation]);
+
+  useEffect(() => {
+    const light = keyLightRef.current;
+    if (!selfShadow || !modelRoot || !light) {
+      return;
+    }
+    light.castShadow = true;
+    // oxlint-disable-next-line react/immutability
+    gl.shadowMap.enabled = true;
+    invalidate();
+    return () => {
+      light.castShadow = false;
+      // oxlint-disable-next-line react/immutability
+      gl.shadowMap.enabled = false;
+      invalidate();
+    };
+  }, [gl, invalidate, keyLightRef, modelRoot, selfShadow]);
+
+  const fieldOfView = efmiToon ? toonStyle.fieldOfView : MODEL_VIEWER_FIELD_OF_VIEW;
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!(camera instanceof PerspectiveCamera) || camera.fov === fieldOfView) {
+      return;
+    }
+
+    // Dolly along with the lens so the model keeps its size on screen.
+    const scale =
+      Math.tan(MathUtils.degToRad(camera.fov / 2)) / Math.tan(MathUtils.degToRad(fieldOfView / 2));
+    if (controls) {
+      camera.position.sub(controls.target).multiplyScalar(scale).add(controls.target);
+      controls.update();
+    }
+    if (desiredCameraDistanceRef.current) {
+      desiredCameraDistanceRef.current *= scale;
+    }
+    // oxlint-disable-next-line react/immutability
+    camera.fov = fieldOfView;
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, fieldOfView, invalidate, modelRoot]);
+
+  useFrame(() => {
+    const light = keyLightRef.current;
+    if (!efmiToon || !light) {
+      return;
+    }
+    aimKeyLight(
+      light,
+      toonStyle.lightFollowsCamera
+        ? modelViewerToonLightDirection(camera.getWorldDirection(toonForward), toonDirection)
+        : modelViewerKeyLightDirection(toonDirection),
+    );
+  });
 
   useEffect(() => {
     if (!modelRoot) {

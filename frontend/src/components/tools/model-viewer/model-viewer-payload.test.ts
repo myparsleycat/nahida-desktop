@@ -3,9 +3,11 @@ import {
     BufferAttribute,
     BufferGeometry,
     Group,
+    Matrix3,
     Mesh,
     MeshStandardMaterial,
     RED_GREEN_RGTC2_Format,
+    ShaderMaterial,
     Texture,
 } from "three";
 import { describe, expect, it, vi } from "vitest";
@@ -14,13 +16,20 @@ import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec"
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
 import {
+    DEFAULT_MODEL_VIEWER_TOON_STYLE,
+    parseModelViewerToonStyle,
+} from "./model-viewer-contract";
+import {
     applyPayloadEval,
     clearPayloadModelData,
     commitPayloadEval,
     finalizePayloadGeometry,
+    markEFMIHeadMeshes,
     preparePayloadEval,
+    setPayloadGameTextureHighlight,
     setPayloadNormalMaps,
     setPayloadToonShadows,
+    setPayloadToonStyle,
 } from "./model-viewer-payload";
 
 function meshWithTargets(
@@ -818,7 +827,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.aoMap).toBeNull();
         expect(material.metalnessMap).toBeNull();
         expect(material.roughnessMap).toBeNull();
-        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v1|model-viewer-dds-v1");
+        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v2|model-viewer-dds-v1");
 
         const shader = {
             vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",
@@ -843,6 +852,8 @@ describe("applyPayloadEval packed maps", () => {
         ).toBe(1);
 
         const version = material.version;
+        secondLight.repeat.y = -1;
+        secondLight.offset.y = 1;
         applyPayloadEval(root, {
             state: {},
             meshes: [
@@ -863,6 +874,10 @@ describe("applyPayloadEval packed maps", () => {
         expect(
             (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
         ).toBe(secondLight);
+        expect(
+            (shader.uniforms as Record<string, { value: Matrix3 }>).rabbitFXLightMapTransform?.value
+                .elements[4],
+        ).toBe(-1);
 
         const applyCutout = (cutoutMapKey: string | null) =>
             applyPayloadEval(root, {
@@ -894,6 +909,257 @@ describe("applyPayloadEval packed maps", () => {
             (shader.uniforms as Record<string, { value: unknown }>).rabbitFXToonEnabled?.value,
         ).toBe(0);
         expect(material.version).toBe(version);
+    });
+
+    it("switches EFMI toon shading and its outline without recompiling or changing picks", () => {
+        const mesh = meshWithTargets([0, 0, 0, 1, 0, 0, 0, 1, 0], []);
+        mesh.userData.materialProfile = "efmi";
+        mesh.userData.toonShadows = false;
+        const diffuse = new Texture();
+        const light = new Texture();
+        for (const texture of [diffuse, light]) {
+            texture.repeat.y = -1;
+            texture.offset.y = 1;
+        }
+        const material = mesh.material as MeshStandardMaterial;
+        const root = new Group();
+        root.userData.payloadTextures = new Map([
+            ["diffuse", diffuse],
+            ["light", light],
+        ]);
+        root.add(mesh);
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: "diffuse",
+                    normalMapKey: null,
+                    lightMapKey: "light",
+                    materialMapKey: null,
+                    cutoutMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+        const state = material.userData.efmiToonMaterial as {
+            enabled: { value: number };
+            lightMapTransform: { value: Matrix3 };
+        };
+        const version = material.version;
+        expect(state.lightMapTransform.value.elements[4]).toBe(-1);
+        expect(state.enabled.value).toBe(0);
+        expect(mesh.children).toHaveLength(0);
+
+        setPayloadToonStyle(root, { ...DEFAULT_MODEL_VIEWER_TOON_STYLE, selfShadow: true });
+        setPayloadToonShadows(root, true);
+        expect(state.enabled.value).toBe(1);
+        expect(mesh.castShadow).toBe(true);
+        const outline = mesh.children[0] as Mesh<BufferGeometry, ShaderMaterial>;
+        expect(outline.material.uniforms.mapTransform.value.elements[4]).toBe(-1);
+        expect(outline.geometry).toBe(mesh.geometry);
+        expect(mesh.geometry.attributes.outlineNormal?.count).toBe(3);
+        expect(outline.visible).toBe(true);
+        expect(outline.userData.meshId).toBeUndefined();
+        const hits: unknown[] = [];
+        outline.raycast({} as never, hits as never);
+        expect(hits).toHaveLength(0);
+
+        setPayloadToonStyle(root, {
+            ...DEFAULT_MODEL_VIEWER_TOON_STYLE,
+            outlines: false,
+            selfShadow: false,
+        });
+        expect(outline.visible).toBe(false);
+        expect(mesh.castShadow).toBe(false);
+        setPayloadToonShadows(root, false);
+        expect(state.enabled.value).toBe(0);
+        expect(material.version).toBe(version);
+    });
+
+    it("lights only head meshes without a light map as a flat EFMI face", () => {
+        const mesh = meshWithTargets([0, 0, 0, 1, 0, 0, 0, 1, 0], []);
+        mesh.userData.materialProfile = "efmi";
+        mesh.userData.toonShadows = true;
+        mesh.userData.efmiHeadMesh = true;
+        const material = mesh.material as MeshStandardMaterial;
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["light", new Texture()]]);
+        root.add(mesh);
+        const apply = (lightMapKey: string | null) =>
+            applyPayloadEval(root, {
+                state: {},
+                meshes: [
+                    {
+                        id: "mesh",
+                        visible: true,
+                        texKey: null,
+                        normalMapKey: null,
+                        lightMapKey,
+                        materialMapKey: null,
+                        cutoutMapKey: null,
+                        shapeWeights: {},
+                        positionVariantIndex: null,
+                    },
+                ],
+            });
+
+        apply(null);
+        const state = material.userData.efmiToonMaterial as { face: { value: number } };
+        expect(state.face.value).toBe(1);
+
+        apply("light");
+        expect(state.face.value).toBe(0);
+
+        apply(null);
+        setPayloadToonStyle(root, { ...DEFAULT_MODEL_VIEWER_TOON_STYLE, flatFace: false });
+        expect(state.face.value).toBe(0);
+    });
+
+    it("classifies wide EFMI faces and hides only small untextured head meshes", () => {
+        const headMesh = (id: string, indices: number) => {
+            const mesh = meshWithTargets([0, 0, 0, 1, 0, 0, 0, 1, 0], []);
+            mesh.userData.meshId = id;
+            mesh.userData.materialProfile = "efmi";
+            mesh.geometry.setIndex(Array.from({ length: indices }, () => 0));
+            return mesh;
+        };
+        const overlay = headMesh("overlay", 1023);
+        const face = headMesh("face", 8040);
+        const feet = headMesh("feet", 3);
+        const transportMesh = (id: string, width: number, minZ: number, maxZ: number) => ({
+            id,
+            bounds: { min: [-width / 2, 0, minZ], max: [width / 2, 0, maxZ] },
+            texKey: null,
+            textureVariants: [],
+            lightMapKey: null,
+            lightMapVariants: [],
+            materialMapKey: null,
+        });
+        markEFMIHeadMeshes(
+            {
+                meshes: [
+                    transportMesh("overlay", 0.14, 1.4, 1.6),
+                    transportMesh("face", 0.233, 1.4, 1.6),
+                    transportMesh("feet", 0.3, 0, 0.1),
+                ],
+            } as never,
+            [overlay, face, feet],
+        );
+        expect(face.userData.efmiHeadMesh).toBe(true);
+        expect(feet.userData.efmiHeadMesh).toBeFalsy();
+
+        const root = new Group();
+        root.userData.payloadTextures = new Map();
+        root.add(overlay, face);
+        const entry = (id: string) => ({
+            id,
+            visible: true,
+            texKey: null,
+            normalMapKey: null,
+            lightMapKey: null,
+            materialMapKey: null,
+            cutoutMapKey: null,
+            shapeWeights: {},
+            positionVariantIndex: null,
+        });
+        applyPayloadEval(root, { state: {}, meshes: [entry("overlay"), entry("face")] });
+        expect((overlay.material as MeshStandardMaterial).visible).toBe(false);
+        expect((face.material as MeshStandardMaterial).visible).toBe(true);
+
+        setPayloadGameTextureHighlight(root, true);
+        expect((overlay.material as MeshStandardMaterial).visible).toBe(true);
+    });
+
+    it("measures the EFMI head from the face when a prop inflates the model height", () => {
+        const headMesh = (indices: number) => {
+            const mesh = meshWithTargets([0, 0, 0, 1, 0, 0, 0, 1, 0], []);
+            mesh.geometry.setIndex(Array.from({ length: indices }, () => 0));
+            return mesh;
+        };
+        const transportMesh = (minZ: number, maxZ: number, width = 0.2, lit = false) => ({
+            bounds: { min: [-width / 2, 0, minZ], max: [width / 2, 0, maxZ] },
+            texKey: "diffuse",
+            textureVariants: [],
+            lightMapKey: lit ? "light" : null,
+            lightMapVariants: [],
+            materialMapKey: null,
+        });
+        const face = headMesh(11538);
+        const overlay = headMesh(900);
+        const iris = headMesh(1032);
+        const chest = headMesh(12000);
+        const hair = headMesh(30000);
+        const prop = headMesh(3);
+        markEFMIHeadMeshes(
+            {
+                meshes: [
+                    transportMesh(1.5, 1.68),
+                    { ...transportMesh(1.45, 1.7), texKey: null },
+                    { ...transportMesh(1.52, 1.545), texKey: null },
+                    transportMesh(1.15, 1.34),
+                    transportMesh(1.4, 1.75, 0.28, true),
+                    transportMesh(0, 2.2, 1.5),
+                ],
+            } as never,
+            [face, overlay, iris, chest, hair, prop],
+        );
+        expect(face.userData.efmiHeadMesh).toBe(true);
+        expect(overlay.userData.efmiOverlayShadow).toBe(true);
+        expect(iris.userData.efmiHeadMesh).toBe(true);
+        expect(iris.userData.efmiOverlayShadow).toBe(false);
+        expect(chest.userData.efmiHeadMesh).toBeFalsy();
+        expect(prop.userData.efmiHeadMesh).toBeFalsy();
+    });
+
+    it("reads an EFMI outline mask as outline width instead of a shadow mask", () => {
+        const mesh = meshWithTargets([0, 0, 0, 1, 0, 0, 0, 1, 0], []);
+        mesh.userData.materialProfile = "efmi";
+        mesh.userData.toonShadows = true;
+        const mask = new Texture();
+        mask.userData.modelViewerOutlineMask = true;
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["mask", mask]]);
+        root.add(mesh);
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: null,
+                    lightMapKey: "mask",
+                    materialMapKey: null,
+                    cutoutMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+
+        const material = mesh.material as MeshStandardMaterial;
+        const state = material.userData.efmiToonMaterial as {
+            lightMapEnabled: { value: number };
+        };
+        expect(state.lightMapEnabled.value).toBe(0);
+        const outline = mesh.children[0] as Mesh<BufferGeometry, ShaderMaterial>;
+        expect(outline.material.uniforms.widthMask.value).toBe(mask);
+        expect(outline.material.uniforms.widthMaskEnabled.value).toBe(1);
+    });
+
+    it("falls back to default toon values for invalid stored settings", () => {
+        expect(parseModelViewerToonStyle("")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
+        expect(parseModelViewerToonStyle("null")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
+        const style = parseModelViewerToonStyle(
+            '{"shadowBrightness":9,"outlines":false,"rimWidth":"x","lightFollowsCamera":1}',
+        );
+        expect(style.shadowBrightness).toBe(1);
+        expect(style.lightFollowsCamera).toBe(true);
+        expect(style.outlines).toBe(false);
+        expect(style.rimWidth).toBe(DEFAULT_MODEL_VIEWER_TOON_STYLE.rimWidth);
     });
 
     it("keeps RabbitFX materials on the stock shader when primary UVs are absent", () => {

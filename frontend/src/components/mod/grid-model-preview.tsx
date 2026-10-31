@@ -35,6 +35,7 @@ const modelPreviewSettingsConfig = {
   environment: "modelViewer.environment",
   exposure: "modelViewer.exposure",
   toonShadows: "modelViewer.toonShadows",
+  toonStyle: "modelViewer.toonStyle",
 } as const;
 
 export type GridModelPreviewState =
@@ -47,6 +48,7 @@ export type ModelPreviewRenderSettings = {
   environment: "studio" | "soft" | "none";
   exposure: number;
   toonShadows: boolean;
+  toonStyle: string;
 };
 
 type PreviewListener = (state: GridModelPreviewState) => void;
@@ -439,9 +441,17 @@ export function GridModelPreviewProvider({
             environment: settings.environment,
             exposure: settings.exposure,
             toonShadows: settings.toonShadows,
+            toonStyle: settings.toonStyle,
           }
         : null,
-    [enabled, settings.environment, settings.exposure, settings.toneMapping, settings.toonShadows],
+    [
+      enabled,
+      settings.environment,
+      settings.exposure,
+      settings.toneMapping,
+      settings.toonShadows,
+      settings.toonStyle,
+    ],
   );
 
   // File renames and timestamp-preserving edits can leave the mod metadata unchanged.

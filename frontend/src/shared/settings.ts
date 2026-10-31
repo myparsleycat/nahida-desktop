@@ -77,6 +77,7 @@ export interface AppSettings {
     "modelViewer.environment": "studio" | "soft" | "none";
     "modelViewer.exposure": number;
     "modelViewer.toonShadows": boolean;
+    "modelViewer.toonStyle": string;
 
     "xxmi.persistToggles": boolean;
     "xxmi.toggleViewerAutoGenerate": boolean;
@@ -403,6 +404,11 @@ export const APP_SETTINGS = {
         publicKey: "modelViewer.toonShadows",
         scope: "modelViewer",
         storageKey: "model_viewer_toon_shadows",
+    },
+    "modelViewer.toonStyle": {
+        publicKey: "modelViewer.toonStyle",
+        scope: "modelViewer",
+        storageKey: "model_viewer_toon_style",
     },
 
     "xxmi.persistToggles": {

@@ -79,6 +79,7 @@ type modelViewerTexturePayload struct {
 	DDS          *modelViewerDDSMetadata
 	InvertAlpha  bool
 	CoverageMask bool
+	OutlineMask  bool
 }
 
 type modelViewerMeshPayload struct {
@@ -298,6 +299,7 @@ func writeModelViewerPayload(
 				MipCount:     directMetadata.MipCount,
 				InvertAlpha:  texture.InvertAlpha,
 				CoverageMask: texture.CoverageMask && effectCardTextures[key],
+				OutlineMask:  texture.OutlineMask && materialProfile == "efmi",
 			}
 			continue
 		}

@@ -11,6 +11,109 @@ export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
 export type ModelViewerVariantStateValue = ViewerStateValue;
 
+export type ModelViewerToonStyle = {
+    rangeBias: number;
+    softness: number;
+    shadowBrightness: number;
+    shadowSaturation: number;
+    ambient: number;
+    lightStrength: number;
+    brightness: number;
+    specular: number;
+    rimStrength: number;
+    rimWidth: number;
+    outlines: boolean;
+    outlineWidth: number;
+    outlineBrightness: number;
+    selfShadow: boolean;
+    lightFollowsCamera: boolean;
+    flatFace: boolean;
+    fieldOfView: number;
+};
+
+export const DEFAULT_MODEL_VIEWER_TOON_STYLE: ModelViewerToonStyle = {
+    rangeBias: -0.4,
+    softness: 0.02,
+    shadowBrightness: 0.5,
+    shadowSaturation: 1,
+    ambient: 0.8,
+    lightStrength: 0.9,
+    // Warfarin defaults to 2 and clips less because its materials carry tints that mods
+    // lack. This value approximates its output for the same textures.
+    brightness: 1.5,
+    specular: 1,
+    rimStrength: 0.5,
+    rimWidth: 0.3,
+    outlines: true,
+    outlineWidth: 0.5,
+    outlineBrightness: 0.5,
+    selfShadow: false,
+    lightFollowsCamera: true,
+    flatFace: true,
+    fieldOfView: 20,
+};
+
+export const MODEL_VIEWER_TOON_RANGES = {
+    rangeBias: { min: -1, max: 1, step: 0.05 },
+    softness: { min: 0, max: 0.25, step: 0.01 },
+    shadowBrightness: { min: 0, max: 1, step: 0.05 },
+    shadowSaturation: { min: 0, max: 2, step: 0.05 },
+    ambient: { min: 0, max: 1.5, step: 0.05 },
+    lightStrength: { min: 0, max: 2, step: 0.05 },
+    brightness: { min: 0.5, max: 3, step: 0.05 },
+    specular: { min: 0, max: 2, step: 0.05 },
+    rimStrength: { min: 0, max: 2, step: 0.05 },
+    rimWidth: { min: 0, max: 1, step: 0.05 },
+    outlineWidth: { min: 0, max: 5, step: 0.25 },
+    outlineBrightness: { min: 0, max: 1, step: 0.05 },
+    fieldOfView: { min: 10, max: 45, step: 1 },
+} as const;
+
+export function parseModelViewerToonStyle(stored: string): ModelViewerToonStyle {
+    const parsed = parseToonStyleRecord(stored);
+    const number = (key: keyof typeof MODEL_VIEWER_TOON_RANGES) => {
+        const value = parsed[key];
+        const range = MODEL_VIEWER_TOON_RANGES[key];
+        return typeof value === "number" && Number.isFinite(value)
+            ? Math.min(Math.max(value, range.min), range.max)
+            : DEFAULT_MODEL_VIEWER_TOON_STYLE[key];
+    };
+    const flag = (key: "outlines" | "selfShadow" | "lightFollowsCamera" | "flatFace") => {
+        const value = parsed[key];
+        return typeof value === "boolean" ? value : DEFAULT_MODEL_VIEWER_TOON_STYLE[key];
+    };
+    return {
+        rangeBias: number("rangeBias"),
+        softness: number("softness"),
+        shadowBrightness: number("shadowBrightness"),
+        shadowSaturation: number("shadowSaturation"),
+        ambient: number("ambient"),
+        lightStrength: number("lightStrength"),
+        brightness: number("brightness"),
+        specular: number("specular"),
+        rimStrength: number("rimStrength"),
+        rimWidth: number("rimWidth"),
+        outlines: flag("outlines"),
+        outlineWidth: number("outlineWidth"),
+        outlineBrightness: number("outlineBrightness"),
+        selfShadow: flag("selfShadow"),
+        lightFollowsCamera: flag("lightFollowsCamera"),
+        flatFace: flag("flatFace"),
+        fieldOfView: number("fieldOfView"),
+    };
+}
+
+function parseToonStyleRecord(stored: string): Record<string, unknown> {
+    try {
+        const parsed: unknown = JSON.parse(stored);
+        return typeof parsed === "object" && parsed !== null
+            ? (parsed as Record<string, unknown>)
+            : {};
+    } catch {
+        return {};
+    }
+}
+
 export type ModelViewerRealtimeShapeKey = {
     targetMeshPrefixes: string[];
     basePath: string;
@@ -122,6 +225,7 @@ export type ModelViewerSurfaceProps = {
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;
     toonShadows?: boolean;
+    toonStyle?: ModelViewerToonStyle;
     normalMaps?: boolean;
     /** Tints the visible meshes the mod binds no diffuse texture to. */
     highlightGameTextures?: boolean;

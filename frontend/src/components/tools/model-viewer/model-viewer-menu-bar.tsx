@@ -11,6 +11,9 @@ import {
   MenubarRadioGroup,
   MenubarRadioItem,
   MenubarSeparator,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
 import { BrushIcon, CameraIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
@@ -19,8 +22,10 @@ import { useTranslation } from "react-i18next";
 import type {
   ModelViewerThreeEnvironment,
   ModelViewerThreeToneMapping,
+  ModelViewerToonStyle,
 } from "./model-viewer-contract";
 
+import { DEFAULT_MODEL_VIEWER_TOON_STYLE, MODEL_VIEWER_TOON_RANGES } from "./model-viewer-contract";
 import {
   DEFAULT_THREE_EXPOSURE,
   MAX_THREE_EXPOSURE,
@@ -28,6 +33,22 @@ import {
   MODEL_ROTATION_ACTIONS,
 } from "./model-viewer-dialog-types";
 import { formatSliderValue } from "./model-viewer-dialog-variants";
+
+const TOON_NUMBER_FIELDS = [
+  { key: "fieldOfView", label: "toon_field_of_view" },
+  { key: "brightness", label: "toon_brightness" },
+  { key: "lightStrength", label: "toon_light_strength" },
+  { key: "ambient", label: "toon_ambient" },
+  { key: "rangeBias", label: "toon_range_bias" },
+  { key: "softness", label: "toon_softness" },
+  { key: "shadowBrightness", label: "toon_shadow_brightness" },
+  { key: "shadowSaturation", label: "toon_shadow_saturation" },
+  { key: "specular", label: "toon_specular" },
+  { key: "rimStrength", label: "toon_rim_strength" },
+  { key: "rimWidth", label: "toon_rim_width" },
+  { key: "outlineWidth", label: "toon_outline_width" },
+  { key: "outlineBrightness", label: "toon_outline_brightness" },
+] as const;
 
 export type BrushMode = "paint" | "erase";
 
@@ -67,6 +88,9 @@ export interface ModelViewerMenuBarProps {
   showToonShadows?: boolean;
   toonShadows?: boolean;
   onToonShadowsChange?: (value: boolean) => void;
+  showToonStyle?: boolean;
+  toonStyle?: ModelViewerToonStyle;
+  onToonStyleChange?: (value: ModelViewerToonStyle) => void;
   showNormalMaps?: boolean;
   normalMaps?: boolean;
   onNormalMapsChange?: (value: boolean) => void;
@@ -107,6 +131,9 @@ export function ModelViewerMenuBar({
   showToonShadows = false,
   toonShadows = false,
   onToonShadowsChange,
+  showToonStyle = false,
+  toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
+  onToonStyleChange,
   showNormalMaps = false,
   normalMaps = true,
   onNormalMapsChange,
@@ -354,6 +381,89 @@ export function ModelViewerMenuBar({
                   >
                     Toon Shadows
                   </MenubarCheckboxItem>
+                  {showToonStyle ? (
+                    <MenubarSub>
+                      <MenubarSubTrigger>
+                        {t("page.tools.model_viewer.menu.toon_style")}
+                      </MenubarSubTrigger>
+                      <MenubarSubContent className="max-h-[70vh] w-56 overflow-y-auto">
+                        <MenubarGroup>
+                          <MenubarCheckboxItem
+                            checked={toonStyle.outlines}
+                            onSelect={(event) => event.preventDefault()}
+                            onCheckedChange={(checked) =>
+                              onToonStyleChange?.({ ...toonStyle, outlines: checked === true })
+                            }
+                          >
+                            {t("page.tools.model_viewer.menu.toon_outlines")}
+                          </MenubarCheckboxItem>
+                          <MenubarCheckboxItem
+                            checked={toonStyle.selfShadow}
+                            onSelect={(event) => event.preventDefault()}
+                            onCheckedChange={(checked) =>
+                              onToonStyleChange?.({ ...toonStyle, selfShadow: checked === true })
+                            }
+                          >
+                            {t("page.tools.model_viewer.menu.toon_self_shadow")}
+                          </MenubarCheckboxItem>
+                          <MenubarCheckboxItem
+                            checked={toonStyle.lightFollowsCamera}
+                            onSelect={(event) => event.preventDefault()}
+                            onCheckedChange={(checked) =>
+                              onToonStyleChange?.({
+                                ...toonStyle,
+                                lightFollowsCamera: checked === true,
+                              })
+                            }
+                          >
+                            {t("page.tools.model_viewer.menu.toon_light_follows_camera")}
+                          </MenubarCheckboxItem>
+                          <MenubarCheckboxItem
+                            checked={toonStyle.flatFace}
+                            onSelect={(event) => event.preventDefault()}
+                            onCheckedChange={(checked) =>
+                              onToonStyleChange?.({ ...toonStyle, flatFace: checked === true })
+                            }
+                          >
+                            {t("page.tools.model_viewer.menu.toon_flat_face")}
+                          </MenubarCheckboxItem>
+                        </MenubarGroup>
+                        <MenubarSeparator />
+                        {TOON_NUMBER_FIELDS.map((field) => (
+                          <div key={field.key}>
+                            <MenubarLabel className="text-xs text-muted-foreground">
+                              {t(`page.tools.model_viewer.menu.${field.label}`)}
+                            </MenubarLabel>
+                            <div className="px-1.5 py-1">
+                              <Input
+                                type="number"
+                                {...MODEL_VIEWER_TOON_RANGES[field.key]}
+                                value={formatSliderValue(toonStyle[field.key])}
+                                onChange={(event) => {
+                                  const range = MODEL_VIEWER_TOON_RANGES[field.key];
+                                  const value = Number.parseFloat(event.target.value);
+                                  if (Number.isFinite(value)) {
+                                    onToonStyleChange?.({
+                                      ...toonStyle,
+                                      [field.key]: Math.min(Math.max(value, range.min), range.max),
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <MenubarSeparator />
+                        <MenubarItem
+                          onSelect={(event) => event.preventDefault()}
+                          onClick={() => onToonStyleChange?.(DEFAULT_MODEL_VIEWER_TOON_STYLE)}
+                        >
+                          <RotateCcwIcon />
+                          {t("page.tools.model_viewer.menu.reset")}
+                        </MenubarItem>
+                      </MenubarSubContent>
+                    </MenubarSub>
+                  ) : null}
                 </MenubarGroup>
               </>
             ) : null}

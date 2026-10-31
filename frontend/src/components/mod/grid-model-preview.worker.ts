@@ -1,7 +1,9 @@
+import { parseModelViewerToonStyle } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import { getModelViewerTextureCapabilities } from "@renderer/components/tools/model-viewer/model-viewer-dds";
 import {
     buildPayloadModel,
     clearPayloadModelData,
+    setPayloadToonStyle,
 } from "@renderer/components/tools/model-viewer/model-viewer-payload";
 import { ModelViewerPositionLoader } from "@renderer/components/tools/model-viewer/model-viewer-position-loader";
 import {
@@ -12,6 +14,7 @@ import {
     MODEL_VIEWER_KEY_LIGHT_POSITION,
     modelViewerLighting,
     modelViewerToneMapping,
+    modelViewerToonLightDirection,
 } from "@renderer/components/tools/model-viewer/model-viewer-scene";
 import { applyModelViewerInitialRotation } from "@renderer/components/tools/model-viewer/model-viewer-upright";
 import { serializeDiagnostic } from "@shared/diagnostic";
@@ -25,6 +28,7 @@ import {
     PerspectiveCamera,
     Scene,
     type Texture,
+    Vector3,
     WebGLRenderer,
 } from "three";
 
@@ -97,11 +101,28 @@ async function render(request: GridModelPreviewRenderRequest): Promise<Blob> {
             undefined,
             getModelViewerTextureCapabilities(renderer),
         );
+        const toonStyle = parseModelViewerToonStyle(settings.toonStyle);
+        setPayloadToonStyle(root, toonStyle);
         applyModelViewerInitialRotation(root, request.transport.defaultYaw);
         scene.add(root);
         const center = frameCameraOnObject(camera, root);
         if (center) {
             camera.lookAt(center);
+        }
+        if (
+            settings.toonShadows &&
+            toonStyle.lightFollowsCamera &&
+            request.transport.materialProfile === "efmi"
+        ) {
+            const key = scene.children.find(
+                (child): child is DirectionalLight => child instanceof DirectionalLight,
+            );
+            key?.position.copy(
+                modelViewerToonLightDirection(
+                    camera.getWorldDirection(new Vector3()),
+                    new Vector3(),
+                ),
+            );
         }
 
         // Linking in parallel keeps the GPU process, which also composites the

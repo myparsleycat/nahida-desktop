@@ -1022,3 +1022,25 @@ func modelViewerTextureNamePriority(name string) int {
 	}
 	return score
 }
+
+// modelViewerTextureIsOutlineMask recognizes the flat maps EFMI binds in the light map
+// slot of some materials: opaque, with every channel either off or on. A packed
+// metallic-gloss map has gradients and an authored alpha. Read as one, the off regions
+// would be forced into shadow; the game shaders read R as outline width.
+func modelViewerTextureIsOutlineMask(rgba *image.NRGBA) bool {
+	flat := func(value uint8) bool { return value < 16 || value >= 240 }
+	saturated, off := 0, 0
+	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
+		if rgba.Pix[offset+3] < 239 {
+			return false
+		}
+		if flat(rgba.Pix[offset]) && flat(rgba.Pix[offset+1]) && flat(rgba.Pix[offset+2]) {
+			saturated++
+		}
+		if rgba.Pix[offset] < 16 {
+			off++
+		}
+	}
+	pixels := len(rgba.Pix) / 4
+	return pixels > 0 && saturated*100 >= pixels*98 && off*2 < pixels
+}

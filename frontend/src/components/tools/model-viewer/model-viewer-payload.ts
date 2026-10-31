@@ -9,11 +9,13 @@ import {
     Box3,
     Sphere,
     Vector3,
+    BackSide,
     BufferAttribute,
     BufferGeometry,
     DataTexture,
     DoubleSide,
     Group,
+    Matrix3,
     Mesh,
     MeshStandardMaterial,
     Object3D,
@@ -25,14 +27,18 @@ import {
     RGBAFormat,
     SRGBColorSpace,
     ShaderChunk,
+    ShaderMaterial,
     Texture,
+    Vector2,
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
 
+import type { ModelViewerToonStyle } from "./model-viewer-contract";
 import type { ModelViewerTextureCapabilities } from "./model-viewer-dds";
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
+import { DEFAULT_MODEL_VIEWER_TOON_STYLE } from "./model-viewer-contract";
 import {
     canUploadModelViewerDDS,
     fetchModelViewerDDSBuffer,
@@ -56,6 +62,10 @@ type PayloadMeshUserData = {
     sourceIndicesUrl?: string;
     materialProfile?: ModViewerTransport["materialProfile"];
     toonShadows: boolean;
+    toonStyle?: ModelViewerToonStyle;
+    efmiHeadMesh?: boolean;
+    efmiOverlayShadow?: boolean;
+    toonOutline?: Mesh<BufferGeometry, ShaderMaterial>;
     highlightGameTextures?: boolean;
     normalMapsDisabled?: boolean;
     lastPositionVariantIndex?: number | null;
@@ -80,9 +90,30 @@ type PayloadMeshUserData = {
 type RabbitFXShaderState = {
     lightMap: { value: Texture };
     lightMapEnabled: { value: number };
+    lightMapTransform: { value: Matrix3 };
     cutoutMap: { value: Texture };
     cutoutEnabled: { value: number };
+    cutoutTransform: { value: Matrix3 };
     toonEnabled: { value: number };
+};
+
+type EFMIToonShaderState = {
+    enabled: { value: number };
+    rangeBias: { value: number };
+    softness: { value: number };
+    shadowBrightness: { value: number };
+    shadowSaturation: { value: number };
+    ambient: { value: number };
+    lightStrength: { value: number };
+    brightness: { value: number };
+    specular: { value: number };
+    rimStrength: { value: number };
+    rimWidth: { value: number };
+    lightMap: { value: Texture };
+    lightMapEnabled: { value: number };
+    lightMapTransform: { value: Matrix3 };
+    face: { value: number };
+    outlineMask: Texture | null;
 };
 
 type DDSShaderState = {
@@ -111,6 +142,28 @@ const noCompressedTextureCapabilities: ModelViewerTextureCapabilities = {
     rgtc: false,
     bptc: false,
 };
+const EFMI_HEAD_MIN_HEIGHT = 0.75;
+const EFMI_HEAD_MAX_WIDTH = 0.3;
+
+// Stock faces span 8040 to 12876 indices across the 34 characters, leaving room for edits.
+const EFMI_FACE_MIN_INDICES = 8000;
+const EFMI_FACE_MAX_INDICES = 16000;
+const EFMI_SIZED_FACE_MIN_HEIGHT = 0.66;
+
+// Overlay shadows and hair reach below the chin by about 5 cm.
+const EFMI_HEAD_BELOW_FACE = 0.08;
+
+// Across the 34 stock characters eye shadows stop at 156 indices and hair shadows at
+// 1158. Irises reach down to 480 indices but are at most 3 cm tall, and hair shadows at
+// least 7.8 cm, so a mod that keeps the game's iris or face texture still draws them.
+const EFMI_EYE_SHADOW_MAX_INDICES = 200;
+const EFMI_HAIR_SHADOW_MAX_INDICES = 1200;
+const EFMI_HAIR_SHADOW_MIN_HEIGHT = 0.075;
+
+// The game pushes the face's inverted hull back so it cannot poke through the nose
+// and lips: Warfarin reads _OutlineOffsetZ 0.236 and scales it by 0.1 in view space.
+const EFMI_FACE_OUTLINE_DEPTH_OFFSET = 0.0236;
+
 const rabbitFXFallbackLightMap = new DataTexture(
     new Uint8Array([255, 255, 255, 255]),
     1,
@@ -187,6 +240,9 @@ export async function buildPayloadModel(
         signal.throwIfAborted();
         for (const object of objects) {
             group.add(object);
+        }
+        if (transport.materialProfile === "efmi") {
+            markEFMIHeadMeshes(transport, objects);
         }
         const prepared = await preparePayloadEval(group, evalResult, positionLoader, signal);
         signal.throwIfAborted();
@@ -295,6 +351,20 @@ export function setPayloadToonShadows(root: Object3D, enabled: boolean): void {
         if (state) {
             state.toonEnabled.value = enabled ? 1 : 0;
         }
+        syncEFMIToon(object, material, userData);
+    });
+}
+
+export function setPayloadToonStyle(root: Object3D, style: ModelViewerToonStyle): void {
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.toonStyle = style;
+        if (object.material instanceof MeshStandardMaterial) {
+            syncEFMIToon(object, object.material, userData);
+        }
     });
 }
 
@@ -337,6 +407,7 @@ function applyGameTextureHighlight(
     material.color.set(
         userData.highlightGameTextures && !texKey ? GAME_TEXTURE_HIGHLIGHT : 0xffffff,
     );
+    material.visible = !userData.efmiOverlayShadow || Boolean(userData.highlightGameTextures);
 }
 
 export async function preparePayloadEval(
@@ -530,6 +601,8 @@ function applyEvaluatedMaps(
         configurePackedMaterialShader(material);
     } else if (userData.materialProfile === "wuwa:rabbitfx" && object.geometry.attributes.uv) {
         configureRabbitFXMaterialShader(material, userData.toonShadows);
+    } else if (userData.materialProfile === "efmi") {
+        configureEFMIToonMaterialShader(material);
     }
     configureDDSMaterialShader(material);
     const normal = object.geometry.attributes.normal;
@@ -614,9 +687,25 @@ function applyEvaluatedMaps(
     if (rabbitFXState) {
         rabbitFXState.lightMap.value = rabbitFXLightMap ?? rabbitFXFallbackLightMap;
         rabbitFXState.lightMapEnabled.value = rabbitFXLightMap ? 1 : 0;
+        rabbitFXState.lightMapTransform.value = textureUvTransform(rabbitFXState.lightMap.value);
         const cutoutMap = evaluated.cutoutMapKey ? textures.get(evaluated.cutoutMapKey) : undefined;
         rabbitFXState.cutoutMap.value = cutoutMap ?? rabbitFXFallbackLightMap;
         rabbitFXState.cutoutEnabled.value = cutoutMap ? 1 : 0;
+        rabbitFXState.cutoutTransform.value = textureUvTransform(rabbitFXState.cutoutMap.value);
+    }
+    const efmiToonState = material.userData.efmiToonMaterial as EFMIToonShaderState | undefined;
+    if (efmiToonState) {
+        const lightMap = evaluated.lightMapKey ? textures.get(evaluated.lightMapKey) : undefined;
+
+        // One- and two-channel containers have no mask or smoothness to read.
+        const format = ddsTextureMetadata(lightMap)?.format ?? "";
+        const outlineMask = Boolean(lightMap?.userData.modelViewerOutlineMask);
+        const usable =
+            lightMap && !outlineMask && !format.startsWith("bc4-") && !format.startsWith("bc5-");
+        efmiToonState.lightMap.value = usable ? lightMap : rabbitFXFallbackLightMap;
+        efmiToonState.lightMapEnabled.value = usable ? 1 : 0;
+        efmiToonState.lightMapTransform.value = textureUvTransform(efmiToonState.lightMap.value);
+        efmiToonState.outlineMask = outlineMask && lightMap ? lightMap : null;
     }
     updateDDSShaderState(material, userData.materialProfile);
     if (
@@ -629,6 +718,7 @@ function applyEvaluatedMaps(
     ) {
         material.needsUpdate = true;
     }
+    syncEFMIToon(object, material, userData);
     userData.lastMaps = {
         texKey: evaluated.texKey,
         normalMapKey: evaluated.normalMapKey,
@@ -668,6 +758,71 @@ function hasUsableTangentFrame(geometry: BufferGeometry): boolean {
         }
     }
     return alongNormal * 4 < sampled;
+}
+
+// The game lights faces from an SDF texture bound outside the mod, because their
+// normals are not meant for N.L. Mods name no parts, so the head zone is measured from
+// the face: a mesh sized like a stock face. A prop taller than the character would skew
+// any fraction of the model's height, so that fraction is only the last resort. Small
+// head meshes that bind no diffuse either are the game's overlay shadows, which multiply
+// the face through a shared mask and stencil that mods do not carry; drawn as surfaces
+// they would be opaque plates over the eyes and forehead.
+export function markEFMIHeadMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
+    const forms = new Set(transport.meshes.map((mesh) => mesh.form));
+    forms.delete(undefined);
+    for (const form of forms.size > 0 ? forms : [undefined]) {
+        const entries = transport.meshes.flatMap((mesh, index) =>
+            mesh.bounds && (!mesh.form || mesh.form === form)
+                ? [{ mesh, index, bounds: mesh.bounds }]
+                : [],
+        );
+        markEFMIHeadMeshesOfForm(entries, objects);
+    }
+}
+
+function markEFMIHeadMeshesOfForm(
+    entries: Array<{
+        mesh: ModViewerTransport["meshes"][number];
+        index: number;
+        bounds: NonNullable<ModViewerTransport["meshes"][number]["bounds"]>;
+    }>,
+    objects: Mesh[],
+): void {
+    const top = Math.max(...entries.map(({ bounds }) => bounds.max[2]));
+    const bottom = Math.min(...entries.map(({ bounds }) => bounds.min[2]));
+    const heightOf = (z: number) => (z - bottom) / (top - bottom);
+    const indexCount = (index: number) => objects[index].geometry.index?.count ?? Infinity;
+    const narrow = entries.filter(
+        ({ bounds }) =>
+            Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]) <=
+            EFMI_HEAD_MAX_WIDTH,
+    );
+
+    const unlit = narrow.filter(
+        ({ mesh }) => !mesh.lightMapKey && mesh.lightMapVariants.length === 0,
+    );
+    const faces = unlit.filter(
+        ({ index, bounds }) =>
+            indexCount(index) >= EFMI_FACE_MIN_INDICES &&
+            indexCount(index) <= EFMI_FACE_MAX_INDICES &&
+            heightOf(bounds.min[2]) >= EFMI_SIZED_FACE_MIN_HEIGHT,
+    );
+    const headFloor =
+        faces.length > 0
+            ? Math.max(...faces.map(({ bounds }) => bounds.min[2])) - EFMI_HEAD_BELOW_FACE
+            : bottom + (top - bottom) * EFMI_HEAD_MIN_HEIGHT;
+
+    for (const { mesh, index, bounds } of narrow) {
+        if (bounds.min[2] < headFloor) continue;
+        const userData = objects[index].userData as PayloadMeshUserData;
+        userData.efmiHeadMesh = true;
+        userData.efmiOverlayShadow =
+            !mesh.texKey &&
+            mesh.textureVariants.length === 0 &&
+            (indexCount(index) <= EFMI_EYE_SHADOW_MAX_INDICES ||
+                (indexCount(index) <= EFMI_HAIR_SHADOW_MAX_INDICES &&
+                    bounds.max[2] - bounds.min[2] >= EFMI_HAIR_SHADOW_MIN_HEIGHT));
+    }
 }
 
 function configureDDSMaterialShader(material: MeshStandardMaterial): void {
@@ -753,8 +908,8 @@ uniform float modelViewerRabbitFXLightSigned;`,
     metalnessFactor *= modelViewerMetalnessSample;`,
             )
             .replace(
-                "float mask = texture2D( rabbitFXLightMap, vRabbitFXUv ).g;",
-                `vec4 modelViewerRabbitFXLightSample = texture2D( rabbitFXLightMap, vRabbitFXUv );
+                "float mask = texture2D( rabbitFXLightMap, ( rabbitFXLightMapTransform * vec3( vRabbitFXUv, 1.0 ) ).xy ).g;",
+                `vec4 modelViewerRabbitFXLightSample = texture2D( rabbitFXLightMap, ( rabbitFXLightMapTransform * vec3( vRabbitFXUv, 1.0 ) ).xy );
     float mask = mix( modelViewerRabbitFXLightSample.g, modelViewerRabbitFXLightSample.r, modelViewerRabbitFXLightBC4 );
     if ( modelViewerRabbitFXLightSigned > 0.5 ) mask = mask * 0.5 + 0.5;`,
             );
@@ -862,16 +1017,20 @@ function configureRabbitFXMaterialShader(
     const state: RabbitFXShaderState = {
         lightMap: { value: rabbitFXFallbackLightMap },
         lightMapEnabled: { value: 0 },
+        lightMapTransform: { value: rabbitFXFallbackLightMap.matrix },
         cutoutMap: { value: rabbitFXFallbackLightMap },
         cutoutEnabled: { value: 0 },
+        cutoutTransform: { value: rabbitFXFallbackLightMap.matrix },
         toonEnabled: { value: toonShadows ? 1 : 0 },
     };
     material.userData.rabbitFXMaterial = state;
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
         shader.uniforms.rabbitFXLightMap = state.lightMap;
         shader.uniforms.rabbitFXLightMapEnabled = state.lightMapEnabled;
+        shader.uniforms.rabbitFXLightMapTransform = state.lightMapTransform;
         shader.uniforms.rabbitFXCutoutMap = state.cutoutMap;
         shader.uniforms.rabbitFXCutoutEnabled = state.cutoutEnabled;
+        shader.uniforms.rabbitFXCutoutTransform = state.cutoutTransform;
         shader.uniforms.rabbitFXToonEnabled = state.toonEnabled;
         shader.vertexShader = replaceRabbitFXShaderAnchor(
             shader.vertexShader,
@@ -892,13 +1051,15 @@ vRabbitFXUv = uv;`,
 varying vec2 vRabbitFXUv;
 uniform sampler2D rabbitFXLightMap;
 uniform float rabbitFXLightMapEnabled;
+uniform mat3 rabbitFXLightMapTransform;
 uniform sampler2D rabbitFXCutoutMap;
 uniform float rabbitFXCutoutEnabled;
+uniform mat3 rabbitFXCutoutTransform;
 uniform float rabbitFXToonEnabled;
 
 float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection ) {
     if ( rabbitFXLightMapEnabled < 0.5 ) return 1.0;
-    float mask = texture2D( rabbitFXLightMap, vRabbitFXUv ).g;
+    float mask = texture2D( rabbitFXLightMap, ( rabbitFXLightMapTransform * vec3( vRabbitFXUv, 1.0 ) ).xy ).g;
     if ( mask <= 0.01 || mask >= 0.99 ) return 1.0;
     float visibility = step( 0.1, mask );
     float boundary = smoothstep( 0.55, 0.81, dot( surfaceNormal, lightDirection ) + 0.4 );
@@ -910,7 +1071,7 @@ float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection 
         shader.fragmentShader = replaceRabbitFXShaderAnchor(
             shader.fragmentShader,
             "#include <map_fragment>",
-            `if ( rabbitFXCutoutEnabled > 0.5 && texture2D( rabbitFXCutoutMap, vRabbitFXUv ).r < 0.5 ) discard;
+            `if ( rabbitFXCutoutEnabled > 0.5 && texture2D( rabbitFXCutoutMap, ( rabbitFXCutoutTransform * vec3( vRabbitFXUv, 1.0 ) ).xy ).r < 0.5 ) discard;
 #include <map_fragment>`,
         );
         shader.fragmentShader = replaceRabbitFXShaderAnchor(
@@ -919,8 +1080,344 @@ float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection 
             patchRabbitFXDirectionalLights(ShaderChunk.lights_fragment_begin),
         );
     };
-    material.customProgramCacheKey = () => "wuwa-rabbitfx-v1";
+    material.customProgramCacheKey = () => "wuwa-rabbitfx-v2";
     material.needsUpdate = true;
+}
+
+// Replaces the lit result, so Environment does not affect the two tones. The
+// lighting model follows the HGRP character shaders as reconstructed by Warfarin
+// Studio: a ramp lookup over N.L, a darker tone for surfaces also facing away from
+// the camera, and a light map packed like _MetallicGlossMap (R metallic, G specular,
+// B shadow mask, A smoothness). Mods carry no per-material ramp here, so the ramp is
+// reduced to its coverage step. directionalLights[0] is the key light: three sorts
+// shadow casters first and keeps scene order otherwise.
+function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
+    if (material.userData.efmiToonMaterial) {
+        return;
+    }
+    const defaults = DEFAULT_MODEL_VIEWER_TOON_STYLE;
+    const state: EFMIToonShaderState = {
+        enabled: { value: 0 },
+        rangeBias: { value: defaults.rangeBias },
+        softness: { value: defaults.softness },
+        shadowBrightness: { value: defaults.shadowBrightness },
+        shadowSaturation: { value: defaults.shadowSaturation },
+        ambient: { value: defaults.ambient },
+        lightStrength: { value: defaults.lightStrength },
+        brightness: { value: defaults.brightness },
+        specular: { value: defaults.specular },
+        rimStrength: { value: defaults.rimStrength },
+        rimWidth: { value: defaults.rimWidth },
+        lightMap: { value: rabbitFXFallbackLightMap },
+        lightMapEnabled: { value: 0 },
+        lightMapTransform: { value: rabbitFXFallbackLightMap.matrix },
+        face: { value: 0 },
+        outlineMask: null,
+    };
+    material.userData.efmiToonMaterial = state;
+    material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+        shader.uniforms.efmiToonEnabled = state.enabled;
+        shader.uniforms.efmiRangeBias = state.rangeBias;
+        shader.uniforms.efmiSoftness = state.softness;
+        shader.uniforms.efmiShadowBrightness = state.shadowBrightness;
+        shader.uniforms.efmiShadowSaturation = state.shadowSaturation;
+        shader.uniforms.efmiAmbient = state.ambient;
+        shader.uniforms.efmiLightStrength = state.lightStrength;
+        shader.uniforms.efmiBrightness = state.brightness;
+        shader.uniforms.efmiSpecular = state.specular;
+        shader.uniforms.efmiRimStrength = state.rimStrength;
+        shader.uniforms.efmiRimWidth = state.rimWidth;
+        shader.uniforms.efmiLightMap = state.lightMap;
+        shader.uniforms.efmiLightMapEnabled = state.lightMapEnabled;
+        shader.uniforms.efmiLightMapTransform = state.lightMapTransform;
+        shader.uniforms.efmiFace = state.face;
+        shader.vertexShader = replaceRabbitFXShaderAnchor(
+            shader.vertexShader,
+            "#include <common>",
+            `#include <common>
+varying vec2 vEfmiUv;`,
+        );
+        shader.vertexShader = replaceRabbitFXShaderAnchor(
+            shader.vertexShader,
+            "#include <uv_vertex>",
+            `#include <uv_vertex>
+vEfmiUv = uv;`,
+        );
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <common>",
+            `#include <common>
+varying vec2 vEfmiUv;
+uniform float efmiToonEnabled;
+uniform float efmiRangeBias;
+uniform float efmiSoftness;
+uniform float efmiShadowBrightness;
+uniform float efmiShadowSaturation;
+uniform float efmiAmbient;
+uniform float efmiLightStrength;
+uniform float efmiBrightness;
+uniform float efmiSpecular;
+uniform float efmiRimStrength;
+uniform float efmiRimWidth;
+uniform sampler2D efmiLightMap;
+uniform float efmiLightMapEnabled;
+uniform mat3 efmiLightMapTransform;
+uniform float efmiFace;
+
+float efmiLuma( vec3 color ) {
+    return dot( color, vec3( 0.212673, 0.715152, 0.072175 ) );
+}
+
+float efmiCoverage( float cosine ) {
+    float position = clamp( cosine, -1.0, 1.0 ) * 0.5 + 0.5;
+    return smoothstep( 0.5 - efmiSoftness - 0.001, 0.5 + efmiSoftness + 0.001, position );
+}`,
+        );
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <opaque_fragment>",
+            `#if NUM_DIR_LIGHTS > 0
+if ( efmiToonEnabled > 0.5 ) {
+    vec3 worldNormal = inverseTransformDirection( normal, viewMatrix );
+    vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
+    vec3 worldView = inverseTransformDirection( normalize( vViewPosition ), viewMatrix );
+    vec3 cameraBack = vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
+    vec3 albedo = diffuseColor.rgb;
+    vec2 lightMapUv = ( efmiLightMapTransform * vec3( vEfmiUv, 1.0 ) ).xy;
+    vec4 packedMap = mix( vec4( 0.0, 1.0, 1.0, 0.5 ), texture2D( efmiLightMap, lightMapUv ), efmiLightMapEnabled );
+
+    float occlusion = 1.0;
+    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+    if ( receiveShadow ) {
+        occlusion = getShadow(
+            directionalShadowMap[ 0 ],
+            directionalLightShadows[ 0 ].shadowMapSize,
+            directionalLightShadows[ 0 ].shadowIntensity,
+            directionalLightShadows[ 0 ].shadowBias,
+            directionalLightShadows[ 0 ].shadowRadius,
+            vDirectionalShadowCoord[ 0 ]
+        );
+    }
+    #endif
+
+    float lightCosine = dot( worldNormal, worldLight );
+
+    float flatLight = efmiFace;
+    float rampCoverage = mix( efmiCoverage( lightCosine + efmiRangeBias ), 1.0, flatLight );
+    float lit = mix( min( rampCoverage, min( packedMap.b, occlusion ) ), 1.0, flatLight );
+    float cameraFacing = efmiCoverage( dot( worldNormal, cameraBack ) ) * packedMap.b * occlusion;
+
+    vec3 shadowTone = mix( vec3( efmiLuma( albedo ) ), albedo, efmiShadowSaturation );
+    shadowTone = max( shadowTone, vec3( 0.0 ) ) * efmiShadowBrightness * 0.96 * efmiAmbient;
+    vec3 deepTone = 0.65 * shadowTone;
+    float deepLuma = efmiLuma( deepTone );
+    deepTone = vec3( deepLuma ) + 1.2 * ( deepTone - deepLuma );
+    vec3 surface = mix( deepTone, shadowTone, clamp( rampCoverage + cameraFacing, 0.0, 1.0 ) );
+    float viewCosine = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
+    surface = mix( surface, albedo * 0.96, lit );
+
+    float sky = mix( clamp( worldNormal.y + 0.15, 0.0, 1.0 ) * 1.5 + 0.5, 0.725, flatLight );
+    vec3 shadowTint = vec3( 0.878, 0.93, 1.122 );
+    vec3 irradiance = mix( shadowTint, vec3( 1.0 ), lit ) * sky * 0.2877 * efmiLightStrength;
+    irradiance += vec3( efmiLightStrength * efmiBrightness );
+    vec3 toon = surface * irradiance;
+
+    float roughness = 1.0 - packedMap.a;
+    float alpha = max( roughness * roughness, 0.007812 );
+    float alphaSquared = alpha * alpha;
+    vec3 specularHalf = normalize( worldLight + 2.0 * normalize( vec3( cameraBack.x, worldLight.y, cameraBack.z ) ) + 3.0 * worldView );
+    float halfCosine = dot( worldNormal, specularHalf );
+    float distribution = halfCosine * halfCosine * ( alphaSquared - 1.0 ) + 1.0;
+    distribution = distribution * distribution;
+    distribution = distribution != alphaSquared ? alphaSquared / distribution : 1.0;
+    float specularTerm = clamp( distribution * 0.5 / ( 2.0 * viewCosine + alpha + 0.0001 ) - 0.000061, 0.0, 20.0 );
+    vec3 reflectance = mix( vec3( 0.04 * packedMap.g ), albedo, packedMap.r );
+    toon += irradiance * ( 0.5 + 0.5 * lit ) * mix( efmiAmbient, 1.0, lit ) * specularTerm * reflectance * efmiSpecular * ( 1.0 - flatLight );
+
+    float luma = efmiLuma( toon );
+    float vivid = clamp( luma - 0.5, 0.0, 0.5 );
+    toon = luma + ( toon - luma ) * ( vivid * vivid + 1.0 );
+
+    vec3 screenLight = worldLight - cameraBack * dot( worldLight, cameraBack );
+    float screenLength = length( screenLight );
+    float rimSide = screenLength > 0.00001 ? clamp( dot( worldNormal, screenLight / screenLength ), 0.0, 1.0 ) : 0.0;
+    float grazing = 1.0 - abs( viewCosine );
+    float rimBand = smoothstep( 0.0, 1.0, ( grazing - ( 0.8 - 0.6 * efmiRimWidth ) ) / ( 0.1 + 0.2 * efmiRimWidth ) );
+    toon += rimBand * rimSide * albedo * 0.96 * efmiRimStrength * ( 1.0 - flatLight );
+
+    outgoingLight = toon;
+}
+#endif
+#include <opaque_fragment>`,
+        );
+
+        // The toon result is display-referred like Warfarin's, which applies no tone
+        // mapping, so the viewer's exposure and tone mapping would only dim it.
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <tonemapping_fragment>",
+            `if ( efmiToonEnabled < 0.5 ) {
+    #include <tonemapping_fragment>
+}`,
+        );
+    };
+    material.customProgramCacheKey = () => "efmi-toon-v6";
+    material.needsUpdate = true;
+}
+
+function syncEFMIToon(
+    object: Mesh,
+    material: MeshStandardMaterial,
+    userData: PayloadMeshUserData,
+): void {
+    const state = material.userData.efmiToonMaterial as EFMIToonShaderState | undefined;
+    if (!state) {
+        return;
+    }
+    const style = userData.toonStyle ?? DEFAULT_MODEL_VIEWER_TOON_STYLE;
+    const enabled = userData.toonShadows;
+    state.enabled.value = enabled ? 1 : 0;
+    state.rangeBias.value = style.rangeBias;
+    state.softness.value = style.softness;
+    state.shadowBrightness.value = style.shadowBrightness;
+    state.shadowSaturation.value = style.shadowSaturation;
+    state.ambient.value = style.ambient;
+    state.lightStrength.value = style.lightStrength;
+    state.brightness.value = style.brightness;
+    state.specular.value = style.specular;
+    state.rimStrength.value = style.rimStrength;
+    state.rimWidth.value = style.rimWidth;
+    state.face.value =
+        style.flatFace && userData.efmiHeadMesh && state.lightMapEnabled.value === 0 ? 1 : 0;
+
+    // Coverage cards are flat ink decals: they neither block light nor have a silhouette.
+    const coverageMask = Boolean(material.map?.userData.modelViewerCoverageMask);
+    object.castShadow = enabled && style.selfShadow && !coverageMask && !userData.efmiOverlayShadow;
+    object.receiveShadow = enabled && style.selfShadow;
+
+    const showOutline =
+        enabled &&
+        style.outlines &&
+        style.outlineWidth > 0 &&
+        !coverageMask &&
+        !userData.efmiOverlayShadow;
+    if (!showOutline && !userData.toonOutline) {
+        return;
+    }
+    userData.toonOutline ??= createToonOutline(object);
+    const uniforms = userData.toonOutline.material.uniforms;
+    userData.toonOutline.visible = showOutline;
+    uniforms.map.value = material.map ?? rabbitFXFallbackLightMap;
+    uniforms.mapTransform.value = textureUvTransform(uniforms.map.value);
+    uniforms.widthMask.value = state.outlineMask ?? rabbitFXFallbackLightMap;
+    uniforms.widthMaskEnabled.value = state.outlineMask ? 1 : 0;
+    uniforms.widthMaskTransform.value = textureUvTransform(uniforms.widthMask.value);
+    uniforms.outlineWidth.value = style.outlineWidth;
+    uniforms.outlineBrightness.value = style.outlineBrightness;
+    uniforms.outlineDepthOffset.value = state.face.value * EFMI_FACE_OUTLINE_DEPTH_OFFSET;
+}
+
+// Direct DDS textures flip V through this transform, which three applies only to
+// a material's own map slots.
+function textureUvTransform(texture: Texture): Matrix3 {
+    texture.updateMatrix();
+    return texture.matrix;
+}
+
+// An inverted hull sharing the mesh's geometry, so position variants, shape keys
+// and compute deformation move it too. It expands in clip space by a width that
+// shrinks with distance and never drops below half a pixel.
+function createToonOutline(object: Mesh): Mesh<BufferGeometry, ShaderMaterial> {
+    if (!object.geometry.attributes.outlineNormal) {
+        object.geometry.setAttribute("outlineNormal", averagedNormals(object.geometry));
+    }
+    const resolution = new Vector2(1, 1);
+    const outline = new Mesh(
+        object.geometry,
+        new ShaderMaterial({
+            uniforms: {
+                map: { value: rabbitFXFallbackLightMap },
+                mapTransform: { value: rabbitFXFallbackLightMap.matrix },
+                widthMask: { value: rabbitFXFallbackLightMap },
+                widthMaskEnabled: { value: 0 },
+                widthMaskTransform: { value: rabbitFXFallbackLightMap.matrix },
+                outlineWidth: { value: 0 },
+                outlineBrightness: { value: 0 },
+                outlineDepthOffset: { value: 0 },
+                outlineResolution: { value: resolution },
+            },
+            vertexShader: `attribute vec3 outlineNormal;
+uniform float outlineWidth;
+uniform float outlineDepthOffset;
+uniform vec2 outlineResolution;
+uniform mat3 mapTransform;
+uniform sampler2D widthMask;
+uniform float widthMaskEnabled;
+uniform mat3 widthMaskTransform;
+varying vec2 vOutlineUv;
+void main() {
+    vOutlineUv = ( mapTransform * vec3( uv, 1.0 ) ).xy;
+    vec4 viewPosition = modelViewMatrix * vec4( position, 1.0 );
+    gl_Position = projectionMatrix * viewPosition;
+    vec2 direction = ( projectionMatrix * vec4( normalMatrix * outlineNormal, 0.0 ) ).xy;
+    float directionSquared = dot( direction, direction );
+    if ( directionSquared > 0.0 ) {
+        direction /= sqrt( directionSquared );
+        direction.x *= outlineResolution.y / outlineResolution.x;
+        float halfFov = atan( 1.0 / projectionMatrix[ 1 ][ 1 ] );
+        float w = gl_Position.w;
+        vec2 offset = direction * ( 0.392699 / halfFov * outlineWidth * clamp( w * halfFov * 4.583663, 0.0, 1.0 ) * 0.005 );
+        vec2 minimum = min( max( w, 0.0 ), 1.570796 / halfFov ) / outlineResolution;
+        offset = mix( offset, sign( offset ) * minimum, vec2( lessThan( abs( offset ), minimum ) ) );
+        if ( widthMaskEnabled > 0.5 ) {
+            offset *= texture2D( widthMask, ( widthMaskTransform * vec3( uv, 1.0 ) ).xy ).r;
+        }
+        gl_Position.xy += offset;
+        vec4 pushed = projectionMatrix * vec4( viewPosition.xy, viewPosition.z - outlineDepthOffset, 1.0 );
+        gl_Position.z = pushed.z * w / pushed.w;
+    }
+}`,
+            fragmentShader: `uniform sampler2D map;
+uniform float outlineBrightness;
+varying vec2 vOutlineUv;
+void main() {
+    gl_FragColor = vec4( texture2D( map, vOutlineUv ).rgb * outlineBrightness, 1.0 );
+    #include <colorspace_fragment>
+}`,
+            side: BackSide,
+        }),
+    );
+    outline.raycast = () => {};
+    outline.onBeforeRender = (renderer) => {
+        renderer.getDrawingBufferSize(resolution);
+    };
+    object.add(outline);
+    return outline;
+}
+
+// Vertices split along UV seams carry different normals, which would tear the hull
+// open along every seam. The game stores an averaged normal for the same reason.
+function averagedNormals(geometry: BufferGeometry): BufferAttribute {
+    const position = geometry.attributes.position;
+    const normal = geometry.attributes.normal;
+    const sums = new Map<string, [number, number, number]>();
+    const key = (index: number) =>
+        `${position.getX(index).toFixed(5)},${position.getY(index).toFixed(5)},${position.getZ(index).toFixed(5)}`;
+    for (let index = 0; index < position.count; index++) {
+        const sum = sums.get(key(index)) ?? [0, 0, 0];
+        sum[0] += normal.getX(index);
+        sum[1] += normal.getY(index);
+        sum[2] += normal.getZ(index);
+        sums.set(key(index), sum);
+    }
+
+    const output = new Float32Array(position.count * 3);
+    for (let index = 0; index < position.count; index++) {
+        const [x, y, z] = sums.get(key(index)) ?? [0, 0, 0];
+        const length = Math.hypot(x, y, z) || 1;
+        output.set([x / length, y / length, z / length], index * 3);
+    }
+    return new BufferAttribute(output, 3);
 }
 
 function patchRabbitFXDirectionalLights(source: string): string {
@@ -1130,6 +1627,7 @@ function loadTexture(
         entry.format ?? "",
         entry.invertAlpha ? "invert" : "",
         entry.coverageMask ? "coverage" : "",
+        entry.outlineMask ? "outline" : "",
     ].join("|");
     const cached = textureCache.get(cacheKey);
     if (cached) {
@@ -1180,6 +1678,7 @@ async function loadPayloadTexture(
             parsed.texture.userData.modelViewerDDS = { format: parsed.format, direct: true };
             parsed.texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
             parsed.texture.userData.modelViewerCoverageMask = Boolean(entry.coverageMask);
+            parsed.texture.userData.modelViewerOutlineMask = Boolean(entry.outlineMask);
             return parsed.texture;
         } catch {
             directTexture?.dispose();
@@ -1194,6 +1693,7 @@ async function loadPayloadTexture(
         texture.userData.modelViewerDDS = { format: entry.format ?? "", direct: false };
         texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
         texture.userData.modelViewerCoverageMask = Boolean(entry.coverageMask);
+        texture.userData.modelViewerOutlineMask = Boolean(entry.outlineMask);
     }
     return texture;
 }
