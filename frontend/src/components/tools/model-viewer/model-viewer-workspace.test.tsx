@@ -3,7 +3,7 @@ import { Mod } from "@bindings/mod";
 import { Tools } from "@bindings/tools";
 import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
 import type { ModViewerTransport } from "@shared/mod-viewer/types";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useImperativeHandle, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ import { ModelViewerDialog } from "./model-viewer-dialog";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
 import { normalizeModelViewerTransport } from "./model-viewer-transport";
 import { ModelViewerWindow } from "./model-viewer-window";
+import { ModelViewerWorkspace } from "./model-viewer-workspace";
 import { ThreeModelViewer } from "./three-model-viewer";
 
 const handle = vi.hoisted(() => ({
@@ -28,6 +29,9 @@ vi.mock("@bindings/tools", () => ({
     LoadModViewer: vi.fn(),
     CleanupModelViewer: vi.fn(),
     PersistModelViewerToggleState: vi.fn(),
+    GetModelViewerIneffectiveValues: vi.fn(() =>
+      Object.assign(Promise.resolve([]), { cancel: vi.fn() }),
+    ),
   },
 }));
 vi.mock("@bindings/mod", () => ({ Mod: { PastePreview: vi.fn() } }));
@@ -325,6 +329,164 @@ it.each(["dialog", "window"])(
 );
 
 it("keeps the selected form for the frames the viewer evaluates", async () => {
+  render(<ModelViewerDialog open onOpenChange={vi.fn()} source={createFormSource()} />);
+
+  const formSelect = await screen.findByRole("combobox", {
+    name: "page.tools.model_viewer.forms.label",
+  });
+  expect(formSelect.hasAttribute("data-placeholder")).toBe(false);
+  fireEvent.click(formSelect);
+  const ult = await screen.findByRole("option", { name: "Ult" });
+  fireEvent.mouseEnter(ult);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
+    { id: "base", visible: false },
+    { id: "ult", visible: true },
+  ]);
+  expect(within(formSelect).getByText("page.tools.model_viewer.forms.all")).toBeTruthy();
+  expect(ult.getAttribute("aria-selected")).toBe("false");
+  fireEvent.mouseLeave(ult);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("");
+  fireEvent.mouseEnter(ult);
+  fireEvent.pointerDown(ult, { pointerType: "mouse" });
+  fireEvent.click(ult);
+  await waitFor(() => expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult"));
+  fireEvent.mouseLeave(ult);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+  expect(within(formSelect).getByText("Ult")).toBeTruthy();
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
+    { id: "base", visible: false },
+    { id: "ult", visible: true },
+  ]);
+});
+
+it("previews individual and all forms without changing the selection, toggles, or playback", async () => {
+  const source = createFormSource();
+  const onFormChange = vi.fn();
+  render(
+    <ModelViewerWorkspace
+      open
+      source={source}
+      form="Base"
+      onFormChange={onFormChange}
+      doubleSidedEnabled
+      onDoubleSidedChange={vi.fn()}
+    />,
+  );
+  const initialViewer = vi.mocked(ThreeModelViewer).mock.lastCall![0];
+  const formSelect = screen.getByRole("combobox", {
+    name: "page.tools.model_viewer.forms.label",
+  });
+  fireEvent.click(formSelect);
+  const ult = await screen.findByRole("option", { name: "Ult" });
+  fireEvent.mouseEnter(ult);
+
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+  expect(within(formSelect).getByText("Base")).toBeTruthy();
+  expect(screen.getByRole("option", { name: "Base" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByText("Base outfit")).toBeTruthy();
+  expect(screen.queryByText("Ult outfit")).toBeNull();
+  expect(onFormChange).not.toHaveBeenCalled();
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].animationClip).toBe(
+    initialViewer.animationClip,
+  );
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].orientation).toBe(
+    initialViewer.orientation,
+  );
+  expect(vi.mocked(useModelViewerAnimationClock).mock.lastCall?.[0].playing).toBe(true);
+
+  act(() => vi.mocked(useModelViewerAnimationClock).mock.lastCall![0].onFrame(1));
+  expect(handle.setAnimationFrame).toHaveBeenLastCalledWith(1);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+  fireEvent.mouseLeave(ult);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Base");
+
+  const all = screen.getByRole("option", { name: "page.tools.model_viewer.forms.all" });
+  fireEvent.mouseEnter(all);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("");
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
+    { id: "base", visible: true },
+    { id: "ult", visible: true },
+  ]);
+  fireEvent.mouseLeave(all);
+  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Base");
+  expect(onFormChange).not.toHaveBeenCalled();
+});
+
+it.each(["escape", "outside", "trigger", "selected item"])(
+  "clears a form preview when closing with %s",
+  async (closeWith) => {
+    render(
+      <ModelViewerWorkspace
+        open
+        source={createFormSource()}
+        form="Base"
+        doubleSidedEnabled
+        onDoubleSidedChange={vi.fn()}
+      />,
+    );
+    const formSelect = screen.getByRole("combobox", {
+      name: "page.tools.model_viewer.forms.label",
+    });
+    fireEvent.click(formSelect);
+    const ult = await screen.findByRole("option", { name: "Ult" });
+    fireEvent.mouseEnter(ult);
+    expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+
+    if (closeWith === "escape") {
+      fireEvent.keyDown(ult, { key: "Escape" });
+    } else if (closeWith === "outside") {
+      fireEvent.mouseDown(document.body);
+      fireEvent.mouseUp(document.body);
+      fireEvent.click(document.body);
+    } else if (closeWith === "trigger") {
+      fireEvent.click(formSelect);
+    } else {
+      const base = screen.getByRole("option", { name: "Base" });
+      fireEvent.pointerDown(base, { pointerType: "mouse" });
+      fireEvent.click(base);
+    }
+
+    await waitFor(() => expect(formSelect.getAttribute("aria-expanded")).toBe("false"));
+    expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Base");
+  },
+);
+
+it.each(["source", "close", "external form"])(
+  "discards a form preview after a %s change",
+  async (change) => {
+    const source = createFormSource();
+    const props: ComponentProps<typeof ModelViewerWorkspace> = {
+      open: true,
+      source,
+      doubleSidedEnabled: true,
+      onDoubleSidedChange: vi.fn(),
+    };
+    const view = render(<ModelViewerWorkspace {...props} />);
+    const formSelect = screen.getByRole("combobox", {
+      name: "page.tools.model_viewer.forms.label",
+    });
+    fireEvent.click(formSelect);
+    const ult = await screen.findByRole("option", { name: "Ult" });
+    fireEvent.mouseEnter(ult);
+    expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult");
+
+    if (change === "source") {
+      view.rerender(<ModelViewerWorkspace {...props} source={createFormSource()} />);
+    } else if (change === "close") {
+      view.rerender(<ModelViewerWorkspace {...props} open={false} />);
+      view.rerender(<ModelViewerWorkspace {...props} />);
+    } else {
+      view.rerender(<ModelViewerWorkspace {...props} form="Base" />);
+    }
+
+    expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe(
+      change === "external form" ? "Base" : "",
+    );
+  },
+);
+
+function createFormSource() {
   const mesh = (id: string, form: string): ModViewerTransport["meshes"][number] => ({
     id,
     component: id,
@@ -349,32 +511,24 @@ it("keeps the selected form for the frames the viewer evaluates", async () => {
       { id: "Base", label: "Base" },
       { id: "Ult", label: "Ult" },
     ],
+    variables: ["Base", "Ult"].map((form) => ({
+      id: `${form}::outfit`,
+      label: `${form} outfit`,
+      form,
+      order: 0,
+      defaultValue: 0,
+      values: [
+        { value: 0, label: "Default" },
+        { value: 1, label: "Alternate" },
+      ],
+    })),
   };
-  render(
-    <ModelViewerDialog
-      open
-      onOpenChange={vi.fn()}
-      source={{
-        mode: "payload",
-        transport,
-        memorySessionId: "workspace",
-        modPath: "C:/mod",
-        name: "Model",
-      }}
-    />,
-  );
 
-  const formSelect = await screen.findByRole("combobox", {
-    name: "page.tools.model_viewer.forms.label",
-  });
-  expect(formSelect.hasAttribute("data-placeholder")).toBe(false);
-  fireEvent.click(formSelect);
-  const ult = await screen.findByRole("option", { name: "Ult" });
-  fireEvent.pointerDown(ult, { pointerType: "mouse" });
-  fireEvent.click(ult);
-  await waitFor(() => expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].form).toBe("Ult"));
-  expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].payloadEval?.meshes).toMatchObject([
-    { id: "base", visible: false },
-    { id: "ult", visible: true },
-  ]);
-});
+  return {
+    mode: "payload" as const,
+    transport,
+    memorySessionId: "workspace",
+    modPath: "C:/mod",
+    name: "Model",
+  };
+}

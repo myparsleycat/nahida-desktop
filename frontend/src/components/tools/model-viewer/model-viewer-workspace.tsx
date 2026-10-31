@@ -136,6 +136,7 @@ export function ModelViewerWorkspace({
   const { t } = useTranslation();
   const [prevOpen, setPrevOpen] = useState(open);
   const [prevSource, setPrevSource] = useState(source);
+  const [prevForm, setPrevForm] = useState(form);
   const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>(() =>
     getInitialActiveState(source),
   );
@@ -156,6 +157,7 @@ export function ModelViewerWorkspace({
   const [toonShadows, setToonShadows] = useState(false);
   const [highlightGameTextures, setHighlightGameTextures] = useState(false);
   const [ownForm, setOwnForm] = useState(ALL_FORMS);
+  const [previewForm, setPreviewForm] = useState<string | null>(null);
   const [viewerStatus, setViewerStatus] = useState<ViewerStatus>(source ? "loading" : "idle");
   const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
@@ -167,6 +169,7 @@ export function ModelViewerWorkspace({
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (!open) {
+      setPreviewForm(null);
       setShowOverwritePreviewDialog(false);
       setIsSavingPreview(false);
       setViewerStatus("idle");
@@ -176,9 +179,15 @@ export function ModelViewerWorkspace({
     }
   }
 
+  if (prevForm !== form) {
+    setPrevForm(form);
+    setPreviewForm(null);
+  }
+
   if (prevSource !== source) {
     setPrevSource(source);
     setPreviewState(null);
+    setPreviewForm(null);
     setViewerStatus(source ? "loading" : "idle");
 
     if (getSourceSessionKey(prevSource) !== getSourceSessionKey(source)) {
@@ -397,16 +406,20 @@ export function ModelViewerWorkspace({
   const requestedForm = form ?? ownForm;
   const activeForm = forms.some((entry) => entry.id === requestedForm) ? requestedForm : ALL_FORMS;
   const selectForm = (next: string) => {
+    setPreviewForm(null);
     setOwnForm(next);
     onFormChange?.(next);
   };
   const inActiveForm = (entry: { form?: string }) => isViewerFormVisible(entry.form, activeForm);
 
+  const effectiveForm = previewForm ?? activeForm;
   const effectiveState = previewState ?? activeState;
   const payloadEval = useMemo(
     () =>
-      payloadTransport ? evaluateViewerState(payloadTransport, effectiveState, activeForm) : null,
-    [activeForm, effectiveState, payloadTransport],
+      payloadTransport
+        ? evaluateViewerState(payloadTransport, effectiveState, effectiveForm)
+        : null,
+    [effectiveForm, effectiveState, payloadTransport],
   );
   const gameTextureMeshCount =
     payloadEval?.meshes.filter((mesh) => mesh.visible && !mesh.texKey).length ?? 0;
@@ -768,7 +781,7 @@ export function ModelViewerWorkspace({
                   className="absolute inset-0 h-full w-full"
                   payloadTransport={payloadTransport}
                   payloadEval={payloadEval ?? undefined}
-                  form={activeForm}
+                  form={effectiveForm}
                   orientation={modelOrientation}
                   animationClip={effectiveAnimation ?? undefined}
                   threeToneMapping={threeToneMapping}
@@ -783,7 +796,12 @@ export function ModelViewerWorkspace({
                   overlay={overlay}
                 />
                 {forms.length > 1 ? (
-                  <FormSwitcher forms={forms} value={activeForm} onChange={selectForm} />
+                  <FormSwitcher
+                    forms={forms}
+                    value={activeForm}
+                    onChange={selectForm}
+                    onPreviewChange={setPreviewForm}
+                  />
                 ) : null}
                 {isViewerReady && gameTextureMeshCount > 0 ? (
                   <GameTextureNotice
@@ -899,10 +917,12 @@ function FormSwitcher({
   forms,
   value,
   onChange,
+  onPreviewChange,
 }: {
   forms: ViewerForm[];
   value: string;
   onChange: (form: string) => void;
+  onPreviewChange: (form: string | null) => void;
 }) {
   const { t } = useTranslation();
 
@@ -929,6 +949,9 @@ function FormSwitcher({
         onValueChange={(next) =>
           onChange(next === ALL_FORMS_OPTION || next == null ? ALL_FORMS : String(next))
         }
+        onOpenChange={(open) => {
+          if (!open) onPreviewChange(null);
+        }}
       >
         <SelectTrigger
           aria-label={t("page.tools.model_viewer.forms.label")}
@@ -941,7 +964,11 @@ function FormSwitcher({
         </SelectTrigger>
         <SelectContent align="start">
           <SelectGroup>
-            <SelectItem value={ALL_FORMS_OPTION}>
+            <SelectItem
+              value={ALL_FORMS_OPTION}
+              onMouseEnter={() => onPreviewChange(ALL_FORMS)}
+              onMouseLeave={() => onPreviewChange(null)}
+            >
               {t("page.tools.model_viewer.forms.all")}
             </SelectItem>
           </SelectGroup>
@@ -960,6 +987,8 @@ function FormSwitcher({
                     value={form.id}
                     title={form.label}
                     className="*:first:min-w-0 *:first:shrink"
+                    onMouseEnter={() => onPreviewChange(form.id)}
+                    onMouseLeave={() => onPreviewChange(null)}
                   >
                     <span className="truncate">{form.label}</span>
                   </SelectItem>
