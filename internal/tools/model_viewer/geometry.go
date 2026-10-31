@@ -53,6 +53,7 @@ type modelViewerGeometry struct {
 	Indices       []uint32
 	VertexCount   int
 	SourceIndices []uint32
+	sourceFaces   []uint32
 }
 
 // modelViewerGeometryOptions selects which optional attributes the extractor

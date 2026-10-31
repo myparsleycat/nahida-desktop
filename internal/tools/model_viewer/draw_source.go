@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +11,8 @@ import (
 )
 
 // DrawSource locates the INI draw call behind one viewer mesh so a tool can
-// hook that draw. Face N of the mesh is triangle N of the draw: compaction
-// renumbers vertices but keeps the triangle order.
+// hook that draw. Removed invalid triangles retain their original draw indices
+// through sourceFaces; vertex compaction does not change that mapping.
 type DrawSource struct {
 	INIPath string
 	Section string
@@ -36,6 +37,7 @@ type DrawSource struct {
 	Reversed bool
 
 	vertexBuffer string
+	sourceFaces  []uint32
 }
 
 // DrawSource returns the draw behind meshID of a loaded viewer session.
@@ -75,7 +77,8 @@ func (d DrawSource) MatchesIB(value string) bool {
 // two parts drawn one after the other from the same index file are separate
 // draws. Meshes that are not frames of one sequence share a DrawKey only when
 // they draw over the same vertex buffer, and one frame binding several vertex
-// buffers leaves the sequence unconfirmed.
+// buffers leaves the sequence unconfirmed. Surface tracking can share a face
+// index only when the meshes kept the same original triangles after recovery.
 func linkModelViewerDrawSources(transport *ModelViewerTransport, sources map[string]DrawSource) {
 	conditions := make(map[string]ModelViewerDNF, len(transport.Meshes))
 	for _, mesh := range transport.Meshes {
@@ -128,17 +131,25 @@ func linkModelViewerDrawSources(transport *ModelViewerTransport, sources map[str
 		}
 	}
 
-	drawKeys := make(map[string]string)
+	type surfaceKey struct {
+		draw  string
+		faces [sha256.Size]byte
+	}
+	drawKeys := make(map[surfaceKey]string)
 	for index := range transport.Meshes {
 		mesh := &transport.Meshes[index]
 		draw, exists := meshDraws[mesh.ID]
 		if !exists {
 			continue
 		}
-		if _, exists := drawKeys[draw]; !exists {
-			drawKeys[draw] = "draw" + strconv.Itoa(len(drawKeys))
+		key := surfaceKey{draw: draw}
+		if faces := sources[mesh.ID].sourceFaces; len(faces) != 0 {
+			key.faces = sha256.Sum256(modelViewerUint32Bytes(faces))
 		}
-		mesh.DrawKey = drawKeys[draw]
+		if _, exists := drawKeys[key]; !exists {
+			drawKeys[key] = "draw" + strconv.Itoa(len(drawKeys))
+		}
+		mesh.DrawKey = drawKeys[key]
 	}
 }
 
@@ -168,12 +179,28 @@ func modelViewerExclusiveIBNames(
 	return names, true
 }
 
-// TriangleVertices reads the vertex indices of one draw triangle in index
-// buffer order, with BaseVertex already applied.
+// SourceFaceIndex maps a viewer face to the original draw before invalid
+// triangles were removed. The result is relative to StartIndex.
+func (d DrawSource) SourceFaceIndex(viewerFace int) (int, error) {
+	if viewerFace < 0 || d.sourceFaces != nil && viewerFace >= len(d.sourceFaces) {
+		return 0, fmt.Errorf("triangle %d is outside viewer mesh", viewerFace)
+	}
+	face := viewerFace
+	if d.sourceFaces != nil {
+		face = int(d.sourceFaces[viewerFace])
+	}
+	if !d.Auto && face >= d.IndexCount/3 {
+		return 0, fmt.Errorf("triangle %d is outside draw of %d indices", face, d.IndexCount)
+	}
+	return face, nil
+}
+
+// TriangleVertices reads a viewer triangle in original index buffer order,
+// with BaseVertex already applied.
 func (d DrawSource) TriangleVertices(face int) ([3]uint32, error) {
-	first := d.StartIndex + face*3
-	if face < 0 || (!d.Auto && face*3+3 > d.IndexCount) {
-		return [3]uint32{}, fmt.Errorf("triangle %d is outside draw of %d indices", face, d.IndexCount)
+	face, err := d.SourceFaceIndex(face)
+	if err != nil {
+		return [3]uint32{}, err
 	}
 	raw, err := os.ReadFile(d.IBPath)
 	if err != nil {
@@ -183,9 +210,10 @@ func (d DrawSource) TriangleVertices(face int) ([3]uint32, error) {
 	if err != nil {
 		return [3]uint32{}, fmt.Errorf("decode index buffer %q: %w", d.IBPath, err)
 	}
-	if first < 0 || first+3 > len(indices) {
+	if d.StartIndex < 0 || d.StartIndex > len(indices) || face >= (len(indices)-d.StartIndex)/3 {
 		return [3]uint32{}, fmt.Errorf("triangle %d is outside index buffer %q", face, d.IBPath)
 	}
+	first := d.StartIndex + face*3
 	var vertices [3]uint32
 	for corner := range vertices {
 		vertices[corner] = indices[first+corner] + uint32(d.BaseVertex)

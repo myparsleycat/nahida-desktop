@@ -575,6 +575,106 @@ func (f serviceFixture) applyInput(face int) ApplyInput {
 	}
 }
 
+func TestServiceApplyUsesOriginalFaceAfterViewerRecovery(t *testing.T) {
+	f := newServiceFixture(t)
+	ini := `[TextureOverrideBody]
+hash = 1234
+ib = ResourceBodyIB
+vb0 = ResourcePosition
+vb1 = ResourceTexcoord
+drawindexed = 6, 3, 0
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourcePosition]
+filename = position.buf
+stride = 40
+[ResourceTexcoord]
+filename = texcoord.buf
+stride = 20
+`
+	positions := make([]byte, 4*40)
+	binary.LittleEndian.PutUint32(positions, math.Float32bits(float32(math.NaN())))
+	for name, data := range map[string][]byte{
+		"mod.ini": []byte(ini), "position.buf": positions, "texcoord.buf": make([]byte, 4*20),
+	} {
+		if err := os.WriteFile(filepath.Join(f.modRoot, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	viewer := modelviewer.New()
+	result, err := viewer.LoadModViewer(context.Background(), f.modRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = viewer.Shutdown() })
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %v", result.Meshes)
+	}
+	f.service.viewer = viewer
+	input := f.applyInput(1)
+	input.ViewerSessionID, input.MeshID, input.FaceIndex = result.MemorySessionID, result.Meshes[0].ID, 0
+	inspection, err := f.service.Apply(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inspection.Emitters) != 1 {
+		t.Fatalf("emitters = %+v", inspection.Emitters)
+	}
+	pid := inspection.Emitters[0].PID
+	for edit := range 2 {
+		if _, err := viewer.CleanupModelViewer(context.Background(), result.MemorySessionID); err != nil {
+			t.Fatal(err)
+		}
+		result, err = viewer.LoadModViewer(context.Background(), f.modRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inspection, err = f.service.Inspect(context.Background(), f.modRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(inspection.Emitters) != 1 || inspection.Emitters[0].PID != pid {
+			t.Fatalf("restored emitters = %+v", inspection.Emitters)
+		}
+		anchor := inspection.Emitters[0].Anchor
+		input = ApplyInput{
+			ModPath: f.modRoot, ViewerSessionID: result.MemorySessionID, MeshID: anchor.MeshID,
+			FaceIndex: anchor.FaceIndex, FaceVertices: anchor.FaceVertices, Barycentric: anchor.Barycentric,
+			TrianglePositions: anchor.TrianglePositions, Point: anchor.Point,
+			Offset: []float64{0, 0, .02 + float64(edit)*.01}, Direction: []float64{.1, 0, -1}, PID: &pid,
+		}
+		inspection, err = f.service.Apply(context.Background(), input)
+		if err != nil {
+			t.Fatalf("reapply restored anchor: %v", err)
+		}
+		if len(inspection.Emitters) != 1 || inspection.Emitters[0].PID != pid ||
+			inspection.Emitters[0].Anchor.FaceIndex != 0 ||
+			!slices.Equal(inspection.Emitters[0].Anchor.Offset, input.Offset) ||
+			!slices.Equal(inspection.Emitters[0].Anchor.Direction, input.Direction) {
+			t.Fatalf("updated anchor = %+v", inspection.Emitters)
+		}
+	}
+	patched, err := os.ReadFile(f.iniPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(patched), "y243 = 6") || strings.Contains(string(patched), "y243 = 3") {
+		t.Fatalf("hook does not target original triangle:\n%s", patched)
+	}
+	key, err := readModMarker(f.modRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := readProfile(runtimeLayout{root: runtimeRootFor(f.modsRoot)}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Emitters) != 1 || doc.Emitters[0].FirstIndex != 6 || doc.Emitters[0].Anchor.FaceIndex != 0 {
+		t.Fatalf("stored profile = %+v", doc.Emitters)
+	}
+}
+
 func TestServiceApplyAndRemoveRestoreMod(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := context.Background()

@@ -50,8 +50,8 @@ type ModelViewerMeshTransport struct {
 	MaterialMapVariants []ModelViewerTextureVariant  `json:"materialMapVariants"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
 	PositionVariants    []ModelViewerPositionVariant `json:"positionVariants"`
-	// DrawKey is shared by the meshes the game draws with one INI draw call,
-	// such as the frames of a frame animation; empty when that draw is unknown.
+	// DrawKey groups meshes of one INI draw with matching viewer-to-source face
+	// indices for surface tracking; empty when that draw is unknown.
 	DrawKey string `json:"drawKey,omitempty"`
 }
 

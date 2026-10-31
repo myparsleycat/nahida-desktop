@@ -57,6 +57,7 @@ func prepareModelViewerPayload(
 				}
 				source := *mesh.drawSource
 				source.vertexBuffer = mesh.positionFile
+				source.sourceFaces = mesh.geometry.sourceFaces
 				prepared.drawSources[item.ID] = source
 			}
 		}

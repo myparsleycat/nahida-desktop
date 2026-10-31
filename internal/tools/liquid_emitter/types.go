@@ -81,7 +81,7 @@ const (
 
 // EmitterAnchor is the editor state of one emitter in source mesh space
 // (see Inspection.MeshDown). Point is the surface point before Offset is added; the face fields
-// keep the viewer corner order so the editor can apply the anchor again.
+// keep the viewer face index and corner order so the editor can apply the anchor again.
 type EmitterAnchor struct {
 	MeshID            string    `json:"meshId"`
 	FaceIndex         int       `json:"faceIndex"`

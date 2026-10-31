@@ -2,7 +2,9 @@ package modelviewer
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -11,11 +13,140 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
 )
+
+func TestLoadModViewerIgnoresIncompleteTriangleIndices(t *testing.T) {
+	for _, count := range []int{4, 5} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometry(t, dir)
+			indices := []uint32{0, 1, 2, 3, 4}[:count]
+			ini := "[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\n" +
+				"drawindexed = auto\n" + viewerBodyResources
+			for name, data := range map[string][]byte{
+				"mod.ini": []byte(ini), "body.ib": modelViewerUint32Bytes(indices),
+			} {
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fixture := loadViewerDir(t, dir)
+			if len(fixture.result.Meshes) != 1 {
+				t.Fatalf("meshes = %v", fixture.result.Meshes)
+			}
+			mesh := fixture.result.Meshes[0]
+			geometry := readViewerMesh(t, fixture.protocol, mesh.GeometryURL)
+			if !slices.Equal(geometry.Indices, []uint32{0, 1, 2}) || len(geometry.Positions) != 9 {
+				t.Fatalf("geometry = %+v", geometry)
+			}
+			source, ok := fixture.service.DrawSource(fixture.result.MemorySessionID, mesh.ID)
+			vertices, err := source.TriangleVertices(0)
+			if !ok || err != nil || vertices != [3]uint32{0, 1, 2} {
+				t.Fatalf("source vertices=%v found=%t err=%v", vertices, ok, err)
+			}
+			if raw, err := os.ReadFile(
+				filepath.Join(dir, "body.ib"),
+			); err != nil ||
+				!bytes.Equal(raw, modelViewerUint32Bytes(indices)) {
+				t.Fatalf("source indices changed: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadModViewerOmitsNonFiniteTriangles(t *testing.T) {
+	for _, attribute := range []string{"position", "tangent", "normal"} {
+		t.Run(attribute, func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometryN(t, dir, 32)
+			position := make([]byte, 32*40)
+			for vertex := range 32 {
+				binary.LittleEndian.PutUint32(position[vertex*40+16:], math.Float32bits(1))
+				binary.LittleEndian.PutUint32(position[vertex*40+24:], math.Float32bits(1))
+				binary.LittleEndian.PutUint32(position[vertex*40+36:], math.Float32bits(1))
+			}
+			binary.LittleEndian.PutUint32(position, math.Float32bits(float32(math.NaN())))
+			binary.LittleEndian.PutUint32(position[4*40:], math.Float32bits(1))
+			binary.LittleEndian.PutUint32(position[5*40+4:], math.Float32bits(1))
+			if attribute == "tangent" {
+				binary.LittleEndian.PutUint32(position[3*40+24:], math.Float32bits(float32(math.NaN())))
+			}
+			if attribute == "normal" {
+				binary.LittleEndian.PutUint32(position[3*40+16:], math.Float32bits(float32(math.Inf(1))))
+			}
+			ini := "[TextureOverrideBody]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\n" +
+				"drawindexed = 6, 0, 0\n" + viewerBodyResources
+			for name, data := range map[string][]byte{
+				"mod.ini": []byte(ini), "pos.buf": position,
+				"body.ib": modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+			} {
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var logs bytes.Buffer
+			protocol := infra.NewProtocol()
+			service := NewWithOptions(Options{
+				Protocol: protocol, Log: infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true}),
+			})
+			for _, load := range []func(context.Context, string) (ModelViewerTransport, error){
+				service.LoadModViewer, service.LoadModGridPreview,
+			} {
+				result, err := load(context.Background(), dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _, _ = service.CleanupModelViewer(context.Background(), result.MemorySessionID) })
+				if len(result.Meshes) != 1 {
+					t.Fatalf("meshes = %v", result.Meshes)
+				}
+				mesh := result.Meshes[0]
+				geometry := readViewerMesh(t, protocol, mesh.GeometryURL)
+				if !slices.Equal(geometry.Positions, []float32{0, 0, 0, 1, 0, 0, 0, 1, 0}) ||
+					!slices.Equal(geometry.Indices, []uint32{0, 1, 2}) {
+					t.Fatalf("geometry = %+v", geometry)
+				}
+				if mesh.Bounds == nil || mesh.Bounds.Min != [3]float64{} || mesh.Bounds.Max != [3]float64{1, 1, 0} {
+					t.Fatalf("bounds = %+v", mesh.Bounds)
+				}
+				if attribute == "position" && len(geometry.Tangents) != 12 ||
+					attribute != "position" && len(geometry.Tangents) != 0 {
+					t.Fatalf("tangents = %v", geometry.Tangents)
+				}
+				if attribute == "normal" && !slices.Equal(geometry.Normals, []float32{0, 0, 1, 0, 0, 1, 0, 0, 1}) {
+					t.Fatalf("generated normals = %v", geometry.Normals)
+				}
+				if sources := readModelViewerProtocolBytes(
+					t,
+					protocol,
+					mesh.SourceIndicesURL,
+				); !bytes.Equal(
+					sources,
+					modelViewerUint32Bytes([]uint32{3, 4, 5}),
+				) {
+					t.Fatalf("source indices = %v", sources)
+				}
+				source, ok := service.DrawSource(result.MemorySessionID, mesh.ID)
+				vertices, err := source.TriangleVertices(0)
+				if !ok || err != nil || vertices != [3]uint32{3, 4, 5} {
+					t.Fatalf("picked source vertices = %v, found = %t, err = %v", vertices, ok, err)
+				}
+			}
+			if !strings.Contains(logs.String(), `"removedTriangles":1`) ||
+				!strings.Contains(logs.String(), `"firstInvalidSourceVertex":0`) {
+				t.Fatalf("recovery diagnostics = %s", logs.String())
+			}
+			if raw, err := os.ReadFile(filepath.Join(dir, "pos.buf")); err != nil || !bytes.Equal(raw, position) {
+				t.Fatalf("source buffer changed: %v", err)
+			}
+		})
+	}
+}
 
 func TestLoadModViewerPreservesAuthoredNormalsAndTangents(t *testing.T) {
 	dir := t.TempDir()

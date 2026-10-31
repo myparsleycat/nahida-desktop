@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
@@ -459,6 +460,12 @@ func (t *Service) prepareModelViewerGeometry(
 	}
 
 	domains := collectModelViewerBindingDomains(prepared.sections)
+	recoveries := make(map[*modelViewerGeometry]*modelViewerGeometryRecovery)
+	defer func() {
+		if ctx.Err() == nil {
+			reportModelViewerGeometryRecoveries(t.log, recoveries)
+		}
+	}()
 	for unitIndex, unit := range units {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -479,6 +486,40 @@ func (t *Service) prepareModelViewerGeometry(
 		if buildErr != nil {
 			return nil, buildErr
 		}
+		validMeshes := meshes[:0]
+		for _, mesh := range meshes {
+			recovery := recoveries[mesh.geometry]
+			if recovery == nil {
+				geometry, stats, err := recoverModelViewerGeometry(ctx, mesh.geometry)
+				if err != nil {
+					return nil, fmt.Errorf("mesh %s geometry: %w", mesh.id, err)
+				}
+				recovery = &modelViewerGeometryRecovery{geometry: geometry, stats: stats}
+				recoveries[mesh.geometry] = recovery
+			}
+			if !slices.ContainsFunc(
+				recovery.iniPaths,
+				func(path string) bool { return platform.SamePathFold(path, iniPath) },
+			) {
+				recovery.iniPaths = append(recovery.iniPaths, iniPath)
+			}
+			positionPath := mesh.positionFile
+			if positionPath != "" && !filepath.IsAbs(positionPath) {
+				positionPath = filepath.Join(folder, filepath.FromSlash(positionPath))
+			}
+			if !slices.ContainsFunc(
+				recovery.positionPaths,
+				func(path string) bool { return platform.SamePathFold(path, positionPath) },
+			) {
+				recovery.positionPaths = append(recovery.positionPaths, positionPath)
+			}
+			recovery.meshIDs = append(recovery.meshIDs, mesh.id)
+			if recovery.geometry != nil {
+				mesh.geometry = recovery.geometry
+				validMeshes = append(validMeshes, mesh)
+			}
+		}
+		meshes = validMeshes
 		if slices.ContainsFunc(unit.members, func(member int) bool {
 			return detectModelViewerLayout(parsedINIs[member].Sections, resources) == "wwmi"
 		}) {

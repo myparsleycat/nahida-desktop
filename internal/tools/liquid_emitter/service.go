@@ -402,6 +402,10 @@ func (s *Service) apply(
 	target *int,
 	look *Look,
 ) error {
+	sourceFace, err := source.SourceFaceIndex(anchor.FaceIndex)
+	if err != nil {
+		return err
+	}
 	sc.stage = stageLoad
 	key, renumbered, err := s.ownedKey(sc, layout)
 	if err != nil {
@@ -498,7 +502,7 @@ func (s *Service) apply(
 	sc.fields["pid"], sc.applied = pid, &pid
 	drop := func(candidate int) bool { return replaced[candidate] }
 	text.removeHooks(drop)
-	firstIndex := source.StartIndex + anchor.FaceIndex*3
+	firstIndex := source.StartIndex + sourceFace*3
 	text.insertHooks(
 		text.drawSites(source),
 		pid, firstIndex, source.BaseVertex,

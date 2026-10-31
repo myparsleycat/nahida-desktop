@@ -1,9 +1,11 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"image/color"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +19,65 @@ import (
 type viewerCancelWriter struct {
 	cancel context.CancelFunc
 	marker string
+}
+
+func TestModelViewerLoadSkipsFullyInvalidMeshes(t *testing.T) {
+	for _, mixed := range []bool{false, true} {
+		name := "all invalid"
+		if mixed {
+			name = "with valid mesh"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeViewerGeometry(t, dir)
+			position := make([]byte, 8*40)
+			copy(position, modelViewerFloat32Bytes([]float32{float32(math.NaN())}))
+			ini := "[TextureOverrideBad]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\n" +
+				"drawindexed = 3, 0, 0\n" +
+				"[TextureOverrideAlsoBad]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\n" +
+				"drawindexed = 3, 0, 0\n"
+			if mixed {
+				ini += "[TextureOverrideGood]\nib = ResourceBodyIB\nvb0 = ResourcePos\nvb1 = ResourceTc\n" +
+					"drawindexed = 3, 3, 0\n"
+			}
+			ini += viewerBodyResources
+			for name, data := range map[string][]byte{
+				"mod.ini": []byte(ini), "pos.buf": position,
+				"body.ib": modelViewerUint32Bytes([]uint32{0, 1, 2, 3, 4, 5}),
+			} {
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var logs bytes.Buffer
+			protocol := infra.NewProtocol()
+			service := NewWithOptions(Options{
+				Protocol: protocol, Log: infra.NewLogWithOptions(infra.LogOptions{Writer: &logs, DisableFile: true}),
+			})
+			result, err := service.LoadModViewer(context.Background(), dir)
+			if mixed {
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _, _ = service.CleanupModelViewer(context.Background(), result.MemorySessionID) })
+				if len(result.Meshes) != 1 || result.Meshes[0].Component != "Good" {
+					t.Fatalf("surviving meshes = %v", result.Meshes)
+				}
+			}
+			if !mixed {
+				if err == nil || !strings.Contains(err.Error(), "No mesh data could be extracted") {
+					t.Fatalf("empty recovery error = %v", err)
+				}
+				if len(service.modelViewerSessions) != 0 ||
+					reflect.ValueOf(protocol).Elem().FieldByName("sessions").Len() != 0 {
+					t.Fatal("failed recovery retained a session")
+				}
+			}
+			if strings.Count(logs.String(), "Skipped invalid model viewer geometry data") != 1 {
+				t.Fatalf("shared geometry diagnostics were duplicated: %s", logs.String())
+			}
+		})
+	}
 }
 
 func (w viewerCancelWriter) Write(p []byte) (int, error) {

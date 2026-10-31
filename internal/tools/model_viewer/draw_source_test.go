@@ -1,9 +1,81 @@
 package modelviewer
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
+
+func TestLinkDrawSourcesSeparatesRecoveredFaceMappings(t *testing.T) {
+	transport := ModelViewerTransport{}
+	sources := make(map[string]DrawSource)
+	for _, frame := range []struct {
+		id    string
+		faces []uint32
+	}{
+		{id: "damaged", faces: []uint32{1, 2}},
+		{id: "same", faces: []uint32{1, 2}},
+		{id: "different", faces: []uint32{0, 2}},
+		{id: "clean"},
+	} {
+		transport.Meshes = append(transport.Meshes, ModelViewerMeshTransport{
+			ID: frame.id, Conditions: ModelViewerDNF{{{Var: "frame", Value: frame.id}}},
+		})
+		sources[frame.id] = DrawSource{
+			INIPath: `C:\mod\mod.ini`, Section: "Body", IB: frame.id, IBPath: `C:\mod\body.ib`,
+			IBFormat: "DXGI_FORMAT_R32_UINT", IndexCount: 9,
+			vertexBuffer: frame.id + ".buf", sourceFaces: frame.faces,
+		}
+	}
+	linkModelViewerDrawSources(&transport, sources)
+	keys := make(map[string]string)
+	for _, mesh := range transport.Meshes {
+		keys[mesh.ID] = mesh.DrawKey
+	}
+	if keys["damaged"] == "" || keys["damaged"] != keys["same"] || keys["damaged"] == keys["different"] ||
+		keys["damaged"] == keys["clean"] || keys["different"] == keys["clean"] {
+		t.Fatalf("incompatible frame surfaces share draw keys: %v", keys)
+	}
+	for _, source := range sources {
+		if !slices.Equal(source.IBAliases, []string{"clean", "damaged", "different", "same"}) {
+			t.Fatalf("surface grouping changed game draw aliases: %v", source.IBAliases)
+		}
+	}
+}
+
+func TestDrawSourceMapsRecoveredFacesWithinDrawBounds(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "body.ib")
+	if err := os.WriteFile(path, modelViewerUint32Bytes([]uint32{99, 99, 99, 0, 1, 2, 3, 4, 5}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source := DrawSource{
+		IBPath: path, IBFormat: "DXGI_FORMAT_R32_UINT", StartIndex: 3, IndexCount: 6, BaseVertex: 10,
+		sourceFaces: []uint32{1}, Reversed: true,
+	}
+	if face, err := source.SourceFaceIndex(0); err != nil || face != 1 {
+		t.Fatalf("source face=%d err=%v", face, err)
+	}
+	if vertices, err := source.TriangleVertices(0); err != nil || vertices != [3]uint32{13, 14, 15} {
+		t.Fatalf("source vertices=%v err=%v", vertices, err)
+	}
+	for _, face := range []int{-1, 1} {
+		if _, err := source.SourceFaceIndex(face); err == nil {
+			t.Fatalf("accepted viewer face %d", face)
+		}
+	}
+	source.sourceFaces = nil
+	if face, err := source.SourceFaceIndex(1); err != nil || face != 1 {
+		t.Fatalf("identity face=%d err=%v", face, err)
+	}
+	if _, err := source.SourceFaceIndex(2); err == nil {
+		t.Fatal("accepted face beyond explicit draw")
+	}
+	source.Auto = true
+	if _, err := source.TriangleVertices(2); err == nil {
+		t.Fatal("accepted face beyond auto index buffer")
+	}
+}
 
 func TestLinkDrawSourcesAliasesOnlyExclusiveFrames(t *testing.T) {
 	draw := func(section, ib, vb string) DrawSource {
