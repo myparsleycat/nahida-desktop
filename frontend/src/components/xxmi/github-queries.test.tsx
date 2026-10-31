@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { XXMI } from "@bindings/xxmi";
+import { useXXMIUpdates } from "@renderer/hooks/use-xxmi-updates";
 import {
   QueryClient,
   QueryClientProvider,
@@ -11,12 +12,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useXXMIUpdates } from "./xxmi-importer-list";
-
 vi.mock("@bindings/xxmi", () => ({ XXMI: { CheckUpdates: vi.fn() } }));
-vi.mock("@renderer/hooks/use-launch-guard", () => ({ useLaunchGuard: vi.fn() }));
-vi.mock("@renderer/components/game-icon", () => ({ GameIcon: () => null }));
-vi.mock("@wailsio/runtime", () => ({ Events: { On: vi.fn() } }));
 
 let client: QueryClient;
 let now: number;

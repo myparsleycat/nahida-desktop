@@ -3,13 +3,14 @@ import { XXMI } from "@bindings/xxmi";
 import { GameIcon } from "@renderer/components/game-icon";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
-import { XXMIUpdateDialog, type UpdateStatus } from "@renderer/components/xxmi/xxmi-update-dialog";
+import { XXMIUpdateDialog } from "@renderer/components/xxmi/xxmi-update-dialog";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
+import { installableUpdates, useXXMIUpdates } from "@renderer/hooks/use-xxmi-updates";
 import { cn } from "@renderer/lib/utils";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { partition, uniqBy } from "es-toolkit";
+import { partition } from "es-toolkit";
 import {
   ChevronRightIcon,
   CircleArrowUpIcon,
@@ -251,23 +252,5 @@ export function XXMIImporterList() {
       />
       {launchGuardDialog}
     </aside>
-  );
-}
-
-export function useXXMIUpdates(enabled: boolean) {
-  return useQuery({
-    queryKey: ["xxmi:updates"],
-    queryFn: () => XXMI.CheckUpdates(false),
-    enabled,
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  }).data;
-}
-
-// A shared package appears once per importer; only unpinned ones can be installed in bulk.
-export function installableUpdates(updates: UpdateStatus[] | null | undefined) {
-  return uniqBy(
-    updates?.filter((entry) => entry.available && !entry.pinned) ?? [],
-    (entry) => entry.package,
   );
 }

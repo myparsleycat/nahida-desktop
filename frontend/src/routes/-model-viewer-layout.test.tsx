@@ -60,6 +60,9 @@ vi.mock("@renderer/components/titlebar/use-texture-resizer-titlebar-activity", (
 vi.mock("@renderer/components/titlebar/use-transfer-titlebar-activity", () => ({
   useTransferTitlebarActivity: vi.fn(),
 }));
+vi.mock("@renderer/components/titlebar/use-xxmi-titlebar-activity", () => ({
+  useXXMITitlebarActivity: vi.fn(),
+}));
 vi.mock("@renderer/components/titlebar/use-elevated-helper", () => ({
   useElevatedHelper: vi.fn(() => null),
 }));

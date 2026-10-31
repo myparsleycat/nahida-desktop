@@ -13,6 +13,7 @@ import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-
 import { useModCompressionTitlebarActivity } from "@renderer/components/titlebar/use-mod-compression-titlebar-activity";
 import { useTextureResizerTitlebarActivity } from "@renderer/components/titlebar/use-texture-resizer-titlebar-activity";
 import { useTransferTitlebarActivity } from "@renderer/components/titlebar/use-transfer-titlebar-activity";
+import { useXXMITitlebarActivity } from "@renderer/components/titlebar/use-xxmi-titlebar-activity";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
@@ -77,6 +78,7 @@ function RootComponent() {
   useModCompressionTitlebarActivity();
   useTextureResizerTitlebarActivity();
   useModFixInspectionTitlebarActivity();
+  useXXMITitlebarActivity();
 
   useDownloadArchiveExtractPromptHandler();
 

@@ -3235,6 +3235,13 @@
       "modBisect": {
         "running": "二分排查中"
       },
+      "xxmi": {
+        "updates": "XXMI 更新",
+        "updateFailed": "XXMI 更新失败",
+        "updateFailedTooltip": "启动时自动更新失败。下次启动时将重试。",
+        "modRuntimesFailed": "运行时更新失败",
+        "modRuntimesFailedTooltip": "启动时运行时自动更新失败。下次启动时将重试。"
+      },
       "textureResizer": {
         "resizing": "正在调整纹理大小",
         "upscaling": "正在放大纹理",

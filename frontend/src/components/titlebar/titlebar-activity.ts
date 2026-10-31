@@ -14,6 +14,7 @@ import { formatSize } from "@shared/utils";
 import {
     ArchiveIcon,
     ArrowUpDownIcon,
+    CircleArrowUpIcon,
     GitCompareIcon,
     ScalingIcon,
     ShieldAlertIcon,
@@ -257,6 +258,58 @@ export function buildModCompressionTitlebarActivity(
         progress: progress === undefined ? undefined : Math.min(100, progress),
         order: 25,
         href: "/setting/mod",
+    };
+}
+
+export function buildXXMIUpdatesTitlebarActivity(
+    count: number,
+    t: Translate,
+): TitlebarActivity | null {
+    if (count === 0) return null;
+
+    return {
+        id: "xxmi:updates",
+        label: t("titlebar.activity.xxmi.updates"),
+        status: "warning",
+        icon: CircleArrowUpIcon,
+        detail: String(count),
+        tooltip: t("page.setting.xxmi.builtin.updatesPending", { count }),
+        order: 40,
+        href: "/xxmi",
+    };
+}
+
+export type XXMIFailedStage = "auto-update" | "mod-runtimes";
+
+export function buildXXMIUpdateFailureTitlebarActivity(
+    failures: Record<string, XXMIFailedStage[]>,
+    t: Translate,
+): TitlebarActivity | null {
+    const importers = Object.keys(failures);
+    if (importers.length === 0) return null;
+
+    const stages = Object.values(failures).flat();
+    const updateFailed = stages.includes("auto-update");
+    const tooltips = [
+        ...(updateFailed ? [t("titlebar.activity.xxmi.updateFailedTooltip")] : []),
+        ...(stages.includes("mod-runtimes")
+            ? [t("titlebar.activity.xxmi.modRuntimesFailedTooltip")]
+            : []),
+    ];
+
+    return {
+        id: "xxmi:update-failure",
+        label: t(
+            updateFailed
+                ? "titlebar.activity.xxmi.updateFailed"
+                : "titlebar.activity.xxmi.modRuntimesFailed",
+        ),
+        status: "error",
+        icon: CircleArrowUpIcon,
+        detail: importers.join(", "),
+        tooltip: tooltips.join(" "),
+        order: 3,
+        href: importers.length === 1 ? `/xxmi/${importers[0]}` : "/xxmi",
     };
 }
 

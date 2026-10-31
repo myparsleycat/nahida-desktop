@@ -5,6 +5,8 @@ import {
     buildModCompressionTitlebarActivity,
     buildModFixTitlebarActivity,
     buildTransferTitlebarActivity,
+    buildXXMIUpdateFailureTitlebarActivity,
+    buildXXMIUpdatesTitlebarActivity,
 } from "@renderer/components/titlebar/titlebar-activity";
 import { ELEVATED_HELPER_ACTIVITY_ID } from "@shared/elevated-helper";
 import type { TransferWithoutData } from "@shared/types";
@@ -380,6 +382,50 @@ describe("buildModFixTitlebarActivity", () => {
         });
 
         expect(activity.detail).toBe("Skimpier…");
+    });
+});
+
+describe("XXMI titlebar activities", () => {
+    it("builds nothing without updates or failures", () => {
+        expect(buildXXMIUpdatesTitlebarActivity(0, t)).toBeNull();
+        expect(buildXXMIUpdateFailureTitlebarActivity({}, t)).toBeNull();
+    });
+
+    it("links a failure to its importer, and several failures to the manage page", () => {
+        expect(buildXXMIUpdateFailureTitlebarActivity({ GIMI: ["auto-update"] }, t)).toMatchObject({
+            status: "error",
+            detail: "GIMI",
+            href: "/xxmi/GIMI",
+        });
+        expect(
+            buildXXMIUpdateFailureTitlebarActivity(
+                { GIMI: ["auto-update"], ZZMI: ["mod-runtimes"] },
+                t,
+            ),
+        ).toMatchObject({
+            detail: "GIMI, ZZMI",
+            href: "/xxmi",
+        });
+    });
+
+    it("names only the stages that failed", () => {
+        expect(buildXXMIUpdateFailureTitlebarActivity({ GIMI: ["auto-update"] }, t)).toMatchObject({
+            label: "titlebar.activity.xxmi.updateFailed",
+            tooltip: "titlebar.activity.xxmi.updateFailedTooltip",
+        });
+        expect(buildXXMIUpdateFailureTitlebarActivity({ GIMI: ["mod-runtimes"] }, t)).toMatchObject(
+            {
+                label: "titlebar.activity.xxmi.modRuntimesFailed",
+                tooltip: "titlebar.activity.xxmi.modRuntimesFailedTooltip",
+            },
+        );
+        expect(
+            buildXXMIUpdateFailureTitlebarActivity({ GIMI: ["auto-update", "mod-runtimes"] }, t),
+        ).toMatchObject({
+            label: "titlebar.activity.xxmi.updateFailed",
+            tooltip:
+                "titlebar.activity.xxmi.updateFailedTooltip titlebar.activity.xxmi.modRuntimesFailedTooltip",
+        });
     });
 });
 

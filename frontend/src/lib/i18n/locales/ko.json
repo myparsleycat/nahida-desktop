@@ -3235,6 +3235,13 @@
       "modBisect": {
         "running": "이진 탐색 중"
       },
+      "xxmi": {
+        "updates": "XXMI 업데이트",
+        "updateFailed": "XXMI 업데이트 실패",
+        "updateFailedTooltip": "실행 중 자동 업데이트에 실패했습니다. 다음 실행 때 다시 시도합니다.",
+        "modRuntimesFailed": "런타임 업데이트 실패",
+        "modRuntimesFailedTooltip": "실행 중 런타임 자동 업데이트에 실패했습니다. 다음 실행 때 다시 시도합니다."
+      },
       "textureResizer": {
         "resizing": "텍스처 리사이즈 중",
         "upscaling": "텍스처 업스케일 중",

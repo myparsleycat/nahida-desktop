@@ -190,6 +190,9 @@ func (x *XXMI) launchBuiltinGameLocked(
 	processName := launchProcessName(cfg, packageSpec, gameExe)
 	progress("auto-update")
 	if err := x.autoUpdateForLaunch(ctx, key, lease); err != nil {
+		if infra.IsCancellationError(err) {
+			return err
+		}
 		_ = infra.ReportError(x.log, err, "XXMI.StartGame", infra.Diagnostic{
 			Severity: infra.DiagnosticWarn, Operation: "launch-game", Stage: stage,
 			Fields: map[string]any{"importer": key},

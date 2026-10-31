@@ -3240,6 +3240,13 @@
       "modBisect": {
         "running": "Running bisect"
       },
+      "xxmi": {
+        "updates": "XXMI updates",
+        "updateFailed": "XXMI update failed",
+        "updateFailedTooltip": "Automatic update failed during launch. It will be retried on the next launch.",
+        "modRuntimesFailed": "Runtime update failed",
+        "modRuntimesFailedTooltip": "Runtime auto update failed during launch. It will be retried on the next launch."
+      },
       "textureResizer": {
         "resizing": "Resizing texture",
         "upscaling": "Upscaling texture",

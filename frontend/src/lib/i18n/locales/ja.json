@@ -3235,6 +3235,13 @@
       "modBisect": {
         "running": "バイセクト中"
       },
+      "xxmi": {
+        "updates": "XXMI 更新",
+        "updateFailed": "XXMI 更新失敗",
+        "updateFailedTooltip": "起動中の自動更新に失敗しました。次回の起動時に再試行します。",
+        "modRuntimesFailed": "ランタイム更新失敗",
+        "modRuntimesFailedTooltip": "起動中のランタイム自動更新に失敗しました。次回の起動時に再試行します。"
+      },
       "textureResizer": {
         "resizing": "テクスチャリサイズ中",
         "upscaling": "テクスチャアップスケール中",

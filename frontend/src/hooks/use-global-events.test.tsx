@@ -130,6 +130,17 @@ it("refilters fresh active and inactive release lists when the persisted prerele
   expect(events.listeners.has("setting:update")).toBe(false);
 });
 
+it.each(["finish", "failed"])("rechecks updates after a launch reaches %s", async (stage) => {
+  renderHook(() => useGlobalEvents(), { wrapper });
+  client.setQueryData(["xxmi:updates"], []);
+
+  await act(async () => {
+    events.listeners.get("xxmi:launch-progress")?.({ data: { importer: "GIMI", stage } });
+  });
+
+  expect(client.getQueryState(["xxmi:updates"])?.isInvalidated).toBe(true);
+});
+
 it("ignores unrelated or malformed setting events", async () => {
   renderHook(() => useGlobalEvents(), { wrapper });
   const lists = renderHook(useReleaseLists, { wrapper });

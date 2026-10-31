@@ -33,9 +33,9 @@ import {
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
 import { XXMIImportDialog } from "@renderer/components/xxmi/xxmi-import-dialog";
-import { installableUpdates, useXXMIUpdates } from "@renderer/components/xxmi/xxmi-importer-list";
 import { XXMILaunchGuardSettings } from "@renderer/components/xxmi/xxmi-launch-guard-settings";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { installableUpdates, useXXMIUpdates } from "@renderer/hooks/use-xxmi-updates";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
 import { toErrorMessage } from "@shared/utils";
