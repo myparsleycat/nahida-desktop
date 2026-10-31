@@ -26,15 +26,29 @@ func TestLoadModViewerMatchesSharedAtlasToUVSeams(t *testing.T) {
 		helperRole     string
 		wrongSize      int
 		correctSize    int
+		prefix         string
+		partialMatch   bool
+		budgetPressure bool
 		want           string
 	}{
 		{name: "inferred atlas", inconsistent: true, want: correct},
 		{name: "smaller atlas", inconsistent: true, wrongSize: 2048, correctSize: 1024, want: correct},
+		{name: "renamed atlas", inconsistent: true, prefix: "角色界面", want: correct},
+		{name: "renamed atlas before redundant dumps", inconsistent: true, prefix: "角色界面", budgetPressure: true, want: correct},
+		{
+			name: "renamed atlas replaces small shared effect", inconsistent: true,
+			wrongSize: 512, correctSize: 1024, prefix: "角色界面", partialMatch: true, want: correct,
+		},
+		{
+			name: "different atlas sizes need stronger evidence", inconsistent: true,
+			wrongSize: 1024, correctSize: 2048, prefix: "角色界面", partialMatch: true, want: wrong,
+		},
 		{name: "small helper map", inconsistent: true, wrongSize: 1024, correctSize: 512, want: wrong},
 		{name: "ambiguous atlases", want: wrong},
 		{name: "blank candidate", inconsistent: true, blankCandidate: true, want: wrong},
 		{name: "blank seams with non-seam color variation", inconsistent: true, blankSeams: true, want: wrong},
 		{name: "no UV seams", inconsistent: true, noSeams: true, want: wrong},
+		{name: "renamed atlas without UV seams", inconsistent: true, noSeams: true, prefix: "角色界面", want: wrong},
 		{name: "authored atlas", inconsistent: true, binding: `Resource\WWMI\Diffuse = ref ResourceWrong`, want: wrong},
 		{
 			name: "authored light map", inconsistent: true,
@@ -52,6 +66,11 @@ func TestLoadModViewerMatchesSharedAtlasToUVSeams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			correctFile := strings.Replace(correct, "/Components-", "/"+tt.prefix+"Components-", 1)
+			want := tt.want
+			if want == correct {
+				want = correctFile
+			}
 			dir := t.TempDir()
 			vertexCount := 64
 			if tt.blankSeams {
@@ -83,6 +102,15 @@ func TestLoadModViewerMatchesSharedAtlasToUVSeams(t *testing.T) {
 			for index := vertexCount; index < len(indices); index++ {
 				indices[index] = uint32(vertexCount - 1)
 			}
+			decoyResources := ""
+			if tt.budgetPressure {
+				decoyResources = `
+[ResourceDecoyA]
+filename = Textures/Components-0-1-2-3 t=33333333.dds
+[ResourceDecoyB]
+filename = Textures/Components-0-1-2-3-4 t=44444444.dds
+`
+			}
 			for name, data := range map[string][]byte{
 				"pos.buf": position,
 				"vec.buf": vector,
@@ -99,8 +127,9 @@ vb2 = ResourceTexcoordBuffer
 drawindexed = ` + modelViewerString(len(indices)) + `, 0, 0
 [ResourceWrong]
 filename = ` + wrong + `
+` + decoyResources + `
 [ResourceCorrect]
-filename = ` + correct + `
+filename = ` + correctFile + `
 [ResourceIndexBuffer]
 filename = body.ib
 format = DXGI_FORMAT_R32_UINT
@@ -119,12 +148,12 @@ stride = 16
 					t.Fatal(err)
 				}
 			}
-			for _, file := range []string{wrong, correct} {
+			for _, file := range []string{wrong, correctFile} {
 				size := 64
 				if file == wrong && tt.wrongSize != 0 {
 					size = tt.wrongSize
 				}
-				if file == correct && tt.correctSize != 0 {
+				if file == correctFile && tt.correctSize != 0 {
 					size = tt.correctSize
 				}
 				pixels := make([]color.NRGBA, size*size)
@@ -132,10 +161,14 @@ stride = 16
 					for column := range size {
 						x, y := column*64/size, row*64/size
 						pixel := color.NRGBA{R: uint8(40 + y*3), G: uint8(30 + y*2), B: 70, A: 255}
-						if file == correct && (tt.blankCandidate || tt.blankSeams && (x < 16 || x >= 48)) {
+						if file == correctFile && (tt.blankCandidate || tt.blankSeams && (x < 16 || x >= 48)) {
 							pixel = color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 						}
 						if file == wrong && tt.inconsistent && x >= 32 {
+							pixel.R = 255 - pixel.R
+							pixel.G = 255 - pixel.G
+						}
+						if file == correctFile && tt.partialMatch && x >= 32 && y < 16 {
 							pixel.R = 255 - pixel.R
 							pixel.G = 255 - pixel.G
 						}
@@ -144,12 +177,32 @@ stride = 16
 				}
 				writeTextureFile(t, dir, file, encodeWwmiBC1MipDDS(t, size, size, pixels))
 			}
+			if tt.budgetPressure {
+				data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(wrong)))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// Padding charges the input byte budget without allocating large decoded atlases.
+				for _, file := range []string{
+					"Textures/Components-0-1-2-3 t=33333333.dds",
+					"Textures/Components-0-1-2-3-4 t=44444444.dds",
+				} {
+					writeTextureFile(t, dir, file, data)
+					if err := os.Truncate(filepath.Join(dir, filepath.FromSlash(file)), 12*1024*1024); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.Truncate(filepath.Join(dir, filepath.FromSlash(correctFile)), 24*1024*1024); err != nil {
+					t.Fatal(err)
+				}
+			}
 			fixture := loadViewerDir(t, dir)
 			if len(fixture.result.Meshes) != 1 {
 				t.Fatalf("meshes = %d, want 1", len(fixture.result.Meshes))
 			}
-			if got := texKey(fixture.result.Meshes[0]); !strings.Contains(got, tt.want) {
-				t.Fatalf("texture = %q, want %q", got, tt.want)
+			if got := texKey(fixture.result.Meshes[0]); !strings.Contains(got, want) {
+				t.Fatalf("texture = %q, want %q", got, want)
 			}
 			if tt.helperRole != "" {
 				mesh := fixture.result.Meshes[0]
@@ -158,8 +211,8 @@ stride = 16
 					"normal_map":   mesh.NormalMapKey,
 					"material_map": mesh.MaterialMapKey,
 				}[tt.helperRole]
-				if key == nil || !strings.Contains(*key, correct) {
-					t.Fatalf("%s texture = %v, want %q", tt.helperRole, key, correct)
+				if key == nil || !strings.Contains(*key, correctFile) {
+					t.Fatalf("%s texture = %v, want %q", tt.helperRole, key, correctFile)
 				}
 			}
 		})

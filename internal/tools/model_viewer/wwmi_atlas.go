@@ -7,7 +7,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"sort"
 	"strings"
 
 	"nahida.live/desktop/internal/diskio"
@@ -20,6 +22,8 @@ const (
 
 	minWwmiResizedAtlasArea = 1024 * 1024
 )
+
+var wwmiAtlasTexRE = regexp.MustCompile(`(?i)(?:^|[/\\])[^/\\]*?Components-(\d+(?:-\d+)*)\s+t=`)
 
 type wwmiAtlasSamples struct {
 	uvs   [][2]float32
@@ -56,6 +60,14 @@ func refineWwmiDumpAtlases(
 		pixels *image.NRGBA
 	}
 	cache := make(map[string]atlas)
+
+	// Renamed atlases did not participate in the initial dump selection. Inspect
+	// them first so already-considered dumps cannot exhaust the decode budget.
+	resources = slices.Clone(resources)
+	sort.SliceStable(resources, func(i, j int) bool {
+		return !wwmiDumpTexRE.MatchString(slashPath(resources[i].Filename)) &&
+			wwmiDumpTexRE.MatchString(slashPath(resources[j].Filename))
+	})
 	remaining := int64(maxWwmiRecoveryBytes)
 	inspect := func(file string) atlas {
 		if found, ok := cache[file]; ok {
@@ -109,7 +121,7 @@ func refineWwmiDumpAtlases(
 		threshold, resizedThreshold := bestScore*0.65, bestScore*0.25
 		bestFile, bestResource := currentFile, ""
 		for _, resource := range resources {
-			match := wwmiDumpTexRE.FindStringSubmatch(slashPath(resource.Filename))
+			match := wwmiAtlasTexRE.FindStringSubmatch(slashPath(resource.Filename))
 			if match == nil || resource.Filename == currentFile || len(strings.Split(match[1], "-")) <= 1 ||
 				!slices.Contains(strings.Split(match[1], "-"), wwmiComponentIndex(group[0].component)) ||
 				slices.ContainsFunc(group, func(mesh *modelViewerDirectMesh) bool {
@@ -129,15 +141,17 @@ func refineWwmiDumpAtlases(
 				continue
 			}
 
-			// A larger shared map outranks the part's own atlas on resolution alone.
-			// Smooth ramps and matcaps also pass as continuous, so crossing sizes takes
-			// a decisive difference and a map large enough to be an atlas.
+			// Small shared effects need only the usual UV evidence to yield to an
+			// atlas. Competing atlas sizes need a stronger match, and small ramps
+			// and matcaps must not displace an atlas.
 			limit := threshold
 			if candidate.hint.Area != current.hint.Area {
 				if candidate.hint.Area < minWwmiResizedAtlasArea {
 					continue
 				}
-				limit = resizedThreshold
+				if current.hint.Area >= minWwmiResizedAtlasArea {
+					limit = resizedThreshold
+				}
 			}
 			if score, ok := samples.score(candidate.pixels); ok && score < limit && score < bestScore {
 				bestScore, bestFile, bestResource = score, resource.Filename, resource.Name
