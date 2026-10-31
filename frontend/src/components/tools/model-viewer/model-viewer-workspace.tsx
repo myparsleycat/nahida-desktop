@@ -950,7 +950,7 @@ function FormSwitcher({
       : selected.label;
 
   return (
-    <div className="absolute top-3 left-3 z-[5] max-w-[calc(100%-1.5rem)]">
+    <div className="absolute top-3 left-3 z-[5] max-w-[calc(100%-2.25rem-88px)]">
       <Select
         value={value || ALL_FORMS_OPTION}
         onValueChange={(next) =>

@@ -31,6 +31,7 @@ import {
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
+  Spherical,
   SRGBColorSpace,
   Texture,
   Vector3,
@@ -47,6 +48,11 @@ import type {
   ModelViewerSurfaceProps,
 } from "./model-viewer-contract";
 
+import {
+  ModelViewerAxisGizmo,
+  type ModelViewerAxisGizmoHandle,
+  type ModelViewerAxisView,
+} from "./model-viewer-axis-gizmo";
 import { ModelViewerComputeController } from "./model-viewer-compute-controller";
 import { parseOrientation } from "./model-viewer-contract";
 import { getModelViewerTextureCapabilities } from "./model-viewer-dds";
@@ -85,11 +91,23 @@ type BodyShapeBaseline = {
 
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
+type ThreeModelController = ModelViewerHandle & {
+  viewAlongAxis: (view: ModelViewerAxisView) => void;
+};
+
+type AxisViewTurn = {
+  phi: number;
+  started: boolean;
+  theta: number;
+};
+
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
 const SMOOTH_ZOOM_DAMPING = 0.16;
 const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
 const SMOOTH_ZOOM_MAX_DELTA = 1 / 30;
+const AXIS_VIEW_TURN_DAMPING = 0.2;
+const AXIS_VIEW_TURN_EPSILON = 0.001;
 const INTERACTIVE_COMMIT_WINDOW_MS = 150;
 const modelViewerRenderer = createThreeRenderer({
   mode: "webgl",
@@ -147,7 +165,8 @@ export const ThreeModelViewer = memo(
     },
     ref,
   ) {
-    const controllerRef = useRef<ModelViewerHandle | null>(null);
+    const controllerRef = useRef<ThreeModelController | null>(null);
+    const axisGizmoRef = useRef<ModelViewerAxisGizmoHandle | null>(null);
 
     useImperativeHandle(
       ref,
@@ -169,7 +188,11 @@ export const ThreeModelViewer = memo(
     const lighting = useMemo(() => modelViewerLighting(threeEnvironment), [threeEnvironment]);
 
     return (
-      <div className={cn("h-full w-full", className)}>
+      <div className={cn("relative h-full w-full", className)}>
+        <ModelViewerAxisGizmo
+          ref={axisGizmoRef}
+          onSelect={(view) => controllerRef.current?.viewAlongAxis(view)}
+        />
         <Canvas
           frameloop="demand"
           style={{ background: "transparent" }}
@@ -199,6 +222,7 @@ export const ThreeModelViewer = memo(
             position={MODEL_VIEWER_FILL_LIGHT_POSITION}
           />
           <ThreeModelScene
+            axisGizmoRef={axisGizmoRef}
             controllerRef={controllerRef}
             animationClip={animationClip}
             animationFrame={animationFrame}
@@ -228,6 +252,7 @@ export const ThreeModelViewer = memo(
 );
 
 function ThreeModelScene({
+  axisGizmoRef,
   controllerRef,
   animationClip,
   animationFrame,
@@ -250,9 +275,11 @@ function ThreeModelScene({
   onVisibleMeshesChange,
   overlay,
 }: ModelViewerSurfaceProps & {
-  controllerRef: MutableRefObject<ModelViewerHandle | null>;
+  axisGizmoRef: MutableRefObject<ModelViewerAxisGizmoHandle | null>;
+  controllerRef: MutableRefObject<ThreeModelController | null>;
 }) {
   const { camera, gl, invalidate, scene } = useThree();
+  const axisViewTurnRef = useRef<AxisViewTurn | null>(null);
   const [modelRoot, setModelRoot] = useState<Object3D | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const groupRef = useRef<Group | null>(null);
@@ -768,6 +795,7 @@ function ThreeModelScene({
       captureSquarePngBlob: () => captureSquareCanvasPngBlob(gl.domElement, renderNow),
       captureSquarePngDataUrl: () => captureSquareCanvasPngDataUrl(gl.domElement, renderNow),
       restoreCameraState: (state, options) => {
+        axisViewTurnRef.current = null;
         restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options);
         desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
           camera,
@@ -799,6 +827,7 @@ function ThreeModelScene({
         applyPayloadVisualsRef.current();
       },
       updateFraming: async () => {
+        axisViewTurnRef.current = null;
         const center = await fitCameraToObject({
           camera,
           controls: controlsRef.current,
@@ -809,6 +838,10 @@ function ThreeModelScene({
           camera,
           controlsRef.current,
         );
+        invalidate();
+      },
+      viewAlongAxis: (view) => {
+        axisViewTurnRef.current = { phi: view.phi, started: false, theta: view.theta };
         invalidate();
       },
     };
@@ -860,6 +893,33 @@ function ThreeModelScene({
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
+    const turn = axisViewTurnRef.current;
+    if (!controls || !turn) {
+      return;
+    }
+
+    const spherical = new Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    const thetaError =
+      MathUtils.euclideanModulo(turn.theta - spherical.theta + Math.PI, Math.PI * 2) - Math.PI;
+    const phiError = turn.phi - spherical.phi;
+    const turnDelta = turn.started ? delta : Math.min(delta, SMOOTH_ZOOM_MAX_DELTA);
+    turn.started = true;
+
+    const finished =
+      Math.abs(thetaError) < AXIS_VIEW_TURN_EPSILON && Math.abs(phiError) < AXIS_VIEW_TURN_EPSILON;
+    const step = finished ? 1 : 1 - Math.pow(1 - AXIS_VIEW_TURN_DAMPING, turnDelta * 60);
+    spherical.theta += thetaError * step;
+    spherical.phi += phiError * step;
+    camera.position.setFromSpherical(spherical).add(controls.target);
+    controls.update();
+    if (finished) {
+      axisViewTurnRef.current = null;
+    }
+    invalidate();
+  });
+
+  useFrame((_, delta) => {
+    const controls = controlsRef.current;
     const desiredDistance = desiredCameraDistanceRef.current;
     if (!(camera instanceof PerspectiveCamera) || !controls || !desiredDistance) {
       return;
@@ -890,6 +950,10 @@ function ThreeModelScene({
     );
     controls.update();
     invalidate();
+  });
+
+  useFrame(() => {
+    axisGizmoRef.current?.update(camera.quaternion);
   });
 
   useEffect(() => {
@@ -1116,6 +1180,9 @@ function ThreeModelScene({
         enableDamping
         enableZoom={false}
         makeDefault
+        onStart={() => {
+          axisViewTurnRef.current = null;
+        }}
         zoomSpeed={ORBIT_CONTROLS_ZOOM_SPEED}
       />
       <group ref={groupRef} rotation={rotation}>
