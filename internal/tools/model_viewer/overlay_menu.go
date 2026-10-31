@@ -354,16 +354,22 @@ func (p *modelViewerOverlayProgram) build(
 		)
 		clicked := hovered.click(hovered.state)
 
-		// A click can also adjust related toggles. The one it sets first is the
-		// button's own; the variable's effects carry out the others.
+		// Prefer the first changed toggle over unchanged initializers. Keep a
+		// clamped toggle as a fallback when the default is already at its bound.
 		var hit *located
 		var transitions []ModelViewerOverlayTransition
 		for _, key := range clicked.assigned {
 			if entry, ok := tracked[key]; ok {
-				// A clamped button can leave the default unchanged but work at other values.
-				transitions = hovered.transitions(entry.internal, entry.variable)
-				if len(transitions) > 0 {
+				candidate := hovered.transitions(entry.internal, entry.variable)
+				if len(candidate) == 0 {
+					continue
+				}
+				changed := modelViewerString(clicked.state[key]) != modelViewerString(hovered.state[key])
+				if hit == nil || changed {
 					hit = &entry
+					transitions = candidate
+				}
+				if changed {
 					break
 				}
 			}

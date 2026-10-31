@@ -118,13 +118,23 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 	}
 	bindings = append(bindings, collectModelViewerArrowBindings(sections)...)
 	bindings = append(bindings, collectModelViewerWrapBindings(sections, defaults, bindings)...)
-	// A key and a menu can share a slot; keep the menu's visibility and effects.
+	// A key and a menu can share a slot; keep the menu's visibility and effects
+	// without losing values that only the key binding can select.
 	sort.SliceStable(bindings, func(i, j int) bool {
 		return bindings[i].AlwaysVisible && !bindings[j].AlwaysVisible
 	})
-	return lo.UniqBy(bindings, func(binding modelViewerSlotBinding) string {
-		return strconv.Itoa(binding.Slot) + ":" + binding.Variable
-	})
+	merged := make([]modelViewerSlotBinding, 0, len(bindings))
+	bySlot := make(map[string]int, len(bindings))
+	for _, binding := range bindings {
+		key := strconv.Itoa(binding.Slot) + ":" + binding.Variable
+		if index, ok := bySlot[key]; ok {
+			merged[index].Values = lo.UniqBy(append(merged[index].Values, binding.Values...), modelViewerString)
+			continue
+		}
+		bySlot[key] = len(merged)
+		merged = append(merged, binding)
+	}
+	return merged
 }
 
 // collectModelViewerWrapBindings reads the values of a variable a command list

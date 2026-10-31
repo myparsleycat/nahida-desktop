@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -15,6 +16,36 @@ $dress = 0, 1, 2`)
 	bindings := collectModelViewerSlotBindings(sections, collectModelViewerDefaultVariables(sections))
 	if len(bindings) != 1 || bindings[0].Variable != "dress" || len(bindings[0].Values) != 3 {
 		t.Fatalf("bindings = %#v", bindings)
+	}
+}
+
+func TestModelViewerSlotBindingsMergeKeyAndMenuValues(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persist $dress = 0
+global persist $other = 1
+global $clickedSlot
+[KeyDress]
+type = cycle
+$dress = 0,1,2
+[CommandListClickedSlot]
+if $clickedSlot == 1
+$dress = ($dress + 1) % 2
+$other = 0
+endif`)
+	bindings := collectModelViewerSlotBindings(sections, collectModelViewerDefaultVariables(sections))
+	if len(bindings) != 1 || bindings[0].Variable != "dress" || !bindings[0].AlwaysVisible ||
+		len(bindings[0].Effects) != 1 || bindings[0].Effects[0].Var != "other" {
+		t.Fatalf("bindings = %#v, want one dress binding with menu visibility and effects", bindings)
+	}
+	want := []any{float64(0), float64(1), float64(2)}
+	if !reflect.DeepEqual(bindings[0].Values, want) {
+		t.Errorf("values = %v, want %v", bindings[0].Values, want)
+	}
+	condition := parseModelViewerConditionDNF("$dress > 1", nil, collectModelViewerBindingDomains(sections))
+	for _, value := range []string{"0", "1", "2"} {
+		if modelViewerDNFSatisfied(condition, map[string]string{"dress": value}) != (value == "2") {
+			t.Errorf("condition $dress > 1 = %#v does not preserve dress=%s", condition, value)
+		}
 	}
 }
 

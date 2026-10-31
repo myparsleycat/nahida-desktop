@@ -247,6 +247,24 @@ func TestModelViewerOverlayMenuKeepsClampedButtonsAtDefaultBounds(t *testing.T) 
 	}
 }
 
+func TestModelViewerOverlayMenuPrefersChangedVariableOverInitialization(t *testing.T) {
+	ini := strings.Replace(overlayTestINI, "$chest = $chest + 1", "$hair = 0\n  $chest = $chest + 1", 1)
+	menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+	if len(menus) != 1 || len(menus[0].Buttons) != 2 {
+		t.Fatalf("menus = %+v, want hair and chest buttons", menus)
+	}
+	chest := menus[0].Buttons[1]
+	if chest.Variable != "chest" {
+		t.Fatalf("second button = %+v, want chest instead of the unchanged hair initializer", chest)
+	}
+	for _, transition := range chest.Transitions {
+		if transition.From == 9 && transition.To == 10 {
+			return
+		}
+	}
+	t.Fatalf("chest transitions = %+v, want the initial value 9 to advance to 10", chest.Transitions)
+}
+
 func TestModelViewerOverlayMenuFollowsToggleStateAndOwnVariable(t *testing.T) {
 	dir := t.TempDir()
 	const quadShader = "Texture1D<float4> IniParams : register(t120);\n" +
