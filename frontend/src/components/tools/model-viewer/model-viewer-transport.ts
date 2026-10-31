@@ -81,7 +81,7 @@ function normalizeTextureRole(value: string): ViewerTextureRole {
 }
 
 function normalizeMaterialProfile(value?: string): ViewerMaterialProfile | undefined {
-    return value === "zzmi" || value === "wuwa:rabbitfx" ? value : undefined;
+    return value === "zzmi" || value === "wuwa:rabbitfx" || value === "efmi" ? value : undefined;
 }
 
 function normalizeComputeSource(source: {

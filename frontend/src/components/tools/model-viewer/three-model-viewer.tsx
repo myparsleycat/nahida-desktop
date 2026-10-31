@@ -64,6 +64,7 @@ import {
   type PreparedPayloadEval,
   preparePayloadEval,
   setPayloadGameTextureHighlight,
+  setPayloadNormalMaps,
   setPayloadToonShadows,
 } from "./model-viewer-payload";
 import { ModelViewerPositionLoader } from "./model-viewer-position-loader";
@@ -157,6 +158,7 @@ export const ThreeModelViewer = memo(
       threeExposure = 1,
       threeToneMapping = "neutral",
       toonShadows = false,
+      normalMaps = true,
       highlightGameTextures = false,
       variantState,
       onSurfacePick,
@@ -234,6 +236,7 @@ export const ThreeModelViewer = memo(
             threeExposure={threeExposure}
             threeToneMapping={threeToneMapping}
             toonShadows={toonShadows}
+            normalMaps={normalMaps}
             highlightGameTextures={highlightGameTextures}
             onError={onError}
             onLoad={onLoad}
@@ -269,6 +272,7 @@ function ThreeModelScene({
   threeExposure = 1,
   threeToneMapping = "neutral",
   toonShadows = false,
+  normalMaps = true,
   highlightGameTextures = false,
   variantState,
   onSurfacePick,
@@ -715,6 +719,14 @@ function ThreeModelScene({
     setPayloadToonShadows(modelRoot, toonShadows);
     invalidate();
   }, [invalidate, modelRoot, toonShadows]);
+
+  useEffect(() => {
+    if (!modelRoot) {
+      return;
+    }
+    setPayloadNormalMaps(modelRoot, normalMaps);
+    invalidate();
+  }, [invalidate, modelRoot, normalMaps]);
 
   useEffect(() => {
     if (!modelRoot) {

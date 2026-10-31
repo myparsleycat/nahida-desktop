@@ -44,8 +44,8 @@ func modelViewerSlotTextureNumber(role string) (int, bool) {
 // decoded hints also identify helper maps; PNG bindings keep their ps-t0 file.
 // The lowest slot holding a fitting file wins, matching the game's
 // diffuse-first slot order, and keeps every conditional assignment of that
-// slot so texture toggles still switch. Each mesh drops its candidates either
-// way, so slot roles never reach the payload.
+// slot so texture toggles still switch. The caller drops the candidates, so slot
+// roles never reach the payload.
 func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi, efmi bool) {
 	hints := make(map[string]*wwmiTextureHint)
 	hintOf := func(file string) *wwmiTextureHint {
@@ -84,7 +84,6 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 	for index := range meshes {
 		mesh := &meshes[index]
 		candidates := mesh.slotTextureCandidates
-		mesh.slotTextureCandidates = nil
 		if len(candidates) == 0 {
 			continue
 		}

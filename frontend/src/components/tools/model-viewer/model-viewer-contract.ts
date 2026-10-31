@@ -122,6 +122,7 @@ export type ModelViewerSurfaceProps = {
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;
     toonShadows?: boolean;
+    normalMaps?: boolean;
     /** Tints the visible meshes the mod binds no diffuse texture to. */
     highlightGameTextures?: boolean;
     /** Called for a left click without drag; null when the click hit no visible mesh. */

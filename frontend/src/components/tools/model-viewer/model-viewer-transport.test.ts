@@ -133,6 +133,9 @@ describe("normalizeModelViewerTransport", () => {
                 .materialProfile,
         ).toBe("wuwa:rabbitfx");
         expect(
+            normalizeModelViewerTransport({ ...base, materialProfile: "efmi" }).materialProfile,
+        ).toBe("efmi");
+        expect(
             normalizeModelViewerTransport({ ...base, materialProfile: "unknown" }).materialProfile,
         ).toBeUndefined();
     });

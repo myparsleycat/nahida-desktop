@@ -205,6 +205,8 @@ hash = 1817f3ca
 match_first_index = 0
 run = CommandListSkinTexture
 ib = ResourceBodyAIB`, want: "zzmi"},
+		{name: "EFMI", ini: `[CommandList_Draw_Component0]
+run = CommandList\EFMIv1\OverrideTextures`, want: "efmi"},
 		{
 			name: "strong WWMI RabbitFX wins stray ZZMI resource",
 			ini: `[Constants]

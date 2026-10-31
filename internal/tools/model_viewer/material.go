@@ -433,7 +433,8 @@ func prepareModelViewerTexture(
 }
 
 func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
-	if (materialProfile == "zzmi" || materialProfile == "wuwa:rabbitfx") && role == "normal_map" {
+	if (materialProfile == "zzmi" || materialProfile == "wuwa:rabbitfx" || materialProfile == "efmi") &&
+		role == "normal_map" {
 		return modelViewerTextureTransformNormalXYReconstruct
 	}
 	return modelViewerTextureTransformPassthrough

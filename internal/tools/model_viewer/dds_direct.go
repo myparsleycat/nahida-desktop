@@ -423,8 +423,8 @@ func modelViewerDDSFormatHasAlpha(format string) bool {
 		strings.HasPrefix(format, "bc3-") || strings.HasPrefix(format, "bc7-")
 }
 
-// ddsutil v0.2.0 recognizes BC4U in the codec but rejects its legacy container
-// format. Expose a DX10 header without copying or changing the source payload.
+// ddsutil v0.2.0 recognizes BC4U and BC5U in the codec but rejects their legacy
+// container format. Expose a DX10 header without copying or changing the source payload.
 func newModelViewerDDSReader(source io.ReaderAt, size int64) (*ddsutil.DdsReader, error) {
 	reader, err := ddsutil.NewDdsReader(source, size)
 	if !errors.Is(err, ddsutil.ErrUnsupportedFormat) {
@@ -432,11 +432,20 @@ func newModelViewerDDSReader(source io.ReaderAt, size int64) (*ddsutil.DdsReader
 	}
 	var header [148]byte
 	if _, readErr := source.ReadAt(header[:128], 0); readErr != nil ||
-		string(header[84:88]) != "BC4U" || binary.LittleEndian.Uint32(header[112:116]) != 0 {
+		binary.LittleEndian.Uint32(header[112:116]) != 0 {
+		return nil, err
+	}
+	var format ddsutil.DxgiFormat
+	switch string(header[84:88]) {
+	case "BC4U":
+		format = ddsutil.DxgiFormatBC4_UNorm
+	case "BC5U":
+		format = ddsutil.DxgiFormatBC5_UNorm
+	default:
 		return nil, err
 	}
 	copy(header[84:88], "DX10")
-	binary.LittleEndian.PutUint32(header[128:132], uint32(ddsutil.DxgiFormatBC4_UNorm))
+	binary.LittleEndian.PutUint32(header[128:132], uint32(format))
 	binary.LittleEndian.PutUint32(header[132:136], uint32(ddsutil.D3D10ResourceDimensionTexture2D))
 	binary.LittleEndian.PutUint32(header[140:144], 1)
 	return ddsutil.NewDdsReader(modelViewerDDSHeaderReader{source: source, header: header}, size+20)

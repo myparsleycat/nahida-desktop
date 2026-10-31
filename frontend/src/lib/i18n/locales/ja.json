@@ -1451,6 +1451,7 @@
         "menu": {
           "model": "モデル",
           "texture": "テクスチャ",
+          "normal_maps": "法線マップ",
           "renderer": "レンダラー",
           "rendering": "レンダリング",
           "misc": "その他",

@@ -423,6 +423,8 @@ func modelViewerAssignmentTextureKey(assignment modelViewerDirectTextureAssignme
 func classifyModelViewerTextureRole(name string) string {
 	key := modelViewerNormalizeKey(name)
 	switch {
+	case strings.Contains(key, "highlight"):
+		return "diffuse"
 	case strings.Contains(key, "normal") || strings.Contains(key, "bump"):
 		return "normal_map"
 	case strings.Contains(key, "light"):

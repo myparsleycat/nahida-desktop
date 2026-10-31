@@ -67,6 +67,9 @@ export interface ModelViewerMenuBarProps {
   showToonShadows?: boolean;
   toonShadows?: boolean;
   onToonShadowsChange?: (value: boolean) => void;
+  showNormalMaps?: boolean;
+  normalMaps?: boolean;
+  onNormalMapsChange?: (value: boolean) => void;
 
   /* Toggle (variant mode only) */
   showToggleViewer: boolean;
@@ -104,6 +107,9 @@ export function ModelViewerMenuBar({
   showToonShadows = false,
   toonShadows = false,
   onToonShadowsChange,
+  showNormalMaps = false,
+  normalMaps = true,
+  onNormalMapsChange,
   showToggleViewer,
   isViewerBusy,
   onSaveTogglesToIni,
@@ -347,6 +353,19 @@ export function ModelViewerMenuBar({
                     onCheckedChange={(checked) => onToonShadowsChange?.(checked === true)}
                   >
                     Toon Shadows
+                  </MenubarCheckboxItem>
+                </MenubarGroup>
+              </>
+            ) : null}
+            {showNormalMaps ? (
+              <>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarCheckboxItem
+                    checked={normalMaps}
+                    onCheckedChange={(checked) => onNormalMapsChange?.(checked === true)}
+                  >
+                    {t("page.tools.model_viewer.menu.normal_maps")}
                   </MenubarCheckboxItem>
                 </MenubarGroup>
               </>

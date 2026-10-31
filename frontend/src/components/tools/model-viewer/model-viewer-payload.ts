@@ -57,6 +57,7 @@ type PayloadMeshUserData = {
     materialProfile?: ModViewerTransport["materialProfile"];
     toonShadows: boolean;
     highlightGameTextures?: boolean;
+    normalMapsDisabled?: boolean;
     lastPositionVariantIndex?: number | null;
     lastShapeSignature?: string;
     geometryStale?: boolean;
@@ -293,6 +294,20 @@ export function setPayloadToonShadows(root: Object3D, enabled: boolean): void {
         const state = material.userData.rabbitFXMaterial as RabbitFXShaderState | undefined;
         if (state) {
             state.toonEnabled.value = enabled ? 1 : 0;
+        }
+    });
+}
+
+export function setPayloadNormalMaps(root: Object3D, enabled: boolean): void {
+    const textures = root.userData.payloadTextures as Map<string, Texture> | undefined;
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.normalMapsDisabled = !enabled;
+        if (object.material instanceof MeshStandardMaterial && textures && userData.lastMaps) {
+            applyEvaluatedMaps(object.material, object, userData, userData.lastMaps, textures);
         }
     });
 }
@@ -535,9 +550,13 @@ function applyEvaluatedMaps(
     }
     userData.tangentFrameUsable ??= hasUsableTangentFrame(object.geometry);
     const canUseDerivativeTangentFrame =
-        userData.materialProfile === "wuwa:rabbitfx" && normal && object.geometry.attributes.uv;
+        (userData.materialProfile === "wuwa:rabbitfx" || userData.materialProfile === "efmi") &&
+        normal &&
+        object.geometry.attributes.uv;
     const normalMap =
-        evaluated.normalMapKey && (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
+        !userData.normalMapsDisabled &&
+        evaluated.normalMapKey &&
+        (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
             ? (textures.get(evaluated.normalMapKey) ?? null)
             : null;
     const last = userData.lastMaps;
@@ -792,7 +811,14 @@ function normalMode(
     metadata: DDSTextureMetadata | undefined,
     materialProfile: ModViewerTransport["materialProfile"],
 ): number {
-    if (!metadata || (materialProfile !== "zzmi" && materialProfile !== "wuwa:rabbitfx")) return 0;
+    if (
+        !metadata ||
+        (materialProfile !== "zzmi" &&
+            materialProfile !== "wuwa:rabbitfx" &&
+            materialProfile !== "efmi")
+    ) {
+        return 0;
+    }
     const bc4 = metadata.format.startsWith("bc4-");
     const signed = metadata.direct && metadata.format.endsWith("snorm");
     if (bc4) return signed ? 4 : 3;

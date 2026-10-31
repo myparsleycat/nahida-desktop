@@ -1451,6 +1451,7 @@
         "menu": {
           "model": "模型",
           "texture": "纹理",
+          "normal_maps": "法线贴图",
           "renderer": "渲染器",
           "rendering": "渲染",
           "misc": "其他",

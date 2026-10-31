@@ -92,6 +92,23 @@ filename = diffuse.dds
 	}
 }
 
+func TestModelViewerLegacyBC5UInspects(t *testing.T) {
+	path := writeModelViewerDDSurface(t, 4, 4, ddsutil.BC5RgUnorm, make([]byte, 16))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := append(bytes.Clone(raw[:128]), raw[148:]...)
+	copy(legacy[84:88], "BC5U")
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "normal.dds", legacy)
+
+	metadata, err := inspectModelViewerDDS(context.Background(), filepath.Join(dir, "normal.dds"))
+	if err != nil || metadata.Format != "bc5-unorm" {
+		t.Fatalf("metadata = %+v, err = %v", metadata, err)
+	}
+}
+
 func TestPrepareModelViewerDDSPreviewCopiesCenteredCompressedBlocks(t *testing.T) {
 	const width, height = uint32(32), uint32(16)
 	blocksX, blocksY := (width+3)/4, (height+3)/4

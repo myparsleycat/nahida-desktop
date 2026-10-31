@@ -78,6 +78,9 @@ func detectModelViewerMaterialProfile(sections []modINISection) string {
 	if zzmi {
 		return "zzmi"
 	}
+	if isModelViewerEFMI(sections) {
+		return "efmi"
+	}
 	return ""
 }
 

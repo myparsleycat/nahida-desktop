@@ -126,7 +126,9 @@ func modelViewerTextureAssignment(key, value, sectionName string) (string, strin
 	if resource == "" {
 		return "", "", false, false
 	}
-	lowerResource := strings.ToLower(resource)
+
+	// EFMI's HighLightMap is a separate highlight texture, not a light map.
+	lowerResource := strings.ReplaceAll(strings.ToLower(resource), "highlightmap", "highlight")
 	sectionRole := hashTextureSuffixRE.FindString(sectionName)
 	channel := ""
 	authored := false
@@ -712,7 +714,14 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachRenamedDumpDiffuse(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
-	attachSlotBoundDiffuse(output, modDir, layoutName == "wwmi", isModelViewerEFMI(sections))
+	efmi := isModelViewerEFMI(sections)
+	attachSlotBoundDiffuse(output, modDir, layoutName == "wwmi", efmi)
+	if efmi {
+		attachEFMIMaterialMaps(output, resources, modDir)
+	}
+	for meshIndex := range output {
+		output[meshIndex].slotTextureCandidates = nil
+	}
 	if timing != nil {
 		timing.AttachMs += time.Since(stageStartedAt).Milliseconds()
 	}

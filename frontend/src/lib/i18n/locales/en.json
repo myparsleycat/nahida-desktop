@@ -1454,6 +1454,7 @@
         "menu": {
           "model": "Model",
           "texture": "Texture",
+          "normal_maps": "Normal Maps",
           "renderer": "Renderer",
           "rendering": "Rendering",
           "misc": "Misc",

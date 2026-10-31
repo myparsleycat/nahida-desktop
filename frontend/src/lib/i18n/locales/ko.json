@@ -1451,6 +1451,7 @@
         "menu": {
           "model": "모델",
           "texture": "텍스처",
+          "normal_maps": "노멀 맵",
           "renderer": "렌더러",
           "rendering": "렌더링",
           "misc": "기타",

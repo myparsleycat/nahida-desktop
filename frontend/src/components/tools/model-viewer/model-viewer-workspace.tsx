@@ -156,6 +156,7 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
+  const [normalMaps, setNormalMaps] = useState(true);
   const [highlightGameTextures, setHighlightGameTextures] = useState(false);
   const [ownForm, setOwnForm] = useState(ALL_FORMS);
   const [previewForm, setPreviewForm] = useState<string | null>(null);
@@ -771,6 +772,11 @@ export function ModelViewerWorkspace({
           showToonShadows={payloadTransport?.materialProfile === "wuwa:rabbitfx"}
           toonShadows={toonShadows}
           onToonShadowsChange={updateToonShadows}
+          showNormalMaps={payloadTransport?.meshes.some(
+            (mesh) => mesh.normalMapKey || mesh.normalMapVariants.length > 0,
+          )}
+          normalMaps={normalMaps}
+          onNormalMapsChange={setNormalMaps}
           showToggleViewer={showToggleViewer}
           isViewerBusy={false}
           onSaveTogglesToIni={handleSaveTogglesToIni}
@@ -800,6 +806,7 @@ export function ModelViewerWorkspace({
                   threeEnvironment={threeEnvironment}
                   threeExposure={threeExposure}
                   toonShadows={toonShadows}
+                  normalMaps={normalMaps}
                   highlightGameTextures={highlightGameTextures}
                   onLoad={handleViewerLoad}
                   onError={handleViewerError}

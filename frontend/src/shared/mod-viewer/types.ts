@@ -69,7 +69,7 @@ export type ViewerDDSFormat =
     | "bc6h-sfloat"
     | "bc7-unorm"
     | "bc7-unorm-srgb";
-export type ViewerMaterialProfile = "zzmi" | "wuwa:rabbitfx";
+export type ViewerMaterialProfile = "zzmi" | "wuwa:rabbitfx" | "efmi";
 
 export type ViewerTexture = {
     texKey: string;

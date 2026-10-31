@@ -19,6 +19,7 @@ import {
     commitPayloadEval,
     finalizePayloadGeometry,
     preparePayloadEval,
+    setPayloadNormalMaps,
     setPayloadToonShadows,
 } from "./model-viewer-payload";
 
@@ -708,6 +709,53 @@ describe("applyPayloadEval packed maps", () => {
 
         geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
         applyPayloadEval(root, evaluated);
+        expect(material.normalMap).toBe(normal);
+    });
+
+    it("draws EFMI normals without tangents and follows the normal map toggle", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("normal", new BufferAttribute(new Float32Array(9), 3));
+        geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
+        const material = new MeshStandardMaterial();
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            baseNormals: new Float32Array(9),
+            lastPositionVariantIndex: null,
+            materialProfile: "efmi",
+            toonShadows: false,
+        };
+        const normal = new Texture();
+        const root = new Group();
+        root.userData.payloadTextures = new Map([["normal", normal]]);
+        root.add(mesh);
+
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: "normal",
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    cutoutMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+        expect(material.normalMap).toBe(normal);
+
+        setPayloadNormalMaps(root, false);
+        expect(material.normalMap).toBeNull();
+
+        setPayloadNormalMaps(root, true);
         expect(material.normalMap).toBe(normal);
     });
 
