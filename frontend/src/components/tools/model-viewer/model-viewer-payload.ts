@@ -21,6 +21,7 @@ import {
     RG11_EAC_Format,
     RGFormat,
     RED_GREEN_RGTC2_Format,
+    RepeatWrapping,
     RGBAFormat,
     SRGBColorSpace,
     ShaderChunk,
@@ -169,6 +170,8 @@ export async function buildPayloadModel(
                 }
                 if (texture) {
                     texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
+                    texture.wrapS = RepeatWrapping;
+                    texture.wrapT = RepeatWrapping;
                     textures.set(key, texture);
                 }
             },

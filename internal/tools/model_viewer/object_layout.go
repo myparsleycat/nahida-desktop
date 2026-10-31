@@ -686,7 +686,9 @@ func loadModelViewerDrawVertexBuffers(
 func detectModelViewerPackedTexcoordOffset(data []byte, stride int) int {
 	switch stride {
 	case modelViewerPackedObjectStride24:
-		if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12) {
+		// A few tiled UV0 coordinates can fall outside the score's range while
+		// UV1 stays in an atlas. Require a clear improvement before switching sets.
+		if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, 12)+0.05 {
 			return 16
 		}
 		return 12

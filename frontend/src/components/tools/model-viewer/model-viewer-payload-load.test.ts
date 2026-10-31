@@ -1,6 +1,13 @@
 import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerMeshTransport } from "@shared/mod-viewer/types";
-import { BufferGeometry, Mesh, MeshStandardMaterial, Texture, SRGBColorSpace } from "three";
+import {
+    BufferGeometry,
+    Mesh,
+    MeshStandardMaterial,
+    Texture,
+    SRGBColorSpace,
+    Vector2,
+} from "three";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -315,6 +322,8 @@ it("loads a supported DDS as a GPU compressed texture", async () => {
     expect(texture?.isCompressedTexture).toBe(true);
     expect(texture?.colorSpace).toBe(SRGBColorSpace);
     expect(texture?.userData.modelViewerDDS).toEqual({ format: "bc1-unorm", direct: true });
+    texture?.updateMatrix();
+    expect(texture?.transformUv(new Vector2(1.25, -0.25)).toArray()).toEqual([0.25, 0.25]);
     expect(fetchTexture).toHaveBeenCalledWith("body.dds", expect.anything());
     clearPayloadModelData(root);
 });
@@ -346,6 +355,8 @@ it("skips the DDS request and loads its lazy fallback when the GPU format is uns
     expect(fetchTexture).toHaveBeenCalledWith("body.png", expect.anything());
     expect(texture?.userData.modelViewerDDS).toEqual({ format: "bc7-unorm", direct: false });
     expect(texture?.userData.modelViewerInvertAlpha).toBe(true);
+    texture?.updateMatrix();
+    expect(texture?.transformUv(new Vector2(1.25, -0.25)).toArray()).toEqual([0.25, 0.75]);
     clearPayloadModelData(root);
 });
 

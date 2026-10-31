@@ -351,6 +351,49 @@ filename = CafeA.ib`
 	}
 }
 
+func TestModelViewerStaticStride24ObjectKeepsUV0WithTiledOutliers(t *testing.T) {
+	dir := t.TempDir()
+	position := make([]byte, 64*modelViewerPackedObjectStride24)
+	for vertex := range 64 {
+		offset := vertex * modelViewerPackedObjectStride24
+		writePackedObjectVertex(position, offset, float32(vertex), 2, 3, float32(vertex)/64, 0.75, 0, 0, 127)
+		binary.LittleEndian.PutUint16(position[offset+16:], modelViewerFloatToHalfBits(0.857+float32(vertex%2)*0.001))
+		binary.LittleEndian.PutUint16(position[offset+18:], modelViewerFloatToHalfBits(0.922))
+	}
+	binary.LittleEndian.PutUint16(position[12:], modelViewerFloatToHalfBits(4.8984375))
+	if err := os.WriteFile(filepath.Join(dir, "Fountain.buf"), position, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "Fountain.ib"),
+		modelViewerUint32Bytes([]uint32{0, 1, 2}),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(`[TextureOverrideFountain]
+vb0 = ResourceFountain
+ib = ResourceFountainIB
+drawindexed = 3, 0, 0
+[ResourceFountain]
+stride = 24
+filename = Fountain.buf
+[ResourceFountainIB]
+format = DXGI_FORMAT_R32_UINT
+filename = Fountain.ib`)
+	meshes, err := buildModelViewerDirectScannedMeshes(filepath.Join(dir, "mod.ini"), sections, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 || meshes[0].geometry == nil {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+	want := []float32{4.8984375, 0.25, 1.0 / 64, 0.25, 2.0 / 64, 0.25}
+	if uv := meshes[0].geometry.Texcoord0; !slices.Equal(uv, want) {
+		t.Fatalf("diffuse UVs = %v; want primary UV0 despite its tiled outlier: %v", uv, want)
+	}
+}
+
 // makeStride24BufferWithTrailingUV builds 24-byte packed vertices whose tangent
 // word at byte 12 is non-finite, matching dumps from the cyclic animation
 // layout where UV0 sits at byte 16.

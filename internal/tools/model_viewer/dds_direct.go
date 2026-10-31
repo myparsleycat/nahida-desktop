@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -135,7 +136,7 @@ func prepareModelViewerDDSPreviewWithLimit(
 	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
 		return nil, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
-	reader, err := ddsutil.NewDdsReader(file, info.Size())
+	reader, err := newModelViewerDDSReader(file, info.Size())
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +386,7 @@ func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMeta
 	if !info.Mode().IsRegular() || info.Size() > maxModelViewerBufferFileBytes {
 		return modelViewerDDSMetadata{}, fmt.Errorf("viewer texture file is too large or invalid: %s", path)
 	}
-	reader, err := ddsutil.NewDdsReader(file, info.Size())
+	reader, err := newModelViewerDDSReader(file, info.Size())
 	if err != nil {
 		return modelViewerDDSMetadata{}, err
 	}
@@ -417,6 +418,46 @@ func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMeta
 func modelViewerDDSFormatHasAlpha(format string) bool {
 	return strings.HasPrefix(format, "bc1-") || strings.HasPrefix(format, "bc2-") ||
 		strings.HasPrefix(format, "bc3-") || strings.HasPrefix(format, "bc7-")
+}
+
+// ddsutil v0.2.0 recognizes BC4U in the codec but rejects its legacy container
+// format. Expose a DX10 header without copying or changing the source payload.
+func newModelViewerDDSReader(source io.ReaderAt, size int64) (*ddsutil.DdsReader, error) {
+	reader, err := ddsutil.NewDdsReader(source, size)
+	if !errors.Is(err, ddsutil.ErrUnsupportedFormat) {
+		return reader, err
+	}
+	var header [148]byte
+	if _, readErr := source.ReadAt(header[:128], 0); readErr != nil ||
+		string(header[84:88]) != "BC4U" || binary.LittleEndian.Uint32(header[112:116]) != 0 {
+		return nil, err
+	}
+	copy(header[84:88], "DX10")
+	binary.LittleEndian.PutUint32(header[128:132], uint32(ddsutil.DxgiFormatBC4_UNorm))
+	binary.LittleEndian.PutUint32(header[132:136], uint32(ddsutil.D3D10ResourceDimensionTexture2D))
+	binary.LittleEndian.PutUint32(header[140:144], 1)
+	return ddsutil.NewDdsReader(modelViewerDDSHeaderReader{source: source, header: header}, size+20)
+}
+
+type modelViewerDDSHeaderReader struct {
+	source io.ReaderAt
+	header [148]byte
+}
+
+func (r modelViewerDDSHeaderReader) ReadAt(buffer []byte, offset int64) (int, error) {
+	if offset < 0 {
+		return 0, fmt.Errorf("negative DDS read offset: %d", offset)
+	}
+	n := 0
+	if offset < int64(len(r.header)) {
+		n = copy(buffer, r.header[offset:])
+		offset += int64(n)
+	}
+	if n == len(buffer) {
+		return n, nil
+	}
+	read, err := r.source.ReadAt(buffer[n:], offset-20)
+	return n + read, err
 }
 
 func modelViewerDDSFormat(format ddsutil.ImageFormat) (string, bool) {

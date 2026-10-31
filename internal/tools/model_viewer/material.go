@@ -747,7 +747,7 @@ func decodeModelViewerDDS(raw []byte) (*image.NRGBA, error) {
 	if _, _, err := modelViewerTextureDimensions(raw, ".dds"); err != nil {
 		return nil, err
 	}
-	reader, err := ddsutil.NewDdsReader(bytes.NewReader(raw), int64(len(raw)))
+	reader, err := newModelViewerDDSReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, err
 	}
@@ -779,7 +779,7 @@ func decodeModelViewerDDSWithMip(
 			return nil, err
 		}
 	}
-	reader, err := ddsutil.NewDdsReader(file, size)
+	reader, err := newModelViewerDDSReader(file, size)
 	if err != nil {
 		return nil, err
 	}

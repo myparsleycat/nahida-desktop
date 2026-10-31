@@ -58,6 +58,40 @@ func TestModelViewerDDSFormat(t *testing.T) {
 	}
 }
 
+func TestModelViewerLegacyBC4UDiffuseLoads(t *testing.T) {
+	path := writeModelViewerDDSurface(t, 4, 4, ddsutil.BC4RUnorm, []byte{128, 128, 0, 0, 0, 0, 0, 0})
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := append(bytes.Clone(raw[:128]), raw[148:]...)
+	copy(legacy[84:88], "BC4U")
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "diffuse.dds", legacy)
+	fixture := loadViewerFixture(t, dir, `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyDiffuse
+drawindexed = 3, 0, 0
+[ResourceBodyDiffuse]
+filename = diffuse.dds
+`+viewerBodyResources)
+	mesh := fixture.result.Meshes[0]
+	texture, exists := fixture.result.Textures[texKey(mesh)]
+	if !exists || texture.Format != "bc4-unorm" || texture.FallbackURL == "" {
+		t.Fatalf("legacy BC4U diffuse missing: key=%q texture=%+v", texKey(mesh), texture)
+	}
+	fallback := readModelViewerProtocolBytes(t, fixture.protocol, texture.FallbackURL)
+	decoded, err := png.Decode(bytes.NewReader(fallback))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pixel := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA); pixel != (color.NRGBA{128, 128, 128, 255}) {
+		t.Fatalf("BC4U fallback pixel = %v; want opaque grayscale", pixel)
+	}
+}
+
 func TestPrepareModelViewerDDSPreviewCopiesCenteredCompressedBlocks(t *testing.T) {
 	const width, height = uint32(32), uint32(16)
 	blocksX, blocksY := (width+3)/4, (height+3)/4
