@@ -3,9 +3,11 @@ package modelviewer
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -308,6 +310,121 @@ filename = Meshes/Component3_VB2.buf
 	}
 	if !strings.Contains(texKey(result.Meshes[0]), "beef001f.png") {
 		t.Fatalf("texKey = %q", texKey(result.Meshes[0]))
+	}
+}
+
+func TestLoadModViewerBindsRenamedEFMIDiffuseToSharedAtlasGroup(t *testing.T) {
+	dir := t.TempDir()
+	for _, file := range []string{
+		"Components-0-1-2 t=beef0001.png",
+		"Components-0-1 t=beef0002.png",
+		"Components-2 t=beef0003.png",
+		"BodyDiffuseTexture.png",
+		"BodyDiffuseTextureT.png",
+	} {
+		writeTextureFile(t, dir, "Textures/"+file, encodeColorPNG(32, 32))
+	}
+	var ini strings.Builder
+	ini.WriteString(`[Constants]
+global $required_efmi_version = 1.00
+global $mod_enabled = 0
+global $object_detected = 0
+global persist $Body = 1
+global persist $Suit = 1
+global persist $Hair = 1
+global persist $Tattoo = 0
+[KeySwapTattoo]
+key = o
+type = cycle
+$Tattoo = 0,1
+[Resource_Atlas]
+filename = Textures/Components-0-1-2 t=beef0001.png
+[TextureOverride_Atlas]
+hash = beef0001
+this = Resource_Atlas
+[Resource_Mask]
+filename = Textures/Components-0-1 t=beef0002.png
+[TextureOverride_Mask]
+hash = beef0002
+this = Resource_Mask
+[Resource_Hair]
+filename = Textures/Components-2 t=beef0003.png
+[TextureOverride_Hair]
+hash = beef0003
+this = Resource_Hair
+[Resource_BodyDiffuse]
+filename = Textures/BodyDiffuseTexture.png
+[Resource_BodyDiffuseT]
+filename = Textures/BodyDiffuseTextureT.png
+[TextureOverride_Body]
+hash = beef0004
+if $object_detected
+    if $Tattoo == 1
+        this = Resource_BodyDiffuseT
+    else
+        this = Resource_BodyDiffuse
+    endif
+endif
+`)
+	for index, part := range []string{"Body", "Suit", "Hair"} {
+		component := "Component" + strconv.Itoa(index)
+		writeEFMIComponentBuffers(t, dir, component)
+		fmt.Fprintf(&ini, `[CommandList_Draw_%[1]s]
+ib = ref Resource_%[1]s_IB
+vb0 = ref Resource_%[1]s_VB0
+vb1 = ref Resource_%[1]s_VB1
+vb2 = ref Resource_%[1]s_VB2
+if $%[2]s
+    drawindexedinstanced = 3, INSTANCE_COUNT, 0, 0, FIRST_INSTANCE
+endif
+[TextureOverride_%[1]s]
+hash = %08[3]x
+if $mod_enabled && DRAW_TYPE == 4
+    handling = skip
+    run = CommandList_Draw_%[1]s
+endif
+[Resource_%[1]s_IB]
+type = Buffer
+format = DXGI_FORMAT_R16_UINT
+filename = Meshes/%[1]s_IB.buf
+[Resource_%[1]s_VB0]
+type = Buffer
+stride = 16
+filename = Meshes/%[1]s_VB0.buf
+[Resource_%[1]s_VB1]
+type = Buffer
+stride = 12
+filename = Meshes/%[1]s_VB1.buf
+[Resource_%[1]s_VB2]
+type = Buffer
+stride = 12
+filename = Meshes/%[1]s_VB2.buf
+`, component, part, index+1)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(ini.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := loadViewerDir(t, dir).result
+
+	for component, want := range map[string][2]string{
+		"_Component0": {"BodyDiffuseTexture.png", "BodyDiffuseTextureT.png"},
+		"_Component1": {"BodyDiffuseTexture.png", "BodyDiffuseTextureT.png"},
+		"_Component2": {"beef0003.png", "beef0003.png"},
+	} {
+		meshes := meshesNamed(result, component)
+		if len(meshes) != 1 {
+			t.Fatalf("%s meshes = %#v", component, result.Meshes)
+		}
+		for value, file := range want {
+			got := viewerEvalResolveTexture(
+				meshes[0].TextureVariants,
+				meshes[0].TexKey,
+				map[string]any{"Tattoo": strconv.Itoa(value)},
+			)
+			if !strings.Contains(got, file) {
+				t.Fatalf("%s Tattoo=%d texture = %q, want %s", component, value, got, file)
+			}
+		}
 	}
 }
 

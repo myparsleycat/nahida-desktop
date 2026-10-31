@@ -10,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -23,6 +26,7 @@ const (
 var (
 	wwmiDumpTexRE        = regexp.MustCompile(`(?i)(?:^|[/\\])Components-(\d+(?:-\d+)*)\s+t=`)
 	wwmiComponentIndexRE = regexp.MustCompile(`(?i)(?:^|_)Component(\d+)$`)
+	renamedDiffuseStemRE = regexp.MustCompile(`(?i)^([a-z0-9]+?)[_-]?diffuse`)
 	pngSignature         = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
 )
 
@@ -125,6 +129,129 @@ func wwmiComponentIndex(name string) string {
 
 func meshHasBoundAuthoredDiffuse(mesh *modelViewerDirectMesh) bool {
 	return mesh != nil && mesh.textureAuthored && mesh.textureDefaultFile != ""
+}
+
+// attachRenamedDumpDiffuse binds hash replacements renamed from their dump name
+// to a role name such as BodyDiffuseTexture.dds. They outrank the Components-
+// files, whose only sRGB entry can be an overlay or emission mask. The name lists
+// no components, so the part toggle sharing its stem ($Body) finds the first one;
+// components sharing that one's largest dump map use the same atlas and join it,
+// unless they have a dedicated sRGB dump texture of their own.
+func attachRenamedDumpDiffuse(
+	meshes []modelViewerDirectMesh,
+	sections []modINISection,
+	resources []modelViewerResource,
+	modDir string,
+	variables map[string]any,
+) {
+	unbound := make(map[string][]*modelViewerDirectMesh)
+	partComponents := make(map[string][]string)
+	for index := range meshes {
+		mesh := &meshes[index]
+		component := wwmiComponentIndex(mesh.component)
+		if component == "" {
+			continue
+		}
+		for _, name := range dnfVarNames(mesh.conditions) {
+			key := unscopedModelViewerVariable(modelViewerNormalizeKey(name))
+			if !slices.Contains(partComponents[key], component) {
+				partComponents[key] = append(partComponents[key], component)
+			}
+		}
+		if !meshHasDiffuseTexture(mesh) && len(mesh.slotTextureCandidates) == 0 {
+			unbound[component] = append(unbound[component], mesh)
+		}
+	}
+	if len(unbound) == 0 || !slices.ContainsFunc(resources, isDumpTextureResource) {
+		return
+	}
+
+	resourceMap := make(map[string]modelViewerResource)
+	for _, resource := range resources {
+		resourceMap[modelViewerNormalizeKey(resource.Name)] = resource
+	}
+	pending := func(component string) []*modelViewerDirectMesh {
+		return lo.Filter(unbound[component], func(mesh *modelViewerDirectMesh, _ int) bool {
+			return !meshHasDiffuseTexture(mesh)
+		})
+	}
+	apply := func(component string, slot *hashImageSlot) {
+		meshes := pending(component)
+		applyHashImageSlot(meshes, slot, nil)
+		for _, mesh := range meshes {
+			mesh.textureAuthored = true
+		}
+	}
+
+	// Every named part claims its own component before any atlas group spreads.
+	slots := collectHashImageSlots(sections, resourceMap, variables, modDir)
+	seedsBySlot := make(map[*hashImageSlot][]string)
+	for index := range slots {
+		slot := &slots[index]
+		stem := renamedDiffuseStem(slot)
+		if stem == "" {
+			continue
+		}
+		seedsBySlot[slot] = partComponents[modelViewerNormalizeKey(stem)]
+		for _, component := range seedsBySlot[slot] {
+			apply(component, slot)
+		}
+	}
+	for index := range slots {
+		slot := &slots[index]
+		for _, seed := range seedsBySlot[slot] {
+			for _, component := range largestDumpGroup(resources, seed, modDir) {
+				if len(pending(component)) > 0 && !hasDedicatedDumpDiffuse(resources, component, modDir) {
+					apply(component, slot)
+				}
+			}
+		}
+	}
+}
+
+func renamedDiffuseStem(slot *hashImageSlot) string {
+	if slot.role != "diffuse" || len(slot.files) == 0 || wwmiDumpTexRE.MatchString(slashPath(slot.files[0].file)) {
+		return ""
+	}
+	match := renamedDiffuseStemRE.FindStringSubmatch(filepath.Base(slashPath(slot.files[0].file)))
+	if match == nil {
+		return ""
+	}
+	return match[1]
+}
+
+func largestDumpGroup(resources []modelViewerResource, component, modDir string) []string {
+	var group []string
+	largest := -1
+	for _, resource := range resources {
+		match := wwmiDumpTexRE.FindStringSubmatch(slashPath(resource.Filename))
+		if match == nil {
+			continue
+		}
+		components := strings.Split(match[1], "-")
+		if !slices.Contains(components, component) {
+			continue
+		}
+		if area := peekImageArea(resource.Filename, modDir); area > largest {
+			largest, group = area, components
+		}
+	}
+	return group
+}
+
+func hasDedicatedDumpDiffuse(resources []modelViewerResource, component, modDir string) bool {
+	return slices.ContainsFunc(resources, func(resource modelViewerResource) bool {
+		match := wwmiDumpTexRE.FindStringSubmatch(slashPath(resource.Filename))
+		if match == nil || match[1] != component {
+			return false
+		}
+		resolved := viewerResourcePath(modDir, resource.Filename)
+		if resolved == "" {
+			return false
+		}
+		hint := inspectWwmiTextureHint(resolved)
+		return hint != nil && hint.SRGB && isLikelyWwmiDiffuse(*hint)
+	})
 }
 
 func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelViewerResource, modDir string) {

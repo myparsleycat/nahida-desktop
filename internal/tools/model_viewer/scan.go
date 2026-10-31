@@ -699,6 +699,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	attachFamilyAndStemTextures(output, sections, resources, conditionVariables)
 	attachIbComponentDumpTextures(output, resources)
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
+	attachRenamedDumpDiffuse(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
 	attachSlotBoundDiffuse(output, modDir, layoutName == "wwmi", isModelViewerEFMI(sections))
 	if timing != nil {
