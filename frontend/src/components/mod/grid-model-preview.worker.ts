@@ -159,6 +159,7 @@ function visibleTransport(
                 mesh.materialMapKey,
                 mesh.cutoutMapKey,
                 mesh.highlightMapKey,
+                mesh.rampMapKey,
             ]),
     );
     return {

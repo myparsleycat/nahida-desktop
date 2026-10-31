@@ -43,12 +43,20 @@ const (
 	efmiFaceHighlightMaxMean      = 8
 	efmiFaceHighlightMinPeak      = 32
 	efmiFaceHighlightOpaqueBeyond = 250
+
+	// _DiffRampMap is sampled along one row and its alpha is the lit coverage. Mods also
+	// name _SpecRampMap files RampMap; those are 2D, and their alpha is opaque.
+	efmiDiffRampMinWidth     = 64
+	efmiDiffRampMaxHeight    = 8
+	efmiDiffRampMaxDarkAlpha = 64
+	efmiDiffRampMinLitAlpha  = 200
 )
 
 var (
 	efmiNonMaterialMapRE = regexp.MustCompile(`(?i)high\s*light|ramp|sdf|matcap|mask|emissi|glow`)
 	efmiNamedNormalMapRE = regexp.MustCompile(`(?i)normal`)
 	efmiNamedLightMapRE  = regexp.MustCompile(`(?i)light\s*map`)
+	efmiNamedRampMapRE   = regexp.MustCompile(`(?i)ramp`)
 )
 
 // attachEFMIMaterialMaps recovers the light and normal maps that unlabeled EFMI
@@ -82,6 +90,7 @@ func attachEFMIMaterialMaps(meshes []modelViewerDirectMesh, resources []modelVie
 			},
 		)
 		attachEFMISlotMaps(mesh, classify)
+		attachEFMIRampMap(mesh, classify)
 		attachEFMIDumpMaps(mesh, resources, modDir, classify)
 	}
 }
@@ -130,6 +139,19 @@ func attachEFMISlotMaps(mesh *modelViewerDirectMesh, classify func(resource, fil
 			}
 			break
 		}
+	}
+}
+
+// A ramp sits at no fixed distance from the diffuse: mods bind it at ps-t11 or ps-t12.
+// The viewer draws one ramp per mesh, so a variant guard around the binding is dropped.
+func attachEFMIRampMap(mesh *modelViewerDirectMesh, classify func(resource, file string) string) {
+	for _, candidate := range mesh.slotTextureCandidates {
+		if candidate.file == "" || classify(candidate.resource, candidate.file) != modelViewerRampMapRole {
+			continue
+		}
+		candidate.role = modelViewerRampMapRole
+		candidate.conditions = modelViewerDNFTrue()
+		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, candidate)
 	}
 }
 
@@ -202,6 +224,9 @@ func attachEFMIDumpMaps(
 // light map holds opposite extremes there (red near 0, green near 1).
 func classifyEFMIMaterialMap(resource, file, modDir string) string {
 	label := resource + " " + filepath.Base(slashPath(file))
+	if efmiNamedRampMapRE.MatchString(label) {
+		return classifyEFMIRampMap(file, modDir)
+	}
 	switch {
 	case efmiNonMaterialMapRE.MatchString(label):
 		return ""
@@ -258,6 +283,31 @@ func classifyEFMIMaterialMap(resource, file, modDir string) string {
 		return ""
 	}
 	return role
+}
+
+func classifyEFMIRampMap(file, modDir string) string {
+	path := viewerResourcePath(modDir, file)
+	if path == "" || !strings.EqualFold(filepath.Ext(path), ".dds") {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	decoded, err := decodeModelViewerDDSHint(path, info.Size())
+	if err != nil || !efmiIsDiffRamp(decoded) {
+		return ""
+	}
+	return modelViewerRampMapRole
+}
+
+func efmiIsDiffRamp(img *image.NRGBA) bool {
+	width, height := img.Bounds().Dx(), img.Bounds().Dy()
+	if width < efmiDiffRampMinWidth || height > efmiDiffRampMaxHeight {
+		return false
+	}
+	row := img.Pix[(height/2)*img.Stride:]
+	return row[3] <= efmiDiffRampMaxDarkAlpha && row[(width-1)*4+3] >= efmiDiffRampMinLitAlpha
 }
 
 // efmiFaceMapRoleFromPixels recognizes the shared face maps. The highlight map is

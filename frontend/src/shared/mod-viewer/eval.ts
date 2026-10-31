@@ -141,6 +141,7 @@ export function evaluateViewerState(
                     resolved,
                 ),
                 highlightMapKey: mesh.highlightMapKey,
+                rampMapKey: mesh.rampMapKey,
                 shapeWeights: Object.fromEntries(
                     mesh.shapeTargets.map((target) => [
                         target.var,

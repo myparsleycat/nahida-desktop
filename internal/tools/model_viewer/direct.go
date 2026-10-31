@@ -757,6 +757,8 @@ func buildModelViewerDirectMeshPayload(
 				item.CutoutMapKey = lo.ToPtr(key)
 			case modelViewerHighlightMapRole:
 				item.HighlightMapKey = lo.ToPtr(key)
+			case modelViewerRampMapRole:
+				item.RampMapKey = lo.ToPtr(key)
 			}
 			continue
 		}

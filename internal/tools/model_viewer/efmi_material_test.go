@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"encoding/binary"
+	"image"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -266,5 +267,30 @@ func TestDecodeModelViewerEFMINormalsFollowsCompactedVertices(t *testing.T) {
 	geometry.SourceIndices = []uint32{2, 3}
 	if normals := decodeModelViewerEFMINormals(combined, stride, geometry); normals != nil {
 		t.Fatalf("normals past the buffer = %v", normals)
+	}
+}
+
+func TestEFMIIsDiffRampRejectsSpecularRamps(t *testing.T) {
+	ramp := func(width, height int, darkAlpha, litAlpha uint8) *image.NRGBA {
+		img := image.NewNRGBA(image.Rect(0, 0, width, height))
+		for y := range height {
+			img.SetNRGBA(0, y, color.NRGBA{A: darkAlpha})
+			img.SetNRGBA(width-1, y, color.NRGBA{A: litAlpha})
+		}
+		return img
+	}
+	tests := []struct {
+		name string
+		img  *image.NRGBA
+		want bool
+	}{
+		{"coverage in alpha", ramp(256, 2, 5, 254), true},
+		{"2D specular ramp", ramp(1024, 32, 5, 254), false},
+		{"opaque specular ramp", ramp(256, 2, 255, 255), false},
+	}
+	for _, test := range tests {
+		if got := efmiIsDiffRamp(test.img); got != test.want {
+			t.Errorf("%s: got %v", test.name, got)
+		}
 	}
 }

@@ -55,6 +55,7 @@ type ModelViewerMeshTransport struct {
 	CutoutMapKey        *string                      `json:"cutoutMapKey"`
 	CutoutMapVariants   []ModelViewerTextureVariant  `json:"cutoutMapVariants"`
 	HighlightMapKey     *string                      `json:"highlightMapKey,omitempty"`
+	RampMapKey          *string                      `json:"rampMapKey,omitempty"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
 	PositionVariants    []ModelViewerPositionVariant `json:"positionVariants"`
 	// DrawKey groups meshes of one INI draw with matching viewer-to-source face

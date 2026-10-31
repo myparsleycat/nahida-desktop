@@ -1112,6 +1112,8 @@ describe("applyPayloadEval packed maps", () => {
         expect(overlay.userData.efmiOverlayShadow).toBe(true);
         expect(iris.userData.efmiHeadMesh).toBe(true);
         expect(iris.userData.efmiOverlayShadow).toBe(false);
+        expect(iris.userData.efmiEyeMesh).toBe(true);
+        expect(face.userData.efmiEyeMesh).toBe(false);
         expect(chest.userData.efmiHeadMesh).toBeFalsy();
         expect(prop.userData.efmiHeadMesh).toBeFalsy();
     });

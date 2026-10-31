@@ -29,6 +29,8 @@ import {
     ShaderChunk,
     ShaderMaterial,
     Texture,
+    UniformsLib,
+    UniformsUtils,
     Vector2,
 } from "three";
 import type { WebGLProgramParametersWithUniforms } from "three";
@@ -65,6 +67,7 @@ type PayloadMeshUserData = {
     toonStyle?: ModelViewerToonStyle;
     efmiHeadMesh?: boolean;
     efmiOverlayShadow?: boolean;
+    efmiEyeMesh?: boolean;
     toonOutline?: Mesh<BufferGeometry, ShaderMaterial>;
     highlightGameTextures?: boolean;
     normalMapsDisabled?: boolean;
@@ -85,6 +88,7 @@ type PayloadMeshUserData = {
         materialMapKey: string | null;
         cutoutMapKey: string | null;
         highlightMapKey?: string | null;
+        rampMapKey?: string | null;
     };
 };
 
@@ -120,6 +124,8 @@ type EFMIToonShaderState = {
     highlightMap: { value: Texture };
     highlightEnabled: { value: number };
     highlightTransform: { value: Matrix3 };
+    rampMap: { value: Texture };
+    rampEnabled: { value: number };
     outlineMask: Texture | null;
 };
 
@@ -167,6 +173,7 @@ const EFMI_HEAD_BELOW_FACE = 0.08;
 const EFMI_EYE_SHADOW_MAX_INDICES = 200;
 const EFMI_HAIR_SHADOW_MAX_INDICES = 1200;
 const EFMI_HAIR_SHADOW_MIN_HEIGHT = 0.075;
+const EFMI_IRIS_MAX_HEIGHT = 0.035;
 
 // The game pushes the face's inverted hull back so it cannot poke through the nose
 // and lips: Warfarin reads _OutlineOffsetZ 0.236 and scales it by 0.1 in view space.
@@ -649,6 +656,7 @@ function applyEvaluatedMaps(
         last.materialMapKey === evaluated.materialMapKey &&
         last.cutoutMapKey === evaluated.cutoutMapKey &&
         last.highlightMapKey === evaluated.highlightMapKey &&
+        last.rampMapKey === evaluated.rampMapKey &&
         material.normalMap === normalMap
     ) {
         return;
@@ -730,6 +738,9 @@ function applyEvaluatedMaps(
         efmiToonState.highlightTransform.value = textureUvTransform(
             efmiToonState.highlightMap.value,
         );
+        const rampMap = evaluated.rampMapKey ? textures.get(evaluated.rampMapKey) : undefined;
+        efmiToonState.rampMap.value = rampMap ?? rabbitFXFallbackLightMap;
+        efmiToonState.rampEnabled.value = rampMap ? 1 : 0;
     }
     updateDDSShaderState(material, userData.materialProfile);
     if (
@@ -750,6 +761,7 @@ function applyEvaluatedMaps(
         materialMapKey: evaluated.materialMapKey,
         cutoutMapKey: evaluated.cutoutMapKey,
         highlightMapKey: evaluated.highlightMapKey,
+        rampMapKey: evaluated.rampMapKey,
     };
 }
 
@@ -854,6 +866,8 @@ function markEFMIHeadMeshesOfForm(
             (indexCount(index) <= EFMI_EYE_SHADOW_MAX_INDICES ||
                 (indexCount(index) <= EFMI_HAIR_SHADOW_MAX_INDICES &&
                     bounds.max[2] - bounds.min[2] >= EFMI_HAIR_SHADOW_MIN_HEIGHT));
+        userData.efmiEyeMesh =
+            !userData.efmiOverlayShadow && bounds.max[2] - bounds.min[2] <= EFMI_IRIS_MAX_HEIGHT;
     }
 }
 
@@ -1116,12 +1130,30 @@ float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection 
     material.needsUpdate = true;
 }
 
+const EFMI_SHADOW_TINT = "vec3( 0.878, 0.93, 1.122 )";
+const EFMI_SKIN_SHADOW_TINT = "vec3( 1.187, 0.927, 0.813 )";
+
+// Without a mod's _DiffRampMap, the ramp reduces to its coverage step. Its color tints
+// the terminator but keeps the luminance.
+const EFMI_RAMP_GLSL = `vec4 efmiRamp( float cosine ) {
+    float position = clamp( cosine, -1.0, 1.0 ) * 0.5 + 0.5;
+    if ( efmiRampEnabled > 0.5 ) {
+        return texture2D( efmiRampMap, vec2( clamp( position, 0.002, 0.998 ), 0.5 ) );
+    }
+    return vec4( 1.0, 1.0, 1.0, smoothstep( 0.5 - efmiSoftness - 0.001, 0.5 + efmiSoftness + 0.001, position ) );
+}
+
+vec3 efmiRampTint( vec3 color, vec3 ramp ) {
+    float chroma = max( ramp.r, max( ramp.g, ramp.b ) ) - min( ramp.r, min( ramp.g, ramp.b ) );
+    vec3 tinted = color * mix( vec3( 1.0 ), ramp, chroma );
+    return tinted * clamp( efmiLuma( color ) / max( efmiLuma( tinted ), 0.001 ), 0.0, 1.5 );
+}`;
+
 // Replaces the lit result, so Environment does not affect the two tones. The
 // lighting model follows the HGRP character shaders as reconstructed by Warfarin
 // Studio: a ramp lookup over N.L, a darker tone for surfaces also facing away from
 // the camera, and a light map packed like _MetallicGlossMap (R metallic, G specular,
-// B shadow mask, A smoothness). Mods carry no per-material ramp here, so the ramp is
-// reduced to its coverage step. directionalLights[0] is the key light: three sorts
+// B shadow mask, A smoothness). directionalLights[0] is the key light: three sorts
 // shadow casters first and keeps scene order otherwise.
 function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
     if (material.userData.efmiToonMaterial) {
@@ -1150,6 +1182,8 @@ function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
         highlightMap: { value: rabbitFXFallbackLightMap },
         highlightEnabled: { value: 0 },
         highlightTransform: { value: rabbitFXFallbackLightMap.matrix },
+        rampMap: { value: rabbitFXFallbackLightMap },
+        rampEnabled: { value: 0 },
         outlineMask: null,
     };
     material.userData.efmiToonMaterial = state;
@@ -1175,6 +1209,8 @@ function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
         shader.uniforms.efmiHighlightMap = state.highlightMap;
         shader.uniforms.efmiHighlightEnabled = state.highlightEnabled;
         shader.uniforms.efmiHighlightTransform = state.highlightTransform;
+        shader.uniforms.efmiRampMap = state.rampMap;
+        shader.uniforms.efmiRampEnabled = state.rampEnabled;
         shader.vertexShader = replaceRabbitFXShaderAnchor(
             shader.vertexShader,
             "#include <common>",
@@ -1216,15 +1252,14 @@ uniform mat3 efmiFaceMaskTransform;
 uniform sampler2D efmiHighlightMap;
 uniform float efmiHighlightEnabled;
 uniform mat3 efmiHighlightTransform;
+uniform sampler2D efmiRampMap;
+uniform float efmiRampEnabled;
 
 float efmiLuma( vec3 color ) {
     return dot( color, vec3( 0.212673, 0.715152, 0.072175 ) );
 }
 
-float efmiCoverage( float cosine ) {
-    float position = clamp( cosine, -1.0, 1.0 ) * 0.5 + 0.5;
-    return smoothstep( 0.5 - efmiSoftness - 0.001, 0.5 + efmiSoftness + 0.001, position );
-}`,
+${EFMI_RAMP_GLSL}`,
         );
         shader.fragmentShader = replaceRabbitFXShaderAnchor(
             shader.fragmentShader,
@@ -1261,23 +1296,24 @@ if ( efmiToonEnabled > 0.5 ) {
         faceMask = texture2D( efmiFaceMask, ( efmiFaceMaskTransform * vec3( vEfmiUv, 1.0 ) ).xy );
     }
     float flatLight = efmiFace * ( 1.0 - faceMask.g );
-    float rampCoverage = mix( efmiCoverage( lightCosine + efmiRangeBias ), 1.0, flatLight );
+    vec4 ramp = efmiRamp( lightCosine + efmiRangeBias );
+    float rampCoverage = mix( ramp.a, 1.0, flatLight );
     float lit = mix( min( rampCoverage, min( packedMap.b, occlusion ) ), 1.0, flatLight );
-    float cameraFacing = efmiCoverage( dot( worldNormal, cameraBack ) ) * packedMap.b * occlusion;
+    float cameraFacing = efmiRamp( dot( worldNormal, cameraBack ) ).a * packedMap.b * occlusion;
 
     vec3 shadowTone = mix( vec3( efmiLuma( albedo ) ), albedo, efmiShadowSaturation );
     shadowTone = max( shadowTone, vec3( 0.0 ) ) * efmiShadowBrightness * 0.96 * efmiAmbient;
     vec3 deepTone = 0.65 * shadowTone;
     float deepLuma = efmiLuma( deepTone );
     deepTone = vec3( deepLuma ) + 1.2 * ( deepTone - deepLuma );
-    vec3 surface = mix( deepTone, shadowTone, clamp( rampCoverage + cameraFacing, 0.0, 1.0 ) );
+    vec3 surface = mix( deepTone, shadowTone, clamp( rampCoverage + cameraFacing + efmiFace, 0.0, 1.0 ) );
     float viewCosine = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
     float faceRim = efmiFace * efmiFaceMaskEnabled * faceMask.r * mix( 0.7, 0.3, faceMask.b );
     vec3 litTone = albedo * mix( vec3( 1.0 ), vec3( 0.637, 0.376, 0.296 ), clamp( 0.85 * ( 1.0 - viewCosine ) * faceRim, 0.0, 1.0 ) );
-    surface = mix( surface, litTone * 0.96, lit );
+    surface = efmiRampTint( mix( surface, litTone * 0.96, lit ), mix( ramp.rgb, vec3( 1.0 ), flatLight ) );
 
-    float sky = mix( clamp( worldNormal.y + 0.15, 0.0, 1.0 ) * 1.5 + 0.5, 0.725, flatLight );
-    vec3 shadowTint = vec3( 0.878, 0.93, 1.122 );
+    float sky = mix( clamp( worldNormal.y + 0.15, 0.0, 1.0 ) * 1.5 + 0.5, 0.725, efmiFace );
+    vec3 shadowTint = mix( ${EFMI_SHADOW_TINT}, ${EFMI_SKIN_SHADOW_TINT}, efmiFace );
     vec3 irradiance = mix( shadowTint, vec3( 1.0 ), lit ) * sky * 0.2877 * efmiLightStrength;
     irradiance += vec3( efmiLightStrength * efmiBrightness );
     vec3 toon = surface * irradiance;
@@ -1325,7 +1361,7 @@ if ( efmiToonEnabled > 0.5 ) {
 }`,
         );
     };
-    material.customProgramCacheKey = () => "efmi-toon-v6";
+    material.customProgramCacheKey = () => "efmi-toon-v7";
     material.needsUpdate = true;
 }
 
@@ -1364,7 +1400,8 @@ function syncEFMIToon(
         style.outlines &&
         style.outlineWidth > 0 &&
         !coverageMask &&
-        !userData.efmiOverlayShadow;
+        !userData.efmiOverlayShadow &&
+        !userData.efmiEyeMesh;
     if (!showOutline && !userData.toonOutline) {
         return;
     }
@@ -1379,6 +1416,18 @@ function syncEFMIToon(
     uniforms.outlineWidth.value = style.outlineWidth;
     uniforms.outlineBrightness.value = style.outlineBrightness;
     uniforms.outlineDepthOffset.value = state.face.value * EFMI_FACE_OUTLINE_DEPTH_OFFSET;
+    uniforms.efmiFace.value = state.face.value;
+    uniforms.efmiRampMap.value = state.rampMap.value;
+    uniforms.efmiRampEnabled.value = state.rampEnabled.value;
+    uniforms.efmiSoftness.value = style.softness;
+    uniforms.efmiRangeBias.value = style.rangeBias;
+    uniforms.efmiShadowBrightness.value = style.shadowBrightness;
+    uniforms.efmiShadowSaturation.value = style.shadowSaturation;
+    uniforms.efmiAmbient.value = style.ambient;
+    uniforms.efmiLightStrength.value = style.lightStrength;
+    uniforms.efmiBrightness.value = style.brightness;
+    uniforms.efmiRimStrength.value = style.rimStrength;
+    uniforms.efmiRimWidth.value = style.rimWidth;
 }
 
 // Direct DDS textures flip V through this transform, which three applies only to
@@ -1399,7 +1448,21 @@ function createToonOutline(object: Mesh): Mesh<BufferGeometry, ShaderMaterial> {
     const outline = new Mesh(
         object.geometry,
         new ShaderMaterial({
+            lights: true,
             uniforms: {
+                ...UniformsUtils.clone(UniformsLib.lights),
+                efmiFace: { value: 0 },
+                efmiRampMap: { value: rabbitFXFallbackLightMap },
+                efmiRampEnabled: { value: 0 },
+                efmiSoftness: { value: 0 },
+                efmiRangeBias: { value: 0 },
+                efmiShadowBrightness: { value: 0 },
+                efmiShadowSaturation: { value: 0 },
+                efmiAmbient: { value: 0 },
+                efmiLightStrength: { value: 0 },
+                efmiBrightness: { value: 0 },
+                efmiRimStrength: { value: 0 },
+                efmiRimWidth: { value: 0 },
                 map: { value: rabbitFXFallbackLightMap },
                 mapTransform: { value: rabbitFXFallbackLightMap.matrix },
                 widthMask: { value: rabbitFXFallbackLightMap },
@@ -1419,8 +1482,12 @@ uniform sampler2D widthMask;
 uniform float widthMaskEnabled;
 uniform mat3 widthMaskTransform;
 varying vec2 vOutlineUv;
+varying vec3 vOutlineNormal;
+varying vec3 vOutlinePosition;
 void main() {
     vOutlineUv = ( mapTransform * vec3( uv, 1.0 ) ).xy;
+    vOutlineNormal = normalize( mat3( modelMatrix ) * outlineNormal );
+    vOutlinePosition = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
     vec4 viewPosition = modelViewMatrix * vec4( position, 1.0 );
     gl_Position = projectionMatrix * viewPosition;
     vec2 direction = ( projectionMatrix * vec4( normalMatrix * outlineNormal, 0.0 ) ).xy;
@@ -1441,11 +1508,69 @@ void main() {
         gl_Position.z = pushed.z * w / pushed.w;
     }
 }`,
-            fragmentShader: `uniform sampler2D map;
+            fragmentShader: `#include <common>
+#include <lights_pars_begin>
+uniform sampler2D map;
 uniform float outlineBrightness;
+uniform float efmiFace;
+uniform sampler2D efmiRampMap;
+uniform float efmiRampEnabled;
+uniform float efmiSoftness;
+uniform float efmiRangeBias;
+uniform float efmiShadowBrightness;
+uniform float efmiShadowSaturation;
+uniform float efmiAmbient;
+uniform float efmiLightStrength;
+uniform float efmiBrightness;
+uniform float efmiRimStrength;
+uniform float efmiRimWidth;
 varying vec2 vOutlineUv;
+varying vec3 vOutlineNormal;
+varying vec3 vOutlinePosition;
+
+float efmiLuma( vec3 color ) {
+    return dot( color, vec3( 0.212673, 0.715152, 0.072175 ) );
+}
+
+${EFMI_RAMP_GLSL}
+
 void main() {
-    gl_FragColor = vec4( texture2D( map, vOutlineUv ).rgb * outlineBrightness, 1.0 );
+    vec3 albedo = texture2D( map, vOutlineUv ).rgb * outlineBrightness;
+    vec3 color = albedo;
+    #if NUM_DIR_LIGHTS > 0
+    vec3 worldNormal = normalize( vOutlineNormal );
+    vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
+    vec3 worldView = normalize( cameraPosition - vOutlinePosition );
+    vec3 cameraBack = vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
+
+    vec4 ramp = efmiRamp( dot( worldNormal, worldLight ) + efmiRangeBias );
+    float facing = clamp( ( dot( worldNormal, cameraBack ) - 0.25 ) * 1.333333, 0.0, 1.0 );
+    float deep = clamp( ramp.a + facing * facing * ( 3.0 - 2.0 * facing ) + efmiFace, 0.0, 1.0 );
+
+    vec3 shadowTone = mix( vec3( efmiLuma( albedo ) ), albedo, efmiShadowSaturation );
+    shadowTone = max( shadowTone, vec3( 0.0 ) ) * efmiShadowBrightness * 0.96 * efmiAmbient;
+    vec3 deepTone = 0.65 * shadowTone;
+    float deepLuma = efmiLuma( deepTone );
+    deepTone = vec3( deepLuma ) + 1.2 * ( deepTone - deepLuma );
+    vec3 surface = efmiRampTint( mix( mix( deepTone, shadowTone, deep ), albedo * 0.96, ramp.a ), ramp.rgb );
+
+    float sky = mix( clamp( worldNormal.y + 0.15, 0.0, 1.0 ) * 1.5 + 0.5, 0.725, efmiFace );
+    vec3 shadowTint = mix( ${EFMI_SHADOW_TINT}, ${EFMI_SKIN_SHADOW_TINT}, efmiFace );
+    vec3 irradiance = mix( shadowTint, vec3( 1.0 ), ramp.a ) * sky * 0.2877 * efmiLightStrength;
+    color = surface * ( irradiance + vec3( efmiLightStrength * efmiBrightness ) );
+
+    float luma = efmiLuma( color );
+    float vivid = clamp( luma - 0.5, 0.0, 0.5 );
+    color = luma + ( color - luma ) * ( vivid * vivid + 1.0 );
+
+    vec3 screenLight = worldLight - cameraBack * dot( worldLight, cameraBack );
+    float screenLength = length( screenLight );
+    float rimSide = screenLength > 0.00001 ? clamp( dot( worldNormal, screenLight / screenLength ), 0.0, 1.0 ) : 0.0;
+    float grazing = 1.0 - abs( dot( worldNormal, worldView ) );
+    float rimBand = smoothstep( 0.0, 1.0, ( grazing - ( 0.8 - 0.6 * efmiRimWidth ) ) / ( 0.1 + 0.2 * efmiRimWidth ) );
+    color += rimBand * rimSide * albedo * 0.96 * efmiRimStrength * ( 1.0 - efmiFace );
+    #endif
+    gl_FragColor = vec4( color, 1.0 );
     #include <colorspace_fragment>
 }`,
             side: BackSide,
