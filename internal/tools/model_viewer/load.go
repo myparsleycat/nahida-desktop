@@ -412,6 +412,9 @@ func (t *Service) prepareModelViewerGeometry(
 	type builtUnit struct {
 		scoped    modelViewerScopedUnit
 		resources []modelViewerResource
+		// hashTextures are the referenced resources of a unit that draws
+		// nothing, which can only replace textures by hash.
+		hashTextures []modelViewerResource
 	}
 	built := make([]builtUnit, len(units))
 	var declaredResourcePaths []string
@@ -457,6 +460,11 @@ func (t *Service) prepareModelViewerGeometry(
 		prepared.sections = append(prepared.sections, sections...)
 		prepared.parseMs += time.Since(parseStartedAt).Milliseconds()
 		built[unitIndex] = builtUnit{scoped: scoped, resources: resources}
+		if !slices.ContainsFunc(sections, sectionHasIBOrDraw) {
+			built[unitIndex].hashTextures = lo.Filter(resources, func(resource modelViewerResource, _ int) bool {
+				return resource.Filename != "" && referenced[modelViewerNormalizeKey(resource.Name)]
+			})
+		}
 	}
 
 	domains := collectModelViewerBindingDomains(prepared.sections)
@@ -523,6 +531,16 @@ func (t *Service) prepareModelViewerGeometry(
 		if slices.ContainsFunc(unit.members, func(member int) bool {
 			return detectModelViewerLayout(parsedINIs[member].Sections, resources) == "wwmi"
 		}) {
+			var siblingTextures []modelViewerResource
+			for otherIndex, other := range units {
+				if otherIndex != unitIndex &&
+					platform.SamePathFold(filepath.Dir(iniPaths[other.primary]), filepath.Dir(iniPath)) {
+					siblingTextures = append(siblingTextures, built[otherIndex].hashTextures...)
+				}
+			}
+			if err := attachSiblingWwmiDumpDiffuse(ctx, folder, meshes, siblingTextures); err != nil {
+				return nil, err
+			}
 			if err := recoverWwmiDumpTextures(ctx, folder, meshes, resources, declaredResourcePaths); err != nil {
 				return nil, err
 			}

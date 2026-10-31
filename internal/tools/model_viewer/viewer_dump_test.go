@@ -486,6 +486,58 @@ filename = %s
 	}
 }
 
+func TestLoadModViewerBindsWWMIDumpDiffuseFromSiblingTextureINI(t *testing.T) {
+	const (
+		sharedFile    = "Textures/Components-0-1 t=11111111.dds"
+		dedicatedFile = "Textures/Components-0 t=22222222.dds"
+	)
+	dir := t.TempDir()
+	pixels := make([]color.NRGBA, 16*16)
+	for i := range pixels {
+		shade := uint8(i % 128)
+		pixels[i] = color.NRGBA{R: 100 + shade, G: 110 + shade, B: 120 + shade, A: 255}
+	}
+	writeTextureFile(t, dir, sharedFile, encodeWwmiUncompressedDDS(16, 16, pixels))
+	writeTextureFile(t, dir, dedicatedFile, encodeWwmiUncompressedDDS(16, 16, pixels))
+	writeTextureFile(t, dir, "vector.buf", make([]byte, 8*8))
+
+	// Both INIs declare ResourceTexture0, as 3DMigoto scopes section names per INI.
+	writeTextureFile(t, dir, "tex.ini", []byte(`[ResourceTexture0]
+filename = `+dedicatedFile+`
+[TextureOverrideTexture0]
+hash = 22222222
+this = ResourceTexture0
+`))
+	result := loadViewerMod(t, dir, `[Constants]
+global $required_wwmi_version = 0.77
+[TextureOverrideComponent0]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceVector
+vb2 = ResourceTc
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceVector]
+filename = vector.buf
+format = DXGI_FORMAT_R8G8B8A8_SNORM
+stride = 8
+[ResourceTexture0]
+filename = `+sharedFile+`
+[TextureOverrideTexture0]
+hash = 11111111
+this = ResourceTexture0
+`)
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %d, want 1", len(result.Meshes))
+	}
+	if key := "diffuse::" + dedicatedFile; texKey(result.Meshes[0]) != key {
+		t.Fatalf("diffuse = %q, want %q", texKey(result.Meshes[0]), key)
+	}
+	if _, ok := result.Textures["diffuse::"+dedicatedFile]; !ok {
+		t.Fatalf("textures = %v, want the sibling dump texture", result.Textures)
+	}
+}
+
 func TestLoadModViewerDoesNotBindWWMIDumpOntoNonComponentMesh(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "Textures/Components-3 t=beef001b.png", encodeColorPNG(16, 16))
