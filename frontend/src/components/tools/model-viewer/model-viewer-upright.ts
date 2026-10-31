@@ -1,4 +1,4 @@
-import { Box3, Euler, Object3D, Vector3 } from "three";
+import { Box3, Euler, MathUtils, Object3D, Vector3 } from "three";
 
 /**
  * Rotation applied to a freshly loaded model root when the model is authored
@@ -12,6 +12,15 @@ export const MODEL_VIEWER_UPRIGHT_ROTATION = new Euler(-Math.PI / 2, 0, 0);
 /** Thresholds mirrored from the reference mod viewer's fitTo() heuristic. */
 export const UPRIGHT_Z_OVER_Y = 1.5;
 export const UPRIGHT_Z_OVER_X = 1.15;
+
+export function applyModelViewerInitialRotation(root: Object3D, defaultYaw = 0): void {
+    if (needsUprightCorrection(root)) {
+        root.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
+    }
+    if (defaultYaw) {
+        root.rotateOnWorldAxis(new Vector3(0, 1, 0), MathUtils.degToRad(defaultYaw));
+    }
+}
 
 /**
  * Detect whether a model root lies on its back in the viewer's Y-up space.

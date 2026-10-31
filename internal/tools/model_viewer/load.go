@@ -150,6 +150,7 @@ func (t *Service) loadModViewer(
 		return ModelViewerTransport{}, prepareErr
 	}
 	defer prepared.cache.releaseAll()
+	transport.DefaultYaw = prepared.defaultYaw
 	var meshPayloadMs, postProcessMs, payloadWriteMs int64
 	var stageStartedAt time.Time
 	// Mesh payloads own the extracted attributes from this point onward. Drop
@@ -359,6 +360,7 @@ type modelViewerGeometryScan struct {
 }
 
 type modelViewerPreparedGeometry struct {
+	defaultYaw                                 float64
 	sections                                   []modINISection
 	shapeKeys                                  []modelViewerShapeKey
 	cache                                      *modelViewerBufferCache
@@ -544,6 +546,7 @@ func (t *Service) prepareModelViewerGeometry(
 		if slices.ContainsFunc(unit.members, func(member int) bool {
 			return detectModelViewerLayout(parsedINIs[member].Sections, resources) == "wwmi"
 		}) {
+			prepared.defaultYaw = 180
 			var siblingTextures []modelViewerResource
 			for otherIndex, other := range units {
 				if otherIndex != unitIndex &&

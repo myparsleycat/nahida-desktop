@@ -75,7 +75,7 @@ import {
   raycastModelViewerSurface,
   resolveModelViewerSurfacePick,
 } from "./model-viewer-surface-pick";
-import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
+import { applyModelViewerInitialRotation } from "./model-viewer-upright";
 
 type BodyShapeBaseline = {
   positions: Float32Array;
@@ -569,9 +569,7 @@ function ThreeModelScene({
             disposeObjectTree(nextRoot);
             return;
           }
-          if (needsUprightCorrection(nextRoot)) {
-            nextRoot.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
-          }
+          applyModelViewerInitialRotation(nextRoot, payloadTransport.defaultYaw);
           materialRef.current = collectStandardMaterials(nextRoot);
           activeObjectRef.current = nextRoot;
           // oxlint-disable-next-line react/set-state-in-effect
@@ -616,9 +614,7 @@ function ThreeModelScene({
         }
 
         const nextRoot = gltf.scene;
-        if (needsUprightCorrection(nextRoot)) {
-          nextRoot.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
-        }
+        applyModelViewerInitialRotation(nextRoot);
         materialRef.current = collectStandardMaterials(nextRoot);
         activeObjectRef.current = nextRoot;
         // oxlint-disable-next-line react/set-state-in-effect

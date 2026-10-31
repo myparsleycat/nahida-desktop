@@ -13,10 +13,7 @@ import {
     modelViewerLighting,
     modelViewerToneMapping,
 } from "@renderer/components/tools/model-viewer/model-viewer-scene";
-import {
-    MODEL_VIEWER_UPRIGHT_ROTATION,
-    needsUprightCorrection,
-} from "@renderer/components/tools/model-viewer/model-viewer-upright";
+import { applyModelViewerInitialRotation } from "@renderer/components/tools/model-viewer/model-viewer-upright";
 import { serializeDiagnostic } from "@shared/diagnostic";
 import type { EvaluatedViewerState, ModViewerTransport } from "@shared/mod-viewer/types";
 import {
@@ -100,9 +97,7 @@ async function render(request: GridModelPreviewRenderRequest): Promise<Blob> {
             undefined,
             getModelViewerTextureCapabilities(renderer),
         );
-        if (needsUprightCorrection(root)) {
-            root.rotation.copy(MODEL_VIEWER_UPRIGHT_ROTATION);
-        }
+        applyModelViewerInitialRotation(root, request.transport.defaultYaw);
         scene.add(root);
         const center = frameCameraOnObject(camera, root);
         if (center) {

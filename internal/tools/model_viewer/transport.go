@@ -190,11 +190,13 @@ type ModelViewerComputeDeformerTransport struct {
 }
 
 type ModelViewerTransport struct {
-	MemorySessionID  string                                 `json:"memorySessionId"`
-	INIPath          string                                 `json:"iniPath"`
-	ModPath          string                                 `json:"modPath"`
-	Name             string                                 `json:"name"`
-	PreviewPath      *string                                `json:"previewPath,omitempty"`
+	MemorySessionID string  `json:"memorySessionId"`
+	INIPath         string  `json:"iniPath"`
+	ModPath         string  `json:"modPath"`
+	Name            string  `json:"name"`
+	PreviewPath     *string `json:"previewPath,omitempty"`
+	// DefaultYaw is the rotation in degrees about viewer Y after upright correction.
+	DefaultYaw       float64                                `json:"defaultYaw,omitempty"`
 	MaterialProfile  string                                 `json:"materialProfile,omitempty"`
 	Meshes           []ModelViewerMeshTransport             `json:"meshes"`
 	Textures         map[string]ModelViewerTextureTransport `json:"textures"`

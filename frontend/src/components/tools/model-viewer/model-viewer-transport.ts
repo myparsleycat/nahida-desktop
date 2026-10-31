@@ -129,6 +129,7 @@ export function normalizeModelViewerTransport(
         iniPath: value.iniPath,
         modPath: value.modPath,
         name: value.name,
+        defaultYaw: value.defaultYaw,
         materialProfile: normalizeMaterialProfile(value.materialProfile),
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,

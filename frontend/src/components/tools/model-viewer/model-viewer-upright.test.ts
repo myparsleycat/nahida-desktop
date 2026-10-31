@@ -1,9 +1,13 @@
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial } from "three";
+import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
-import { MODEL_VIEWER_UPRIGHT_ROTATION, needsUprightCorrection } from "./model-viewer-upright";
+import {
+    applyModelViewerInitialRotation,
+    MODEL_VIEWER_UPRIGHT_ROTATION,
+    needsUprightCorrection,
+} from "./model-viewer-upright";
 
-function boxMesh(size: [number, number, number]): Mesh {
+function boxMesh(size: readonly [number, number, number]): Mesh {
     const geometry = new BufferGeometry();
     geometry.setAttribute(
         "position",
@@ -71,4 +75,53 @@ describe("needsUprightCorrection", () => {
         expect(MODEL_VIEWER_UPRIGHT_ROTATION.y).toBe(0);
         expect(MODEL_VIEWER_UPRIGHT_ROTATION.z).toBe(0);
     });
+});
+
+describe("applyModelViewerInitialRotation", () => {
+    it.each([
+        {
+            name: "Z-up WWMI",
+            size: [20, 20, 100],
+            up: [0, 0, 1],
+            front: [0, 1, 0],
+            yaw: 180,
+            facing: 1,
+        },
+        {
+            name: "Y-up WWMI",
+            size: [20, 100, 20],
+            up: [0, 1, 0],
+            front: [0, 0, -1],
+            yaw: 180,
+            facing: 1,
+        },
+        {
+            name: "Z-up default",
+            size: [20, 20, 100],
+            up: [0, 0, 1],
+            front: [0, 1, 0],
+            yaw: undefined,
+            facing: -1,
+        },
+        {
+            name: "Y-up default",
+            size: [20, 100, 20],
+            up: [0, 1, 0],
+            front: [0, 0, 1],
+            yaw: undefined,
+            facing: 1,
+        },
+    ] as const)(
+        "preserves upright and expected facing for $name",
+        ({ size, up, front, yaw, facing }) => {
+            const root = new Group().add(boxMesh(size));
+
+            applyModelViewerInitialRotation(root, yaw);
+
+            const rotatedUp = new Vector3(...up).applyQuaternion(root.quaternion);
+            const rotatedFront = new Vector3(...front).applyQuaternion(root.quaternion);
+            expect(rotatedUp.distanceTo(new Vector3(0, 1, 0))).toBeLessThan(1e-10);
+            expect(rotatedFront.distanceTo(new Vector3(0, 0, facing))).toBeLessThan(1e-10);
+        },
+    );
 });

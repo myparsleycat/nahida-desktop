@@ -332,6 +332,8 @@ export type ModViewerTransport = {
     iniPath: string;
     modPath: string;
     name: string;
+    /** Rotation in degrees about viewer Y after upright correction. */
+    defaultYaw?: number;
     materialProfile?: ViewerMaterialProfile;
     meshes: ViewerMeshTransport[];
     textures: Record<

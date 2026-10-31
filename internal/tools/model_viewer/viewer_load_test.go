@@ -24,6 +24,49 @@ filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 `
 
+func TestLoadModViewerInitialYaw(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		marker string
+		wwmi   bool
+		want   float64
+	}{
+		{name: "mihoyo"},
+		{name: "wwmi marker", marker: "[Constants]\nglobal $required_wwmi_version = 0.77\n", wwmi: true, want: 180},
+		{name: "wwmi resource layout", wwmi: true, want: 180},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ini := test.marker + `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+` + viewerBodyResources
+			if test.wwmi {
+				writeTextureFile(t, dir, "vector.buf", make([]byte, 8*8))
+				ini = strings.ReplaceAll(ini, "vb1 = ResourceTc", "vb1 = ResourceVectorBuffer\nvb2 = ResourceTc")
+				ini += `[ResourceVectorBuffer]
+filename = vector.buf
+format = DXGI_FORMAT_R8G8B8A8_SNORM
+stride = 8
+`
+				if test.marker == "" {
+					ini = strings.NewReplacer(
+						"ResourceBodyIB", "ResourceIndexBuffer",
+						"ResourcePos", "ResourcePositionBuffer",
+						"ResourceTc", "ResourceTexCoordBuffer",
+					).Replace(ini)
+				}
+			}
+			fixture := loadViewerFixture(t, dir, ini)
+			if fixture.result.DefaultYaw != test.want {
+				t.Fatalf("default yaw = %v, want %v", fixture.result.DefaultYaw, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadModViewerRecoversMissingComputeOutputFile(t *testing.T) {
 	fixture := loadViewerFixture(t, t.TempDir(), `[TextureOverrideBody]
 ib = ResourceBodyIB
