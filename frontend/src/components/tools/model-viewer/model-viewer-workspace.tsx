@@ -549,8 +549,10 @@ export function ModelViewerWorkspace({
   };
 
   const renderTileVariable = (variable: ViewerVariable) => (
-    <div key={variable.id} className="border-l-4 border-l-primary/40 pl-3">
-      <div className="mb-2 text-sm font-medium">{variable.label}</div>
+    <div key={variable.id} className="min-w-0 border-l-4 border-l-primary/40 pl-3">
+      <div className="mb-2 truncate text-sm font-medium" title={variable.label}>
+        {variable.label}
+      </div>
       <Select
         value={String(activeState[variable.id] ?? variable.defaultValue)}
         onValueChange={(value) => {
@@ -847,7 +849,7 @@ export function ModelViewerWorkspace({
           </div>
 
           {showToggleViewer || inspector ? (
-            <div className="flex min-h-0 flex-col gap-3">
+            <div className="flex min-h-0 min-w-0 flex-col gap-3">
               <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
                 {inspector}
                 {showToggleViewer && inspector ? (

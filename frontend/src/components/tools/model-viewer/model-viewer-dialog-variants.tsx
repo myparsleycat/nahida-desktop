@@ -37,7 +37,7 @@ export function VariantTile({
     <button
       type="button"
       className={cn(
-        "relative flex aspect-square min-h-20 items-end justify-center overflow-hidden rounded-md border bg-black/20 p-2 text-white transition",
+        "relative flex aspect-square min-h-20 min-w-0 items-end justify-center overflow-hidden rounded-md border bg-black/20 p-2 text-white transition",
         disabled ? "cursor-not-allowed opacity-60" : "hover:bg-black/30",
       )}
       disabled={disabled}
@@ -70,7 +70,10 @@ export function VariantTile({
           className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] object-contain"
         />
       ) : null}
-      <div className="relative z-10 rounded bg-black/60 px-2 py-1 text-[11px] leading-none">
+      <div
+        className="relative z-10 max-w-full truncate rounded bg-black/60 px-2 py-1 text-[11px] leading-none"
+        title={variable.label}
+      >
         {variable.label}
       </div>
     </button>
@@ -152,16 +155,18 @@ export function VariantSlider({
   return (
     <div className="rounded-md bg-muted/50 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {variable.iconPath ? (
             <img
               src={modelViewerSourceToUrl(variable.iconPath)}
-              className="size-8 rounded object-contain"
+              className="size-8 shrink-0 rounded object-contain"
             />
           ) : null}
-          <div className="text-sm font-medium">{variable.label}</div>
+          <div className="truncate text-sm font-medium" title={variable.label}>
+            {variable.label}
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground tabular-nums">
+        <div className="shrink-0 text-xs text-muted-foreground tabular-nums">
           {formatSliderValue(draftValue)}
         </div>
       </div>
