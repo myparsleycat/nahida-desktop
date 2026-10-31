@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/myparsleycat/ddsutil"
@@ -370,6 +371,62 @@ func TestAttachWwmiDumpTextureDoesNotInventResourceName(t *testing.T) {
 	assignment := meshes[0].textureAssignments[0]
 	if assignment.file != relative || assignment.resource != "" || meshes[0].textureDefaultFile != relative {
 		t.Fatalf("dump assignment = %#v, default = %q", assignment, meshes[0].textureDefaultFile)
+	}
+}
+
+func TestLoadModViewerLeavesGameTextureDrawWithoutOtherStateDump(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "Textures"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "Textures", "Components-0 t=0000abcd.dds"),
+		encodeWwmiUncompressedDDS(2, 2, []color.NRGBA{
+			{R: 255, A: 255}, {G: 255, A: 255}, {B: 255, A: 255}, {R: 255, G: 255, B: 255, A: 255},
+		}),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	result := loadViewerMod(t, dir, `[Constants]
+global $char = 0
+[KeyChar]
+type = cycle
+$char = 0, 1
+[CommandListSharedBuffers]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+[TextureOverrideComponent0]
+if $char == 0
+ps-t1 = ResourceSwapped
+endif
+run = CommandListSharedBuffers
+if $char == 1
+drawindexed = 3, 0, 0
+else
+drawindexed = 3, 0, 1
+endif
+[ResourceSwapped]
+filename = Textures/Components-0 t=0000abcd.dds
+`+viewerBodyResources)
+
+	swapped := evaluateViewerTransport(result, map[string]any{"char": "0"})
+	game := evaluateViewerTransport(result, map[string]any{"char": "1"})
+	textures := func(state viewerEvalState) []string {
+		var keys []string
+		for _, mesh := range state.Meshes {
+			if mesh.Visible {
+				keys = append(keys, mesh.TexKey)
+			}
+		}
+		return keys
+	}
+	if keys := textures(swapped); len(keys) != 1 || !strings.Contains(keys[0], "0000abcd") {
+		t.Fatalf("swapped textures = %q", keys)
+	}
+	if keys := textures(game); len(keys) != 1 || keys[0] != "" {
+		t.Fatalf("game textures = %q", keys)
 	}
 }
 

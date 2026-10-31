@@ -34,6 +34,7 @@ type modelViewerDirectMesh struct {
 	textureDumpInferred    bool
 	textureDefaultFile     string
 	nonDiffuseTextureFiles []string
+	otherStateTextures     []string
 	slotTextureCandidates  []modelViewerDirectTextureAssignment
 	indexCount             int
 	drawSource             *DrawSource
@@ -792,7 +793,7 @@ func buildModelViewerDirectMeshPayload(
 			}
 		}
 		for role, name := range bestByRole {
-			if authoredRoles[role] {
+			if authoredRoles[role] || meshTextureBelongsToOtherState(&mesh, name) {
 				continue
 			}
 			key := modelViewerNormalizeKey(name)

@@ -31,6 +31,7 @@ type modelViewerDirectDrawRecord struct {
 	slotTextures    []modelViewerDirectTextureAssignment
 	authoredDiffuse bool
 	nonDiffuse      []string
+	otherState      []string
 	thisFiles       []string
 	conditions      ModelViewerDNF
 	draw            modelViewerDrawInstruction
@@ -548,6 +549,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				mesh.nonDiffuseTextureFiles,
 				resourceFilenames(resourceMap, record.nonDiffuse),
 			)
+			mesh.otherStateTextures = lo.Union(mesh.otherStateTextures, record.otherState)
 			appendModelViewerDirectTextureHistory(mesh, record.textureHistory, resourceMap)
 			appendModelViewerSlotTextureCandidates(mesh, record.slotTextures, resourceMap)
 			continue
@@ -669,6 +671,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			conditions:             draw.conditions,
 			textureAuthored:        record.authoredDiffuse,
 			nonDiffuseTextureFiles: resourceFilenames(resourceMap, record.nonDiffuse),
+			otherStateTextures:     record.otherState,
 			indexCount:             indexCount,
 			drawSource: &DrawSource{
 				INIPath:    iniPath,

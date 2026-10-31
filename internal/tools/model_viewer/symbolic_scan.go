@@ -446,6 +446,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 			slotTextures:    append([]modelViewerDirectTextureAssignment(nil), slotTextures...),
 			authoredDiffuse: authored,
 			nonDiffuse:      append([]string(nil), state.nonDiffuse...),
+			otherState:      modelViewerSymbolicOtherStateTextures(state, drawConditions),
 			thisFiles:       thisFiles,
 			conditions:      cloneModelViewerDNF(variant.conditions),
 			draw:            recordDraw,
@@ -700,6 +701,23 @@ func modelViewerSymbolicTextureHistory(
 					conditions: conditions,
 				},
 			)
+		}
+	}
+	return output
+}
+
+// modelViewerSymbolicOtherStateTextures lists resources the section binds only
+// in states where this draw does not run.
+func modelViewerSymbolicOtherStateTextures(
+	state *modelViewerSymbolicSectionState,
+	drawConditions ModelViewerDNF,
+) []string {
+	var output []string
+	for _, history := range state.textures {
+		for _, assignment := range history {
+			if !modelViewerDNFIntersects(drawConditions, assignment.conditions) {
+				output = appendUniqueModelViewer(output, assignment.resource)
+			}
 		}
 	}
 	return output

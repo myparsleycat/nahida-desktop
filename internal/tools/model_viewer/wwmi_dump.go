@@ -416,6 +416,11 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		if dumpPick == "" && mesh.textureDefaultFile == "" {
 			dumpPick = boundPickedByIndex[index]
 		}
+		if meshTextureBelongsToOtherState(mesh, resourceByFile[slashPath(dumpPick)]) {
+			dumpPick = pick(lo.Reject(filesByIndex[index], func(file string, _ int) bool {
+				return meshTextureBelongsToOtherState(mesh, resourceByFile[slashPath(file)])
+			}))
+		}
 		if meshHasBoundAuthoredDiffuse(mesh) {
 			continue
 		}
@@ -444,6 +449,20 @@ func attachWwmiDumpTextures(meshes []modelViewerDirectMesh, resources []modelVie
 		mesh.textureDefaultFile = dumpPick
 		mesh.textureDumpInferred = true
 	}
+}
+
+// meshTextureBelongsToOtherState reports whether the mesh's section binds the
+// resource only in toggle states where this draw does not run. Such a draw stays
+// on the game's textures, and its UVs do not fit the other state's atlas.
+func meshTextureBelongsToOtherState(mesh *modelViewerDirectMesh, resource string) bool {
+	key := modelViewerNormalizeKey(resource)
+	boundHere := func(assignment modelViewerDirectTextureAssignment) bool {
+		return modelViewerNormalizeKey(assignment.resource) == key
+	}
+	return slices.ContainsFunc(mesh.otherStateTextures, func(other string) bool {
+		return modelViewerNormalizeKey(other) == key
+	}) && !slices.ContainsFunc(mesh.textureAssignments, boundHere) &&
+		!slices.ContainsFunc(mesh.slotTextureCandidates, boundHere)
 }
 
 func keepLikelyDiffuseAssignments(
