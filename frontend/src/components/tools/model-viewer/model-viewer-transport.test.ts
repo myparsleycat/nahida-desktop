@@ -227,6 +227,7 @@ describe("normalizeModelViewerTransport", () => {
         ["gimi_cyclic_packed_v1", undefined],
         ["gimi_packed_dual_quaternion_v1", undefined],
         ["gimi_packed_dual_quaternion_v1", "object"],
+        ["gimi_packed_dual_quaternion_v1", "object_direct"],
     ] as const)(
         "keeps a %s compute descriptor with %s pose variant",
         (kind, dualQuaternionVariant) => {

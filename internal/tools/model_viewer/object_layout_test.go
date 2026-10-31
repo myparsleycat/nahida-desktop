@@ -432,6 +432,57 @@ func TestModelViewerPackedUVScoreCountsNonFiniteWordsAgainstTheScore(t *testing.
 	}
 }
 
+func TestModelViewerPacked28ObjectDrawUsesPrimaryUVBeforeSecondarySet(t *testing.T) {
+	dir := t.TempDir()
+	position := make([]byte, 3*28)
+	for vertex := range 3 {
+		offset := vertex * 28
+		writePackedObjectVertex(position, offset, float32(vertex+1), 2, 3, 0, 0, 0, 0, 127)
+		binary.LittleEndian.PutUint16(position[offset+16:], modelViewerFloatToHalfBits(float32(vertex)*0.25))
+		binary.LittleEndian.PutUint16(position[offset+18:], modelViewerFloatToHalfBits(0.75))
+		binary.LittleEndian.PutUint16(position[offset+20:], modelViewerFloatToHalfBits(float32(vertex)*3))
+		binary.LittleEndian.PutUint16(position[offset+22:], modelViewerFloatToHalfBits(0.5))
+		binary.LittleEndian.PutUint32(position[offset+24:], 0x7f437fc3)
+	}
+	ini := `[Constants]
+post ResourceTankPosition = copy_desc ResourceTankPosition.1
+[TextureOverrideTankPosition]
+hash = 11111111
+vb0 = ResourceTankPosition
+[TextureOverrideTankHead]
+hash = 22222222
+ib = ResourceTankHeadIB
+drawindexed = auto
+[ResourceTankPosition]
+[ResourceTankPosition.1]
+stride = 28
+filename = Tank.buf
+[ResourceTankHeadIB]
+format = DXGI_FORMAT_R32_UINT
+filename = TankHead.ib
+`
+	for name, data := range map[string][]byte{
+		"mod.ini": []byte(ini), "Tank.buf": position,
+		"TankHead.ib": modelViewerUint32Bytes([]uint32{0, 1, 2}),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sections := parseModINI(ini)
+	meshes, err := buildModelViewerDirectScannedMeshes(filepath.Join(dir, "mod.ini"), sections,
+		collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 || meshes[0].geometry == nil {
+		t.Fatalf("meshes = %+v", meshes)
+	}
+	if uv := meshes[0].geometry.Texcoord0; !slices.Equal(uv, []float32{0, 0.25, 0.25, 0.25, 0.5, 0.25}) {
+		t.Fatalf("diffuse UVs = %v; want the primary UV at byte 16 with V flipped", uv)
+	}
+}
+
 func TestModelViewerDeclaredTexcoordOffsetSurvivesStride24Guess(t *testing.T) {
 	dir := t.TempDir()
 	position := makeStride24BufferWithTrailingUV(3)

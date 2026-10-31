@@ -5,10 +5,11 @@ import (
 	"strings"
 )
 
-// Packed dual-quaternion armature shaders pose game vertices with Blender-space
-// dual quaternions. Their base records come in three packed layouts: the 20-byte
-// record, the 24-byte object record with an explicit UV0/UV1 pair, and the
-// 28-byte object record that keeps a vertex color word before the pair. Most
+// Packed dual-quaternion armature shaders pose game vertices with dual
+// quaternions, using either Blender-space or direct position axes. Their base
+// records come in three packed layouts: the 20-byte record, the 24-byte object
+// record with an explicit UV0/UV1 pair, and the 28-byte object record that keeps
+// a vertex color word alongside the pair. Most
 // exports keep the legacy interpolation body; the newer object build replaces
 // the pose math as well. Every variant reports the stride and diffuse UV offset
 // later stages decode.
@@ -71,7 +72,6 @@ var modelViewerPackedDualQuaternionObjectBody = []string{
 	"-qdw*qx+qdx*qw-qdy*qz+qdz*qy",
 	"m00*pos.x+m01*pos.y+m02*pos.z",
 	"m00*normal.x+m01*normal.y+m02*normal.z",
-	"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
 	"i32toi8(int(normal_result",
 }
 
@@ -107,7 +107,9 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord0;uinttexcoord1;}",
 		},
 		poseVariant: "object",
-		required:    modelViewerPackedDualQuaternionObjectBody,
+		required: append([]string{
+			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
+		}, modelViewerPackedDualQuaternionObjectBody...),
 	},
 	{
 		baseStride:     modelViewerPackedObjectStride28,
@@ -116,7 +118,31 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
 		},
 		poseVariant: "object",
-		required:    modelViewerPackedDualQuaternionObjectBody,
+		required: append([]string{
+			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
+		}, modelViewerPackedDualQuaternionObjectBody...),
+	},
+	{
+		baseStride: modelViewerPackedObjectStride28,
+		// This export labels its primary UV word "color" and leaves the
+		// actual tangent at the end; the declared field names are misleading.
+		texcoordOffset: 16,
+		vertexStructs: []string{
+			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord1;uinttexcoord2;}",
+		},
+		poseVariant: "object_direct",
+		required: append([]string{
+			"pos.x=f16tof32(base[i].position.x&0xffff)",
+			"pos.y=f16tof32(base[i].position.x>>16)",
+			"pos.z=f16tof32(base[i].position.y&0xffff)", "pos.w=1.0f",
+			"normal.x=float(i8toi32(base[i].normal.x&0xff))",
+			"normal.z=float(i8toi32(base[i].normal.x>>8&0xff))",
+			"normal.y=float(i8toi32(base[i].normal.x>>16&0xff))*-1.0f",
+			"if(qr_len<1e-6f)qr_len=1e-6f",
+			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.y)<<16|(uint)f32tof16(pos_result.x)",
+			"rw_buffer[i].position.y=(uint)f32tof16(pos_result.w)<<16|(uint)f32tof16(pos_result.z)",
+			"i32toi8(int(normal_result.z))<<16|i32toi8(int(normal_result.y))<<8|i32toi8(int(normal_result.x))",
+		}, modelViewerPackedDualQuaternionObjectBody...),
 	},
 }
 

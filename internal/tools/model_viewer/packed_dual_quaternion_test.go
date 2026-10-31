@@ -515,6 +515,85 @@ func TestPackedDualQuaternion28ObjectBody(t *testing.T) {
 	}
 }
 
+var packedDualQuaternion28DirectShader = strings.NewReplacer(
+	"uint2 position; uint normal; uint tangent; uint texcoord0; uint texcoord1;",
+	"uint2 position; uint normal; uint tangent; uint color; uint texcoord1; uint texcoord2;",
+	"pos.z = f16tof32(base[i].position.x >> 16);",
+	"pos.y = f16tof32(base[i].position.x >> 16);",
+	"pos.y = f16tof32(base[i].position.y & 0xffff) * -1.0f;",
+	"pos.z = f16tof32(base[i].position.y & 0xffff);",
+	"normal.x = float(i8toi32(base[i].normal.x & 0xff));",
+	`normal.x = float(i8toi32(base[i].normal.x & 0xff));
+ normal.z = float(i8toi32(base[i].normal.x >> 8 & 0xff));
+ normal.y = float(i8toi32(base[i].normal.x >> 16 & 0xff)) * -1.0f;`,
+	"float qr_len = length(qr);",
+	"float qr_len = length(qr); if (qr_len < 1e-6f) qr_len = 1e-6f;",
+	"rw_buffer[i].position.x = (uint)f32tof16(pos_result.z)<<16 | (uint)f32tof16(pos_result.x);",
+	`rw_buffer[i].position.x = (uint)f32tof16(pos_result.y)<<16 | (uint)f32tof16(pos_result.x);
+ rw_buffer[i].position.y = (uint)f32tof16(pos_result.w)<<16 | (uint)f32tof16(pos_result.z);`,
+	"rw_buffer[i].normal.x = i32toi8(int(normal_result.x));",
+	`rw_buffer[i].normal.x = i32toi8(int(normal_result.w))<<24 | i32toi8(int(normal_result.z))<<16 |
+ i32toi8(int(normal_result.y))<<8 | i32toi8(int(normal_result.x));`,
+).Replace(packedDualQuaternion24Shader)
+
+func TestPackedDualQuaternion28DirectObjectLoadsAnimationAndUVs(t *testing.T) {
+	dir := t.TempDir()
+	ini := strings.NewReplacer(
+		"global $dt", "global $dt\nglobal $pause = 0",
+		"$start = 6", "$start = 1", "$end = 5159", "$end = 7",
+		"stride = 20", "stride = 28", "stride = 52", "stride = 56",
+		"$freq = $freq + 24 * $dt", "if $pause == 0\n$freq = $freq + 24 * $dt\nendif",
+		"Dispatch = 3, 1, 1", "Dispatch = 3, 1, 1\ncs-u5 = null\ncs-t50 = null\ncs-t51 = null",
+	).Replace(packedDualQuaternionINI)
+	base := make([]byte, 3*28)
+	for vertex := range 3 {
+		offset := vertex * 28
+		writePackedObjectVertex(base, offset, float32(vertex+1), 2, 3, 0, 0, 0, 0, 127)
+		binary.LittleEndian.PutUint16(base[offset+16:], modelViewerFloatToHalfBits(0.25))
+		binary.LittleEndian.PutUint16(base[offset+18:], modelViewerFloatToHalfBits(0.75))
+	}
+	for name, data := range map[string][]byte{
+		"mod.ini": []byte(ini), "anim.hlsl": []byte(packedDualQuaternion28DirectShader),
+		"base.buf": base, "blend.buf": make([]byte, 3*32), "pose.buf": make([]byte, 8*56),
+		"head.ib": modelViewerUint32Bytes([]uint32{0, 1, 2}),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New()
+	payload, err := service.LoadModViewer(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = service.CleanupModelViewer(context.Background(), payload.MemorySessionID) })
+	if len(payload.Meshes) != 1 || len(payload.ComputeDeformers) != 1 || len(payload.Animations) != 1 {
+		t.Fatalf("meshes=%d deformers=%d animations=%d", len(payload.Meshes), len(payload.ComputeDeformers),
+			len(payload.Animations))
+	}
+	d, clip := payload.ComputeDeformers[0], payload.Animations[0]
+	if d.Kind != modelViewerPackedDualQuaternionKind || d.VertexCount != 3 || d.Pose == nil ||
+		d.Pose.DualQuaternionVariant != "object_direct" || d.Pose.BoneCount != 1 || d.Pose.FrameCount != 8 ||
+		d.Base.Encoding != modelViewerPackedFloatEncoding || clip.DeformerID != d.ID ||
+		clip.FrameStart != 1 || clip.FrameEnd != 5 || clip.FPS != 24 {
+		t.Fatalf("deformer=%+v clip=%+v", d, clip)
+	}
+	mesh := readViewerMesh(t, service.protocol, payload.Meshes[0].GeometryURL)
+	if len(mesh.UVs) != 6 || mesh.UVs[0] != 0.25 || mesh.UVs[1] != 0.25 {
+		t.Fatalf("UVs=%v; want the primary UV at byte 16", mesh.UVs)
+	}
+	for _, replacement := range []struct{ from, to string }{
+		{"pos.y = f16tof32(base[i].position.x >> 16);", "pos.y = 0;"},
+		{"f32tof16(pos_result.z);", "f32tof16(pos_result.y);"},
+		{"normal.y = float(i8toi32(base[i].normal.x >> 16 & 0xff)) * -1.0f;", "normal.y = 0;"},
+	} {
+		if isKnownModelViewerPackedDualQuaternionShader(strings.Replace(packedDualQuaternion28DirectShader,
+			replacement.from, replacement.to, 1)) {
+			t.Fatalf("changed coordinate mapping accepted: %s", replacement.from)
+		}
+	}
+}
+
 func TestPackedDualQuaternion24CompoundGuardClips(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

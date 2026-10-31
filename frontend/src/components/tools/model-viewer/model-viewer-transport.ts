@@ -217,7 +217,9 @@ export function normalizeModelViewerTransport(
         computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
             const dualQuaternionVariant = deformer.pose?.dualQuaternionVariant;
             if (
-                (dualQuaternionVariant && dualQuaternionVariant !== "object") ||
+                (dualQuaternionVariant &&
+                    dualQuaternionVariant !== "object" &&
+                    dualQuaternionVariant !== "object_direct") ||
                 (deformer.kind !== "gimi_shape_pose_v1" &&
                     deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
                     deformer.kind !== "gimi_cyclic_packed_v1" &&
@@ -257,9 +259,12 @@ export function normalizeModelViewerTransport(
                     })),
                     pose: deformer.pose
                         ? {
-                              dualQuaternionVariant: dualQuaternionVariant
-                                  ? ("object" as const)
-                                  : undefined,
+                              dualQuaternionVariant:
+                                  dualQuaternionVariant === "object_direct"
+                                      ? ("object_direct" as const)
+                                      : dualQuaternionVariant
+                                        ? ("object" as const)
+                                        : undefined,
                               blend: normalizeComputeSource(deformer.pose.blend),
                               frames: normalizeComputeSource(deformer.pose.frames),
                               boneCount: deformer.pose.boneCount,

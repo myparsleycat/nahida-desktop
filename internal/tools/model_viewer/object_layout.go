@@ -693,10 +693,14 @@ func detectModelViewerPackedTexcoordOffset(data []byte, stride int) int {
 		}
 		return 12
 	case modelViewerPackedObjectStride28:
+		offset := 12
 		if modelViewerPackedUVScore(data, stride, 20) >= modelViewerPackedUVScore(data, stride, 12) {
-			return 20
+			offset = 20
 		}
-		return 12
+		if modelViewerPackedUVScore(data, stride, 16) > modelViewerPackedUVScore(data, stride, offset)+0.05 {
+			return 16
+		}
+		return offset
 	default:
 		return 12
 	}

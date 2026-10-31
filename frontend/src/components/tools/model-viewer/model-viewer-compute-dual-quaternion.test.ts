@@ -81,7 +81,38 @@ describe("packed dual-quaternion kernel", () => {
         expectVector(result.normals, [1, 0, 0]);
     });
 
-    it.each([undefined, "object"] as const)(
+    it("applies direct object positions while preserving the shader's normal axis conversion", () => {
+        const pose = [2, 3, 4, 5, 6, 7, 0, 0, 0, 1, 1, 2, 3, 0];
+        const { deformer, buffers } = fixture([...pose, ...pose]);
+        deformer.pose!.dualQuaternionVariant = "object_direct";
+        const result = computePackedDualQuaternionFrame(deformer, buffers, 0);
+        expectVector(result.positions, [9, 16, 25]);
+        expectVector(result.normals, [0, -1, 0]);
+    });
+
+    it("rotates direct object positions and converted normals without remapping the output", () => {
+        const q = Math.SQRT1_2;
+        const pose = [1, 1, 1, 0, 0, 0, 0, 0, q, q, 0, 0, 0, 0];
+        const { deformer, buffers } = fixture([...pose, ...pose]);
+        deformer.pose!.dualQuaternionVariant = "object_direct";
+        const result = computePackedDualQuaternionFrame(deformer, buffers, 0);
+        expectVector(result.positions, [-2, 1, 3]);
+        expectVector(result.normals, [1, 0, 0]);
+    });
+
+    it.each([
+        [0, [1, 2, 3]],
+        [1e-7, [0.98, 1.96, 3]],
+    ] as const)("clamps the direct object quaternion length for %s", (qz, expected) => {
+        const pose = [1, 1, 1, 0, 0, 0, 0, 0, qz, 0, 0, 0, 0, 0];
+        const { deformer, buffers } = fixture([...pose, ...pose]);
+        deformer.pose!.dualQuaternionVariant = "object_direct";
+        expectVector(computePackedDualQuaternionFrame(deformer, buffers, 0).positions, [
+            ...expected,
+        ]);
+    });
+
+    it.each([undefined, "object", "object_direct"] as const)(
         "interpolates opposite quaternion signs for %s",
         (variant) => {
             const first = [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
@@ -102,6 +133,7 @@ describe("packed dual-quaternion kernel", () => {
     it.each([
         [undefined, [3, 2, -1]],
         ["object", [1, 2, 3]],
+        ["object_direct", [1, 2, 3]],
     ] as const)(
         "matches %s quaternion contributions at dot zero across bones",
         (variant, expected) => {
@@ -125,6 +157,7 @@ describe("packed dual-quaternion kernel", () => {
     it.each([
         [undefined, [3, 2, -1]],
         ["object", [1, 2, 3]],
+        ["object_direct", [1, 2, 3]],
     ] as const)(
         "matches %s quaternion contributions at dot zero between frames",
         (variant, expected) => {
