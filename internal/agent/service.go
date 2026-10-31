@@ -2007,10 +2007,24 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 	case "mod":
 		canonical, err := canonicalExistingDir(scope.ModPath)
 		if err != nil {
-			return AgentScope{}, nil, fmt.Errorf("selected mod folder is unavailable: %w", err)
+			return AgentScope{}, nil, infra.AnnotateError(
+				fmt.Errorf("selected mod folder is unavailable: %w", err),
+				infra.Diagnostic{
+					Operation: "agent-session", Stage: "resolve-mod-folder",
+					Fields: map[string]any{"modPath": scope.ModPath, "modName": scope.ModName},
+				},
+			)
+		}
+		entry, err := entryPath(canonical)
+		if err != nil {
+			return AgentScope{}, nil, fmt.Errorf("resolve selected mod folder location %q: %w", scope.ModPath, err)
 		}
 		for _, gameRoot := range gameRoots {
-			if pathWithin(gameRoot.Path, canonical) && !strings.EqualFold(gameRoot.Path, canonical) {
+			physicalRoot, err := platform.FinalPath(gameRoot.Path)
+			if err != nil {
+				continue
+			}
+			if pathWithin(physicalRoot, entry) && !platform.SamePathFold(physicalRoot, entry) {
 				name := strings.TrimSpace(scope.ModName)
 				if name == "" {
 					name = filepath.Base(canonical)

@@ -123,12 +123,16 @@ func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
 			_ = sandbox.Close()
 			return nil, errors.New("sandbox root requires id and path")
 		}
+		entry, err := entryPath(view.Path)
+		if err != nil {
+			_ = sandbox.Close()
+			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
+		}
 		canonical, err := canonicalExistingDir(view.Path)
 		if err != nil {
 			_ = sandbox.Close()
 			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
 		}
-		view.Path = canonical
 		root, err := os.OpenRoot(canonical)
 		if err != nil {
 			_ = sandbox.Close()
@@ -140,12 +144,7 @@ func NewSandbox(roots []SandboxRoot) (*Sandbox, error) {
 			_ = sandbox.Close()
 			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
 		}
-		entry, err := entryPath(canonical)
-		if err != nil {
-			_ = root.Close()
-			_ = sandbox.Close()
-			return nil, fmt.Errorf("open sandbox root %s: %w", view.Name, err)
-		}
+		view.Path = physical
 		sandbox.roots[view.ID] = &openedRoot{view: view, root: root, physical: physical, entry: entry}
 	}
 	return sandbox, nil
@@ -615,7 +614,13 @@ func (s *Sandbox) ResolveExisting(rootID, relativePath string) (string, error) {
 	if !pathWithin(root.view.Path, resolved) {
 		return "", errSandboxPath
 	}
-	return resolved, nil
+	relative, err := filepath.Rel(root.view.Path, resolved)
+	if err != nil {
+		return "", err
+	}
+
+	// Managed mod actions must receive the junction entry so they rename it rather than its target.
+	return filepath.Join(root.entry, relative), nil
 }
 
 // ResolveTarget resolves a sandbox path that may be missing, such as an action's output file. The
@@ -806,7 +811,13 @@ func canonicalExistingDir(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Preserve the spelling used by persisted root IDs. If EvalSymlinks fails below a junction,
+	// resolve the parent physically and retain the directory's own entry for scope checks.
 	canonical, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		canonical, err = entryPath(abs)
+	}
 	if err != nil {
 		return "", err
 	}

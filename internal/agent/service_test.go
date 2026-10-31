@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	agentactions "nahida.live/desktop/internal/agent/actions"
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/hunting"
+	modservice "nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/xxmi"
@@ -689,6 +692,196 @@ func TestSessionScopesResolveCurrentGameRoots(t *testing.T) {
 	}
 	if _, err := service.CreateSession(ctx, AgentScope{Type: "mod", ModPath: t.TempDir()}); err == nil {
 		t.Fatal("outside mod scope unexpectedly succeeded")
+	}
+}
+
+func TestSessionScopesOpenModBelowJunction(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	base := t.TempDir()
+	client, err := db.New(filepath.Join(base, "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mods := filepath.Join(base, "Stored Mods")
+	selected := filepath.Join(mods, "Character", "Selected Mod")
+	if err := os.MkdirAll(selected, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkedMods := filepath.Join(base, "Mods")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", linkedMods, mods).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: linkedMods}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	session, err := service.OpenSession(ctx, AgentScope{
+		Type: "mod", ModPath: filepath.Join(linkedMods, "Character", "Selected Mod"), ModName: "Selected Mod",
+	})
+	if err != nil {
+		t.Fatalf("OpenSession below junction: %v", err)
+	}
+	direct, err := service.OpenSession(ctx, AgentScope{Type: "mod", ModPath: selected})
+	if err != nil || direct.ID != session.ID {
+		t.Fatalf("OpenSession through physical path = %#v, %v; want session %q", direct, err, session.ID)
+	}
+	snapshot, err := service.GetSession(ctx, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := NewSandbox(snapshot.Roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sandbox.Close() })
+	if _, err := sandbox.Writable().ResolveExisting(snapshot.Roots[0].ID, "."); err != nil {
+		t.Fatalf("selected mod is not writable: %v", err)
+	}
+	_, err = sandbox.Writable().ResolveTarget(snapshot.Roots[1].ID, "Sibling/new.ini")
+	if !errors.Is(err, errSandboxReadOnly) {
+		t.Fatalf("sibling write error = %v, want read-only rejection", err)
+	}
+
+	externalMod := t.TempDir()
+	linkedMod := filepath.Join(mods, "Character", "External Mod")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", linkedMod, externalMod).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	external, err := service.OpenSession(ctx, AgentScope{
+		Type: "mod", ModPath: filepath.Join(linkedMods, "Character", "External Mod"),
+	})
+	if err != nil {
+		t.Fatalf("OpenSession for a mod junction: %v", err)
+	}
+	externalSnapshot, err := service.GetSession(ctx, external.ID)
+	if err != nil || len(externalSnapshot.Roots) != 2 {
+		t.Fatalf("restored mod junction roots = %#v, %v", externalSnapshot.Roots, err)
+	}
+	externalSandbox, err := NewSandbox(externalSnapshot.Roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = externalSandbox.Close() })
+	resolved, err := externalSandbox.Writable().ResolveExisting(externalSnapshot.Roots[0].ID, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedInfo, err := os.Stat(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetInfo, err := os.Stat(externalMod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(resolvedInfo, targetInfo) {
+		t.Fatalf("mod junction resolved to a different directory: %q", resolved)
+	}
+
+	modsService := modservice.New()
+	modsService.UseClient(client)
+	t.Cleanup(func() {
+		if err := modsService.ServiceShutdown(); err != nil {
+			t.Errorf("mod service shutdown: %v", err)
+		}
+	})
+	registry := agentactions.NewRegistry(agentactions.Dependencies{Mod: modsService})
+	arguments, err := json.Marshal(map[string]string{
+		"rootId": externalSnapshot.Roots[0].ID, "relativePath": ".",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Execute(ctx, "mod", externalSandbox, "mod.disable", arguments); err != nil {
+		t.Fatalf("disable a mod junction through the agent: %v", err)
+	}
+	disabledInfo, err := os.Stat(filepath.Join(filepath.Dir(linkedMod), "DISABLED External Mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(disabledInfo, targetInfo) {
+		t.Fatal("disabled junction no longer points at the original mod")
+	}
+	if _, err := os.Stat(externalMod); err != nil {
+		t.Fatalf("external mod target was moved: %v", err)
+	}
+}
+
+func TestServiceExecutesApprovalWithLegacyJunctionRootID(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	base := t.TempDir()
+	mods := filepath.Join(base, "Stored Mods")
+	if err := os.Mkdir(mods, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkedMods := filepath.Join(base, "Mods")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", linkedMods, mods).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	legacyPath, err := filepath.EvalSymlinks(linkedMods)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := db.New(filepath.Join(base, "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: linkedMods}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AgentSessions.Insert(ctx, db.AgentSessionRow{
+		ID: "session", ScopeType: "global", Title: "Test", CreatedAt: "1", UpdatedAt: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(mods, "obsolete.ini")
+	if err := os.WriteFile(file, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	arguments, err := json.Marshal(map[string]any{
+		"rootId":     rootID("Game", legacyPath),
+		"operations": []PatchOperation{{Type: "delete", Path: "obsolete.ini"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AgentApprovals.Insert(ctx, db.AgentApprovalRow{
+		ID: "approval", SessionID: "session", TurnID: "turn", ToolCallID: "tool",
+		ActionID: "sandbox.apply_patch", Arguments: string(arguments), Summary: "Delete obsolete file",
+		Status: "pending", CreatedAt: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := New(Options{})
+	if err := service.UseClient(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	service.workers["session"] = &sessionWorker{queue: make(chan queuedRun, 1)}
+	if _, err := client.AgentApprovals.Transition(ctx, "approval", "pending", "executing", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.executeApprovedAction(ctx, "approval"); err != nil {
+		t.Fatal(err)
+	}
+	approval, err := client.AgentApprovals.Get(ctx, "approval")
+	if err != nil || approval == nil || approval.Status != "completed" {
+		t.Fatalf("restored approval = %#v, %v", approval, err)
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("approved deletion did not remove the file: %v", err)
 	}
 }
 
