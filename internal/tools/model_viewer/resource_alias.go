@@ -58,19 +58,40 @@ func resolveModelViewerEffectiveResourcesAt(
 	sections []modINISection,
 	resources []modelViewerResource,
 ) []modelViewerResource {
-	output := resolveModelViewerEffectiveResources(sections, resources)
+	candidates := append([]modelViewerResource(nil), resources...)
+	for index, resource := range candidates {
+		if resource.Filename == "" {
+			continue
+		}
+		path, err := resolveModelViewerResourcePath(root, baseDir, resource.Filename)
+		if err != nil || !modelViewerPathWithin(root, path) {
+			continue
+		}
+
+		// Compute outputs can declare a file the mod omits and replace it at
+		// runtime. Follow their resource aliases only when that file is missing.
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			candidates[index].Filename = ""
+		}
+	}
+
+	output := resolveModelViewerEffectiveResources(sections, candidates)
 	for index := range output {
-		if resources[index].Filename != "" || output[index].Filename == "" {
+		if candidates[index].Filename != "" {
+			continue
+		}
+		if output[index].Filename == "" {
+			output[index] = resources[index]
 			continue
 		}
 		path, err := resolveModelViewerResourcePath(root, baseDir, output[index].Filename)
 		if err != nil || !modelViewerPathWithin(root, path) {
-			output[index].Filename = ""
+			output[index] = resources[index]
 			continue
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
-			output[index].Filename = ""
+			output[index] = resources[index]
 		}
 	}
 	return output

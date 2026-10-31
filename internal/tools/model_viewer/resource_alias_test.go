@@ -79,6 +79,51 @@ stride = 40`, filename))
 	}
 }
 
+func TestResolveModelViewerEffectiveResourcesAtRecoversMissingDeclaredFile(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		directFile bool
+		sourceFile string
+		wantFile   string
+		wantStride int
+	}{
+		{name: "missing output", sourceFile: "base.buf", wantFile: "base.buf", wantStride: 40},
+		{name: "existing output", directFile: true, sourceFile: "base.buf", wantFile: "output.buf", wantStride: 24},
+		{name: "missing source", sourceFile: "missing.buf", wantFile: "output.buf", wantStride: 24},
+		{name: "outside source", sourceFile: "../base.buf", wantFile: "output.buf", wantStride: 24},
+		{name: "directory source", sourceFile: ".", wantFile: "output.buf", wantStride: 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "base.buf"), make([]byte, 40), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if tc.directFile {
+				if err := os.WriteFile(filepath.Join(root, "output.buf"), make([]byte, 24), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			sections := parseModINI(fmt.Sprintf(`[CustomShaderKeys]
+cs-u5 = copy ResourceBodyPositionBase
+ResourceBodyPosition = copy ref cs-u5
+[ResourceBodyPosition]
+filename = output.buf
+stride = 24
+[ResourceBodyPositionBase]
+filename = %s
+stride = 40`, tc.sourceFile))
+			resources := collectModelViewerResources(sections)
+			resolved := resolveModelViewerEffectiveResourcesAt(root, root, sections, resources)
+			if got := resolved[0]; got.Filename != tc.wantFile || got.Stride != tc.wantStride {
+				t.Fatalf("effective position = %#v; want file %q stride %d", got, tc.wantFile, tc.wantStride)
+			}
+			if resources[0].Filename != "output.buf" {
+				t.Fatal("declared resource was mutated")
+			}
+		})
+	}
+}
+
 func TestResolveModelViewerEffectiveResourcesPrefersCopyDescAndRejectsAmbiguity(t *testing.T) {
 	sections := parseModINI(`[Constants]
 post ResourceBodyPosition = copy_desc ResourceBodyPosition.0

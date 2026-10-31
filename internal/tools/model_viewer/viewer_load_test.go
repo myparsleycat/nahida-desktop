@@ -24,6 +24,30 @@ filename = body.ib
 format = DXGI_FORMAT_R32_UINT
 `
 
+func TestLoadModViewerRecoversMissingComputeOutputFile(t *testing.T) {
+	fixture := loadViewerFixture(t, t.TempDir(), `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourceBodyPosition
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[CustomShaderKeys]
+cs-u5 = copy ResourcePos
+ResourceBodyPosition = copy ref cs-u5
+[ResourceBodyPosition]
+type = Buffer
+filename = missing-output.buf
+stride = 40
+`+viewerBodyResources)
+	body := meshesNamed(fixture.result, "Body")
+	if len(body) != 1 {
+		t.Fatalf("body meshes = %d; all meshes = %#v", len(body), fixture.result.Meshes)
+	}
+	geometry := readViewerMesh(t, fixture.protocol, body[0].GeometryURL)
+	if len(geometry.Positions) != 9 || len(geometry.Indices) != 3 {
+		t.Fatalf("recovered geometry = %#v", geometry)
+	}
+}
+
 func TestLoadModViewerRecoversCopiedVertexBuffers(t *testing.T) {
 	for _, binding := range []string{"", "vb0 = ResourcePos"} {
 		t.Run(binding, func(t *testing.T) {
