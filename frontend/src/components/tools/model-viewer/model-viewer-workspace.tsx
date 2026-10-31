@@ -77,6 +77,7 @@ import {
   type IneffectiveSuggestion,
 } from "./model-viewer-ineffective";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
+import { ModelViewerOverlayMenuPanel } from "./model-viewer-overlay-menu";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
@@ -686,6 +687,15 @@ export function ModelViewerWorkspace({
 
   const toggleControls = (
     <div className="p-4">
+      {payloadTransport?.overlayMenus?.filter(inActiveForm).map((menu, index) => (
+        <ModelViewerOverlayMenuPanel
+          key={index}
+          menu={menu}
+          variables={variables}
+          activeState={activeState}
+          onSelect={handleSelectValue}
+        />
+      ))}
       {hasVariantTileUi ? (
         <div
           className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"

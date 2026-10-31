@@ -869,7 +869,7 @@ func buildModelViewerDirectMeshPayload(
 			}
 			item.ShapeTargets = append(
 				item.ShapeTargets,
-				ModelViewerShapeTarget{Var: dimension.VariableID, Mode: dimension.Mode},
+				ModelViewerShapeTarget{Var: dimension.VariableID, Mode: dimension.Mode, Divisor: dimension.Divisor},
 			)
 			payload.ShapePositions = append(payload.ShapePositions, high)
 			payload.ShapeLowPositions = append(payload.ShapeLowPositions, low)

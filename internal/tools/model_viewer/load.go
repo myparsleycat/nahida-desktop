@@ -258,6 +258,13 @@ func (t *Service) loadModViewer(
 		prepared.computeAnimations,
 		options.includeAllStateVariables,
 	)
+	transport.OverlayMenus = t.serveModelViewerOverlayTextures(ctx, sessionID, buildModelViewerOverlayMenus(
+		ctx,
+		folder,
+		prepared.scans,
+		transport.Variables,
+		prepared.variableNames,
+	))
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
 	stage = "write-payload"
@@ -347,6 +354,8 @@ func firstUnresolvedModelViewerPositionResource(scans []modelViewerGeometryScan)
 type modelViewerGeometryScan struct {
 	sections  []modINISection
 	resources []modelViewerResource
+	// iniDir is what the shader paths of the sections are relative to.
+	iniDir string
 }
 
 type modelViewerPreparedGeometry struct {
@@ -448,7 +457,11 @@ func (t *Service) prepareModelViewerGeometry(
 				)
 			}
 		}
-		prepared.scans = append(prepared.scans, modelViewerGeometryScan{sections: sections, resources: resources})
+		prepared.scans = append(prepared.scans, modelViewerGeometryScan{
+			sections:  sections,
+			resources: resources,
+			iniDir:    filepath.Dir(iniPaths[unit.primary]),
+		})
 		stageStartedAt = time.Now()
 		referenced := collectModelViewerReferencedResources(sections)
 		prepared.referencedMs += time.Since(stageStartedAt).Milliseconds()

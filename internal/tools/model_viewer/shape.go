@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,8 @@ type modelViewerShapeKeyDimension struct {
 	OffsetPath      string `json:"offsetPath,omitempty"`
 	VertexIDPath    string `json:"vertexIdPath,omitempty"`
 	VertexDeltaPath string `json:"vertexDeltaPath,omitempty"`
+	// Divisor is what the INI divides the variable by to get the weight; zero means none.
+	Divisor float64 `json:"divisor,omitempty"`
 }
 
 type modelViewerShapeKey struct {
@@ -37,6 +40,7 @@ var (
 	modelViewerShapeOutputRE = regexp.MustCompile(`(?i)^([^=]+?)\s*=\s*copy\s+ref\s+cs-u5\s*$`)
 	modelViewerShapeBaseRE   = regexp.MustCompile(`(?i)^cs-u5\s*=\s*copy\s+(.+)$`)
 	modelViewerVariableRE    = regexp.MustCompile(`\$([\w.]+)`)
+	modelViewerShapeDivideRE = regexp.MustCompile(`^\s*\$[\w.]+\s*/\s*(\d+(?:\.\d+)?)\s*$`)
 )
 
 func collectModelViewerShapeKeys(
@@ -124,11 +128,16 @@ func collectModelViewerShapeKeys(
 				smaller, smallerOK := resourceMap[modelViewerNormalizeKey(smallerName)]
 				bigger, biggerOK := resourceMap[modelViewerNormalizeKey(biggerName)]
 				if smallerOK && biggerOK && smaller.Filename != "" && bigger.Filename != "" {
+					var divisor float64
+					if divide := modelViewerShapeDivideRE.FindStringSubmatch(variableValue); divide != nil {
+						divisor, _ = strconv.ParseFloat(divide[1], 64)
+					}
 					dimensions[variable] = modelViewerShapeKeyDimension{
 						VariableID:  variable,
 						Mode:        "midpoint_pair",
 						SmallerPath: filepath.Join(modDir, filepath.FromSlash(smaller.Filename)),
 						BiggerPath:  filepath.Join(modDir, filepath.FromSlash(bigger.Filename)),
+						Divisor:     divisor,
 					}
 				}
 			}

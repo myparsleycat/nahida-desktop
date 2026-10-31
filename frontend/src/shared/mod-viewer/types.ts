@@ -92,6 +92,8 @@ export type ViewerMenuGuard = {
 
 export type ViewerMenuEffect = {
     when?: ViewerMenuGuard | null;
+    /** Guards of the conditionals enclosing `when`, which must pass too. */
+    also?: ViewerMenuGuard[];
     var: string;
     value: string;
 };
@@ -113,6 +115,43 @@ export type ViewerVariable = {
     effects?: ViewerMenuEffect[];
     /** The form whose INI declares the variable; see ModViewerTransport.forms. */
     form?: string;
+};
+
+export type ViewerOverlayQuad = {
+    path: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    opacity: number;
+    flipbook?: {
+        columns: number;
+        rows: number;
+        frameStart: number;
+        frameEnd: number;
+        fps: number;
+    };
+    /** How the quad looks while a variable holds a value other than its default. */
+    states?: Array<{ variable: string; value: number; path: string; opacity: number }>;
+};
+
+export type ViewerOverlayButton = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    variable: string;
+    transitions: Array<{ from: number; to: number }>;
+    hover?: Array<{ quad: number; path: string }>;
+};
+
+export type ViewerOverlayMenu = {
+    width: number;
+    height: number;
+    /** The form whose INI declares the menu; see ModViewerTransport.forms. */
+    form?: string;
+    quads: ViewerOverlayQuad[];
+    buttons: ViewerOverlayButton[];
 };
 
 export type ViewerINI = {
@@ -261,7 +300,7 @@ export type ViewerEvalMesh = {
     materialMapVariants: TextureVariant[];
     cutoutMapKey: string | null;
     cutoutMapVariants: TextureVariant[];
-    shapeTargets: Array<{ var: string }>;
+    shapeTargets: Array<{ var: string; divisor?: number }>;
     positionVariants: PositionVariant[];
 };
 
@@ -282,6 +321,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
         positionsUrl: string;
         mode?: "midpoint_pair";
         lowPositionsUrl?: string;
+        divisor?: number;
     }>;
     positionVariants: Array<PositionVariant & { geometryUrl: string }>;
 };
@@ -313,6 +353,8 @@ export type ModViewerTransport = {
     defaultState: Record<string, ViewerStateValue>;
     stateRules: ViewerStateRule[];
     uiAssets: ViewerUiAssets;
+    /** Menus the mod draws over the game, reproduced from its INI. */
+    overlayMenus?: ViewerOverlayMenu[];
     animations: ViewerAnimationClip[];
     computeDeformers: ViewerComputeDeformer[];
     /** Present with two or more entries when the mod's meshes come from several folders. */

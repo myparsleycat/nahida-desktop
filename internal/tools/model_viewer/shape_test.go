@@ -37,6 +37,32 @@ filename = big.buf`)
 	}
 }
 
+func TestCollectModelViewerShapeKeysKeepsWeightDivisor(t *testing.T) {
+	sections := parseModINI(`[CustomShaderShape]
+cs = ShapeKey.hlsl
+ResourceBodyPosition = copy ref cs-u5
+cs-u5 = copy ResourceBodyPositionBase
+[CommandListApply]
+x88 = $body/10
+cs-t52 = copy ResourceBodySmall
+cs-t51 = copy ResourceBodyBig
+run = CustomShaderShape
+[ResourceBodyPosition]
+filename = out.buf
+stride = 40
+[ResourceBodyPositionBase]
+filename = base.buf
+stride = 40
+[ResourceBodySmall]
+filename = small.buf
+[ResourceBodyBig]
+filename = big.buf`)
+	shapes := collectModelViewerShapeKeys(sections, collectModelViewerResources(sections), t.TempDir())
+	if len(shapes) != 1 || len(shapes[0].Dimensions) != 1 || shapes[0].Dimensions[0].Divisor != 10 {
+		t.Fatalf("shapes = %#v", shapes)
+	}
+}
+
 func TestCollectModelViewerSimpleShapeKeys(t *testing.T) {
 	modDir := t.TempDir()
 	sections := parseModINI(`[CustomShaderFace]

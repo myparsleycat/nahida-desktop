@@ -56,6 +56,9 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			if effect.When != nil {
 				effect.When.Var = publicName(effect.When.Var)
 			}
+			for guardIndex := range effect.Also {
+				effect.Also[guardIndex].Var = publicName(effect.Also[guardIndex].Var)
+			}
 		}
 	}
 	defaults := make(map[string]any, len(transport.DefaultState))

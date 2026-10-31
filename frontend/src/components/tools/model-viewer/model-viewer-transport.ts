@@ -169,6 +169,7 @@ export function normalizeModelViewerTransport(
                 positionsUrl: target.positionsUrl,
                 mode: target.mode === "midpoint_pair" ? target.mode : undefined,
                 lowPositionsUrl: target.lowPositionsUrl,
+                divisor: target.divisor || undefined,
             })),
             positionVariants: (mesh.positionVariants ?? []).map((variant) => ({
                 conditions: normalizeDNF(variant.conditions),
@@ -194,6 +195,7 @@ export function normalizeModelViewerTransport(
             slider: variable.slider ?? undefined,
             effects: variable.effects?.map((effect) => ({
                 when: effect.when,
+                also: effect.also ?? undefined,
                 var: effect.var,
                 value: effect.value,
             })),
@@ -206,6 +208,30 @@ export function normalizeModelViewerTransport(
             conditions: normalizeDNF(rule.conditions),
         })),
         uiAssets: value.uiAssets,
+        overlayMenus: value.overlayMenus?.map((menu) => ({
+            width: menu.width,
+            height: menu.height,
+            form: menu.form || undefined,
+            quads: (menu.quads ?? []).map((quad) => ({
+                path: quad.path,
+                x: quad.x,
+                y: quad.y,
+                width: quad.width,
+                height: quad.height,
+                opacity: quad.opacity,
+                flipbook: quad.flipbook ?? undefined,
+                states: quad.states ?? undefined,
+            })),
+            buttons: (menu.buttons ?? []).map((button) => ({
+                x: button.x,
+                y: button.y,
+                width: button.width,
+                height: button.height,
+                variable: button.variable,
+                transitions: button.transitions ?? [],
+                hover: button.hover ?? undefined,
+            })),
+        })),
         animations: (value.animations ?? []).map((clip) => ({
             id: clip.id,
             label: clip.label,

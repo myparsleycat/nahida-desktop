@@ -86,7 +86,10 @@ export function applyVariableSelection(
 ): Record<string, ViewerStateValue> {
     const next = { ...state, [variable.id]: value };
     for (const effect of variable.effects ?? []) {
-        if (menuGuardHolds(effect.when, next)) {
+        if (
+            menuGuardHolds(effect.when, next) &&
+            (effect.also ?? []).every((guard) => menuGuardHolds(guard, next))
+        ) {
             next[effect.var] = effect.value;
         }
     }
@@ -140,7 +143,7 @@ export function evaluateViewerState(
                 shapeWeights: Object.fromEntries(
                     mesh.shapeTargets.map((target) => [
                         target.var,
-                        Number(lookupStateValue(resolved, target.var) ?? 0),
+                        Number(lookupStateValue(resolved, target.var) ?? 0) / (target.divisor || 1),
                     ]),
                 ),
                 positionVariantIndex,

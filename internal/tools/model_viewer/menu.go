@@ -408,7 +408,15 @@ func parseModelViewerMenuBranch(lines []string) (string, []any, []ModelViewerMen
 		if guard != nil {
 			when = &ModelViewerMenuGuard{Var: guard.variable, Op: guard.op, Value: strconv.Itoa(guard.value)}
 		}
-		effects = append(effects, ModelViewerMenuEffect{When: when, Var: lhs, Value: rhs})
+		var also []ModelViewerMenuGuard
+		for _, enclosing := range stack[:max(len(stack)-1, 0)] {
+			if enclosing.guard != nil {
+				also = append(also, ModelViewerMenuGuard{
+					Var: enclosing.guard.variable, Op: enclosing.guard.op, Value: strconv.Itoa(enclosing.guard.value),
+				})
+			}
+		}
+		effects = append(effects, ModelViewerMenuEffect{When: when, Also: also, Var: lhs, Value: rhs})
 	}
 	return variable, values, effects, variable != "" && len(values) > 0
 }

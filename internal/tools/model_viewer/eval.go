@@ -133,8 +133,11 @@ func applyViewerVariableSelection(state map[string]any, variable ModelViewerVari
 	next := cloneViewerEvalState(state)
 	next[variable.ID] = value
 	for _, effect := range variable.Effects {
-		guard := effect.When
-		if viewerEvalMenuGuardHolds(guard, next) {
+		holds := viewerEvalMenuGuardHolds(effect.When, next)
+		for index := 0; holds && index < len(effect.Also); index++ {
+			holds = viewerEvalMenuGuardHolds(&effect.Also[index], next)
+		}
+		if holds {
 			next[effect.Var] = effect.Value
 		}
 	}

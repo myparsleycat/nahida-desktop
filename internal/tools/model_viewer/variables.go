@@ -66,13 +66,17 @@ func prependModelViewerShapeVariables(
 			if !ok {
 				defaultValue = float64(0)
 			}
+			slider := &ModelViewerSlider{Min: 0, Max: 1, Step: 0.01}
+			if dimension.Divisor > 0 {
+				slider = &ModelViewerSlider{Min: 0, Max: dimension.Divisor, Step: 1}
+			}
 			output = append(output, ModelViewerVariable{
 				ID:            id,
 				Label:         humanizeModelViewerLabel(id),
 				DefaultValue:  defaultValue,
 				Values:        []ModelViewerVariableValue{},
 				ControlType:   "slider",
-				Slider:        &ModelViewerSlider{Min: 0, Max: 1, Step: 0.01},
+				Slider:        slider,
 				alwaysVisible: true,
 			})
 		}

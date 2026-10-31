@@ -20,6 +20,8 @@ type ModelViewerShapeTarget struct {
 	PositionsURL    string `json:"positionsUrl"`
 	Mode            string `json:"mode,omitempty"`
 	LowPositionsURL string `json:"lowPositionsUrl,omitempty"`
+	// Divisor is what the INI divides Var by to get the weight; zero means none.
+	Divisor float64 `json:"divisor,omitempty"`
 }
 
 type ModelViewerPositionVariant struct {
@@ -84,9 +86,11 @@ type ModelViewerMenuGuard struct {
 }
 
 type ModelViewerMenuEffect struct {
-	When  *ModelViewerMenuGuard `json:"when,omitempty"`
-	Var   string                `json:"var"`
-	Value string                `json:"value"`
+	When *ModelViewerMenuGuard `json:"when,omitempty"`
+	// Also holds the guards of the conditionals enclosing When, which must pass too.
+	Also  []ModelViewerMenuGuard `json:"also,omitempty"`
+	Var   string                 `json:"var"`
+	Value string                 `json:"value"`
 }
 
 type ModelViewerVariable struct {
@@ -198,6 +202,7 @@ type ModelViewerTransport struct {
 	DefaultState     map[string]any                         `json:"defaultState"`
 	StateRules       []ModelViewerStateRule                 `json:"stateRules"`
 	UIAssets         ModelViewerUIAssets                    `json:"uiAssets"`
+	OverlayMenus     []ModelViewerOverlayMenu               `json:"overlayMenus,omitempty"`
 	Animations       []ModelViewerAnimationClip             `json:"animations"`
 	ComputeDeformers []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
 	// Forms includes folder groups and named draw groups within one INI.
