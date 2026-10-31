@@ -537,19 +537,25 @@ func inspectWwmiTextureHint(filePath string) *wwmiTextureHint {
 		}
 	}
 	packedFormat := ddsPackedFourCC[fourcc] || ddsPackedDXGI[dxgi]
-	if colorSpace == "linear" || packedFormat || texturePixelCount(width, height) > uint64(maxHintDecodeArea) ||
-		size > maxHintDecodeBytes {
-		return &wwmiTextureHint{
-			SRGB:           colorSpace == "srgb",
-			ColorSpace:     colorSpace,
-			Area:           area,
-			Bytes:          size,
-			IsLikelyNormal: packedFormat,
-			IsLikelyPacked: packedFormat,
-		}
+	unanalyzed := &wwmiTextureHint{
+		SRGB:           colorSpace == "srgb",
+		ColorSpace:     colorSpace,
+		Area:           area,
+		Bytes:          size,
+		IsLikelyNormal: packedFormat,
+		IsLikelyPacked: packedFormat,
 	}
+	if colorSpace == "linear" || packedFormat {
+		return unanalyzed
+	}
+
+	// The hint samples a bounded number of texels, so even an 8K atlas without
+	// mips is cheap to analyze, and ranking it against other dumps needs the result.
 	decoded, decodeErr := decodeModelViewerDDSHint(filePath, size)
 	if decodeErr != nil {
+		if texturePixelCount(width, height) > uint64(maxHintDecodeArea) || size > maxHintDecodeBytes {
+			return unanalyzed
+		}
 		return nil
 	}
 	return hintFromAnalysis(analyzeNRGBA(decoded), colorSpace, area, size)

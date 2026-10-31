@@ -220,6 +220,26 @@ func TestInspectWwmiTextureHintKeepsOversizedHeaderWithoutDecode(t *testing.T) {
 	}
 }
 
+func TestInspectWwmiTextureHintAnalyzesDecodableAtlasOverDecodeLimits(t *testing.T) {
+	t.Parallel()
+	const width, height = 8192, 4096
+	header := encodeDX10HeaderDDS(width, height, 99)
+	for offset, value := range map[int]uint32{8: 0x000a1007, 20: width * height, 28: 1, 76: 32, 80: 4, 132: 3, 140: 1} {
+		binary.LittleEndian.PutUint32(header[offset:], value)
+	}
+	path := filepath.Join(t.TempDir(), "atlas.dds")
+	if err := os.WriteFile(path, header, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, 148+width*height); err != nil {
+		t.Fatal(err)
+	}
+	hint := inspectWwmiTextureHint(path)
+	if hint == nil || !hint.Analyzed || hint.Area != width*height {
+		t.Fatalf("hint = %#v", hint)
+	}
+}
+
 func TestInspectWwmiTextureHintKeepsHeaderAreaAfterDownsample(t *testing.T) {
 	root := t.TempDir()
 	const dim = 512
