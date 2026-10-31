@@ -24,9 +24,13 @@ func TestLoadModViewerMatchesSharedAtlasToUVSeams(t *testing.T) {
 		blankSeams     bool
 		noSeams        bool
 		helperRole     string
+		wrongSize      int
+		correctSize    int
 		want           string
 	}{
 		{name: "inferred atlas", inconsistent: true, want: correct},
+		{name: "smaller atlas", inconsistent: true, wrongSize: 2048, correctSize: 1024, want: correct},
+		{name: "small helper map", inconsistent: true, wrongSize: 1024, correctSize: 512, want: wrong},
 		{name: "ambiguous atlases", want: wrong},
 		{name: "blank candidate", inconsistent: true, blankCandidate: true, want: wrong},
 		{name: "blank seams with non-seam color variation", inconsistent: true, blankSeams: true, want: wrong},
@@ -116,9 +120,17 @@ stride = 16
 				}
 			}
 			for _, file := range []string{wrong, correct} {
-				pixels := make([]color.NRGBA, 64*64)
-				for y := range 64 {
-					for x := range 64 {
+				size := 64
+				if file == wrong && tt.wrongSize != 0 {
+					size = tt.wrongSize
+				}
+				if file == correct && tt.correctSize != 0 {
+					size = tt.correctSize
+				}
+				pixels := make([]color.NRGBA, size*size)
+				for row := range size {
+					for column := range size {
+						x, y := column*64/size, row*64/size
 						pixel := color.NRGBA{R: uint8(40 + y*3), G: uint8(30 + y*2), B: 70, A: 255}
 						if file == correct && (tt.blankCandidate || tt.blankSeams && (x < 16 || x >= 48)) {
 							pixel = color.NRGBA{R: 128, G: 128, B: 128, A: 255}
@@ -127,10 +139,10 @@ stride = 16
 							pixel.R = 255 - pixel.R
 							pixel.G = 255 - pixel.G
 						}
-						pixels[y*64+x] = pixel
+						pixels[row*size+column] = pixel
 					}
 				}
-				writeTextureFile(t, dir, file, encodeWwmiBC1MipDDS(t, 64, 64, pixels))
+				writeTextureFile(t, dir, file, encodeWwmiBC1MipDDS(t, size, size, pixels))
 			}
 			fixture := loadViewerDir(t, dir)
 			if len(fixture.result.Meshes) != 1 {

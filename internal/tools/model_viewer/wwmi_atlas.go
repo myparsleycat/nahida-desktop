@@ -17,6 +17,8 @@ import (
 const (
 	maxWwmiAtlasVertices = 65536
 	maxWwmiAtlasSeams    = 4096
+
+	minWwmiResizedAtlasArea = 1024 * 1024
 )
 
 type wwmiAtlasSamples struct {
@@ -104,7 +106,7 @@ func refineWwmiDumpAtlases(
 		if !valid {
 			continue
 		}
-		threshold := bestScore * 0.65
+		threshold, resizedThreshold := bestScore*0.65, bestScore*0.25
 		bestFile, bestResource := currentFile, ""
 		for _, resource := range resources {
 			match := wwmiDumpTexRE.FindStringSubmatch(slashPath(resource.Filename))
@@ -123,11 +125,21 @@ func refineWwmiDumpAtlases(
 				continue
 			}
 			candidate := inspect(resource.Filename)
-			if candidate.pixels == nil || candidate.hint.Area != current.hint.Area ||
-				candidate.hint.SRGB != current.hint.SRGB {
+			if candidate.pixels == nil || candidate.hint.SRGB != current.hint.SRGB {
 				continue
 			}
-			if score, ok := samples.score(candidate.pixels); ok && score < threshold && score < bestScore {
+
+			// A larger shared map outranks the part's own atlas on resolution alone.
+			// Smooth ramps and matcaps also pass as continuous, so crossing sizes takes
+			// a decisive difference and a map large enough to be an atlas.
+			limit := threshold
+			if candidate.hint.Area != current.hint.Area {
+				if candidate.hint.Area < minWwmiResizedAtlasArea {
+					continue
+				}
+				limit = resizedThreshold
+			}
+			if score, ok := samples.score(candidate.pixels); ok && score < limit && score < bestScore {
 				bestScore, bestFile, bestResource = score, resource.Filename, resource.Name
 			}
 		}
