@@ -2194,6 +2194,7 @@ function payloadEvalSignature(evalResult: NonNullable<ModelViewerSurfaceProps["p
       lightMapKey: mesh.lightMapKey,
       materialMapKey: mesh.materialMapKey,
       cutoutMapKey: mesh.cutoutMapKey,
+      highlightMapKey: mesh.highlightMapKey,
       shapeWeights: mesh.shapeWeights,
       positionVariantIndex: mesh.positionVariantIndex,
     })),

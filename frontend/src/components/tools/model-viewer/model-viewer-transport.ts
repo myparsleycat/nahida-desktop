@@ -74,6 +74,7 @@ function normalizeTextureRole(value: string): ViewerTextureRole {
         case "light_map":
         case "material_map":
         case "cutout_map":
+        case "highlight_map":
             return value;
         default:
             throw new TypeError(`Invalid model viewer texture role: ${value}`);
@@ -166,6 +167,7 @@ export function normalizeModelViewerTransport(
                 conditions: normalizeDNF(variant.conditions),
                 texKey: variant.texKey,
             })),
+            highlightMapKey: mesh.highlightMapKey,
             shapeTargets: (mesh.shapeTargets ?? []).map((target) => ({
                 var: target.var,
                 positionsUrl: target.positionsUrl,

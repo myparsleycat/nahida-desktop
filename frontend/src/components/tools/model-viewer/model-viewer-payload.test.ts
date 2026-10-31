@@ -1037,6 +1037,7 @@ describe("applyPayloadEval packed maps", () => {
             lightMapKey: null,
             lightMapVariants: [],
             materialMapKey: null,
+            highlightMapKey: null,
         });
         markEFMIHeadMeshes(
             {
@@ -1086,6 +1087,7 @@ describe("applyPayloadEval packed maps", () => {
             lightMapKey: lit ? "light" : null,
             lightMapVariants: [],
             materialMapKey: null,
+            highlightMapKey: null,
         });
         const face = headMesh(11538);
         const overlay = headMesh(900);

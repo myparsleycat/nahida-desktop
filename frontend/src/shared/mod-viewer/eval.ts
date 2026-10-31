@@ -140,6 +140,7 @@ export function evaluateViewerState(
                     mesh.cutoutMapKey,
                     resolved,
                 ),
+                highlightMapKey: mesh.highlightMapKey,
                 shapeWeights: Object.fromEntries(
                     mesh.shapeTargets.map((target) => [
                         target.var,

@@ -54,6 +54,7 @@ type ModelViewerMeshTransport struct {
 	MaterialMapVariants []ModelViewerTextureVariant  `json:"materialMapVariants"`
 	CutoutMapKey        *string                      `json:"cutoutMapKey"`
 	CutoutMapVariants   []ModelViewerTextureVariant  `json:"cutoutMapVariants"`
+	HighlightMapKey     *string                      `json:"highlightMapKey,omitempty"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
 	PositionVariants    []ModelViewerPositionVariant `json:"positionVariants"`
 	// DrawKey groups meshes of one INI draw with matching viewer-to-source face

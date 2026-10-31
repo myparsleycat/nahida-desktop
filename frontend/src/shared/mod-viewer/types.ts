@@ -43,6 +43,7 @@ export type ViewerMesh = {
     materialMapVariants: TextureVariant[];
     cutoutMapKey: string | null;
     cutoutMapVariants: TextureVariant[];
+    highlightMapKey?: string | null;
     shapeTargets: ViewerShapeTarget[];
     positionVariants: Array<PositionVariant & { positions: Float32Array }>;
 };
@@ -52,7 +53,8 @@ export type ViewerTextureRole =
     | "normal_map"
     | "light_map"
     | "material_map"
-    | "cutout_map";
+    | "cutout_map"
+    | "highlight_map";
 
 export type ViewerDDSFormat =
     | "bc1-unorm"
@@ -285,6 +287,7 @@ export type EvaluatedViewerMesh = {
     lightMapKey: string | null;
     materialMapKey: string | null;
     cutoutMapKey: string | null;
+    highlightMapKey?: string | null;
     shapeWeights: Record<string, number>;
     positionVariantIndex: number | null;
 };
@@ -309,6 +312,7 @@ export type ViewerEvalMesh = {
     materialMapVariants: TextureVariant[];
     cutoutMapKey: string | null;
     cutoutMapVariants: TextureVariant[];
+    highlightMapKey?: string | null;
     shapeTargets: Array<{ var: string; divisor?: number }>;
     positionVariants: PositionVariant[];
 };

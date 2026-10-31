@@ -84,6 +84,7 @@ type PayloadMeshUserData = {
         lightMapKey: string | null;
         materialMapKey: string | null;
         cutoutMapKey: string | null;
+        highlightMapKey?: string | null;
     };
 };
 
@@ -113,6 +114,12 @@ type EFMIToonShaderState = {
     lightMapEnabled: { value: number };
     lightMapTransform: { value: Matrix3 };
     face: { value: number };
+    faceMask: { value: Texture };
+    faceMaskEnabled: { value: number };
+    faceMaskTransform: { value: Matrix3 };
+    highlightMap: { value: Texture };
+    highlightEnabled: { value: number };
+    highlightTransform: { value: Matrix3 };
     outlineMask: Texture | null;
 };
 
@@ -148,6 +155,7 @@ const EFMI_HEAD_MAX_WIDTH = 0.3;
 // Stock faces span 8040 to 12876 indices across the 34 characters, leaving room for edits.
 const EFMI_FACE_MIN_INDICES = 8000;
 const EFMI_FACE_MAX_INDICES = 16000;
+const EFMI_BOUND_FACE_MIN_HEIGHT = 0.55;
 const EFMI_SIZED_FACE_MIN_HEIGHT = 0.66;
 
 // Overlay shadows and hair reach below the chin by about 5 cm.
@@ -640,6 +648,7 @@ function applyEvaluatedMaps(
         last.lightMapKey === evaluated.lightMapKey &&
         last.materialMapKey === evaluated.materialMapKey &&
         last.cutoutMapKey === evaluated.cutoutMapKey &&
+        last.highlightMapKey === evaluated.highlightMapKey &&
         material.normalMap === normalMap
     ) {
         return;
@@ -706,6 +715,21 @@ function applyEvaluatedMaps(
         efmiToonState.lightMapEnabled.value = usable ? 1 : 0;
         efmiToonState.lightMapTransform.value = textureUvTransform(efmiToonState.lightMap.value);
         efmiToonState.outlineMask = outlineMask && lightMap ? lightMap : null;
+
+        const faceMask = evaluated.materialMapKey
+            ? textures.get(evaluated.materialMapKey)
+            : undefined;
+        efmiToonState.faceMask.value = faceMask ?? rabbitFXFallbackLightMap;
+        efmiToonState.faceMaskEnabled.value = faceMask ? 1 : 0;
+        efmiToonState.faceMaskTransform.value = textureUvTransform(efmiToonState.faceMask.value);
+        const highlightMap = evaluated.highlightMapKey
+            ? textures.get(evaluated.highlightMapKey)
+            : undefined;
+        efmiToonState.highlightMap.value = highlightMap ?? rabbitFXFallbackLightMap;
+        efmiToonState.highlightEnabled.value = highlightMap ? 1 : 0;
+        efmiToonState.highlightTransform.value = textureUvTransform(
+            efmiToonState.highlightMap.value,
+        );
     }
     updateDDSShaderState(material, userData.materialProfile);
     if (
@@ -725,6 +749,7 @@ function applyEvaluatedMaps(
         lightMapKey: evaluated.lightMapKey,
         materialMapKey: evaluated.materialMapKey,
         cutoutMapKey: evaluated.cutoutMapKey,
+        highlightMapKey: evaluated.highlightMapKey,
     };
 }
 
@@ -762,11 +787,12 @@ function hasUsableTangentFrame(geometry: BufferGeometry): boolean {
 
 // The game lights faces from an SDF texture bound outside the mod, because their
 // normals are not meant for N.L. Mods name no parts, so the head zone is measured from
-// the face: a mesh sized like a stock face. A prop taller than the character would skew
-// any fraction of the model's height, so that fraction is only the last resort. Small
-// head meshes that bind no diffuse either are the game's overlay shadows, which multiply
-// the face through a shared mask and stencil that mods do not carry; drawn as surfaces
-// they would be opaque plates over the eyes and forehead.
+// the face: the mesh binding the face's mask or highlight, else a mesh sized like a
+// stock face. A prop taller than the character would skew any fraction of the model's
+// height, so that fraction is only the last resort. Small head meshes that bind no
+// diffuse either are the game's overlay shadows, which multiply the face through a
+// shared mask and stencil that mods do not carry; drawn as surfaces they would be
+// opaque plates over the eyes and forehead.
 export function markEFMIHeadMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
     const forms = new Set(transport.meshes.map((mesh) => mesh.form));
     forms.delete(undefined);
@@ -801,12 +827,18 @@ function markEFMIHeadMeshesOfForm(
     const unlit = narrow.filter(
         ({ mesh }) => !mesh.lightMapKey && mesh.lightMapVariants.length === 0,
     );
-    const faces = unlit.filter(
+    const bound = unlit.filter(
+        ({ mesh, bounds }) =>
+            (mesh.materialMapKey || mesh.highlightMapKey) &&
+            heightOf(bounds.min[2]) >= EFMI_BOUND_FACE_MIN_HEIGHT,
+    );
+    const sized = unlit.filter(
         ({ index, bounds }) =>
             indexCount(index) >= EFMI_FACE_MIN_INDICES &&
             indexCount(index) <= EFMI_FACE_MAX_INDICES &&
             heightOf(bounds.min[2]) >= EFMI_SIZED_FACE_MIN_HEIGHT,
     );
+    const faces = bound.length > 0 ? bound : sized;
     const headFloor =
         faces.length > 0
             ? Math.max(...faces.map(({ bounds }) => bounds.min[2])) - EFMI_HEAD_BELOW_FACE
@@ -1112,6 +1144,12 @@ function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
         lightMapEnabled: { value: 0 },
         lightMapTransform: { value: rabbitFXFallbackLightMap.matrix },
         face: { value: 0 },
+        faceMask: { value: rabbitFXFallbackLightMap },
+        faceMaskEnabled: { value: 0 },
+        faceMaskTransform: { value: rabbitFXFallbackLightMap.matrix },
+        highlightMap: { value: rabbitFXFallbackLightMap },
+        highlightEnabled: { value: 0 },
+        highlightTransform: { value: rabbitFXFallbackLightMap.matrix },
         outlineMask: null,
     };
     material.userData.efmiToonMaterial = state;
@@ -1131,23 +1169,32 @@ function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
         shader.uniforms.efmiLightMapEnabled = state.lightMapEnabled;
         shader.uniforms.efmiLightMapTransform = state.lightMapTransform;
         shader.uniforms.efmiFace = state.face;
+        shader.uniforms.efmiFaceMask = state.faceMask;
+        shader.uniforms.efmiFaceMaskEnabled = state.faceMaskEnabled;
+        shader.uniforms.efmiFaceMaskTransform = state.faceMaskTransform;
+        shader.uniforms.efmiHighlightMap = state.highlightMap;
+        shader.uniforms.efmiHighlightEnabled = state.highlightEnabled;
+        shader.uniforms.efmiHighlightTransform = state.highlightTransform;
         shader.vertexShader = replaceRabbitFXShaderAnchor(
             shader.vertexShader,
             "#include <common>",
             `#include <common>
-varying vec2 vEfmiUv;`,
+varying vec2 vEfmiUv;
+varying vec3 vEfmiModelRight;`,
         );
         shader.vertexShader = replaceRabbitFXShaderAnchor(
             shader.vertexShader,
             "#include <uv_vertex>",
             `#include <uv_vertex>
-vEfmiUv = uv;`,
+vEfmiUv = uv;
+vEfmiModelRight = normalize( mat3( modelMatrix ) * vec3( 1.0, 0.0, 0.0 ) );`,
         );
         shader.fragmentShader = replaceRabbitFXShaderAnchor(
             shader.fragmentShader,
             "#include <common>",
             `#include <common>
 varying vec2 vEfmiUv;
+varying vec3 vEfmiModelRight;
 uniform float efmiToonEnabled;
 uniform float efmiRangeBias;
 uniform float efmiSoftness;
@@ -1163,6 +1210,12 @@ uniform sampler2D efmiLightMap;
 uniform float efmiLightMapEnabled;
 uniform mat3 efmiLightMapTransform;
 uniform float efmiFace;
+uniform sampler2D efmiFaceMask;
+uniform float efmiFaceMaskEnabled;
+uniform mat3 efmiFaceMaskTransform;
+uniform sampler2D efmiHighlightMap;
+uniform float efmiHighlightEnabled;
+uniform mat3 efmiHighlightTransform;
 
 float efmiLuma( vec3 color ) {
     return dot( color, vec3( 0.212673, 0.715152, 0.072175 ) );
@@ -1202,7 +1255,12 @@ if ( efmiToonEnabled > 0.5 ) {
 
     float lightCosine = dot( worldNormal, worldLight );
 
-    float flatLight = efmiFace;
+    // _SDFMask.G keeps N.L where the SDF does not reach, such as the jaw edge.
+    vec4 faceMask = vec4( 1.0, 0.0, 1.0, 0.0 );
+    if ( efmiFace > 0.5 && efmiFaceMaskEnabled > 0.5 ) {
+        faceMask = texture2D( efmiFaceMask, ( efmiFaceMaskTransform * vec3( vEfmiUv, 1.0 ) ).xy );
+    }
+    float flatLight = efmiFace * ( 1.0 - faceMask.g );
     float rampCoverage = mix( efmiCoverage( lightCosine + efmiRangeBias ), 1.0, flatLight );
     float lit = mix( min( rampCoverage, min( packedMap.b, occlusion ) ), 1.0, flatLight );
     float cameraFacing = efmiCoverage( dot( worldNormal, cameraBack ) ) * packedMap.b * occlusion;
@@ -1214,13 +1272,19 @@ if ( efmiToonEnabled > 0.5 ) {
     deepTone = vec3( deepLuma ) + 1.2 * ( deepTone - deepLuma );
     vec3 surface = mix( deepTone, shadowTone, clamp( rampCoverage + cameraFacing, 0.0, 1.0 ) );
     float viewCosine = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
-    surface = mix( surface, albedo * 0.96, lit );
+    float faceRim = efmiFace * efmiFaceMaskEnabled * faceMask.r * mix( 0.7, 0.3, faceMask.b );
+    vec3 litTone = albedo * mix( vec3( 1.0 ), vec3( 0.637, 0.376, 0.296 ), clamp( 0.85 * ( 1.0 - viewCosine ) * faceRim, 0.0, 1.0 ) );
+    surface = mix( surface, litTone * 0.96, lit );
 
     float sky = mix( clamp( worldNormal.y + 0.15, 0.0, 1.0 ) * 1.5 + 0.5, 0.725, flatLight );
     vec3 shadowTint = vec3( 0.878, 0.93, 1.122 );
     vec3 irradiance = mix( shadowTint, vec3( 1.0 ), lit ) * sky * 0.2877 * efmiLightStrength;
     irradiance += vec3( efmiLightStrength * efmiBrightness );
     vec3 toon = surface * irradiance;
+    if ( efmiFace > 0.5 && efmiHighlightEnabled > 0.5 ) {
+        vec2 highlightUv = vEfmiUv + vec2( dot( worldView, normalize( vEfmiModelRight ) ) * 0.03, 0.0 );
+        toon += texture2D( efmiHighlightMap, ( efmiHighlightTransform * vec3( highlightUv, 1.0 ) ).xy ).rgb * irradiance * mix( efmiAmbient, 1.0, lit ) * ( 0.5 + 0.5 * lit );
+    }
 
     float roughness = 1.0 - packedMap.a;
     float alpha = max( roughness * roughness, 0.007812 );

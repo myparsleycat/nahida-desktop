@@ -18,16 +18,31 @@ const (
 	efmiLightMapRole  = "light_map"
 	efmiNormalMapRole = "normal_map"
 
+	// EFMI reads a material map as the face's _SDFMask.
+	efmiFaceMaskRole      = "material_map"
+	efmiFaceHighlightRole = modelViewerHighlightMapRole
+
 	// A shader binds its diffuse, light, and normal maps in consecutive slots,
 	// or only the diffuse and normal maps, so its maps sit within this distance.
 	efmiMaterialMapSlotReach = 2
 	efmiMinMaterialMapSide   = 16
+
+	// A dump drawn by more components than one material plausibly spans is shared
+	// detail noise, even when its channels pass as a normal map.
+	efmiMaxSharedMapComponents = 4
 
 	efmiNormalDiskFraction = 0.85
 	efmiNormalMaxRadius    = 0.5
 	efmiMapSampleCount     = 4096
 	efmiGrayChannelSpread  = 8
 	efmiGrayFraction       = 0.98
+
+	efmiFaceMaskCenterMaxGreen    = 24
+	efmiFaceMaskMinEdgeFraction   = 0.05
+	efmiFaceMaskMaxMeanAlpha      = 96
+	efmiFaceHighlightMaxMean      = 8
+	efmiFaceHighlightMinPeak      = 32
+	efmiFaceHighlightOpaqueBeyond = 250
 )
 
 var (
@@ -53,6 +68,19 @@ func attachEFMIMaterialMaps(meshes []modelViewerDirectMesh, resources []modelVie
 	}
 	for index := range meshes {
 		mesh := &meshes[index]
+
+		// RabbitFX templates bind the face's mask in the light map slot, where it would
+		// read as a metallic map.
+		mesh.textureAssignments = lo.Reject(
+			mesh.textureAssignments,
+			func(assignment modelViewerDirectTextureAssignment, _ int) bool {
+				if assignment.role != efmiLightMapRole || assignment.file == "" {
+					return false
+				}
+				role := classify(assignment.resource, assignment.file)
+				return role == efmiFaceMaskRole || role == efmiFaceHighlightRole
+			},
+		)
 		attachEFMISlotMaps(mesh, classify)
 		attachEFMIDumpMaps(mesh, resources, modDir, classify)
 	}
@@ -114,7 +142,8 @@ func meshBindsDiffuseFile(mesh *modelViewerDirectMesh, file string) bool {
 
 // attachEFMIDumpMaps pairs a dumped diffuse with the dumps of the component list
 // it came from, because one material's textures are drawn by the same components.
-// A map shared more widely must at least match the atlas resolution.
+// A map shared more widely must at least match the atlas resolution, except the
+// face's mask and highlight, which the game authors at a fixed size.
 func attachEFMIDumpMaps(
 	mesh *modelViewerDirectMesh,
 	resources []modelViewerResource,
@@ -127,7 +156,7 @@ func attachEFMIDumpMaps(
 	}
 	component := wwmiComponentIndex(mesh.component)
 	diffuseArea := peekImageArea(mesh.textureDefaultFile, modDir)
-	for _, role := range []string{efmiLightMapRole, efmiNormalMapRole} {
+	for _, role := range []string{efmiLightMapRole, efmiNormalMapRole, efmiFaceMaskRole, efmiFaceHighlightRole} {
 		if meshHasRole(mesh, role) {
 			continue
 		}
@@ -142,7 +171,10 @@ func attachEFMIDumpMaps(
 			}
 			exact := match[1] == diffuse[1]
 			area := peekImageArea(resource.Filename, modDir)
-			if !exact && (area != diffuseArea || !slices.Contains(strings.Split(match[1], "-"), component)) {
+			components := strings.Split(match[1], "-")
+			faceMap := role == efmiFaceMaskRole || role == efmiFaceHighlightRole
+			if !exact && (len(components) > efmiMaxSharedMapComponents ||
+				!slices.Contains(components, component) || !faceMap && area != diffuseArea) {
 				continue
 			}
 			if exact && !bestExact || exact == bestExact &&
@@ -215,6 +247,9 @@ func classifyEFMIMaterialMap(resource, file, modDir string) string {
 	if err != nil {
 		return ""
 	}
+	if role := efmiFaceMapRoleFromPixels(decoded); srgb != nil && role != "" {
+		return role
+	}
 	role := efmiMapRoleFromPixels(decoded)
 
 	// A container without a color space can hold a diffuse, whose channels also
@@ -223,6 +258,50 @@ func classifyEFMIMaterialMap(resource, file, modDir string) string {
 		return ""
 	}
 	return role
+}
+
+// efmiFaceMapRoleFromPixels recognizes the shared face maps. The highlight map is
+// opaque black apart from a faint gray nose highlight. The mask's green channel,
+// which selects N.L over the SDF, is off across the face and on around its edge.
+func efmiFaceMapRoleFromPixels(img *image.NRGBA) string {
+	width, height := img.Bounds().Dx(), img.Bounds().Dy()
+	stride := max(1, int(math.Sqrt(float64(width*height)/efmiMapSampleCount)))
+	samples, centerSamples, edge, opaqueGray := 0, 0, 0, 0
+	redSum, alphaSum, centerGreenSum, peak := 0, 0, 0, 0
+	for y := 0; y < height; y += stride {
+		for x := 0; x < width; x += stride {
+			offset := y*img.Stride + x*4
+			red, green, blue := int(img.Pix[offset]), int(img.Pix[offset+1]), int(img.Pix[offset+2])
+			alpha := int(img.Pix[offset+3])
+			samples++
+			redSum += red
+			alphaSum += alpha
+			peak = max(peak, red)
+			if alpha >= efmiFaceHighlightOpaqueBeyond &&
+				max(red, green, blue)-min(red, green, blue) <= efmiGrayChannelSpread {
+				opaqueGray++
+			}
+			if green >= 200 {
+				edge++
+			}
+			if x*5 >= width*2 && x*5 < width*3 && y*5 >= height*2 && y*5 < height*4 {
+				centerSamples++
+				centerGreenSum += green
+			}
+		}
+	}
+	if samples == 0 || centerSamples == 0 {
+		return ""
+	}
+	if opaqueGray == samples && redSum/samples < efmiFaceHighlightMaxMean && peak >= efmiFaceHighlightMinPeak {
+		return efmiFaceHighlightRole
+	}
+	if centerGreenSum/centerSamples <= efmiFaceMaskCenterMaxGreen &&
+		float64(edge) >= efmiFaceMaskMinEdgeFraction*float64(samples) &&
+		alphaSum/samples <= efmiFaceMaskMaxMeanAlpha {
+		return efmiFaceMaskRole
+	}
+	return ""
 }
 
 func efmiMapRoleFromPixels(img *image.NRGBA) string {

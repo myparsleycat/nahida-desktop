@@ -179,6 +179,68 @@ this = Resource_Diffuse
 	}
 }
 
+func TestLoadModViewerAssignsEFMIFaceMapsAndSkipsSharedNoise(t *testing.T) {
+	dir := t.TempDir()
+	writeEFMIComponentBuffers(t, dir, "Component3")
+
+	const side = 64
+	mask := make([]color.NRGBA, 0, side*side)
+	highlight := slices.Repeat([]color.NRGBA{{A: 255}}, side*side)
+	highlight[side*side/2] = color.NRGBA{R: 104, G: 104, B: 104, A: 255}
+	for y := range side {
+		for x := range side {
+			green := uint8(0)
+			if x < 8 || x >= side-8 || y < 8 {
+				green = 255
+			}
+			mask = append(mask, color.NRGBA{R: 200, G: green, B: 60, A: 30})
+		}
+	}
+	files := map[string][]byte{
+		"Components-3-4 t=00000000 BC7-sRGB.dds":     encodeWwmiColorDDS(32),
+		"Components-3-9 t=66666666 BC7-Linear.dds":   efmiDX10DDS(side, efmiDXGIBGRA8, mask),
+		"Components-3-9 t=77777777 BC7-Linear.dds":   efmiDX10DDS(side, efmiDXGIBGRA8, highlight),
+		"Components-1-2-3-4-5 t=88888888 Linear.dds": efmiSolidDDS(32, efmiTestNormalMap),
+	}
+	ini := `[Constants]
+global $required_efmi_version = 1.41
+[CommandList_Draw_Component3]
+run = CommandList\EFMIv1\OverrideTextures
+ib = ref Resource_Component3_IB
+vb0 = ref Resource_Component3_VB0
+vb1 = ref Resource_Component3_VB1
+vb2 = ref Resource_Component3_VB2
+drawindexed = 3, 0, 0
+`
+	index := 0
+	for name, data := range files {
+		writeTextureFile(t, dir, "Textures/"+name, data)
+		suffix := string(rune('A' + index))
+		hash := name[strings.Index(name, "t=")+2:][:8]
+		ini += "[Resource_T" + suffix + "]\nfilename = Textures/" + name + "\n"
+		ini += "[TextureOverride_T" + suffix + "]\nhash = " + hash + "\nthis = Resource_T" + suffix + "\n"
+		index++
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(ini+efmiComponent3Resources), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := loadViewerDir(t, dir).result
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	mesh := result.Meshes[0]
+	if mesh.MaterialMapKey == nil || !strings.Contains(*mesh.MaterialMapKey, "t=66666666") {
+		t.Fatalf("face mask = %v", mesh.MaterialMapKey)
+	}
+	if mesh.HighlightMapKey == nil || !strings.Contains(*mesh.HighlightMapKey, "t=77777777") {
+		t.Fatalf("highlight map = %v", mesh.HighlightMapKey)
+	}
+	if mesh.NormalMapKey != nil {
+		t.Fatalf("shared noise bound as normal map: %q", *mesh.NormalMapKey)
+	}
+}
+
 func encodeWwmiColorDDS(side uint32) []byte {
 	pixels := make([]color.NRGBA, 0, side*side)
 	for y := range side {
