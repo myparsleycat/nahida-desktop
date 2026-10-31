@@ -320,6 +320,12 @@ func TestLoadModViewerKeepsMenuVariablesWithoutMeshGating(t *testing.T) {
 global persist $menu = 0
 global persist $other = 0
 global $clickedSlot
+[KeyMenu]
+type = cycle
+$menu = 0,1
+[KeyOther]
+type = cycle
+$other = 0,1
 [CommandListClickedSlot]
 if $clickedSlot == 1
     $menu = 1 - $menu

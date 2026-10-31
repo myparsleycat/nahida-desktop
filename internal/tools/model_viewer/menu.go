@@ -118,6 +118,10 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 	}
 	bindings = append(bindings, collectModelViewerArrowBindings(sections)...)
 	bindings = append(bindings, collectModelViewerWrapBindings(sections, defaults, bindings)...)
+	// A key and a menu can share a slot; keep the menu's visibility and effects.
+	sort.SliceStable(bindings, func(i, j int) bool {
+		return bindings[i].AlwaysVisible && !bindings[j].AlwaysVisible
+	})
 	return lo.UniqBy(bindings, func(binding modelViewerSlotBinding) string {
 		return strconv.Itoa(binding.Slot) + ":" + binding.Variable
 	})

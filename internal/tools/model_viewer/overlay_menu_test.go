@@ -210,6 +210,43 @@ func TestModelViewerOverlayMenuSkipsTexturesTheRendererCannotShow(t *testing.T) 
 	}
 }
 
+func TestModelViewerOverlayMenuKeepsClampedButtonsAtDefaultBounds(t *testing.T) {
+	for _, initial := range []string{"0", "10"} {
+		t.Run(initial, func(t *testing.T) {
+			ini := strings.Replace(overlayTestINI, "global $chest = 9", "global $chest = "+initial, 1)
+			ini = strings.Replace(ini, "$page = 1", "$chest = $chest - 1\n"+
+				"  if $chest < 0\n    $chest = 0\n  endif", 1)
+			menus := buildOverlayTestMenuFrom(t, context.Background(), ini, "frame.png")
+			if len(menus) != 1 {
+				t.Fatalf("menus = %d, want 1", len(menus))
+			}
+			var buttons []ModelViewerOverlayButton
+			for _, button := range menus[0].Buttons {
+				if button.Variable == "chest" {
+					buttons = append(buttons, button)
+				}
+			}
+			if len(buttons) != 2 {
+				t.Fatalf("chest buttons = %+v, want increase and decrease", buttons)
+			}
+			for index, button := range buttons {
+				if len(button.Transitions) != 10 {
+					t.Fatalf("button %d transitions = %v, want 10", index, button.Transitions)
+				}
+				for step, transition := range button.Transitions {
+					want := ModelViewerOverlayTransition{From: float64(step), To: float64(step + 1)}
+					if index == 1 {
+						want = ModelViewerOverlayTransition{From: float64(step + 1), To: float64(step)}
+					}
+					if transition != want {
+						t.Fatalf("button %d transition = %+v, want %+v", index, transition, want)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestModelViewerOverlayMenuFollowsToggleStateAndOwnVariable(t *testing.T) {
 	dir := t.TempDir()
 	const quadShader = "Texture1D<float4> IniParams : register(t120);\n" +
