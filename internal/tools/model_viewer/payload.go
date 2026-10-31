@@ -167,6 +167,13 @@ func writeModelViewerPayload(
 			directURL := t.protocol.LocalFileURL(texture.Path, true)
 			directMetadata := *texture.DDS
 			previewLimit, resample := modelViewerDDSPreviewLimit(*texture.DDS, options)
+
+			// Compressed uploads cannot generate mipmaps, and minified normal and light
+			// maps without them turn toon shading into speckles. Dumped EFMI textures are
+			// usually mipless, so they take the decoded fallback, which does.
+			if materialProfile == "efmi" && texture.DDS.MipCount == 1 {
+				resample = true
+			}
 			if plan, needed := modelViewerDDSPreviewPlanFor(
 				*texture.DDS,
 				previewLimit,

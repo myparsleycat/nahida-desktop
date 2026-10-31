@@ -304,6 +304,50 @@ func TestWriteModelViewerPayloadScalesMiplessDDSIntoFallback(t *testing.T) {
 	}
 }
 
+func TestWriteModelViewerPayloadDecodesMiplessEFMIDDS(t *testing.T) {
+	mipless := filepath.Join(t.TempDir(), "mipless.dds")
+	if err := os.WriteFile(mipless, encodeModelViewerBC1DDS(t, 16, 16, 1, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mipped := filepath.Join(t.TempDir(), "mipped.dds")
+	if err := os.WriteFile(mipped, encodeModelViewerBC1DDS(t, 16, 16, 5, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	textures := make(map[string]modelViewerTexturePayload)
+	for key, path := range map[string]string{"mipless": mipless, "mipped": mipped} {
+		metadata, err := inspectModelViewerDDS(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		textures[key] = modelViewerTexturePayload{Key: key, Role: "diffuse", Path: path, DDS: &metadata}
+	}
+
+	protocol := infra.NewProtocol()
+	transport := ModelViewerTransport{
+		MaterialProfile: "efmi",
+		Textures:        make(map[string]ModelViewerTextureTransport),
+	}
+	err := writeModelViewerPayload(
+		context.Background(),
+		NewWithOptions(Options{Protocol: protocol}),
+		protocol.CreateMemorySession(),
+		&transport,
+		nil,
+		textures,
+		modelViewerPayloadOptions{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if texture := transport.Textures["mipless"]; texture.URL != texture.FallbackURL || texture.MipCount != 0 {
+		t.Fatalf("mipless texture = %#v", texture)
+	}
+	if texture := transport.Textures["mipped"]; texture.URL == texture.FallbackURL || texture.MipCount != 5 {
+		t.Fatalf("mipped texture = %#v", texture)
+	}
+}
+
 func TestPrepareModelViewerDDSPreviewDecimatesOddFinalMip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "odd-mips.dds")
 	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 15, 9, 2, 1), 0o600); err != nil {
