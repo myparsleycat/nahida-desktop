@@ -72,12 +72,15 @@ type PayloadMeshUserData = {
         normalMapKey: string | null;
         lightMapKey: string | null;
         materialMapKey: string | null;
+        cutoutMapKey: string | null;
     };
 };
 
 type RabbitFXShaderState = {
     lightMap: { value: Texture };
     lightMapEnabled: { value: number };
+    cutoutMap: { value: Texture };
+    cutoutEnabled: { value: number };
     toonEnabled: { value: number };
 };
 
@@ -544,6 +547,7 @@ function applyEvaluatedMaps(
         last.normalMapKey === evaluated.normalMapKey &&
         last.lightMapKey === evaluated.lightMapKey &&
         last.materialMapKey === evaluated.materialMapKey &&
+        last.cutoutMapKey === evaluated.cutoutMapKey &&
         material.normalMap === normalMap
     ) {
         return;
@@ -591,6 +595,9 @@ function applyEvaluatedMaps(
     if (rabbitFXState) {
         rabbitFXState.lightMap.value = rabbitFXLightMap ?? rabbitFXFallbackLightMap;
         rabbitFXState.lightMapEnabled.value = rabbitFXLightMap ? 1 : 0;
+        const cutoutMap = evaluated.cutoutMapKey ? textures.get(evaluated.cutoutMapKey) : undefined;
+        rabbitFXState.cutoutMap.value = cutoutMap ?? rabbitFXFallbackLightMap;
+        rabbitFXState.cutoutEnabled.value = cutoutMap ? 1 : 0;
     }
     updateDDSShaderState(material, userData.materialProfile);
     if (
@@ -608,6 +615,7 @@ function applyEvaluatedMaps(
         normalMapKey: evaluated.normalMapKey,
         lightMapKey: evaluated.lightMapKey,
         materialMapKey: evaluated.materialMapKey,
+        cutoutMapKey: evaluated.cutoutMapKey,
     };
 }
 
@@ -828,12 +836,16 @@ function configureRabbitFXMaterialShader(
     const state: RabbitFXShaderState = {
         lightMap: { value: rabbitFXFallbackLightMap },
         lightMapEnabled: { value: 0 },
+        cutoutMap: { value: rabbitFXFallbackLightMap },
+        cutoutEnabled: { value: 0 },
         toonEnabled: { value: toonShadows ? 1 : 0 },
     };
     material.userData.rabbitFXMaterial = state;
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
         shader.uniforms.rabbitFXLightMap = state.lightMap;
         shader.uniforms.rabbitFXLightMapEnabled = state.lightMapEnabled;
+        shader.uniforms.rabbitFXCutoutMap = state.cutoutMap;
+        shader.uniforms.rabbitFXCutoutEnabled = state.cutoutEnabled;
         shader.uniforms.rabbitFXToonEnabled = state.toonEnabled;
         shader.vertexShader = replaceRabbitFXShaderAnchor(
             shader.vertexShader,
@@ -854,6 +866,8 @@ vRabbitFXUv = uv;`,
 varying vec2 vRabbitFXUv;
 uniform sampler2D rabbitFXLightMap;
 uniform float rabbitFXLightMapEnabled;
+uniform sampler2D rabbitFXCutoutMap;
+uniform float rabbitFXCutoutEnabled;
 uniform float rabbitFXToonEnabled;
 
 float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection ) {
@@ -864,6 +878,14 @@ float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection 
     float boundary = smoothstep( 0.55, 0.81, dot( surfaceNormal, lightDirection ) + 0.4 );
     return mix( 1.0, boundary * visibility, rabbitFXToonEnabled );
 }`,
+        );
+
+        // Red also holds a BC4 mask, which has no green channel to sample.
+        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+            shader.fragmentShader,
+            "#include <map_fragment>",
+            `if ( rabbitFXCutoutEnabled > 0.5 && texture2D( rabbitFXCutoutMap, vRabbitFXUv ).r < 0.5 ) discard;
+#include <map_fragment>`,
         );
         shader.fragmentShader = replaceRabbitFXShaderAnchor(
             shader.fragmentShader,

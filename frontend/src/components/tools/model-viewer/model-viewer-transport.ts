@@ -73,6 +73,7 @@ function normalizeTextureRole(value: string): ViewerTextureRole {
         case "normal_map":
         case "light_map":
         case "material_map":
+        case "cutout_map":
             return value;
         default:
             throw new TypeError(`Invalid model viewer texture role: ${value}`);
@@ -155,6 +156,11 @@ export function normalizeModelViewerTransport(
             })),
             materialMapKey: mesh.materialMapKey,
             materialMapVariants: (mesh.materialMapVariants ?? []).map((variant) => ({
+                conditions: normalizeDNF(variant.conditions),
+                texKey: variant.texKey,
+            })),
+            cutoutMapKey: mesh.cutoutMapKey,
+            cutoutMapVariants: (mesh.cutoutMapVariants ?? []).map((variant) => ({
                 conditions: normalizeDNF(variant.conditions),
                 texKey: variant.texKey,
             })),

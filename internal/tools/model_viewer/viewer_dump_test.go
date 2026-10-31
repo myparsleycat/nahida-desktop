@@ -342,6 +342,96 @@ this = ResourceTexture0
 	}
 }
 
+func TestLoadModViewerResolvesTextureSelectorPerDraw(t *testing.T) {
+	dir := t.TempDir()
+	const skin, cloth = "Textures/Components-3 t=aaaa0001.png", "Textures/Components-3 t=aaaa0002.png"
+	writeTextureFile(t, dir, skin, encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, cloth, encodeColorPNG(16, 16))
+	writeTextureFile(t, dir, "parts.ib", modelViewerUint32Bytes([]uint32{0, 1, 2, 1, 2, 3, 2, 3, 4}))
+	result := loadViewerMod(t, dir, `[Constants]
+global $texture_id = -1
+[CommandListTextures]
+if $texture_id == 1
+Resource\RabbitFX\Diffuse = ref ResourceSkin
+else if $texture_id == 2
+Resource\RabbitFX\Diffuse = ref ResourceCloth
+endif
+run = CommandList\RabbitFX\SetTextures
+[TextureOverrideComponent3]
+hash = beef000d
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+$texture_id = 2
+run = CommandListTextures
+drawindexed = 3, 0, 0
+$texture_id = 0
+run = CommandListTextures
+drawindexed = 3, 3, 0
+$texture_id = 1
+run = CommandListTextures
+drawindexed = 3, 6, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = parts.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceSkin]
+filename = `+skin+`
+[ResourceCloth]
+filename = `+cloth+`
+`)
+	if len(result.Meshes) != 3 {
+		t.Fatalf("meshes = %+v", result.Meshes)
+	}
+	if !strings.Contains(texKey(result.Meshes[0]), cloth) {
+		t.Fatalf("selector 2 texKey = %q", texKey(result.Meshes[0]))
+	}
+	if got := texKey(result.Meshes[1]); got != "" || len(result.Meshes[1].TextureVariants) != 0 {
+		t.Fatalf("selector without a branch texKey = %q, variants = %+v", got, result.Meshes[1].TextureVariants)
+	}
+	if !strings.Contains(texKey(result.Meshes[2]), skin) {
+		t.Fatalf("selector 1 texKey = %q", texKey(result.Meshes[2]))
+	}
+}
+
+func TestModelViewerSelectorAssignmentEndsWithItsBranch(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global $selector = 1
+global persist $toggle = 0
+[TextureOverrideComponent3]
+hash = beef000d
+$selector = 2
+if $toggle == 1
+$selector = 1
+endif
+if $selector == 1
+ps-t0 = ResourceFirst
+else
+ps-t0 = ResourceSecond
+endif
+drawindexed = 3, 0, 0
+`)
+	records, _, err := collectModelViewerSymbolicDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %+v", records)
+	}
+	resources := make(map[string]bool)
+	for _, assignment := range records[0].textureHistory {
+		resources[assignment.resource] = true
+	}
+	if !resources["First"] || !resources["Second"] {
+		t.Fatalf("textures = %+v", records[0].textureHistory)
+	}
+}
+
 func TestLoadModViewerRecoversUnreferencedWWMIDiffuse(t *testing.T) {
 	const (
 		maskFile  = "Textures/Components-0-1-2 t=11111111.dds"

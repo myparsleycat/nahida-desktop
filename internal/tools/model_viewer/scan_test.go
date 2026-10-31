@@ -18,6 +18,46 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+func TestModelViewerRabbitFXCutoutFollowsDraws(t *testing.T) {
+	sections := parseModINI(`[TextureOverrideParts]
+ib = ResourceIB
+Resource\RabbitFX\Diffuse = ref ResourceAtlasA
+run = CommandList\RabbitFX\SetTextures
+drawindexed = 3, 0, 0
+Resource\RabbitFX\FXMap = ref resourceCutoutMaskA
+run = CommandList\RabbitFX\Run
+drawindexed = 3, 3, 0
+Resource\RabbitFX\Diffuse = ref ResourceAtlasB
+run = CommandList\RabbitFX\SetTextures
+drawindexed = 3, 6, 0
+Resource\RabbitFX\FXMap = ref ResourceCutoutMaskB
+Resource\RabbitFX\Diffuse = ref ResourceAtlasC
+run = CommandList\RabbitFX\SetTextures
+drawindexed = 3, 9, 0
+Resource\RabbitFX\FXMap = ref ResourceSparkle
+run = CommandList\RabbitFX\Run
+drawindexed = 3, 12, 0`)
+	records, _, err := collectModelViewerSymbolicDrawRecords(sections, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int]string{0: "", 3: "CutoutMaskA", 6: "", 9: "CutoutMaskB", 12: ""}
+	if len(records) != len(want) {
+		t.Fatalf("records = %d", len(records))
+	}
+	for _, record := range records {
+		got := ""
+		for _, assignment := range record.textureHistory {
+			if assignment.role == modelViewerCutoutMapRole {
+				got = assignment.resource
+			}
+		}
+		if got != want[record.draw.StartIndex] {
+			t.Errorf("draw at %d cutout = %q, want %q", record.draw.StartIndex, got, want[record.draw.StartIndex])
+		}
+	}
+}
+
 func TestModelViewerSharedGeometryPreservesMeshState(t *testing.T) {
 	dir := t.TempDir()
 	writeViewerGeometry(t, dir)

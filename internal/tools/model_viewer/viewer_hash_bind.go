@@ -753,7 +753,10 @@ func peekDdsRole(filePath string) *struct {
 }
 
 func meshHasTextureEvidence(mesh modelViewerDirectMesh) bool {
-	return mesh.textureDefaultFile != "" || mesh.textureAuthored || len(mesh.textureAssignments) > 0 ||
+	return mesh.textureDefaultFile != "" || mesh.textureAuthored ||
+		slices.ContainsFunc(mesh.textureAssignments, func(assignment modelViewerDirectTextureAssignment) bool {
+			return assignment.role != modelViewerCutoutMapRole
+		}) ||
 		len(mesh.slotTextureCandidates) > 0 || len(mesh.nonDiffuseTextureFiles) > 0
 }
 

@@ -189,7 +189,37 @@ func collectModelViewerResourceAliases(
 		}
 	}
 	aliases.addEFMIArmatureInputs(sections)
+	aliases.addWWMIShapeKeyApplierInputs(sections)
 	return aliases
+}
+
+// addWWMIShapeKeyApplierInputs follows the base positions through the applier,
+// which writes cs-t6 plus shape key deltas into cs-u6. A draw can bind that output
+// or a copy of it, and the preview applies shape keys over the bind pose itself.
+func (a modelViewerResourceAliases) addWWMIShapeKeyApplierInputs(sections []modINISection) {
+	for _, section := range sections {
+		input, output := "", ""
+		applied := false
+		for _, raw := range section.Lines {
+			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
+			left, right, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			left, right = strings.TrimSpace(left), strings.TrimSpace(right)
+			switch {
+			case strings.EqualFold(left, "cs-t6"):
+				input = modelViewerResourceToken(right)
+			case strings.EqualFold(left, "cs-u6"):
+				output = modelViewerResourceToken(right)
+			case strings.EqualFold(left, "run") && strings.EqualFold(right, `CustomShader\WWMIv1\ShapeKeyApplier`):
+				a.add(a.computeInputs, output, input)
+				applied = true
+			case applied && output != "" && strings.EqualFold(modelViewerResourceToken(right), output):
+				a.add(a.computeInputs, modelViewerResourceToken(left), input)
+			}
+		}
+	}
 }
 
 func (a modelViewerResourceAliases) add(edges map[string][]string, target, source string) {

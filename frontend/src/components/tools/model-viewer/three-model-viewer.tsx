@@ -2020,6 +2020,7 @@ function payloadEvalSignature(evalResult: NonNullable<ModelViewerSurfaceProps["p
       normalMapKey: mesh.normalMapKey,
       lightMapKey: mesh.lightMapKey,
       materialMapKey: mesh.materialMapKey,
+      cutoutMapKey: mesh.cutoutMapKey,
       shapeWeights: mesh.shapeWeights,
       positionVariantIndex: mesh.positionVariantIndex,
     })),

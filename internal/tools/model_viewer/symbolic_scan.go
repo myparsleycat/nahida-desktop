@@ -2,12 +2,21 @@ package modelviewer
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
+)
+
+const (
+	modelViewerRabbitFXSetTextures = "commandlistrabbitfxsettextures"
+	modelViewerCutoutMapRole       = "cutout_map"
 )
 
 // A leading $ would make this a mod variable rather than the bound vertex shader.
@@ -28,16 +37,19 @@ type modelViewerSymbolicBranchFrame struct {
 }
 
 type modelViewerSymbolicSectionState struct {
-	buffers          map[string][]modelViewerSymbolicAssignment
-	resolvedBuffers  map[string][]modelViewerSymbolicAssignment
-	textures         map[string][]modelViewerSymbolicAssignment
-	resolvedTextures map[string][]modelViewerSymbolicAssignment
-	thisHistory      []modelViewerSymbolicAssignment
-	resolvedThis     []modelViewerSymbolicAssignment
-	nonDiffuse       []string
-	draws            []modelViewerDirectDrawRecord
-	explicitDraw     bool
-	nestedSkip       ModelViewerDNF
+	buffers               map[string][]modelViewerSymbolicAssignment
+	resolvedBuffers       map[string][]modelViewerSymbolicAssignment
+	textures              map[string][]modelViewerSymbolicAssignment
+	resolvedTextures      map[string][]modelViewerSymbolicAssignment
+	thisHistory           []modelViewerSymbolicAssignment
+	resolvedThis          []modelViewerSymbolicAssignment
+	nonDiffuse            []string
+	draws                 []modelViewerDirectDrawRecord
+	explicitDraw          bool
+	nestedSkip            ModelViewerDNF
+	rabbitFXPending       bool
+	rabbitFXReleased      bool
+	rabbitFXCutoutPending bool
 }
 
 type modelViewerSymbolicScanContext struct {
@@ -49,6 +61,7 @@ type modelViewerSymbolicScanContext struct {
 	sectionName   string
 	commandForm   string
 	resourcesOnly bool
+	assigned      map[string]modelViewerAssignedValue
 }
 
 func scanModelViewerSymbolicRoot(
@@ -101,6 +114,7 @@ func collectModelViewerSymbolicDrawRecords(
 			continue
 		}
 		ctx.sectionName = section.Name
+		ctx.assigned = nil
 		state := &modelViewerSymbolicSectionState{
 			buffers:  make(map[string][]modelViewerSymbolicAssignment),
 			textures: make(map[string][]modelViewerSymbolicAssignment),
@@ -113,6 +127,7 @@ func collectModelViewerSymbolicDrawRecords(
 		); err != nil {
 			return nil, nil, err
 		}
+		state.keepRabbitFXReleasedDrawsOnGameTextures()
 		// EFMI overrides skip through their shared dispatcher, so a draw callback
 		// with its drawindexed removed hides the component instead of drawing it.
 		// The implicit draw survives only in states where that skip is not reached.
@@ -177,11 +192,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 		lower := strings.ToLower(line)
 		switch {
 		case strings.HasPrefix(lower, "if "):
-			branch := parseModelViewerConditionDNF(
-				strings.TrimSpace(line[3:]),
-				modelViewerAliases(c.variables),
-				c.variables,
-			)
+			branch := c.parseCondition(strings.TrimSpace(line[3:]))
 			c.seq++
 			stack = append(stack, modelViewerSymbolicBranchFrame{
 				current: branch, seen: branch, seq: c.seq,
@@ -196,19 +207,22 @@ func (c *modelViewerSymbolicScanContext) scan(
 			if strings.HasPrefix(lower, "else if ") {
 				expression = strings.TrimSpace(line[8:])
 			}
-			branch := parseModelViewerConditionDNF(expression, modelViewerAliases(c.variables), c.variables)
+			c.forgetAssignments(len(stack))
+			branch := c.parseCondition(expression)
 			frame := &stack[len(stack)-1]
 			frame.current = modelViewerDNFAnd(modelViewerDNFNot(frame.seen), branch)
 			frame.seen = modelViewerDNFOr(frame.seen, branch)
 			continue
 		case lower == "else":
 			if len(stack) > 0 {
+				c.forgetAssignments(len(stack))
 				frame := &stack[len(stack)-1]
 				frame.current = modelViewerDNFNot(frame.seen)
 			}
 			continue
 		case lower == "endif":
 			if len(stack) > 0 {
+				c.forgetAssignments(len(stack))
 				stack = stack[:len(stack)-1]
 			}
 			continue
@@ -224,9 +238,13 @@ func (c *modelViewerSymbolicScanContext) scan(
 		if len(conditions) == 0 {
 			continue
 		}
+		c.recordAssignment(key, value, len(stack))
 		if nested := modelViewerNestedSectionName(key, value); nested != "" {
 			name := modelViewerNormalizeKey(nested)
 			section, exists := c.lookup[name]
+			if !exists && name == modelViewerRabbitFXSetTextures && strings.EqualFold(key, "run") {
+				state.applyRabbitFXTextures(conditions)
+			}
 			if !exists || visiting[name] || c.expansions >= maxModelViewerDirectRunExpansions {
 				continue
 			}
@@ -243,6 +261,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 				return err
 			}
 			c.commandForm = previousForm
+			c.forgetAssignments(len(stack) + 1)
 			continue
 		}
 		switch strings.ToLower(key) {
@@ -269,6 +288,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 				continue
 			}
 			state.explicitDraw = true
+			state.rabbitFXCutoutPending = false
 			c.draws++
 			if c.draws > maxModelViewerDraws {
 				return infra.ContractError(
@@ -278,6 +298,8 @@ func (c *modelViewerSymbolicScanContext) scan(
 			if !c.resourcesOnly {
 				state.draws = append(state.draws, c.snapshotRecords(state, draw, draw.Auto, conditions, stack)...)
 			}
+		case `resource\rabbitfx\fxmap`:
+			state.assignRabbitFXMap(value, conditions, sequence)
 		default:
 			if strings.HasPrefix(strings.ToLower(key), "resource") || modelViewerUAVSlotRE.MatchString(key) {
 				state.copyBuffer(key, value, conditions, sequence)
@@ -309,6 +331,8 @@ func (c *modelViewerSymbolicScanContext) scan(
 				}
 			}
 			if texture {
+				state.rabbitFXPending = state.rabbitFXPending ||
+					strings.HasPrefix(modelViewerNormalizeKey(key), "resourcerabbitfx")
 				delete(state.resolvedTextures, role)
 				state.textures[role] = append(
 					state.textures[role],
@@ -323,6 +347,109 @@ func (c *modelViewerSymbolicScanContext) scan(
 		}
 	}
 	return nil
+}
+
+// applyRabbitFXTextures models SetTextures consuming the resources set before it.
+// Run with none set, as when a selector value has no branch in the mod's texture
+// CommandList, it leaves the next draws on the game's textures, so the atlas of the
+// previous draw must not carry over. An assignment without a resource marks that.
+// A cutout mask matches one atlas's layout, so SetTextures also ends the mask of
+// earlier draws, whichever textures it binds.
+func (s *modelViewerSymbolicSectionState) applyRabbitFXTextures(conditions ModelViewerDNF) {
+	if !s.rabbitFXCutoutPending && len(s.textures[modelViewerCutoutMapRole]) > 0 {
+		s.appendTexture(modelViewerCutoutMapRole, modelViewerSymbolicAssignment{
+			conditions: cloneModelViewerDNF(conditions),
+		})
+	}
+	s.rabbitFXCutoutPending = false
+	if s.rabbitFXPending {
+		s.rabbitFXPending = false
+		return
+	}
+	for role := range s.textures {
+		if _, slot := modelViewerSlotTextureNumber(role); slot || role == modelViewerCutoutMapRole {
+			continue
+		}
+		s.appendTexture(role, modelViewerSymbolicAssignment{conditions: cloneModelViewerDNF(conditions)})
+		s.rabbitFXReleased = true
+	}
+}
+
+// assignRabbitFXMap records FXMap only when it names a cutout mask, because other
+// mods use it for other effects. Any other value still replaces an earlier mask.
+func (s *modelViewerSymbolicSectionState) assignRabbitFXMap(value string, conditions ModelViewerDNF, sequence int) {
+	resource := modelViewerTrimTextureValue(value)
+	if !strings.Contains(strings.ToLower(resource), "cutout") {
+		resource = ""
+	}
+	s.appendTexture(modelViewerCutoutMapRole, modelViewerSymbolicAssignment{
+		resource:   resource,
+		conditions: cloneModelViewerDNF(conditions),
+		sequence:   sequence,
+	})
+	s.rabbitFXCutoutPending = true
+}
+
+func (s *modelViewerSymbolicSectionState) appendTexture(role string, assignment modelViewerSymbolicAssignment) {
+	delete(s.resolvedTextures, role)
+	s.textures[role] = append(s.textures[role], assignment)
+}
+
+// keepRabbitFXReleasedDrawsOnGameTextures stops dump recovery from giving a released
+// draw an atlas the section binds for other draws, which its UVs do not fit.
+func (s *modelViewerSymbolicSectionState) keepRabbitFXReleasedDrawsOnGameTextures() {
+	if !s.rabbitFXReleased {
+		return
+	}
+	var bound []string
+	for _, history := range s.textures {
+		for _, assignment := range history {
+			if assignment.resource != "" {
+				bound = appendUniqueModelViewer(bound, assignment.resource)
+			}
+		}
+	}
+	for index := range s.draws {
+		draw := &s.draws[index]
+		if !slices.ContainsFunc(draw.textureHistory, func(assignment modelViewerDirectTextureAssignment) bool {
+			return assignment.role == "diffuse"
+		}) {
+			draw.otherState = lo.Union(draw.otherState, bound)
+		}
+	}
+}
+
+func (c *modelViewerSymbolicScanContext) parseCondition(expression string) ModelViewerDNF {
+	parser := &modelViewerDNFParser{
+		tokens:    tokenizeModelViewerDNF(expression),
+		aliases:   modelViewerAliases(c.variables),
+		variables: c.variables,
+		assigned:  c.assigned,
+	}
+	return parser.parseOr()
+}
+
+func (c *modelViewerSymbolicScanContext) recordAssignment(key, value string, depth int) {
+	match := modelViewerDNFBareRE.FindStringSubmatch(key)
+	if match == nil {
+		return
+	}
+	variable := modelViewerNormalizeKey(match[1])
+	literal, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		delete(c.assigned, variable)
+		return
+	}
+	if c.assigned == nil {
+		c.assigned = make(map[string]modelViewerAssignedValue)
+	}
+	c.assigned[variable] = modelViewerAssignedValue{value: literal, depth: depth}
+}
+
+func (c *modelViewerSymbolicScanContext) forgetAssignments(depth int) {
+	maps.DeleteFunc(c.assigned, func(_ string, assigned modelViewerAssignedValue) bool {
+		return assigned.depth >= depth
+	})
 }
 
 // Copies through a compute UAV keep the input's bind-pose vertex addresses.
@@ -689,7 +816,7 @@ func modelViewerSymbolicTextureHistory(
 		}
 		for _, assignment := range resolved {
 			conditions := modelViewerDNFAnd(drawConditions, assignment.conditions)
-			if len(conditions) == 0 {
+			if len(conditions) == 0 || assignment.resource == "" {
 				continue
 			}
 			output = append(
@@ -715,7 +842,7 @@ func modelViewerSymbolicOtherStateTextures(
 	var output []string
 	for _, history := range state.textures {
 		for _, assignment := range history {
-			if !modelViewerDNFIntersects(drawConditions, assignment.conditions) {
+			if assignment.resource != "" && !modelViewerDNFIntersects(drawConditions, assignment.conditions) {
 				output = appendUniqueModelViewer(output, assignment.resource)
 			}
 		}

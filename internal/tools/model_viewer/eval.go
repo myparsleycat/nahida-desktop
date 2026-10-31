@@ -13,6 +13,7 @@ type viewerEvalMesh struct {
 	NormalMapKey         string
 	LightMapKey          string
 	MaterialMapKey       string
+	CutoutMapKey         string
 	PositionVariantIndex *int
 }
 
@@ -154,6 +155,7 @@ func evaluateViewerTransport(payload ModelViewerTransport, state map[string]any)
 			NormalMapKey:         viewerEvalResolveTexture(mesh.NormalMapVariants, mesh.NormalMapKey, resolved),
 			LightMapKey:          viewerEvalResolveTexture(mesh.LightMapVariants, mesh.LightMapKey, resolved),
 			MaterialMapKey:       viewerEvalResolveTexture(mesh.MaterialMapVariants, mesh.MaterialMapKey, resolved),
+			CutoutMapKey:         viewerEvalResolveTexture(mesh.CutoutMapVariants, mesh.CutoutMapKey, resolved),
 			PositionVariantIndex: positionIndex,
 		}
 	}
@@ -176,6 +178,7 @@ func viewerEvalStatesDiffer(left, right viewerEvalState) bool {
 			left.Meshes[index].NormalMapKey != right.Meshes[index].NormalMapKey ||
 			left.Meshes[index].LightMapKey != right.Meshes[index].LightMapKey ||
 			left.Meshes[index].MaterialMapKey != right.Meshes[index].MaterialMapKey ||
+			left.Meshes[index].CutoutMapKey != right.Meshes[index].CutoutMapKey ||
 			viewerEvalIndexValue(
 				left.Meshes[index].PositionVariantIndex,
 			) != viewerEvalIndexValue(
@@ -226,6 +229,7 @@ func buildViewerBlockingVars(payload ModelViewerTransport, testedVar string, sta
 			mesh.NormalMapVariants,
 			mesh.LightMapVariants,
 			mesh.MaterialMapVariants,
+			mesh.CutoutMapVariants,
 		} {
 			for _, variant := range variants {
 				addDNF(variant.Conditions)

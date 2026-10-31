@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+func TestResolveModelViewerEffectiveResourcesFollowsShapeKeyApplier(t *testing.T) {
+	sections := parseModINI(`[CommandListApplyShapeKeys]
+cs-t6 = ResourcePositionBuffer
+cs-u6 = ResourcePositionRW
+run = CustomShader\WWMIv1\ShapeKeyApplier
+ResourceShapeKeyedPosition = copy ResourcePositionRW
+[ResourceShapeKeyedPosition]
+[ResourcePositionRW]
+type = RWBuffer
+stride = 12
+[ResourcePositionBuffer]
+filename = Meshes/Position.buf
+stride = 12`)
+	resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
+	for _, resource := range resources {
+		if resource.Filename != "Meshes/Position.buf" {
+			t.Fatalf("%s filename = %q", resource.Name, resource.Filename)
+		}
+	}
+}
+
 func TestResolveModelViewerEffectiveResourcesFollowsUAVChain(t *testing.T) {
 	sections := parseModINI(`[Constants]
 post ResourceBodyPosition = copy_desc ResourcBodyPosition.2

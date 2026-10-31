@@ -59,6 +59,7 @@ function evalState(shapeWeights: Record<string, number>): EvaluatedViewerState {
                 normalMapKey: null,
                 lightMapKey: null,
                 materialMapKey: null,
+                cutoutMapKey: null,
                 shapeWeights,
                 positionVariantIndex: null,
             },
@@ -77,6 +78,7 @@ function variantEval(positionVariantIndex: number | null): EvaluatedViewerState 
                 normalMapKey: null,
                 lightMapKey: null,
                 materialMapKey: null,
+                cutoutMapKey: null,
                 shapeWeights: {},
                 positionVariantIndex,
             },
@@ -294,6 +296,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: "light",
                     materialMapKey: "material",
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -364,6 +367,7 @@ describe("applyPayloadEval packed maps", () => {
                         normalMapKey: null,
                         lightMapKey: null,
                         materialMapKey: null,
+                        cutoutMapKey: null,
                         shapeWeights: {},
                         positionVariantIndex: null,
                     },
@@ -422,6 +426,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey,
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -452,6 +457,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -495,6 +501,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -681,6 +688,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -729,12 +737,14 @@ describe("applyPayloadEval packed maps", () => {
         const normal = new Texture();
         const firstLight = new Texture();
         const secondLight = new Texture();
+        const cutout = new Texture();
         const root = new Group();
         root.userData.payloadTextures = new Map([
             ["diffuse", diffuse],
             ["normal", normal],
             ["light-a", firstLight],
             ["light-b", secondLight],
+            ["cutout", cutout],
         ]);
         root.add(mesh);
 
@@ -748,6 +758,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: "light-a",
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -763,7 +774,8 @@ describe("applyPayloadEval packed maps", () => {
 
         const shader = {
             vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",
-            fragmentShader: "#include <common>\nvoid main() {\n#include <lights_fragment_begin>\n}",
+            fragmentShader:
+                "#include <common>\nvoid main() {\n#include <map_fragment>\n#include <lights_fragment_begin>\n}",
             uniforms: {},
         };
         material.onBeforeCompile(shader as never, {} as never);
@@ -793,6 +805,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: "normal",
                     lightMapKey: "light-b",
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -802,6 +815,31 @@ describe("applyPayloadEval packed maps", () => {
         expect(
             (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
         ).toBe(secondLight);
+
+        const applyCutout = (cutoutMapKey: string | null) =>
+            applyPayloadEval(root, {
+                state: {},
+                meshes: [
+                    {
+                        id: "mesh",
+                        visible: true,
+                        texKey: "diffuse",
+                        normalMapKey: "normal",
+                        lightMapKey: "light-b",
+                        materialMapKey: null,
+                        cutoutMapKey,
+                        shapeWeights: {},
+                        positionVariantIndex: null,
+                    },
+                ],
+            });
+        const uniforms = shader.uniforms as Record<string, { value: unknown }>;
+        applyCutout("cutout");
+        expect(uniforms.rabbitFXCutoutMap?.value).toBe(cutout);
+        expect(uniforms.rabbitFXCutoutEnabled?.value).toBe(1);
+        applyCutout(null);
+        expect(uniforms.rabbitFXCutoutEnabled?.value).toBe(0);
+        expect(material.version).toBe(version);
 
         setPayloadToonShadows(root, false);
         expect(
@@ -829,6 +867,7 @@ describe("applyPayloadEval packed maps", () => {
                     normalMapKey: null,
                     lightMapKey: "light",
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: null,
                 },
@@ -866,6 +905,7 @@ describe("lazy payload position variants", () => {
                     normalMapKey: null,
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: 0,
                 },
@@ -876,6 +916,7 @@ describe("lazy payload position variants", () => {
                     normalMapKey: null,
                     lightMapKey: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     shapeWeights: {},
                     positionVariantIndex: 0,
                 },

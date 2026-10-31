@@ -29,6 +29,7 @@ it("keeps folder-shared meshes visible in an INI form without showing sibling fo
             normalMapKey: null,
             lightMapKey: null,
             materialMapKey: null,
+            cutoutMapKey: null,
             shapeTargets: [],
         })),
     };

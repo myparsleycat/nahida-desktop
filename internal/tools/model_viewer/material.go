@@ -440,7 +440,8 @@ func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTex
 }
 
 func modelViewerTextureFormatFor(materialProfile, role, requested string) string {
-	if materialProfile == "wuwa:rabbitfx" && (role == "normal_map" || role == "light_map" || role == "material_map") {
+	if materialProfile == "wuwa:rabbitfx" &&
+		(role == "normal_map" || role == "light_map" || role == "material_map" || role == modelViewerCutoutMapRole) {
 		return "png"
 	}
 	return normalizeModelViewerFormat(requested)

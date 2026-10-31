@@ -200,6 +200,14 @@ type modelViewerDNFParser struct {
 	position  int
 	aliases   map[string]ModelViewerDNF
 	variables map[string]any
+	assigned  map[string]modelViewerAssignedValue
+}
+
+// modelViewerAssignedValue is a literal a section assigned to a variable. Depth
+// is the branch nesting of the assignment, which ends when that branch does.
+type modelViewerAssignedValue struct {
+	value float64
+	depth int
 }
 
 func parseModelViewerConditionDNF(
@@ -251,7 +259,53 @@ func (p *modelViewerDNFParser) parseAtom() ModelViewerDNF {
 		return modelViewerDNFTrue()
 	}
 	p.position++
+	if folded, ok := foldModelViewerAssignedAtom(token, p.assigned); ok {
+		return folded
+	}
 	return modelViewerDNFAtom(token, p.aliases, p.variables)
+}
+
+// foldModelViewerAssignedAtom decides a comparison of a variable the running
+// section has just set to a literal. Such a variable selects what a shared
+// CommandList binds for the next draw, so it is not a state the user can toggle.
+func foldModelViewerAssignedAtom(raw string, assigned map[string]modelViewerAssignedValue) (ModelViewerDNF, bool) {
+	if len(assigned) == 0 {
+		return nil, false
+	}
+	atom := strings.TrimSpace(raw)
+	name, op, right := "", "!=", 0.0
+	if match := modelViewerDNFClauseRE.FindStringSubmatch(atom); match != nil {
+		parsed, err := strconv.ParseFloat(match[3], 64)
+		if err != nil {
+			return nil, false
+		}
+		name, op, right = match[1], match[2], parsed
+	} else if match := modelViewerDNFBareRE.FindStringSubmatch(atom); match != nil {
+		name = match[1]
+	}
+	left, ok := assigned[modelViewerNormalizeKey(name)]
+	if !ok {
+		return nil, false
+	}
+	holds := false
+	switch op {
+	case "==":
+		holds = left.value == right
+	case "!=":
+		holds = left.value != right
+	case "<":
+		holds = left.value < right
+	case "<=":
+		holds = left.value <= right
+	case ">":
+		holds = left.value > right
+	case ">=":
+		holds = left.value >= right
+	}
+	if holds {
+		return modelViewerDNFTrue(), true
+	}
+	return modelViewerDNFFalse(), true
 }
 
 func (p *modelViewerDNFParser) peek() string {

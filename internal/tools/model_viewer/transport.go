@@ -50,6 +50,8 @@ type ModelViewerMeshTransport struct {
 	LightMapVariants    []ModelViewerTextureVariant  `json:"lightMapVariants"`
 	MaterialMapKey      *string                      `json:"materialMapKey"`
 	MaterialMapVariants []ModelViewerTextureVariant  `json:"materialMapVariants"`
+	CutoutMapKey        *string                      `json:"cutoutMapKey"`
+	CutoutMapVariants   []ModelViewerTextureVariant  `json:"cutoutMapVariants"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
 	PositionVariants    []ModelViewerPositionVariant `json:"positionVariants"`
 	// DrawKey groups meshes of one INI draw with matching viewer-to-source face
@@ -231,6 +233,7 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 			mesh.NormalMapVariants,
 			mesh.LightMapVariants,
 			mesh.MaterialMapVariants,
+			mesh.CutoutMapVariants,
 		} {
 			for variantIndex := range variants {
 				variants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(

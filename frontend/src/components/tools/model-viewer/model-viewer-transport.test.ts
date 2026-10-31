@@ -25,7 +25,9 @@ describe("normalizeModelViewerTransport", () => {
                     lightMapKey: null,
                     lightMapVariants: null,
                     materialMapKey: null,
+                    cutoutMapKey: null,
                     materialMapVariants: null,
+                    cutoutMapVariants: null,
                     shapeTargets: null,
                     positionVariants: null,
                 },
@@ -76,6 +78,7 @@ describe("normalizeModelViewerTransport", () => {
             normalMapVariants: [],
             lightMapVariants: [],
             materialMapVariants: [],
+            cutoutMapVariants: [],
             shapeTargets: [],
             positionVariants: [],
         });

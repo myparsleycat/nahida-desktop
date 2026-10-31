@@ -57,7 +57,9 @@ function mesh(id: string): ViewerMeshTransport {
         lightMapKey: null,
         lightMapVariants: [],
         materialMapKey: null,
+        cutoutMapKey: null,
         materialMapVariants: [],
+        cutoutMapVariants: [],
         shapeTargets: [],
         positionVariants: [],
     };
@@ -100,7 +102,9 @@ it("preserves backend normals and bounds through initial load and variant restor
         lightMapKey: null,
         lightMapVariants: [],
         materialMapKey: null,
+        cutoutMapKey: null,
         materialMapVariants: [],
+        cutoutMapVariants: [],
         shapeTargets: [],
         positionVariants: [],
     };
@@ -128,6 +132,7 @@ it("preserves backend normals and bounds through initial load and variant restor
                 normalMapKey: null,
                 lightMapKey: null,
                 materialMapKey: null,
+                cutoutMapKey: null,
                 shapeWeights: {},
                 positionVariantIndex: null,
             },

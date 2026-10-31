@@ -27,6 +27,7 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			mesh.NormalMapVariants,
 			mesh.LightMapVariants,
 			mesh.MaterialMapVariants,
+			mesh.CutoutMapVariants,
 		} {
 			for variantIndex := range variants {
 				remapDNF(variants[variantIndex].Conditions)

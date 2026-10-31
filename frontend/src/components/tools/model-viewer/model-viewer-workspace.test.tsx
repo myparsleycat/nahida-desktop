@@ -500,7 +500,9 @@ function createFormSource() {
     lightMapKey: null,
     lightMapVariants: [],
     materialMapKey: null,
+    cutoutMapKey: null,
     materialMapVariants: [],
+    cutoutMapVariants: [],
     shapeTargets: [],
     positionVariants: [],
   });

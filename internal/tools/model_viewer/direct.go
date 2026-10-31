@@ -71,6 +71,7 @@ func modelViewerDirectGatingVariables(meshes []ModelViewerMeshTransport, _ []Mod
 			mesh.NormalMapVariants,
 			mesh.LightMapVariants,
 			mesh.MaterialMapVariants,
+			mesh.CutoutMapVariants,
 		} {
 			for _, variant := range variants {
 				addDNF(variant.Conditions)
@@ -685,6 +686,7 @@ func buildModelViewerDirectMeshPayload(
 		NormalMapVariants:   []ModelViewerTextureVariant{},
 		LightMapVariants:    []ModelViewerTextureVariant{},
 		MaterialMapVariants: []ModelViewerTextureVariant{},
+		CutoutMapVariants:   []ModelViewerTextureVariant{},
 		ShapeTargets:        []ModelViewerShapeTarget{},
 		PositionVariants:    []ModelViewerPositionVariant{},
 	}
@@ -751,6 +753,8 @@ func buildModelViewerDirectMeshPayload(
 				item.LightMapKey = lo.ToPtr(key)
 			case "material_map":
 				item.MaterialMapKey = lo.ToPtr(key)
+			case modelViewerCutoutMapRole:
+				item.CutoutMapKey = lo.ToPtr(key)
 			}
 			continue
 		}
@@ -764,6 +768,8 @@ func buildModelViewerDirectMeshPayload(
 			item.LightMapVariants = append(item.LightMapVariants, variant)
 		case "material_map":
 			item.MaterialMapVariants = append(item.MaterialMapVariants, variant)
+		case modelViewerCutoutMapRole:
+			item.CutoutMapVariants = append(item.CutoutMapVariants, variant)
 		}
 	}
 	if item.TexKey == nil && firstDiffuseKey != "" && !skippedMissingDiffuse {

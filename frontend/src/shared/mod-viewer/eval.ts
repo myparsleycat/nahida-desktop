@@ -132,6 +132,11 @@ export function evaluateViewerState(
                     mesh.materialMapKey,
                     resolved,
                 ),
+                cutoutMapKey: resolveTextureVariant(
+                    mesh.cutoutMapVariants,
+                    mesh.cutoutMapKey,
+                    resolved,
+                ),
                 shapeWeights: Object.fromEntries(
                     mesh.shapeTargets.map((target) => [
                         target.var,
