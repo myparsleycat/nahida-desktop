@@ -478,6 +478,25 @@ func readModelViewerEFMIBase(ctx context.Context, segments []modelViewerEFMISegm
 	return output, ctx.Err()
 }
 
+// decodeModelViewerEFMINormals reads the packed normal behind each position of
+// the EFMI vertex record, in the geometry's compacted vertex order.
+func decodeModelViewerEFMINormals(combined []byte, stride int, geometry *modelViewerGeometry) []float32 {
+	output := make([]float32, 0, geometry.VertexCount*3)
+	for vertex := range geometry.VertexCount {
+		source := vertex
+		if len(geometry.SourceIndices) == geometry.VertexCount {
+			source = int(geometry.SourceIndices[vertex])
+		}
+		start := source*stride + 12
+		if start+4 > len(combined) {
+			return nil
+		}
+		normal := decodeModelViewerEFMINormal(binary.LittleEndian.Uint32(combined[start:]))
+		output = append(output, normal[:]...)
+	}
+	return output
+}
+
 // decodeModelViewerEFMINormal mirrors the shader's 10-bit octahedral decode.
 func decodeModelViewerEFMINormal(packed uint32) [3]float32 {
 	component := func(shift uint32) float64 {

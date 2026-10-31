@@ -457,6 +457,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		)
 	}
 	stageStartedAt = time.Now()
+	efmi := isModelViewerEFMI(sections)
 	layoutName := detectModelViewerLayout(sections, resources)
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
@@ -639,6 +640,9 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			if source.kind == modelViewerDrawVertexPacked {
 				normalizeModelViewerPackedObjectNormals(geometry.Normal)
 			}
+			if efmi && source.kind == modelViewerDrawVertexMihoyo && buffers.posStride == modelViewerEFMIVertexStride {
+				geometry.Normal = decodeModelViewerEFMINormals(buffers.combined, buffers.stride, geometry)
+			}
 			if timing != nil {
 				timing.Geometries++
 			}
@@ -714,7 +718,6 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachRenamedDumpDiffuse(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
-	efmi := isModelViewerEFMI(sections)
 	attachSlotBoundDiffuse(output, modDir, layoutName == "wwmi", efmi)
 	if efmi {
 		attachEFMIMaterialMaps(output, resources, modDir)

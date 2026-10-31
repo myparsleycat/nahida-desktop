@@ -188,3 +188,21 @@ func encodeWwmiColorDDS(side uint32) []byte {
 	}
 	return efmiDX10DDS(side, efmiDXGIBGRA8SRGB, pixels)
 }
+
+func TestDecodeModelViewerEFMINormalsFollowsCompactedVertices(t *testing.T) {
+	const stride = 24
+	combined := make([]byte, stride*3)
+	binary.LittleEndian.PutUint32(combined[0*stride+12:], 511)
+	binary.LittleEndian.PutUint32(combined[2*stride+12:], 511<<10)
+
+	geometry := &modelViewerGeometry{VertexCount: 2, SourceIndices: []uint32{2, 0}}
+	normals := decodeModelViewerEFMINormals(combined, stride, geometry)
+	if !slices.Equal(normals, []float32{0, 1, 0, 1, 0, 0}) {
+		t.Fatalf("normals = %v", normals)
+	}
+
+	geometry.SourceIndices = []uint32{2, 3}
+	if normals := decodeModelViewerEFMINormals(combined, stride, geometry); normals != nil {
+		t.Fatalf("normals past the buffer = %v", normals)
+	}
+}
