@@ -865,11 +865,6 @@ export function ModelViewerWorkspace({
                   </InspectorSection>
                 ) : showToggleViewer ? (
                   <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
-                    <div className="border-b px-4 py-3">
-                      <div className="text-sm font-medium">
-                        {t("page.tools.model_viewer.toggle_viewer")}
-                      </div>
-                    </div>
                     <div className="min-h-0 flex-1 overflow-y-auto">{toggleControls}</div>
                   </div>
                 ) : null}
