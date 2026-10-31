@@ -37,7 +37,7 @@ func TestParseModelViewerINIMatchesElectronCommentsAndDuplicateSections(t *testi
 	}
 }
 
-func TestDiscoverModelViewerINIsMatchesElectronOrderDepthAndLimit(t *testing.T) {
+func TestDiscoverModelViewerINIsOrderDepthAndLimit(t *testing.T) {
 	root := t.TempDir()
 	writeINI := func(relative string) {
 		t.Helper()
@@ -55,8 +55,9 @@ func TestDiscoverModelViewerINIsMatchesElectronOrderDepthAndLimit(t *testing.T) 
 	for index := range maxModelViewerINIFiles {
 		writeINI(filepath.Join("one", fmt.Sprintf("c%02d.ini", index)))
 	}
-	writeINI(filepath.Join("one", "two", "kept.ini"))
-	writeINI(filepath.Join("one", "two", "three", "ignored.ini"))
+	// A merged mod nests each variant's INI as part/variant/part/mod.ini.
+	writeINI(filepath.Join("deep", "variant", "part", "kept.ini"))
+	writeINI(filepath.Join("deep", "variant", "part", "four", "ignored.ini"))
 	paths, err := discoverModelViewerActiveINIs(root)
 	if err != nil {
 		t.Fatal(err)
@@ -64,9 +65,9 @@ func TestDiscoverModelViewerINIsMatchesElectronOrderDepthAndLimit(t *testing.T) 
 	if len(paths) != maxModelViewerINIFiles {
 		t.Fatalf("paths = %#v", paths)
 	}
-	last := fmt.Sprintf("c%02d.ini", maxModelViewerINIFiles-3)
+	last := fmt.Sprintf("c%02d.ini", maxModelViewerINIFiles-4)
 	if filepath.Base(paths[0]) != "a.ini" || filepath.Base(paths[1]) != "b.ini" ||
-		filepath.Base(paths[maxModelViewerINIFiles-1]) != last {
+		filepath.Base(paths[2]) != "kept.ini" || filepath.Base(paths[maxModelViewerINIFiles-1]) != last {
 		t.Fatalf("order = %#v", paths)
 	}
 	for _, path := range paths {

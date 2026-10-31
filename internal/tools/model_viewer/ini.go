@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	maxModelViewerINIFiles = 32
-	maxModelViewerINIDepth = 2
+	maxModelViewerINIFiles = 64
+	maxModelViewerINIDepth = 3
 )
 
 type modelViewerINILine struct {
