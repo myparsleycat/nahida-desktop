@@ -331,6 +331,56 @@ describe("applyPayloadEval packed maps", () => {
         expect(uniforms.modelViewerRoughnessBC4.value).toBe(1);
     });
 
+    it("blends coverage masks only while one is bound", () => {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+        const material = new MeshStandardMaterial();
+        const mesh = new Mesh(geometry, material);
+        mesh.userData = {
+            meshId: "mesh",
+            basePositions: new Float32Array(9),
+            shapeTargets: [],
+            positionVariants: [],
+            baseNormals: new Float32Array(0),
+            lastPositionVariantIndex: null,
+            materialProfile: "generic",
+        };
+        const mask = new Texture();
+        mask.userData.modelViewerCoverageMask = true;
+        const root = new Group();
+        root.userData.payloadTextures = new Map([
+            ["mask", mask],
+            ["diffuse", new Texture()],
+        ]);
+        root.add(mesh);
+        const apply = (texKey: string) =>
+            applyPayloadEval(root, {
+                state: {},
+                meshes: [
+                    {
+                        id: "mesh",
+                        visible: true,
+                        texKey,
+                        normalMapKey: null,
+                        lightMapKey: null,
+                        materialMapKey: null,
+                        shapeWeights: {},
+                        positionVariantIndex: null,
+                    },
+                ],
+            });
+
+        apply("mask");
+        expect(material.transparent).toBe(true);
+        expect(material.depthWrite).toBe(false);
+        const { version } = material;
+
+        apply("diffuse");
+        expect(material.transparent).toBe(false);
+        expect(material.depthWrite).toBe(true);
+        expect(material.version).toBeGreaterThan(version);
+    });
+
     it("recompiles when a normal-map variant changes the packed-normal define", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));

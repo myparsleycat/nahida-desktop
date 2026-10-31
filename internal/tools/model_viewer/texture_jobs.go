@@ -186,6 +186,11 @@ func runModelViewerTextureJobs(
 			DDS:          &metadata,
 			InvertAlpha: modelViewerTextureNameRequestsAlphaInvert(job.resourceName) ||
 				metadata.AutoInvertAlpha,
+
+			// A dump name marks a game texture; an authored map may be a real
+			// black-and-white diffuse.
+			CoverageMask: job.role == "diffuse" && metadata.AutoCoverageMask &&
+				wwmiDumpTexRE.MatchString(slashPath(job.path)),
 		}
 		for _, key := range job.keys {
 			outputs[job.batchIndex][key] = item

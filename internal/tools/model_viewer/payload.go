@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
@@ -66,6 +67,8 @@ func prepareModelViewerPayload(
 	return meshPayloads, texturePayloads, textureStats, ctx.Err()
 }
 
+const modelViewerEffectCardUVArea = 2
+
 type modelViewerTexturePayload struct {
 	Key          string
 	Role         string
@@ -75,6 +78,7 @@ type modelViewerTexturePayload struct {
 	ResourceName string
 	DDS          *modelViewerDDSMetadata
 	InvertAlpha  bool
+	CoverageMask bool
 }
 
 type modelViewerMeshPayload struct {
@@ -97,6 +101,44 @@ type modelViewerPayloadOptions struct {
 	includeAllStateVariables     bool
 }
 
+// modelViewerEffectCardTextures returns the textures of meshes whose triangles
+// cover the texture at least twice over. An unwrapped surface stays near one
+// even with mirrored parts such as eyes, while effect cards reuse the whole map.
+func modelViewerEffectCardTextures(
+	transportMeshes []ModelViewerMeshTransport,
+	meshes []modelViewerMeshPayload,
+) map[string]bool {
+	result := make(map[string]bool)
+	for index := range min(len(transportMeshes), len(meshes)) {
+		if modelViewerMeshUVArea(meshes[index]) < modelViewerEffectCardUVArea {
+			continue
+		}
+		mesh := &transportMeshes[index]
+		if mesh.TexKey != nil {
+			result[*mesh.TexKey] = true
+		}
+		for _, variant := range mesh.TextureVariants {
+			result[variant.TexKey] = true
+		}
+	}
+	return result
+}
+
+func modelViewerMeshUVArea(mesh modelViewerMeshPayload) float64 {
+	vertices := uint32(len(mesh.UVs) / 2)
+	area := 0.0
+	for offset := 0; offset+2 < len(mesh.Indices); offset += 3 {
+		a, b, c := mesh.Indices[offset], mesh.Indices[offset+1], mesh.Indices[offset+2]
+		if a >= vertices || b >= vertices || c >= vertices {
+			continue
+		}
+		edgeU1, edgeV1 := mesh.UVs[b*2]-mesh.UVs[a*2], mesh.UVs[b*2+1]-mesh.UVs[a*2+1]
+		edgeU2, edgeV2 := mesh.UVs[c*2]-mesh.UVs[a*2], mesh.UVs[c*2+1]-mesh.UVs[a*2+1]
+		area += math.Abs(float64(edgeU1*edgeV2-edgeU2*edgeV1)) / 2
+	}
+	return area
+}
+
 func writeModelViewerPayload(
 	ctx context.Context,
 	t *Service,
@@ -114,6 +156,7 @@ func writeModelViewerPayload(
 		textureKeys = append(textureKeys, key)
 	}
 	sort.Strings(textureKeys)
+	effectCardTextures := modelViewerEffectCardTextures(transport.Meshes, meshes)
 	for _, key := range textureKeys {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -238,15 +281,16 @@ func writeModelViewerPayload(
 				directMetadata.Width, directMetadata.Height, directMetadata.MipCount = 0, 0, 0
 			}
 			transport.Textures[key] = ModelViewerTextureTransport{
-				URL:         directURL,
-				FallbackURL: fallbackURL,
-				Role:        texture.Role,
-				Encoding:    "dds",
-				Format:      directMetadata.Format,
-				Width:       directMetadata.Width,
-				Height:      directMetadata.Height,
-				MipCount:    directMetadata.MipCount,
-				InvertAlpha: texture.InvertAlpha,
+				URL:          directURL,
+				FallbackURL:  fallbackURL,
+				Role:         texture.Role,
+				Encoding:     "dds",
+				Format:       directMetadata.Format,
+				Width:        directMetadata.Width,
+				Height:       directMetadata.Height,
+				MipCount:     directMetadata.MipCount,
+				InvertAlpha:  texture.InvertAlpha,
+				CoverageMask: texture.CoverageMask && effectCardTextures[key],
 			}
 			continue
 		}

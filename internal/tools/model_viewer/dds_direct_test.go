@@ -386,6 +386,46 @@ func TestRunModelViewerTextureJobsKeepsDDSCompressed(t *testing.T) {
 	}
 }
 
+func TestRunModelViewerTextureJobsMarksDumpedCoverageMasks(t *testing.T) {
+	dir := t.TempDir()
+	mask := encodeModelViewerBC1DDS(t, 8, 8, 1, 1)
+	binary.LittleEndian.PutUint16(mask[len(mask)-8:], 0xffff)
+	tinted := encodeModelViewerBC1DDS(t, 8, 8, 1, 1)
+	binary.LittleEndian.PutUint16(tinted[len(tinted)-8:], 0xf800)
+	tests := []struct {
+		name string
+		file string
+		raw  []byte
+		role string
+		want bool
+	}{
+		{"dumped mask", "Components-9 t=b9b6476d.dds", mask, "diffuse", true},
+		{"authored map", "WingDiffuse.dds", mask, "diffuse", false},
+		{"helper role", "Components-9 t=b9b6476e.dds", mask, "normal_map", false},
+		{"colored dump", "Components-9 t=b9b6476f.dds", tinted, "diffuse", false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(dir, test.file)
+			if err := os.WriteFile(path, test.raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			output, _, err := runModelViewerTextureJobs(
+				context.Background(),
+				modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85},
+				1,
+				[]modelViewerTextureJob{{path: path, keys: []string{"wing"}, role: test.role, canonicalKey: "wing"}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := output[0]["wing"].CoverageMask; got != test.want {
+				t.Fatalf("CoverageMask = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestRunModelViewerTextureJobsPreservesDetectedDDSAlphaInversion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "body.dds")
 	if err := os.WriteFile(path, encodeModelViewerTransparentWhiteBC3DDS(t, 4, 4), 0o600); err != nil {
@@ -515,6 +555,62 @@ func TestWriteModelViewerPayloadKeepsLargeDDSDirectWhenPreviewDisabled(t *testin
 	if texture.Encoding != "dds" || texture.Width != 4096 || texture.Height != 4 || texture.MipCount != 1 ||
 		!strings.Contains(texture.URL, "/protocol/local?") {
 		t.Fatalf("transport texture = %#v", texture)
+	}
+}
+
+func TestWriteModelViewerPayloadKeepsCoverageMaskOnlyOnEffectCards(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wing.dds")
+	if err := os.WriteFile(path, encodeModelViewerBC1DDS(t, 4, 4, 1, 0), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := inspectModelViewerDDS(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quad := []float32{0, 0, 1, 0, 1, 1, 0, 1}
+	tests := []struct {
+		name  string
+		quads int
+		want  bool
+	}{
+		{"mirrored surface", 1, false},
+		{"repeated cards", 2, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var mesh modelViewerMeshPayload
+			for card := range test.quads {
+				first := uint32(card * 4)
+				mesh.Indices = append(mesh.Indices, first, first+1, first+2, first, first+2, first+3)
+				mesh.UVs = append(mesh.UVs, quad...)
+				mesh.Positions = append(mesh.Positions, make([]float32, 12)...)
+			}
+			mesh.SourceIndices = make([]uint32, len(mesh.Indices)/3)
+			key := "wing"
+			protocol := infra.NewProtocol()
+			sessionID := protocol.CreateMemorySession()
+			transport := ModelViewerTransport{
+				Textures: make(map[string]ModelViewerTextureTransport),
+				Meshes:   []ModelViewerMeshTransport{{ID: "mesh", TexKey: &key}},
+			}
+			err := writeModelViewerPayload(
+				context.Background(),
+				NewWithOptions(Options{Protocol: protocol}),
+				sessionID,
+				&transport,
+				[]modelViewerMeshPayload{mesh},
+				map[string]modelViewerTexturePayload{
+					key: {Key: key, Role: "diffuse", Path: path, DDS: &metadata, CoverageMask: true},
+				},
+				modelViewerPayloadOptions{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := transport.Textures[key].CoverageMask; got != test.want {
+				t.Fatalf("CoverageMask = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 

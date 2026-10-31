@@ -621,6 +621,28 @@ func modelViewerTextureShouldInvertAlpha(resourceName string, decoded *modelView
 			decoded.lowRGB/float64(decoded.low) >= 8
 }
 
+// modelViewerTextureIsCoverageMask recognizes the grayscale maps of ink and smoke
+// effects: opaque, colorless, and mostly black with some bright strokes. Their
+// shaders read brightness as coverage, so drawn as color they show black cards.
+func modelViewerTextureIsCoverageMask(rgba *image.NRGBA) bool {
+	black, bright := 0, 0
+	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
+		r, g, b := int(rgba.Pix[offset]), int(rgba.Pix[offset+1]), int(rgba.Pix[offset+2])
+		peak := max(r, g, b)
+		if rgba.Pix[offset+3] < 239 || peak-min(r, g, b) > 16 {
+			return false
+		}
+		if peak < 16 {
+			black++
+		}
+		if peak >= 128 {
+			bright++
+		}
+	}
+	pixels := len(rgba.Pix) / 4
+	return black*2 >= pixels && bright*100 >= pixels && pixels > 0
+}
+
 func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
 	cloned := image.NewNRGBA(source.Rect)
 	copy(cloned.Pix, source.Pix)

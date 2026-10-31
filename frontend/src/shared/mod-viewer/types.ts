@@ -296,6 +296,7 @@ export type ModViewerTransport = {
             height?: number;
             mipCount?: number;
             invertAlpha?: boolean;
+            coverageMask?: boolean;
         }
     >;
     variables: ViewerVariable[];

@@ -83,6 +83,7 @@ type RabbitFXShaderState = {
 
 type DDSShaderState = {
     invertAlpha: { value: number };
+    coverageMask: { value: number };
     mapBC4: { value: number };
     mapSigned: { value: number };
     normalMode: { value: number };
@@ -552,6 +553,7 @@ function applyEvaluatedMaps(
     const hadPackedNormalMap = usesPackedNormalMap(material.normalMap);
     const hadMetalnessMap = Boolean(material.metalnessMap);
     const hadRoughnessMap = Boolean(material.roughnessMap);
+    const wasTransparent = material.transparent;
     material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
     applyGameTextureHighlight(material, userData, evaluated.texKey);
     material.normalMap = normalMap;
@@ -596,7 +598,8 @@ function applyEvaluatedMaps(
         hadNormalMap !== Boolean(material.normalMap) ||
         hadPackedNormalMap !== usesPackedNormalMap(material.normalMap) ||
         hadMetalnessMap !== Boolean(material.metalnessMap) ||
-        hadRoughnessMap !== Boolean(material.roughnessMap)
+        hadRoughnessMap !== Boolean(material.roughnessMap) ||
+        wasTransparent !== material.transparent
     ) {
         material.needsUpdate = true;
     }
@@ -644,6 +647,7 @@ function configureDDSMaterialShader(material: MeshStandardMaterial): void {
     if (material.userData.modelViewerDDSMaterial) return;
     const state: DDSShaderState = {
         invertAlpha: { value: 0 },
+        coverageMask: { value: 0 },
         mapBC4: { value: 0 },
         mapSigned: { value: 0 },
         normalMode: { value: 0 },
@@ -660,6 +664,7 @@ function configureDDSMaterialShader(material: MeshStandardMaterial): void {
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer) => {
         previousCompile(shader, renderer);
         shader.uniforms.modelViewerInvertAlpha = state.invertAlpha;
+        shader.uniforms.modelViewerCoverageMask = state.coverageMask;
         shader.uniforms.modelViewerMapBC4 = state.mapBC4;
         shader.uniforms.modelViewerMapSigned = state.mapSigned;
         shader.uniforms.modelViewerNormalMode = state.normalMode;
@@ -673,6 +678,7 @@ function configureDDSMaterialShader(material: MeshStandardMaterial): void {
             "#include <common>",
             `#include <common>
 uniform float modelViewerInvertAlpha;
+uniform float modelViewerCoverageMask;
 uniform float modelViewerMapBC4;
 uniform float modelViewerMapSigned;
 uniform float modelViewerNormalMode;
@@ -690,6 +696,7 @@ uniform float modelViewerRabbitFXLightSigned;`,
     if ( modelViewerMapSigned > 0.5 ) sampledDiffuseColor = sampledDiffuseColor * 0.5 + 0.5;
     if ( modelViewerMapBC4 > 0.5 ) sampledDiffuseColor = vec4( sampledDiffuseColor.rrr, 1.0 );
     if ( modelViewerInvertAlpha > 0.5 ) sampledDiffuseColor.a = 1.0 - sampledDiffuseColor.a;
+    if ( modelViewerCoverageMask > 0.5 ) sampledDiffuseColor = vec4( vec3( 0.02 ), pow( sampledDiffuseColor.r, 0.4545 ) );
     diffuseColor *= sampledDiffuseColor;
 #endif`,
         );
@@ -741,6 +748,13 @@ function updateDDSShaderState(
     const rabbitFX = material.userData.rabbitFXMaterial as RabbitFXShaderState | undefined;
     const rabbitFXMap = ddsTextureMetadata(rabbitFX?.lightMap.value);
     state.invertAlpha.value = material.map?.userData.modelViewerInvertAlpha ? 1 : 0;
+
+    // A mesh's cards overlap in no fixed order, which one ink color hides as
+    // long as they do not write depth over each other.
+    const coverageMask = Boolean(material.map?.userData.modelViewerCoverageMask);
+    state.coverageMask.value = coverageMask ? 1 : 0;
+    material.transparent = coverageMask;
+    material.depthWrite = !coverageMask;
     state.mapBC4.value = map?.direct && map.format.startsWith("bc4-") ? 1 : 0;
     state.mapSigned.value = map?.direct && map.format.endsWith("snorm") ? 1 : 0;
     state.normalMode.value = normalMode(normal, materialProfile);
@@ -1067,6 +1081,7 @@ function loadTexture(
         entry.encoding,
         entry.format ?? "",
         entry.invertAlpha ? "invert" : "",
+        entry.coverageMask ? "coverage" : "",
     ].join("|");
     const cached = textureCache.get(cacheKey);
     if (cached) {
@@ -1116,6 +1131,7 @@ async function loadPayloadTexture(
             signal.throwIfAborted();
             parsed.texture.userData.modelViewerDDS = { format: parsed.format, direct: true };
             parsed.texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
+            parsed.texture.userData.modelViewerCoverageMask = Boolean(entry.coverageMask);
             return parsed.texture;
         } catch {
             directTexture?.dispose();
@@ -1129,6 +1145,7 @@ async function loadPayloadTexture(
     if (texture && entry.encoding === "dds") {
         texture.userData.modelViewerDDS = { format: entry.format ?? "", direct: false };
         texture.userData.modelViewerInvertAlpha = Boolean(entry.invertAlpha);
+        texture.userData.modelViewerCoverageMask = Boolean(entry.coverageMask);
     }
     return texture;
 }

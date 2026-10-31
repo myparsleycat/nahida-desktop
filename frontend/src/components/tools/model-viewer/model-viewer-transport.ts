@@ -118,6 +118,7 @@ export function normalizeModelViewerTransport(
             height: texture.height || undefined,
             mipCount: texture.mipCount || undefined,
             invertAlpha: texture.invertAlpha || undefined,
+            coverageMask: texture.coverageMask || undefined,
         };
     }
 
