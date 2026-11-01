@@ -35,11 +35,14 @@ var (
 	legacyVarRe = func() []*regexp.Regexp {
 		out := make([]*regexp.Regexp, 0, 5)
 		for _, name := range []string{"$gui_menu", "$gui_hover", "$gui_slot", "$gui_mx", "$gui_my"} {
-			out = append(out, regexp.MustCompile(`(?i)global(?:\s+persist)?\s+`+regexp.QuoteMeta(name)+`\b`))
+			out = append(
+				out,
+				regexp.MustCompile(`(?i)(?:global(?:\s+persist)?|persist\s+global)\s+`+regexp.QuoteMeta(name)+`\b`),
+			)
 		}
 		return out
 	}()
-	globalPrefixRe = regexp.MustCompile(`(?i)^\s*global\s+(?:persist\s+)?`)
+	globalPrefixRe = regexp.MustCompile(`(?i)^\s*(?:global(?:\s+persist)?|persist\s+global)\s+`)
 )
 
 func generatePreview(sourceText string, slots []MenuMakerSlot, settings MenuMakerSettings) MenuMakerGenerateResult {

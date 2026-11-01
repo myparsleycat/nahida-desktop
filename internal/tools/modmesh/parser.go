@@ -32,6 +32,7 @@ type BufferResource struct {
 
 var (
 	modINIHeaderRE  = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	persistDeclRE   = regexp.MustCompile(`(?i)^(?:global\s+persist|persist\s+global)\s+\$`)
 	modINIMergedRE  = regexp.MustCompile(`(?i)^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$`)
 	modINISectionRE = regexp.MustCompile(
 		`(?i)^(TextureOverride|ShaderOverride|Resource|Constants|Present|CommandList|CustomShader)(.*)$`,
@@ -152,7 +153,7 @@ func scoreModINI(path, text string) int {
 		switch {
 		case strings.HasPrefix(lower, "namespace") && strings.Contains(line, "="):
 			score += 60
-		case strings.HasPrefix(lower, "global persist $"):
+		case persistDeclRE.MatchString(line):
 			score += 15
 		case lower == "type = cycle" || lower == "type=cycle":
 			score += 10

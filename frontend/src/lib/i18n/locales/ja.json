@@ -1494,6 +1494,8 @@
         "toast": {
           "save_to_ini_success": "現在のトグル状態を INI に保存しました",
           "save_to_ini_no_changes": "保存できる persist 変数がありません",
+          "save_to_ini_repaired": "INI の誤った persist 宣言を修正しました。トグル値は保存されていません",
+          "save_to_ini_success_repaired": "トグル値を INI に保存し、誤った persist 宣言を修正しました",
           "save_to_ini_error": "INI への保存に失敗しました",
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
           "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",

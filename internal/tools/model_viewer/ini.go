@@ -39,7 +39,7 @@ type modelViewerVariableName struct {
 
 var (
 	modelViewerVariableUseRE  = regexp.MustCompile(`\$(\w+)`)
-	modelViewerVariableDeclRE = regexp.MustCompile(`(?i)^global\s+(?:persist\s+)?\$(\w+)\b`)
+	modelViewerVariableDeclRE = regexp.MustCompile(`(?i)^(?:global\s+(?:persist?\s+)?|persist\s+global\s+)\$(\w+)\b`)
 	// Hash-override ZZMI exports bind no Resource\ZZMI slots; the ZZMI-only skin
 	// command list is then the evidence that the maps use ZZZ channel packing.
 	modelViewerZZMIMarkerRE = regexp.MustCompile(

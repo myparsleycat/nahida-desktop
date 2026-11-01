@@ -33,7 +33,9 @@ type modelViewerBranchFrame struct {
 	inverse []modelViewerConditionClause
 }
 
-var modelViewerDefaultVariableRE = regexp.MustCompile(`(?i)^(?:global\s+)?(?:persist\s+)?(\$\w+)\s*=\s*([^,]+)$`)
+var modelViewerDefaultVariableRE = regexp.MustCompile(
+	`(?i)^(?:global\s+(?:persist?\s+)?|persist\s+(?:global\s+)?)?(\$\w+)\s*=\s*([^,]+)$`,
+)
 
 // collectModelViewerDefaultVariables takes the first value assigned to each
 // variable. A global declaration holds the value the variable starts with, so
