@@ -433,7 +433,8 @@ func (t *Service) zzmiRequireTarget(ctx context.Context, targetPath string) (str
 	if err != nil {
 		return "", "", err
 	}
-	target, err := filepath.EvalSymlinks(targetPath)
+	// The returned target names the backup sessions, so it keeps the spelling of existing ones.
+	target, err := platform.ResolveLinks(targetPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", "", infra.WithCause(infra.ContractError("Destination path does not exist"), err)
@@ -441,16 +442,20 @@ func (t *Service) zzmiRequireTarget(ctx context.Context, targetPath string) (str
 		return "", "", infra.ContractError("Path is outside the managed ZZMI mod folder")
 	}
 	target, _ = filepath.Abs(target)
+	location, err := platform.FinalEntryPath(target)
+	if err != nil {
+		return "", "", infra.WithCause(infra.ContractError("Path is outside the managed ZZMI mod folder"), err)
+	}
 	for _, game := range games {
 		if game.Importer == nil || !strings.EqualFold(*game.Importer, "ZZMI") {
 			continue
 		}
-		root, resolveErr := filepath.EvalSymlinks(game.ModFolderPath)
+		root, resolveErr := platform.FinalPath(game.ModFolderPath)
 		if resolveErr != nil {
 			continue
 		}
 		root, _ = filepath.Abs(root)
-		if platform.SameOrChildPath(root, target) {
+		if platform.SameOrChildPath(root, location) {
 			info, statErr := os.Stat(target)
 			if statErr != nil || !info.IsDir() {
 				return "", "", infra.WithCause(infra.ContractError("ZZMI fixer target must be a directory"), statErr)

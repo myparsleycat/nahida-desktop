@@ -84,7 +84,7 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	if err != nil {
 		return TextureResizeResult{}, textureError("Failed to resolve target path '%s': %s", normalized.targetPath, err)
 	}
-	if resolved, err = filepath.EvalSymlinks(resolved); err != nil {
+	if resolved, err = platform.ResolveLinks(resolved); err != nil {
 		return TextureResizeResult{}, textureError("Failed to resolve target path '%s': %s", normalized.targetPath, err)
 	}
 	info, statErr := os.Stat(resolved)

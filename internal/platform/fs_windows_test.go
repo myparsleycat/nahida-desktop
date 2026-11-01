@@ -180,3 +180,40 @@ func TestFinalPathFollowsJunction(t *testing.T) {
 		t.Fatalf("FinalPath(missing) err = %v", err)
 	}
 }
+
+func TestResolveLinksAroundJunction(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	child := filepath.Join(root, "Target", "Mod", "Inner")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "Link")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, filepath.Join(root, "Target")).
+		CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	want, err := FinalPath(filepath.Join(child, ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveLinks(filepath.Join(link, "Mod"))
+	if err != nil || !SamePathFold(got, want) {
+		t.Fatalf("below junction = %q, %v; want %q", got, err, want)
+	}
+	leaf, err := ResolveLinks(link)
+	if eval, evalErr := filepath.EvalSymlinks(link); err != nil || evalErr != nil || leaf != eval {
+		t.Fatalf("junction itself = %q, %v; EvalSymlinks = %q, %v", leaf, err, eval, evalErr)
+	}
+	if _, err := ResolveLinks(filepath.Join(link, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing err = %v", err)
+	}
+	entry, err := FinalEntryPath(link)
+	if wantEntry, finalErr := FinalPath(
+		root,
+	); err != nil || finalErr != nil ||
+		!SamePathFold(entry, filepath.Join(wantEntry, "Link")) {
+		t.Fatalf("entry = %q, %v", entry, err)
+	}
+}

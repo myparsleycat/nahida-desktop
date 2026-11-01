@@ -206,13 +206,17 @@ func (t *Service) resolveFixInspectionImporter(ctx context.Context, modPath stri
 	if err != nil {
 		return "", err
 	}
-	target, err := filepath.EvalSymlinks(modPath)
+	target, err := platform.ResolveLinks(modPath)
 	if err != nil {
 		return "", fmt.Errorf("resolve added mod path %q: %w", modPath, err)
 	}
 	target, err = filepath.Abs(target)
 	if err != nil {
 		return "", fmt.Errorf("resolve absolute added mod path %q: %w", target, err)
+	}
+	location, err := platform.FinalEntryPath(target)
+	if err != nil {
+		return "", fmt.Errorf("locate added mod path %q: %w", target, err)
 	}
 
 	games, err := client.GamePaths.List(ctx)
@@ -225,12 +229,12 @@ func (t *Service) resolveFixInspectionImporter(ctx context.Context, modPath stri
 		if game.Importer == nil || strings.TrimSpace(*game.Importer) == "" {
 			continue
 		}
-		root, resolveErr := filepath.EvalSymlinks(game.ModFolderPath)
+		root, resolveErr := platform.FinalPath(game.ModFolderPath)
 		if resolveErr != nil {
 			continue
 		}
 		root, resolveErr = filepath.Abs(root)
-		if resolveErr != nil || !platform.SameOrChildPath(root, target) || len(root) <= bestRootLength {
+		if resolveErr != nil || !platform.SameOrChildPath(root, location) || len(root) <= bestRootLength {
 			continue
 		}
 		importer = *game.Importer

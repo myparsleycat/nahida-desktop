@@ -161,11 +161,11 @@ func ResolveResource(root, relative string) (string, error) {
 	if err != nil || !platform.SameOrChildPath(rootAbs, path) || platform.SamePathFold(rootAbs, path) {
 		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
-	realRoot, err := filepath.EvalSymlinks(rootAbs)
+	realRoot, err := platform.FinalPath(rootAbs)
 	if err != nil {
 		return "", err
 	}
-	realPath, err := filepath.EvalSymlinks(path)
+	realPath, err := platform.FinalPath(path)
 	if err != nil || !platform.SameOrChildPath(realRoot, realPath) || platform.SamePathFold(realRoot, realPath) {
 		return "", infra.WithCause(errors.New("resource path is outside mod root"), err)
 	}
@@ -173,5 +173,11 @@ func ResolveResource(root, relative string) (string, error) {
 	if err != nil || !info.Mode().IsRegular() {
 		return "", infra.WithCause(errors.New("resource is not a regular file"), err)
 	}
-	return realPath, nil
+
+	// Callers compare the result with the root they passed, which may reach the mod through a linked Mods folder.
+	inRoot, err := filepath.Rel(realRoot, realPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(rootAbs, inRoot), nil
 }

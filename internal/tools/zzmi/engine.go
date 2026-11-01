@@ -23,6 +23,7 @@ import (
 	"golang.org/x/text/transform"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 var (
@@ -59,7 +60,7 @@ func Run(ctx context.Context, target, tool string, pack *RulePack, log Logger) (
 	if err := pack.Validate(); err != nil {
 		return Result{}, err
 	}
-	root, err := filepath.EvalSymlinks(target)
+	root, err := platform.ResolveLinks(target)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve ZZMI target: %w", err)
 	}

@@ -267,15 +267,16 @@ func resolveMergedINIRef(baseDir, entry string) (string, error) {
 	if err != nil || !platform.SameOrChildPath(base, resolved) || platform.SamePathFold(base, resolved) {
 		return "", infra.WithCause(errors.New("merged INI path is outside mod root"), err)
 	}
-	// EvalSymlinks can fail on Windows temp junctions even for in-tree files.
-	// Keep the logical path when evaluation fails; successful evaluation still
-	// rejects symlink escapes like Electron loadIniBundle.
-	if realBase, evalErr := filepath.EvalSymlinks(base); evalErr == nil {
-		if realPath, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {
+	// Keep the logical path when resolution fails; a successful one still rejects
+	// link escapes like Electron loadIniBundle.
+	if realBase, evalErr := platform.FinalPath(base); evalErr == nil {
+		if realPath, evalErr := platform.FinalPath(resolved); evalErr == nil {
 			if !platform.SameOrChildPath(realBase, realPath) || platform.SamePathFold(realBase, realPath) {
 				return "", errors.New("merged INI path is outside mod root")
 			}
-			resolved = realPath
+			if relative, relErr := filepath.Rel(realBase, realPath); relErr == nil {
+				resolved = filepath.Join(base, relative)
+			}
 		}
 	}
 	info, err := os.Stat(resolved)

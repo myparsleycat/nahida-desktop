@@ -618,11 +618,15 @@ func resolveBisectExclude(root, input string) (string, error) {
 	} else if err != nil {
 		return "", err
 	}
-	canonicalRoot, err := filepath.EvalSymlinks(rootAbs)
+	canonicalRoot, err := platform.FinalPath(rootAbs)
 	if err != nil {
 		return "", err
 	}
-	canonicalInput, err := filepath.EvalSymlinks(inputAbs)
+	resolvedInput, err := platform.ResolveLinks(inputAbs)
+	if err != nil {
+		return "", err
+	}
+	canonicalInput, err := platform.FinalEntryPath(resolvedInput)
 	if err != nil {
 		return "", err
 	}
@@ -777,6 +781,8 @@ func keepBisectINIDisabled(originalPath, style string) error {
 
 func listBisectOrphans(ctx context.Context, root string) ([]string, error) {
 	var paths []string
+	// The trailing separator makes the walk enter a Mods folder that is itself a junction.
+	root = strings.TrimRight(root, `\/`) + string(filepath.Separator)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()

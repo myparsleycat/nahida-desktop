@@ -19,6 +19,7 @@ import (
 
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type UploadFile struct {
@@ -306,7 +307,7 @@ func collectUploadPathsContext(
 		if err := ctx.Err(); err != nil {
 			return collectedUploadPaths{}, err
 		}
-		absolute, err := filepath.EvalSymlinks(rawPath)
+		absolute, err := platform.ResolveLinks(rawPath)
 		if err != nil {
 			continue
 		}

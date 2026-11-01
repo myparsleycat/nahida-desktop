@@ -147,6 +147,39 @@ func FinalPath(path string) (string, error) {
 	return final, nil
 }
 
+// FinalEntryPath follows the links above path and keeps its last name, which is where the directory entry of a link
+// at path sits. A mod folder linked into Mods is inside Mods by this location, though its contents are elsewhere.
+func FinalEntryPath(path string) (string, error) {
+	clean := filepath.Clean(path)
+	parent := filepath.Dir(clean)
+	if parent == clean {
+		return FinalPath(clean)
+	}
+	final, err := FinalPath(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(final, filepath.Base(clean)), nil
+}
+
+// ResolveLinks is filepath.EvalSymlinks that also works below a junction, where EvalSymlinks fails with a path not
+// found error. Without a junction above path the result is that of EvalSymlinks, so a mapped drive keeps its letter
+// and a value derived from the path stays stable. A junction at path itself stays in place, as in EvalSymlinks.
+func ResolveLinks(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		return "", err
+	}
+	entry, entryErr := FinalEntryPath(path)
+	if entryErr != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(entry)
+}
+
 // FinalPathOfHandle returns the path of an open file or directory in the form FinalPath does.
 func FinalPathOfHandle(handle windows.Handle) (string, error) {
 	buffer := make([]uint16, windows.MAX_PATH)
