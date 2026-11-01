@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -21,11 +22,18 @@ import (
 )
 
 const (
-	bodyShapedSuffix = " (Body Shaped)"
-	shaderFixMarker  = ".nahida-shader-fixes.json"
+	bodyShapedSuffix     = " (Body Shaped)"
+	shaderFixMarker      = ".nahida-shader-fixes.json"
+	inlineFrameStride    = 40
+	inlineNormalOffset   = 12
+	inlineTangentOffset  = 24
+	inlineFrameTolerance = 0.05
 )
 
-var bodyDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
+var (
+	bodyDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
+	bodyShapedNameRE     = regexp.MustCompile(`(?i)(?:\s*\(Body Shaped\)(?:\s*\(\d+\))?)+$`)
+)
 
 type BodyShapeMeshCandidate struct {
 	ID                   string                  `json:"id"`
@@ -95,15 +103,13 @@ type BodyShapeMeshDescriptor struct {
 }
 
 type BodyShapeBeginExportInput struct {
-	SessionID      string   `json:"sessionId"`
-	MeshIDs        []string `json:"meshIds"`
-	IncludeWeights bool     `json:"includeWeights"`
+	SessionID string   `json:"sessionId"`
+	MeshIDs   []string `json:"meshIds"`
 }
 
 type BodyShapeExportMeshUpload struct {
-	MeshID             string  `json:"meshId"`
-	PositionsUploadURL string  `json:"positionsUploadUrl"`
-	WeightsUploadURL   *string `json:"weightsUploadUrl,omitempty"`
+	MeshID             string `json:"meshId"`
+	PositionsUploadURL string `json:"positionsUploadUrl"`
 }
 
 type BodyShapeExportUpload struct {
@@ -118,15 +124,12 @@ type BodyShapeOK struct {
 type BodyShapeCommitExportInput struct {
 	SessionID      string                  `json:"sessionId"`
 	ExportID       string                  `json:"exportId"`
-	Amount         *float64                `json:"amount,omitempty"`
-	AxisScale      []float64               `json:"axisScale,omitempty"`
 	WriteChangeLog *bool                   `json:"writeChangeLog,omitempty"`
 	ChangeSummary  *BodyShapeChangeSummary `json:"changeSummary,omitempty"`
 }
 
 type bodyShapeExportSlot struct {
-	meshIDs        []string
-	includeWeights bool
+	meshIDs []string
 }
 
 type bodyShapeSession struct {
@@ -137,8 +140,11 @@ type bodyShapeSession struct {
 }
 
 type BodyShapeChangeSummary struct {
+	Operation       string    `json:"operation"`
 	Amount          float64   `json:"amount"`
 	AxisScale       []float64 `json:"axisScale"`
+	Translation     []float64 `json:"translation"`
+	TaperFactor     float64   `json:"taperFactor"`
 	MovedVertices   int       `json:"movedVertices"`
 	MaxDisplacement float64   `json:"maxDisplacement"`
 }
@@ -148,16 +154,14 @@ type BodyShapeExportMesh struct {
 	PositionPath   string    `json:"positionPath"`
 	PositionStride int       `json:"positionStride"`
 	Positions      []float32 `json:"positions"`
+	Indices        []uint32  `json:"indices,omitempty"`
 	VectorPath     *string   `json:"vectorPath,omitempty"`
 	VectorLayout   *string   `json:"vectorLayout"`
-	Weights        []float32 `json:"weights,omitempty"`
 }
 
 type BodyShapeExportInput struct {
 	ModRoot        string                  `json:"modRoot"`
 	Meshes         []BodyShapeExportMesh   `json:"meshes"`
-	Amount         *float64                `json:"amount,omitempty"`
-	AxisScale      []float64               `json:"axisScale,omitempty"`
 	WriteChangeLog *bool                   `json:"writeChangeLog,omitempty"`
 	ChangeSummary  *BodyShapeChangeSummary `json:"changeSummary,omitempty"`
 }
@@ -166,6 +170,7 @@ type BodyShapeExportedMesh struct {
 	MeshID        string  `json:"meshId"`
 	PositionPath  string  `json:"positionPath"`
 	PositionBytes int     `json:"positionBytes"`
+	InlineFrames  bool    `json:"inlineFrames"`
 	VectorPath    *string `json:"vectorPath,omitempty"`
 	VectorBytes   *int    `json:"vectorBytes,omitempty"`
 }
@@ -263,9 +268,11 @@ func (t *Service) BodyShapeExport(
 		platform.SamePathFold(sourceRoot, targetRoot) {
 		return result, errors.New("invalid body shape target path")
 	}
-	copied := false
+	if err = os.Mkdir(targetRoot, 0o755); err != nil {
+		return result, err
+	}
 	defer func() {
-		if err != nil && copied {
+		if err != nil {
 			if cleanupErr := os.RemoveAll(targetRoot); cleanupErr != nil {
 				t.logError(cleanupErr, "BodyShapeEditor:exportMesh:cleanup:"+targetRoot)
 			}
@@ -274,7 +281,6 @@ func (t *Service) BodyShapeExport(
 	if err = copyBodyShapeTree(ctx, sourceRoot, targetRoot); err != nil {
 		return result, err
 	}
-	copied = true
 	if removeErr := os.Remove(
 		filepath.Join(targetRoot, shaderFixMarker),
 	); removeErr != nil &&
@@ -430,23 +436,13 @@ func (t *Service) BodyShapeBeginExport(
 			t.removeBodyShapeUploads(input.SessionID, created)
 			return BodyShapeExportUpload{}, uploadErr
 		}
-		upload := BodyShapeExportMeshUpload{MeshID: mesh.ID, PositionsUploadURL: positionsURL}
-		if input.IncludeWeights {
-			weightsURL, weightsErr := createUpload(
-				bodyShapeUploadID(exportID, index, "weights"),
-				int64(mesh.VertexCount)*4,
-			)
-			if weightsErr != nil {
-				t.removeBodyShapeUploads(input.SessionID, created)
-				return BodyShapeExportUpload{}, weightsErr
-			}
-			upload.WeightsUploadURL = &weightsURL
-		}
-		result.Meshes = append(result.Meshes, upload)
+		result.Meshes = append(
+			result.Meshes,
+			BodyShapeExportMeshUpload{MeshID: mesh.ID, PositionsUploadURL: positionsURL},
+		)
 	}
 	session.exports[exportID] = bodyShapeExportSlot{
-		meshIDs:        lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string { return mesh.ID }),
-		includeWeights: input.IncludeWeights,
+		meshIDs: lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string { return mesh.ID }),
 	}
 	return result, nil
 }
@@ -471,17 +467,14 @@ func (t *Service) BodyShapeCommitExport(
 	if !exists || len(meshes) == 0 || lo.Contains(meshes, nil) {
 		return BodyShapeExportResult{}, infra.ContractError("Body shape export slot not found")
 	}
-	uploads := make([]string, 0, len(meshes)*2)
+	uploads := make([]string, 0, len(meshes))
 	for index := range meshes {
-		uploads = append(
-			uploads,
-			bodyShapeUploadID(input.ExportID, index, "positions"),
-			bodyShapeUploadID(input.ExportID, index, "weights"),
-		)
+		uploads = append(uploads, bodyShapeUploadID(input.ExportID, index, "positions"))
 	}
 	defer t.removeBodyShapeUploads(input.SessionID, uploads)
 
 	exportMeshes := make([]BodyShapeExportMesh, 0, len(meshes))
+	changed := false
 	for index, mesh := range meshes {
 		positions, takeErr := t.takeBodyShapeUpload(
 			input.SessionID,
@@ -490,32 +483,25 @@ func (t *Service) BodyShapeCommitExport(
 		if takeErr != nil {
 			return BodyShapeExportResult{}, takeErr
 		}
-		exportMesh := BodyShapeExportMesh{
+		changed = changed || !slices.Equal(positions, mesh.Positions)
+		exportMeshes = append(exportMeshes, BodyShapeExportMesh{
 			MeshID:         mesh.ID,
 			PositionPath:   mesh.PositionPath,
 			PositionStride: mesh.PositionStride,
 			Positions:      positions,
+			Indices:        mesh.Indices,
 			VectorPath:     mesh.VectorPath,
 			VectorLayout:   mesh.VectorLayout,
-		}
-		if slot.includeWeights {
-			exportMesh.Weights, takeErr = t.takeBodyShapeUpload(
-				input.SessionID,
-				bodyShapeUploadID(input.ExportID, index, "weights"),
-			)
-			if takeErr != nil {
-				return BodyShapeExportResult{}, takeErr
-			}
-		}
-		exportMeshes = append(exportMeshes, exportMesh)
+		})
+	}
+	if !changed {
+		return BodyShapeExportResult{}, infra.ContractError("Body shape export has no position changes")
 	}
 	return t.BodyShapeExport(
 		ctx,
 		BodyShapeExportInput{
 			ModRoot:        session.loaded.ModRoot,
 			Meshes:         exportMeshes,
-			Amount:         input.Amount,
-			AxisScale:      input.AxisScale,
 			WriteChangeLog: input.WriteChangeLog,
 			ChangeSummary:  input.ChangeSummary,
 		},
@@ -744,7 +730,7 @@ func loadBodyShapeMod(modPath string, warn func(string)) (BodyShapeLoadResult, e
 func exportBodyShapeMeshes(input BodyShapeExportInput, warn func(string)) (BodyShapeExportResult, error) {
 	result := BodyShapeExportResult{Meshes: make([]BodyShapeExportedMesh, 0, len(input.Meshes))}
 	for _, mesh := range input.Meshes {
-		written, err := exportBodyShapeMesh(mesh, input.Amount, input.AxisScale, warn)
+		written, err := exportBodyShapeMesh(mesh, warn)
 		if err != nil {
 			return result, infra.AnnotateError(err, infra.Diagnostic{
 				Operation: "BodyShapeEditor:exportMesh",
@@ -766,12 +752,7 @@ func exportBodyShapeMeshes(input BodyShapeExportInput, warn func(string)) (BodyS
 	return result, nil
 }
 
-func exportBodyShapeMesh(
-	input BodyShapeExportMesh,
-	amount *float64,
-	axisScale []float64,
-	warn func(string),
-) (BodyShapeExportedMesh, error) {
+func exportBodyShapeMesh(input BodyShapeExportMesh, warn func(string)) (BodyShapeExportedMesh, error) {
 	positionPath, err := filepath.Abs(input.PositionPath)
 	if err != nil {
 		return BodyShapeExportedMesh{}, err
@@ -803,14 +784,35 @@ func exportBodyShapeMesh(
 			),
 		)
 	}
+	var rotations []bodyFrameRotation
+	if len(input.Indices) == 0 {
+		warn(fmt.Sprintf("Skipping normal update for %s: no index buffer", positionPath))
+	} else {
+		before, extractErr := modmesh.ExtractPositions(original, input.PositionStride)
+		if extractErr != nil {
+			return BodyShapeExportedMesh{}, extractErr
+		}
+		rotations = bodyFrameRotations(before, input.Positions, input.Indices)
+	}
+	inlineFrames := false
+	if rotations != nil && input.PositionStride == inlineFrameStride {
+		if inlineFrames = hasInlineFrames(written, input.PositionStride); inlineFrames {
+			rewriteInlineFrames(written, input.PositionStride, rotations)
+		} else {
+			warn(fmt.Sprintf("Skipping inline normal update for %s: layout is not normal/tangent", positionPath))
+		}
+	}
 	if err := writeBodyFileAtomic(positionPath, written, 0o600); err != nil {
 		return BodyShapeExportedMesh{}, err
 	}
-	result := BodyShapeExportedMesh{MeshID: input.MeshID, PositionPath: positionPath, PositionBytes: len(written)}
-	if input.VectorPath != nil && input.VectorLayout != nil && *input.VectorLayout == "snorm8-tangent-normal" &&
-		len(input.Weights) > 0 &&
-		amount != nil &&
-		len(axisScale) == 3 {
+	result := BodyShapeExportedMesh{
+		MeshID:        input.MeshID,
+		PositionPath:  positionPath,
+		PositionBytes: len(written),
+		InlineFrames:  inlineFrames,
+	}
+	if rotations != nil && input.VectorPath != nil && input.VectorLayout != nil &&
+		*input.VectorLayout == "snorm8-tangent-normal" {
 		vectorPath, absErr := filepath.Abs(*input.VectorPath)
 		if absErr != nil {
 			return result, absErr
@@ -822,14 +824,11 @@ func exportBodyShapeMesh(
 		if len(vectors) != expected*8 {
 			warn(fmt.Sprintf("Skipping vector rewrite for %s: size mismatch", vectorPath))
 		} else {
-			corrected, correctionErr := correctBodyVectors(vectors, input.Weights, *amount, axisScale)
-			if correctionErr != nil {
-				return result, correctionErr
-			}
-			if err := writeBodyFileAtomic(vectorPath, corrected, 0o600); err != nil {
+			rewriteSnorm8Frames(vectors, rotations)
+			if err := writeBodyFileAtomic(vectorPath, vectors, 0o600); err != nil {
 				return result, err
 			}
-			bytes := len(corrected)
+			bytes := len(vectors)
 			result.VectorPath, result.VectorBytes = &vectorPath, &bytes
 		}
 	}
@@ -847,42 +846,38 @@ func writeBodyShapeChangeLog(
 	}
 	positions := make([]string, 0, len(meshes))
 	vectors := make([]string, 0, len(meshes))
+	inlineFrames := make([]string, 0, len(meshes))
+	unchangedFrames := make([]string, 0, len(meshes))
 	for _, mesh := range meshes {
 		if !platform.SameOrChildPath(root, mesh.PositionPath) {
 			return "", errors.New("position path is outside mod root")
 		}
 		relativePosition, _ := filepath.Rel(root, mesh.PositionPath)
 		positions = append(positions, relativePosition)
+		if mesh.InlineFrames {
+			inlineFrames = append(inlineFrames, relativePosition)
+		}
 		if mesh.VectorPath != nil {
 			relativeVector, _ := filepath.Rel(root, *mesh.VectorPath)
 			vectors = append(vectors, relativeVector)
 		}
+		if !mesh.InlineFrames && mesh.VectorPath == nil {
+			unchangedFrames = append(unchangedFrames, relativePosition)
+		}
 	}
 
-	vectorLine := "- 방향 버퍼: 수정하지 않음 (레이아웃 미검증 또는 균일 스케일)"
+	lines := []string{"[체형 수정 내역]", "", "- 수정 대상 파일: " + strings.Join(positions, ", ")}
 	if len(vectors) > 0 {
-		vectorLine = "- 방향 버퍼: " + strings.Join(vectors, ", ")
+		lines = append(lines, "- 법선/탄젠트 갱신 (벡터 버퍼): "+strings.Join(vectors, ", "))
 	}
-	lines := []string{
-		"[체형 수정 내역]", "", "- 수정 대상 파일: " + strings.Join(positions, ", "),
-		vectorLine,
-		"- 유지한 파일: Index, Blend, UV, Color 및 기타 원본 파일",
-		"- 변경 방식: 본/부위 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
+	if len(inlineFrames) > 0 {
+		lines = append(lines, "- 법선/탄젠트 갱신 (위치 버퍼 내부): "+strings.Join(inlineFrames, ", "))
 	}
-	if summary != nil && len(summary.AxisScale) == 3 {
-		lines = append(
-			lines,
-			fmt.Sprintf("- 강도: %v", summary.Amount),
-			fmt.Sprintf(
-				"- 축 스케일: X=%v, Y=%v, Z=%v",
-				summary.AxisScale[0],
-				summary.AxisScale[1],
-				summary.AxisScale[2],
-			),
-			fmt.Sprintf("- 이동 정점 수: %d", summary.MovedVertices),
-			fmt.Sprintf("- 최대 이동 거리: %.6f", summary.MaxDisplacement),
-		)
+	if len(unchangedFrames) > 0 {
+		lines = append(lines, "- 법선/탄젠트 미수정: "+strings.Join(unchangedFrames, ", "))
 	}
+	lines = append(lines, "- 유지한 파일: Index, Blend, UV, Color 및 기타 원본 파일")
+	lines = append(lines, bodyShapeSummaryLines(summary)...)
 	lines = append(lines, "- 참고: 실제 애니메이션과 모든 의상 조합에서 미세 클리핑이 발생할 수 있음", "")
 
 	changeLogPath := filepath.Join(root, "변경사항.txt")
@@ -890,6 +885,54 @@ func writeBodyShapeChangeLog(
 		return "", err
 	}
 	return changeLogPath, nil
+}
+
+func bodyShapeSummaryLines(summary *BodyShapeChangeSummary) []string {
+	if summary == nil {
+		return []string{"- 변경 방식: 본/부위 가중치 기반 정점 변형 (원본 정점 기준 재계산)"}
+	}
+	var lines []string
+	switch summary.Operation {
+	case "inflate":
+		lines = []string{
+			"- 변경 방식: 본/부위 가중치 + 법선 방향 팽창 (원본 정점 기준 재계산)",
+			fmt.Sprintf("- 강도: %v", summary.Amount),
+		}
+	case "translate":
+		lines = []string{"- 변경 방식: 본/부위 가중치 + 이동 (원본 정점 기준 재계산)"}
+		if len(summary.Translation) == 3 {
+			lines = append(lines, fmt.Sprintf(
+				"- 이동량: X=%v, Y=%v, Z=%v",
+				summary.Translation[0],
+				summary.Translation[1],
+				summary.Translation[2],
+			))
+		}
+	case "taper":
+		lines = []string{
+			"- 변경 방식: 본/부위 가중치 + 피벗 높이 기준 테이퍼 (원본 정점 기준 재계산)",
+			fmt.Sprintf("- 강도: %v", summary.Amount),
+			fmt.Sprintf("- 테이퍼 계수: %v", summary.TaperFactor),
+		}
+	default:
+		lines = []string{
+			"- 변경 방식: 본/부위 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
+			fmt.Sprintf("- 강도: %v", summary.Amount),
+		}
+		if len(summary.AxisScale) == 3 {
+			lines = append(lines, fmt.Sprintf(
+				"- 축 스케일: X=%v, Y=%v, Z=%v",
+				summary.AxisScale[0],
+				summary.AxisScale[1],
+				summary.AxisScale[2],
+			))
+		}
+	}
+	return append(
+		lines,
+		fmt.Sprintf("- 이동 정점 수: %d", summary.MovedVertices),
+		fmt.Sprintf("- 최대 이동 거리: %.6f", summary.MaxDisplacement),
+	)
 }
 
 func writeBodyPositions(original []byte, stride int, positions []float32) ([]byte, error) {
@@ -917,54 +960,171 @@ func writeBodyPositions(original []byte, stride int, positions []float32) ([]byt
 	return out, nil
 }
 
-func correctBodyVectors(original []byte, weights []float32, amount float64, axis []float64) ([]byte, error) {
-	if len(original)%8 != 0 {
-		return nil, infra.ContractError("Vector buffer length is not divisible by 8")
-	}
-	out := append([]byte(nil), original...)
-	limit := min(len(weights), len(original)/8)
-	for vertex := range limit {
-		weight := float64(weights[vertex])
-		if weight <= 0 || amount == 0 {
-			continue
-		}
-		sx, sy, sz := 1+amount*axis[0]*weight, 1+amount*axis[1]*weight, 1+amount*axis[2]*weight
-		if math.Abs(sx-1) < 1e-8 && math.Abs(sy-1) < 1e-8 && math.Abs(sz-1) < 1e-8 {
-			continue
-		}
-		correctBodyVertexVectors(out, vertex, sx, sy, sz)
-	}
-	return out, nil
+type bodyVec3 [3]float64
+
+func (v bodyVec3) add(other bodyVec3) bodyVec3 {
+	return bodyVec3{v[0] + other[0], v[1] + other[1], v[2] + other[2]}
 }
 
-func correctBodyVertexVectors(data []byte, vertex int, sx, sy, sz float64) {
-	base := vertex * 8
-	tx, ty, tz := float64(int8(data[base]))/127, float64(int8(data[base+1]))/127, float64(int8(data[base+2]))/127
-	nx, ny, nz := float64(int8(data[base+4]))/127, float64(int8(data[base+5]))/127, float64(int8(data[base+6]))/127
-	tx, ty, tz = tx*sx, ty*sy, tz*sz
-	if length := math.Sqrt(tx*tx + ty*ty + tz*tz); length > 1e-8 {
-		tx, ty, tz = tx/length, ty/length, tz/length
+func (v bodyVec3) scale(factor float64) bodyVec3 {
+	return bodyVec3{v[0] * factor, v[1] * factor, v[2] * factor}
+}
+
+func (v bodyVec3) dot(other bodyVec3) float64 {
+	return v[0]*other[0] + v[1]*other[1] + v[2]*other[2]
+}
+
+func (v bodyVec3) cross(other bodyVec3) bodyVec3 {
+	return bodyVec3{
+		v[1]*other[2] - v[2]*other[1],
+		v[2]*other[0] - v[0]*other[2],
+		v[0]*other[1] - v[1]*other[0],
 	}
-	if sx == 0 {
-		sx = 1
+}
+
+func (v bodyVec3) normalized() (bodyVec3, bool) {
+	length := math.Sqrt(v.dot(v))
+	if length <= 1e-8 {
+		return v, false
 	}
-	if sy == 0 {
-		sy = 1
+	return v.scale(1 / length), true
+}
+
+// bodyFrameRotation is the shortest-arc rotation between a vertex's geometric normals before and
+// after deformation. Applying it to the authored frame keeps split and hand-edited normals.
+type bodyFrameRotation struct {
+	axis   bodyVec3
+	cos    float64
+	active bool
+}
+
+func (r bodyFrameRotation) apply(v bodyVec3) bodyVec3 {
+	return v.scale(r.cos).add(r.axis.cross(v)).add(r.axis.scale(r.axis.dot(v) / (1 + r.cos)))
+}
+
+func (r bodyFrameRotation) rebase(normal, tangent bodyVec3) (bodyVec3, bodyVec3, bool) {
+	rotatedNormal, ok := r.apply(normal).normalized()
+	if !ok {
+		return normal, tangent, false
 	}
-	if sz == 0 {
-		sz = 1
+	rotatedTangent := r.apply(tangent)
+	rotatedTangent = rotatedTangent.add(rotatedNormal.scale(-rotatedTangent.dot(rotatedNormal)))
+	rotatedTangent, ok = rotatedTangent.normalized()
+	if !ok {
+		return normal, tangent, false
 	}
-	nx, ny, nz = nx/sx, ny/sy, nz/sz
-	if length := math.Sqrt(nx*nx + ny*ny + nz*nz); length > 1e-8 {
-		nx, ny, nz = nx/length, ny/length, nz/length
+	return rotatedNormal, rotatedTangent, true
+}
+
+func bodyVertexNormals(positions []float32, indices []uint32) []bodyVec3 {
+	normals := make([]bodyVec3, len(positions)/3)
+	at := func(vertex uint32) bodyVec3 {
+		offset := int(vertex) * 3
+		return bodyVec3{float64(positions[offset]), float64(positions[offset+1]), float64(positions[offset+2])}
 	}
-	dot := tx*nx + ty*ny + tz*nz
-	tx, ty, tz = tx-nx*dot, ty-ny*dot, tz-nz*dot
-	if length := math.Sqrt(tx*tx + ty*ty + tz*tz); length > 1e-8 {
-		tx, ty, tz = tx/length, ty/length, tz/length
+	for index := 0; index+2 < len(indices); index += 3 {
+		a, b, c := indices[index], indices[index+1], indices[index+2]
+		if int(a) >= len(normals) || int(b) >= len(normals) || int(c) >= len(normals) {
+			continue
+		}
+		origin := at(a)
+		face := at(b).add(origin.scale(-1)).cross(at(c).add(origin.scale(-1)))
+		normals[a], normals[b], normals[c] = normals[a].add(face), normals[b].add(face), normals[c].add(face)
 	}
-	data[base], data[base+1], data[base+2] = byte(snorm8(tx)), byte(snorm8(ty)), byte(snorm8(tz))
-	data[base+4], data[base+5], data[base+6] = byte(snorm8(nx)), byte(snorm8(ny)), byte(snorm8(nz))
+	return normals
+}
+
+func bodyFrameRotations(before, after []float32, indices []uint32) []bodyFrameRotation {
+	beforeNormals := bodyVertexNormals(before, indices)
+	afterNormals := bodyVertexNormals(after, indices)
+	rotations := make([]bodyFrameRotation, len(beforeNormals))
+	for vertex := range rotations {
+		from, fromOK := beforeNormals[vertex].normalized()
+		to, toOK := afterNormals[vertex].normalized()
+		if !fromOK || !toOK {
+			continue
+		}
+		cos := from.dot(to)
+		if 1-cos < 1e-12 || 1+cos < 1e-6 {
+			continue
+		}
+		rotations[vertex] = bodyFrameRotation{axis: from.cross(to), cos: cos, active: true}
+	}
+	return rotations
+}
+
+func hasInlineFrames(data []byte, stride int) bool {
+	unit := func(value float64) bool { return math.Abs(value-1) <= inlineFrameTolerance }
+	for base := 0; base+stride <= len(data); base += stride {
+		normal := readBodyVec3(data[base+inlineNormalOffset:])
+		tangent := readBodyVec3(data[base+inlineTangentOffset:])
+		handedness := float64(math.Float32frombits(binary.LittleEndian.Uint32(data[base+inlineTangentOffset+12:])))
+		if !unit(math.Sqrt(normal.dot(normal))) || !unit(math.Sqrt(tangent.dot(tangent))) ||
+			!unit(math.Abs(handedness)) {
+			return false
+		}
+	}
+	return true
+}
+
+func rewriteInlineFrames(data []byte, stride int, rotations []bodyFrameRotation) {
+	for vertex, rotation := range rotations {
+		base := vertex * stride
+		if !rotation.active || base+stride > len(data) {
+			continue
+		}
+		normal, tangent, ok := rotation.rebase(
+			readBodyVec3(data[base+inlineNormalOffset:]),
+			readBodyVec3(data[base+inlineTangentOffset:]),
+		)
+		if ok {
+			writeBodyVec3(data[base+inlineNormalOffset:], normal)
+			writeBodyVec3(data[base+inlineTangentOffset:], tangent)
+		}
+	}
+}
+
+func readBodyVec3(data []byte) bodyVec3 {
+	return bodyVec3{
+		float64(math.Float32frombits(binary.LittleEndian.Uint32(data))),
+		float64(math.Float32frombits(binary.LittleEndian.Uint32(data[4:]))),
+		float64(math.Float32frombits(binary.LittleEndian.Uint32(data[8:]))),
+	}
+}
+
+func writeBodyVec3(data []byte, value bodyVec3) {
+	binary.LittleEndian.PutUint32(data, math.Float32bits(float32(value[0])))
+	binary.LittleEndian.PutUint32(data[4:], math.Float32bits(float32(value[1])))
+	binary.LittleEndian.PutUint32(data[8:], math.Float32bits(float32(value[2])))
+}
+
+func rewriteSnorm8Frames(data []byte, rotations []bodyFrameRotation) {
+	read := func(offset int) bodyVec3 {
+		return bodyVec3{
+			float64(int8(data[offset])) / 127,
+			float64(int8(data[offset+1])) / 127,
+			float64(int8(data[offset+2])) / 127,
+		}
+	}
+	write := func(offset int, value bodyVec3) {
+		data[offset], data[offset+1], data[offset+2] = byte(
+			snorm8(value[0]),
+		), byte(
+			snorm8(value[1]),
+		), byte(
+			snorm8(value[2]),
+		)
+	}
+	for vertex, rotation := range rotations {
+		base := vertex * 8
+		if !rotation.active || base+8 > len(data) {
+			continue
+		}
+		if normal, tangent, ok := rotation.rebase(read(base+4), read(base)); ok {
+			write(base, tangent)
+			write(base+4, normal)
+		}
+	}
 }
 
 func snorm8(value float64) int8 {
@@ -1004,9 +1164,6 @@ func remapBodyShapePathWithResolver(
 }
 
 func copyBodyShapeTree(ctx context.Context, source, target string) error {
-	if err := os.Mkdir(target, 0o755); err != nil {
-		return err
-	}
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -1082,5 +1239,6 @@ func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) (returnEr
 }
 
 func bodyShapedFolderBaseName(name string) string {
-	return strings.TrimSpace(bodyDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "")) + bodyShapedSuffix
+	base := bodyDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "")
+	return strings.TrimSpace(bodyShapedNameRE.ReplaceAllString(base, "")) + bodyShapedSuffix
 }

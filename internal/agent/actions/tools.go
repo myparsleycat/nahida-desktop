@@ -422,8 +422,8 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.BodyShapeCloseSession(ctx, id) }))
 	registry.add(simpleAction("tools.body_shape_begin_export", "Prepare a body-shape export upload.", "tools",
 		RiskWrite, objectSchema(map[string]any{
-			"sessionId": stringSchema(), "meshIds": stringArraySchema(), "includeWeights": booleanSchema(),
-		}, "sessionId", "meshIds", "includeWeights"),
+			"sessionId": stringSchema(), "meshIds": stringArraySchema(),
+		}, "sessionId", "meshIds"),
 		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
 			var input tools.BodyShapeBeginExportInput
 			if err := decodeActionArguments(raw, &input); err != nil {
@@ -435,7 +435,6 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 		"tools.body_shape_commit_export", "Commit uploaded body-shape changes to mod files.",
 		"tools", RiskConfirm, objectSchema(map[string]any{
 			"sessionId": stringSchema(), "exportId": stringSchema(),
-			"amount": map[string]any{}, "axisScale": map[string]any{"type": "array"},
 			"writeChangeLog": map[string]any{}, "changeSummary": map[string]any{"type": "object"},
 		}, "sessionId", "exportId"),
 		func(ctx context.Context, actionCtx actionContext, raw json.RawMessage) (any, error) {

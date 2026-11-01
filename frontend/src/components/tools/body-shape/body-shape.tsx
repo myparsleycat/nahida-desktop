@@ -48,7 +48,6 @@ import {
   applyBrushStroke,
   applyGeodesicBrush,
   applyMultiRegionDeform,
-  composeDisplayWeights,
   computeMeshBounds,
   computeRegionPivot,
   extractBoneWeights,
@@ -615,39 +614,21 @@ export default function BodyShapeTool({
         previewPositions: selectedMesh.previewPositions,
         regions: activeRegions,
       });
-      const weights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions, {
-        ignoreAmount: true,
-      });
-      const primary = activeRegions.find((r) => r.amount !== 0);
-      const includeWeights = deformOperation === "scale";
       const upload = await Tools.BodyShapeBeginExport({
         sessionId: loaded.sessionId,
         meshIds: selectedMesh.meshIds,
-        includeWeights,
       });
       const uploads = await Promise.allSettled(
-        (upload.meshes ?? []).flatMap((target) => {
+        (upload.meshes ?? []).map((target) => {
           const segment = selectedMesh.segments.find((entry) => entry.meshId === target.meshId);
           if (!segment) {
-            return [
-              Promise.reject(new Error(`Body shape export mesh is unknown: ${target.meshId}`)),
-            ];
+            return Promise.reject(new Error(`Body shape export mesh is unknown: ${target.meshId}`));
           }
           const end = segment.vertexOffset + segment.vertexCount;
-          return [
-            uploadTypedArray(
-              target.positionsUploadUrl,
-              selectedMesh.previewPositions.subarray(segment.vertexOffset * 3, end * 3),
-            ),
-            ...(includeWeights && target.weightsUploadUrl
-              ? [
-                  uploadTypedArray(
-                    target.weightsUploadUrl,
-                    weights.subarray(segment.vertexOffset, end),
-                  ),
-                ]
-              : []),
-          ];
+          return uploadTypedArray(
+            target.positionsUploadUrl,
+            selectedMesh.previewPositions.subarray(segment.vertexOffset * 3, end * 3),
+          );
         }),
       );
       const failedUpload = uploads.find(
@@ -663,12 +644,13 @@ export default function BodyShapeTool({
       const result = await Tools.BodyShapeCommitExport({
         sessionId: loaded.sessionId,
         exportId: upload.exportId,
-        amount: primary?.amount ?? 0,
-        axisScale: primary ? [...primary.axisScale] : [1, 1, 1],
         writeChangeLog: true,
         changeSummary: {
-          amount: primary?.amount ?? 0,
-          axisScale: primary ? ([...primary.axisScale] as [number, number, number]) : [1, 1, 1],
+          operation: deformOperation,
+          amount: unifiedControl.amount,
+          axisScale: [...unifiedControl.axisScale],
+          translation: [...unifiedControl.translation],
+          taperFactor: unifiedControl.taperFactor,
           movedVertices: metricsNow.movedVertices,
           maxDisplacement: metricsNow.maxDisplacement,
         },
@@ -685,6 +667,10 @@ export default function BodyShapeTool({
               }),
       });
       onExported?.(result as never);
+      if (!onExported && result.modRoot) {
+        setModPath(result.modRoot);
+        await loadMod(result.modRoot);
+      }
     } catch (error) {
       Logger.capture("body-shape:browser-operation", error);
       toast.error(t("page.tools.body_shape.toast.export_failed"), {
@@ -1277,7 +1263,11 @@ export default function BodyShapeTool({
                     </div>
                   ) : null}
 
-                  <Button type="button" onClick={() => void exportMesh()} disabled={exporting}>
+                  <Button
+                    type="button"
+                    onClick={() => void exportMesh()}
+                    disabled={exporting || (metrics?.movedVertices ?? 0) === 0}
+                  >
                     {exporting ? (
                       <Loader2Icon className="size-4 animate-spin" />
                     ) : (

@@ -44,9 +44,14 @@ func writeTestPositions(t *testing.T, path string, positions []float32, stride i
 
 func TestBodyShapedFolderBaseName(t *testing.T) {
 	for input, expected := range map[string]string{
-		"Astral Modulator":          "Astral Modulator (Body Shaped)",
-		"DISABLED Astral Modulator": "Astral Modulator (Body Shaped)",
-		"DISABLED_Foo":              "Foo (Body Shaped)",
+		"Astral Modulator":                    "Astral Modulator (Body Shaped)",
+		"DISABLED Astral Modulator":           "Astral Modulator (Body Shaped)",
+		"DISABLED_Foo":                        "Foo (Body Shaped)",
+		"Foo (Body Shaped)":                   "Foo (Body Shaped)",
+		"Foo (Body Shaped) (2)":               "Foo (Body Shaped)",
+		"DISABLED Foo (body shaped)":          "Foo (Body Shaped)",
+		"Foo (Body Shaped) (Body Shaped) (3)": "Foo (Body Shaped)",
+		"Foo (2)":                             "Foo (2) (Body Shaped)",
 	} {
 		if actual := bodyShapedFolderBaseName(input); actual != expected {
 			t.Fatalf("bodyShapedFolderBaseName(%q) = %q, want %q", input, actual, expected)
@@ -263,6 +268,36 @@ func TestBodyShapeExportCopiesVariantAndDisablesUnmanagedSource(t *testing.T) {
 	}
 }
 
+func TestBodyShapeExportRemovesPartialCopyOnFailure(t *testing.T) {
+	parent := t.TempDir()
+	sourceRoot := filepath.Join(parent, "Character Mod")
+	if err := os.Mkdir(sourceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	positionPath := filepath.Join(sourceRoot, "Position.buf")
+	writeTestPositions(t, positionPath, []float32{0, 0, 0}, 12)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	disabler := &bodyShapeTestDisabler{}
+	service := NewWithOptions(Options{Mod: disabler})
+
+	_, err := service.BodyShapeExport(ctx, BodyShapeExportInput{
+		ModRoot: sourceRoot,
+		Meshes:  []BodyShapeExportMesh{{PositionPath: positionPath, PositionStride: 12, Positions: []float32{1, 0, 0}}},
+	})
+	if err == nil {
+		t.Fatal("export succeeded with a cancelled context")
+	}
+
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "Character Mod" || disabler.called != "" {
+		t.Fatalf("entries = %v, disabled = %q", entries, disabler.called)
+	}
+}
+
 func loadBodyShapeTestMod(t *testing.T, ini string) (*Service, *bodyShapeTestDisabler, BodyShapeSessionDescriptor) {
 	t.Helper()
 	sourceRoot := filepath.Join(t.TempDir(), "Character Mod")
@@ -342,6 +377,195 @@ func TestBodyShapeBinaryUploadCommitExportsAllSelectedPositions(t *testing.T) {
 	siblings, err := os.ReadDir(filepath.Dir(*result.ModRoot))
 	if err != nil || len(siblings) != 2 {
 		t.Fatalf("mod folders = %v, %v", siblings, err)
+	}
+}
+
+func TestBodyShapeCommitRejectsUnchangedPositions(t *testing.T) {
+	ctx := context.Background()
+	service, disabler, loaded := loadBodyShapeTestMod(
+		t,
+		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n",
+	)
+	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{
+		SessionID: loaded.SessionID,
+		MeshIDs:   []string{loaded.Meshes[0].ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(
+		http.MethodPut,
+		upload.Meshes[0].PositionsUploadURL,
+		strings.NewReader(string(modmesh.Float32Bytes([]float32{0, 0, 0, 1, 0, 0}))),
+	)
+	request.Header.Set("Content-Type", "application/octet-stream")
+	recorder := httptest.NewRecorder()
+	service.protocol.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("upload = %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	_, err = service.BodyShapeCommitExport(
+		ctx,
+		BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID},
+	)
+	if err == nil {
+		t.Fatal("commit accepted unchanged positions")
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(loaded.ModRoot))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || disabler.called != "" {
+		t.Fatalf("entries = %v, disabled = %q", entries, disabler.called)
+	}
+}
+
+var (
+	frameTestBefore  = []float32{0, 0, 0, 1, 0, 0, 0, 1, 0}
+	frameTestRotated = []float32{0, 0, 0, 1, 0, 0, 0, 0, 1}
+	frameTestIndices = []uint32{0, 1, 2}
+)
+
+func assertFrameVec(t *testing.T, label string, actual, want bodyVec3, tolerance float64) {
+	t.Helper()
+	for axis := range want {
+		if math.Abs(actual[axis]-want[axis]) > tolerance {
+			t.Fatalf("%s = %v, want %v", label, actual, want)
+		}
+	}
+}
+
+func TestExportRotatesInlineFrames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Position.buf")
+	raw := make([]byte, 3*inlineFrameStride)
+	for vertex := range 3 {
+		base := vertex * inlineFrameStride
+		writeBodyVec3(raw[base:], bodyVec3{
+			float64(
+				frameTestBefore[vertex*3],
+			),
+			float64(frameTestBefore[vertex*3+1]),
+			float64(frameTestBefore[vertex*3+2]),
+		})
+		writeBodyVec3(raw[base+inlineNormalOffset:], bodyVec3{0, 0, 1})
+		writeBodyVec3(raw[base+inlineTangentOffset:], bodyVec3{1, 0, 0})
+		binary.LittleEndian.PutUint32(raw[base+inlineTangentOffset+12:], math.Float32bits(-1))
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := exportBodyShapeMesh(BodyShapeExportMesh{
+		PositionPath:   path,
+		PositionStride: inlineFrameStride,
+		Positions:      frameTestRotated,
+		Indices:        frameTestIndices,
+	}, func(message string) { t.Fatal(message) })
+	if err != nil || !result.InlineFrames {
+		t.Fatalf("result = %#v, %v", result, err)
+	}
+
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for vertex := range 3 {
+		base := vertex * inlineFrameStride
+		assertFrameVec(t, "normal", readBodyVec3(written[base+inlineNormalOffset:]), bodyVec3{0, -1, 0}, 1e-5)
+		assertFrameVec(t, "tangent", readBodyVec3(written[base+inlineTangentOffset:]), bodyVec3{1, 0, 0}, 1e-5)
+		handedness := math.Float32frombits(binary.LittleEndian.Uint32(written[base+inlineTangentOffset+12:]))
+		if handedness != -1 {
+			t.Fatalf("handedness = %v", handedness)
+		}
+	}
+}
+
+func TestExportKeepsNonFrameBytesInStride40(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Position.buf")
+	raw := make([]byte, 3*inlineFrameStride)
+	for index := inlineNormalOffset; index < inlineFrameStride; index++ {
+		for vertex := range 3 {
+			raw[vertex*inlineFrameStride+index] = 0x7f
+		}
+	}
+	for vertex := range 3 {
+		writeBodyVec3(raw[vertex*inlineFrameStride:], bodyVec3{
+			float64(
+				frameTestBefore[vertex*3],
+			),
+			float64(frameTestBefore[vertex*3+1]),
+			float64(frameTestBefore[vertex*3+2]),
+		})
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	warnings := 0
+	result, err := exportBodyShapeMesh(BodyShapeExportMesh{
+		PositionPath:   path,
+		PositionStride: inlineFrameStride,
+		Positions:      frameTestRotated,
+		Indices:        frameTestIndices,
+	}, func(string) { warnings++ })
+	if err != nil || result.InlineFrames || warnings != 1 {
+		t.Fatalf("result = %#v, warnings = %d, err = %v", result, warnings, err)
+	}
+
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for vertex := range 3 {
+		base := vertex * inlineFrameStride
+		if !reflect.DeepEqual(
+			written[base+inlineNormalOffset:base+inlineFrameStride],
+			raw[base+inlineNormalOffset:base+inlineFrameStride],
+		) {
+			t.Fatalf("vertex %d attributes changed", vertex)
+		}
+	}
+}
+
+func TestExportRotatesSnorm8VectorBuffer(t *testing.T) {
+	dir := t.TempDir()
+	positionPath := filepath.Join(dir, "Position.buf")
+	writeTestPositions(t, positionPath, frameTestBefore, 12)
+	vectorPath := filepath.Join(dir, "Vector.buf")
+	vectors := make([]byte, 3*8)
+	for vertex := range 3 {
+		base := vertex * 8
+		copy(vectors[base:], []byte{127, 0, 0, 0x55, 0, 0, 127, 0x66})
+	}
+	if err := os.WriteFile(vectorPath, vectors, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	layout := "snorm8-tangent-normal"
+	result, err := exportBodyShapeMesh(BodyShapeExportMesh{
+		PositionPath:   positionPath,
+		PositionStride: 12,
+		Positions:      frameTestRotated,
+		Indices:        frameTestIndices,
+		VectorPath:     &vectorPath,
+		VectorLayout:   &layout,
+	}, func(message string) { t.Fatal(message) })
+	if err != nil || result.VectorPath == nil {
+		t.Fatalf("result = %#v, %v", result, err)
+	}
+
+	written, err := os.ReadFile(vectorPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for vertex := range 3 {
+		base := vertex * 8
+		want := []byte{127, 0, 0, 0x55, 0, 0x81, 0, 0x66}
+		if !reflect.DeepEqual(written[base:base+8], want) {
+			t.Fatalf("vertex %d vectors = %v, want %v", vertex, written[base:base+8], want)
+		}
 	}
 }
 
