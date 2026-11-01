@@ -11,7 +11,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-ozzo/ozzo-validation/v4 v4.4.1
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.19.2
+	github.com/klauspost/compress v1.20.3
 	github.com/mholt/archives v0.1.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/myparsleycat/ddsutil v0.2.0
