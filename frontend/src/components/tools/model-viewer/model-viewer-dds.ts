@@ -24,6 +24,10 @@ const DDS_RESOURCE_DIMENSION_TEXTURE2D = 3;
 const DDS_RESOURCE_MISC_TEXTURECUBE = 0x4;
 const DDS_MAX_PIXELS = 8192 * 8192;
 
+// WebView2 reads a response body while occupying the host UI thread that every
+// window shares, at about 2.4 ms per MB. Smaller responses leave gaps for input.
+const DDS_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
+
 const FOURCC_DXT1 = fourCC("DXT1");
 const FOURCC_DXT3 = fourCC("DXT3");
 const FOURCC_DXT5 = fourCC("DXT5");
@@ -116,16 +120,7 @@ export async function fetchModelViewerDDSBuffer(
     expectedFormat: ViewerDDSFormat,
     maxTextureSize: number,
     signal: AbortSignal,
-    mipCount?: number,
 ): Promise<ArrayBuffer> {
-    // Ranged requests exist to skip oversized mips. A single-mip file has none
-    // to skip, so probing its header would only add a round trip.
-    if (mipCount === 1) {
-        const response = await fetch(url, { signal, cache: "no-store" });
-        if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
-        return response.arrayBuffer();
-    }
-
     const headerResponse = await fetch(url, {
         signal,
         cache: "no-store",
@@ -164,21 +159,27 @@ export async function fetchModelViewerDDSBuffer(
         throw new Error("DDS has no mip within the model viewer limit");
     }
 
-    const payloadResponse = await fetch(url, {
-        signal,
-        cache: "no-store",
-        headers: { Range: `bytes=${selectedOffset}-${selectedOffset + selectedBytes - 1}` },
-    });
-    if (!payloadResponse.ok) throw new Error(`DDS request failed with ${payloadResponse.status}`);
-    const payload = await payloadResponse.arrayBuffer();
-    if (payloadResponse.status !== 206) return payload;
-    if (payload.byteLength !== selectedBytes) throw new Error("DDS mip range is truncated");
+    const output = new ArrayBuffer(header.dataOffset + selectedBytes);
+    const outputBytes = new Uint8Array(output);
+    outputBytes.set(new Uint8Array(headerBuffer, 0, header.dataOffset));
+    for (let loaded = 0; loaded < selectedBytes;) {
+        const start = selectedOffset + loaded;
+        const length = Math.min(selectedBytes - loaded, DDS_RESPONSE_MAX_BYTES);
+        const response = await fetch(url, {
+            signal,
+            cache: "no-store",
+            headers: { Range: `bytes=${start}-${start + length - 1}` },
+        });
+        if (!response.ok) throw new Error(`DDS request failed with ${response.status}`);
+        const chunk = await response.arrayBuffer();
+        if (response.status !== 206) return chunk;
+        if (chunk.byteLength !== length) throw new Error("DDS mip range is truncated");
+        outputBytes.set(new Uint8Array(chunk), header.dataOffset + loaded);
+        loaded += length;
+    }
 
     const selectedWidth = mipDimension(header.width, selectedMip);
     const selectedHeight = mipDimension(header.height, selectedMip);
-    const output = new ArrayBuffer(header.dataOffset + selectedBytes);
-    new Uint8Array(output).set(new Uint8Array(headerBuffer, 0, header.dataOffset));
-    new Uint8Array(output, header.dataOffset).set(new Uint8Array(payload));
     const outputView = new DataView(output);
     outputView.setUint32(12, selectedHeight, true);
     outputView.setUint32(16, selectedWidth, true);

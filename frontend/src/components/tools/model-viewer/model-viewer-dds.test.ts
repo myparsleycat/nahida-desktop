@@ -46,6 +46,30 @@ describe("fetchModelViewerDDSBuffer", () => {
             [8192, 2],
         ]);
     });
+
+    it("reassembles a large texture from bounded range responses", async () => {
+        const source = ddsFixture({ fourcc: "DXT1", width: 2048, height: 2048, mipCount: 2 });
+        const bytes = new Uint8Array(source);
+        for (let index = 128; index < bytes.length; index++) bytes[index] = index % 251;
+        const requested: number[] = [];
+        vi.stubGlobal("fetch", (_url: string, init: RequestInit) => {
+            const range = (init.headers as Record<string, string>).Range;
+            const [start, end] = range.slice("bytes=".length).split("-").map(Number);
+            requested.push(end - start + 1);
+            return Promise.resolve(new Response(source.slice(start, end + 1), { status: 206 }));
+        });
+
+        const buffer = await fetchModelViewerDDSBuffer(
+            "wails://local-file/texture.dds",
+            "bc1-unorm",
+            maxTextureSize,
+            new AbortController().signal,
+        );
+
+        expect(Math.max(...requested)).toBeLessThanOrEqual(2 * 1024 * 1024);
+        expect(buffer.byteLength).toBe(bytes.length);
+        expect(new Uint8Array(buffer).every((value, index) => value === bytes[index])).toBe(true);
+    });
 });
 
 describe("parseModelViewerDDS", () => {
