@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
+	"time"
 )
 
 func TestProtocolMemoryLoaderLifetimeAndRange(t *testing.T) {
@@ -71,6 +73,93 @@ func TestProtocolMemoryLoaderReceivesRequestCancellation(t *testing.T) {
 	p.ServeHTTP(response, httptest.NewRequestWithContext(ctx, http.MethodGet, url, nil))
 	if response.Code != http.StatusInternalServerError {
 		t.Fatalf("cancelled response=%d", response.Code)
+	}
+}
+
+func TestProtocolMemoryLoaderReceivesSessionCancellation(t *testing.T) {
+	for _, shutdown := range []bool{false, true} {
+		name := "cleanup"
+		if shutdown {
+			name = "shutdown"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				p := NewProtocol()
+				session := p.CreateMemorySession()
+				other := p.CreateMemorySession()
+				otherURL, err := p.StoreMemoryBuffer(other, "other", []byte("active"), "text/plain")
+				if err != nil {
+					t.Fatal(err)
+				}
+				started := make(chan context.Context, 1)
+				release := make(chan struct{})
+				url, err := p.StoreMemoryLoader(session, "lazy", func(ctx context.Context) ([]byte, error) {
+					started <- ctx
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					case <-release:
+						return []byte("late"), nil
+					}
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				type requestKey struct{}
+				requestCtx, cancel := context.WithTimeout(
+					context.WithValue(context.Background(), requestKey{}, "value"),
+					time.Minute,
+				)
+				defer cancel()
+				response := httptest.NewRecorder()
+				done := make(chan struct{})
+				go func() {
+					p.ServeHTTP(response, httptest.NewRequestWithContext(requestCtx, http.MethodGet, url, nil))
+					close(done)
+				}()
+				loadCtx := <-started
+				if loadCtx.Value(requestKey{}) != "value" {
+					t.Error("loader lost request value")
+				}
+				deadline, ok := loadCtx.Deadline()
+				wantDeadline, _ := requestCtx.Deadline()
+				if !ok || deadline != wantDeadline {
+					t.Error("loader lost request deadline")
+				}
+
+				if shutdown {
+					if err := p.ServiceShutdown(); err != nil {
+						t.Error(err)
+					}
+				} else {
+					p.CleanupMemorySession(session)
+					p.CleanupMemorySession(session)
+				}
+				synctest.Wait()
+				if !errors.Is(loadCtx.Err(), context.Canceled) {
+					t.Errorf("loader context after session end: %v", loadCtx.Err())
+				}
+				select {
+				case <-done:
+				default:
+					t.Error("cancelled loader did not finish")
+				}
+				if requestCtx.Err() != nil {
+					t.Errorf("session end cancelled request parent: %v", requestCtx.Err())
+				}
+				close(release)
+				<-done
+				if response.Code != http.StatusNotFound || response.Body.String() == "late" {
+					t.Errorf("late response=%d %q", response.Code, response.Body.String())
+				}
+				otherResponse := httptest.NewRecorder()
+				p.ServeHTTP(otherResponse, httptest.NewRequest(http.MethodGet, otherURL, nil))
+				if !shutdown && (otherResponse.Code != http.StatusOK || otherResponse.Body.String() != "active") {
+					t.Errorf("other session response=%d %q", otherResponse.Code, otherResponse.Body.String())
+				}
+				p.CleanupMemorySession(other)
+			})
+		})
 	}
 }
 

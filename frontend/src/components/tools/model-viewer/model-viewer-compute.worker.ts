@@ -1,5 +1,6 @@
+import { fetchBinaryBytes } from "@renderer/wails/binary-memory";
 import { serializeDiagnostic } from "@shared/diagnostic";
-import type { ViewerComputeBinarySource, ViewerComputeDeformer } from "@shared/mod-viewer/types";
+import type { ViewerComputeDeformer } from "@shared/mod-viewer/types";
 
 import {
     createCyclicPackedComputer,
@@ -100,12 +101,15 @@ scope.onmessage = (event) => {
 
 async function initialize(request: InitRequest): Promise<void> {
     const generation = request.generation;
+    const sources = new ModelViewerComputeSourceLoader();
     try {
         const meshes = await Promise.all(
             request.meshes.map(async (mesh) => ({
                 ...mesh,
                 sourceIndices: mesh.sourceIndicesUrl
-                    ? new Uint32Array(await fetchSource(mesh.sourceIndicesUrl))
+                    ? new Uint32Array(
+                          await sources.load(mesh.sourceIndicesUrl, mesh.vertexCount * 4),
+                      )
                     : Uint32Array.from({ length: mesh.vertexCount }, (_, index) => index),
             })),
         );
@@ -129,7 +133,7 @@ async function initialize(request: InitRequest): Promise<void> {
                   request.deformer.vertexCount,
               )
             : meshes.map((mesh) => mesh.sourceIndices);
-        const compute = await bindDeformerCompute(request.deformer);
+        const compute = await bindDeformerCompute(request.deformer, sources);
         active = {
             generation,
             vertexCount: request.deformer.vertexCount,
@@ -151,7 +155,10 @@ async function initialize(request: InitRequest): Promise<void> {
         };
         scope.postMessage({ type: "ready", generation });
     } catch (error) {
+        sources.dispose(error);
         postError(generation, undefined, "initialize", error, request.deformer.base.url);
+    } finally {
+        sources.dispose();
     }
 }
 
@@ -213,33 +220,34 @@ function recycleBuffers(request: RecycleRequest): void {
 
 async function bindDeformerCompute(
     deformer: ViewerComputeDeformer,
+    sources: ModelViewerComputeSourceLoader,
 ): Promise<
     (poseFrame: number, phaseSeconds: number, options?: GIMIComputeOptions) => GIMIShapePoseFrame
 > {
     switch (deformer.kind) {
         case "gimi_cyclic_packed_shape_v1": {
-            const stages = await loadPackedShapeStages(deformer);
+            const stages = await loadPackedShapeStages(deformer, sources);
             validatePackedShapeBuffers(deformer, stages);
             const prepared = preparePackedShapeStages(deformer, stages);
             return (_poseFrame, phaseSeconds, options) =>
                 computePackedShapeFrame(prepared.deformer, prepared.stages, phaseSeconds, options);
         }
         case "gimi_cyclic_packed_v1": {
-            const buffers = await loadShapePoseBuffers(deformer);
+            const buffers = await loadShapePoseBuffers(deformer, sources);
             validateCyclicPackedBuffers(deformer, buffers);
             const prepared = prepareShapePoseBuffers(deformer, buffers);
             const compute = createCyclicPackedComputer(prepared.deformer, prepared.buffers);
             return (poseFrame, _phaseSeconds, options) => compute(poseFrame, options);
         }
         case "gimi_packed_dual_quaternion_v1": {
-            const buffers = await loadShapePoseBuffers(deformer);
+            const buffers = await loadShapePoseBuffers(deformer, sources);
             validatePackedDualQuaternionBuffers(deformer, buffers);
             const prepared = prepareShapePoseBuffers(deformer, buffers);
             const compute = createPackedDualQuaternionComputer(prepared.deformer, prepared.buffers);
             return (poseFrame, phaseSeconds, options) => compute(poseFrame, options, phaseSeconds);
         }
         case "gimi_shape_pose_v1": {
-            const buffers = await loadShapePoseBuffers(deformer);
+            const buffers = await loadShapePoseBuffers(deformer, sources);
             return createGIMIShapePoseComputer(deformer, buffers);
         }
     }
@@ -277,19 +285,20 @@ function preparePackedShapeStages(
 
 async function loadShapePoseBuffers(
     deformer: ViewerComputeDeformer,
+    sources: ModelViewerComputeSourceLoader,
 ): Promise<GIMIShapePoseBuffers> {
     const [base, shapeTargets, blend, pose] = await Promise.all([
-        fetchSource(deformer.base.url, deformer.base.byteLength),
+        sources.load(deformer.base.url, deformer.base.byteLength),
         Promise.all(
             deformer.shapePasses.map((pass) =>
-                fetchSource(pass.target.url, pass.target.byteLength),
+                sources.load(pass.target.url, pass.target.byteLength),
             ),
         ),
         deformer.pose
-            ? fetchSource(deformer.pose.blend.url, deformer.pose.blend.byteLength)
+            ? sources.load(deformer.pose.blend.url, deformer.pose.blend.byteLength)
             : undefined,
         deformer.pose
-            ? fetchSource(deformer.pose.frames.url, deformer.pose.frames.byteLength)
+            ? sources.load(deformer.pose.frames.url, deformer.pose.frames.byteLength)
             : undefined,
     ]);
     return { base, shapeTargets, blend, pose };
@@ -297,37 +306,80 @@ async function loadShapePoseBuffers(
 
 async function loadPackedShapeStages(
     deformer: ViewerComputeDeformer,
+    sources: ModelViewerComputeSourceLoader,
 ): Promise<PackedShapeStageBuffers> {
-    const cache = new Map<string, Promise<ArrayBuffer>>();
-    const load = (source: ViewerComputeBinarySource) => {
-        const hit = cache.get(source.url);
-        if (hit) {
-            return hit;
-        }
-        const pending = fetchSource(source.url, source.byteLength);
-        cache.set(source.url, pending);
-        return pending;
-    };
     return Promise.all(
-        deformer.shapeStages.map(async (stage) => ({
-            base: await load(stage.base),
-            target: await load(stage.target),
-        })),
+        deformer.shapeStages.map(async (stage) => {
+            const [base, target] = await Promise.all([
+                sources.load(stage.base.url, stage.base.byteLength),
+                sources.load(stage.target.url, stage.target.byteLength),
+            ]);
+            return { base, target };
+        }),
     );
 }
 
-async function fetchSource(url: string, expectedBytes?: number): Promise<ArrayBuffer> {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-        throw new Error(`Failed to load GIMI shape/pose source (${response.status}).`);
+type PendingSource = {
+    url: string;
+    resolve: (bytes: Uint8Array) => void;
+    reject: (error: unknown) => void;
+};
+
+const MODEL_COMPUTE_SOURCE_LOAD_CONCURRENCY = 8;
+
+class ModelViewerComputeSourceLoader {
+    private readonly controller = new AbortController();
+    private readonly cache = new Map<string, Promise<Uint8Array>>();
+    private readonly queue = new Set<PendingSource>();
+    private active = 0;
+
+    async load(url: string, expectedBytes?: number): Promise<ArrayBuffer> {
+        this.controller.signal.throwIfAborted();
+        const pending =
+            this.cache.get(url) ??
+            new Promise<Uint8Array>((resolve, reject) => {
+                this.queue.add({ url, resolve, reject });
+                this.startNext();
+            });
+        this.cache.set(url, pending);
+        const bytes = await pending;
+        if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
+            const error = new Error(
+                `GIMI shape/pose source size changed: expected ${expectedBytes}, received ${bytes.byteLength}.`,
+            );
+            this.dispose(error);
+            throw error;
+        }
+        return bytes.buffer as ArrayBuffer;
     }
-    const buffer = await response.arrayBuffer();
-    if (expectedBytes !== undefined && buffer.byteLength !== expectedBytes) {
-        throw new Error(
-            `GIMI shape/pose source size changed: expected ${expectedBytes}, received ${buffer.byteLength}.`,
-        );
+
+    dispose(reason?: unknown): void {
+        this.controller.abort(reason);
+        for (const pending of this.queue) pending.reject(this.controller.signal.reason);
+        this.queue.clear();
+        this.cache.clear();
     }
-    return buffer;
+
+    private startNext(): void {
+        for (const pending of this.queue) {
+            if (
+                this.controller.signal.aborted ||
+                this.active >= MODEL_COMPUTE_SOURCE_LOAD_CONCURRENCY
+            )
+                return;
+            this.queue.delete(pending);
+            this.active += 1;
+            void fetchBinaryBytes(pending.url, undefined, this.controller.signal)
+                .then(pending.resolve, (error: unknown) => {
+                    this.dispose(error);
+                    pending.reject(error);
+                })
+                .finally(() => {
+                    this.active -= 1;
+                    this.startNext();
+                });
+        }
+    }
 }
 
 function postError(

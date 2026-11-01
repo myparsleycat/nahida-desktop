@@ -34,6 +34,8 @@ type memoryUploadEntry struct {
 }
 
 type memoryProtocolSession struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
 	buffers map[string]memoryProtocolEntry
 	uploads map[string]*memoryUploadEntry
 }
@@ -69,8 +71,11 @@ func (p *Protocol) LocalFileURL(path string, original bool) string {
 //wails:ignore
 func (p *Protocol) CreateMemorySession() string {
 	id := uuid.NewString()
+	ctx, cancel := context.WithCancel(context.Background())
 	p.mu.Lock()
 	p.sessions[id] = &memoryProtocolSession{
+		ctx:     ctx,
+		cancel:  cancel,
 		buffers: make(map[string]memoryProtocolEntry),
 		uploads: make(map[string]*memoryUploadEntry),
 	}
@@ -188,8 +193,12 @@ func (p *Protocol) CleanupMemorySession(sessionID string) {
 		return
 	}
 	p.mu.Lock()
+	session := p.sessions[sessionID]
 	delete(p.sessions, sessionID)
 	p.mu.Unlock()
+	if session != nil {
+		session.cancel()
+	}
 }
 
 func memoryProtocolURL(sessionID, entryID string) string {
@@ -276,7 +285,26 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 		return
 	}
 	if entry.load != nil {
-		data, err := entry.load(request.Context())
+		ctx, cancel := context.WithCancel(request.Context())
+		stop := context.AfterFunc(session.ctx, cancel)
+		defer func() {
+			stop()
+			cancel()
+		}()
+		if session.ctx.Err() != nil {
+			cancel()
+		}
+		data, err := entry.load(ctx)
+		p.mu.RLock()
+		active := p.sessions[sessionID] == session
+		p.mu.RUnlock()
+		if !active {
+			http.NotFound(w, request)
+			return
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err != nil {
 			p.reportProtocolFailure(
 				err,
@@ -285,13 +313,6 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 				map[string]any{"sessionId": sessionID, "bufferId": bufferID},
 			)
 			http.Error(w, "Failed to load binary buffer", http.StatusInternalServerError)
-			return
-		}
-		p.mu.RLock()
-		active := p.sessions[sessionID] == session
-		p.mu.RUnlock()
-		if !active {
-			http.NotFound(w, request)
 			return
 		}
 		entry.data = data
@@ -547,7 +568,11 @@ func normalizeContentType(value string) string {
 
 func (p *Protocol) ServiceShutdown() error {
 	p.mu.Lock()
-	clear(p.sessions)
+	sessions := p.sessions
+	p.sessions = make(map[string]*memoryProtocolSession)
 	p.mu.Unlock()
+	for _, session := range sessions {
+		session.cancel()
+	}
 	return nil
 }

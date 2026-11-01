@@ -122,9 +122,28 @@ func prepareModelViewerDDSPreviewWithLimit(
 	expected modelViewerDDSMetadata,
 	maxDimension uint32,
 ) ([]byte, error) {
+	surface, err := readModelViewerDDSPreviewSurface(ctx, path, expected, maxDimension)
+	if err != nil {
+		return nil, err
+	}
+	return encodeModelViewerDDSSurface(ctx, surface)
+}
+
+func readModelViewerDDSPreviewSurface(
+	ctx context.Context,
+	path string,
+	expected modelViewerDDSMetadata,
+	maxDimension uint32,
+) (*ddsutil.Surface, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -172,10 +191,7 @@ func prepareModelViewerDDSPreviewWithLimit(
 			}
 		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	return encodeModelViewerDDSSurface(ctx, surface)
+	return surface, err
 }
 
 func modelViewerDDSPreviewPlanFor(
@@ -375,6 +391,12 @@ func inspectModelViewerDDS(ctx context.Context, path string) (modelViewerDDSMeta
 	if err := ctx.Err(); err != nil {
 		return modelViewerDDSMetadata{}, err
 	}
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return modelViewerDDSMetadata{}, err
+	}
+	defer release()
+
 	file, err := os.Open(path)
 	if err != nil {
 		return modelViewerDDSMetadata{}, err

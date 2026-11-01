@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func prepareModelViewerPayload(
@@ -191,6 +193,9 @@ func writeModelViewerPayload(
 							previewLimit,
 						)
 						if loadErr != nil {
+							if infra.IsCancellationError(loadErr) {
+								return nil, loadErr
+							}
 							t.log.Warn(
 								fmt.Sprintf(
 									"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
@@ -245,6 +250,9 @@ func writeModelViewerPayload(
 						options.ddsPreviewPreferredDimension,
 					)
 					if loadErr != nil {
+						if infra.IsCancellationError(loadErr) {
+							return nil, loadErr
+						}
 						t.log.Warn(
 							fmt.Sprintf(
 								"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",

@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -150,6 +151,15 @@ func readModelViewerVariantPositions(
 		vertexCount < 0 {
 		return nil, fmt.Errorf("invalid position source layout")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	release, err := diskio.Acquire(ctx, source.sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	file, err := os.Open(source.sourcePath)
 	if err != nil {
 		return nil, err

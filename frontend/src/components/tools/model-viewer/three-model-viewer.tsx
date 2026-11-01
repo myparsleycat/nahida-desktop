@@ -318,6 +318,7 @@ function ThreeModelScene({
   const formRef = useRef(form);
   const toonShadowsRef = useRef(toonShadows);
   const animationClipRef = useRef(animationClip);
+  const animationFrameRef = useRef(animationFrame);
   const animationValuesRef = useRef<Record<string, string | number>>({});
   const modelRootRef = useRef<Object3D | null>(null);
   const applyPayloadVisualsRef = useRef<(options?: { interactive?: boolean }) => void>(() => {});
@@ -468,7 +469,8 @@ function ThreeModelScene({
 
   useEffect(() => {
     animationClipRef.current = animationClip;
-  }, [animationClip]);
+    animationFrameRef.current = animationFrame;
+  }, [animationClip, animationFrame]);
 
   useEffect(() => {
     modelRootRef.current = modelRoot;
@@ -688,13 +690,21 @@ function ThreeModelScene({
     };
   }, [payloadTransport, src]);
 
+  const computeDeformerId = animationClip?.deformerId;
   useEffect(() => {
     computeControllerRef.current?.dispose();
     computeControllerRef.current = null;
+    const clip = animationClipRef.current;
     const deformer = payloadTransport?.computeDeformers.find(
-      (candidate) => candidate.id === animationClip?.deformerId,
+      (candidate) => candidate.id === computeDeformerId,
     );
-    if (!modelRoot || !payloadTransport || !deformer || !animationClip) {
+    if (
+      !modelRoot ||
+      modelRoot !== activeObjectRef.current ||
+      !payloadTransport ||
+      !deformer ||
+      !clip
+    ) {
       return;
     }
     const controller = new ModelViewerComputeController(
@@ -706,17 +716,17 @@ function ThreeModelScene({
     );
     computeControllerRef.current = controller;
     const frameIndex = Math.min(
-      Math.max(animationFrameIndexRef.current ?? animationFrame ?? 0, 0),
-      Math.max(animationClip.frames.length - 1, 0),
+      Math.max(animationFrameIndexRef.current ?? animationFrameRef.current ?? 0, 0),
+      Math.max(clip.frames.length - 1, 0),
     );
-    controller.request({ clip: animationClip, frameIndex });
+    controller.request({ clip, frameIndex });
     return () => {
       if (computeControllerRef.current === controller) {
         computeControllerRef.current = null;
       }
       controller.dispose();
     };
-  }, [animationClip?.id, modelRoot, payloadTransport, invalidate]);
+  }, [computeDeformerId, modelRoot, payloadTransport, invalidate]);
 
   useEffect(() => {
     if (!animationClip?.deformerId) {

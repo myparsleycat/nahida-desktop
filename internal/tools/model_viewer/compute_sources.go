@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -248,6 +249,15 @@ func readModelViewerComputeRecords(
 	if source.load != nil {
 		return selectModelViewerComputeRecords(ctx, source, sources, vertexCount)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	release, err := diskio.Acquire(ctx, source.sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	file, err := os.Open(source.sourcePath)
 	if err != nil {
 		return nil, err
