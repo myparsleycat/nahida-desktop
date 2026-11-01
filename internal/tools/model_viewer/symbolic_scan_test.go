@@ -382,6 +382,68 @@ endif`)
 	}
 }
 
+func TestBindHashImageTexturesResolvesTiedSlotsStably(t *testing.T) {
+	t.Parallel()
+
+	resources := []modelViewerResource{
+		{Name: "Body", Filename: "BodyDiffuse.dds"},
+		{Name: "BodyB", Filename: "BodyDiffuse-B.dds"},
+		{Name: "Ult", Filename: "UltDiffuse.dds"},
+		{Name: "UltB", Filename: "UltDiffuse-B.dds"},
+	}
+	for _, test := range []struct {
+		name string
+		ini  string
+		want string
+	}{
+		{
+			name: "declaration order",
+			ini: `[TextureOverrideBody]
+if $t == 0
+this = ResourceBody
+else if $t == 1
+this = ResourceBodyB
+endif
+[TextureOverrideUlt]
+if $t == 0
+this = ResourceUlt
+else if $t == 1
+this = ResourceUltB
+endif`,
+			want: "BodyDiffuse.dds",
+		},
+		{
+			name: "default state",
+			ini: `[TextureOverrideUlt]
+if $t == 0
+this = ResourceUlt
+endif
+[TextureOverrideBody]
+if $t == 1
+this = ResourceBodyB
+endif`,
+			want: "BodyDiffuse-B.dds",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			sections := parseModINI(test.ini)
+			for range 64 {
+				meshes := []modelViewerDirectMesh{{
+					component:  "Component3",
+					ibName:     "IndexBuffer",
+					conditions: ModelViewerDNF{{{Var: "t", Value: "1"}}},
+				}}
+				bindHashImageTextures(meshes, sections, resources, "", map[string]any{"t": 1.0})
+				if meshes[0].textureDefaultFile != test.want {
+					t.Fatalf("default file = %q, want %q", meshes[0].textureDefaultFile, test.want)
+				}
+			}
+		})
+	}
+}
+
 func modelViewerAnimatedDrawSections(frames, draws int) []modINISection {
 	var ini strings.Builder
 	ini.WriteString("[TextureOverrideBody]\nrun = CommandListFrames\n[CommandListFrames]\n")

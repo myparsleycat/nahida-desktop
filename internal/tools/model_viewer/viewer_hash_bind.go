@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"encoding/binary"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -508,20 +509,33 @@ func bindHashImageTextures(
 	}
 
 	type scoredBind struct {
-		ibHash    string
-		slot      *hashImageSlot
-		score     int
-		tightness int
+		ibHash        string
+		slot          *hashImageSlot
+		score         int
+		tightness     int
+		defaultActive bool
 	}
 	var scored []scoredBind
-	for ibHash, group := range byIb {
-		groupVars := meshDNFVars(group)
-		for slot := range unused {
+	for _, ibHash := range slices.Sorted(maps.Keys(byIb)) {
+		groupVars := meshDNFVars(byIb[ibHash])
+		for _, slot := range diffuseSlots {
 			if score := overlapScore(groupVars, slot.vars); score > 0 {
-				scored = append(scored, scoredBind{ibHash: ibHash, slot: slot, score: score, tightness: len(slot.vars)})
+				scored = append(scored, scoredBind{
+					ibHash:    ibHash,
+					slot:      slot,
+					score:     score,
+					tightness: len(slot.vars),
+					defaultActive: slices.ContainsFunc(slot.files, func(entry hashImageFile) bool {
+						return viewerEvalDNFSatisfied(entry.cond, variables)
+					}),
+				})
 			}
 		}
 	}
+
+	// A mod can override several game textures under the same toggles, such as a
+	// body and its ultimate form. Nothing ties either to a draw, so remaining ties
+	// fall to the default state and then to declaration order.
 	sort.SliceStable(scored, func(i, j int) bool {
 		if scored[i].score != scored[j].score {
 			return scored[i].score > scored[j].score
@@ -529,7 +543,10 @@ func bindHashImageTextures(
 		if scored[i].tightness != scored[j].tightness {
 			return scored[i].tightness < scored[j].tightness
 		}
-		return scored[i].slot.area > scored[j].slot.area
+		if scored[i].slot.area != scored[j].slot.area {
+			return scored[i].slot.area > scored[j].slot.area
+		}
+		return scored[i].defaultActive && !scored[j].defaultActive
 	})
 	for _, pick := range scored {
 		if !unbound[pick.ibHash] || !unused[pick.slot] {
