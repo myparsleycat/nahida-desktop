@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -100,6 +101,128 @@ func TestZstdCoordinatorParallelCompressionAndRestore(t *testing.T) {
 	}
 	if state := m.compression.snapshot(); state.Status != "idle" || state.Enabled || state.Error != "" {
 		t.Fatalf("state = %+v", state)
+	}
+}
+
+func TestZstdCoordinatorReconcilesLinkedModsFolder(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	stored := filepath.Join(base, "Stored")
+	importer := filepath.Join(base, "Importer")
+	want := bytes.Repeat([]byte("linked-mods-folder"), 64*1024)
+	for _, name := range []string{"DISABLED Full", "DISABLED Scoped"} {
+		if err := os.MkdirAll(filepath.Join(stored, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(stored, name, "payload.bin"), want, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(importer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(importer, "Mods")
+	createJunction(t, stored, linked)
+
+	settings, err := setting.Open(ctx, filepath.Join(base, "compression.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionConfig(ctx, "zstd", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SetCompressionEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	m := NewWithOptions(Options{
+		Settings: settings,
+		XXMI:     compressionImporterSource{{Key: "A", ImporterFolder: importer}},
+	})
+	m.UseClient(settings.Client())
+	t.Cleanup(func() {
+		_ = m.ServiceShutdown()
+		_ = settings.Close()
+	})
+	c := m.compression
+	if err := c.loadState(ctx); err != nil {
+		t.Fatal(err)
+	}
+	full := filepath.Join(stored, "DISABLED Full", "payload.bin")
+	scoped := filepath.Join(stored, "DISABLED Scoped", "payload.bin")
+	exists := func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+
+	// A mod action reports the path through the link, lowercased by the pending scope set.
+	c.reconcile(ctx, compressionWork{scopes: []string{strings.ToLower(filepath.Join(linked, "DISABLED Scoped"))}})
+	if !exists(scoped+managedZstdExtension) || exists(full+managedZstdExtension) {
+		t.Fatalf("scope pass: scoped=%v full=%v, status %+v",
+			exists(scoped+managedZstdExtension), exists(full+managedZstdExtension), c.snapshot())
+	}
+
+	c.reconcile(ctx, compressionWork{full: true})
+	if !exists(full + managedZstdExtension) {
+		t.Fatalf("full pass did not compress through the linked root, status %+v", c.snapshot())
+	}
+
+	// The watcher reports physical paths, so restoring through the link must mark those.
+	// The compression passes above marked the same file, so their marks are dropped first.
+	c.selfChangeMu.Lock()
+	clear(c.selfChanges)
+	c.selfChangeMu.Unlock()
+	if err := c.restoreBeforeEnable(ctx, filepath.Join(linked, "DISABLED Scoped")); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(scoped) {
+		t.Fatal("restore before enable did not restore the payload")
+	}
+	physical, err := platform.FinalPath(filepath.Dir(scoped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.isSelfChange(filepath.Join(physical, "payload.bin")) {
+		t.Fatal("restore was not marked under the physical path the watcher reports")
+	}
+
+	if _, err := m.SetCompressionEnabled(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForCompression(t, c)
+	for _, path := range []string{full, scoped} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("restored %s: %v", path, err)
+		}
+	}
+}
+
+func TestExistingCompressionScopesResolveLinkedPathsInsideRoots(t *testing.T) {
+	base := t.TempDir()
+	stored := filepath.Join(base, "Stored")
+	external := filepath.Join(base, "External")
+	for _, dir := range []string{filepath.Join(stored, "Character", "Mod"), filepath.Join(external, "Escaped")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	linked := filepath.Join(base, "Mods")
+	createJunction(t, stored, linked)
+	createJunction(t, external, filepath.Join(stored, "Character", "Outside"))
+	root, err := platform.FinalPath(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := existingCompressionScopes([]string{
+		filepath.Join(linked, "Character"),
+		filepath.Join(root, "Character", "Mod"),
+		filepath.Join(linked, "Character", "Outside", "Escaped"),
+		filepath.Join(linked, "Missing"),
+	}, []string{root})
+
+	if len(got) != 1 || !platform.SamePathFold(got[0], filepath.Join(root, "Character")) {
+		t.Fatalf("scopes = %v, want only %q", got, filepath.Join(root, "Character"))
 	}
 }
 

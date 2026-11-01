@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -540,11 +541,19 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 }
 
 func existingCompressionScopes(scopes, roots []string) []string {
-	var result []string
+	// Roots are physical while mod actions report paths through the link, so the
+	// same folder can arrive under two spellings and only collapses once resolved.
+	// A scope keeps its last name, so the walkers still reject a reparse point there
+	// instead of leaving the root.
+	resolved := map[string]struct{}{}
 	for _, scope := range scopes {
+		physical, err := platform.FinalEntryPath(scope)
+		if err != nil {
+			continue
+		}
 		contained := false
 		for _, root := range roots {
-			if pathContains(root, scope) {
+			if pathContains(root, physical) {
 				contained = true
 				break
 			}
@@ -552,11 +561,11 @@ func existingCompressionScopes(scopes, roots []string) []string {
 		if !contained {
 			continue
 		}
-		if _, err := os.Lstat(scope); err == nil {
-			result = append(result, scope)
+		if _, err := os.Lstat(physical); err == nil {
+			addCompressionScope(resolved, physical)
 		}
 	}
-	return unionPaths(result)
+	return unionPaths(slices.Collect(maps.Keys(resolved)))
 }
 
 func (c *compressionCoordinator) roots(ctx context.Context) ([]string, error) {
@@ -592,12 +601,9 @@ func resolveCompressionRoot(importerFolder string) (string, error) {
 	}
 	// XXMI commonly makes ImporterFolder\Mods a link to the user's configured
 	// mod library. Resolve that trusted boundary once; recursive walkers still
-	// reject reparse points found below the resulting root.
-	root, err = filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", err
-	}
-	root, err = filepath.Abs(root)
+	// reject reparse points found below the resulting root, including a junction
+	// passed to them as the root itself.
+	root, err = platform.FinalPath(root)
 	if err != nil {
 		return "", err
 	}
@@ -736,6 +742,12 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	}
 	if done != nil {
 		<-done
+	}
+	// The watcher reports physical paths. A restore marked under the link would look
+	// like an outside change and could queue a pass that compresses the folder again
+	// before the caller renames it.
+	if physical, err := platform.FinalEntryPath(folder); err == nil {
+		folder = physical
 	}
 	c.opMu.Lock()
 	err := restoreZstdFolder(ctx, folder, c.markSelfChanges, func(path string, err error) {
