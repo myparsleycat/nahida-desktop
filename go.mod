@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/anthropics/anthropic-sdk-go v1.73.0
-	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/coder/websocket v1.8.15
 	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/gabriel-vasile/mimetype v1.4.15
