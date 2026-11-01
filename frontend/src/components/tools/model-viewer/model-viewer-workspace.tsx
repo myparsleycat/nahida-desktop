@@ -390,6 +390,11 @@ export function ModelViewerWorkspace({
         return;
       }
 
+      if (results.some((result) => (result.repairedVariables ?? []).length > 0)) {
+        toast.warning(t("page.tools.model_viewer.toast.save_to_ini_repaired"));
+        return;
+      }
+
       toast.warning(t("page.tools.model_viewer.toast.save_to_ini_no_changes"));
     } catch (error) {
       Logger.capture("model-viewer:save", error);

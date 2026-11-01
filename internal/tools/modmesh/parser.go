@@ -152,7 +152,7 @@ func scoreModINI(path, text string) int {
 		switch {
 		case strings.HasPrefix(lower, "namespace") && strings.Contains(line, "="):
 			score += 60
-		case strings.HasPrefix(lower, "global persist $"):
+		case strings.HasPrefix(lower, "global persist $"), strings.HasPrefix(lower, "persist global $"):
 			score += 15
 		case lower == "type = cycle" || lower == "type=cycle":
 			score += 10

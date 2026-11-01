@@ -1497,6 +1497,7 @@
         "toast": {
           "save_to_ini_success": "Saved current toggle values to INI",
           "save_to_ini_no_changes": "No matching persist variables were found to save",
+          "save_to_ini_repaired": "Fixed misspelled persist declarations in the INI. No toggle values were saved",
           "save_to_ini_error": "Failed to save toggle values to INI",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
           "capture_preview_error": "Failed to save the current viewer capture as preview.png",

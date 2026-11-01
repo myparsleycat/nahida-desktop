@@ -74,15 +74,11 @@ func (e *persistEngine) PersistStateToINI(
 ) (PersistModelViewerResult, error) {
 	e.workMu.Lock()
 	defer e.workMu.Unlock()
-	updates := persistUpdatesFromState(state)
-	if len(updates) == 0 {
-		return PersistModelViewerResult{UpdatedVariables: []string{}}, nil
-	}
-	updated, err := applyPersistUpdates(targetINIPath, updates)
+	updated, repaired, err := applyPersistUpdates(targetINIPath, persistUpdatesFromState(state))
 	if err != nil {
 		return PersistModelViewerResult{}, err
 	}
-	return PersistModelViewerResult{UpdatedVariables: updated}, nil
+	return PersistModelViewerResult{UpdatedVariables: updated, RepairedVariables: repaired}, nil
 }
 
 func (e *persistEngine) Stop() {
@@ -505,7 +501,7 @@ func (e *persistEngine) flushReadyFile(
 	if len(updates) == 0 {
 		return
 	}
-	updated, err := applyPersistUpdatesChecked(targetINIPath, updates, expected)
+	updated, _, err := applyPersistUpdatesChecked(targetINIPath, updates, expected, false)
 	if err != nil {
 		// A mod can be renamed or removed during the learner's quiet window.
 		// The queued update belongs to the old path and must not interfere with

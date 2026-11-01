@@ -108,10 +108,10 @@ const (
 
 var (
 	modelViewerOverlayAssignRE = regexp.MustCompile(
-		`(?i)^(?:(?:local|global)\s+)?(?:persist\s+)?(\$[\w.]+|[xyzw]\d*)\s*=\s*(.+)$`,
+		`(?i)^(?:persist\s+global\s+|(?:(?:local|global)\s+)?(?:persist\s+)?)(\$[\w.]+|[xyzw]\d*)\s*=\s*(.+)$`,
 	)
 	modelViewerOverlayDeclareRE = regexp.MustCompile(
-		`(?i)^(?:(?:global|local)\s+)?(?:persist\s+)?(\$[\w.]+)(?:\s*=\s*(.+))?$`,
+		`(?i)^(?:persist\s+global\s+|(?:(?:global|local)\s+)?(?:persist\s+)?)(\$[\w.]+)(?:\s*=\s*(.+))?$`,
 	)
 	modelViewerOverlayLocalRE   = regexp.MustCompile(`(?i)^local\s+(\$[\w.]+)$`)
 	modelViewerOverlayBindRE    = regexp.MustCompile(`(?i)^ps-t(\d+)\s*=\s*(.+)$`)

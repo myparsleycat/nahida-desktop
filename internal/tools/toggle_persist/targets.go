@@ -15,7 +15,9 @@ import (
 	"nahida.live/desktop/internal/diskio"
 )
 
-var globalDeclarationRE = regexp.MustCompile(`(?i)^global\s+(persist\s+)?\$([^\s=\\]+)(?:\s*=\s*.*)?$`)
+var globalDeclarationRE = regexp.MustCompile(
+	`(?i)^(?:(persist)\s+global|global(?:\s+(persist))?)\s+\$([^\s=\\]+)(?:\s*=\s*.*)?$`,
+)
 
 type persistTarget struct {
 	iniPath     string
@@ -201,12 +203,12 @@ func parsePersistTargets(content, namespace string) ([]persistTarget, string) {
 		if match == nil {
 			continue
 		}
-		key := "$" + match[2]
+		key := "$" + match[3]
 		if namespace != "" {
-			key = `$\` + namespace + `\` + match[2]
+			key = `$\` + namespace + `\` + match[3]
 		}
 		targets = append(targets, persistTarget{
-			key: strings.ToLower(key), varName: match[2], persistent: match[1] != "",
+			key: strings.ToLower(key), varName: match[3], persistent: match[1] != "" || match[2] != "",
 		})
 	}
 	return targets, namespace

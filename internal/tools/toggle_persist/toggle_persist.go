@@ -14,12 +14,15 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-var persistDeclarationRE = regexp.MustCompile(`(?i)^global\s+persist\s+\$([^\s=\\]+)(?:\s*=\s*(.*))?$`)
+var persistDeclarationRE = regexp.MustCompile(
+	`(?i)^(?:global\s+(persist?)|persist\s+global)\s+\$([^\s=\\]+)(?:\s*=\s*(.*))?$`,
+)
 
 var errPersistTargetChanged = errors.New("persist target changed before write")
 
 type PersistModelViewerResult struct {
-	UpdatedVariables []string `json:"updatedVariables"`
+	UpdatedVariables  []string `json:"updatedVariables"`
+	RepairedVariables []string `json:"repairedVariables"`
 }
 
 func (t *Service) PersistModelViewerToggleState(
@@ -119,26 +122,35 @@ func persistUpdatesFromState(state map[string]any) map[string]string {
 	return updates
 }
 
-func applyPersistUpdates(iniPath string, updates map[string]string) ([]string, error) {
-	return applyPersistUpdatesChecked(iniPath, updates, nil)
+func applyPersistUpdates(iniPath string, updates map[string]string) ([]string, []string, error) {
+	return applyPersistUpdatesChecked(iniPath, updates, nil, true)
 }
 
+// With repairSpelling, "global persis $x" becomes "global persist $x". 3DMigoto rejects the misspelling, leaving $x
+// undeclared and the mod's toggles dead in game. Only an explicit save may repair it, because declaring those
+// variables changes how the mod behaves in game. The background watcher must not.
 func applyPersistUpdatesChecked(
 	iniPath string,
 	updates map[string]string,
 	expected *persistTarget,
-) (result []string, returnErr error) {
+	repairSpelling bool,
+) (changed, repaired []string, returnErr error) {
 	raw, info, err := readPersistINI(iniPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, errors.New("target INI path is not a regular file")
+		return nil, nil, errors.New("target INI path is not a regular file")
 	}
 	content := string(raw)
 	if expected != nil && (!os.SameFile(info, expected.info) ||
 		fingerprintTogglePersistINI(content) != expected.fingerprint) {
-		return nil, errPersistTargetChanged
+		return nil, nil, errPersistTargetChanged
+	}
+	declared := map[string]bool{}
+	targets, _ := parsePersistTargets(content, "")
+	for _, target := range targets {
+		declared[strings.ToLower(target.varName)] = true
 	}
 	lineEnding := "\n"
 	if strings.Contains(content, "\r\n") {
@@ -146,7 +158,7 @@ func applyPersistUpdatesChecked(
 	}
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	inConstants := false
-	updated := make([]string, 0, len(updates))
+	changed, repaired = []string{}, []string{}
 	for index, line := range lines {
 		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))
 		if strings.HasPrefix(trimmed, "[") {
@@ -160,23 +172,42 @@ func applyPersistUpdatesChecked(
 		if match == nil {
 			continue
 		}
-		name := strings.TrimSpace(match[1])
-		next, exists := updates[strings.ToLower(name)]
-		if !exists || strings.TrimSpace(match[2]) == strings.TrimSpace(next) {
+		name := strings.TrimSpace(match[2])
+		key := strings.ToLower(name)
+		misspelled := strings.EqualFold(match[1], "persis")
+		if misspelled {
+			// Repairing a name that is already declared would make 3DMigoto report a redeclaration.
+			if !repairSpelling || declared[key] {
+				continue
+			}
+			declared[key] = true
+		}
+		value := strings.TrimSpace(match[3])
+		next, exists := updates[key]
+		valueChanged := exists && value != strings.TrimSpace(next)
+		if !valueChanged && !misspelled {
 			continue
 		}
-		lines[index] = "global persist $" + name + " = " + strings.TrimSpace(next)
-		updated = append(updated, name)
+		if valueChanged {
+			value = strings.TrimSpace(next)
+			changed = append(changed, name)
+		} else {
+			repaired = append(repaired, name)
+		}
+		lines[index] = "global persist $" + name
+		if value != "" {
+			lines[index] += " = " + value
+		}
 	}
-	if len(updated) == 0 {
-		return []string{}, nil
+	if len(changed) == 0 && len(repaired) == 0 {
+		return changed, repaired, nil
 	}
 	tempPath := filepath.Join(
 		filepath.Dir(iniPath),
 		fmt.Sprintf(".%s.%d.%d.tmp", filepath.Base(iniPath), os.Getpid(), time.Now().UnixNano()),
 	)
 	if err := os.WriteFile(tempPath, []byte(strings.Join(lines, lineEnding)), info.Mode().Perm()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() {
 		cleanupErr := os.Remove(tempPath)
@@ -187,14 +218,14 @@ func applyPersistUpdatesChecked(
 	if expected != nil {
 		current, err := os.Stat(iniPath)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !os.SameFile(current, info) {
-			return nil, errPersistTargetChanged
+			return nil, nil, errPersistTargetChanged
 		}
 	}
 	if err := platform.ReplaceAtomic(tempPath, iniPath); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return updated, nil
+	return changed, repaired, nil
 }

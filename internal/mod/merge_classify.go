@@ -34,7 +34,7 @@ var (
 	objectGUIDRE      = regexp.MustCompile(`(?im)^\s*global\s+\$object_guid\s*=\s*(\S+)`)
 	namespaceRE       = regexp.MustCompile(`(?im)^\s*namespace\s*=\s*([^;\r\n]+)`)
 	keySectionRE      = regexp.MustCompile(`(?im)^\s*\[Key`)
-	persistVarRE      = regexp.MustCompile(`(?im)^\s*global\s+persist\s+\$`)
+	persistVarRE      = regexp.MustCompile(`(?im)^\s*(?:global\s+persist|persist\s+global)\s+\$`)
 	controlFlowRE     = regexp.MustCompile(`(?im)^\s*(?:if|else\s+if|elif|else|endif)\b`)
 	numberedResRE     = regexp.MustCompile(`(?im)^\s*\[Resource[^\]]*\.\d+\]`)
 	commandListRE     = regexp.MustCompile(`(?im)^\s*\[CommandList`)

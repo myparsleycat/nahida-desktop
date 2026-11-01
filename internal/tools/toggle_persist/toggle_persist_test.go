@@ -32,6 +32,74 @@ func TestPersistModelViewerToggleStateOnlyUpdatesConstantsPersistVariables(t *te
 	}
 }
 
+func TestPersistModelViewerToggleStateHandlesDeclarationVariants(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mod.ini")
+	input := "[Constants]\nglobal persis $Toggle = 0\nglobal persis $Unlisted = 1\npersist global $Reversed = 0\n" +
+		"global persist $Dup = 0\nglobal persis $Dup = 1\n"
+	if err := os.WriteFile(path, []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	result, err := service.PersistModelViewerToggleState(
+		path,
+		map[string]any{"toggle": float64(0), "reversed": float64(2)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(result.UpdatedVariables, []string{"Reversed"}) ||
+		!reflect.DeepEqual(result.RepairedVariables, []string{"Toggle", "Unlisted"}) {
+		t.Fatalf("result = %#v", result)
+	}
+	want := "[Constants]\nglobal persist $Toggle = 0\nglobal persist $Unlisted = 1\nglobal persist $Reversed = 2\n" +
+		"global persist $Dup = 0\nglobal persis $Dup = 1\n"
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != want {
+		t.Fatalf("updated INI = %q, %v; want %q", raw, err, want)
+	}
+}
+
+func TestPersistModelViewerToggleStateRepairsWithoutViewerState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mod.ini")
+	if err := os.WriteFile(path, []byte("[Constants]\nglobal persis $Toggle = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := New().PersistModelViewerToggleState(path, map[string]any{})
+	if err != nil || !reflect.DeepEqual(result.RepairedVariables, []string{"Toggle"}) {
+		t.Fatalf("result = %#v, %v", result, err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != "[Constants]\nglobal persist $Toggle = 1\n" {
+		t.Fatalf("updated INI = %q, %v", raw, err)
+	}
+}
+
+func TestParsePersistTargetsReadsDeclarationVariants(t *testing.T) {
+	content := "[Constants]\npersist global $Reversed = 1\nglobal persist $Plain = 0\nglobal $Local = 0\n" +
+		"global persis $Typo = 0\n"
+	targets, _ := parsePersistTargets(content, "")
+	got := map[string]bool{}
+	for _, target := range targets {
+		got[target.varName] = target.persistent
+	}
+	want := map[string]bool{"Reversed": true, "Plain": true, "Local": false}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("targets = %#v; want %#v", got, want)
+	}
+}
+
+func TestFingerprintIgnoresWhatASaveRewrites(t *testing.T) {
+	want := fingerprintTogglePersistINI("[Constants]\nglobal persist $Toggle = 2\n")
+	for _, input := range []string{
+		"[Constants]\npersist global $Toggle = 0\n",
+		"[Constants]\nglobal persis $Toggle = 1\n",
+	} {
+		if got := fingerprintTogglePersistINI(input); got != want {
+			t.Fatalf("fingerprint of %q differs from the rewritten declaration", input)
+		}
+	}
+}
+
 func TestPersistModelViewerToggleStateDoesNotRewriteUnchangedFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mod.ini")
 	input := "[Constants]\nglobal persist $Toggle = 2\n"
@@ -82,6 +150,26 @@ func TestTogglePersistBatchesWatcherChangesAndWritesThemAfterTheQuietWindow(t *t
 	}
 	if countPrefix(harness.info, "Updated persist variables") != 1 {
 		t.Fatalf("updated log count = %d (%v)", countPrefix(harness.info, "Updated persist variables"), harness.info)
+	}
+}
+
+func TestTogglePersistWatcherLeavesMisspelledDeclarationsAlone(t *testing.T) {
+	harness := createPersistHarness(t, [][2]string{{"Toggle", "0"}})
+	input := "[Constants]\nglobal persist $Toggle = 0\nglobal persis $Typo = 0\n"
+	if err := os.WriteFile(harness.targetINIPath, []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.start(); err != nil {
+		t.Fatal(err)
+	}
+	defer harness.engine.Stop()
+
+	harness.trigger([][2]string{{"Toggle", "1"}})
+	harness.engine.Advance(3000)
+	want := "[Constants]\nglobal persist $Toggle = 1\nglobal persis $Typo = 0\n"
+	raw, err := os.ReadFile(harness.targetINIPath)
+	if err != nil || string(raw) != want {
+		t.Fatalf("INI = %q, %v; want %q (info=%v errors=%v)", raw, err, want, harness.info, harness.errors)
 	}
 }
 

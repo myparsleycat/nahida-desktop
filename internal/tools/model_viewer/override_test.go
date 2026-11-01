@@ -2,6 +2,20 @@ package modelviewer
 
 import "testing"
 
+func TestCollectModelViewerDefaultVariablesReadsDeclarationVariants(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persis $typo = 2
+persist global $reversed = 3
+
+[Present]
+$typo = 7
+$reversed = 7`)
+	variables := collectModelViewerDefaultVariables(sections)
+	if variables["typo"] != float64(2) || variables["reversed"] != float64(3) {
+		t.Fatalf("variables = %#v", variables)
+	}
+}
+
 func TestModelViewerDrawBindingsSelectActiveBranch(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $toggle = 1

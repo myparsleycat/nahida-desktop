@@ -377,7 +377,12 @@ func TestPersistWatcherSupportsLinkedModsRoot(t *testing.T) {
 	if err != nil || target == nil {
 		t.Fatalf("linked target = %#v, %v", target, err)
 	}
-	if _, err := applyPersistUpdatesChecked(target.iniPath, map[string]string{"toggle": "2"}, target); err != nil {
+	if _, _, err := applyPersistUpdatesChecked(
+		target.iniPath,
+		map[string]string{"toggle": "2"},
+		target,
+		false,
+	); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(path)
