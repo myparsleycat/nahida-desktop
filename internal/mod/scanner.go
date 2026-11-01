@@ -16,6 +16,7 @@ import (
 
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/appliedtool"
 )
 
 var mediaExtensions = map[string]bool{
@@ -260,7 +261,14 @@ func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
 	info.Preview = buckets.bestPath()
 	info.PreviewImages = sortedPreviewImages(images)
 	applyDefaultPreview(info, modPath, reports...)
+	applyAppliedTools(info, modPath, reports...)
 	return info
+}
+
+func applyAppliedTools(info *ModInfo, modPath string, reports ...func(error)) {
+	tools, err := appliedtool.Detect(modPath)
+	reportScanFailure(err, reports)
+	info.AppliedTools = tools
 }
 
 func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
@@ -315,6 +323,7 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 	info.Preview = buckets.bestPath()
 	info.PreviewImages = sortedPreviewImages(images)
 	applyDefaultPreview(info, modPath, reports...)
+	applyAppliedTools(info, modPath, reports...)
 	return &walkedMod{info: info, iniPaths: iniPaths}
 }
 

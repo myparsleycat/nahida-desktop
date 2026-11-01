@@ -38,6 +38,8 @@ import { useTranslation } from "react-i18next";
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 import zzmiModFixerIcon from "@/renderer/assets/img/zzmi-mod-fixer-icon.png";
 
+import { ModAppliedToolIcons } from "./mod-applied-tool-icons";
+
 interface ModCardHeaderProps {
   mod: ModInfo;
   actions: ModActionApi;
@@ -65,6 +67,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
             </TooltipContent>
           </Tooltip>
         )}
+        <ModAppliedToolIcons tools={mod.appliedTools} />
         <TruncatedText className="text-sm font-semibold" text={stripDisabledPrefix(mod.name)} />
       </div>
       <div className="flex shrink-0 items-center gap-1">

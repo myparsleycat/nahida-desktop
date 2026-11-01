@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"nahida.live/desktop/internal/mod/appliedtool"
 	"nahida.live/desktop/internal/mod/metadata"
 )
 
@@ -66,6 +67,29 @@ func TestPreviewSelectionScansAndPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	previewEqual(t, scanMod(group, modPath).Preview, filepath.Join(modPath, "preview.mp4"))
+}
+
+func TestScansReportAppliedTools(t *testing.T) {
+	group := t.TempDir()
+	modPath := filepath.Join(group, "mod")
+	if err := os.Mkdir(modPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"mod.ini":                    "[Constants]\n",
+		appliedtool.LiquidMarkerFile: `{"modKey":"0123456789ab"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(modPath, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{appliedtool.LiquidEmitter}
+	if got := scanMod(group, modPath).AppliedTools; !reflect.DeepEqual(got, want) {
+		t.Fatalf("full scan applied tools = %v", got)
+	}
+	if got := scanModLight(group, modPath).AppliedTools; !reflect.DeepEqual(got, want) {
+		t.Fatalf("light scan applied tools = %v", got)
+	}
 }
 
 func TestSetDefaultPreviewPreservesMetadataAndRejectsInvalidPaths(t *testing.T) {

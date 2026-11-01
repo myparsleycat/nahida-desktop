@@ -5,7 +5,10 @@
 // runtime reads on F10.
 package liquidemitter
 
-import "nahida.live/desktop/internal/modruntime"
+import (
+	"nahida.live/desktop/internal/mod/appliedtool"
+	"nahida.live/desktop/internal/modruntime"
+)
 
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
@@ -16,7 +19,7 @@ const (
 	profilesDir       = "Profiles"
 	profileIndexFile  = "_index.json"
 	profileLoaderFile = "surface/ProfileLoader.ini"
-	modMarkerFile     = ".nahida-liquid.json"
+	modMarkerFile     = appliedtool.LiquidMarkerFile
 	// The loader reads every .ini below Mods, so the backup must not end in .ini.
 	backupSuffix = ".nhd-liquid-orig"
 

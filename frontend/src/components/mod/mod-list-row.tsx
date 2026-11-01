@@ -12,6 +12,7 @@ import { formatDate, formatSize } from "@shared/utils";
 import { FolderIcon } from "lucide-react";
 import { memo } from "react";
 
+import { ModAppliedToolIcons } from "./mod-applied-tool-icons";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModDownloadOverlay } from "./mod-download-overlay";
 import { MOD_LIST_GRID_TEMPLATE_COLUMNS } from "./mod-list-layout";
@@ -74,7 +75,8 @@ export const ModListRow = memo(function ModListRow({
               </div>
             )}
           </div>
-          <div role="cell" className="min-w-0 p-2 text-left">
+          <div role="cell" className="flex min-w-0 items-center gap-1 p-2 text-left">
+            <ModAppliedToolIcons tools={mod.appliedTools} />
             <TruncatedText
               className="block w-full text-left font-medium"
               text={stripDisabledPrefix(mod.name)}

@@ -483,6 +483,11 @@
           "started": "Download started."
         }
       },
+      "applied-tools": {
+        "body-shape": "Body shape applied",
+        "touch-profile": "Touch profile applied",
+        "liquid-emitter": "Liquid emitter applied"
+      },
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",
         "open-in-explorer": "Open in File Explorer",

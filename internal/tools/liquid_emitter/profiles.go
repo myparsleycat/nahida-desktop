@@ -158,6 +158,9 @@ type modMarker struct {
 	// disabled; ReenableSource is false when it was already disabled.
 	Source         string `json:"source,omitempty"`
 	ReenableSource bool   `json:"reenableSource,omitempty"`
+	// Empty marks a generated mod with no emitters left, which keeps the marker
+	// only to record Source.
+	Empty bool `json:"empty,omitempty"`
 }
 
 type runtimeLayout struct {

@@ -277,6 +277,8 @@ type ModInfo struct {
 	Inis          []IniResult `json:"inis"`
 	// Dependencies is filled by the full scan only; the light scan reads no INI.
 	Dependencies []ModDependency `json:"dependencies,omitempty"`
+	// AppliedTools lists the appliedtool IDs of the tools whose output is in the mod.
+	AppliedTools []string `json:"appliedTools,omitempty"`
 }
 
 type FolderGroup struct {

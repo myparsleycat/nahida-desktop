@@ -34,6 +34,7 @@ export interface ModInfo {
         toggleKeys: ToggleKey[];
     }[];
     dependencies?: ModDependency[];
+    appliedTools?: string[];
 }
 
 export type { FolderGroup, ModDependency } from "@shared/types";

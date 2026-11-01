@@ -483,6 +483,11 @@
           "started": "다운로드를 시작했습니다."
         }
       },
+      "applied-tools": {
+        "body-shape": "체형 변경 적용됨",
+        "touch-profile": "터치 프로필 적용됨",
+        "liquid-emitter": "액체 분사 부착점 적용됨"
+      },
       "character-sidebar": {
         "add-to-character": "{{name}}에 추가",
         "open-in-explorer": "파일 탐색기에서 열기",

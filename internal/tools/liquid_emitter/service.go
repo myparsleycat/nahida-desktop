@@ -566,7 +566,7 @@ func (s *Service) apply(
 	if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
 		changes = append([]fileChange{{path: backup, data: original}}, changes...)
 	}
-	marker, err := markerChange(sc.root, key, sc.origin)
+	marker, err := markerChange(sc.root, key, sc.origin, false)
 	if err != nil {
 		return err
 	}
@@ -609,7 +609,7 @@ func (s *Service) setLook(sc *scope, layout runtimeLayout, pid int, look Look) e
 	if err != nil {
 		return err
 	}
-	marker, err := markerChange(sc.root, key, sc.origin)
+	marker, err := markerChange(sc.root, key, sc.origin, false)
 	if err != nil {
 		return err
 	}
@@ -692,15 +692,16 @@ func (s *Service) remove(sc *scope, layout runtimeLayout, pids []int) error {
 	if err != nil {
 		return err
 	}
-	if len(doc.Emitters) == 0 && len(owned) == 0 {
+	empty := len(doc.Emitters) == 0 && len(owned) == 0
+	if empty {
 		delete(index.Owners, key)
 	}
 	// A generated mod keeps its marker without emitters: it records the
 	// original to restore.
-	if len(doc.Emitters) == 0 && len(owned) == 0 && marker.Source == "" {
+	if empty && marker.Source == "" {
 		changes = append(changes, fileChange{path: filepath.Join(sc.root, modMarkerFile), remove: true})
 	} else {
-		marker, err := markerChange(sc.root, key, sc.origin)
+		marker, err := markerChange(sc.root, key, sc.origin, empty)
 		if err != nil {
 			return err
 		}
@@ -769,13 +770,14 @@ func (s *Service) ownedKey(sc *scope, layout runtimeLayout) (string, map[int]int
 }
 
 // markerChange rewrites the marker when it does not yet name this folder
-// under this key, or when origin records the mod this folder was copied from.
-func markerChange(root, key string, origin *modMarker) ([]fileChange, error) {
+// under this key, when origin records the mod this folder was copied from, or
+// when empty differs from what it records.
+func markerChange(root, key string, origin *modMarker, empty bool) ([]fileChange, error) {
 	marker, err := readMarker(root)
 	if err != nil {
 		return nil, err
 	}
-	next := modMarker{Version: 1, ModKey: key, ModPath: root}
+	next := modMarker{Version: 1, ModKey: key, ModPath: root, Empty: empty}
 	if marker.ModKey == key {
 		next.Source, next.ReenableSource = marker.Source, marker.ReenableSource
 	}
@@ -783,7 +785,7 @@ func markerChange(root, key string, origin *modMarker) ([]fileChange, error) {
 		next.Source, next.ReenableSource = origin.Source, origin.ReenableSource
 	}
 	if marker.ModKey == key && marker.ModPath != "" && samePhysicalPath(marker.ModPath, root) &&
-		marker.Source == next.Source && marker.ReenableSource == next.ReenableSource {
+		marker.Source == next.Source && marker.ReenableSource == next.ReenableSource && marker.Empty == next.Empty {
 		return nil, nil
 	}
 	encoded, err := encodeJSON(next)

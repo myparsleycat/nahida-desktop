@@ -19,6 +19,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/appliedtool"
 	"nahida.live/desktop/internal/modruntime"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -1271,11 +1272,29 @@ func TestServiceNewModLeavesOriginalAndRestores(t *testing.T) {
 		t.Fatalf("new-mod apply on a generated mod = %v", err)
 	}
 	key, _ := readModMarker(target)
+	reportsLiquid := func(want bool) {
+		t.Helper()
+		tools, err := appliedtool.Detect(target)
+		if err != nil || slices.Contains(tools, appliedtool.LiquidEmitter) != want {
+			t.Fatalf("applied tools = %v, want liquid %v (err=%v)", tools, want, err)
+		}
+	}
+	reportsLiquid(true)
 
-	// Without emitters the generated mod still knows its original.
+	// Without emitters the generated mod still knows its original, but no
+	// longer counts as carrying the tool until an emitter returns.
 	emptied, err := f.service.Remove(ctx, RemoveInput{ModPath: target})
 	if err != nil || emptied.SourcePath == "" || len(emptied.Emitters) != 0 {
 		t.Fatalf("remove all from a generated mod = %+v (err=%v)", emptied, err)
+	}
+	reportsLiquid(false)
+	again.Mode = ApplyInPlace
+	if _, err := f.service.Apply(ctx, again); err != nil {
+		t.Fatal(err)
+	}
+	reportsLiquid(true)
+	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: target}); err != nil {
+		t.Fatal(err)
 	}
 
 	// A file locked in the copy, or an original that cannot be enabled, stops

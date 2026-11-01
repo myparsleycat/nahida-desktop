@@ -483,6 +483,11 @@
           "started": "ダウンロードを開始しました。"
         }
       },
+      "applied-tools": {
+        "body-shape": "体型変更を適用済み",
+        "touch-profile": "タッチプロファイルを適用済み",
+        "liquid-emitter": "液体噴射ポイントを適用済み"
+      },
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",
         "open-in-explorer": "ファイルエクスプローラーで開く",

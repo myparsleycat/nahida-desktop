@@ -17,6 +17,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/appliedtool"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
@@ -872,7 +873,7 @@ func writeBodyShapeChangeLog(
 		}
 	}
 
-	lines := []string{"[체형 수정 내역]", "", "- 수정 대상 파일: " + strings.Join(positions, ", ")}
+	lines := []string{appliedtool.BodyShapeChangeLogHeader, "", "- 수정 대상 파일: " + strings.Join(positions, ", ")}
 	if len(vectors) > 0 {
 		lines = append(lines, "- 법선/탄젠트 갱신 (벡터 버퍼): "+strings.Join(vectors, ", "))
 	}
@@ -886,7 +887,7 @@ func writeBodyShapeChangeLog(
 	lines = append(lines, bodyShapeSummaryLines(summary)...)
 	lines = append(lines, "- 참고: 실제 애니메이션과 모든 의상 조합에서 미세 클리핑이 발생할 수 있음", "")
 
-	changeLogPath := filepath.Join(root, "변경사항.txt")
+	changeLogPath := filepath.Join(root, appliedtool.BodyShapeChangeLogFile)
 	if err := writeBodyFileAtomic(changeLogPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
 		return "", err
 	}

@@ -483,6 +483,11 @@
           "started": "已开始下载。"
         }
       },
+      "applied-tools": {
+        "body-shape": "已应用体型修改",
+        "touch-profile": "已应用触摸配置",
+        "liquid-emitter": "已应用液体喷射点"
+      },
       "character-sidebar": {
         "add-to-character": "添加到 {{name}}",
         "open-in-explorer": "在文件资源管理器中打开",

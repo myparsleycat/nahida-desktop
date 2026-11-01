@@ -1,12 +1,15 @@
 package touchprofile
 
-import "nahida.live/desktop/internal/tools/modmesh"
+import (
+	"nahida.live/desktop/internal/mod/appliedtool"
+	"nahida.live/desktop/internal/tools/modmesh"
+)
 
 const (
 	touchRuntimeVersion        = "1"
 	touchPromptVersion         = "17"
-	touchProfileManifestFile   = ".nahida-touch-profile.json"
-	touchProfileManifestKind   = "nahida-touch-profile"
+	touchProfileManifestFile   = appliedtool.TouchProfileManifestFile
+	touchProfileManifestKind   = appliedtool.TouchProfileManifestKind
 	touchObjectMode            = 7
 	touchPositionStride        = 40
 	touchMaskBands             = 3

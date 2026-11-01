@@ -216,7 +216,7 @@ func (s *Service) rewriteMarker(sc *scope, origin *modMarker) error {
 	if err != nil {
 		return err
 	}
-	changes, err := markerChange(sc.root, marker.ModKey, origin)
+	changes, err := markerChange(sc.root, marker.ModKey, origin, false)
 	if err != nil {
 		return err
 	}
