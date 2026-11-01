@@ -56,25 +56,21 @@ function getRenameDefaultValue(name: string) {
   return stripDisabledPrefix(name);
 }
 
-async function cleanupModelViewerSource(source: ModelViewerDialogSource | null) {
-  if (!source?.memorySessionId) {
-    return;
-  }
-
+async function cleanupModelViewerSession(memorySessionId: string) {
   try {
-    await Tools.CleanupModelViewer(source.memorySessionId);
+    await Tools.CleanupModelViewer(memorySessionId);
   } catch (error) {
-    Logger.warn({ error, memorySessionId: source.memorySessionId }, "cleanupModelViewerSource");
+    Logger.warn({ error, memorySessionId }, "cleanupModelViewerSession");
   }
 }
 
-function scheduleModelViewerCleanup(source: ModelViewerDialogSource | null) {
-  if (!source) {
+function scheduleModelViewerCleanup(memorySessionId: string | null) {
+  if (!memorySessionId) {
     return;
   }
 
   window.setTimeout(() => {
-    void cleanupModelViewerSource(source);
+    void cleanupModelViewerSession(memorySessionId);
   }, 0);
 }
 
@@ -149,6 +145,32 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     source: ModelViewerDialogSource;
   } | null>(null);
   const [showModelViewer, setShowModelViewer] = useState(false);
+  const [modelViewerGroupPath, setModelViewerGroupPath] = useState(selectedGroupPath);
+  const modelViewerLifetimeRef = useRef<symbol | null>(null);
+  const modelViewerRequestRef = useRef<symbol | null>(null);
+  const modelViewerSessionRef = useRef<string | null>(null);
+  const cleanupModelViewer = useCallback(() => {
+    const sessionId = modelViewerSessionRef.current;
+    modelViewerSessionRef.current = null;
+    scheduleModelViewerCleanup(sessionId);
+  }, []);
+
+  if (modelViewerGroupPath !== selectedGroupPath) {
+    setModelViewerGroupPath(selectedGroupPath);
+    setConvertingModelPath(null);
+    setModelViewerState(null);
+    setShowModelViewer(false);
+  }
+
+  useEffect(() => {
+    modelViewerLifetimeRef.current = Symbol();
+    return () => {
+      modelViewerLifetimeRef.current = null;
+      modelViewerRequestRef.current = null;
+      cleanupModelViewer();
+    };
+  }, [selectedGroupPath, cleanupModelViewer]);
+
   const [enableConfirmState, setEnableConfirmState] = useState<{
     mod: ModInfo;
     enable: () => void;
@@ -253,19 +275,28 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   };
 
   const openModelViewer = async (mod: ModInfo) => {
-    if (convertingModelPath) {
+    const lifetime = modelViewerLifetimeRef.current;
+    if (!lifetime || modelViewerRequestRef.current || modelViewerSessionRef.current) {
       return;
     }
 
+    const request = Symbol();
+    modelViewerRequestRef.current = request;
     setConvertingModelPath(mod.path);
     try {
       const result = await Tools.LoadModViewer(mod.path);
+      if (modelViewerLifetimeRef.current !== lifetime) {
+        scheduleModelViewerCleanup(result.memorySessionId);
+        return;
+      }
+      modelViewerSessionRef.current = result.memorySessionId;
+      const transport = normalizeModelViewerTransport(result);
       setModelViewerState({
         mod,
         groupPath: selectedGroupPath,
         source: {
           mode: "payload",
-          transport: normalizeModelViewerTransport(result),
+          transport,
           memorySessionId: result.memorySessionId,
           modPath: mod.path,
           name: result.name,
@@ -273,6 +304,10 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       });
       setShowModelViewer(true);
     } catch (error) {
+      if (modelViewerLifetimeRef.current !== lifetime) {
+        return;
+      }
+      cleanupModelViewer();
       const rawMessage = toErrorMessage(error);
       const lastErrorIndex = rawMessage.lastIndexOf("Error");
       const message =
@@ -287,7 +322,10 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         description: message,
       });
     } finally {
-      setConvertingModelPath(null);
+      if (modelViewerRequestRef.current === request) {
+        modelViewerRequestRef.current = null;
+        setConvertingModelPath(null);
+      }
     }
   };
 
@@ -481,7 +519,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         onOpenChange={(open) => {
           setShowModelViewer(open);
           if (!open) {
-            scheduleModelViewerCleanup(modelViewerState?.source ?? null);
+            cleanupModelViewer();
             setModelViewerState(null);
           }
         }}

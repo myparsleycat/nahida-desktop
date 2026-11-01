@@ -1,7 +1,10 @@
 package modelviewer
 
 import (
+	"bytes"
 	"encoding/binary"
+	"image"
+	"image/color"
 	"math"
 	"os"
 	"path/filepath"
@@ -169,6 +172,82 @@ filename = diffuse.png
 	}
 	if texKey(mesh) == "" || fixture.result.Textures[texKey(mesh)].Role != "diffuse" {
 		t.Fatalf("texKey=%q textures=%#v", texKey(mesh), fixture.result.Textures)
+	}
+}
+
+func TestLoadModViewerPreservesAlphaTextureVariants(t *testing.T) {
+	for _, extension := range []string{"png", "dds"} {
+		t.Run(extension, func(t *testing.T) {
+			dir := t.TempDir()
+			filename := "mask." + extension
+			if extension == "png" {
+				writeModelViewerTestPNG(t, filepath.Join(dir, filename), color.NRGBA{R: 255, A: 255})
+			} else {
+				writeTextureFile(t, dir, filename, encodeModelViewerBC1DDS(t, 4, 4, 1, 0))
+			}
+			fixture := loadViewerFixture(t, dir, `[Constants]
+global persist $color = 0
+[KeyColor]
+type = cycle
+$color = 0,1,2
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+Resource\GIMI\Diffuse = ref ResourceBodyDiffuse
+if $color == 1
+Resource\GIMI\Diffuse = ref ResourceBodyDiffuseInvertAlpha
+endif
+if $color == 2
+Resource\GIMI\Diffuse = ref ResourceBodyDiffuseAlias
+endif
+drawindexed = 3, 0, 0
+`+viewerBodyResources+`
+[ResourceBodyDiffuse]
+filename = `+filename+`
+[ResourceBodyDiffuseInvertAlpha]
+filename = `+filename+`
+[ResourceBodyDiffuseAlias]
+filename = `+filename+`
+`)
+			if len(fixture.result.Meshes) != 1 || len(fixture.result.Textures) != 2 {
+				t.Fatalf("meshes=%d textures=%d, want one mesh and two alpha variants",
+					len(fixture.result.Meshes), len(fixture.result.Textures))
+			}
+			keys := make([]string, 3)
+			for index := range keys {
+				evaluated := evaluateViewerTransport(fixture.result, map[string]any{"color": index})
+				keys[index] = evaluated.Meshes[0].TexKey
+			}
+			if keys[0] != "diffuse::"+filename || keys[1] == keys[0] || keys[2] != keys[0] {
+				t.Fatalf("texture keys=%q, want distinct inversion and shared normal alias", keys)
+			}
+			for index, key := range keys[:2] {
+				texture, exists := fixture.result.Textures[key]
+				if !exists {
+					t.Fatalf("missing texture for state %d: %q", index, key)
+				}
+				if extension == "dds" {
+					if texture.Encoding != "dds" || texture.InvertAlpha != (index == 1) {
+						t.Fatalf("state %d texture=%#v", index, texture)
+					}
+					continue
+				}
+				decoded, _, err := image.Decode(
+					bytes.NewReader(readModelViewerProtocolBytes(t, fixture.protocol, texture.URL)),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantAlpha := uint8(255)
+				if index == 1 {
+					wantAlpha = 0
+				}
+				if alpha := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA).A; alpha != wantAlpha {
+					t.Fatalf("state %d alpha=%d, want %d", index, alpha, wantAlpha)
+				}
+			}
+		})
 	}
 }
 

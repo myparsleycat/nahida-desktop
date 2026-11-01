@@ -594,7 +594,7 @@ func analyzeModelViewerTexture(rgba *image.NRGBA) *modelViewerDecodedTexture {
 		switch {
 		case alpha <= 16:
 			low++
-			lowRGB += float64(rgba.Pix[offset]+rgba.Pix[offset+1]+rgba.Pix[offset+2]) / 3
+			lowRGB += float64(int(rgba.Pix[offset])+int(rgba.Pix[offset+1])+int(rgba.Pix[offset+2])) / 3
 		case alpha >= 239:
 			high++
 		default:

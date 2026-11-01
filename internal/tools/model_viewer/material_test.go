@@ -616,6 +616,31 @@ func TestRunModelViewerTextureJobsKeepsInvertAlphaVariant(t *testing.T) {
 	}
 }
 
+func TestModelViewerTextureAlphaBrightness(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		pixel      color.NRGBA
+		brightness float64
+		invert     bool
+	}{
+		{name: "transparent gray", pixel: color.NRGBA{R: 86, G: 86, B: 86}, brightness: 86, invert: true},
+		{name: "transparent dark", pixel: color.NRGBA{R: 7, G: 7, B: 7}, brightness: 7},
+		{name: "opaque gray", pixel: color.NRGBA{R: 86, G: 86, B: 86, A: 255}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rgba := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+			rgba.SetNRGBA(0, 0, test.pixel)
+			decoded := analyzeModelViewerTexture(rgba)
+			if decoded.lowRGB != test.brightness {
+				t.Errorf("transparent brightness=%v, want %v", decoded.lowRGB, test.brightness)
+			}
+			if invert := modelViewerTextureShouldInvertAlpha("", decoded); invert != test.invert {
+				t.Errorf("auto invert=%t, want %t", invert, test.invert)
+			}
+		})
+	}
+}
+
 func TestRunModelViewerTextureJobsPreservesDetectedAlphaInversion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mask.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 255, G: 64, B: 32, A: 0})

@@ -98,7 +98,7 @@ func collectModelViewerTextureJobs(
 				}
 			}
 		}
-		fileKey := modelViewerTextureKey(resource.Filename, role)
+		fileKey := modelViewerTextureVariantKey(resource.Filename, role, name)
 		texturePath, pathErr := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
 		if pathErr != nil {
 			continue
@@ -416,9 +416,17 @@ func countModelViewerLogicalTextures(outputs []map[string]modelViewerTexturePayl
 
 func modelViewerAssignmentTextureKey(assignment modelViewerDirectTextureAssignment) string {
 	if assignment.file != "" && assignment.role != "" {
-		return modelViewerTextureKey(assignment.file, assignment.role)
+		return modelViewerTextureVariantKey(assignment.file, assignment.role, assignment.resource)
 	}
 	return modelViewerNormalizeKey(assignment.resource)
+}
+
+func modelViewerTextureVariantKey(relative, role, resourceName string) string {
+	key := modelViewerTextureKey(relative, role)
+	if key != "" && modelViewerTextureNameRequestsAlphaInvert(resourceName) {
+		return key + "::invert-alpha"
+	}
+	return key
 }
 
 func classifyModelViewerTextureRole(name string) string {
