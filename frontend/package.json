@@ -59,7 +59,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/router-plugin": "^1.168.42",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "@types/path-browserify": "^1.0.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
