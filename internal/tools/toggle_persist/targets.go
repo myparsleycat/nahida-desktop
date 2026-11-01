@@ -75,6 +75,7 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		return nil, fmt.Errorf("resolve persist importer %q: %w", importerFolder, err)
 	}
 	index := persistTargetIndex{}
+	pathAliases := persistTargetIndex{}
 	graph := commandGraph{}
 	visit := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -107,6 +108,7 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		if strings.EqualFold(relative, "d3dx.ini") {
 			namespace = ""
 		}
+		pathNamespace := namespace
 		targets, namespace := parsePersistTargets(string(content), namespace)
 		graph.add(string(content), namespace)
 		fingerprint := ""
@@ -119,6 +121,15 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 			target.info = info
 			target.fingerprint = fingerprint
 			index[target.key] = append(index[target.key], target)
+			pathKey := strings.ToLower("$" + target.varName)
+			if pathNamespace != "" {
+				pathKey = strings.ToLower(`$\` + pathNamespace + `\` + target.varName)
+			}
+			if pathKey != target.key {
+				key := target.key
+				target.key = pathKey
+				pathAliases[key] = append(pathAliases[key], target)
+			}
 		}
 		return nil
 	}
@@ -139,9 +150,21 @@ func indexPersistTargets(importerFolder string) (persistTargetIndex, error) {
 		}
 	}
 
-	for key := range graph.timeDriven() {
+	driven := graph.timeDriven()
+	for key := range driven {
 		for i := range index[key] {
 			index[key][i].timeDriven = true
+		}
+	}
+
+	// XXMI can save values under the INI path even when the file declares a
+	// namespace. Keep those aliases subject to the same ownership checks and
+	// time-driven classification as the declared namespace.
+	for key, targets := range pathAliases {
+		_, timeDriven := driven[key]
+		for _, target := range targets {
+			target.timeDriven = timeDriven
+			index[target.key] = append(index[target.key], target)
 		}
 	}
 	return index, nil

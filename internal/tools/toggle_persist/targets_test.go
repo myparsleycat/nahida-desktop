@@ -42,12 +42,57 @@ func TestPersistWatcherResolvesNamespaceDeclarations(t *testing.T) {
 			},
 		},
 		{
+			name: "file path keys remain valid with an explicit namespace",
+			files: map[string]string{
+				"Mods/Characters/Suoming/쇄명 - 키사키 v1.1/mod.ini": "namespace = Suoming\\Kisaki_CowBikini\r\n" +
+					"[Constants]\r\nglobal persist $Bottom = 1\r\nglobal persist $Tail = 1\r\n",
+			},
+			state: `$\mods\characters\suoming\쇄명 - 키사키 v1.1\mod.ini\bottom = 0` + "\n" +
+				`$\mods\characters\suoming\쇄명 - 키사키 v1.1\mod.ini\tail = 0`,
+			want: map[string]string{
+				"Mods/Characters/Suoming/쇄명 - 키사키 v1.1/mod.ini": "$Bottom = 0\r\nglobal persist $Tail = 0",
+			},
+		},
+		{
+			name: "file path keys distinguish copies sharing an explicit namespace",
+			files: map[string]string{
+				"Mods/One/mod.ini": "namespace = Shared\n[Constants]\nglobal persist $Toggle = 0\n",
+				"Mods/Two/mod.ini": "namespace = Shared\n[Constants]\nglobal persist $Toggle = 0\n",
+			},
+			state: `$\Mods\One\mod.ini\Toggle = 1` + "\n" + `$\Mods\Two\mod.ini\Toggle = 2`,
+			want: map[string]string{
+				"Mods/One/mod.ini": "$Toggle = 1",
+				"Mods/Two/mod.ini": "$Toggle = 2",
+			},
+		},
+		{
+			name: "explicit namespace matching its file path is indexed once",
+			files: map[string]string{
+				"Mods/Copy/mod.ini": "namespace = mods\\copy\\mod.ini\n[Constants]\nglobal persist $Toggle = 0\n",
+			},
+			state: `$\Mods\Copy\mod.ini\Toggle = 2`,
+			want:  map[string]string{"Mods/Copy/mod.ini": "$Toggle = 2"},
+		},
+		{
 			name: "path shaped namespace cannot hijack another declaration",
 			files: map[string]string{
 				"Mods/Copy/mod.ini": "namespace = Mods\\Example\\mod.ini\n[Constants]\nglobal persist $Toggle = 0\n",
 			},
 			state:     `$\Mods\Example\mod.ini\Toggle = 1`,
 			want:      map[string]string{"Mods/Copy/mod.ini": "$Toggle = 0", "Mods/Example/mod.ini": "$Toggle = 0"},
+			ambiguous: true,
+		},
+		{
+			name: "path alias conflicts with another explicit namespace",
+			files: map[string]string{
+				"Mods/One/mod.ini": "namespace = Creator\\One\n[Constants]\nglobal persist $Toggle = 0\n",
+				"Mods/Two/mod.ini": "namespace = Mods\\One\\mod.ini\n[Constants]\nglobal persist $Toggle = 0\n",
+			},
+			state: `$\Mods\One\mod.ini\Toggle = 9`,
+			want: map[string]string{
+				"Mods/One/mod.ini": "$Toggle = 0",
+				"Mods/Two/mod.ini": "$Toggle = 0",
+			},
 			ambiguous: true,
 		},
 		{
@@ -401,12 +446,14 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 		"namespace = Parts",
 		"[Constants]",
 		"global persist $glow = 0",
+		"global persist $path_glow = 0",
 		"[CommandListAdvance]",
 		`$frame = $frame + 23 * $\Mods\Example\mod.ini\dt`,
 		"if $frame > 60",
 		`	$\Mods\Example\mod.ini\loop = $\Mods\Example\mod.ini\loop + 1`,
 		"endif",
 		"$glow = $frame % 2",
+		"$path_glow = $frame % 2",
 		"",
 	}, "\n"))
 	if err := harness.start(); err != nil {
@@ -419,6 +466,7 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 			`$\Mods\Example\mod.ini\menu = 1`,
 			`$\Mods\Example\mod.ini\step = 1`,
 			`$\Parts\glow = 1`,
+			`$\Mods\Example\parts.ini\path_glow = 1`,
 		}, "\n"))
 	}
 	expect := func(path string, want ...string) {
@@ -437,7 +485,7 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 	trigger("2")
 	harness.engine.Advance(initialQuietMs)
 	expect(harness.targetINIPath, "$anime_state = 0", "$menu = 1", "$step = 0")
-	expect(partsPath, "$glow = 0")
+	expect(partsPath, "$glow = 0", "$path_glow = 0")
 
 	// The animation keeps cycling while $glow has settled.
 	for _, animeState := range []string{"0", "1", "2"} {
@@ -445,7 +493,7 @@ func TestPersistWatcherWritesTimeDrivenVariablesOnlyOnceSettled(t *testing.T) {
 		harness.engine.Advance(timeDrivenSettleMs / 2)
 	}
 	expect(harness.targetINIPath, "$anime_state = 0")
-	expect(partsPath, "$glow = 1")
+	expect(partsPath, "$glow = 1", "$path_glow = 1")
 
 	harness.engine.Advance(timeDrivenSettleMs)
 	expect(harness.targetINIPath, "$anime_state = 2")
