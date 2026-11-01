@@ -7,6 +7,225 @@ import (
 	"testing"
 )
 
+func TestModelViewerSymbolicDerivedBodySelector(t *testing.T) {
+	t.Parallel()
+
+	var ini strings.Builder
+	ini.WriteString(`[Constants]
+global persist $top = 2
+global persist $bottom = 1
+global persist $sleeve = 1
+global persist $stocking = 1
+global $body_variant = 15
+global $mod_enabled = 0
+[KeyTop]
+type = cycle
+$top = 2, 1, 0
+[KeyBottom]
+type = cycle
+$bottom = 1, 0
+[KeySleeve]
+type = cycle
+$sleeve = 1, 0
+[KeyStocking]
+type = cycle
+$stocking = 1, 0
+[TextureOverrideBody]
+ib = ResourceIB
+vb0 = ResourcePos
+if $mod_enabled
+$body_variant = $bottom * 4 + $sleeve * 2 + $stocking
+if $top == 2
+$body_variant = $body_variant + 8
+endif
+`)
+	for variant := range 16 {
+		branch := "else if"
+		if variant == 0 {
+			branch = "if"
+		}
+		fmt.Fprintf(&ini, "%s $body_variant == %d\ndrawindexed = 3, %d, 0\n", branch, variant, variant*3)
+	}
+	ini.WriteString("endif\nif $sleeve == 1\ndrawindexed = 3, 48, 0\nendif\nendif\n")
+	sections := parseModINI(ini.String())
+	records, err := collectModelViewerDirectDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracked := map[string]bool{"top": true, "bottom": true, "sleeve": true, "stocking": true}
+	for top := range 3 {
+		for bottom := range 2 {
+			for sleeve := range 2 {
+				for stocking := range 2 {
+					state := map[string]string{
+						"top": fmt.Sprint(top), "bottom": fmt.Sprint(bottom),
+						"sleeve": fmt.Sprint(sleeve), "stocking": fmt.Sprint(stocking),
+					}
+					variant := bottom*4 + sleeve*2 + stocking
+					if top == 2 {
+						variant += 8
+					}
+					want := []int{variant * 3}
+					if sleeve == 1 {
+						want = append(want, 48)
+					}
+					var got []int
+					for _, record := range records {
+						if modelViewerDNFSatisfied(
+							normalizeModelViewerDNFWithTracked(record.conditions, tracked),
+							state,
+						) {
+							got = append(got, record.draw.StartIndex)
+						}
+					}
+					if !reflect.DeepEqual(got, want) {
+						t.Fatalf("state %v: draws = %v, want %v", state, got, want)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestModelViewerSymbolicElifPreservesParentAlternatives(t *testing.T) {
+	t.Parallel()
+
+	var alternatives []string
+	for value := range 12 {
+		alternatives = append(alternatives, fmt.Sprintf("$color == %d", value))
+	}
+	sections := parseModINI(`[TextureOverrideBody]
+ib = ResourceIB
+vb0 = ResourcePos
+if ` + strings.Join(alternatives, " || ") + `
+if $mode == 0
+drawindexed = 3, 0, 0
+elif $mode == 1
+drawindexed = 3, 3, 0
+endif
+endif
+`)
+	records, err := collectModelViewerDirectDrawRecords(sections, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for color := range 13 {
+		for mode := range 3 {
+			state := map[string]string{"color": fmt.Sprint(color), "mode": fmt.Sprint(mode)}
+			var got []int
+			for _, record := range records {
+				if modelViewerDNFSatisfied(record.conditions, state) {
+					got = append(got, record.draw.StartIndex)
+				}
+			}
+			var want []int
+			if color < 12 && mode < 2 {
+				want = []int{mode * 3}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("state %v: draws = %v, want %v", state, got, want)
+			}
+		}
+	}
+}
+
+func TestModelViewerSymbolicNumericRuntimeGuardStaysUnknown(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		expression string
+		condition  string
+	}{
+		{name: "guard alias", expression: "$mod_enabled", condition: "$copy"},
+		{name: "guard arithmetic", expression: "$mod_enabled + 1", condition: "$copy == 2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			sections := parseModINI(`[Constants]
+global $mod_enabled = 0
+global persist $outfit = 1
+[KeyOutfit]
+type = cycle
+$outfit = 0, 1
+[TextureOverrideBody]
+handling = skip
+ib = ResourceIB
+vb0 = ResourcePos
+if $mod_enabled
+$copy = ` + test.expression + `
+if ` + test.condition + `
+if $outfit == 1
+drawindexed = 3, 0, 0
+endif
+endif
+endif
+`)
+			records, err := collectModelViewerDirectDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(records) != 1 {
+				t.Fatalf("draw count = %d, want 1", len(records))
+			}
+			conditions := normalizeModelViewerDNFWithTracked(records[0].conditions, map[string]bool{"outfit": true})
+			for outfit := range 2 {
+				state := map[string]string{"outfit": fmt.Sprint(outfit)}
+				if got := modelViewerDNFSatisfied(conditions, state); got != (outfit == 1) {
+					t.Fatalf("outfit %d: visible = %t, want %t", outfit, got, outfit == 1)
+				}
+			}
+		})
+	}
+}
+
+func TestModelViewerSymbolicUnknownAssignmentKeepsOtherStates(t *testing.T) {
+	t.Parallel()
+
+	sections := parseModINI(`[Constants]
+global $mod_enabled = 0
+global persist $outfit = 0
+[KeyOutfit]
+type = cycle
+$outfit = 0, 1
+[TextureOverrideBody]
+ib = ResourceIB
+vb0 = ResourcePos
+$selector = $outfit + 1
+if $outfit == 1
+$selector = $mod_enabled + 1
+endif
+$copy = $selector + 0
+if $copy == 1
+drawindexed = 3, 0, 0
+elif $copy == 2
+drawindexed = 3, 3, 0
+endif
+`)
+	records, err := collectModelViewerDirectDrawRecords(sections, collectModelViewerDefaultVariables(sections))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for outfit := range 2 {
+		state := map[string]string{"outfit": fmt.Sprint(outfit)}
+		var got []int
+		for _, record := range records {
+			conditions := normalizeModelViewerDNFWithTracked(record.conditions, map[string]bool{"outfit": true})
+			if modelViewerDNFSatisfied(conditions, state) {
+				got = append(got, record.draw.StartIndex)
+			}
+		}
+		want := []int{0}
+		if outfit == 1 {
+			want = append(want, 3)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("outfit %d: draws = %v, want %v", outfit, got, want)
+		}
+	}
+}
+
 func TestModelViewerSymbolicBufferWritesPreserveDrawSnapshots(t *testing.T) {
 	sections := parseModINI(`[TextureOverrideBody]
 vb0 = ResourcePos

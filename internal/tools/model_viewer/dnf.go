@@ -33,15 +33,18 @@ func modelViewerDNFAnd(left, right ModelViewerDNF) ModelViewerDNF {
 	if modelViewerDNFIsTrue(right) {
 		return cloneModelViewerDNF(left)
 	}
-	if len(left)*len(right) > maxModelViewerDNFGroups {
-		return modelViewerDNFTrue()
-	}
+
+	// Shared parent conditions make many input pairs contradictory or duplicates;
+	// only surviving alternatives count toward the expansion limit.
 	var output ModelViewerDNF
 	for _, leftGroup := range left {
 		for _, rightGroup := range right {
 			merged, possible := mergeModelViewerDNFGroup(leftGroup, rightGroup)
 			if possible && !containsModelViewerDNFGroup(output, merged) {
 				output = append(output, merged)
+				if len(output) > maxModelViewerDNFGroups {
+					return modelViewerDNFTrue()
+				}
 			}
 		}
 	}
@@ -201,6 +204,7 @@ type modelViewerDNFParser struct {
 	aliases   map[string]ModelViewerDNF
 	variables map[string]any
 	assigned  map[string]modelViewerAssignedValue
+	derived   map[string]modelViewerSymbolicNumber
 }
 
 // modelViewerAssignedValue is a literal a section assigned to a variable. Depth
@@ -259,6 +263,9 @@ func (p *modelViewerDNFParser) parseAtom() ModelViewerDNF {
 		return modelViewerDNFTrue()
 	}
 	p.position++
+	if derived, ok := foldModelViewerDerivedAtom(token, p.derived); ok {
+		return derived
+	}
 	if folded, ok := foldModelViewerAssignedAtom(token, p.assigned); ok {
 		return folded
 	}

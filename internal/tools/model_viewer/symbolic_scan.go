@@ -64,6 +64,7 @@ type modelViewerSymbolicScanContext struct {
 	commandForm   string
 	resourcesOnly bool
 	assigned      map[string]modelViewerAssignedValue
+	derived       map[string]modelViewerSymbolicNumber
 }
 
 func scanModelViewerSymbolicRoot(
@@ -117,6 +118,7 @@ func collectModelViewerSymbolicDrawRecords(
 		}
 		ctx.sectionName = section.Name
 		ctx.assigned = nil
+		ctx.derived = nil
 		state := &modelViewerSymbolicSectionState{
 			buffers:  make(map[string][]modelViewerSymbolicAssignment),
 			textures: make(map[string][]modelViewerSymbolicAssignment),
@@ -211,6 +213,10 @@ func (c *modelViewerSymbolicScanContext) scan(
 			}
 			c.forgetAssignments(len(stack))
 			branch := c.parseCondition(expression)
+
+			// Prune unreachable selector values before branch exclusion can exceed
+			// the DNF expansion limit and widen the surviving draw conditions.
+			branch = modelViewerDNFAnd(modelViewerSymbolicStackConditions(stack[:len(stack)-1]), branch)
 			frame := &stack[len(stack)-1]
 			frame.current = modelViewerDNFAnd(modelViewerDNFNot(frame.seen), branch)
 			frame.seen = modelViewerDNFOr(frame.seen, branch)
@@ -240,7 +246,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 		if len(conditions) == 0 {
 			continue
 		}
-		c.recordAssignment(key, value, len(stack))
+		c.recordAssignment(key, value, len(stack), conditions)
 		if nested := modelViewerNestedSectionName(key, value); nested != "" {
 			name := modelViewerNormalizeKey(nested)
 			section, exists := c.lookup[name]
@@ -427,17 +433,22 @@ func (c *modelViewerSymbolicScanContext) parseCondition(expression string) Model
 		aliases:   modelViewerAliases(c.variables),
 		variables: c.variables,
 		assigned:  c.assigned,
+		derived:   c.derived,
 	}
 	return parser.parseOr()
 }
 
-func (c *modelViewerSymbolicScanContext) recordAssignment(key, value string, depth int) {
+func (c *modelViewerSymbolicScanContext) recordAssignment(key, value string, depth int, conditions ModelViewerDNF) {
 	match := modelViewerDNFBareRE.FindStringSubmatch(key)
 	if match == nil {
 		return
 	}
 	variable := modelViewerNormalizeKey(match[1])
 	literal, err := strconv.ParseFloat(value, 64)
+	_, derived := c.derived[variable]
+	if err != nil || derived {
+		c.recordDerivedAssignment(variable, value, conditions)
+	}
 	if err != nil {
 		delete(c.assigned, variable)
 		return
