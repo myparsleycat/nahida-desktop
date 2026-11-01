@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"cmp"
 	"context"
 	"image"
 	"maps"
@@ -12,6 +13,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/platform"
 )
@@ -21,13 +24,27 @@ const (
 	maxWwmiAtlasSeams    = 4096
 
 	minWwmiResizedAtlasArea = 1024 * 1024
+
+	// Each atlas is decoded twice, and a character can share several 4K atlases
+	// without mips, which take 16 MiB each.
+	maxWwmiAtlasBytes = 256 * 1024 * 1024
 )
 
-var wwmiAtlasTexRE = regexp.MustCompile(`(?i)(?:^|[/\\])[^/\\]*?Components-(\d+(?:-\d+)*)\s+t=`)
+var (
+	wwmiAtlasTexRE  = regexp.MustCompile(`(?i)(?:^|[/\\])[^/\\]*?Components-(\d+(?:-\d+)*)\s+t=`)
+	wwmiAtlasHashRE = regexp.MustCompile(`(?i)\st=([0-9a-f]{8})`)
+)
 
 type wwmiAtlasSamples struct {
 	uvs   [][2]float32
 	seams [][2]int
+}
+
+type wwmiAtlasRival struct {
+	file, resource string
+	score          float64
+	resized        bool
+	declared       int
 }
 
 // Shared dump names identify users of an atlas, not its shader role. Among
@@ -63,12 +80,13 @@ func refineWwmiDumpAtlases(
 
 	// Renamed atlases did not participate in the initial dump selection. Inspect
 	// them first so already-considered dumps cannot exhaust the decode budget.
+	declared := resources
 	resources = slices.Clone(resources)
 	sort.SliceStable(resources, func(i, j int) bool {
 		return !wwmiDumpTexRE.MatchString(slashPath(resources[i].Filename)) &&
 			wwmiDumpTexRE.MatchString(slashPath(resources[j].Filename))
 	})
-	remaining := int64(maxWwmiRecoveryBytes)
+	remaining := int64(maxWwmiAtlasBytes)
 	inspect := func(file string) atlas {
 		if found, ok := cache[file]; ok {
 			return found
@@ -88,6 +106,11 @@ func refineWwmiDumpAtlases(
 		defer release()
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > remaining/2 || info.Size() > maxHintDecodeBytes {
+			return atlas{}
+		}
+
+		// Linear maps are rejected from the header alone, so they cost no decode budget.
+		if srgb := parseDdsSrgbState(readFilePrefix(path, 148)); srgb != nil && !*srgb {
 			return atlas{}
 		}
 		remaining -= info.Size() * 2
@@ -114,15 +137,16 @@ func refineWwmiDumpAtlases(
 			continue
 		}
 		samples := collectWwmiAtlasSamples(group)
-		bestScore, valid := samples.score(current.pixels)
+		currentScore, valid := samples.score(current.pixels)
 		if !valid {
 			continue
 		}
-		threshold, resizedThreshold := bestScore*0.65, bestScore*0.25
-		bestFile, bestResource := currentFile, ""
+
+		var rivals []wwmiAtlasRival
 		for _, resource := range resources {
 			match := wwmiAtlasTexRE.FindStringSubmatch(slashPath(resource.Filename))
-			if match == nil || resource.Filename == currentFile || len(strings.Split(match[1], "-")) <= 1 ||
+			if match == nil || sameWwmiAtlas(resource.Filename, currentFile) ||
+				len(strings.Split(match[1], "-")) <= 1 ||
 				!slices.Contains(strings.Split(match[1], "-"), wwmiComponentIndex(group[0].component)) ||
 				slices.ContainsFunc(group, func(mesh *modelViewerDirectMesh) bool {
 					return slices.Contains(mesh.nonDiffuseTextureFiles, resource.Filename) ||
@@ -144,33 +168,94 @@ func refineWwmiDumpAtlases(
 			// Small shared effects need only the usual UV evidence to yield to an
 			// atlas. Competing atlas sizes need a stronger match, and small ramps
 			// and matcaps must not displace an atlas.
-			limit := threshold
-			if candidate.hint.Area != current.hint.Area {
-				if candidate.hint.Area < minWwmiResizedAtlasArea {
-					continue
-				}
-				if current.hint.Area >= minWwmiResizedAtlasArea {
-					limit = resizedThreshold
-				}
+			resized := candidate.hint.Area != current.hint.Area
+			if resized && candidate.hint.Area < minWwmiResizedAtlasArea {
+				continue
 			}
-			if score, ok := samples.score(candidate.pixels); ok && score < limit && score < bestScore {
-				bestScore, bestFile, bestResource = score, resource.Filename, resource.Name
+			resized = resized && current.hint.Area >= minWwmiResizedAtlasArea
+			if score, ok := samples.score(candidate.pixels); ok {
+				rivals = append(rivals, wwmiAtlasRival{
+					file: resource.Filename, resource: resource.Name, score: score, resized: resized,
+					declared: slices.IndexFunc(declared, func(other modelViewerResource) bool {
+						return other.Filename == resource.Filename
+					}),
+				})
 			}
 		}
-		if bestFile == currentFile {
+		eligibleRivals := func() []wwmiAtlasRival {
+			return lo.Filter(rivals, func(rival wwmiAtlasRival, _ int) bool {
+				if !rival.resized {
+					return rival.score < currentScore*0.65
+				}
+
+				// Unrelated maps score about the same on these seams. When the current map
+				// and another atlas both look unrelated, a single clear outlier is the
+				// component's atlas even though seams in painted hair and cloth are noisy.
+				others := lo.Filter(rivals, func(other wwmiAtlasRival, _ int) bool {
+					return !sameWwmiAtlas(other.file, rival.file)
+				})
+				if len(others) > 0 && !slices.ContainsFunc(others, func(other wwmiAtlasRival) bool {
+					return rival.score >= other.score*0.6
+				}) {
+					return rival.score < currentScore*0.6
+				}
+				return rival.score < currentScore*0.25
+			})
+		}
+		if len(eligibleRivals()) == 0 {
 			continue
 		}
+
+		// Recolored variants share one UV layout, but their contrast alone moves the
+		// score. The current atlas answers with its best variant, not only its default.
+		// They are decoded last because they can only keep the current atlas, and must
+		// not spend the budget that the rivals need.
+		for _, resource := range resources {
+			if resource.Filename == currentFile || !sameWwmiAtlas(resource.Filename, currentFile) {
+				continue
+			}
+			if variant := inspect(resource.Filename); variant.pixels != nil {
+				if score, ok := samples.score(variant.pixels); ok {
+					currentScore = min(currentScore, score)
+				}
+			}
+		}
+		eligible := eligibleRivals()
+		if len(eligible) == 0 {
+			continue
+		}
+
+		// Mods declare the default variant of an atlas first.
+		lowest := slices.MinFunc(eligible, func(left, right wwmiAtlasRival) int {
+			return cmp.Compare(left.score, right.score)
+		})
+		best := slices.MinFunc(lo.Filter(rivals, func(rival wwmiAtlasRival, _ int) bool {
+			return sameWwmiAtlas(rival.file, lowest.file)
+		}), func(left, right wwmiAtlasRival) int {
+			return cmp.Compare(left.declared, right.declared)
+		})
 		for _, mesh := range group {
-			mesh.textureDefaultFile = bestFile
+			mesh.textureDefaultFile = best.file
 			for index := range mesh.textureAssignments {
 				assignment := &mesh.textureAssignments[index]
 				if assignment.role == "diffuse" {
-					assignment.file, assignment.resource = bestFile, bestResource
+					assignment.file, assignment.resource = best.file, best.resource
 				}
 			}
 		}
 	}
 	return ctx.Err()
+}
+
+// sameWwmiAtlas treats files with one dump hash as variants of a single atlas,
+// such as "t=be3d8dad.dds" and "t=be3d8dad B.dds".
+func sameWwmiAtlas(left, right string) bool {
+	if left == right {
+		return true
+	}
+	leftHash := wwmiAtlasHashRE.FindStringSubmatch(left)
+	rightHash := wwmiAtlasHashRE.FindStringSubmatch(right)
+	return leftHash != nil && rightHash != nil && strings.EqualFold(leftHash[1], rightHash[1])
 }
 
 func collectWwmiAtlasSamples(meshes []*modelViewerDirectMesh) wwmiAtlasSamples {
