@@ -63,5 +63,6 @@ function transferResult(result: BodyShapeMeshProcessResult): Transferable[] {
         result.originalNormals,
         result.componentIds,
         result.symmetryMap,
+        result.weldMap,
     ].filter((value): value is ArrayBuffer => value instanceof ArrayBuffer);
 }

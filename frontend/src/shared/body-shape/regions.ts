@@ -1,4 +1,5 @@
 import { computeBoundingCenter } from "./deform";
+import { neighborsAt, type VertexAdjacency } from "./selection";
 import { clamp01 } from "./weights";
 
 /** Built-in body-shape region ids selectable in the UI. */
@@ -271,6 +272,8 @@ export type ActiveRegionDeform = {
     amount: number;
     axisScale: readonly [number, number, number];
     pivot: readonly [number, number, number];
+    /** Packed xyz pivot per vertex when the mask has separate parts; overrides `pivot`. */
+    vertexPivots?: Float32Array;
     operation?: "scale" | "inflate" | "translate" | "taper";
     normals?: Float32Array;
     translation?: readonly [number, number, number];
@@ -336,21 +339,25 @@ export function applyMultiRegionDeform(options: {
                 continue;
             }
 
+            const pivotX = region.vertexPivots ? region.vertexPivots[o] : region.pivot[0];
+            const pivotY = region.vertexPivots ? region.vertexPivots[o + 1] : region.pivot[1];
+            const pivotZ = region.vertexPivots ? region.vertexPivots[o + 2] : region.pivot[2];
+
             if (region.operation === "taper") {
                 const tf = region.taperFactor ?? 0.5;
-                const heightDiff = py - region.pivot[1];
+                const heightDiff = py - pivotY;
                 const scale = region.amount * tf * w * heightDiff;
-                dx += (px - region.pivot[0]) * scale;
-                dz += (pz - region.pivot[2]) * scale;
+                dx += (px - pivotX) * scale;
+                dz += (pz - pivotZ) * scale;
                 continue;
             }
 
             const sx = 1 + region.amount * region.axisScale[0] * w;
             const sy = 1 + region.amount * region.axisScale[1] * w;
             const sz = 1 + region.amount * region.axisScale[2] * w;
-            const qx = region.pivot[0] + (px - region.pivot[0]) * sx;
-            const qy = region.pivot[1] + (py - region.pivot[1]) * sy;
-            const qz = region.pivot[2] + (pz - region.pivot[2]) * sz;
+            const qx = pivotX + (px - pivotX) * sx;
+            const qy = pivotY + (py - pivotY) * sy;
+            const qz = pivotZ + (pz - pivotZ) * sz;
             dx += qx - px;
             dy += qy - py;
             dz += qz - pz;
@@ -430,6 +437,116 @@ export function computeRegionPivot(
     }
     if (total <= 1e-8) return [fallback[0], fallback[1], fallback[2]];
     return [sx / total, sy / total, sz / total];
+}
+
+type MaskPart = {
+    index: number;
+    root: number;
+    sum: [number, number, number];
+    total: number;
+    low: [number, number, number];
+    high: [number, number, number];
+};
+
+/**
+ * Gives each separate part of a mask its own pivot, so scaling both thighs thickens each
+ * instead of pushing them apart. Parts whose bounds overlap keep one pivot: a pocket or
+ * belt loop on a torso must move with the torso, not grow in place. Parts never touch
+ * through a nonzero weight, so their different pivots cannot open a gap.
+ *
+ * Returns undefined when one pivot applies to the whole mask.
+ */
+export function computeMaskPivots(
+    positions: Float32Array,
+    weights: Float32Array,
+    adjacency: VertexAdjacency,
+): Float32Array | undefined {
+    const vertexCount = Math.min(weights.length, Math.floor(positions.length / 3));
+    const isMasked = (vertex: number) =>
+        weights[vertex] > 0 &&
+        Number.isFinite(positions[vertex * 3]) &&
+        Number.isFinite(positions[vertex * 3 + 1]) &&
+        Number.isFinite(positions[vertex * 3 + 2]);
+    const partOf = new Int32Array(vertexCount).fill(-1);
+    const parts: MaskPart[] = [];
+    const stack: number[] = [];
+    for (let seed = 0; seed < vertexCount; seed += 1) {
+        if (partOf[seed] >= 0 || !isMasked(seed)) continue;
+        const part: MaskPart = {
+            index: parts.length,
+            root: parts.length,
+            sum: [0, 0, 0],
+            total: 0,
+            low: [Infinity, Infinity, Infinity],
+            high: [-Infinity, -Infinity, -Infinity],
+        };
+        partOf[seed] = part.index;
+        stack.push(seed);
+        while (stack.length > 0) {
+            const vertex = stack.pop()!;
+            for (let axis = 0; axis < 3; axis += 1) {
+                const value = positions[vertex * 3 + axis];
+                part.sum[axis] += value * weights[vertex];
+                part.low[axis] = Math.min(part.low[axis], value);
+                part.high[axis] = Math.max(part.high[axis], value);
+            }
+            part.total += weights[vertex];
+            for (const neighbor of neighborsAt(adjacency, vertex)) {
+                if (neighbor >= vertexCount || partOf[neighbor] >= 0 || !isMasked(neighbor)) {
+                    continue;
+                }
+                partOf[neighbor] = part.index;
+                stack.push(neighbor);
+            }
+        }
+        parts.push(part);
+    }
+
+    const findRoot = (index: number): number => {
+        while (parts[index].root !== index) {
+            parts[index].root = parts[parts[index].root].root;
+            index = parts[index].root;
+        }
+        return index;
+    };
+    const byLowX = parts.toSorted((a, b) => a.low[0] - b.low[0]);
+    for (let order = 0; order < byLowX.length; order += 1) {
+        const part = byLowX[order];
+        for (let next = order + 1; next < byLowX.length; next += 1) {
+            const other = byLowX[next];
+            if (other.low[0] > part.high[0]) break;
+            if (
+                other.low[1] <= part.high[1] &&
+                part.low[1] <= other.high[1] &&
+                other.low[2] <= part.high[2] &&
+                part.low[2] <= other.high[2]
+            ) {
+                parts[findRoot(part.index)].root = findRoot(other.index);
+            }
+        }
+    }
+
+    const groups = new Map<number, { sum: [number, number, number]; total: number }>();
+    for (const part of parts) {
+        const root = findRoot(part.index);
+        const group = groups.get(root) ?? { sum: [0, 0, 0], total: 0 };
+        group.sum[0] += part.sum[0];
+        group.sum[1] += part.sum[1];
+        group.sum[2] += part.sum[2];
+        group.total += part.total;
+        groups.set(root, group);
+    }
+    if (groups.size <= 1) return undefined;
+
+    const pivots = new Float32Array(vertexCount * 3);
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        if (partOf[vertex] < 0) continue;
+        const group = groups.get(findRoot(partOf[vertex]))!;
+        pivots[vertex * 3] = group.sum[0] / group.total;
+        pivots[vertex * 3 + 1] = group.sum[1] / group.total;
+        pivots[vertex * 3 + 2] = group.sum[2] / group.total;
+    }
+    return pivots;
 }
 
 /** Effective per-vertex diagonal scale for vector correction (product of region factors). */

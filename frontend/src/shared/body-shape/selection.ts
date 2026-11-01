@@ -13,9 +13,113 @@ export type GeodesicBrushWorkspace = {
     changed: number[];
 };
 
+/** Seam duplicates can differ by float rounding; the cell is far below any modeled detail. */
+const WELD_CELL_RATIO = 2e-5;
+
+/**
+ * Maps each vertex to the first vertex at the same position. Game meshes split vertices along
+ * UV and material seams, so index topology alone sees those seams as open boundaries.
+ */
+export function buildPositionWeldMap(positions: Float32Array): Uint32Array {
+    const vertexCount = Math.floor(positions.length / 3);
+    const weldMap = new Uint32Array(vertexCount);
+    const low = [Infinity, Infinity, Infinity];
+    const high = [-Infinity, -Infinity, -Infinity];
+    const isFinitePosition = (offset: number) =>
+        Number.isFinite(positions[offset]) &&
+        Number.isFinite(positions[offset + 1]) &&
+        Number.isFinite(positions[offset + 2]);
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        const offset = vertex * 3;
+        if (!isFinitePosition(offset)) continue;
+        for (let axis = 0; axis < 3; axis += 1) {
+            low[axis] = Math.min(low[axis], positions[offset + axis]);
+            high[axis] = Math.max(high[axis], positions[offset + axis]);
+        }
+    }
+
+    const extent = Math.max(high[0] - low[0], high[1] - low[1], high[2] - low[2]);
+    const cell = Math.max(extent * WELD_CELL_RATIO, Number.MIN_VALUE);
+    const firstsByCell = new Map<number, number[]>();
+    // Each axis spans at most 1 / WELD_CELL_RATIO cells, so 16 bits each stay a safe integer.
+    const cellKey = (x: number, y: number, z: number) => x * 2 ** 32 + y * 2 ** 16 + z;
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        const offset = vertex * 3;
+        weldMap[vertex] = vertex;
+        if (!isFinitePosition(offset)) continue;
+        const x = Math.round((positions[offset] - low[0]) / cell);
+        const y = Math.round((positions[offset + 1] - low[1]) / cell);
+        const z = Math.round((positions[offset + 2] - low[2]) / cell);
+
+        // Twins differing by rounding can fall on either side of a cell boundary.
+        let nearest = -1;
+        let nearestDistance = cell * cell;
+        for (let cx = Math.max(x - 1, 0); cx <= x + 1; cx += 1) {
+            for (let cy = Math.max(y - 1, 0); cy <= y + 1; cy += 1) {
+                for (let cz = Math.max(z - 1, 0); cz <= z + 1; cz += 1) {
+                    for (const first of firstsByCell.get(cellKey(cx, cy, cz)) ?? []) {
+                        const distance =
+                            (positions[first * 3] - positions[offset]) ** 2 +
+                            (positions[first * 3 + 1] - positions[offset + 1]) ** 2 +
+                            (positions[first * 3 + 2] - positions[offset + 2]) ** 2;
+                        if (distance <= nearestDistance) {
+                            nearest = first;
+                            nearestDistance = distance;
+                        }
+                    }
+                }
+            }
+        }
+        if (nearest >= 0) {
+            weldMap[vertex] = nearest;
+            continue;
+        }
+
+        const key = cellKey(x, y, z);
+        const firsts = firstsByCell.get(key);
+        if (firsts) firsts.push(vertex);
+        else firstsByCell.set(key, [vertex]);
+    }
+    return weldMap;
+}
+
+/** Lists the vertices sharing each weld representative, leaving out unwelded vertices. */
+export function collectWeldGroups(weldMap: Uint32Array): number[][] {
+    const groups = new Map<number, number[]>();
+    for (let vertex = 0; vertex < weldMap.length; vertex += 1) {
+        const first = weldMap[vertex];
+        if (first === vertex) continue;
+        const group = groups.get(first);
+        if (group) group.push(vertex);
+        else groups.set(first, [first, vertex]);
+    }
+    return [...groups.values()];
+}
+
+/** Gives every welded vertex one weight so a mask edit cannot pull a seam apart. */
+export function syncWeldedWeights(
+    weights: Float32Array,
+    weldMap: Uint32Array,
+    mode: BrushMode,
+): void {
+    const vertexCount = Math.min(weights.length, weldMap.length);
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        const first = weldMap[vertex];
+        if (first === vertex) continue;
+        weights[first] =
+            mode === "erase"
+                ? Math.min(weights[first], weights[vertex])
+                : Math.max(weights[first], weights[vertex]);
+    }
+    for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+        weights[vertex] = weights[weldMap[vertex]];
+    }
+}
+
 export function buildVertexAdjacency(
     vertexCount: number,
     indices: ArrayLike<number>,
+    weldGroups: readonly (readonly number[])[] = [],
 ): VertexAdjacency {
     const neighbors = Array.from({ length: Math.max(0, vertexCount) }, () => new Set<number>());
 
@@ -48,6 +152,17 @@ export function buildVertexAdjacency(
         if (b !== c) {
             neighbors[b].add(c);
             neighbors[c].add(b);
+        }
+    }
+
+    for (const group of weldGroups) {
+        const shared = new Set(group);
+        for (const vertex of group) {
+            for (const neighbor of neighbors[vertex]) shared.add(neighbor);
+        }
+        for (const vertex of group) {
+            neighbors[vertex] = new Set(shared);
+            neighbors[vertex].delete(vertex);
         }
     }
 

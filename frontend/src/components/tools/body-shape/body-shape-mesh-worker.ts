@@ -1,8 +1,10 @@
 import { fetchBinaryBytes, fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import {
     buildConnectedComponents,
+    buildPositionWeldMap,
     buildSymmetryMap,
     buildVertexAdjacency,
+    collectWeldGroups,
     computeBoundingCenter,
     computeVertexNormals,
 } from "@shared/body-shape";
@@ -41,6 +43,7 @@ export type BodyShapeMeshProcessResult = {
     originalNormals?: ArrayBuffer;
     componentIds?: ArrayBuffer;
     symmetryMap: ArrayBuffer;
+    weldMap: ArrayBuffer;
     boundingCenter: [number, number, number];
 };
 
@@ -82,7 +85,9 @@ export async function processBodyShapeMesh(
         vertexOffset += segment.mesh.vertexCount;
     }
 
-    const adjacency = indices ? buildVertexAdjacency(vertexCount, indices) : undefined;
+    const weldMap = buildPositionWeldMap(positions);
+    const weldGroups = collectWeldGroups(weldMap);
+    const adjacency = indices ? buildVertexAdjacency(vertexCount, indices, weldGroups) : undefined;
     if (adjacency) validateAdjacency(adjacency, vertexCount);
     return {
         originalPositions: asArrayBuffer(positions),
@@ -91,12 +96,13 @@ export async function processBodyShapeMesh(
         adjacencyOffsets: adjacency ? asArrayBuffer(adjacency.offsets) : undefined,
         adjacencyNeighbors: adjacency ? asArrayBuffer(adjacency.neighbors) : undefined,
         originalNormals: indices
-            ? asArrayBuffer(computeVertexNormals(positions, indices))
+            ? asArrayBuffer(computeVertexNormals(positions, indices, weldGroups))
             : undefined,
         componentIds: adjacency
             ? asArrayBuffer(buildConnectedComponents(vertexCount, adjacency))
             : undefined,
         symmetryMap: asArrayBuffer(buildSymmetryMap(positions, "x", 1e-3)),
+        weldMap: asArrayBuffer(weldMap),
         boundingCenter: computeBoundingCenter(positions),
     };
 }

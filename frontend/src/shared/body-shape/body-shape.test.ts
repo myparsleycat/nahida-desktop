@@ -10,8 +10,11 @@ import {
     applySnorm8VectorCorrection,
     brushFalloff,
     buildConnectedComponents,
+    buildPositionWeldMap,
     buildSymmetryMap,
     buildVertexAdjacency,
+    collectWeldGroups,
+    computeMaskPivots,
     detectSnorm8VectorLayout,
     displacementMetrics,
     computeVertexNormals,
@@ -30,9 +33,141 @@ import {
     selectConnectedComponent,
     shrinkSelectionWeights,
     smoothSelectionWeights,
+    syncWeldedWeights,
     validatePositionBuffer,
     writePositionsIntoBuffer,
 } from "./index";
+
+describe("body-shape seam welding", () => {
+    // Two triangles sharing an edge through split vertices 1/3 and 2/5, plus a flipped copy of the first.
+    const positions = new Float32Array([
+        0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+    ]);
+    const indices = new Uint32Array([0, 1, 2, 3, 4, 5, 6, 8, 7]);
+    const weldMap = buildPositionWeldMap(positions);
+    const weldGroups = collectWeldGroups(weldMap);
+
+    it("welds coincident vertices, tolerating float rounding but not nearby vertices", () => {
+        assert.deepEqual([...weldMap], [0, 1, 2, 1, 4, 2, 0, 1, 2]);
+
+        const rounded = buildPositionWeldMap(
+            new Float32Array([0, 0, 0, 1e-6, 0, 0, 1e-2, 0, 0, 1, 0, 0]),
+        );
+        assert.deepEqual([...rounded], [0, 0, 2, 3]);
+
+        const acrossCells = buildPositionWeldMap(
+            new Float32Array([0, 0, 0, 2.9e-5, 0, 0, 3.1e-5, 0, 0, 1, 0, 0]),
+        );
+        assert.deepEqual([...acrossCells], [0, 1, 1, 3]);
+    });
+
+    it("carries a surface brush across a seam without tearing the mask", () => {
+        const weights = new Float32Array(9);
+        applyGeodesicBrush({
+            positions,
+            adjacency: buildVertexAdjacency(9, indices, weldGroups),
+            weights,
+            seedVertexIndices: [0],
+            radius: 1.2,
+            strength: 1,
+            mode: "paint",
+        });
+        syncWeldedWeights(weights, weldMap, "paint");
+
+        assert.ok(weights[1] > 0);
+        assert.equal(weights[1], weights[3]);
+        assert.equal(weights[2], weights[5]);
+    });
+
+    it("keeps erased weights when syncing duplicates", () => {
+        const weights = new Float32Array([0, 1, 0, 0.25, 0, 0, 0, 1, 0]);
+        syncWeldedWeights(weights, weldMap, "erase");
+        assert.deepEqual([weights[1], weights[3], weights[7]], [0.25, 0.25, 0.25]);
+    });
+
+    it("merges seam normals by facing so a double-sided shell does not cancel", () => {
+        const folded = new Float32Array(positions);
+        folded[14] = 1;
+        const normals = computeVertexNormals(folded, indices, weldGroups);
+        const normalAt = (vertex: number) =>
+            [...normals.subarray(vertex * 3, vertex * 3 + 3)].map((value) => value + 0);
+        assert.deepEqual(normalAt(1), normalAt(3));
+        assert.ok(normalAt(1)[0] < 0);
+        assert.deepEqual(normalAt(7), [0, 0, -1]);
+    });
+});
+
+describe("body-shape mask pivots", () => {
+    function triangles(points: number[][]) {
+        return {
+            positions: new Float32Array(points.flat()),
+            adjacency: buildVertexAdjacency(
+                points.length,
+                new Uint32Array(
+                    points.flatMap((_, index) =>
+                        index % 3 === 0 ? [index, index + 1, index + 2] : [],
+                    ),
+                ),
+            ),
+            weights: new Float32Array(points.length).fill(1),
+        };
+    }
+    const left = [
+        [-2, 0, 0],
+        [-1, 0, 0],
+        [-1.5, 1, 0],
+    ];
+    const right = left.map(([x, y, z]) => [-x, y, z]);
+
+    it("scales separate parts around their own centers", () => {
+        const mesh = triangles([...left, ...right]);
+        const vertexPivots = computeMaskPivots(mesh.positions, mesh.weights, mesh.adjacency);
+        assert.ok(vertexPivots);
+
+        const previewPositions = new Float32Array(mesh.positions.length);
+        applyMultiRegionDeform({
+            originalPositions: mesh.positions,
+            previewPositions,
+            regions: [
+                {
+                    id: "legs",
+                    weights: mesh.weights,
+                    amount: 0.5,
+                    axisScale: [1, 0, 0],
+                    pivot: [0, 0, 0],
+                    vertexPivots,
+                },
+            ],
+        });
+        assert.deepEqual([previewPositions[0], previewPositions[3]], [-2.25, -0.75]);
+        assert.deepEqual([previewPositions[9], previewPositions[12]], [2.25, 0.75]);
+    });
+
+    it("keeps one pivot for parts inside each other's bounds and for a single part", () => {
+        const pocket = [
+            [-1.6, 0.2, 0],
+            [-1.5, 0.2, 0],
+            [-1.55, 0.3, 0],
+        ];
+        const nested = triangles([...left, ...pocket]);
+        assert.equal(
+            computeMaskPivots(nested.positions, nested.weights, nested.adjacency),
+            undefined,
+        );
+
+        const single = triangles(left);
+        assert.equal(
+            computeMaskPivots(single.positions, single.weights, single.adjacency),
+            undefined,
+        );
+    });
+
+    it("ignores unmasked vertices when splitting parts", () => {
+        const mesh = triangles([...left, ...right]);
+        mesh.weights.fill(0, 3);
+        assert.equal(computeMaskPivots(mesh.positions, mesh.weights, mesh.adjacency), undefined);
+    });
+});
 
 describe("body-shape weights", () => {
     it("computes smooth falloff clamped outside radius", () => {

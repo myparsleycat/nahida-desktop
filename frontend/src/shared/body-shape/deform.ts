@@ -48,10 +48,14 @@ export function anisotropicScaleFromOriginal(options: {
     }
 }
 
+/** Duplicates facing further apart than this are the two sides of a double-sided shell. */
+const WELD_MIN_FACING = -0.5;
+
 /** Compute area-weighted vertex normals for an indexed triangle mesh. */
 export function computeVertexNormals(
     positions: Float32Array,
     indices: Uint16Array | Uint32Array,
+    weldGroups: readonly (readonly number[])[] = [],
 ): Float32Array {
     const vertexCount = Math.floor(positions.length / 3);
     const normals = new Float32Array(vertexCount * 3);
@@ -88,6 +92,8 @@ export function computeVertexNormals(
         normals[c + 2] += nz;
     }
 
+    for (const group of weldGroups) mergeNormalsByFacing(normals, group);
+
     for (let i = 0; i < vertexCount; i++) {
         const o = i * 3;
         const length = Math.hypot(normals[o], normals[o + 1], normals[o + 2]);
@@ -98,6 +104,33 @@ export function computeVertexNormals(
     }
 
     return normals;
+}
+
+/** Merges duplicates that face the same way; opposite shell sides must not cancel to zero. */
+function mergeNormalsByFacing(normals: Float32Array, group: readonly number[]): void {
+    const clusters: { sum: [number, number, number]; vertices: number[] }[] = [];
+    for (const vertex of group) {
+        const o = vertex * 3;
+        const normal: [number, number, number] = [normals[o], normals[o + 1], normals[o + 2]];
+        const length = Math.hypot(...normal);
+        const cluster = clusters.find(({ sum }) => {
+            const sumLength = Math.hypot(...sum);
+            if (length === 0 || sumLength === 0) return true;
+            const dot = normal[0] * sum[0] + normal[1] * sum[1] + normal[2] * sum[2];
+            return dot / (length * sumLength) > WELD_MIN_FACING;
+        });
+        if (!cluster) {
+            clusters.push({ sum: normal, vertices: [vertex] });
+            continue;
+        }
+        cluster.vertices.push(vertex);
+        cluster.sum[0] += normal[0];
+        cluster.sum[1] += normal[1];
+        cluster.sum[2] += normal[2];
+    }
+    for (const { sum, vertices } of clusters) {
+        for (const vertex of vertices) normals.set(sum, vertex * 3);
+    }
 }
 
 /** Effective per-vertex scale factors for normal/tangent correction: A_eff = I + w(A - I). */

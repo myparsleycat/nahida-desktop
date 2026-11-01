@@ -623,3 +623,132 @@ func TestRemapBodyShapePathUsesCanonicalPaths(t *testing.T) {
 		t.Fatal("canonical path outside the mod root was accepted")
 	}
 }
+
+func TestExportRotatesWeldedSeamVerticesTogether(t *testing.T) {
+	before := []float32{
+		0, 0, 0, 1, 0, 0, 0, 1, 0,
+		1, 0, 0, 1, 1, 0, 0, 1, 0,
+		0, 0, 0, 1, 0, 0, 0, 1, 0,
+	}
+	after := append([]float32(nil), before...)
+	after[13], after[14] = 1, 1
+	indices := []uint32{0, 1, 2, 3, 4, 5, 6, 8, 7}
+	path := filepath.Join(t.TempDir(), "Position.buf")
+	raw := make([]byte, 9*inlineFrameStride)
+	for vertex := range 9 {
+		base := vertex * inlineFrameStride
+		writeBodyVec3(raw[base:], bodyVec3{
+			float64(before[vertex*3]),
+			float64(before[vertex*3+1]),
+			float64(before[vertex*3+2]),
+		})
+		normal := bodyVec3{0, 0, 1}
+		if vertex >= 6 {
+			normal = bodyVec3{0, 0, -1}
+		}
+		writeBodyVec3(raw[base+inlineNormalOffset:], normal)
+		writeBodyVec3(raw[base+inlineTangentOffset:], bodyVec3{1, 0, 0})
+		binary.LittleEndian.PutUint32(raw[base+inlineTangentOffset+12:], math.Float32bits(1))
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := exportBodyShapeMesh(BodyShapeExportMesh{
+		PositionPath:   path,
+		PositionStride: inlineFrameStride,
+		Positions:      after,
+		Indices:        indices,
+	}, func(message string) { t.Fatal(message) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalAt := func(vertex int) bodyVec3 {
+		return readBodyVec3(written[vertex*inlineFrameStride+inlineNormalOffset:])
+	}
+
+	seam := normalAt(1)
+	assertFrameVec(t, "seam duplicate", normalAt(3), seam, 1e-5)
+	if seam[2] > 0.99 {
+		t.Fatalf("seam normal did not rotate: %v", seam)
+	}
+	assertFrameVec(t, "flipped shell", normalAt(7), bodyVec3{0, 0, -1}, 1e-5)
+}
+
+func TestExportSkipsOnlyInvalidInlineFrames(t *testing.T) {
+	const triangles, invalidVertex = 150, 4
+	before := make([]float32, 0, triangles*9)
+	after := make([]float32, 0, triangles*9)
+	indices := make([]uint32, 0, triangles*3)
+	for triangle := range triangles {
+		for index := range 9 {
+			offset := float32(0)
+			if index%3 == 0 {
+				offset = float32(triangle * 2)
+			}
+			before = append(before, frameTestBefore[index]+offset)
+			after = append(after, frameTestRotated[index]+offset)
+		}
+		first := uint32(triangle * 3)
+		indices = append(indices, first, first+1, first+2)
+	}
+	path := filepath.Join(t.TempDir(), "Position.buf")
+	raw := make([]byte, len(before)/3*inlineFrameStride)
+	for vertex := range len(before) / 3 {
+		base := vertex * inlineFrameStride
+		writeBodyVec3(raw[base:], bodyVec3{
+			float64(before[vertex*3]),
+			float64(before[vertex*3+1]),
+			float64(before[vertex*3+2]),
+		})
+		normal := bodyVec3{0, 0, 1}
+		if vertex == invalidVertex {
+			normal = bodyVec3{0, 0, 0.5}
+		}
+		writeBodyVec3(raw[base+inlineNormalOffset:], normal)
+		writeBodyVec3(raw[base+inlineTangentOffset:], bodyVec3{1, 0, 0})
+		binary.LittleEndian.PutUint32(raw[base+inlineTangentOffset+12:], math.Float32bits(1))
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := exportBodyShapeMesh(BodyShapeExportMesh{
+		PositionPath:   path,
+		PositionStride: inlineFrameStride,
+		Positions:      after,
+		Indices:        indices,
+	}, func(string) {})
+	if err != nil || !result.InlineFrames {
+		t.Fatalf("result = %#v, %v", result, err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalAt := func(vertex int) bodyVec3 {
+		return readBodyVec3(written[vertex*inlineFrameStride+inlineNormalOffset:])
+	}
+	assertFrameVec(t, "valid frame", normalAt(invalidVertex+1), bodyVec3{0, -1, 0}, 1e-5)
+	assertFrameVec(t, "invalid frame", normalAt(invalidVertex), bodyVec3{0, 0, 0.5}, 1e-5)
+}
+
+func TestBodyNormalClustersWeldAcrossGridCells(t *testing.T) {
+	positions := []float32{0, 0, 0, 2.9e-5, 0, 0, 3.1e-5, 0, 0, 1e-2, 0, 0, 1, 0, 0}
+	normals := make([]bodyVec3, 5)
+	for vertex := range normals {
+		normals[vertex] = bodyVec3{0, 0, 1}
+	}
+
+	clusters := bodyNormalClusters(positions, normals)
+	if clusters[2] != clusters[1] {
+		t.Fatalf("clusters = %v, duplicates across a cell boundary stayed apart", clusters)
+	}
+	if clusters[3] != 3 || clusters[4] != 4 {
+		t.Fatalf("clusters = %v, distinct vertices were welded", clusters)
+	}
+}

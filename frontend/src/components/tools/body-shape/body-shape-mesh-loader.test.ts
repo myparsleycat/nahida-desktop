@@ -38,6 +38,7 @@ function result(): BodyShapeMeshProcessResult {
         originalPositions: new Float32Array([1, 2, 3]).buffer,
         segments: [{ meshId: "mesh", vertexOffset: 0, vertexCount: 1, blendStride: 32 }],
         symmetryMap: new Int32Array([0]).buffer,
+        weldMap: new Uint32Array([0]).buffer,
         boundingCenter: [1, 2, 3],
     };
 }

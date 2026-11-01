@@ -48,6 +48,7 @@ import {
   applyBrushStroke,
   applyGeodesicBrush,
   applyMultiRegionDeform,
+  computeMaskPivots,
   computeMeshBounds,
   computeRegionPivot,
   extractBoneWeights,
@@ -56,6 +57,7 @@ import {
   selectConnectedComponent,
   shrinkSelectionWeights,
   smoothSelectionWeights,
+  syncWeldedWeights,
   type ActiveRegionDeform,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
@@ -200,6 +202,7 @@ export default function BodyShapeTool({
   const [showOriginal, setShowOriginal] = useState(false);
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
+  const [maskVersion, setMaskVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
 
   /* Brush state */
@@ -296,8 +299,26 @@ export default function BodyShapeTool({
 
   const hasSelection = useMemo(
     () => selectedMesh?.selectionWeights.some((weight) => weight > 0) ?? false,
-    [selectedMesh, weightVersion],
+    [selectedMesh, maskVersion],
   );
+
+  const selectionPivots = useMemo(() => {
+    if (!selectedMesh || !hasSelection) return null;
+    return {
+      pivot: computeRegionPivot(
+        selectedMesh.originalPositions,
+        selectedMesh.selectionWeights,
+        selectedMesh.boundsCenter,
+      ),
+      vertexPivots: selectedMesh.adjacency
+        ? computeMaskPivots(
+            selectedMesh.originalPositions,
+            selectedMesh.selectionWeights,
+            selectedMesh.adjacency,
+          )
+        : undefined,
+    };
+  }, [selectedMesh, hasSelection, maskVersion]);
 
   const meshExtent = useMemo(() => {
     if (!selectedMesh) return 1;
@@ -306,7 +327,7 @@ export default function BodyShapeTool({
   }, [selectedMesh]);
 
   const activeRegions: ActiveRegionDeform[] = useMemo(() => {
-    if (!selectedMesh || !hasSelection) return [];
+    if (!selectedMesh || !selectionPivots) return [];
     const isTranslate = deformOperation === "translate";
     return [
       {
@@ -318,14 +339,16 @@ export default function BodyShapeTool({
         normals: selectedMesh.originalNormals,
         translation: unifiedControl.translation,
         taperFactor: unifiedControl.taperFactor,
-        pivot: computeRegionPivot(
-          selectedMesh.originalPositions,
-          selectedMesh.selectionWeights,
-          selectedMesh.boundsCenter,
-        ),
+        pivot: selectionPivots.pivot,
+        vertexPivots: selectionPivots.vertexPivots,
       },
     ];
-  }, [selectedMesh, hasSelection, unifiedControl, deformOperation, weightVersion]);
+  }, [selectedMesh, selectionPivots, unifiedControl, deformOperation, weightVersion]);
+
+  const bumpMaskVersion = () => {
+    setMaskVersion((version) => version + 1);
+    setWeightVersion((version) => version + 1);
+  };
 
   const commitSelectionHistory = (before: Float32Array) => {
     if (!selectedMesh) return;
@@ -366,7 +389,8 @@ export default function BodyShapeTool({
             selectedMesh.symmetryMap,
           );
         }
-        setWeightVersion((version) => version + 1);
+        syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, brushMode);
+        bumpMaskVersion();
       }
       return;
     }
@@ -414,7 +438,8 @@ export default function BodyShapeTool({
         selectedMesh.symmetryMap,
       );
     }
-    setWeightVersion((version) => version + 1);
+    syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, brushMode);
+    bumpMaskVersion();
   };
 
   const handleBrushStrokeStart = () => {
@@ -434,31 +459,34 @@ export default function BodyShapeTool({
     selectedMesh.selectionWeights.fill(0);
     setSelectedKeys([]);
     commitSelectionHistory(before);
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const smoothSelection = () => {
     if (!selectedMesh?.adjacency) return;
     const before = new Float32Array(selectedMesh.selectionWeights);
     smoothSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 0.5, 2);
+    syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, "paint");
     commitSelectionHistory(before);
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const growSelection = () => {
     if (!selectedMesh?.adjacency) return;
     const before = new Float32Array(selectedMesh.selectionWeights);
     growSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 1.0, 1);
+    syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, "paint");
     commitSelectionHistory(before);
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const shrinkSelection = () => {
     if (!selectedMesh?.adjacency) return;
     const before = new Float32Array(selectedMesh.selectionWeights);
     shrinkSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 1.0, 1);
+    syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, "erase");
     commitSelectionHistory(before);
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const undoSelection = () => {
@@ -469,7 +497,7 @@ export default function BodyShapeTool({
     selectionHistoryRef.current.redo.push(entry);
     setSelectedKeys([]);
     updateHistoryState();
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const redoSelection = () => {
@@ -480,7 +508,7 @@ export default function BodyShapeTool({
     selectionHistoryRef.current.undo.push(entry);
     setSelectedKeys([]);
     updateHistoryState();
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const hasPaintedWeights = hasSelection;
@@ -544,8 +572,9 @@ export default function BodyShapeTool({
       }
     }
     selectedMesh.selectionWeights.set(newWeights);
+    syncWeldedWeights(selectedMesh.selectionWeights, selectedMesh.weldMap, "paint");
     commitSelectionHistory(before);
-    setWeightVersion((version) => version + 1);
+    bumpMaskVersion();
   };
 
   const handleItemHighlighted = (item: { key: string; label: string } | undefined) => {

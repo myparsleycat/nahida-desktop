@@ -43,6 +43,7 @@ export type LoadedMesh = {
     originalNormals?: Float32Array;
     componentIds?: Uint32Array;
     symmetryMap?: Int32Array;
+    weldMap: Uint32Array;
     boundsCenter: [number, number, number];
     geodesicWorkspace: GeodesicBrushWorkspace;
 };
@@ -123,6 +124,7 @@ async function loadBodyShapeMesh(
             : undefined,
         componentIds: result.componentIds ? new Uint32Array(result.componentIds) : undefined,
         symmetryMap: result.symmetryMap ? new Int32Array(result.symmetryMap) : undefined,
+        weldMap: new Uint32Array(result.weldMap),
         boundsCenter: result.boundingCenter,
         geodesicWorkspace: createGeodesicBrushWorkspace(vertexCount),
     };

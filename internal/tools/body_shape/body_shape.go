@@ -28,6 +28,12 @@ const (
 	inlineNormalOffset   = 12
 	inlineTangentOffset  = 24
 	inlineFrameTolerance = 0.05
+	// Measured on local mods: frame meshes reach 0.03% invalid, non-frame stride 40 data reaches 100%.
+	inlineFrameMaxInvalid = 0.01
+	// Seam duplicates can differ by float rounding; the cell is far below any modeled detail.
+	bodyWeldCellRatio = 2e-5
+	// Duplicates facing further apart than this are the two sides of a double-sided shell.
+	bodyWeldMinFacing = -0.5
 )
 
 var (
@@ -1034,9 +1040,98 @@ func bodyVertexNormals(positions []float32, indices []uint32) []bodyVec3 {
 	return normals
 }
 
+// bodyNormalClusters maps each vertex to the first vertex sharing its position and facing. Vertices
+// split at a seam must rotate together, while the two sides of a double-sided shell must not cancel.
+func bodyNormalClusters(positions []float32, normals []bodyVec3) []int {
+	isFinite := func(vertex int) bool {
+		for _, value := range positions[vertex*3 : vertex*3+3] {
+			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+				return false
+			}
+		}
+		return true
+	}
+	low := bodyVec3{math.Inf(1), math.Inf(1), math.Inf(1)}
+	high := bodyVec3{math.Inf(-1), math.Inf(-1), math.Inf(-1)}
+	for vertex := range normals {
+		if !isFinite(vertex) {
+			continue
+		}
+		for axis := range 3 {
+			low[axis] = min(low[axis], float64(positions[vertex*3+axis]))
+			high[axis] = max(high[axis], float64(positions[vertex*3+axis]))
+		}
+	}
+	cell := max(max(high[0]-low[0], high[1]-low[1], high[2]-low[2])*bodyWeldCellRatio, math.SmallestNonzeroFloat64)
+
+	type cluster struct {
+		first    int
+		position bodyVec3
+		sum      bodyVec3
+	}
+	groups := make(map[uint64][]*cluster)
+	cellKey := func(x, y, z int) uint64 { return uint64(x)<<32 | uint64(y)<<16 | uint64(z) }
+	clusters := make([]int, len(normals))
+	for vertex, normal := range normals {
+		clusters[vertex] = vertex
+		if !isFinite(vertex) {
+			continue
+		}
+		position := bodyVec3{
+			float64(positions[vertex*3]),
+			float64(positions[vertex*3+1]),
+			float64(positions[vertex*3+2]),
+		}
+		x := int(math.Round((position[0] - low[0]) / cell))
+		y := int(math.Round((position[1] - low[1]) / cell))
+		z := int(math.Round((position[2] - low[2]) / cell))
+		direction, directed := normal.normalized()
+
+		// Twins differing by rounding can fall on either side of a cell boundary.
+		var nearest *cluster
+		nearestDistance := cell * cell
+		for cx := max(x-1, 0); cx <= x+1; cx++ {
+			for cy := max(y-1, 0); cy <= y+1; cy++ {
+				for cz := max(z-1, 0); cz <= z+1; cz++ {
+					for _, candidate := range groups[cellKey(cx, cy, cz)] {
+						delta := candidate.position.add(position.scale(-1))
+						if distance := delta.dot(delta); distance > nearestDistance {
+							continue
+						} else if facing, faced := candidate.sum.normalized(); !directed || !faced ||
+							facing.dot(direction) > bodyWeldMinFacing {
+							nearest, nearestDistance = candidate, distance
+						}
+					}
+				}
+			}
+		}
+		if nearest == nil {
+			key := cellKey(x, y, z)
+			groups[key] = append(groups[key], &cluster{first: vertex, position: position, sum: normal})
+			continue
+		}
+		clusters[vertex] = nearest.first
+		nearest.sum = nearest.sum.add(normal)
+	}
+	return clusters
+}
+
+func mergeClusteredNormals(normals []bodyVec3, clusters []int) []bodyVec3 {
+	merged := make([]bodyVec3, len(normals))
+	for vertex, first := range clusters {
+		merged[first] = merged[first].add(normals[vertex])
+	}
+	for vertex, first := range clusters {
+		merged[vertex] = merged[first]
+	}
+	return merged
+}
+
 func bodyFrameRotations(before, after []float32, indices []uint32) []bodyFrameRotation {
 	beforeNormals := bodyVertexNormals(before, indices)
-	afterNormals := bodyVertexNormals(after, indices)
+	clusters := bodyNormalClusters(before, beforeNormals)
+	afterNormals := mergeClusteredNormals(bodyVertexNormals(after, indices), clusters)
+	beforeNormals = mergeClusteredNormals(beforeNormals, clusters)
 	rotations := make([]bodyFrameRotation, len(beforeNormals))
 	for vertex := range rotations {
 		from, fromOK := beforeNormals[vertex].normalized()
@@ -1053,24 +1148,30 @@ func bodyFrameRotations(before, after []float32, indices []uint32) []bodyFrameRo
 	return rotations
 }
 
-func hasInlineFrames(data []byte, stride int) bool {
+func isInlineFrame(vertex []byte) bool {
 	unit := func(value float64) bool { return math.Abs(value-1) <= inlineFrameTolerance }
-	for base := 0; base+stride <= len(data); base += stride {
-		normal := readBodyVec3(data[base+inlineNormalOffset:])
-		tangent := readBodyVec3(data[base+inlineTangentOffset:])
-		handedness := float64(math.Float32frombits(binary.LittleEndian.Uint32(data[base+inlineTangentOffset+12:])))
-		if !unit(math.Sqrt(normal.dot(normal))) || !unit(math.Sqrt(tangent.dot(tangent))) ||
-			!unit(math.Abs(handedness)) {
-			return false
+	normal := readBodyVec3(vertex[inlineNormalOffset:])
+	tangent := readBodyVec3(vertex[inlineTangentOffset:])
+	handedness := float64(math.Float32frombits(binary.LittleEndian.Uint32(vertex[inlineTangentOffset+12:])))
+	return unit(math.Sqrt(normal.dot(normal))) && unit(math.Sqrt(tangent.dot(tangent))) && unit(math.Abs(handedness))
+}
+
+// hasInlineFrames tells a normal/tangent layout from other stride 40 data. Real meshes carry a few
+// degenerate frames, so the decision cannot depend on a single vertex.
+func hasInlineFrames(data []byte, stride int) bool {
+	vertices, invalid := len(data)/stride, 0
+	for vertex := range vertices {
+		if !isInlineFrame(data[vertex*stride:]) {
+			invalid++
 		}
 	}
-	return true
+	return vertices > 0 && float64(invalid) <= float64(vertices)*inlineFrameMaxInvalid
 }
 
 func rewriteInlineFrames(data []byte, stride int, rotations []bodyFrameRotation) {
 	for vertex, rotation := range rotations {
 		base := vertex * stride
-		if !rotation.active || base+stride > len(data) {
+		if !rotation.active || base+stride > len(data) || !isInlineFrame(data[base:]) {
 			continue
 		}
 		normal, tangent, ok := rotation.rebase(
