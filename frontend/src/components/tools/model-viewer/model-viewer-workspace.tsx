@@ -385,12 +385,20 @@ export function ModelViewerWorkspace({
         ),
       );
 
-      if (results.some((result) => (result.updatedVariables ?? []).length > 0)) {
-        toast.success(t("page.tools.model_viewer.toast.save_to_ini_success"));
+      const hasUpdated = results.some((result) => (result.updatedVariables ?? []).length > 0);
+      const hasRepaired = results.some((result) => (result.repairedVariables ?? []).length > 0);
+      if (hasUpdated) {
+        toast.success(
+          t(
+            hasRepaired
+              ? "page.tools.model_viewer.toast.save_to_ini_success_repaired"
+              : "page.tools.model_viewer.toast.save_to_ini_success",
+          ),
+        );
         return;
       }
 
-      if (results.some((result) => (result.repairedVariables ?? []).length > 0)) {
+      if (hasRepaired) {
         toast.warning(t("page.tools.model_viewer.toast.save_to_ini_repaired"));
         return;
       }

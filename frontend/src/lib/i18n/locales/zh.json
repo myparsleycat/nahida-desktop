@@ -1495,6 +1495,7 @@
           "save_to_ini_success": "已将当前切换状态保存到 INI",
           "save_to_ini_no_changes": "没有找到可保存的 persist 变量",
           "save_to_ini_repaired": "已修复 INI 中拼写错误的 persist 声明，未保存开关值",
+          "save_to_ini_success_repaired": "已将开关值保存到 INI，并修复了拼写错误的 persist 声明",
           "save_to_ini_error": "保存到 INI 失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",

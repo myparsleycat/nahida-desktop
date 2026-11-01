@@ -93,6 +93,8 @@ func TestFingerprintIgnoresWhatASaveRewrites(t *testing.T) {
 	for _, input := range []string{
 		"[Constants]\npersist global $Toggle = 0\n",
 		"[Constants]\nglobal persis $Toggle = 1\n",
+		"[Constants]\n  persist global $Toggle=0\n",
+		"[Constants]\nglobal persist $Toggle\n",
 	} {
 		if got := fingerprintTogglePersistINI(input); got != want {
 			t.Fatalf("fingerprint of %q differs from the rewritten declaration", input)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -398,12 +397,6 @@ func (l *TogglePersistLearner) evaluateLearning(file *persistFileState, at int64
 	return newlyLearned
 }
 
-var (
-	persistValueRE = regexp.MustCompile(`(?i)^(\s*(?:global\s+persist?|persist\s+global)\s+\$[^=]+\s*=\s*).*$`)
-	// A write rewrites these flag spellings to "global persist", which must not look like an edit of the INI.
-	persistFlagVariantRE = regexp.MustCompile(`(?i)^(\s*)(?:global\s+persis|persist\s+global)\s+`)
-)
-
 func fingerprintTogglePersistINI(content string) string {
 	normalized := strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(normalized, "\n")
@@ -414,9 +407,9 @@ func fingerprintTogglePersistINI(content string) string {
 		if strings.HasPrefix(trimmed, "[") {
 			inConstants = strings.EqualFold(trimmed, "[Constants]")
 		}
-		if inConstants && persistDeclarationRE.MatchString(trimmed) {
-			masked := persistValueRE.ReplaceAllString(line, "${1}<persist-value>")
-			out = append(out, persistFlagVariantRE.ReplaceAllString(masked, "${1}global persist "))
+		// A save rewrites a declaration to this form, which must not look like an edit of the INI.
+		if match := persistDeclarationRE.FindStringSubmatch(trimmed); inConstants && match != nil {
+			out = append(out, "global persist $"+match[2]+" = <persist-value>")
 			continue
 		}
 		out = append(out, line)
