@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -207,7 +209,7 @@ func TestModelViewerPositionOverridesPruneMutuallyExclusiveMeshes(t *testing.T) 
 		collectModelViewerResources(sections),
 		dir,
 		variables,
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +382,7 @@ func TestReadModelViewerShapePositionsMatchesIdentityAndCompactSources(t *testin
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	identity, err := readModelViewerShapePositions(cache, path, 40, nil, 4)
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +432,7 @@ stride = 40`)
 		collectModelViewerResources(sections),
 		dir,
 		variables,
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +484,7 @@ stride = 40`)
 		collectModelViewerResources(sections),
 		dir,
 		variables,
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -530,22 +532,61 @@ func TestModelViewerSourceIndicesPayloadOmitsIdentityAndPreservesCompactMapping(
 	}
 }
 
-func TestCleanupModelViewerReleasesMemoryOnlyAfterLastSession(t *testing.T) {
+func TestModelViewerMemoryReleaseWaitsForIdleViewer(t *testing.T) {
 	protocol := infra.NewProtocol()
 	service := NewWithOptions(Options{Protocol: protocol})
 	first, second := protocol.CreateMemorySession(), protocol.CreateMemorySession()
 	service.modelViewerSessions[first] = &modelViewerSession{}
 	service.modelViewerSessions[second] = &modelViewerSession{}
-	previous := modelViewerFreeOSMemory
-	called := 0
-	modelViewerFreeOSMemory = func() { called++ }
-	t.Cleanup(func() { modelViewerFreeOSMemory = previous })
-
-	if removed, err := service.CleanupModelViewer(context.Background(), first); err != nil || !removed || called != 0 {
-		t.Fatalf("first cleanup = removed %v, err %v, releases %d", removed, err, called)
+	released := 0
+	var pending []func()
+	service.freeOSMemory = func() { released++ }
+	service.afterFunc = func(_ time.Duration, release func()) func() bool {
+		pending = append(pending, release)
+		return func() bool { return true }
 	}
-	if removed, err := service.CleanupModelViewer(context.Background(), second); err != nil || !removed || called != 1 {
-		t.Fatalf("last cleanup = removed %v, err %v, releases %d", removed, err, called)
+
+	if removed, err := service.CleanupModelViewer(context.Background(), first); err != nil || !removed ||
+		len(pending) != 0 {
+		t.Fatalf("first cleanup = removed %v, err %v, scheduled %d", removed, err, len(pending))
+	}
+	if removed, err := service.CleanupModelViewer(context.Background(), second); err != nil || !removed ||
+		len(pending) != 1 || released != 0 {
+		t.Fatalf("last cleanup = removed %v, err %v, scheduled %d, releases %d", removed, err, len(pending), released)
+	}
+
+	// A load refused for a closed window registers nothing, so it must not void the release.
+	service.modelViewerClosedWindows[1] = true
+	if _, _, err := service.beginModelViewerLoad(context.Background(), 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("closed window load err = %v", err)
+	}
+	pending[0]()
+	if released != 1 {
+		t.Fatalf("released %d times after a refused load", released)
+	}
+
+	// A load starting before a timer fires keeps the heap it is about to reuse.
+	service.modelViewerSessions[first] = &modelViewerSession{}
+	if _, err := service.CleanupModelViewer(context.Background(), first); err != nil || len(pending) != 2 {
+		t.Fatalf("cleanup err %v, scheduled %d", err, len(pending))
+	}
+	_, endLoad, err := service.beginModelViewerLoad(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending[1]()
+	if released != 1 {
+		t.Fatalf("released %d times during a load", released)
+	}
+
+	// A load that ends without a session leaves the viewer idle again.
+	endLoad()
+	if len(pending) != 3 {
+		t.Fatalf("scheduled %d releases after the load ended", len(pending))
+	}
+	pending[2]()
+	if released != 2 {
+		t.Fatalf("released %d times once idle", released)
 	}
 }
 

@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,8 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"nahida.live/desktop/internal/diskio"
 )
 
 type modelViewerResource struct {
@@ -406,14 +409,23 @@ type modelViewerInterleavedBuffers struct {
 }
 
 type modelViewerBufferCache struct {
+	// ctx is the load the cache belongs to; reads stop when it is cancelled.
+	ctx             context.Context
 	mu              sync.Mutex
 	geometryPending map[string]*modelViewerGeometryPending
+	filesPending    map[string]*modelViewerFilePending
 	files           map[string][]byte
 	indices         map[string][]uint32
 	geometries      map[string]*modelViewerGeometry
 	pairs           map[string]modelViewerPairedBuffers
 	fmts            map[string]modelViewerFmtCacheEntry
 	interleaved     map[string]modelViewerInterleavedBuffers
+}
+
+type modelViewerFilePending struct {
+	done chan struct{}
+	data []byte
+	err  error
 }
 
 type modelViewerGeometryPending struct {
@@ -430,8 +442,9 @@ type modelViewerPairedBuffers struct {
 	hasFrame bool
 }
 
-func newModelViewerBufferCache() *modelViewerBufferCache {
+func newModelViewerBufferCache(ctx context.Context) *modelViewerBufferCache {
 	return &modelViewerBufferCache{
+		ctx:         ctx,
 		files:       make(map[string][]byte),
 		indices:     make(map[string][]uint32),
 		geometries:  make(map[string]*modelViewerGeometry),
@@ -535,6 +548,8 @@ func (c *modelViewerBufferCache) geometry(
 	return geometry, err
 }
 
+// read reads each file once per load; concurrent misses on one path wait
+// for the first read instead of reading it again under another disk slot.
 func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
 	key := strings.ToLower(path)
 	c.mu.Lock()
@@ -542,15 +557,36 @@ func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
 		c.mu.Unlock()
 		return data, nil
 	}
+	if pending := c.filesPending[key]; pending != nil {
+		c.mu.Unlock()
+		<-pending.done
+		return pending.data, pending.err
+	}
+	if c.filesPending == nil {
+		c.filesPending = make(map[string]*modelViewerFilePending)
+	}
+	pending := &modelViewerFilePending{done: make(chan struct{})}
+	c.filesPending[key] = pending
 	c.mu.Unlock()
-	data, err := os.ReadFile(path)
+	data, err := c.readFile(path)
+	c.mu.Lock()
+	if err == nil {
+		c.files[key] = data
+	}
+	pending.data, pending.err = data, err
+	delete(c.filesPending, key)
+	close(pending.done)
+	c.mu.Unlock()
+	return data, err
+}
+
+func (c *modelViewerBufferCache) readFile(path string) ([]byte, error) {
+	release, err := diskio.Acquire(c.ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	c.files[key] = data
-	c.mu.Unlock()
-	return data, nil
+	defer release()
+	return os.ReadFile(path)
 }
 
 // decodeIndices caches the decoded index buffer per file+format so draws that

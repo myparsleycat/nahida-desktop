@@ -13,7 +13,7 @@ import (
 )
 
 func TestModelViewerGeometryConcurrentRequestsShareResult(t *testing.T) {
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	var calls atomic.Int32
 	want := &modelViewerGeometry{Position: []float32{1, 2, 3}}
 	var workers sync.WaitGroup

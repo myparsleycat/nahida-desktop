@@ -3,7 +3,6 @@ package modelviewer
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -35,6 +34,7 @@ func (t *Service) beginModelViewerLoad(
 		cancel()
 		return nil, nil, context.Canceled
 	}
+	t.cancelModelViewerMemoryReleaseLocked()
 	if t.modelViewerLoads[windowID] == nil {
 		t.modelViewerLoads[windowID] = make(map[*modelViewerLoad]struct{})
 	}
@@ -47,6 +47,7 @@ func (t *Service) beginModelViewerLoad(
 				delete(t.modelViewerLoads, windowID)
 			}
 		}
+		t.scheduleModelViewerMemoryReleaseLocked(fmt.Sprintf("load ended without a session, window=%d", windowID))
 		t.modelViewerMu.Unlock()
 		cancel()
 	}, nil
@@ -80,7 +81,53 @@ func (t *Service) CleanupModelViewerWindow(windowID uint) {
 	}
 }
 
-var modelViewerFreeOSMemory = debug.FreeOSMemory
+// modelViewerMemoryReleaseDelay lets the next load of a preview batch start
+// before memory is returned to the OS, so a busy viewer is not collected per load.
+const modelViewerMemoryReleaseDelay = 3 * time.Second
+
+// scheduleModelViewerMemoryReleaseLocked must be called with modelViewerMu held.
+func (t *Service) scheduleModelViewerMemoryReleaseLocked(trigger string) {
+	if t.modelViewerShutdown || len(t.modelViewerSessions) > 0 || len(t.modelViewerLoads) > 0 {
+		return
+	}
+	t.cancelModelViewerMemoryReleaseLocked()
+	generation := t.modelViewerReleaseGeneration
+	t.modelViewerStopRelease = t.afterFunc(modelViewerMemoryReleaseDelay, func() {
+		t.releaseModelViewerMemory(generation, trigger)
+	})
+}
+
+// cancelModelViewerMemoryReleaseLocked must be called with modelViewerMu held.
+// The generation also voids a release whose timer already fired.
+func (t *Service) cancelModelViewerMemoryReleaseLocked() {
+	t.modelViewerReleaseGeneration++
+	if t.modelViewerStopRelease != nil {
+		t.modelViewerStopRelease()
+		t.modelViewerStopRelease = nil
+	}
+}
+
+func (t *Service) releaseModelViewerMemory(generation uint64, trigger string) {
+	t.modelViewerMu.Lock()
+	if generation != t.modelViewerReleaseGeneration ||
+		len(t.modelViewerSessions) > 0 ||
+		len(t.modelViewerLoads) > 0 {
+		t.modelViewerMu.Unlock()
+		return
+	}
+	t.modelViewerStopRelease = nil
+	t.modelViewerMu.Unlock()
+	startedAt := time.Now()
+	t.freeOSMemory()
+	t.log.Info(
+		fmt.Sprintf(
+			"Released model viewer memory in %dms (%s)",
+			time.Since(startedAt).Milliseconds(),
+			trigger,
+		),
+		"StaticGlb.cleanupViewer",
+	)
+}
 
 func (t *Service) CleanupModelViewer(_ context.Context, memorySessionID string) (bool, error) {
 	memorySessionID = strings.TrimSpace(memorySessionID)
@@ -95,28 +142,20 @@ func (t *Service) CleanupModelViewer(_ context.Context, memorySessionID string) 
 		}
 		delete(t.modelViewerSessions, memorySessionID)
 	}
-	lastSession := exists && len(t.modelViewerSessions) == 0
+	if exists {
+		t.scheduleModelViewerMemoryReleaseLocked("session=" + memorySessionID)
+	}
 	t.modelViewerMu.Unlock()
 	if exists {
 		t.protocol.CleanupMemorySession(memorySessionID)
-	}
-	if lastSession {
-		startedAt := time.Now()
-		modelViewerFreeOSMemory()
-		t.log.Info(
-			fmt.Sprintf(
-				"Released model viewer memory in %dms (session=%s)",
-				time.Since(startedAt).Milliseconds(),
-				memorySessionID,
-			),
-			"StaticGlb.cleanupViewer",
-		)
 	}
 	return exists, nil
 }
 
 func (t *Service) shutdownModelViewer() error {
 	t.modelViewerMu.Lock()
+	t.modelViewerShutdown = true
+	t.cancelModelViewerMemoryReleaseLocked()
 	for windowID := range t.modelViewerLoads {
 		t.cancelModelViewerLoadsLocked(windowID)
 	}

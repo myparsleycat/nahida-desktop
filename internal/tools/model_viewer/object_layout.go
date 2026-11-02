@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -313,7 +315,7 @@ func lookupModelViewerFamilyTexcoord(
 	}
 	for _, filename := range modelViewerSiblingTexcoordFilenames(position) {
 		path, err := resolveModelViewerResourcePath(modDir, modDir, filename)
-		if err != nil || !modelViewerPathWithin(modDir, path) {
+		if err != nil || !platform.SameOrChildPath(modDir, path) {
 			continue
 		}
 		info, err := os.Stat(path)
@@ -342,7 +344,7 @@ func modelViewerResourceVertexCount(modDir string, resource modelViewerResource,
 		return 0, 0, false
 	}
 	path, err := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
-	if err != nil || !modelViewerPathWithin(modDir, path) {
+	if err != nil || !platform.SameOrChildPath(modDir, path) {
 		return 0, 0, false
 	}
 	info, err := os.Stat(path)
@@ -772,7 +774,7 @@ func resolveModelViewerPackedTexcoordOffset(
 	}
 	for _, filename := range modelViewerSiblingTexcoordFilenames(position) {
 		resolved, err := resolveModelViewerResourcePath(modDir, modDir, filename)
-		if err != nil || !modelViewerPathWithin(modDir, resolved) {
+		if err != nil || !platform.SameOrChildPath(modDir, resolved) {
 			continue
 		}
 		info, err := os.Stat(resolved)

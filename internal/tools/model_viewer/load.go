@@ -407,7 +407,7 @@ func (t *Service) prepareModelViewerGeometry(
 	budget *modelViewerLoadBudget,
 ) (*modelViewerPreparedGeometry, error) {
 	prepared := &modelViewerPreparedGeometry{
-		cache:             newModelViewerBufferCache(),
+		cache:             newModelViewerBufferCache(ctx),
 		variableNames:     make(map[string]modelViewerVariableName),
 		timing:            &modelViewerMeshBuildTiming{},
 		computeDeformers:  []ModelViewerComputeDeformerTransport{},

@@ -217,7 +217,7 @@ func TestModelViewerObjectBufferRejectsParentDirectoryTraversal(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Remove(outside) })
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	position := modelViewerResource{
 		Name:     "ResourceStovePosition",
 		Filename: `..\` + outsideName,
@@ -489,7 +489,7 @@ func TestModelViewerDeclaredTexcoordOffsetSurvivesStride24Guess(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Cafe.buf"), position, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	declared := modelViewerDrawVertexSource{
 		kind: modelViewerDrawVertexPacked,
 		position: modelViewerResource{

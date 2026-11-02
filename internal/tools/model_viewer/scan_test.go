@@ -81,7 +81,7 @@ filename = red.png
 [ResourceBlueDiffuse]
 filename = blue.png
 ` + viewerBodyResources)
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	timing := &modelViewerMeshBuildTiming{}
 	meshes, err := buildModelViewerDirectScannedMeshesAt(
@@ -139,7 +139,7 @@ vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = 3, 0, 3
 ` + viewerBodyResources)
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	timing := &modelViewerMeshBuildTiming{}
 	meshes, err := buildModelViewerDirectScannedMeshesAt(
@@ -201,7 +201,7 @@ vb0 = ResourcePos
 vb1 = ResourceTc
 drawindexed = auto
 ` + viewerBodyResources)
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	meshes, err := buildModelViewerDirectScannedMeshesAt(filepath.Join(dir, "mod.ini"), dir, sections, nil, cache, nil)
 	if err != nil {
@@ -295,7 +295,7 @@ format = DXGI_FORMAT_R32_UINT
 filename = BodyA.ib
 `)
 	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 
 	scanned, err := buildModelViewerDirectScannedMeshesPrepared(
@@ -348,7 +348,7 @@ drawindexed = 3, 0, 0
 filename = body.ib
 format = DXGI_FORMAT_R16_UINT
 ` + viewerBodyResources)
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	timing := &modelViewerMeshBuildTiming{}
 	meshes, err := buildModelViewerDirectScannedMeshesAt(
@@ -413,7 +413,7 @@ vb1 = ResourceTc
 filename = body.ib
 format = DXGI_FORMAT_R16_UINT
 ` + viewerBodyResources)
-			cache := newModelViewerBufferCache()
+			cache := newModelViewerBufferCache(context.Background())
 			defer cache.releaseAll()
 			timing := &modelViewerMeshBuildTiming{}
 			meshes, err := buildModelViewerDirectScannedMeshesAt(
@@ -570,7 +570,7 @@ stride = 16`
 		available[modelViewerNormalizeKey(name)] = modelViewerTexturePayload{Key: name}
 	}
 	sections := parseModINI(iniText)
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	meshes, err := buildModelViewerDirectScannedMeshesAt(
 		iniPath,
@@ -668,7 +668,7 @@ stride = 20`
 		dir,
 		sections,
 		collectModelViewerDefaultVariables(sections),
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 		nil,
 	)
 	if err != nil {
@@ -707,7 +707,7 @@ format = DXGI_FORMAT_R32_UINT
 		dir,
 		sections,
 		collectModelViewerDefaultVariables(sections),
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 		nil,
 	)
 	if err != nil {
@@ -754,7 +754,7 @@ stride = 20`
 		dir,
 		sections,
 		collectModelViewerDefaultVariables(sections),
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 		nil,
 	); err == nil {
 		t.Fatal("missing position buffer succeeded")

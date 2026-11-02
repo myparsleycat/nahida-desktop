@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
 	"os"
@@ -214,7 +215,12 @@ func TestModelViewerStreamOutputRejectsUnsupportedReplay(t *testing.T) {
 			for _, resource := range collectModelViewerResources(sections) {
 				resources[modelViewerNormalizeKey(resource.Name)] = resource
 			}
-			outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+			outputs := collectModelViewerStreamOutputs(
+				dir,
+				sections,
+				resources,
+				newModelViewerBufferCache(context.Background()),
+			)
 			if len(outputs) != 0 {
 				t.Fatalf("unsupported replay produced %d outputs", len(outputs))
 			}
@@ -300,7 +306,12 @@ so0 = null
 			for _, resource := range collectModelViewerResources(sections) {
 				resources[modelViewerNormalizeKey(resource.Name)] = resource
 			}
-			outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+			outputs := collectModelViewerStreamOutputs(
+				dir,
+				sections,
+				resources,
+				newModelViewerBufferCache(context.Background()),
+			)
 			output, exists := outputs["so"]
 			if exists != test.want {
 				t.Fatalf("output exists=%v want=%v", exists, test.want)
@@ -343,7 +354,12 @@ so0 = null
 	for _, resource := range collectModelViewerResources(sections) {
 		resources[modelViewerNormalizeKey(resource.Name)] = resource
 	}
-	outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+	outputs := collectModelViewerStreamOutputs(
+		dir,
+		sections,
+		resources,
+		newModelViewerBufferCache(context.Background()),
+	)
 	if len(outputs) != 0 {
 		t.Fatalf("directory link outside the mod folder produced %d streams", len(outputs))
 	}
@@ -378,7 +394,12 @@ endif
 	for _, resource := range collectModelViewerResources(sections) {
 		resources[modelViewerNormalizeKey(resource.Name)] = resource
 	}
-	outputs := collectModelViewerStreamOutputs(dir, sections, resources, newModelViewerBufferCache())
+	outputs := collectModelViewerStreamOutputs(
+		dir,
+		sections,
+		resources,
+		newModelViewerBufferCache(context.Background()),
+	)
 	output, exists := outputs["so"]
 	if !exists {
 		t.Fatal("the inactive else arm discarded the bound stream")

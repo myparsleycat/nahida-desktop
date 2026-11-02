@@ -4,6 +4,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const maxModelViewerResourceAliasDepth = 32
@@ -64,7 +66,7 @@ func resolveModelViewerEffectiveResourcesAt(
 			continue
 		}
 		path, err := resolveModelViewerResourcePath(root, baseDir, resource.Filename)
-		if err != nil || !modelViewerPathWithin(root, path) {
+		if err != nil || !platform.SameOrChildPath(root, path) {
 			continue
 		}
 
@@ -85,7 +87,7 @@ func resolveModelViewerEffectiveResourcesAt(
 			continue
 		}
 		path, err := resolveModelViewerResourcePath(root, baseDir, output[index].Filename)
-		if err != nil || !modelViewerPathWithin(root, path) {
+		if err != nil || !platform.SameOrChildPath(root, path) {
 			output[index] = resources[index]
 			continue
 		}

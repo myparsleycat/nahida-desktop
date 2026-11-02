@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -160,16 +161,16 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 		return "", err
 	}
 	ceiling := filepath.Dir(filepath.Clean(root))
-	if !modelViewerPathWithin(ceiling, target) {
+	if !platform.SameOrChildPath(ceiling, target) {
 		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
 	// A filename authored inside the mod folder must also resolve there: a
 	// symlink or junction inside it must not redirect a read to a sibling
 	// folder.
-	if modelViewerPathWithin(root, target) {
+	if platform.SameOrChildPath(root, target) {
 		realRoot, rootOK := resolveModelViewerLinkPath(root)
 		realTarget, targetOK := resolveModelViewerLinkPath(target)
-		if rootOK && targetOK && !modelViewerPathWithin(realRoot, realTarget) {
+		if rootOK && targetOK && !platform.SameOrChildPath(realRoot, realTarget) {
 			return "", infra.ContractError(
 				fmt.Sprintf("Model Viewer resource link escapes the mod folder: %s", relative),
 			)
@@ -180,7 +181,7 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 		if realCeiling, ceilingErr := filepath.EvalSymlinks(ceiling); ceilingErr == nil {
 			resolvedCeiling = realCeiling
 		}
-		if !modelViewerPathWithin(resolvedCeiling, resolved) {
+		if !platform.SameOrChildPath(resolvedCeiling, resolved) {
 			return "", infra.ContractError(
 				fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative),
 			)
@@ -235,19 +236,10 @@ func resolveModelViewerLinkPath(path string) (string, bool) {
 // it inside modDir, so callers can read or key the file without re-checking.
 func resolveModelViewerModBufferPath(modDir, filename string) (string, bool) {
 	path, err := resolveModelViewerResourcePath(modDir, modDir, filename)
-	if err != nil || !modelViewerPathWithin(modDir, path) {
+	if err != nil || !platform.SameOrChildPath(modDir, path) {
 		return "", false
 	}
 	return path, true
-}
-
-func modelViewerPathWithin(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(relative) {
-		return false
-	}
-	return true
 }
 
 func isModelViewerBufferResource(resource modelViewerResource) bool {

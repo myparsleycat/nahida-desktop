@@ -2,12 +2,14 @@ package modelviewer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
 	"sort"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -326,23 +328,25 @@ func writeModelViewerPayload(
 	if len(meshes) != len(transport.Meshes) {
 		return fmt.Errorf("model viewer payload mesh count mismatch")
 	}
+	group, meshCtx := errgroup.WithContext(ctx)
+	group.SetLimit(runtime.GOMAXPROCS(0))
 	writeMesh := func(mesh *ModelViewerMeshTransport, payload modelViewerMeshPayload) error {
-		if err := ctx.Err(); err != nil {
+		if err := meshCtx.Err(); err != nil {
 			return err
 		}
 		write := func(suffix string, data []byte) (string, error) {
-			if err := ctx.Err(); err != nil {
+			if err := meshCtx.Err(); err != nil {
 				return "", err
 			}
 			return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
 		}
 		var err error
-		mesh.Bounds, err = modelViewerGeometryBounds(ctx, payload.Positions)
+		mesh.Bounds, err = modelViewerGeometryBounds(meshCtx, payload.Positions)
 		if err != nil {
 			return fmt.Errorf("mesh %s bounds: %w", mesh.ID, err)
 		}
 		if payload.Normals == nil {
-			payload.Normals, err = modelViewerVertexNormals(ctx, payload.Positions, payload.Indices)
+			payload.Normals, err = modelViewerVertexNormals(meshCtx, payload.Positions, payload.Indices)
 			if err != nil {
 				return fmt.Errorf("mesh %s normals: %w", mesh.ID, err)
 			}
@@ -402,32 +406,22 @@ func writeModelViewerPayload(
 		return nil
 	}
 	meshErrors := make([]error, len(transport.Meshes))
-	if workers := min(len(transport.Meshes), runtime.GOMAXPROCS(0)); workers > 1 {
-		work := make(chan int)
-		var workerGroup sync.WaitGroup
-		for range workers {
-			workerGroup.Add(1)
-			go func() {
-				defer workerGroup.Done()
-				for meshIndex := range work {
-					meshErrors[meshIndex] = writeMesh(&transport.Meshes[meshIndex], meshes[meshIndex])
-				}
-			}()
-		}
-		for meshIndex := range transport.Meshes {
-			work <- meshIndex
-		}
-		close(work)
-		workerGroup.Wait()
-	} else {
-		for meshIndex := range transport.Meshes {
+	for meshIndex := range transport.Meshes {
+		group.Go(func() error {
 			meshErrors[meshIndex] = writeMesh(&transport.Meshes[meshIndex], meshes[meshIndex])
-		}
+			return meshErrors[meshIndex]
+		})
 	}
+	waitErr := group.Wait()
+	if waitErr == nil {
+		return nil
+	}
+	// The first failure cancels the other meshes; report the lowest failing
+	// mesh rather than whichever failed first or a cancellation it caused.
 	for _, err := range meshErrors {
-		if err != nil {
+		if err != nil && (ctx.Err() != nil || !errors.Is(err, context.Canceled)) {
 			return err
 		}
 	}
-	return nil
+	return waitErr
 }

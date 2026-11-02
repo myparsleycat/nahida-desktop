@@ -445,7 +445,7 @@ func modelViewerComputeSource(folder string, resource modelViewerResource) (Mode
 		return ModelViewerComputeBinarySource{}, false
 	}
 	path, err := resolveModelViewerResourcePath(folder, folder, resource.Filename)
-	if err != nil || !modelViewerPathWithin(folder, path) {
+	if err != nil || !platform.SameOrChildPath(folder, path) {
 		return ModelViewerComputeBinarySource{}, false
 	}
 	info, err := os.Stat(path)
@@ -703,7 +703,7 @@ func collectModelViewerComputePasses(section modINISection) []modelViewerCompute
 
 func readModelViewerComputeShader(root, baseDir, relative string) (string, bool) {
 	path, err := resolveModelViewerResourcePath(root, baseDir, relative)
-	if err != nil || !modelViewerPathWithin(root, path) {
+	if err != nil || !platform.SameOrChildPath(root, path) {
 		return "", false
 	}
 	file, err := os.Open(path)

@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,7 +45,7 @@ func TestModelViewerResourceGrouping(t *testing.T) {
 		{Name: "BodyBlend", Filename: "blend.buf", Stride: 1},
 		{Name: "BodyTexcoord", Filename: "uv.buf", Stride: 2},
 	}
-	groups, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil)
+	groups, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(context.Background()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestCollectModelViewerMihoyoGroupsSkipsInterleaveValidationErrors(t *testin
 		{Name: "BodyBlend", Filename: "blend.buf", Stride: 1},
 		{Name: "BodyTexcoord", Filename: "uv.buf", Stride: 2},
 	}
-	groups, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil)
+	groups, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(context.Background()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,12 @@ func TestCollectModelViewerMihoyoGroupsPropagatesReadErrors(t *testing.T) {
 		{Name: "BodyBlend", Filename: "blend.buf", Stride: 32},
 		{Name: "BodyTexcoord", Filename: "uv.buf", Stride: 20},
 	}
-	if _, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil); err == nil {
+	if _, err := collectModelViewerMihoyoGroups(
+		dir,
+		resources,
+		newModelViewerBufferCache(context.Background()),
+		nil,
+	); err == nil {
 		t.Fatal("unreadable vertex buffers succeeded")
 	}
 }

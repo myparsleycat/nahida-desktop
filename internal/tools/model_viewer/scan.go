@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -270,7 +271,7 @@ func buildModelViewerDirectScannedMeshes(
 		filepath.Dir(iniPath),
 		sections,
 		variables,
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 		nil,
 	)
 }

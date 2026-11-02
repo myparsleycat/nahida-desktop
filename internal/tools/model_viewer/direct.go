@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"maps"
@@ -98,7 +99,7 @@ func buildModelViewerDirectMeshes(
 		filepath.Dir(iniPath),
 		assetPath,
 		sections,
-		newModelViewerBufferCache(),
+		newModelViewerBufferCache(context.Background()),
 		nil,
 	)
 }

@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 const (
@@ -763,8 +765,7 @@ func viewerResourcePath(modDir, relative string) string {
 		return ""
 	}
 	cleaned := filepath.Clean(filepath.Join(modDir, filepath.FromSlash(relative)))
-	rel, err := filepath.Rel(modDir, cleaned)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	if !platform.SameOrChildPath(modDir, cleaned) {
 		return ""
 	}
 	return cleaned

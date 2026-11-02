@@ -118,7 +118,13 @@ stride = 12`)
 		geometry:     &modelViewerGeometry{Position: []float32{0, 0, 0, 1, 0, 0, 0, 1, 0}, VertexCount: 3},
 	}
 
-	transport, payload := buildModelViewerDirectMeshPayload(mesh, nil, nil, shapes, newModelViewerBufferCache())
+	transport, payload := buildModelViewerDirectMeshPayload(
+		mesh,
+		nil,
+		nil,
+		shapes,
+		newModelViewerBufferCache(context.Background()),
+	)
 	if len(transport.ShapeTargets) != 1 || transport.ShapeTargets[0].Var != "smile" ||
 		len(payload.ShapePositions) != 1 ||
 		len(payload.ShapeLowPositions) != 1 {
@@ -318,7 +324,13 @@ filename = Meshes/deltas.buf`), 0, "", "")
 		geometry:     &modelViewerGeometry{Position: []float32{0, 0, 0, 2, 0, 0}, VertexCount: 2},
 	}
 
-	transport, payload := buildModelViewerDirectMeshPayload(mesh, nil, nil, shapes, newModelViewerBufferCache())
+	transport, payload := buildModelViewerDirectMeshPayload(
+		mesh,
+		nil,
+		nil,
+		shapes,
+		newModelViewerBufferCache(context.Background()),
+	)
 	if len(transport.ShapeTargets) != 1 || len(payload.ShapePositions) != 1 {
 		t.Fatalf("targets = %+v, want the key on the mesh drawing its position buffer", transport.ShapeTargets)
 	}
@@ -416,7 +428,11 @@ func TestReadModelViewerSparseShapePositionsUsesUncompactedVertexIDs(t *testing.
 		VertexDeltaPath: filepath.Join(modDir, "deltas.buf"),
 	}
 
-	positions, err := readModelViewerSparseShapePositions(newModelViewerBufferCache(), dimension, geometry)
+	positions, err := readModelViewerSparseShapePositions(
+		newModelViewerBufferCache(context.Background()),
+		dimension,
+		geometry,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

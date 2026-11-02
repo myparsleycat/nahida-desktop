@@ -407,7 +407,7 @@ func TestPackedDualQuaternion28LegacyBody(t *testing.T) {
 		packed[modelViewerNormalizeKey("position1")] != 20 {
 		t.Fatalf("packed UV layout: %v", packed)
 	}
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	source := resolveModelViewerDrawVertexSource(
 		dir,
@@ -497,7 +497,7 @@ func TestPackedDualQuaternion28ObjectBody(t *testing.T) {
 		packed[modelViewerNormalizeKey("position1")] != 20 {
 		t.Fatalf("packed UV layout: %v", packed)
 	}
-	cache := newModelViewerBufferCache()
+	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 	source := resolveModelViewerDrawVertexSource(
 		dir,
@@ -701,7 +701,7 @@ func TestPackedDualQuaternionDetection(t *testing.T) {
 			if packed["position"] != 16 || packed["position1"] != 16 {
 				t.Fatalf("alias layouts: %v", packed)
 			}
-			cache := newModelViewerBufferCache()
+			cache := newModelViewerBufferCache(context.Background())
 			defer cache.releaseAll()
 			source := resolveModelViewerDrawVertexSource(
 				dir,
@@ -801,7 +801,7 @@ func TestPackedDualQuaternionUVStreamEvidence(t *testing.T) {
 			}
 			sections := parseModINI(packedDualQuaternionINI)
 			resources := resolveModelViewerEffectiveResources(sections, collectModelViewerResources(sections))
-			cache := newModelViewerBufferCache()
+			cache := newModelViewerBufferCache(context.Background())
 			defer cache.releaseAll()
 			source := resolveModelViewerDrawVertexSource(
 				dir,
