@@ -203,14 +203,21 @@ type drawSite struct {
 }
 
 // iniUnit is the INIs of one 3DMigoto namespace, which run each other's
-// command lists by plain name. The first member declares the override.
+// command lists by plain name. The first member declares the override. A
+// member of another namespace holds sections the unit runs as
+// CommandList\NS\Name, and runs its own namespace's sections by plain name.
 type iniUnit struct {
-	texts     []*iniText
-	namespace string
+	texts      []*iniText
+	namespace  string
+	namespaces []string
 }
 
 func newINIUnit(texts ...*iniText) iniUnit {
-	return iniUnit{texts: texts, namespace: strings.ToLower(texts[0].namespace())}
+	namespaces := make([]string, len(texts))
+	for index, text := range texts {
+		namespaces[index] = strings.ToLower(text.namespace())
+	}
+	return iniUnit{texts: texts, namespace: namespaces[0], namespaces: namespaces}
 }
 
 func (t *iniText) namespace() string {
@@ -304,7 +311,7 @@ func (u iniUnit) sectionBodies() map[string][]sectionSpan {
 		for index, raw := range text.lines {
 			line := strings.TrimSpace(raw)
 			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-				current = strings.ToLower(strings.TrimSpace(line[1 : len(line)-1]))
+				current = u.qualifiedName(file, strings.ToLower(strings.TrimSpace(line[1:len(line)-1])))
 				if spans := bodies[current]; len(spans) > 0 && spans[0].file != file {
 					current = ""
 					continue
@@ -321,14 +328,34 @@ func (u iniUnit) sectionBodies() map[string][]sectionSpan {
 	return bodies
 }
 
-// sectionName drops the unit's own namespace from a reference such as
-// CommandList\NS\Name, which names the same section as CommandListName.
-func (u iniUnit) sectionName(target string) string {
+// sectionName resolves a reference run from a section of member file. The
+// unit's own namespace drops from CommandList\NS\Name, which names the same
+// section as CommandListName, and a plain name in a member of another
+// namespace names that namespace's section.
+func (u iniUnit) sectionName(file int, target string) string {
 	prefix, rest, ok := strings.Cut(target, `\`)
-	if !ok || u.namespace == "" || !strings.HasPrefix(rest, u.namespace+`\`) {
+	if !ok {
+		return u.qualifiedName(file, target)
+	}
+	if u.namespace == "" || !strings.HasPrefix(rest, u.namespace+`\`) {
 		return target
 	}
 	return prefix + rest[len(u.namespace)+1:]
+}
+
+// qualifiedName spells a plain lowercase section name of member file as the
+// unit references it, which is qualified for a member of another namespace.
+func (u iniUnit) qualifiedName(file int, name string) string {
+	namespace := u.namespaces[file]
+	if namespace == "" || namespace == u.namespace {
+		return name
+	}
+	for _, prefix := range []string{"commandlist", "customshader", "textureoverride", "shaderoverride", "resource"} {
+		if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" {
+			return prefix + `\` + namespace + `\` + rest
+		}
+	}
+	return name
 }
 
 type drawWalk struct {
@@ -438,7 +465,7 @@ func (w *drawWalk) visit(name string, state walkState, active map[string]bool) w
 			key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
 			switch nested := nestedSection(key, value); {
 			case nested != "":
-				state = w.visit(w.unit.sectionName(nested), state, active)
+				state = w.visit(w.unit.sectionName(span.file, nested), state, active)
 			case key == "ib":
 				state.bound = []string{value}
 				if !w.source.Implicit || strings.EqualFold(value, "null") || !w.source.MatchesIB(value) {

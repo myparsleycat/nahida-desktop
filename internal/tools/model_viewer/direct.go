@@ -490,22 +490,24 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 func collectModelViewerIBResources(
 	resources []modelViewerResource,
 	groups []modelViewerBufferGroup,
-	_ []modINISection,
+	sections []modINISection,
 	_ map[string]any,
 	textureBindings []modelViewerTextureBinding,
 	drawBindings []modelViewerDrawBinding,
 	_ bool,
 ) []modelViewerIbResource {
 	keys := sortedModelViewerGroupKeys(groups)
+	shaderInputs := modelViewerShaderInputResources(sections)
 	var output []modelViewerIbResource
 	seen := make(map[string]bool)
 	for _, resource := range resources {
 		filename := strings.TrimSpace(resource.Filename)
 		nameKey := strings.ToLower(resource.Name)
 		extension := strings.ToLower(filepath.Ext(filename))
-		isIndexBuffer := extension == ".ib" || strings.Contains(strings.ToUpper(resource.Format), "UINT") ||
-			strings.HasSuffix(nameKey, "ib") ||
-			strings.Contains(nameKey, "indexbuffer")
+		isIndexBuffer := extension == ".ib" || strings.HasSuffix(nameKey, "ib") ||
+			strings.Contains(nameKey, "indexbuffer") ||
+			strings.Contains(strings.ToUpper(resource.Format), "UINT") &&
+				!shaderInputs[modelViewerNormalizeKey(resource.Name)]
 		if filename == "" || !isIndexBuffer {
 			continue
 		}
@@ -539,6 +541,34 @@ func collectModelViewerIBResources(
 		output = append(output, ib)
 	}
 	return output
+}
+
+// modelViewerShaderInputResources lists the resources bound to shader slots and
+// never as an index buffer, such as WWMI's blend remap and shape key tables,
+// whose UINT format alone does not make them index buffers.
+func modelViewerShaderInputResources(sections []modINISection) map[string]bool {
+	inputs := make(map[string]bool)
+	indexBuffers := make(map[string]bool)
+	for _, section := range sections {
+		for _, raw := range section.Lines {
+			left, right, ok := strings.Cut(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]), "=")
+			resource := modelViewerResourceToken(right)
+			if !ok || resource == "" {
+				continue
+			}
+			target := strings.ToLower(modelViewerAssignmentTarget(left))
+			switch {
+			case target == "ib":
+				indexBuffers[modelViewerNormalizeKey(resource)] = true
+			case modelViewerShaderSlotRE.MatchString(target):
+				inputs[modelViewerNormalizeKey(resource)] = true
+			}
+		}
+	}
+	for key := range indexBuffers {
+		delete(inputs, key)
+	}
+	return inputs
 }
 
 func inferModelViewerFmtLayout(

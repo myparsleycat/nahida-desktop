@@ -59,6 +59,16 @@ func sectionValue(lines []string, key string) string {
 	return ""
 }
 
+// modelViewerAssignmentTarget is the left side of a command list assignment
+// without the pre or post keyword that schedules it.
+func modelViewerAssignmentTarget(left string) string {
+	fields := strings.Fields(left)
+	if len(fields) == 2 && (strings.EqualFold(fields[0], "pre") || strings.EqualFold(fields[0], "post")) {
+		return fields[1]
+	}
+	return strings.TrimSpace(left)
+}
+
 func regularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()

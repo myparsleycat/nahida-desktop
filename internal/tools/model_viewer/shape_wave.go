@@ -150,7 +150,7 @@ func modelViewerRunGuard(
 		walkModelViewerBranchLines(section.Lines, func(line string, clauses []modelViewerConditionClause) {
 			left, right, ok := strings.Cut(line, "=")
 			if !ok ||
-				!strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(left), "post ")), "run") ||
+				!strings.EqualFold(modelViewerAssignmentTarget(left), "run") ||
 				modelViewerNormalizeKey(strings.TrimSpace(right)) != target {
 				return
 			}

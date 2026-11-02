@@ -16,7 +16,8 @@ import (
 type DrawSource struct {
 	INIPath string
 	// UnitINIPaths are the INIs of INIPath's 3DMigoto namespace in discovery
-	// order, INIPath included, which run each other's sections by plain name.
+	// order, INIPath included, which run each other's sections by plain name,
+	// followed by the INIs of other namespaces whose sections the draw runs.
 	UnitINIPaths []string
 	Section      string
 	// IB is the resource bound as the draw's index buffer, as ib = names it

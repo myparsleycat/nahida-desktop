@@ -405,6 +405,28 @@ func TestSharedDrawAcrossNamespaceMembers(t *testing.T) {
 	}
 }
 
+// A draw INI of another namespace holds the draw the override runs as
+// CommandList\NS\Name, and runs its own command lists by plain name.
+func TestDrawSitesInCommandListOfOtherNamespace(t *testing.T) {
+	var texts []*iniText
+	for _, ini := range []string{
+		"namespace = Hsin\n[TextureOverrideBody]\nib = ResourceBodyIB\nrun = CommandList\\HsinDraw\\Body\n",
+		"namespace = HsinDraw\n[CommandListBody]\nrun = CommandListInner\n[CommandListInner]\ndrawindexed = 6, 3, 0\n",
+		"[CommandListInner]\ndrawindexed = 6, 3, 0\n",
+	} {
+		text, err := parseINIText([]byte(ini))
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts = append(texts, text)
+	}
+	draw := modelviewer.DrawSource{Section: "Body", IB: "BodyIB", StartIndex: 3, IndexCount: 6}
+	if walk := newINIUnit(texts...).ownWalk(draw); len(walk.sites) != 1 || walk.sites[0].file != 1 ||
+		walk.sharedDraw() {
+		t.Fatalf("draw in another namespace = %+v", walk.sites)
+	}
+}
+
 // WWMI Tools exports call draw command lists that another INI of the same
 // namespace declares. Only the INIs the viewer resolved the draw over take
 // part, and of a section declared twice only the first INI's runs.

@@ -326,6 +326,9 @@ func (c *modelViewerSymbolicScanContext) scan(
 						sequence:   sequence,
 					},
 				)
+				state.thisHistory = append(
+					state.thisHistory,
+					state.resourceAliases(resource, false, conditions, sequence)...)
 			}
 			if isNonDiffusePsSlot(key, resource) {
 				state.nonDiffuse = appendUniqueModelViewer(state.nonDiffuse, resource)
@@ -351,10 +354,41 @@ func (c *modelViewerSymbolicScanContext) scan(
 						sequence:   sequence,
 					},
 				)
+				state.textures[role] = append(
+					state.textures[role],
+					state.resourceAliases(textureResource, authored, conditions, sequence)...,
+				)
 			}
 		}
 	}
 	return nil
+}
+
+// resourceAliases follows a resource the flow assigned before binding it, as in
+// ResourceD = ResourceBody before ps-t3 = ResourceD. The binding then shows the
+// assigned source, which wins over the bound resource and its own file
+// wherever the assignment ran, as a copy over a file-backed texture replaces
+// its contents.
+func (s *modelViewerSymbolicSectionState) resourceAliases(
+	resource string,
+	authored bool,
+	conditions ModelViewerDNF,
+	sequence int,
+) []modelViewerSymbolicAssignment {
+	var output []modelViewerSymbolicAssignment
+	for _, alias := range s.bufferAssignments("resource" + strings.ToLower(resource)) {
+		aliasConditions := modelViewerDNFAnd(conditions, alias.conditions)
+		if alias.resource == "" || strings.EqualFold(alias.resource, "null") || len(aliasConditions) == 0 {
+			continue
+		}
+		output = append(output, modelViewerSymbolicAssignment{
+			resource:   alias.resource,
+			authored:   authored,
+			conditions: aliasConditions,
+			sequence:   sequence,
+		})
+	}
+	return output
 }
 
 // applyRabbitFXTextures models SetTextures consuming the resources set before it.

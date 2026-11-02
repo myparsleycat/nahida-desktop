@@ -458,7 +458,7 @@ func (t *Service) prepareModelViewerGeometry(
 			return nil, err
 		}
 		parseStartedAt := time.Now()
-		scoped := scopeModelViewerUnit(unit, unitIndex, parsedINIs, iniPaths, scopes, unitByNamespace, folder)
+		scoped := scopeModelViewerUnit(units, unitIndex, parsedINIs, iniPaths, scopes, unitByNamespace, folder)
 		sections := scoped.sections
 		for key, value := range scoped.names {
 			prepared.variableNames[key] = value

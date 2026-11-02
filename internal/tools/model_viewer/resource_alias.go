@@ -170,7 +170,7 @@ func collectModelViewerResourceAliases(
 			}
 			left = strings.TrimSpace(left)
 			right = strings.TrimSpace(right)
-			plainLeft := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(left), "post "))
+			plainLeft := strings.ToLower(modelViewerAssignmentTarget(left))
 			if strings.HasPrefix(strings.ToLower(right), "copy_desc ") {
 				target := modelViewerResourceToken(plainLeft)
 				source := modelViewerResourceToken(strings.TrimSpace(right[len("copy_desc "):]))

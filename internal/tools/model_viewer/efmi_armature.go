@@ -432,7 +432,7 @@ func collectModelViewerRunTargets(sections []modINISection) map[string]bool {
 	for _, section := range sections {
 		for _, raw := range section.Lines {
 			left, right, ok := strings.Cut(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]), "=")
-			if ok && strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(left), "post ")), "run") {
+			if ok && strings.EqualFold(modelViewerAssignmentTarget(left), "run") {
 				targets[modelViewerNormalizeKey(strings.TrimSpace(right))] = true
 			}
 		}

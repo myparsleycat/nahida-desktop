@@ -246,6 +246,121 @@ global persist $outfit = 1
 	}
 }
 
+// A mod can draw from a command list of a draw INI in another namespace, bind
+// a vertex buffer a shape key INI fills, and set textures through a material
+// INI's fileless resource. Unresolved, the buffers fell to the bare IB fallback
+// and rendered as untextured triangle soup.
+func TestLoadModViewerFollowsSectionsOfOtherNamespaces(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"mod.ini": `namespace = Lib
+[TextureOverrideBody]
+hash = 12345678
+ib = ResourceBodyIB
+vb0 = Resource\LibShape\Shaped
+vb1 = ResourceTc
+run = CommandList\LibDraw\Body
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceUnusedIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+		"Shape/shape.ini": `namespace = LibShape
+[ResourceBase]
+filename = ../pos.buf
+stride = 40
+[ResourceShaped]
+[Present]
+cs-u5 = copy ResourceBase
+ResourceShaped = ref cs-u5
+`,
+		"Draw/draw.ini": `namespace = LibDraw
+[CommandListBody]
+run = CommandList\LibMat\Skin
+if $\LibConst\outfit >= 2
+drawindexed = 3, 0, 0
+endif
+`,
+		"Draw/mat.ini": `namespace = LibMat
+[ResourceD]
+[ResourceSkin]
+filename = skin.png
+[ResourceTan]
+filename = tan.png
+[ResourceLight]
+filename = light.png
+[CommandListSkin]
+if $\LibConst\tan == 1
+ResourceD = ResourceTan
+else
+ResourceD = ResourceSkin
+endif
+run = CommandListSetTex
+[CommandListSetTex]
+ps-t0 = ResourceD
+ps-t1 = ResourceLight
+`,
+		"const.ini": `namespace = LibConst
+[Constants]
+global persist $outfit = 2
+global persist $tan = 0
+[KeyOutfit]
+key = 1
+type = cycle
+$outfit = 1, 2
+[KeyTan]
+key = 2
+type = cycle
+$tan = 0, 1
+`,
+	}
+	for name, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeViewerGeometry(t, root)
+	writeModelViewerTestPNG(t, filepath.Join(root, "Draw", "skin.png"), color.NRGBA{R: 255, A: 255})
+	writeModelViewerTestPNG(t, filepath.Join(root, "Draw", "tan.png"), color.NRGBA{G: 255, A: 255})
+	writeModelViewerTestPNG(t, filepath.Join(root, "Draw", "light.png"), color.NRGBA{B: 255, A: 255})
+
+	fixture := loadViewerDir(t, root)
+	result := fixture.result
+	if len(result.Meshes) != 1 || result.Meshes[0].Component != "Body" {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	if !evaluateViewerTransport(result, nil).Meshes[0].Visible ||
+		evaluateViewerTransport(result, map[string]any{"const::outfit": "1"}).Meshes[0].Visible {
+		t.Fatalf("mesh does not follow $\\LibConst\\outfit: %#v", result.Meshes[0].Conditions)
+	}
+	for tan, want := range map[string]string{"0": "skin.png", "1": "tan.png"} {
+		texture := evaluateViewerTransport(result, map[string]any{"const::tan": tan}).Meshes[0].TexKey
+		if !strings.Contains(texture, want) {
+			t.Fatalf("texture at tan %s = %q, variants = %#v", tan, texture, result.Meshes[0].TextureVariants)
+		}
+	}
+
+	// A tool hooking the draw finds it in the draw INI of the other namespace.
+	source, ok := fixture.service.DrawSource(result.MemorySessionID, result.Meshes[0].ID)
+	var unit []string
+	for _, iniPath := range source.UnitINIPaths {
+		unit = append(unit, filepath.Base(iniPath))
+	}
+	if !ok || filepath.Base(source.INIPath) != "mod.ini" ||
+		!slices.Equal(unit, []string{"mod.ini", "shape.ini", "draw.ini", "mat.ini"}) {
+		t.Fatalf("draw source = %#v", source)
+	}
+}
+
 // A character bundle keeps each form in a folder of its own, with INIs that
 // often share a file name and variable names.
 func TestLoadModViewerSeparatesFormsWithSameININame(t *testing.T) {

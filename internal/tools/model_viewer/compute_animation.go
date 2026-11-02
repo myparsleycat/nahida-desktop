@@ -626,7 +626,7 @@ func collectModelViewerReachableComputeSections(sections []modINISection) map[st
 		for _, raw := range section.Lines {
 			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
 			left, right, ok := strings.Cut(line, "=")
-			if !ok || !strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(left), "post ")), "run") {
+			if !ok || !strings.EqualFold(modelViewerAssignmentTarget(left), "run") {
 				continue
 			}
 			key := modelViewerNormalizeKey(strings.TrimSpace(right))
