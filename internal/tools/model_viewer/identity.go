@@ -93,6 +93,18 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			clip.Frames[frameIndex].Values = values
 		}
 	}
+	for deformerIndex := range transport.ComputeDeformers {
+		merged := transport.ComputeDeformers[deformerIndex].MergedDeltas
+		if merged == nil {
+			continue
+		}
+		for groupIndex := range merged.Groups {
+			group := &merged.Groups[groupIndex]
+			group.AutoPlayVar = publicName(group.AutoPlayVar)
+			group.SpeedVar = publicName(group.SpeedVar)
+			group.WeightVar = publicName(group.WeightVar)
+		}
+	}
 }
 
 func normalizeModelViewerTransportValueTypes(transport *ModelViewerTransport) {

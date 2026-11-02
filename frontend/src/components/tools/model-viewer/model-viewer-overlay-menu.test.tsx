@@ -86,3 +86,96 @@ it("swaps the drawing and click areas with the page and keeps the toggle values"
   fireEvent.click(screen.getByRole("button", { name: "Hair" }));
   expect(screen.getByRole("status")).toHaveProperty("textContent", '{"hair":2,"chest":1}');
 });
+
+it("drags a slider into the variable of the current mode and moves its parts", () => {
+  const sliderMenu: ViewerOverlayMenu = {
+    width: 100,
+    height: 10,
+    pages: [
+      {
+        quads: [
+          { ...rect(0), width: 100, path: "panel.png" },
+          { ...rect(0), width: 0, path: "bar.png" },
+          { ...rect(0), path: "handle.png" },
+        ],
+        buttons: [
+          { ...rect(0), variable: "play", label: "Play", transitions: [{ from: 1, to: 0 }] },
+        ],
+        sliders: [
+          {
+            handle: 2,
+            parts: [
+              { quad: 1, startX: 0, startWidth: 0, endX: 0, endWidth: 90 },
+              { quad: 2, startX: 0, startWidth: 10, endX: 90, endWidth: 10 },
+            ],
+            modes: [
+              {
+                whenVariable: "play",
+                whenValue: 1,
+                variable: "speed",
+                label: "Speed",
+                min: 10,
+                max: 110,
+              },
+              {
+                whenVariable: "play",
+                whenValue: 0,
+                variable: "weight",
+                label: "Weight",
+                min: 0,
+                max: 1,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  function SliderHarness() {
+    const [state, setState] = useState<Record<string, VariableStateValue>>({
+      play: 1,
+      speed: 60,
+      weight: 0,
+    });
+    return (
+      <>
+        <output>{JSON.stringify(state)}</output>
+        <ModelViewerOverlayMenuPanel
+          menu={sliderMenu}
+          variables={[]}
+          activeState={state}
+          onSelect={(variable, value) => setState((current) => ({ ...current, [variable]: value }))}
+        />
+      </>
+    );
+  }
+
+  const { container } = render(<SliderHarness />);
+  const panel = container.querySelector("img")!.parentElement!;
+  panel.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
+  HTMLElement.prototype.setPointerCapture = () => {};
+  const images = container.querySelectorAll("img");
+  expect(images[2]!.style.left).toBe("45%");
+  expect(images[1]!.style.width).toBe("45%");
+
+  const handle = screen.getByRole("slider", { name: "Speed" });
+  fireEvent.pointerDown(handle, { clientX: 50, pointerId: 1 });
+  fireEvent.pointerMove(handle, { clientX: 95, pointerId: 1 });
+  fireEvent.pointerUp(handle, { pointerId: 1 });
+  fireEvent.pointerMove(handle, { clientX: 0, pointerId: 1 });
+  expect(screen.getByRole("status")).toHaveProperty(
+    "textContent",
+    '{"play":1,"speed":110,"weight":0}',
+  );
+  expect(images[2]!.style.left).toBe("90%");
+
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
+  const weight = screen.getByRole("slider", { name: "Weight" });
+  expect(images[2]!.style.left).toBe("0%");
+  fireEvent.pointerDown(weight, { clientX: 5, pointerId: 1 });
+  fireEvent.pointerMove(weight, { clientX: 50, pointerId: 1 });
+  expect(screen.getByRole("status")).toHaveProperty(
+    "textContent",
+    '{"play":0,"speed":110,"weight":0.5}',
+  );
+});

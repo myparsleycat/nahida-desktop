@@ -219,6 +219,8 @@ export type ModelViewerSurfaceProps = {
     shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;
     animationFrame?: number;
+    /** The variables a compute deformer reads while it plays. */
+    computeState?: Record<string, ModelViewerVariantStateValue>;
     /** Live position overrides for body-shape editing (skips shape keys / animation). */
     bodyShapeOverrides?: ModelViewerBodyShapeOverride[];
     threeToneMapping?: ModelViewerThreeToneMapping;

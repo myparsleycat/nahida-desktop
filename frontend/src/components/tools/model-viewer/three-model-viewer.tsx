@@ -155,6 +155,7 @@ export const ThreeModelViewer = memo(
       className,
       animationClip,
       animationFrame,
+      computeState,
       bodyShapeOverrides,
       onError,
       onLoad,
@@ -243,6 +244,7 @@ export const ThreeModelViewer = memo(
             keyLightRef={keyLightRef}
             animationClip={animationClip}
             animationFrame={animationFrame}
+            computeState={computeState}
             bodyShapeOverrides={bodyShapeOverrides}
             orientation={orientation}
             shapeKeys={shapeKeys}
@@ -276,6 +278,7 @@ function ThreeModelScene({
   keyLightRef,
   animationClip,
   animationFrame,
+  computeState,
   bodyShapeOverrides,
   onError,
   onLoad,
@@ -326,6 +329,7 @@ function ThreeModelScene({
   const geometryFinalizeTimerRef = useRef<number | undefined>(undefined);
   const positionLoaderRef = useRef<ModelViewerPositionLoader | null>(null);
   const computeControllerRef = useRef<ModelViewerComputeController | null>(null);
+  const computeStateRef = useRef(computeState);
   const payloadEvalAbortRef = useRef<AbortController | null>(null);
   const payloadEvalGenerationRef = useRef(0);
   const animationFrameIndexRef = useRef<number | null>(null);
@@ -715,6 +719,7 @@ function ThreeModelScene({
       (error) => onErrorRef.current?.(error),
     );
     computeControllerRef.current = controller;
+    controller.setVariables(computeStateRef.current ?? {});
     const frameIndex = Math.min(
       Math.max(animationFrameIndexRef.current ?? animationFrameRef.current ?? 0, 0),
       Math.max(clip.frames.length - 1, 0),
@@ -727,6 +732,11 @@ function ThreeModelScene({
       controller.dispose();
     };
   }, [computeDeformerId, modelRoot, payloadTransport, invalidate]);
+
+  useEffect(() => {
+    computeStateRef.current = computeState;
+    computeControllerRef.current?.setVariables(computeState ?? {});
+  }, [computeState]);
 
   useEffect(() => {
     if (!animationClip?.deformerId) {

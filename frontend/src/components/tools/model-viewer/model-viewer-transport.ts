@@ -240,6 +240,12 @@ export function normalizeModelViewerTransport(
                     transitions: button.transitions ?? [],
                     page: button.page ?? undefined,
                     hover: button.hover ?? undefined,
+                    label: button.label || undefined,
+                })),
+                sliders: page.sliders?.map((slider) => ({
+                    handle: slider.handle,
+                    parts: slider.parts ?? [],
+                    modes: slider.modes ?? [],
                 })),
             })),
         })),
@@ -269,7 +275,8 @@ export function normalizeModelViewerTransport(
                 (deformer.kind !== "gimi_shape_pose_v1" &&
                     deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
                     deformer.kind !== "gimi_cyclic_packed_v1" &&
-                    deformer.kind !== "gimi_cyclic_packed_shape_v1")
+                    deformer.kind !== "gimi_cyclic_packed_shape_v1" &&
+                    deformer.kind !== "gimi_merged_delta_shape_v1")
             ) {
                 return [];
             }
@@ -317,6 +324,20 @@ export function normalizeModelViewerTransport(
                               frames: normalizeComputeSource(deformer.pose.frames),
                               boneCount: deformer.pose.boneCount,
                               frameCount: deformer.pose.frameCount,
+                          }
+                        : undefined,
+                    mergedDeltas: deformer.mergedDeltas
+                        ? {
+                              url: deformer.mergedDeltas.url,
+                              groups: (deformer.mergedDeltas.groups ?? []).map((group) => ({
+                                  autoPlayVar: group.autoPlayVar,
+                                  speedVar: group.speedVar,
+                                  weightVar: group.weightVar,
+                                  steps: group.steps ?? [],
+                                  stepLimit: group.stepLimit,
+                                  frameEnd: group.frameEnd,
+                              })),
+                              keys: deformer.mergedDeltas.keys ?? [],
                           }
                         : undefined,
                 },

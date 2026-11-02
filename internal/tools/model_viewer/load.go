@@ -268,6 +268,16 @@ func (t *Service) loadModViewer(
 		modelViewerOverlayMenuOnlyVariables(&transport),
 	))
 	transport.Variables = withoutModelViewerOverlayStateVariables(transport.Variables, transport.OverlayMenus)
+	transport.OverlayMenus = append(
+		transport.OverlayMenus,
+		t.serveModelViewerOverlayTextures(ctx, sessionID, buildModelViewerOverlayPanels(
+			ctx,
+			folder,
+			prepared.scans,
+			transport.ComputeDeformers,
+			prepared.variableNames,
+		))...,
+	)
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
 	stage = "write-payload"

@@ -68,8 +68,9 @@ func (t *Service) prepareModelViewerComputeSources(
 			}
 		}
 		originalCount := deformer.VertexCount
+		var lookup []uint32
 		if len(sources) < originalCount || len(deformer.meshSourceOffsets) > 0 {
-			lookup := make([]uint32, originalCount)
+			lookup = make([]uint32, originalCount)
 			for vertex, source := range sources {
 				lookup[source] = uint32(vertex)
 			}
@@ -166,9 +167,26 @@ func (t *Service) prepareModelViewerComputeSources(
 			registered[key] = *source
 			return nil
 		}
-		packed := deformer.Kind != "gimi_shape_pose_v1"
+		packed := deformer.Kind != modelViewerGIMIShapePoseKind && deformer.Kind != modelViewerMergedDeltaKind
 		if err := register(&deformer.Base, packed); err != nil {
 			return err
+		}
+		if merged := deformer.MergedDeltas; merged != nil {
+			remap := func(vertex uint32) (uint32, bool) {
+				if lookup == nil {
+					return vertex, true
+				}
+				return lookup[vertex], used[vertex]
+			}
+			url, err := storeLoader(
+				deformer.ID+".deltas",
+				ModelViewerComputeBinarySource{sourcePath: deformer.ID + ":deltas"},
+				func(ctx context.Context) ([]byte, error) { return merged.build(ctx, remap) },
+			)
+			if err != nil {
+				return err
+			}
+			merged.URL = url
 		}
 		for pass := range deformer.ShapePasses {
 			if err := register(&deformer.ShapePasses[pass].Target, false); err != nil {

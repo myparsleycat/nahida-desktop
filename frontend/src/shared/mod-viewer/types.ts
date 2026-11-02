@@ -151,11 +151,36 @@ export type ViewerOverlayButton = {
     /** The index in ViewerOverlayMenu.pages this button leads to. */
     page?: number;
     hover?: Array<{ quad: number; path: string }>;
+    /** Names a variable the regular controls do not list. */
+    label?: string;
+};
+
+export type ViewerOverlaySlider = {
+    /** The index in ViewerOverlayPage.quads of the part that takes the drag. */
+    handle: number;
+    /** The quads that move with the slider, as they stand at both ends of the track. */
+    parts: Array<{
+        quad: number;
+        startX: number;
+        startWidth: number;
+        endX: number;
+        endWidth: number;
+    }>;
+    /** What the slider sets, chosen by the value of whenVariable. */
+    modes: Array<{
+        whenVariable: string;
+        whenValue: number;
+        variable: string;
+        label: string;
+        min: number;
+        max: number;
+    }>;
 };
 
 export type ViewerOverlayPage = {
     quads: ViewerOverlayQuad[];
     buttons: ViewerOverlayButton[];
+    sliders?: ViewerOverlaySlider[];
 };
 
 export type ViewerOverlayMenu = {
@@ -248,7 +273,8 @@ export type ViewerComputeDeformerKind =
     | "gimi_shape_pose_v1"
     | "gimi_packed_dual_quaternion_v1"
     | "gimi_cyclic_packed_v1"
-    | "gimi_cyclic_packed_shape_v1";
+    | "gimi_cyclic_packed_shape_v1"
+    | "gimi_merged_delta_shape_v1";
 
 export type ViewerComputeDeformer = {
     kind: ViewerComputeDeformerKind;
@@ -265,6 +291,21 @@ export type ViewerComputeDeformer = {
         frames: ViewerComputeBinarySource;
         boneCount: number;
         frameCount: number;
+    };
+    mergedDeltas?: {
+        url: string;
+        /** While a group plays, its frame runs back and forth between 0 and frameEnd. */
+        groups: Array<{
+            autoPlayVar: string;
+            speedVar: string;
+            weightVar: string;
+            /** Frames per game frame at 100% speed while the weight is below until. */
+            steps: Array<{ until: number; step: number }>;
+            stepLimit: number;
+            frameEnd: number;
+        }>;
+        /** Weight is the group weight times scale minus offset, clamped to 0..1. */
+        keys: Array<{ group: number; scale: number; offset: number; weight?: number }>;
     };
 };
 

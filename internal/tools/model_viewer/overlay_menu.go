@@ -67,12 +67,15 @@ type ModelViewerOverlayButton struct {
 	Transitions []ModelViewerOverlayTransition `json:"transitions,omitempty"`
 	Page        *int                           `json:"page,omitempty"`
 	Hover       []ModelViewerOverlayHover      `json:"hover,omitempty"`
+	// Label names a variable the regular controls do not list.
+	Label string `json:"label,omitempty"`
 }
 
 // ModelViewerOverlayPage is what a menu shows in one state of its own variables.
 type ModelViewerOverlayPage struct {
 	Quads   []ModelViewerOverlayQuad   `json:"quads"`
 	Buttons []ModelViewerOverlayButton `json:"buttons"`
+	Sliders []ModelViewerOverlaySlider `json:"sliders,omitempty"`
 }
 
 // ModelViewerOverlayMenu is a menu a mod draws over the game and operates with
@@ -113,17 +116,18 @@ var (
 	modelViewerOverlayDeclareRE = regexp.MustCompile(
 		`(?i)^(?:persist\s+global\s+|(?:(?:global|local)\s+)?(?:persist\s+)?)(\$[\w.]+)(?:\s*=\s*(.+))?$`,
 	)
-	modelViewerOverlayLocalRE   = regexp.MustCompile(`(?i)^local\s+(\$[\w.]+)$`)
-	modelViewerOverlayBindRE    = regexp.MustCompile(`(?i)^ps-t(\d+)\s*=\s*(.+)$`)
-	modelViewerOverlayConfigRE  = regexp.MustCompile(`^\$([\w.]+)$`)
-	modelViewerOverlaySizeRE    = regexp.MustCompile(`(?m)^\s*#define\s+(?:DIMENSIONS|SIZE)\s+\w+\[(\d+)\]\.xy\b`)
-	modelViewerOverlayShiftRE   = regexp.MustCompile(`(?m)^\s*#define\s+(?:SHIFT|OFFSET)\s+\w+\[(\d+)\]\.zw\b`)
-	modelViewerOverlayAlphaRE   = regexp.MustCompile(`(?m)^\s*\w+\.a\s*=\s*\w+\.a\s*\*\s*([0-9.]+)\s*;`)
-	modelViewerOverlayFrameRE   = regexp.MustCompile(`(?m)^\s*#define\s+FRAME_INDEX\s+\w+\[(\d+)\]\.x\b`)
-	modelViewerOverlayColumnsRE = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_COLS\s+(\d+)\b`)
-	modelViewerOverlayRowsRE    = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_ROWS\s+(\d+)\b`)
-	modelViewerOverlayTextureRE = regexp.MustCompile(`Texture2D\s*(?:<[^>]*>)?\s+\w+\s*:\s*register\(\s*t(\d+)\s*\)`)
-	modelViewerOverlayNameRE    = regexp.MustCompile(`\$?[A-Za-z_\\][\w.\\]*`)
+	modelViewerOverlayLocalRE     = regexp.MustCompile(`(?i)^local\s+(\$[\w.]+)$`)
+	modelViewerOverlayBindRE      = regexp.MustCompile(`(?i)^ps-t(\d+)\s*=\s*(.+)$`)
+	modelViewerOverlayConfigRE    = regexp.MustCompile(`^\$([\w.]+)$`)
+	modelViewerOverlaySizeRE      = regexp.MustCompile(`(?m)^\s*#define\s+(?:DIMENSIONS|SIZE)\s+\w+\[(\d+)\]\.xy\b`)
+	modelViewerOverlayShiftRE     = regexp.MustCompile(`(?m)^\s*#define\s+(?:SHIFT|OFFSET)\s+\w+\[(\d+)\]\.zw\b`)
+	modelViewerOverlayAlphaRE     = regexp.MustCompile(`(?m)^\s*\w+\.a\s*=\s*\w+\.a\s*\*\s*([0-9.]+)\s*;`)
+	modelViewerOverlayFrameRE     = regexp.MustCompile(`(?m)^\s*#define\s+FRAME_INDEX\s+\w+\[(\d+)\]\.x\b`)
+	modelViewerOverlayColumnsRE   = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_COLS\s+(\d+)\b`)
+	modelViewerOverlayRowsRE      = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_ROWS\s+(\d+)\b`)
+	modelViewerOverlayTextureRE   = regexp.MustCompile(`Texture2D\s*(?:<[^>]*>)?\s+\w+\s*:\s*register\(\s*t(\d+)\s*\)`)
+	modelViewerOverlayNameRE      = regexp.MustCompile(`\$?[A-Za-z_\\][\w.\\]*`)
+	modelViewerOverlayPanelGateRE = regexp.MustCompile(`\$([\w.]+)\s*==\s*(-?\d+(?:\.\d+)?)`)
 )
 
 type modelViewerOverlayShader struct {
@@ -196,8 +200,8 @@ func buildModelViewerOverlayMenus(
 	return menus
 }
 
-func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *modelViewerOverlayProgram {
-	program := &modelViewerOverlayProgram{
+func newModelViewerOverlayProgramBase(folder string, scan modelViewerGeometryScan) *modelViewerOverlayProgram {
+	return &modelViewerOverlayProgram{
 		folder:          folder,
 		shaderDir:       scan.iniDir,
 		lists:           make(map[string][]string),
@@ -208,6 +212,25 @@ func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *
 		initial:         modelViewerOverlayInitialState(scan.sections),
 		menuKeys:        make(map[string]bool),
 	}
+}
+
+func (p *modelViewerOverlayProgram) loadTextures(folder string, scan modelViewerGeometryScan) {
+	for _, resource := range scan.resources {
+		if resource.Filename == "" {
+			continue
+		}
+		path := filepath.Join(folder, filepath.FromSlash(slashPath(resource.Filename)))
+		name := modelViewerNormalizeKey(modelViewerTrimResourcePrefix(resource.Name))
+		if regularFile(path) {
+			p.textures[name] = path
+		} else {
+			p.missingTextures[name] = true
+		}
+	}
+}
+
+func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *modelViewerOverlayProgram {
+	program := newModelViewerOverlayProgramBase(folder, scan)
 	var clickKey *modINISection
 	for index := range scan.sections {
 		section := &scan.sections[index]
@@ -253,19 +276,7 @@ func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *
 	if len(program.targets) == 0 {
 		return nil
 	}
-
-	for _, resource := range scan.resources {
-		if resource.Filename == "" {
-			continue
-		}
-		path := filepath.Join(folder, filepath.FromSlash(slashPath(resource.Filename)))
-		name := modelViewerNormalizeKey(modelViewerTrimResourcePrefix(resource.Name))
-		if regularFile(path) {
-			program.textures[name] = path
-		} else {
-			program.missingTextures[name] = true
-		}
-	}
+	program.loadTextures(folder, scan)
 	return program
 }
 
@@ -673,6 +684,7 @@ func assembleModelViewerOverlayMenu(
 ) *ModelViewerOverlayMenu {
 	originX, originY := math.Inf(1), math.Inf(1)
 	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	shiftX := func(value float64) float64 { return roundModelViewerOverlay(value - originX) }
 	kept := make([]int, len(pages))
 	count := 0
 	hasToggle := false
@@ -689,7 +701,7 @@ func assembleModelViewerOverlayMenu(
 		}
 		hasToggle = hasToggle || slices.ContainsFunc(page.page.Buttons, func(button ModelViewerOverlayButton) bool {
 			return button.Variable != ""
-		})
+		}) || len(page.page.Sliders) > 0
 	}
 	if !hasToggle {
 		return nil
@@ -731,6 +743,14 @@ func assembleModelViewerOverlayMenu(
 			buttons = append(buttons, button)
 		}
 		page.Buttons = buttons
+		for _, slider := range page.Sliders {
+			for index := range slider.Parts {
+				part := &slider.Parts[index]
+				part.StartX, part.EndX = shiftX(part.StartX), shiftX(part.EndX)
+				part.StartWidth = roundModelViewerOverlay(part.StartWidth)
+				part.EndWidth = roundModelViewerOverlay(part.EndWidth)
+			}
+		}
 		menu.Pages = append(menu.Pages, page)
 	}
 	return menu
@@ -962,9 +982,19 @@ func (p *modelViewerOverlayProgram) trace(
 	cursorX, cursorY float64,
 	overrides map[string]any,
 ) *modelViewerOverlayRun {
+	run := p.newRun(p.initial, cursorX, cursorY)
+	maps.Copy(run.state, overrides)
+	for _, lines := range p.presents {
+		run.exec(lines, 0, true)
+	}
+	return run
+}
+
+// newRun starts a run from a copy of the given state, with the window and the cursor set.
+func (p *modelViewerOverlayProgram) newRun(state map[string]any, cursorX, cursorY float64) *modelViewerOverlayRun {
 	run := &modelViewerOverlayRun{
 		program: p,
-		state:   cloneModelViewerState(p.initial),
+		state:   cloneModelViewerState(state),
 		bound:   make(map[string]string),
 		sources: make(map[string]string),
 	}
@@ -978,10 +1008,6 @@ func (p *modelViewerOverlayProgram) trace(
 		"time": 0,
 	} {
 		run.state[key] = value
-	}
-	maps.Copy(run.state, overrides)
-	for _, lines := range p.presents {
-		run.exec(lines, 0, true)
 	}
 	return run
 }

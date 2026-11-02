@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -40,9 +41,13 @@ var (
 
 type modelViewerComputePass struct {
 	x88, x89           string
-	t50, t51, t52      string
+	t50, t51, t52, t53 string
 	shader, outputName string
-	equalities         []modelViewerStateEquality
+	// outputSource is the resource bound to the UAV that outputName refers to.
+	outputSource string
+	equalities   []modelViewerStateEquality
+	// deltaParams holds the variables bound to the x100+ registers at this dispatch.
+	deltaParams map[int]string
 }
 
 // usableForPackedShape reports whether the pass binds the two buffers and the
@@ -126,7 +131,19 @@ func detectModelViewerComputeAnimation(
 		); deformer != nil {
 			return deformer, clips
 		}
-		return detectModelViewerPackedShapeAnimation(
+		if deformer, clips := detectModelViewerPackedShapeAnimation(
+			root,
+			shaderBaseDir,
+			scopeID,
+			sections,
+			reachable,
+			effective,
+			defaults,
+			meshes,
+		); deformer != nil {
+			return deformer, clips
+		}
+		return detectModelViewerMergedDeltaAnimation(
 			root,
 			shaderBaseDir,
 			scopeID,
@@ -628,9 +645,20 @@ func collectModelViewerReachableComputeSections(sections []modINISection) map[st
 func collectModelViewerComputePasses(section modINISection) []modelViewerComputePass {
 	state := modelViewerComputePass{}
 	uav := make(map[string]string)
+	deltaParams := make(map[int]string)
 	var output []modelViewerComputePass
 	for _, raw := range section.Lines {
 		line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
+		if match := modelViewerMergedDeltaBindRE.FindStringSubmatch(line); match != nil {
+			if register, err := strconv.Atoi(match[1]); err == nil && register >= modelViewerMergedDeltaFirstParam {
+				if match[2] == "" {
+					delete(deltaParams, register)
+				} else {
+					deltaParams[register] = match[2]
+				}
+				continue
+			}
+		}
 		match := modelViewerComputeBindingRE.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -647,9 +675,12 @@ func collectModelViewerComputePasses(section modINISection) []modelViewerCompute
 			state.t51 = modelViewerResourceToken(value)
 		case "cs-t52":
 			state.t52 = modelViewerResourceToken(value)
+		case "cs-t53":
+			state.t53 = modelViewerResourceToken(value)
 		case "cs":
 			state.shader = stripModelViewerQuotes(value)
 		case "dispatch":
+			state.deltaParams = maps.Clone(deltaParams)
 			output = append(output, state)
 		default:
 			if modelViewerUAVSlotRE.MatchString(key) {
@@ -662,7 +693,7 @@ func collectModelViewerComputePasses(section modINISection) []modelViewerCompute
 			}
 			if target := modelViewerResourceToken(key); target != "" {
 				if slot := modelViewerUAVReference(value); slot != "" && uav[slot] != "" {
-					state.outputName = target
+					state.outputName, state.outputSource = target, uav[slot]
 				}
 			}
 		}

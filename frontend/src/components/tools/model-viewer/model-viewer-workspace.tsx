@@ -477,7 +477,8 @@ export function ModelViewerWorkspace({
   const slotHoverPath = uiAssets?.slotHoverPath;
   const slotActivePath = uiAssets?.slotActivePath;
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
-  const hasVariantToggleUi = visibleVariables.length > 0;
+  const hasVariantToggleUi =
+    visibleVariables.length > 0 || Boolean(payloadTransport?.overlayMenus?.some(inActiveForm));
   const showToggleViewer = Boolean(payloadTransport && hasVariantToggleUi);
   const isViewerReady = viewerStatus === "ready";
   const canSaveCapturedPreview = Boolean(source?.modPath) && isViewerReady && !isSavingPreview;
@@ -844,6 +845,7 @@ export function ModelViewerWorkspace({
                   form={effectiveForm}
                   orientation={modelOrientation}
                   animationClip={effectiveAnimation ?? undefined}
+                  computeState={payloadEval?.state}
                   threeToneMapping={threeToneMapping}
                   threeEnvironment={threeEnvironment}
                   threeExposure={threeExposure}

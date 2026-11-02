@@ -20,6 +20,7 @@ import {
     type GIMIShapePoseFrame,
     remapSourceIndices,
 } from "./model-viewer-compute-kernel";
+import { createMergedDeltaComputer } from "./model-viewer-compute-merged-delta";
 import {
     computePackedShapeFrame,
     type PackedShapeStageBuffers,
@@ -46,6 +47,7 @@ type FrameRequest = {
     id: number;
     poseFrame: number;
     phaseSeconds: number;
+    groupWeights?: number[];
 };
 
 type RecycleRequest = {
@@ -139,7 +141,8 @@ async function initialize(request: InitRequest): Promise<void> {
             vertexCount: request.deformer.vertexCount,
             vertices: subset,
             hasTangents:
-                request.deformer.kind === "gimi_shape_pose_v1" &&
+                (request.deformer.kind === "gimi_shape_pose_v1" ||
+                    request.deformer.kind === "gimi_merged_delta_shape_v1") &&
                 request.deformer.base.stride === 40,
             meshes: new Map(
                 meshes.map((mesh, index) => [
@@ -176,6 +179,7 @@ function computeFrame(request: FrameRequest): void {
         const frame = current.compute(request.poseFrame, request.phaseSeconds, {
             vertices: current.vertices,
             out: current.scratch,
+            groupWeights: request.groupWeights,
         });
         current.scratch = frame;
         const meshes = Array.from(current.meshes.values(), (mesh) => {
@@ -225,6 +229,14 @@ async function bindDeformerCompute(
     (poseFrame: number, phaseSeconds: number, options?: GIMIComputeOptions) => GIMIShapePoseFrame
 > {
     switch (deformer.kind) {
+        case "gimi_merged_delta_shape_v1": {
+            const [base, deltas] = await Promise.all([
+                sources.load(deformer.base.url, deformer.base.byteLength),
+                sources.load(deformer.mergedDeltas?.url ?? ""),
+            ]);
+            const compute = createMergedDeltaComputer(deformer, { base, deltas });
+            return (_poseFrame, _phaseSeconds, options) => compute(options);
+        }
         case "gimi_cyclic_packed_shape_v1": {
             const stages = await loadPackedShapeStages(deformer, sources);
             validatePackedShapeBuffers(deformer, stages);

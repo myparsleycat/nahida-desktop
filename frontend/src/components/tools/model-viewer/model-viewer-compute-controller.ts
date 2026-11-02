@@ -2,8 +2,11 @@ import type {
     ViewerAnimationClip,
     ViewerComputeDeformer,
     ViewerMeshTransport,
+    ViewerStateValue,
 } from "@shared/mod-viewer/types";
 import { BufferAttribute, Mesh, Object3D } from "three";
+
+import { MergedDeltaPlayback } from "./model-viewer-compute-merged-delta";
 
 type ComputeWorker = Pick<Worker, "onmessage" | "onerror" | "postMessage" | "terminate">;
 
@@ -28,6 +31,9 @@ export class ModelViewerComputeController {
     private inFlight = false;
     private latest?: ComputeFrameRequest;
     private activeRequest?: ComputeFrameRequest;
+    private lastRequest?: ComputeFrameRequest;
+    private readonly mergedPlayback?: MergedDeltaPlayback;
+    private variables: Record<string, ViewerStateValue> = {};
     private nextId = 1;
     private phaseOffset = 0;
     private previousFrameTime = 0;
@@ -47,6 +53,9 @@ export class ModelViewerComputeController {
         ),
     ) {
         this.worker = worker;
+        this.mergedPlayback = deformer.mergedDeltas
+            ? new MergedDeltaPlayback(deformer.mergedDeltas.groups)
+            : undefined;
         this.generation = Date.now() + Math.floor(Math.random() * 1_000_000);
         root.traverse((object) => {
             if (!(object instanceof Mesh) || !deformer.meshIds.includes(object.userData.meshId)) {
@@ -105,7 +114,17 @@ export class ModelViewerComputeController {
             return;
         }
         this.latest = request;
+        this.lastRequest = request;
         this.dispatchLatest();
+    }
+
+    /** The variables of the toggle controls; a paused clip still follows them. */
+    setVariables(variables: Record<string, ViewerStateValue>): void {
+        this.variables = variables;
+        this.mergedPlayback?.observe(variables);
+        if (this.mergedPlayback && this.lastRequest) {
+            this.request(this.lastRequest);
+        }
     }
 
     dispose(restore = true): void {
@@ -120,6 +139,7 @@ export class ModelViewerComputeController {
         this.baselines.clear();
         this.latest = undefined;
         this.activeRequest = undefined;
+        this.lastRequest = undefined;
     }
 
     private dispatchLatest(): void {
@@ -140,6 +160,11 @@ export class ModelViewerComputeController {
             id: this.nextId++,
             poseFrame: frame.index,
             phaseSeconds: this.phaseSeconds(request, frame.time),
+            groupWeights: this.mergedPlayback?.advance(
+                frame.time,
+                request.clip.frames.length / request.clip.fps,
+                this.variables,
+            ),
         });
     }
 

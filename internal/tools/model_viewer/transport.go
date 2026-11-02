@@ -179,15 +179,16 @@ type ModelViewerComputePoseSource struct {
 }
 
 type ModelViewerComputeDeformerTransport struct {
-	MeshSourceIndices map[string]string              `json:"meshSourceIndices,omitempty"`
-	Kind              string                         `json:"kind"`
-	ID                string                         `json:"id"`
-	MeshIDs           []string                       `json:"meshIds"`
-	VertexCount       int                            `json:"vertexCount"`
-	Base              ModelViewerComputeBinarySource `json:"base"`
-	ShapePasses       []ModelViewerComputeShapePass  `json:"shapePasses"`
-	ShapeStages       []ModelViewerComputeShapeStage `json:"shapeStages,omitempty"`
-	Pose              *ModelViewerComputePoseSource  `json:"pose,omitempty"`
+	MeshSourceIndices map[string]string               `json:"meshSourceIndices,omitempty"`
+	Kind              string                          `json:"kind"`
+	ID                string                          `json:"id"`
+	MeshIDs           []string                        `json:"meshIds"`
+	VertexCount       int                             `json:"vertexCount"`
+	Base              ModelViewerComputeBinarySource  `json:"base"`
+	ShapePasses       []ModelViewerComputeShapePass   `json:"shapePasses"`
+	ShapeStages       []ModelViewerComputeShapeStage  `json:"shapeStages,omitempty"`
+	Pose              *ModelViewerComputePoseSource   `json:"pose,omitempty"`
+	MergedDeltas      *ModelViewerComputeMergedDeltas `json:"mergedDeltas,omitempty"`
 	// meshSourceOffsets places a mesh's vertices inside records merged from several buffers.
 	meshSourceOffsets map[string]uint32
 }

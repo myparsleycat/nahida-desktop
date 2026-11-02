@@ -16,6 +16,7 @@ export type GIMIShapePoseFrame = {
 export type GIMIComputeOptions = {
     vertices?: Uint32Array;
     out?: GIMIShapePoseFrame;
+    groupWeights?: readonly number[];
 };
 
 // Character shape/pose records pack position, normal, and a float4 tangent;
