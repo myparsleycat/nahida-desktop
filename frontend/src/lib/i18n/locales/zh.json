@@ -1431,6 +1431,7 @@
           "grouped": "{{group}} › {{label}}"
         },
         "overlay_switch_page": "切换菜单页面",
+        "overlay_resize": "调整覆盖层大小",
         "toggle_viewer": "切换查看器",
         "toggle_viewer_splitter": "拖动可调整大小。单击可显示或隐藏切换查看器。",
         "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",
@@ -1458,6 +1459,9 @@
           "model": "模型",
           "texture": "纹理",
           "normal_maps": "法线贴图",
+          "overlay_in_viewer": "在查看器中显示覆盖层",
+          "overlay_in_viewer_hint": "拖动覆盖层可移动位置。使用 Ctrl + 鼠标滚轮或右下角调整大小。",
+          "overlay_reset_placement": "重置覆盖层位置和大小",
           "toon_style": "卡通风格",
           "toon_outlines": "描边",
           "toon_self_shadow": "自阴影",
@@ -1498,6 +1502,7 @@
           "save_to_ini_repaired": "已修复 INI 中拼写错误的 persist 声明，未保存开关值",
           "save_to_ini_success_repaired": "已将开关值保存到 INI，并修复了拼写错误的 persist 声明",
           "save_to_ini_error": "保存到 INI 失败",
+          "overlay_in_viewer_save_error": "保存覆盖层显示设置失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",
           "load_error": "无法加载模型"

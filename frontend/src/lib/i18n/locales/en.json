@@ -1433,6 +1433,7 @@
           "grouped": "{{group}} › {{label}}"
         },
         "overlay_switch_page": "Switch menu page",
+        "overlay_resize": "Resize overlay",
         "toggle_viewer": "Toggle Viewer",
         "toggle_viewer_splitter": "Drag to resize. Click to show or hide the Toggle Viewer.",
         "ineffective_blocked_by": "This value cannot be used with the current combination: {{variables}}",
@@ -1461,6 +1462,9 @@
           "model": "Model",
           "texture": "Texture",
           "normal_maps": "Normal Maps",
+          "overlay_in_viewer": "Show Overlay in Viewer",
+          "overlay_in_viewer_hint": "Drag the overlay to move it. Resize it with Ctrl + mouse wheel or its bottom-right corner.",
+          "overlay_reset_placement": "Reset Overlay Position and Size",
           "toon_style": "Toon Style",
           "toon_outlines": "Outlines",
           "toon_self_shadow": "Self Shadow",
@@ -1501,6 +1505,7 @@
           "save_to_ini_repaired": "Fixed misspelled persist declarations in the INI. No toggle values were saved",
           "save_to_ini_success_repaired": "Saved toggle values to the INI and fixed misspelled persist declarations",
           "save_to_ini_error": "Failed to save toggle values to INI",
+          "overlay_in_viewer_save_error": "Failed to save the overlay display setting",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
           "capture_preview_error": "Failed to save the current viewer capture as preview.png",
           "load_error": "Failed to load the model"

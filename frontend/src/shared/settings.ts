@@ -78,6 +78,7 @@ export interface AppSettings {
     "modelViewer.exposure": number;
     "modelViewer.toonShadows": boolean;
     "modelViewer.toonStyle": string;
+    "modelViewer.overlayInViewer": boolean;
 
     "xxmi.persistToggles": boolean;
     "xxmi.toggleViewerAutoGenerate": boolean;
@@ -409,6 +410,11 @@ export const APP_SETTINGS = {
         publicKey: "modelViewer.toonStyle",
         scope: "modelViewer",
         storageKey: "model_viewer_toon_style",
+    },
+    "modelViewer.overlayInViewer": {
+        publicKey: "modelViewer.overlayInViewer",
+        scope: "modelViewer",
+        storageKey: "model_viewer_overlay_in_viewer",
     },
 
     "xxmi.persistToggles": {

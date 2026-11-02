@@ -89,6 +89,9 @@ type ModelViewerOverlayPage struct {
 // the mouse, in pixels at the reference resolution with the corner shared by its
 // pages at the origin. The first page is the one the mod opens on.
 type ModelViewerOverlayMenu struct {
+	// X and Y are where the mod draws that corner in the reference resolution.
+	X      float64                  `json:"x"`
+	Y      float64                  `json:"y"`
 	Width  float64                  `json:"width"`
 	Height float64                  `json:"height"`
 	Form   string                   `json:"form,omitempty"`
@@ -905,6 +908,8 @@ func assembleModelViewerOverlayMenu(
 	}
 
 	menu := &ModelViewerOverlayMenu{
+		X:      roundModelViewerOverlay(originX),
+		Y:      roundModelViewerOverlay(originY),
 		Width:  roundModelViewerOverlay(maxX - originX),
 		Height: roundModelViewerOverlay(maxY - originY),
 		Form:   form,

@@ -38,7 +38,7 @@ import {
 } from "@shared/mod-viewer/eval";
 import type { ViewerForm, ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { debounce } from "es-toolkit";
+import { debounce, mapValues } from "es-toolkit";
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
 import {
   Fragment,
@@ -81,7 +81,11 @@ import {
   type IneffectiveSuggestion,
 } from "./model-viewer-ineffective";
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
-import { ModelViewerOverlayMenuPanel } from "./model-viewer-overlay-menu";
+import {
+  ModelViewerFloatingOverlayMenu,
+  ModelViewerOverlayMenuPanel,
+  type ModelViewerOverlayPlacement,
+} from "./model-viewer-overlay-menu";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { ModelViewerSideSplit } from "./model-viewer-side-split";
 import { ThreeModelViewer } from "./three-model-viewer";
@@ -179,6 +183,10 @@ export function ModelViewerWorkspace({
   );
   useEffect(() => () => persistToonStyle.flush(), [persistToonStyle]);
   const [normalMaps, setNormalMaps] = useState(true);
+  const [overlayInViewer, setOverlayInViewer] = useState(true);
+  const [overlayMenuViews, setOverlayMenuViews] = useState<
+    Record<string, { page?: number; placement?: ModelViewerOverlayPlacement }>
+  >({});
   const [highlightGameTextures, setHighlightGameTextures] = useState(false);
   const [ownForm, setOwnForm] = useState(ALL_FORMS);
   const [previewForm, setPreviewForm] = useState<string | null>(null);
@@ -219,6 +227,7 @@ export function ModelViewerWorkspace({
     }
 
     setActiveState(source?.transport.defaultState ?? {});
+    setOverlayMenuViews({});
     setHighlightGameTextures(false);
     setOwnForm(ALL_FORMS);
     setActiveAnimationId(source?.transport.animations[0]?.id ?? null);
@@ -248,18 +257,29 @@ export function ModelViewerWorkspace({
       getSetting("modelViewer.exposure"),
       getSetting("modelViewer.toonShadows"),
       getSetting("modelViewer.toonStyle"),
+      getSetting("modelViewer.overlayInViewer"),
     ])
-      .then(([toneMapping, environment, exposure, storedToonShadows, storedToonStyle]) => {
-        if (cancelled) {
-          return;
-        }
+      .then(
+        ([
+          toneMapping,
+          environment,
+          exposure,
+          storedToonShadows,
+          storedToonStyle,
+          storedOverlayInViewer,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
 
-        setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
-        setThreeEnvironment(normalizeThreeEnvironment(environment));
-        setThreeExposure(clampThreeExposure(exposure));
-        setToonShadows(storedToonShadows === true);
-        setToonStyle(parseModelViewerToonStyle(storedToonStyle));
-      })
+          setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
+          setThreeEnvironment(normalizeThreeEnvironment(environment));
+          setThreeExposure(clampThreeExposure(exposure));
+          setToonShadows(storedToonShadows === true);
+          setToonStyle(parseModelViewerToonStyle(storedToonStyle));
+          setOverlayInViewer(storedOverlayInViewer !== false);
+        },
+      )
       .catch((error) => {
         Logger.capture(
           "components/tools/model-viewer/model-viewer-workspace.tsx",
@@ -343,6 +363,18 @@ export function ModelViewerWorkspace({
         error,
       );
       toast.error("Failed to save toon shadow setting.");
+    });
+  };
+
+  const updateOverlayInViewer = (value: boolean) => {
+    setOverlayInViewer(value);
+    void setSetting("modelViewer.overlayInViewer", value).catch((error) => {
+      Logger.capture(
+        "components/tools/model-viewer/model-viewer-workspace.tsx",
+        "Failed to persist model viewer overlay display setting",
+        error,
+      );
+      toast.error(t("page.tools.model_viewer.toast.overlay_in_viewer_save_error"));
     });
   };
 
@@ -481,9 +513,28 @@ export function ModelViewerWorkspace({
   const slotHoverPath = uiAssets?.slotHoverPath;
   const slotActivePath = uiAssets?.slotActivePath;
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
-  const hasVariantToggleUi =
-    visibleVariables.length > 0 || Boolean(payloadTransport?.overlayMenus?.some(inActiveForm));
-  const showToggleViewer = Boolean(payloadTransport && hasVariantToggleUi);
+  const overlayMenus = (payloadTransport?.overlayMenus ?? []).flatMap((menu, index) =>
+    inActiveForm(menu)
+      ? [{ menu, key: `${payloadTransport?.memorySessionId}:${menu.form ?? ""}:${index}` }]
+      : [],
+  );
+  const overlayMenuPanelProps = (entry: (typeof overlayMenus)[number]) => ({
+    menu: entry.menu,
+    variables,
+    activeState,
+    onSelect: handleSelectValue,
+    page: overlayMenuViews[entry.key]?.page ?? 0,
+    onPageChange: (page: number) =>
+      setOverlayMenuViews((views) => ({
+        ...views,
+        [entry.key]: { ...views[entry.key], page },
+      })),
+  });
+  const hasOverlayMenus = overlayMenus.length > 0;
+  const showToggleViewer = Boolean(
+    payloadTransport && (visibleVariables.length > 0 || hasOverlayMenus),
+  );
+  const showToggleControls = showToggleViewer && (visibleVariables.length > 0 || !overlayInViewer);
   const isViewerReady = viewerStatus === "ready";
   const canSaveCapturedPreview = Boolean(source?.modPath) && isViewerReady && !isSavingPreview;
 
@@ -728,15 +779,17 @@ export function ModelViewerWorkspace({
 
   const toggleControls = (
     <div className="p-4">
-      {payloadTransport?.overlayMenus?.filter(inActiveForm).map((menu, index) => (
-        <ModelViewerOverlayMenuPanel
-          key={`${payloadTransport?.memorySessionId}:${menu.form ?? ""}:${index}`}
-          menu={menu}
-          variables={variables}
-          activeState={activeState}
-          onSelect={handleSelectValue}
-        />
-      ))}
+      {overlayInViewer
+        ? null
+        : overlayMenus.map((entry) => (
+            <div
+              key={entry.key}
+              className="mx-auto mb-4 w-full"
+              style={{ maxWidth: entry.menu.width }}
+            >
+              <ModelViewerOverlayMenuPanel {...overlayMenuPanelProps(entry)} />
+            </div>
+          ))}
       {hasVariantTileUi ? (
         <div
           className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"
@@ -828,12 +881,23 @@ export function ModelViewerWorkspace({
           isViewerBusy={false}
           onSaveTogglesToIni={handleSaveTogglesToIni}
           onResetToggles={handleResetToggles}
+          showOverlayInViewer={hasOverlayMenus}
+          overlayInViewer={overlayInViewer}
+          onOverlayInViewerChange={updateOverlayInViewer}
+          canResetOverlayPlacement={overlayMenus.some(
+            (entry) => overlayMenuViews[entry.key]?.placement,
+          )}
+          onResetOverlayPlacement={() =>
+            setOverlayMenuViews((views) =>
+              mapValues(views, (view) => ({ ...view, placement: undefined })),
+            )
+          }
           canSaveCapturedPreview={canSaveCapturedPreview}
           onCapturePreviewClick={handleCapturePreviewClick}
         />
 
         <ModelViewerSideSplit
-          resizable={showToggleViewer && !inspector}
+          resizable={showToggleControls && !inspector}
           viewer={
             <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
               {payloadTransport ? (
@@ -862,6 +926,21 @@ export function ModelViewerWorkspace({
                       overlay={overlay}
                     />
                   )}
+                  {overlayInViewer && !deferViewer
+                    ? overlayMenus.map((entry) => (
+                        <ModelViewerFloatingOverlayMenu
+                          key={entry.key}
+                          {...overlayMenuPanelProps(entry)}
+                          placement={overlayMenuViews[entry.key]?.placement}
+                          onPlacementChange={(placement) =>
+                            setOverlayMenuViews((views) => ({
+                              ...views,
+                              [entry.key]: { ...views[entry.key], placement },
+                            }))
+                          }
+                        />
+                      ))
+                    : null}
                   {forms.length > 1 ? (
                     <FormSwitcher
                       forms={forms}
@@ -904,11 +983,11 @@ export function ModelViewerWorkspace({
             </div>
           }
           side={
-            showToggleViewer || inspector ? (
+            showToggleControls || inspector ? (
               <>
                 <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
                   {inspector}
-                  {showToggleViewer && inspector ? (
+                  {showToggleControls && inspector ? (
                     // Below a tool panel the column scrolls, so the toggles keep
                     // their height and fold away until the tool needs them.
                     <InspectorSection
@@ -921,7 +1000,7 @@ export function ModelViewerWorkspace({
                     >
                       {toggleControls}
                     </InspectorSection>
-                  ) : showToggleViewer ? (
+                  ) : showToggleControls ? (
                     <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
                       <div className="min-h-0 flex-1 overflow-y-auto">{toggleControls}</div>
                     </div>

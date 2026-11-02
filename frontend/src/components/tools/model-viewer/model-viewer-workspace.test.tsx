@@ -2,6 +2,7 @@
 import { Mod } from "@bindings/mod";
 import { Tools } from "@bindings/tools";
 import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
+import { getSetting, setSetting } from "@renderer/lib/settings";
 import type { ModViewerTransport } from "@shared/mod-viewer/types";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useImperativeHandle, type ComponentProps } from "react";
@@ -544,6 +545,89 @@ it("closes the toggle viewer on a bar click and resizes it on a bar drag", () =>
   view.rerender(<ModelViewerWorkspace {...props} inspector={<div />} />);
   expect(screen.queryByRole("separator")).toBeNull();
 });
+
+it("moves an overlay menu between the side column and the viewer, keeping its page", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe() {
+        this.callback(
+          [{ contentRect: { width: 960, height: 540 } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
+      }
+      disconnect() {}
+    },
+  );
+  const { container } = render(
+    <ModelViewerWorkspace
+      open
+      source={createOverlaySource()}
+      doubleSidedEnabled
+      onDoubleSidedChange={vi.fn()}
+    />,
+  );
+  await act(async () => {});
+  const menus = () => vi.mocked(ModelViewerMenuBar).mock.lastCall![0];
+  const floating = () => screen.queryByTestId("model-viewer-floating-overlay");
+
+  // On by default. A menu is all this mod has for the side column, so the column goes with it.
+  expect(menus().showOverlayInViewer).toBe(true);
+  expect(menus().showToggleViewer).toBe(true);
+  expect(floating()).toBeTruthy();
+  expect(screen.queryByRole("separator")).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "page.tools.model_viewer.overlay_switch_page" }),
+  );
+  expect(floating()!.querySelector("img")?.getAttribute("src")).toContain("b.png");
+
+  act(() => menus().onOverlayInViewerChange!(false));
+  expect(setSetting).toHaveBeenCalledWith("modelViewer.overlayInViewer", false);
+  expect(floating()).toBeNull();
+  expect(screen.getByRole("separator")).toBeTruthy();
+  expect(container.querySelector("img")?.getAttribute("src")).toContain("b.png");
+
+  act(() => menus().onOverlayInViewerChange!(true));
+  expect(floating()!.querySelector("img")?.getAttribute("src")).toContain("b.png");
+  vi.unstubAllGlobals();
+});
+
+it("keeps an overlay menu in the side column when the user turned the viewer display off", async () => {
+  vi.mocked(getSetting).mockImplementation((async (key: string) =>
+    key === "modelViewer.overlayInViewer" ? false : undefined) as typeof getSetting);
+  render(
+    <ModelViewerWorkspace
+      open
+      source={createOverlaySource()}
+      doubleSidedEnabled
+      onDoubleSidedChange={vi.fn()}
+      deferViewer
+    />,
+  );
+  await waitFor(() => expect(screen.getByRole("separator")).toBeTruthy());
+  vi.mocked(getSetting).mockImplementation((async () => undefined) as typeof getSetting);
+});
+
+function createOverlaySource() {
+  const rect = { x: 0, y: 0, width: 10, height: 10 };
+  const page = (path: string, target: number) => ({
+    quads: [{ ...rect, path, opacity: 1 }],
+    buttons: [{ ...rect, transitions: [], page: target }],
+  });
+  return {
+    mode: "payload" as const,
+    transport: {
+      ...normalizeModelViewerTransport(payload),
+      overlayMenus: [
+        { x: 0, y: 0, width: 10, height: 10, pages: [page("a.png", 1), page("b.png", 0)] },
+      ],
+    },
+    memorySessionId: "workspace",
+    modPath: "C:/mod",
+    name: "Model",
+  };
+}
 
 function createFormSource() {
   const mesh = (id: string, form: string): ModViewerTransport["meshes"][number] => ({

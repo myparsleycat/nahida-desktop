@@ -215,6 +215,8 @@ export function normalizeModelViewerTransport(
         })),
         uiAssets: value.uiAssets,
         overlayMenus: value.overlayMenus?.map((menu) => ({
+            x: menu.x,
+            y: menu.y,
             width: menu.width,
             height: menu.height,
             form: menu.form || undefined,

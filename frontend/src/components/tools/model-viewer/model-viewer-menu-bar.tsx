@@ -100,6 +100,11 @@ export interface ModelViewerMenuBarProps {
   isViewerBusy: boolean;
   onSaveTogglesToIni: () => void;
   onResetToggles: () => void;
+  showOverlayInViewer?: boolean;
+  overlayInViewer?: boolean;
+  onOverlayInViewerChange?: (value: boolean) => void;
+  canResetOverlayPlacement?: boolean;
+  onResetOverlayPlacement?: () => void;
 
   /* Preview capture */
   canSaveCapturedPreview: boolean;
@@ -141,6 +146,11 @@ export function ModelViewerMenuBar({
   isViewerBusy,
   onSaveTogglesToIni,
   onResetToggles,
+  showOverlayInViewer = false,
+  overlayInViewer = false,
+  onOverlayInViewerChange,
+  canResetOverlayPlacement = false,
+  onResetOverlayPlacement,
   canSaveCapturedPreview,
   onCapturePreviewClick,
   brushProps,
@@ -498,6 +508,29 @@ export function ModelViewerMenuBar({
                 {t("page.tools.model_viewer.menu.reset")}
               </MenubarItem>
             </MenubarGroup>
+            {showOverlayInViewer ? (
+              <>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarCheckboxItem
+                    checked={overlayInViewer}
+                    title={t("page.tools.model_viewer.menu.overlay_in_viewer_hint")}
+                    onCheckedChange={(checked) => onOverlayInViewerChange?.(checked === true)}
+                  >
+                    {t("page.tools.model_viewer.menu.overlay_in_viewer")}
+                  </MenubarCheckboxItem>
+                  {overlayInViewer ? (
+                    <MenubarItem
+                      disabled={!canResetOverlayPlacement}
+                      onClick={onResetOverlayPlacement}
+                    >
+                      <RotateCcwIcon />
+                      {t("page.tools.model_viewer.menu.overlay_reset_placement")}
+                    </MenubarItem>
+                  ) : null}
+                </MenubarGroup>
+              </>
+            ) : null}
           </MenubarContent>
         </MenubarMenu>
       ) : null}

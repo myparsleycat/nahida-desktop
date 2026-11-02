@@ -527,7 +527,8 @@ func buildSpecs() map[string]spec {
 				return formatFloat(clampModelViewerExposure(n))
 			},
 		},
-		KeyModelViewerToonShadows: boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
+		KeyModelViewerToonShadows:     boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
+		KeyModelViewerOverlayInViewer: boolSpec(definitionsByKey[KeyModelViewerOverlayInViewer], true),
 		KeyModelViewerToonStyle: {
 			def:        definitionsByKey[KeyModelViewerToonStyle],
 			getDefault: func(*Setting) any { return "" },

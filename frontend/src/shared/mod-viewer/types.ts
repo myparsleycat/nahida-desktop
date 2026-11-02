@@ -184,6 +184,9 @@ export type ViewerOverlayPage = {
 };
 
 export type ViewerOverlayMenu = {
+    /** Where the mod draws the menu's corner in the 1920x1080 reference window. */
+    x: number;
+    y: number;
     width: number;
     height: number;
     /** The form whose INI declares the menu; see ModViewerTransport.forms. */

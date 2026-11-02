@@ -1431,6 +1431,7 @@
           "grouped": "{{group}} › {{label}}"
         },
         "overlay_switch_page": "メニューページを切り替える",
+        "overlay_resize": "オーバーレイのサイズを変更",
         "toggle_viewer": "トグルビューアー",
         "toggle_viewer_splitter": "ドラッグでサイズを変更します。クリックでトグルビューアーの表示と非表示を切り替えます。",
         "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",
@@ -1458,6 +1459,9 @@
           "model": "モデル",
           "texture": "テクスチャ",
           "normal_maps": "法線マップ",
+          "overlay_in_viewer": "ビューアーにオーバーレイを表示",
+          "overlay_in_viewer_hint": "オーバーレイはドラッグで移動します。サイズは Ctrl + マウスホイールまたは右下の角で変更します。",
+          "overlay_reset_placement": "オーバーレイの位置とサイズをリセット",
           "toon_style": "トゥーンスタイル",
           "toon_outlines": "アウトライン",
           "toon_self_shadow": "セルフシャドウ",
@@ -1498,6 +1502,7 @@
           "save_to_ini_repaired": "INI の誤った persist 宣言を修正しました。トグル値は保存されていません",
           "save_to_ini_success_repaired": "トグル値を INI に保存し、誤った persist 宣言を修正しました",
           "save_to_ini_error": "INI への保存に失敗しました",
+          "overlay_in_viewer_save_error": "オーバーレイ表示設定の保存に失敗しました",
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
           "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",
           "load_error": "モデルの読み込みに失敗しました"

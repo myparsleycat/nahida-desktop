@@ -1431,6 +1431,7 @@
           "grouped": "{{group}} › {{label}}"
         },
         "overlay_switch_page": "메뉴 페이지 전환",
+        "overlay_resize": "오버레이 크기 조절",
         "toggle_viewer": "토글 뷰어",
         "toggle_viewer_splitter": "드래그하여 크기를 조절합니다. 클릭하면 토글 뷰어를 표시하거나 숨깁니다.",
         "ineffective_blocked_by": "다음 설정이 함께 적용되어 이 값을 사용할 수 없습니다: {{variables}}",
@@ -1458,6 +1459,9 @@
           "model": "모델",
           "texture": "텍스처",
           "normal_maps": "노멀 맵",
+          "overlay_in_viewer": "뷰어에 오버레이 표시",
+          "overlay_in_viewer_hint": "오버레이를 드래그하면 이동합니다. 크기는 Ctrl + 마우스 휠 또는 우하단 모서리로 조절합니다.",
+          "overlay_reset_placement": "오버레이 위치 및 크기 초기화",
           "toon_style": "툰 스타일",
           "toon_outlines": "외곽선",
           "toon_self_shadow": "자체 그림자",
@@ -1498,6 +1502,7 @@
           "save_to_ini_repaired": "INI의 잘못된 persist 선언을 수정했습니다. 저장된 토글 값은 없습니다.",
           "save_to_ini_success_repaired": "토글 값을 INI에 저장하고 잘못된 persist 선언을 수정했습니다.",
           "save_to_ini_error": "INI 저장에 실패했습니다.",
+          "overlay_in_viewer_save_error": "오버레이 표시 설정을 저장하지 못했습니다.",
           "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
           "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다.",
           "load_error": "모델을 불러오지 못했습니다."

@@ -178,6 +178,9 @@ func TestModelViewerOverlayMenuReproducesLayoutAndClicks(t *testing.T) {
 	if menu.Width != 200 || menu.Height != 300 {
 		t.Fatalf("size = %vx%v, want 200x300", menu.Width, menu.Height)
 	}
+	if menu.X != 100 || menu.Y != 50 {
+		t.Fatalf("corner = %v,%v, want where the mod draws the backdrop, 100,50", menu.X, menu.Y)
+	}
 	// The closed-menu gates are passed, and the list drawn outside the menu stays out.
 	if len(menu.Pages[0].Quads) != 5 {
 		t.Fatalf("quads = %d, want the backdrop, three slots and a decoration", len(menu.Pages[0].Quads))
@@ -297,6 +300,9 @@ func TestModelViewerOverlayMenuReadsClipSpaceSelectionMenu(t *testing.T) {
 	if menu.Width != 1200 || menu.Height != 700 {
 		t.Fatalf("size = %vx%v, want the painted part of the backdrop, 1200x700", menu.Width, menu.Height)
 	}
+	if menu.X != 400 || menu.Y != 200 {
+		t.Fatalf("corner = %v,%v, want the painted part of the backdrop, 400,200", menu.X, menu.Y)
+	}
 
 	quads := menu.Pages[0].Quads
 	if len(quads) != 5 {
@@ -304,7 +310,8 @@ func TestModelViewerOverlayMenuReadsClipSpaceSelectionMenu(t *testing.T) {
 	}
 	shownMark, hiddenMark := quads[2], quads[4]
 	if filepath.Base(shownMark.Path) != "mark.buf" || shownMark.X != 80 || shownMark.Y != 70 || shownMark.Width != 480 ||
-		shownMark.Opacity != 1 || len(shownMark.States) != 1 ||
+		shownMark.Opacity != 1 ||
+		len(shownMark.States) != 1 ||
 		shownMark.States[0].Value != 0 ||
 		shownMark.States[0].Opacity != 0 {
 		t.Fatalf("mark drawn by default = %+v, want it to disappear at 0", shownMark)

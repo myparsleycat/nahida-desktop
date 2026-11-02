@@ -64,11 +64,12 @@ const (
 
 	KeyDebugOpenConsole = "debug.openConsole"
 
-	KeyModelViewerToneMapping = "modelViewer.toneMapping"
-	KeyModelViewerEnvironment = "modelViewer.environment"
-	KeyModelViewerExposure    = "modelViewer.exposure"
-	KeyModelViewerToonShadows = "modelViewer.toonShadows"
-	KeyModelViewerToonStyle   = "modelViewer.toonStyle"
+	KeyModelViewerToneMapping     = "modelViewer.toneMapping"
+	KeyModelViewerEnvironment     = "modelViewer.environment"
+	KeyModelViewerExposure        = "modelViewer.exposure"
+	KeyModelViewerToonShadows     = "modelViewer.toonShadows"
+	KeyModelViewerToonStyle       = "modelViewer.toonStyle"
+	KeyModelViewerOverlayInViewer = "modelViewer.overlayInViewer"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -173,6 +174,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerExposure, ScopeModelViewer, "model_viewer_exposure"},
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 	{KeyModelViewerToonStyle, ScopeModelViewer, "model_viewer_toon_style"},
+	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},
