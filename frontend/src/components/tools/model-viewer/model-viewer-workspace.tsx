@@ -104,6 +104,7 @@ function getInitialActiveAnimationId(source: ModelViewerDialogSource | null): st
 
 export function ModelViewerWorkspace({
   open,
+  deferViewer = false,
   source,
   existingPreviewPath,
   onPreviewSaved,
@@ -118,6 +119,8 @@ export function ModelViewerWorkspace({
   onVisibleMeshesChange,
 }: {
   open: boolean;
+  /** Shows the loading state without mounting the viewer yet. */
+  deferViewer?: boolean;
   source: ModelViewerDialogSource | null;
   existingPreviewPath?: string;
   onPreviewSaved?: (path: string) => void | Promise<void>;
@@ -837,28 +840,30 @@ export function ModelViewerWorkspace({
           <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
             {payloadTransport ? (
               <>
-                <ThreeModelViewer
-                  ref={viewerRef}
-                  className="absolute inset-0 h-full w-full"
-                  payloadTransport={payloadTransport}
-                  payloadEval={payloadEval ?? undefined}
-                  form={effectiveForm}
-                  orientation={modelOrientation}
-                  animationClip={effectiveAnimation ?? undefined}
-                  computeState={payloadEval?.state}
-                  threeToneMapping={threeToneMapping}
-                  threeEnvironment={threeEnvironment}
-                  threeExposure={threeExposure}
-                  toonShadows={toonShadows}
-                  toonStyle={toonStyle}
-                  normalMaps={normalMaps}
-                  highlightGameTextures={highlightGameTextures}
-                  onLoad={handleViewerLoad}
-                  onError={handleViewerError}
-                  onSurfacePick={onSurfacePick}
-                  onVisibleMeshesChange={onVisibleMeshesChange}
-                  overlay={overlay}
-                />
+                {deferViewer ? null : (
+                  <ThreeModelViewer
+                    ref={viewerRef}
+                    className="absolute inset-0 h-full w-full"
+                    payloadTransport={payloadTransport}
+                    payloadEval={payloadEval ?? undefined}
+                    form={effectiveForm}
+                    orientation={modelOrientation}
+                    animationClip={effectiveAnimation ?? undefined}
+                    computeState={payloadEval?.state}
+                    threeToneMapping={threeToneMapping}
+                    threeEnvironment={threeEnvironment}
+                    threeExposure={threeExposure}
+                    toonShadows={toonShadows}
+                    toonStyle={toonStyle}
+                    normalMaps={normalMaps}
+                    highlightGameTextures={highlightGameTextures}
+                    onLoad={handleViewerLoad}
+                    onError={handleViewerError}
+                    onSurfacePick={onSurfacePick}
+                    onVisibleMeshesChange={onVisibleMeshesChange}
+                    overlay={overlay}
+                  />
+                )}
                 {forms.length > 1 ? (
                   <FormSwitcher
                     forms={forms}

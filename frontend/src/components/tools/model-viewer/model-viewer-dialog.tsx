@@ -23,8 +23,11 @@ export function ModelViewerDialog({
 }) {
   const { t } = useTranslation();
   const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
+  // Creating the WebGL renderer and PMREM environment blocks the main thread for
+  // 50-75ms, which visibly stalls the opening animation if it runs during it.
+  const [openAnimationDone, setOpenAnimationDone] = useState(open);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={setOpenAnimationDone}>
       <DialogContent
         className="flex h-full max-h-[92vh] min-w-[95vw] flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
         onClick={(event) => event.stopPropagation()}
@@ -36,6 +39,7 @@ export function ModelViewerDialog({
         </DialogHeader>
         <ModelViewerWorkspace
           open={open}
+          deferViewer={!openAnimationDone}
           doubleSidedEnabled={doubleSidedEnabled}
           onDoubleSidedChange={setDoubleSidedEnabled}
           source={source}
