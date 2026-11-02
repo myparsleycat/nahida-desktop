@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -206,6 +207,12 @@ func collectModelViewerMihoyoGroups(
 			if isModelViewerInterleaveValidationError(err) {
 				continue
 			}
+			if errors.Is(err, fs.ErrNotExist) {
+				if warn != nil {
+					warn("Skipping buffer group with a missing file: " + key)
+				}
+				continue
+			}
 			return nil, err
 		}
 		groups = append(
@@ -302,6 +309,12 @@ func collectModelViewerWwmiGroups(
 			}
 			return vb, stride, nil
 		})
+		if errors.Is(err, fs.ErrNotExist) {
+			if warn != nil {
+				warn("Skipping WWMI buffer group with a missing file: " + key)
+			}
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

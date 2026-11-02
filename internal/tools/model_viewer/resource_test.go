@@ -87,13 +87,18 @@ func TestCollectModelViewerMihoyoGroupsSkipsInterleaveValidationErrors(t *testin
 
 func TestCollectModelViewerMihoyoGroupsPropagatesReadErrors(t *testing.T) {
 	dir := t.TempDir()
+	for _, name := range []string{"pos.buf", "blend.buf", "uv.buf"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	resources := []modelViewerResource{
-		{Name: "BodyPosition", Filename: "missing-pos.buf", Stride: 40},
-		{Name: "BodyBlend", Filename: "missing-blend.buf", Stride: 32},
-		{Name: "BodyTexcoord", Filename: "missing-uv.buf", Stride: 20},
+		{Name: "BodyPosition", Filename: "pos.buf", Stride: 40},
+		{Name: "BodyBlend", Filename: "blend.buf", Stride: 32},
+		{Name: "BodyTexcoord", Filename: "uv.buf", Stride: 20},
 	}
 	if _, err := collectModelViewerMihoyoGroups(dir, resources, newModelViewerBufferCache(), nil); err == nil {
-		t.Fatal("missing vertex buffers succeeded")
+		t.Fatal("unreadable vertex buffers succeeded")
 	}
 }
 

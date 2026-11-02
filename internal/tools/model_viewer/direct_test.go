@@ -833,6 +833,41 @@ format = DXGI_FORMAT_R32_UINT`
 	}
 }
 
+func TestModelViewerLegacyBuildSkipsBufferGroupWithMissingFiles(t *testing.T) {
+	iniText := `[TextureOverrideFace]
+hash = 19df8e84
+ib = ResourceFaceIB
+drawindexed = 3, 0, 0
+[ResourceFacePosition]
+type = Buffer
+stride = 40
+filename = FacePosition.buf
+[ResourceFaceBlend]
+type = Buffer
+stride = 32
+filename = FaceBlend.buf
+[ResourceFaceTexcoord]
+type = Buffer
+stride = 36
+filename = FaceTexcoord.buf
+[ResourceFaceIB]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = Face.ib`
+
+	meshes, _, _, _, err := buildModelViewerDirectMeshes(
+		filepath.Join(t.TempDir(), "stale.ini"),
+		"",
+		parseModINI(iniText),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 0 {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+}
+
 func TestModelViewerDirectScannerUsesCommandListGlobalBuffers(t *testing.T) {
 	dir := t.TempDir()
 	iniText := `[CommandListGlobalBuffers]
