@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -35,29 +36,37 @@ type ModelViewerIneffectiveValue struct {
 }
 
 type modelViewerEvaluator struct {
-	payload  ModelViewerTransport
-	blocking map[string][]ModelViewerVariable
-	ctx      context.Context
+	payload      ModelViewerTransport
+	blocking     map[string][]ModelViewerVariable
+	blockingOnce sync.Once
+	ctx          context.Context
 }
 
 func newModelViewerEvaluator(ctx context.Context, payload ModelViewerTransport) *modelViewerEvaluator {
-	e := &modelViewerEvaluator{payload: payload, ctx: ctx, blocking: make(map[string][]ModelViewerVariable)}
-	// Co-occurrence depends on the manifest, not the selected values.
-	all := make(map[string]any, len(payload.Variables))
-	byID := make(map[string]ModelViewerVariable, len(payload.Variables))
-	for _, variable := range payload.Variables {
-		all[variable.ID] = 0
-		byID[variable.ID] = variable
-	}
-	for _, variable := range payload.Variables {
-		if variable.ControlType == "slider" || len(variable.Values) == 0 {
-			continue
+	return &modelViewerEvaluator{payload: payload, ctx: ctx}
+}
+
+// ensureBlocking builds the blocking table on the first request, since grid
+// previews register sessions that are never evaluated.
+func (e *modelViewerEvaluator) ensureBlocking() {
+	e.blockingOnce.Do(func() {
+		e.blocking = make(map[string][]ModelViewerVariable)
+		// Co-occurrence depends on the manifest, not the selected values.
+		all := make(map[string]any, len(e.payload.Variables))
+		byID := make(map[string]ModelViewerVariable, len(e.payload.Variables))
+		for _, variable := range e.payload.Variables {
+			all[variable.ID] = 0
+			byID[variable.ID] = variable
 		}
-		for _, blocking := range buildViewerBlockingVars(payload, variable.ID, all) {
-			e.blocking[variable.ID] = append(e.blocking[variable.ID], byID[blocking.ID])
+		for _, variable := range e.payload.Variables {
+			if variable.ControlType == "slider" || len(variable.Values) == 0 {
+				continue
+			}
+			for _, blocking := range buildViewerBlockingVars(e.payload, variable.ID, all) {
+				e.blocking[variable.ID] = append(e.blocking[variable.ID], byID[blocking.ID])
+			}
 		}
-	}
-	return e
+	})
 }
 
 func (t *Service) GetModelViewerIneffectiveValues(
@@ -117,6 +126,7 @@ func (e *modelViewerEvaluator) evaluate(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	e.ensureBlocking()
 	evaluate := func(state map[string]any) viewerEvalState {
 		return evaluateViewerTransportInForm(e.payload, state, form)
 	}

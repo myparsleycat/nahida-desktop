@@ -79,6 +79,11 @@ func (t *Service) loadModViewer(
 	if window, ok := ctx.Value(application.WindowKey).(application.Window); ok {
 		windowID = window.ID()
 	}
+	ctx, endLoad, beginErr := t.beginModelViewerLoad(ctx, windowID)
+	if beginErr != nil {
+		return ModelViewerTransport{}, beginErr
+	}
+	defer endLoad()
 	requestedPath := modPath
 	var absErr error
 	folder, absErr = filepath.Abs(requestedPath)
@@ -160,7 +165,14 @@ func (t *Service) loadModViewer(
 	runtime.GC()
 	stage = "prepare-payload"
 	stageStartedAt = time.Now()
-	meshPayloads, texturePayloads, textureStats, payloadErr := prepareModelViewerPayload(ctx, prepared, &transport)
+	textureDiagnostics := &infra.DiagnosticBatch{}
+	defer textureDiagnostics.Report(t.log, "StaticGlb.loadForViewer", "model-viewer-textures")
+	meshPayloads, texturePayloads, textureStats, payloadErr := prepareModelViewerPayload(
+		ctx,
+		prepared,
+		&transport,
+		textureDiagnostics,
+	)
 	if payloadErr != nil {
 		return ModelViewerTransport{}, payloadErr
 	}

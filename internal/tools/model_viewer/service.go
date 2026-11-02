@@ -19,6 +19,7 @@ type Service struct {
 	modelViewerMu            sync.Mutex
 	modelViewerSessions      map[string]*modelViewerSession
 	modelViewerClosedWindows map[uint]bool
+	modelViewerLoads         map[uint]map[*modelViewerLoad]struct{}
 }
 
 func New() *Service { return NewWithOptions(Options{}) }
@@ -33,6 +34,7 @@ func NewWithOptions(opts Options) *Service {
 		findModelViewerPreview:   opts.FindModelViewerPreview,
 		modelViewerSessions:      make(map[string]*modelViewerSession),
 		modelViewerClosedWindows: make(map[uint]bool),
+		modelViewerLoads:         make(map[uint]map[*modelViewerLoad]struct{}),
 	}
 }
 

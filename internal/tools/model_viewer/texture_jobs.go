@@ -2,17 +2,22 @@ package modelviewer
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type modelViewerTextureSettings struct {
 	TextureFormat   string
 	JPEGQuality     int
 	MaterialProfile string
+	// diagnostics collects textures dropped from the payload; nil drops them silently.
+	diagnostics *infra.DiagnosticBatch
 }
 
 const modelViewerTextureConcurrency = 8
@@ -152,6 +157,11 @@ func runModelViewerTextureJobs(
 		outputs[index] = make(map[string]modelViewerTexturePayload)
 	}
 	stats := modelViewerTextureRunStats{Jobs: len(jobs)}
+	fail := func(err error) {
+		if settings.diagnostics != nil {
+			settings.diagnostics.Add(err)
+		}
+	}
 	if ctx.Err() != nil || len(jobs) == 0 {
 		return outputs, stats, ctx.Err()
 	}
@@ -170,6 +180,13 @@ func runModelViewerTextureJobs(
 			var err error
 			metadata, err = inspectModelViewerDDS(ctx, job.path)
 			if err != nil {
+				fail(fmt.Errorf(
+					"inspect DDS texture path=%q resource=%q role=%q: %w",
+					job.path,
+					job.resourceName,
+					job.role,
+					err,
+				))
 				failedDirectPaths[pathKey] = true
 				continue
 			}
@@ -319,6 +336,13 @@ hashDispatch:
 				group.decodes++
 				decoded, err := decodeModelViewerTextureSource(ctx, group.path)
 				if err != nil {
+					fail(fmt.Errorf(
+						"decode texture path=%q resource=%q role=%q: %w",
+						group.path,
+						group.jobs[0].resourceName,
+						group.jobs[0].role,
+						err,
+					))
 					continue
 				}
 				variants := make(map[encodeVariant]*modelViewerPreparedTexture, 2)
@@ -347,6 +371,14 @@ hashDispatch:
 							variant.quality,
 						)
 						if err != nil {
+							fail(fmt.Errorf(
+								"encode texture path=%q resource=%q role=%q format=%q: %w",
+								job.path,
+								job.resourceName,
+								job.role,
+								variant.format,
+								err,
+							))
 							texture = nil
 						}
 						if ctx.Err() != nil {

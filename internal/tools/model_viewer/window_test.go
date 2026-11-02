@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -17,6 +19,18 @@ type modelViewerOwnerWindow struct {
 }
 
 func (w modelViewerOwnerWindow) ID() uint { return w.id }
+
+type viewerMarkerWriter struct {
+	marker string
+	seen   *atomic.Bool
+}
+
+func (w viewerMarkerWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), w.marker) {
+		w.seen.Store(true)
+	}
+	return len(p), nil
+}
 
 func TestModelViewerWindowCleanupIsOwnedAndIdempotent(t *testing.T) {
 	protocol := infra.NewProtocol()
@@ -74,11 +88,23 @@ drawindexed = 3, 0, 0
 	if fixture.service.modelViewerSessions[fixture.result.MemorySessionID] == nil {
 		t.Fatal("unowned session was released")
 	}
-	// Close during discovery to exercise the final registration fence after payload creation.
+	// Closing the window during discovery cancels the load before texture preparation.
+	var texturesPrepared atomic.Bool
+	fixture.service.log = infra.NewLogWithOptions(infra.LogOptions{
+		Dev:         true,
+		DisableFile: true,
+		Writer:      viewerMarkerWriter{marker: "Texture preparation completed", seen: &texturesPrepared},
+	})
 	fixture.service.findModelViewerPreview = func(string) *string { fixture.service.CleanupModelViewerWindow(43); return nil }
 	closedCtx := context.WithValue(context.Background(), application.WindowKey, modelViewerOwnerWindow{id: 43})
 	if _, err := fixture.service.LoadModViewer(closedCtx, dir); !errors.Is(err, context.Canceled) {
 		t.Fatalf("late load = %v", err)
+	}
+	if texturesPrepared.Load() {
+		t.Fatal("load kept preparing textures after its window closed")
+	}
+	if len(fixture.service.modelViewerLoads) != 0 {
+		t.Fatalf("finished loads remain registered: %v", fixture.service.modelViewerLoads)
 	}
 	if len(fixture.service.modelViewerSessions) != 1 {
 		t.Fatalf("late load registered a session: %v", fixture.service.modelViewerSessions)

@@ -16,8 +16,9 @@ func prepareModelViewerPayload(
 	ctx context.Context,
 	prepared *modelViewerPreparedGeometry,
 	transport *ModelViewerTransport,
+	diagnostics *infra.DiagnosticBatch,
 ) ([]modelViewerMeshPayload, map[string]modelViewerTexturePayload, modelViewerTextureRunStats, error) {
-	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85}
+	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85, diagnostics: diagnostics}
 	meshPayloads := make([]modelViewerMeshPayload, 0)
 	texturePayloads := make(map[string]modelViewerTexturePayload)
 	textureJobs := make([]modelViewerTextureJob, 0)

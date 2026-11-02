@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/myparsleycat/ddsutil"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 func TestModelViewerTextureBindingAndPreparation(t *testing.T) {
@@ -888,9 +890,10 @@ func TestRunModelViewerTextureJobsIsolatesFailedContent(t *testing.T) {
 	good := filepath.Join(dir, "good.png")
 	writeModelViewerTestPNG(t, good, color.NRGBA{R: 255, A: 255})
 	missing := filepath.Join(dir, "missing.png")
+	diagnostics := &infra.DiagnosticBatch{}
 	output, stats, err := runModelViewerTextureJobs(
 		context.Background(),
-		modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85},
+		modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, diagnostics: diagnostics},
 		1,
 		[]modelViewerTextureJob{
 			{
@@ -912,6 +915,16 @@ func TestRunModelViewerTextureJobsIsolatesFailedContent(t *testing.T) {
 	if len(output[0]["good"].Bytes) == 0 || stats.UniqueContents != 2 || stats.Decodes != 2 || stats.Encodes != 1 ||
 		stats.LogicalTextures != 1 {
 		t.Fatalf("output = %#v stats = %#v", output, stats)
+	}
+	var logged bytes.Buffer
+	diagnostics.Report(
+		infra.NewLogWithOptions(infra.LogOptions{Dev: true, DisableFile: true, Writer: &logged}),
+		"test",
+		"model-viewer-textures",
+	)
+	if text := logged.String(); !strings.Contains(text, "missing.png") || !strings.Contains(text, "Missing") ||
+		strings.Contains(text, "good.png") {
+		t.Fatalf("texture diagnostics = %s", text)
 	}
 }
 
