@@ -1,10 +1,17 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg" // Decoders for backdrops whose visible area is measured.
+	_ "image/png"
+	"io"
 	"maps"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -107,6 +114,12 @@ const (
 
 	modelViewerOverlaySampleRate    = 120
 	modelViewerOverlaySampleSeconds = 10
+
+	modelViewerOverlayAlphaSampleStep = 4
+	// Out of 65535; soft shadows fade out below this.
+	modelViewerOverlayVisibleAlpha = 2048
+
+	modelViewerOverlayDDSType = "image/vnd.ms-dds"
 )
 
 var (
@@ -116,25 +129,31 @@ var (
 	modelViewerOverlayDeclareRE = regexp.MustCompile(
 		`(?i)^(?:persist\s+global\s+|(?:(?:global|local)\s+)?(?:persist\s+)?)(\$[\w.]+)(?:\s*=\s*(.+))?$`,
 	)
-	modelViewerOverlayLocalRE     = regexp.MustCompile(`(?i)^local\s+(\$[\w.]+)$`)
-	modelViewerOverlayBindRE      = regexp.MustCompile(`(?i)^ps-t(\d+)\s*=\s*(.+)$`)
-	modelViewerOverlayConfigRE    = regexp.MustCompile(`^\$([\w.]+)$`)
-	modelViewerOverlaySizeRE      = regexp.MustCompile(`(?m)^\s*#define\s+(?:DIMENSIONS|SIZE)\s+\w+\[(\d+)\]\.xy\b`)
-	modelViewerOverlayShiftRE     = regexp.MustCompile(`(?m)^\s*#define\s+(?:SHIFT|OFFSET)\s+\w+\[(\d+)\]\.zw\b`)
-	modelViewerOverlayAlphaRE     = regexp.MustCompile(`(?m)^\s*\w+\.a\s*=\s*\w+\.a\s*\*\s*([0-9.]+)\s*;`)
-	modelViewerOverlayFrameRE     = regexp.MustCompile(`(?m)^\s*#define\s+FRAME_INDEX\s+\w+\[(\d+)\]\.x\b`)
-	modelViewerOverlayColumnsRE   = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_COLS\s+(\d+)\b`)
-	modelViewerOverlayRowsRE      = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_ROWS\s+(\d+)\b`)
-	modelViewerOverlayTextureRE   = regexp.MustCompile(`Texture2D\s*(?:<[^>]*>)?\s+\w+\s*:\s*register\(\s*t(\d+)\s*\)`)
+	modelViewerOverlayLocalRE   = regexp.MustCompile(`(?i)^local\s+(\$[\w.]+)$`)
+	modelViewerOverlayBindRE    = regexp.MustCompile(`(?i)^ps-t(\d+)\s*=\s*(.+)$`)
+	modelViewerOverlayConfigRE  = regexp.MustCompile(`^\$([\w.]+)$`)
+	modelViewerOverlaySizeRE    = regexp.MustCompile(`(?m)^\s*#define\s+(?:DIMENSIONS|SIZE)\s+\w+\[(\d+)\]\.xy\b`)
+	modelViewerOverlayShiftRE   = regexp.MustCompile(`(?m)^\s*#define\s+(?:SHIFT|OFFSET)\s+\w+\[(\d+)\]\.zw\b`)
+	modelViewerOverlayAlphaRE   = regexp.MustCompile(`(?m)^\s*\w+\.a\s*=\s*\w+\.a\s*\*\s*([0-9.]+)\s*;`)
+	modelViewerOverlayFrameRE   = regexp.MustCompile(`(?m)^\s*#define\s+FRAME_INDEX\s+\w+\[(\d+)\]\.x\b`)
+	modelViewerOverlayColumnsRE = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_COLS\s+(\d+)\b`)
+	modelViewerOverlayRowsRE    = regexp.MustCompile(`(?m)^\s*#define\s+FLIPBOOK_ROWS\s+(\d+)\b`)
+	modelViewerOverlayTextureRE = regexp.MustCompile(`Texture2D\s*(?:<[^>]*>)?\s+\w+\s*:\s*register\(\s*t(\d+)\s*\)`)
+	modelViewerOverlayCornerRE  = regexp.MustCompile(
+		`\.pos\.xy\s*=\s*float2\(\s*\w+\[(\d+)\]\.x\s*,\s*\w+\[(\d+)\]\.y\s*\)`,
+	)
 	modelViewerOverlayNameRE      = regexp.MustCompile(`\$?[A-Za-z_\\][\w.\\]*`)
 	modelViewerOverlayPanelGateRE = regexp.MustCompile(`\$([\w.]+)\s*==\s*(-?\d+(?:\.\d+)?)`)
 )
 
 type modelViewerOverlayShader struct {
 	sizeRegister, shiftRegister, frameRegister string
-	textureRegister                            string
-	opacity                                    float64
-	columns, rows                              int
+	// lowRegister and highRegister hold the opposite corners of a quad in clip space,
+	// for a vertex shader that places it without a size and an offset.
+	lowRegister, highRegister string
+	textureRegister           string
+	opacity                   float64
+	columns, rows             int
 }
 
 type modelViewerOverlayProgram struct {
@@ -145,8 +164,10 @@ type modelViewerOverlayProgram struct {
 	targets           map[string]bool
 	textures          map[string]string
 	missingTextures   map[string]bool
-	shaders           map[string]*modelViewerOverlayShader
-	initial           map[string]any
+	// renamedImages are texture files whose content is an image despite the extension.
+	renamedImages map[string]bool
+	shaders       map[string]*modelViewerOverlayShader
+	initial       map[string]any
 	// menuKeys are the variables found to select a page.
 	menuKeys    map[string]bool
 	unsupported bool
@@ -163,6 +184,8 @@ type modelViewerOverlayRun struct {
 	assigned []string
 	// opened is set once the menu lists are running; see chooseBranch.
 	opened bool
+	// drawing is the custom shader running, whose Draw lines each add a quad.
+	drawing string
 }
 
 type modelViewerOverlayTracedQuad struct {
@@ -193,6 +216,10 @@ func buildModelViewerOverlayMenus(
 		if program == nil {
 			continue
 		}
+		// A menu may draw from variables of the INI it controls, whose names are scoped apart.
+		for _, other := range scans {
+			maps.Copy(program.initial, modelViewerOverlayInitialState(other.sections))
+		}
 		if menu := program.build(ctx, variables, names, menuOnly); menu != nil {
 			menus = append(menus, *menu)
 		}
@@ -209,6 +236,7 @@ func newModelViewerOverlayProgramBase(folder string, scan modelViewerGeometrySca
 		textures:        make(map[string]string),
 		shaders:         make(map[string]*modelViewerOverlayShader),
 		missingTextures: make(map[string]bool),
+		renamedImages:   make(map[string]bool),
 		initial:         modelViewerOverlayInitialState(scan.sections),
 		menuKeys:        make(map[string]bool),
 	}
@@ -223,6 +251,9 @@ func (p *modelViewerOverlayProgram) loadTextures(folder string, scan modelViewer
 		name := modelViewerNormalizeKey(modelViewerTrimResourcePrefix(resource.Name))
 		if regularFile(path) {
 			p.textures[name] = path
+			if !modelViewerOverlayKnownImageExtension(path) && modelViewerOverlayImageType(path) != "" {
+				p.renamedImages[path] = true
+			}
 		} else {
 			p.missingTextures[name] = true
 		}
@@ -273,11 +304,58 @@ func newModelViewerOverlayProgram(folder string, scan modelViewerGeometryScan) *
 			}
 		}
 	}
+	program.addPresentTargets(sectionValue(clickKey.Lines, "condition"))
 	if len(program.targets) == 0 {
 		return nil
 	}
 	program.loadTextures(folder, scan)
 	return program
+}
+
+// addPresentTargets marks what [Present] runs under a condition testing everything
+// the click key tests, which draws the menu whether or not a list assigns those
+// variables. Keys alone may open such a menu.
+func (p *modelViewerOverlayProgram) addPresentTargets(clickCondition string) {
+	wanted := modelViewerVariableRE.FindAllStringSubmatch(clickCondition, -1)
+	if len(wanted) == 0 {
+		return
+	}
+	var visit func(lines []string)
+	visit = func(lines []string) {
+		for index := 0; index < len(lines); index++ {
+			if !strings.HasPrefix(strings.ToLower(lines[index]), "if ") {
+				continue
+			}
+			branches, end, ok := splitModelViewerDirectConditional(lines, index)
+			if !ok {
+				return
+			}
+			for _, branch := range branches {
+				visit(branch.lines)
+				if branch.expression == nil {
+					continue
+				}
+				tested := modelViewerVariableRE.FindAllStringSubmatch(*branch.expression, -1)
+				if slices.ContainsFunc(wanted, func(variable []string) bool {
+					return !slices.ContainsFunc(tested, func(candidate []string) bool {
+						return modelViewerNormalizeKey(candidate[1]) == modelViewerNormalizeKey(variable[1])
+					})
+				}) {
+					continue
+				}
+				for _, line := range branch.lines {
+					key, value, isAssign := strings.Cut(line, "=")
+					if isAssign && strings.EqualFold(strings.TrimSpace(key), "run") {
+						p.targets[modelViewerNormalizeKey(value)] = true
+					}
+				}
+			}
+			index = end
+		}
+	}
+	for _, lines := range p.presents {
+		visit(lines)
+	}
 }
 
 // modelViewerOverlayInitialState holds only what [Constants] declares. Values
@@ -551,6 +629,7 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 		})
 	}
 
+	layers := make(map[int][]ModelViewerOverlayQuad)
 	for _, entry := range buttonVariables {
 		domain := modelViewerOverlayDomain(entry.variable)
 		if len(domain) > maxModelViewerOverlayStateValues {
@@ -567,7 +646,8 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 			overrides := maps.Clone(state)
 			overrides[entry.internal] = value
 			changed := p.trace(-1, -1, overrides)
-			if len(changed.quads) != len(idle.quads) {
+			if !modelViewerOverlaySameQuads(changed.quads, idle.quads, true) {
+				addModelViewerOverlayLayers(quads, layers, idle, changed, entry.variable.ID, value)
 				continue
 			}
 			for index, quad := range changed.quads {
@@ -579,10 +659,126 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 			}
 		}
 	}
+	quads, buttons = insertModelViewerOverlayLayers(quads, layers, buttons)
 	return &modelViewerOverlayPageBuild{
 		page:  ModelViewerOverlayPage{Quads: quads, Buttons: buttons},
 		drawn: idle.quads,
 	}
+}
+
+// addModelViewerOverlayLayers records a value that draws a different set of quads:
+// the ones it no longer draws turn invisible for it, and the ones only it draws
+// become hidden layers shown for it. layers holds them by the quad they go below.
+func addModelViewerOverlayLayers(
+	quads []ModelViewerOverlayQuad,
+	layers map[int][]ModelViewerOverlayQuad,
+	idle, changed *modelViewerOverlayRun,
+	variable string,
+	value float64,
+) {
+	matches := modelViewerOverlayAlignQuads(idle.quads, changed.quads)
+	matchedChanged := make(map[int]bool, len(matches))
+	matchedIdle := make(map[int]int, len(matches))
+	for _, match := range matches {
+		matchedIdle[match[0]] = match[1]
+		matchedChanged[match[1]] = true
+	}
+	for index, quad := range idle.quads {
+		if _, kept := matchedIdle[index]; !kept {
+			quads[index].States = append(quads[index].States, ModelViewerOverlayQuadState{
+				Variable: variable, Value: value, Path: quad.path,
+			})
+		}
+	}
+
+	next := 0
+	for index, quad := range changed.quads {
+		if matchedChanged[index] {
+			continue
+		}
+		for next < len(matches) && matches[next][1] < index {
+			next++
+		}
+		below := len(idle.quads)
+		if next < len(matches) {
+			below = matches[next][0]
+		}
+		state := ModelViewerOverlayQuadState{Variable: variable, Value: value, Path: quad.path, Opacity: quad.opacity}
+		existing := slices.IndexFunc(layers[below], func(layer ModelViewerOverlayQuad) bool {
+			return layer.X == quad.x && layer.Y == quad.y && layer.Width == quad.width && layer.Height == quad.height &&
+				layer.Path == quad.path && layer.States[0].Variable == variable
+		})
+		if existing >= 0 {
+			layers[below][existing].States = append(layers[below][existing].States, state)
+			continue
+		}
+		layers[below] = append(layers[below], ModelViewerOverlayQuad{
+			Path: quad.path, X: quad.x, Y: quad.y, Width: quad.width, Height: quad.height,
+			FlipX: quad.flipX, FlipY: quad.flipY,
+			States: []ModelViewerOverlayQuadState{state},
+		})
+	}
+}
+
+// modelViewerOverlayAlignQuads returns the longest common subsequence of two draw
+// lists as index pairs in draw order.
+func modelViewerOverlayAlignQuads(a, b []modelViewerOverlayTracedQuad) [][2]int {
+	same := func(left, right modelViewerOverlayTracedQuad) bool {
+		return left.path == right.path && left.x == right.x && left.y == right.y &&
+			left.width == right.width && left.height == right.height
+	}
+	lengths := make([][]int, len(a)+1)
+	for index := range lengths {
+		lengths[index] = make([]int, len(b)+1)
+	}
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := len(b) - 1; j >= 0; j-- {
+			if same(a[i], b[j]) {
+				lengths[i][j] = lengths[i+1][j+1] + 1
+			} else {
+				lengths[i][j] = max(lengths[i+1][j], lengths[i][j+1])
+			}
+		}
+	}
+	var matches [][2]int
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		switch {
+		case same(a[i], b[j]):
+			matches = append(matches, [2]int{i, j})
+			i++
+			j++
+		case lengths[i+1][j] >= lengths[i][j+1]:
+			i++
+		default:
+			j++
+		}
+	}
+	return matches
+}
+
+func insertModelViewerOverlayLayers(
+	quads []ModelViewerOverlayQuad,
+	layers map[int][]ModelViewerOverlayQuad,
+	buttons []ModelViewerOverlayButton,
+) ([]ModelViewerOverlayQuad, []ModelViewerOverlayButton) {
+	if len(layers) == 0 {
+		return quads, buttons
+	}
+	moved := make([]int, len(quads))
+	merged := make([]ModelViewerOverlayQuad, 0, len(quads)+len(layers))
+	for index, quad := range quads {
+		merged = append(merged, layers[index]...)
+		moved[index] = len(merged)
+		merged = append(merged, quad)
+	}
+	merged = append(merged, layers[len(quads)]...)
+	for buttonIndex := range buttons {
+		for hoverIndex := range buttons[buttonIndex].Hover {
+			hover := &buttons[buttonIndex].Hover[hoverIndex]
+			hover.Quad = moved[hover.Quad]
+		}
+	}
+	return merged, buttons
 }
 
 func modelViewerOverlayRectsOverlap(a, b ModelViewerOverlayButton) bool {
@@ -695,9 +891,10 @@ func assembleModelViewerOverlayMenu(
 		}
 		kept[index] = count
 		count++
-		for _, quad := range page.drawn {
-			originX, originY = min(originX, quad.x), min(originY, quad.y)
-			maxX, maxY = max(maxX, quad.x+quad.width), max(maxY, quad.y+quad.height)
+		for _, quad := range page.page.Quads {
+			left, top, right, bottom := modelViewerOverlayVisibleBounds(quad)
+			originX, originY = min(originX, left), min(originY, top)
+			maxX, maxY = max(maxX, right), max(maxY, bottom)
 		}
 		hasToggle = hasToggle || slices.ContainsFunc(page.page.Buttons, func(button ModelViewerOverlayButton) bool {
 			return button.Variable != ""
@@ -754,6 +951,48 @@ func assembleModelViewerOverlayMenu(
 		menu.Pages = append(menu.Pages, page)
 	}
 	return menu
+}
+
+// modelViewerOverlayVisibleBounds is the area a quad takes up in the menu. A
+// backdrop covering the window is mostly empty, with the menu painted on one part.
+func modelViewerOverlayVisibleBounds(quad ModelViewerOverlayQuad) (left, top, right, bottom float64) {
+	left, top, right, bottom = quad.X, quad.Y, quad.X+quad.Width, quad.Y+quad.Height
+	if quad.Width < modelViewerOverlayWidth || quad.Height < modelViewerOverlayHeight {
+		return left, top, right, bottom
+	}
+	file, err := os.Open(quad.Path)
+	if err != nil {
+		return left, top, right, bottom
+	}
+	defer func() { _ = file.Close() }()
+	decoded, _, err := image.Decode(file)
+	if err != nil {
+		return left, top, right, bottom
+	}
+
+	bounds := decoded.Bounds()
+	minX, minY, maxX, maxY := bounds.Max.X, bounds.Max.Y, bounds.Min.X, bounds.Min.Y
+	for y := bounds.Min.Y; y < bounds.Max.Y; y += modelViewerOverlayAlphaSampleStep {
+		for x := bounds.Min.X; x < bounds.Max.X; x += modelViewerOverlayAlphaSampleStep {
+			if _, _, _, alpha := decoded.At(x, y).RGBA(); alpha > modelViewerOverlayVisibleAlpha {
+				minX, minY = min(minX, x), min(minY, y)
+				maxX, maxY = max(
+					maxX,
+					x+modelViewerOverlayAlphaSampleStep,
+				), max(
+					maxY,
+					y+modelViewerOverlayAlphaSampleStep,
+				)
+			}
+		}
+	}
+	if minX >= maxX || minY >= maxY {
+		return left, top, right, bottom
+	}
+	scaleX, scaleY := quad.Width/float64(bounds.Dx()), quad.Height/float64(bounds.Dy())
+	return quad.X + float64(minX-bounds.Min.X)*scaleX, quad.Y + float64(minY-bounds.Min.Y)*scaleY,
+		quad.X + float64(min(maxX, bounds.Max.X)-bounds.Min.X)*scaleX,
+		quad.Y + float64(min(maxY, bounds.Max.Y)-bounds.Min.Y)*scaleY
 }
 
 // modelViewerOverlayMenuOnlyVariables returns the listed variables nothing in the
@@ -854,10 +1093,25 @@ func (t *Service) serveModelViewerOverlayTextures(
 ) []ModelViewerOverlayMenu {
 	served := make(map[string]string)
 	serve := func(path string) (string, error) {
-		if !strings.EqualFold(filepath.Ext(path), ".dds") {
+		isDDS := strings.EqualFold(filepath.Ext(path), ".dds")
+		if !isDDS && modelViewerOverlayKnownImageExtension(path) {
 			return path, nil
 		}
 		if url, ok := served[path]; ok {
+			return url, nil
+		}
+		// The renderer tells images apart by extension, which a renamed one does not have.
+		if imageType := modelViewerOverlayImageType(path); !isDDS && imageType != modelViewerOverlayDDSType {
+			url, err := t.protocol.StoreMemoryLoaderWithContentType(
+				sessionID,
+				"overlay-tex:"+strconv.Itoa(len(served)),
+				imageType,
+				func(context.Context) ([]byte, error) { return os.ReadFile(path) },
+			)
+			if err != nil {
+				return "", err
+			}
+			served[path] = url
 			return url, nil
 		}
 		if _, err := inspectModelViewerDDS(ctx, path); err != nil {
@@ -910,6 +1164,37 @@ func (t *Service) serveModelViewerOverlayTextures(
 		kept = append(kept, menu)
 	}
 	return kept
+}
+
+func modelViewerOverlayKnownImageExtension(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".webp", ".dds":
+		return true
+	}
+	return false
+}
+
+// modelViewerOverlayImageType returns the content type of a file holding an image
+// the renderer can show, or nothing. Mods also ship textures under other extensions.
+func modelViewerOverlayImageType(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	header := make([]byte, 512)
+	count, err := io.ReadFull(file, header)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return ""
+	}
+	if bytes.HasPrefix(header[:count], []byte("DDS ")) {
+		return modelViewerOverlayDDSType
+	}
+	switch contentType := http.DetectContentType(header[:count]); contentType {
+	case "image/png", "image/jpeg", "image/webp":
+		return contentType
+	}
+	return ""
 }
 
 // flipbook samples the frame expression over time, since menus compute their
@@ -1060,12 +1345,23 @@ func (r *modelViewerOverlayRun) exec(lines []string, depth int, followMenuOnly b
 			if r.program.targets[target] {
 				r.opened = true
 			}
-			if body, ok := r.program.lists[target]; ok {
+			isShader := strings.HasPrefix(target, "customshader")
+			body, ok := r.program.lists[target]
+			if ok {
+				outer := r.drawing
+				if isShader {
+					r.drawing = target
+				}
 				r.exec(body, depth+1, false)
+				r.drawing = outer
 			}
-			if strings.HasPrefix(target, "customshader") {
+			if isShader && !r.program.listDraws(target, make(map[string]bool)) {
 				r.recordQuad(target)
 			}
+			continue
+		}
+		if r.drawing != "" && modelViewerOverlayIsDrawLine(line) {
+			r.recordQuad(r.drawing)
 			continue
 		}
 		if match := modelViewerOverlayAssignRE.FindStringSubmatch(line); match != nil {
@@ -1083,6 +1379,34 @@ func (r *modelViewerOverlayRun) exec(lines []string, depth int, followMenuOnly b
 			}
 		}
 	}
+}
+
+func modelViewerOverlayIsDrawLine(line string) bool {
+	key, _, ok := strings.Cut(line, "=")
+	if !ok {
+		return false
+	}
+	fields := strings.Fields(key)
+	return len(fields) > 0 && strings.EqualFold(fields[len(fields)-1], "draw") &&
+		(len(fields) == 1 || len(fields) == 2 && strings.EqualFold(fields[0], "pre"))
+}
+
+// listDraws reports whether a list holds a Draw line, also through the command
+// lists it runs, whether or not its conditions let the line execute.
+func (p *modelViewerOverlayProgram) listDraws(list string, visiting map[string]bool) bool {
+	if visiting[list] {
+		return false
+	}
+	visiting[list] = true
+	return slices.ContainsFunc(p.lists[list], func(line string) bool {
+		if modelViewerOverlayIsDrawLine(line) {
+			return true
+		}
+		key, value, ok := strings.Cut(line, "=")
+		target := modelViewerNormalizeKey(value)
+		return ok && strings.EqualFold(strings.TrimSpace(key), "run") &&
+			strings.HasPrefix(target, "commandlist") && p.listDraws(target, visiting)
+	})
 }
 
 // modelViewerOverlayRegisterAlias returns the other spelling of IniParams register
@@ -1182,9 +1506,7 @@ func (r *modelViewerOverlayRun) recordQuad(list string) {
 		}
 		return
 	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".jpg", ".jpeg", ".webp", ".dds":
-	default:
+	if !modelViewerOverlayKnownImageExtension(path) && !r.program.renamedImages[path] {
 		// The renderer cannot show the rest, and a menu missing parts misleads.
 		r.program.unsupported = true
 		return
@@ -1201,6 +1523,14 @@ func (r *modelViewerOverlayRun) recordQuad(list string) {
 		height:  number("y"+shader.sizeRegister) * modelViewerOverlayHeight,
 		opacity: shader.opacity,
 		shader:  shader,
+	}
+	if shader.lowRegister != "" {
+		left, bottom := number("x"+shader.lowRegister), number("y"+shader.lowRegister)
+		right, top := number("x"+shader.highRegister), number("y"+shader.highRegister)
+		quad.x = (left + 1) / 2 * modelViewerOverlayWidth
+		quad.y = (1 - top) / 2 * modelViewerOverlayHeight
+		quad.width = (right - left) / 2 * modelViewerOverlayWidth
+		quad.height = (top - bottom) / 2 * modelViewerOverlayHeight
 	}
 	if quad.width == 0 || quad.height == 0 {
 		return
@@ -1226,30 +1556,24 @@ func (p *modelViewerOverlayProgram) shader(list string) *modelViewerOverlayShade
 		return shader
 	}
 	p.shaders[list] = nil
-	relative := stripModelViewerQuotes(sectionValue(p.lists[list], "ps"))
-	if relative == "" {
+	text := p.shaderSource(list, "ps")
+	if text == "" {
 		return nil
 	}
-	path, err := resolveModelViewerResourcePath(p.folder, p.shaderDir, relative)
-	if err != nil {
+	texture := modelViewerOverlayTextureRE.FindStringSubmatch(text)
+	if texture == nil {
 		return nil
 	}
-	source, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	text := string(source)
+	shader := &modelViewerOverlayShader{textureRegister: texture[1], opacity: 1}
 	size := modelViewerOverlaySizeRE.FindStringSubmatch(text)
 	shift := modelViewerOverlayShiftRE.FindStringSubmatch(text)
-	texture := modelViewerOverlayTextureRE.FindStringSubmatch(text)
-	if size == nil || shift == nil || texture == nil {
-		return nil
-	}
-	shader := &modelViewerOverlayShader{
-		sizeRegister:    size[1],
-		shiftRegister:   shift[1],
-		textureRegister: texture[1],
-		opacity:         1,
+	if size != nil && shift != nil {
+		shader.sizeRegister, shader.shiftRegister = size[1], shift[1]
+	} else {
+		shader.lowRegister, shader.highRegister = modelViewerOverlayCornerRegisters(p.shaderSource(list, "vs"))
+		if shader.lowRegister == "" {
+			return nil
+		}
 	}
 	if alpha := modelViewerOverlayAlphaRE.FindStringSubmatch(text); alpha != nil {
 		if value, err := strconv.ParseFloat(alpha[1], 64); err == nil {
@@ -1266,6 +1590,39 @@ func (p *modelViewerOverlayProgram) shader(list string) *modelViewerOverlayShade
 	}
 	p.shaders[list] = shader
 	return shader
+}
+
+func (p *modelViewerOverlayProgram) shaderSource(list, stage string) string {
+	relative := stripModelViewerQuotes(sectionValue(p.lists[list], stage))
+	if relative == "" {
+		return ""
+	}
+	path, err := resolveModelViewerResourcePath(p.folder, p.shaderDir, relative)
+	if err != nil {
+		return ""
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(source)
+}
+
+// modelViewerOverlayCornerRegisters reads a triangle strip the vertex shader builds
+// from two IniParams registers, with the first vertex at the low corner.
+func modelViewerOverlayCornerRegisters(source string) (low, high string) {
+	vertices := modelViewerOverlayCornerRE.FindAllStringSubmatch(source, -1)
+	if len(vertices) != 4 {
+		return "", ""
+	}
+	low, high = vertices[0][1], vertices[3][1]
+	expected := [4][2]string{{low, low}, {low, high}, {high, low}, {high, high}}
+	for index, vertex := range vertices {
+		if vertex[1] != expected[index][0] || vertex[2] != expected[index][1] {
+			return "", ""
+		}
+	}
+	return low, high
 }
 
 // click runs the click list from the given state, with the cursor where this run

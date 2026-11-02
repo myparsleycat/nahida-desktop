@@ -1,7 +1,12 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -203,6 +208,226 @@ func TestModelViewerOverlayMenuReproducesLayoutAndClicks(t *testing.T) {
 	if len(hair.Hover) != 1 || hair.Hover[0].Quad != 1 || filepath.Base(hair.Hover[0].Path) != "hover.png" {
 		t.Fatalf("hair hover = %+v", hair.Hover)
 	}
+}
+
+const overlayClipSpaceTestShader = `
+Texture1D<float4> IniParams : register(t120);
+void main(out vs2ps output, uint vertex : SV_VertexID)
+{
+	switch(vertex) {
+		case 0: output.pos.xy = float2(IniParams[5].x, IniParams[5].y); break;
+		case 1: output.pos.xy = float2(IniParams[5].x, IniParams[6].y); break;
+		case 2: output.pos.xy = float2(IniParams[6].x, IniParams[5].y); break;
+		case 3: output.pos.xy = float2(IniParams[6].x, IniParams[6].y); break;
+		default: output.pos.xy = 0; break;
+	};
+}
+Texture2D<float4> tex : register(t100);
+`
+
+const overlayClipSpaceTestINI = `
+[KeyOpen]
+key = y
+type = cycle
+$menu = 0,1
+[KeyClick]
+condition = $menu == 1
+key = VK_LBUTTON
+run = CommandListSelect
+[Constants]
+global $menu = 0
+global $top = 1
+global $hat = 0
+[Present]
+if $menu == 1
+    run = CustomShaderMenu
+endif
+[CustomShaderMenu]
+vs = draw.hlsl
+ps = draw.hlsl
+x5 = -1.0
+y5 = -1.0
+x6 = 1.0
+y6 = 1.0
+ps-t100 = ResourceBack
+Draw = 4,0
+x5 = -0.5
+y5 = -0.5
+x6 = 0
+y6 = 0.5
+ps-t100 = ResourceIcon
+Draw = 4,0
+if $top == 1
+    ps-t100 = ResourceMark
+    Draw = 4,0
+endif
+x5 = 0
+y5 = -0.5
+x6 = 0.5
+y6 = 0.5
+ps-t100 = ResourceIcon
+Draw = 4,0
+if $hat == 1
+    ps-t100 = ResourceMark
+    Draw = 4,0
+endif
+[CommandListSelect]
+if cursor_x > 0.25 && cursor_x < 0.5
+    $top = ($top + 1) % 2
+endif
+if cursor_x > 0.5 && cursor_x < 0.75
+    $hat = ($hat + 1) % 2
+endif
+[ResourceBack]
+filename = back.buf
+[ResourceIcon]
+filename = icon.buf
+[ResourceMark]
+filename = mark.buf
+`
+
+// A shared-pattern selection menu places quads by clip space corners inside one
+// custom shader, ships PNGs as .buf, and draws selection marks only for some values.
+func TestModelViewerOverlayMenuReadsClipSpaceSelectionMenu(t *testing.T) {
+	menus := buildOverlayClipSpaceTestMenus(t, overlayClipSpaceTestINI)
+	if len(menus) != 1 {
+		t.Fatalf("menus = %d, want 1", len(menus))
+	}
+	menu := menus[0]
+	if menu.Width != 1200 || menu.Height != 700 {
+		t.Fatalf("size = %vx%v, want the painted part of the backdrop, 1200x700", menu.Width, menu.Height)
+	}
+
+	quads := menu.Pages[0].Quads
+	if len(quads) != 5 {
+		t.Fatalf("quads = %+v, want the backdrop, two icons and a mark for each toggle", quads)
+	}
+	shownMark, hiddenMark := quads[2], quads[4]
+	if filepath.Base(shownMark.Path) != "mark.buf" || shownMark.X != 80 || shownMark.Y != 70 || shownMark.Width != 480 ||
+		shownMark.Opacity != 1 || len(shownMark.States) != 1 ||
+		shownMark.States[0].Value != 0 ||
+		shownMark.States[0].Opacity != 0 {
+		t.Fatalf("mark drawn by default = %+v, want it to disappear at 0", shownMark)
+	}
+	if filepath.Base(hiddenMark.Path) != "mark.buf" || hiddenMark.Opacity != 0 || len(hiddenMark.States) != 1 ||
+		hiddenMark.States[0].Variable != "hat" || hiddenMark.States[0].Value != 1 ||
+		hiddenMark.States[0].Opacity != 1 {
+		t.Fatalf("mark drawn only at 1 = %+v, want it hidden until then", hiddenMark)
+	}
+
+	buttons := menu.Pages[0].Buttons
+	if len(buttons) != 2 || buttons[0].Variable != "top" || buttons[1].Variable != "hat" || buttons[0].X != 80 ||
+		buttons[1].X != 560 {
+		t.Fatalf("buttons = %+v", buttons)
+	}
+}
+
+// A shader whose only Draw is behind pre or in a list it runs draws once per Draw,
+// and one whose Draw a failed condition skips draws nothing.
+func TestModelViewerOverlayMenuRecordsEachReachedDraw(t *testing.T) {
+	menus := buildOverlayClipSpaceTestMenus(t, `
+[KeyClick]
+condition = $menu == 1
+key = VK_LBUTTON
+run = CommandListSelect
+[Constants]
+global $menu = 0
+global $top = 1
+global $hat = 0
+[Present]
+if $menu == 1
+    run = CustomShaderBack
+    run = CustomShaderIcon
+    run = CustomShaderSkipped
+endif
+[CustomShaderBack]
+vs = draw.hlsl
+ps = draw.hlsl
+x5 = -1.0
+y5 = -1.0
+x6 = 1.0
+y6 = 1.0
+ps-t100 = ResourceBack
+pre Draw = 4,0
+[CustomShaderIcon]
+vs = draw.hlsl
+ps = draw.hlsl
+x5 = -0.5
+y5 = -0.5
+x6 = 0
+y6 = 0.5
+ps-t100 = ResourceIcon
+run = CommandListDraw
+[CustomShaderSkipped]
+vs = draw.hlsl
+ps = draw.hlsl
+ps-t100 = ResourceMark
+if $hat == 1
+    Draw = 4,0
+endif
+[CommandListDraw]
+Draw = 4,0
+[CommandListSelect]
+if cursor_x > 0.25 && cursor_x < 0.5
+    $top = ($top + 1) % 2
+endif
+[ResourceBack]
+filename = back.buf
+[ResourceIcon]
+filename = icon.buf
+[ResourceMark]
+filename = mark.buf
+`)
+	if len(menus) != 1 {
+		t.Fatalf("menus = %d, want 1", len(menus))
+	}
+	var drawn []string
+	for _, quad := range menus[0].Pages[0].Quads {
+		drawn = append(drawn, filepath.Base(quad.Path))
+	}
+	if !slices.Equal(drawn, []string{"back.buf", "icon.buf"}) {
+		t.Fatalf("quads = %v, want the backdrop and the icon once each", drawn)
+	}
+}
+
+func buildOverlayClipSpaceTestMenus(t *testing.T, ini string) []ModelViewerOverlayMenu {
+	t.Helper()
+	dir := t.TempDir()
+	back := image.NewNRGBA(image.Rect(0, 0, 1920, 1080))
+	draw.Draw(back, image.Rect(400, 200, 1600, 900), image.NewUniform(color.White), image.Point{}, draw.Src)
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, back); err != nil {
+		t.Fatal(err)
+	}
+	signature := "\x89PNG\r\n\x1a\n"
+	for name, content := range map[string]string{
+		"draw.hlsl": overlayClipSpaceTestShader,
+		"back.buf":  encoded.String(),
+		"icon.buf":  signature,
+		"mark.buf":  signature,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scan := modelViewerGeometryScan{
+		sections: parseModINI(ini),
+		resources: []modelViewerResource{
+			{Name: "Back", Filename: "back.buf"},
+			{Name: "Icon", Filename: "icon.buf"},
+			{Name: "Mark", Filename: "mark.buf"},
+		},
+		iniDir: dir,
+	}
+	binary := []ModelViewerVariableValue{{Value: 0.0}, {Value: 1.0}}
+	return buildModelViewerOverlayMenus(
+		context.Background(),
+		dir,
+		[]modelViewerGeometryScan{scan},
+		[]ModelViewerVariable{{ID: "top", Values: binary}, {ID: "hat", Values: binary}},
+		nil,
+		nil,
+	)
 }
 
 const overlayPagedTestINI = `

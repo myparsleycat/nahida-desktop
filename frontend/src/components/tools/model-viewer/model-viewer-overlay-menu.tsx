@@ -64,7 +64,7 @@ export function ModelViewerOverlayMenuPanel({
   return (
     <div
       ref={containerRef}
-      className="relative mx-auto mb-4 w-full select-none"
+      className="relative mx-auto mb-4 w-full overflow-hidden select-none"
       style={{ maxWidth: menu.width, aspectRatio: `${menu.width} / ${menu.height}` }}
     >
       {page?.quads.map((quad, index) => {
@@ -90,7 +90,7 @@ export function ModelViewerOverlayMenuPanel({
             src={url}
             alt=""
             draggable={false}
-            className="pointer-events-none absolute"
+            className="pointer-events-none absolute max-w-none"
             style={style}
           />
         );

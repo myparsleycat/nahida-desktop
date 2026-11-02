@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,6 +118,7 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 		}
 	}
 	bindings = append(bindings, collectModelViewerArrowBindings(sections)...)
+	bindings = append(bindings, collectModelViewerKeyListBindings(sections, bindings)...)
 	bindings = append(bindings, collectModelViewerWrapBindings(sections, defaults, bindings)...)
 	// A key and a menu can share a slot; keep the menu's visibility and effects
 	// without losing values that only the key binding can select.
@@ -135,6 +137,311 @@ func collectModelViewerSlotBindings(sections []modINISection, defaults map[strin
 		merged = append(merged, binding)
 	}
 	return merged
+}
+
+// collectModelViewerKeyListBindings reads the variables a list run by a key steps
+// with a modulo, as a click on a menu slot does. What the rest of the branch sets
+// becomes the variable's effects:
+//
+//	if cursor_x > 0.1 && cursor_x < 0.2
+//	    $x = ($x + 1) % 3
+//	    run = CommandListApplyX
+//	endif
+func collectModelViewerKeyListBindings(
+	sections []modINISection,
+	existing []modelViewerSlotBinding,
+) []modelViewerSlotBinding {
+	flattener := &modelViewerEffectFlattener{
+		lists:     make(map[string][]string),
+		variables: make(map[string]any),
+		visiting:  make(map[string]bool),
+	}
+	for _, section := range sections {
+		if strings.EqualFold(section.Header, "CommandList") {
+			lines := make([]string, 0, len(section.Lines))
+			for _, line := range section.Lines {
+				if line = strings.TrimSpace(strings.SplitN(line, ";", 2)[0]); line != "" {
+					lines = append(lines, line)
+				}
+			}
+			flattener.lists[modelViewerNormalizeKey(section.Header+section.Name)] = lines
+		}
+	}
+	addModelViewerBindingDomains(flattener.variables, existing)
+
+	type step struct {
+		variable string
+		count    int
+		rest     []string
+		clicked  bool
+	}
+	var steps []step
+	var visit func(block []string)
+	visit = func(block []string) {
+		for index := 0; index < len(block); index++ {
+			if strings.HasPrefix(strings.ToLower(block[index]), "if ") {
+				branches, end, ok := splitModelViewerDirectConditional(block, index)
+				if !ok {
+					return
+				}
+				for _, branch := range branches {
+					visit(branch.lines)
+				}
+				index = end
+				continue
+			}
+			assignment := modelViewerMenuAssignRE.FindStringSubmatch(block[index])
+			if assignment == nil {
+				continue
+			}
+			match := modelViewerMenuIncrModRE.FindStringSubmatch(strings.TrimSpace(assignment[2]))
+			if match == nil || !strings.EqualFold(match[1], assignment[1]) {
+				continue
+			}
+			count, err := strconv.Atoi(match[2])
+			if err == nil && count > 1 && count <= maxModelViewerMenuValues {
+				steps = append(steps, step{
+					variable: modelViewerNormalizeKey(assignment[1]),
+					count:    count,
+					rest:     block[index+1:],
+				})
+			}
+		}
+	}
+	// Mouse keys go first: the same variable may also step from a controller key.
+	for _, clicked := range []bool{true, false} {
+		for _, section := range sections {
+			if strings.HasPrefix(modelViewerNormalizeKey(section.Header), "key") &&
+				modelViewerOverlayIsClickKey(cleanModelViewerOverlayLines(section.Lines)) == clicked {
+				start := len(steps)
+				visit(flattener.lists[modelViewerNormalizeKey(sectionValue(section.Lines, "run"))])
+				for index := start; index < len(steps); index++ {
+					steps[index].clicked = clicked
+				}
+			}
+		}
+	}
+	for _, found := range steps {
+		values := modelViewerMenuCycleValues(0, found.count-1)
+		key := "__domain:" + found.variable
+		if _, known := flattener.variables[key]; !known {
+			flattener.variables[key] = values
+		}
+	}
+
+	seen := make(map[string]bool, len(existing))
+	for _, binding := range existing {
+		seen[binding.Variable] = true
+	}
+	var output []modelViewerSlotBinding
+	for _, found := range steps {
+		if seen[found.variable] {
+			continue
+		}
+		seen[found.variable] = true
+		effects, ok := flattener.flatten(found.rest, modelViewerDNFTrue())
+		if !ok {
+			effects = nil
+		}
+		// As with other menu slots, a click may act only through its effects.
+		output = append(output, modelViewerSlotBinding{
+			Variable:      found.variable,
+			Values:        modelViewerMenuCycleValues(0, found.count-1),
+			Effects:       effects,
+			AlwaysVisible: found.clicked && len(effects) > 0,
+		})
+	}
+	return output
+}
+
+// modelViewerEffectFlattener turns command list lines into effects, which apply in
+// order and test their guards again each time. Lines it cannot express that way fail
+// the whole list, since a partial list would leave the model in a state the mod
+// never produces.
+type modelViewerEffectFlattener struct {
+	lists     map[string][]string
+	variables map[string]any
+	visiting  map[string]bool
+}
+
+func (f *modelViewerEffectFlattener) flatten(lines []string, guard ModelViewerDNF) ([]ModelViewerMenuEffect, bool) {
+	var effects []ModelViewerMenuEffect
+	for index := 0; index < len(lines); index++ {
+		line := lines[index]
+		if strings.HasPrefix(strings.ToLower(line), "if ") {
+			branches, end, ok := splitModelViewerDirectConditional(lines, index)
+			if !ok {
+				return nil, false
+			}
+			nested, ok := f.flattenConditional(branches, guard)
+			if !ok {
+				return nil, false
+			}
+			effects = append(effects, nested...)
+			index = end
+		} else if key, value, ok := strings.Cut(line, "="); ok && strings.EqualFold(strings.TrimSpace(key), "run") {
+			target := modelViewerNormalizeKey(value)
+			list, known := f.lists[target]
+			if !known && strings.HasPrefix(target, "commandlist") {
+				return nil, false
+			}
+			if known {
+				if f.visiting[target] {
+					return nil, false
+				}
+				f.visiting[target] = true
+				nested, listOK := f.flatten(list, guard)
+				delete(f.visiting, target)
+				if !listOK {
+					return nil, false
+				}
+				effects = append(effects, nested...)
+			}
+		} else if assignment := modelViewerMenuAssignRE.FindStringSubmatch(line); assignment != nil {
+			value := strings.TrimSpace(assignment[2])
+			if !modelViewerMenuLiteralRE.MatchString(value) {
+				return nil, false
+			}
+			effects = append(
+				effects,
+				modelViewerGuardedEffects(guard, modelViewerNormalizeKey(assignment[1]), value)...)
+		}
+		if len(effects) > maxModelViewerMenuValues {
+			return nil, false
+		}
+	}
+	return effects, true
+}
+
+func (f *modelViewerEffectFlattener) flattenConditional(
+	branches []modelViewerDirectConditionalBranch,
+	guard ModelViewerDNF,
+) ([]ModelViewerMenuEffect, bool) {
+	conditions := make([]ModelViewerDNF, len(branches))
+	for index, branch := range branches {
+		conditions[index] = modelViewerDNFTrue()
+		if branch.expression != nil {
+			condition, ok := f.parseGuard(*branch.expression)
+			if !ok {
+				return nil, false
+			}
+			conditions[index] = condition
+		}
+	}
+
+	var effects []ModelViewerMenuEffect
+	prior := modelViewerDNFTrue()
+	for index, branch := range branches {
+		scope, ok := modelViewerExactDNFAnd(prior, conditions[index])
+		if !ok {
+			return nil, false
+		}
+		if scope, ok = modelViewerExactDNFAnd(guard, scope); !ok {
+			return nil, false
+		}
+		nested, ok := f.flatten(branch.lines, scope)
+		if !ok {
+			return nil, false
+		}
+
+		// A later branch must see the value the mod tested, not what this one set,
+		// and its guard holds the negation of this branch's condition.
+		if index+1 < len(branches) {
+			var reads []string
+			for _, condition := range conditions[index:] {
+				reads = append(reads, dnfVarNames(condition)...)
+			}
+			if slices.ContainsFunc(nested, func(effect ModelViewerMenuEffect) bool {
+				return slices.Contains(reads, effect.Var)
+			}) {
+				return nil, false
+			}
+		}
+
+		// Writing a variable the branch tests would fail the guards of the lines after
+		// it, so that goes last, and only one such write can.
+		reads := dnfVarNames(scope)
+		written := func(effect ModelViewerMenuEffect) bool { return slices.Contains(reads, effect.Var) }
+		var last *ModelViewerMenuEffect
+		for _, effect := range nested {
+			if !written(effect) {
+				effects = append(effects, effect)
+				continue
+			}
+			if last != nil && (last.Var != effect.Var || last.Value != effect.Value) {
+				return nil, false
+			}
+			last = &effect
+		}
+		for _, effect := range nested {
+			if written(effect) {
+				effects = append(effects, effect)
+			}
+		}
+
+		if prior, ok = modelViewerExactDNFAnd(prior, modelViewerDNFNot(conditions[index])); !ok {
+			return nil, false
+		}
+	}
+	return effects, true
+}
+
+// modelViewerExactDNFAnd reports false where modelViewerDNFAnd gives up on too many
+// alternatives by returning true, which would leave effects without their guards.
+func modelViewerExactDNFAnd(left, right ModelViewerDNF) (ModelViewerDNF, bool) {
+	result := modelViewerDNFAnd(left, right)
+	return result, !modelViewerDNFIsTrue(result) || modelViewerDNFIsTrue(left) && modelViewerDNFIsTrue(right)
+}
+
+// parseGuard rejects what the DNF parser would read as always true: tests of the
+// cursor or other expressions, comparisons of a variable without known values, and
+// expressions that could reach the parser's limit on alternatives, which it reports
+// the same way. Each atom of n alternatives multiplies that bound by at most n+1.
+func (f *modelViewerEffectFlattener) parseGuard(expression string) (ModelViewerDNF, bool) {
+	bound := 1
+	for _, token := range tokenizeModelViewerDNF(expression) {
+		if token == "(" || token == ")" || token == "&&" || token == "||" || token == "!" {
+			continue
+		}
+		alternatives := 1
+		if !modelViewerDNFBareRE.MatchString(token) {
+			match := modelViewerDNFClauseRE.FindStringSubmatch(token)
+			if match == nil {
+				return nil, false
+			}
+			if match[2] != "==" && match[2] != "!=" {
+				variable := modelViewerNormalizeKey(match[1])
+				if _, known := f.variables["__domain:"+variable]; !known {
+					return nil, false
+				}
+				alternatives = len(expandModelViewerDNFComparison(variable, match[2], match[3], f.variables))
+			}
+		}
+		if bound *= alternatives + 1; bound > maxModelViewerDNFGroups {
+			return nil, false
+		}
+	}
+	return parseModelViewerConditionDNF(expression, nil, f.variables), true
+}
+
+func modelViewerGuardedEffects(guard ModelViewerDNF, variable, value string) []ModelViewerMenuEffect {
+	effects := make([]ModelViewerMenuEffect, 0, len(guard))
+	for _, group := range guard {
+		effect := ModelViewerMenuEffect{Var: variable, Value: value}
+		for index, clause := range group {
+			menuGuard := ModelViewerMenuGuard{Var: clause.Var, Op: "==", Value: clause.Value}
+			if clause.Negate {
+				menuGuard.Op = "!="
+			}
+			if index == 0 {
+				effect.When = &menuGuard
+			} else {
+				effect.Also = append(effect.Also, menuGuard)
+			}
+		}
+		effects = append(effects, effect)
+	}
+	return effects
 }
 
 // collectModelViewerWrapBindings reads the values of a variable a command list

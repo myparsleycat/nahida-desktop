@@ -690,6 +690,84 @@ $underwear = 0`)
 	}
 }
 
+// A click list decides each branch once, but effects test their guards again after
+// every write, so a line clearing the tested variable must not stop the lines after it.
+func TestModelViewerKeyListEffectsMatchCommandList(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global $tail = 0
+global $bow = 1
+global $plain = 0
+global $other = 0
+global $none = 0
+[KeyClick]
+key = VK_LBUTTON
+run = CommandListSelect
+[CommandListSelect]
+if cursor_x > 0.5
+  $tail = ($tail + 1) % 3
+  run = CommandListTail
+endif
+[CommandListTail]
+$plain = 0
+if $tail == 1 || $tail == 2
+  $plain = 1
+  if $bow == 1
+    $bow = 0
+    $other = 1
+  endif
+else
+  $none = 1
+endif`)
+	defaults := collectModelViewerDefaultVariables(sections)
+	variables := buildModelViewerDirectVariables(sections, collectModelViewerSlotBindings(sections, defaults), defaults)
+	if len(variables) != 1 || variables[0].ID != "tail" || len(variables[0].Values) != 3 ||
+		!variables[0].alwaysVisible {
+		t.Fatalf("variables = %#v", variables)
+	}
+
+	state := map[string]any{"tail": "0", "bow": "1", "plain": "0", "other": "0", "none": "0"}
+	state = applyViewerVariableSelection(state, variables[0], "1")
+	for name, want := range map[string]string{"plain": "1", "bow": "0", "other": "1", "none": "0"} {
+		if state[name] != want {
+			t.Fatalf("tail 1: %s = %v, want %s in %v", name, state[name], want, state)
+		}
+	}
+	state = applyViewerVariableSelection(state, variables[0], "0")
+	for name, want := range map[string]string{"plain": "0", "bow": "0", "other": "1", "none": "1"} {
+		if state[name] != want {
+			t.Fatalf("tail 0: %s = %v, want %s in %v", name, state[name], want, state)
+		}
+	}
+}
+
+func TestModelViewerKeyListKeepsNoEffectsItCannotExpress(t *testing.T) {
+	for name, body := range map[string]string{
+		"later branch tests a written variable": "if $flag == 0\n  $flag = 1\nelif $flag == 1\n  $flag = 0\nendif",
+		"else follows a written variable":       "if $flag == 0\n  $flag = 1\n  $a = 1\nelse\n  $flag = 0\n  $a = 0\nendif",
+		"branch writes two tested variables":    "if $flag == 1 && $a == 1\n  $flag = 0\n  $a = 0\n  $b = 1\nendif",
+		"list of another INI":                   "$flag = 1\nrun = CommandList\\pack\\Apply",
+		"too many alternatives": "if ($a == 1 || $b == 1) && ($c == 1 || $d == 1) && ($e == 1 || $f == 1) && " +
+			"($g == 1 || $h == 1) && ($i == 1 || $j == 1) && ($k == 1 || $l == 1) && ($m == 1 || $n == 1) && " +
+			"($o == 1 || $p == 1)\n  $flag = 1\nendif",
+		"computed value": "$flag = $x + 1",
+		"cursor test":    "if cursor_x > 0.5\n  $flag = 1\nendif",
+	} {
+		t.Run(name, func(t *testing.T) {
+			sections := parseModINI("[Constants]\nglobal $x = 0\nglobal $flag = 0\n[KeyClick]\nkey = VK_LBUTTON\n" +
+				"run = CommandListSelect\n[CommandListSelect]\n$x = ($x + 1) % 2\n" + body)
+			defaults := collectModelViewerDefaultVariables(sections)
+			variables := buildModelViewerDirectVariables(
+				sections,
+				collectModelViewerSlotBindings(sections, defaults),
+				defaults,
+			)
+			if len(variables) != 1 || len(variables[0].Effects) != 0 || variables[0].alwaysVisible {
+				t.Fatalf("variables = %#v", variables)
+			}
+		})
+	}
+}
+
 func TestModelViewerClickedSlotConditionalEffects(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $top = 1
