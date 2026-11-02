@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -83,24 +84,39 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 		return declaredColorSpace(file) == "srgb" && likelyDiffuse(file)
 	}
 
+	normalMaps := make(map[string]bool)
+	isNormalMap := func(file string) bool {
+		resolved := viewerResourcePath(modDir, file)
+		if resolved == "" || !strings.EqualFold(filepath.Ext(file), ".dds") || declaredColorSpace(file) == "srgb" {
+			return false
+		}
+		normal, cached := normalMaps[resolved]
+		if !cached {
+			normal = isTwoChannelNormalMap(resolved)
+			normalMaps[resolved] = normal
+		}
+		return normal
+	}
+
 	for index := range meshes {
 		mesh := &meshes[index]
+		wwmiMesh := wwmi || wwmiComponentIndex(mesh.component) != ""
+		if !efmi && !wwmiMesh {
+			replaceNormalMapDiffuse(mesh, srgbDiffuse, likelyDiffuse, isNormalMap)
+			continue
+		}
 		candidates := mesh.slotTextureCandidates
 		if len(candidates) == 0 {
 			continue
 		}
 
 		fits, replace := likelyDiffuse, false
-		wwmiMesh := wwmi || wwmiComponentIndex(mesh.component) != ""
 		primaryMaskDiffuse := wwmiMesh && !efmi && meshDiffuseMatches(mesh, hintOf, func(hint *wwmiTextureHint) bool {
 			return hint.Analyzed && hint.PrimaryColorFraction >= 0.5
 		})
 		switch {
 		case !meshHasDiffuseTexture(mesh):
-			if !efmi && !wwmiMesh {
-				continue
-			}
-			if wwmiMesh && !efmi {
+			if !efmi {
 				fits = srgbDiffuse
 			}
 		case wwmiMesh && !mesh.textureAuthored &&
@@ -170,6 +186,70 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 			break
 		}
 	}
+}
+
+// replaceNormalMapDiffuse corrects GIMI mods on the ps-t0 normal, ps-t1 diffuse,
+// ps-t2 light map layout that keep the resource names of the ps-t0 diffuse, ps-t1
+// light map layout. Names cannot tell the layouts apart, so the swap needs a ps-t0
+// that holds a normal map and an sRGB color map to take its place. That map proves
+// the layout, so toggle variants without a declared color space move with it; a
+// variant declared linear cannot be told from a light map and stays one.
+func replaceNormalMapDiffuse(
+	mesh *modelViewerDirectMesh,
+	isSRGBColorMap, isColorMap, isNormalMap func(file string) bool,
+) {
+	if !meshHasDiffuseTexture(mesh) {
+		return
+	}
+	colorMaps := func(assignments []modelViewerDirectTextureAssignment, role string) []modelViewerDirectTextureAssignment {
+		matching := lo.Filter(assignments, func(assignment modelViewerDirectTextureAssignment, _ int) bool {
+			return assignment.role == role && assignment.file != "" && isColorMap(assignment.file)
+		})
+		if !lo.SomeBy(matching, func(assignment modelViewerDirectTextureAssignment) bool {
+			return isSRGBColorMap(assignment.file)
+		}) {
+			return nil
+		}
+		return matching
+	}
+	replacements := colorMaps(mesh.slotTextureCandidates, modelViewerSlotTextureRole(1))
+	if len(replacements) == 0 {
+		replacements = colorMaps(mesh.textureAssignments, "light_map")
+	}
+	if len(replacements) == 0 || mesh.textureDefaultFile != "" && !isNormalMap(mesh.textureDefaultFile) ||
+		!lo.EveryBy(mesh.textureAssignments, func(assignment modelViewerDirectTextureAssignment) bool {
+			return assignment.role != "diffuse" || assignment.file == "" || isNormalMap(assignment.file)
+		}) {
+		return
+	}
+
+	replacedRole := replacements[0].role
+	mesh.textureAssignments = lo.Reject(
+		mesh.textureAssignments,
+		func(assignment modelViewerDirectTextureAssignment, _ int) bool {
+			return assignment.role == "diffuse" || assignment.role == replacedRole && isColorMap(assignment.file)
+		},
+	)
+	mesh.textureDefaultFile = replacements[0].file
+	for _, replacement := range replacements {
+		replacement.role = "diffuse"
+		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, replacement)
+	}
+}
+
+// isTwoChannelNormalMap recognizes a normal map that stores X and Y around their
+// midpoint and leaves blue empty, which reads as a flat olive when drawn as color.
+func isTwoChannelNormalMap(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	decoded, err := decodeModelViewerDDSHint(path, info.Size())
+	if err != nil {
+		return false
+	}
+	analysis := analyzeNRGBA(decoded)
+	return absFloat(analysis.meanR-0.5) <= 0.1 && absFloat(analysis.meanG-0.5) <= 0.1 && analysis.meanB <= 0.08
 }
 
 func meshDiffuseMatches(

@@ -2,6 +2,8 @@ package modelviewer
 
 import (
 	"encoding/binary"
+	"image/color"
+	"slices"
 	"testing"
 )
 
@@ -14,6 +16,134 @@ func encodeDX10HeaderDDS(width, height, dxgi uint32) []byte {
 	copy(header[84:88], "DX10")
 	binary.LittleEndian.PutUint32(header[128:132], dxgi)
 	return header
+}
+
+func TestAttachSlotBoundDiffuseReplacesGIMINormalMapNamedDiffuse(t *testing.T) {
+	const side = 16
+	dir := t.TempDir()
+	olive := color.NRGBA{R: 127, G: 127, B: 2, A: 255}
+	writeTextureFile(
+		t,
+		dir,
+		"Normal.dds",
+		efmiDX10DDS(side, efmiDXGIBGRA8, slices.Repeat([]color.NRGBA{olive}, side*side)),
+	)
+	writeTextureFile(t, dir, "Color.dds", encodeWwmiColorDDS(side))
+	writeTextureFile(t, dir, "Skin.dds", encodeWwmiColorDDS(side))
+	writeTextureFile(t, dir, "Linear.dds", efmiSolidDDS(side, efmiTestLightMap))
+	legacy := make([]color.NRGBA, 0, side*side)
+	for y := range side {
+		for x := range side {
+			legacy = append(legacy, color.NRGBA{R: uint8(x * 8), G: uint8(y * 3), B: uint8((x + y) * 4), A: 255})
+		}
+	}
+	writeTextureFile(t, dir, "Legacy.dds", encodeWwmiUncompressedDDS(side, side, legacy))
+
+	skin := ModelViewerDNF{{{Var: "skin", Value: "1"}}}
+	assign := func(role, file string, conditions ModelViewerDNF) modelViewerDirectTextureAssignment {
+		return modelViewerDirectTextureAssignment{role: role, resource: file, file: file, conditions: conditions}
+	}
+	for _, tt := range []struct {
+		name          string
+		diffuse       string
+		lightMaps     []modelViewerDirectTextureAssignment
+		slots         []modelViewerDirectTextureAssignment
+		wantDiffuses  []string
+		wantLightMaps []string
+	}{
+		{
+			name:    "light map names keep toggles",
+			diffuse: "Normal.dds",
+			lightMaps: []modelViewerDirectTextureAssignment{
+				assign("light_map", "Color.dds", modelViewerDNFTrue()),
+				assign("light_map", "Skin.dds", skin),
+			},
+			wantDiffuses: []string{"Color.dds", "Skin.dds"},
+		},
+		{
+			name:    "undeclared variant follows the sRGB map",
+			diffuse: "Normal.dds",
+			lightMaps: []modelViewerDirectTextureAssignment{
+				assign("light_map", "Color.dds", modelViewerDNFTrue()),
+				assign("light_map", "Legacy.dds", skin),
+			},
+			wantDiffuses: []string{"Color.dds", "Legacy.dds"},
+		},
+		{
+			name:    "linear variant stays a light map",
+			diffuse: "Normal.dds",
+			lightMaps: []modelViewerDirectTextureAssignment{
+				assign("light_map", "Color.dds", modelViewerDNFTrue()),
+				assign("light_map", "Linear.dds", skin),
+			},
+			wantDiffuses:  []string{"Color.dds"},
+			wantLightMaps: []string{"Linear.dds"},
+		},
+		{
+			name:          "undeclared map alone proves nothing",
+			diffuse:       "Normal.dds",
+			lightMaps:     []modelViewerDirectTextureAssignment{assign("light_map", "Legacy.dds", modelViewerDNFTrue())},
+			wantDiffuses:  []string{"Normal.dds"},
+			wantLightMaps: []string{"Legacy.dds"},
+		},
+		{
+			name:         "unnamed ps-t1",
+			diffuse:      "Normal.dds",
+			slots:        []modelViewerDirectTextureAssignment{assign(modelViewerSlotTextureRole(1), "Color.dds", modelViewerDNFTrue())},
+			wantDiffuses: []string{"Color.dds"},
+		},
+		{
+			name:          "real color diffuse stays",
+			diffuse:       "Skin.dds",
+			lightMaps:     []modelViewerDirectTextureAssignment{assign("light_map", "Color.dds", modelViewerDNFTrue())},
+			wantDiffuses:  []string{"Skin.dds"},
+			wantLightMaps: []string{"Color.dds"},
+		},
+		{
+			name:          "linear replacement is a light map",
+			diffuse:       "Normal.dds",
+			lightMaps:     []modelViewerDirectTextureAssignment{assign("light_map", "Linear.dds", modelViewerDNFTrue())},
+			wantDiffuses:  []string{"Normal.dds"},
+			wantLightMaps: []string{"Linear.dds"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			meshes := []modelViewerDirectMesh{
+				{
+					component:          "Body",
+					textureAuthored:    true,
+					textureDefaultFile: tt.diffuse,
+					textureAssignments: append(
+						[]modelViewerDirectTextureAssignment{assign("diffuse", tt.diffuse, modelViewerDNFTrue())},
+						tt.lightMaps...),
+					slotTextureCandidates: tt.slots,
+				},
+			}
+
+			attachSlotBoundDiffuse(meshes, dir, false, false)
+
+			var diffuses, lightMaps []string
+			for _, assignment := range meshes[0].textureAssignments {
+				switch assignment.role {
+				case "diffuse":
+					diffuses = append(diffuses, assignment.file)
+				case "light_map":
+					lightMaps = append(lightMaps, assignment.file)
+				}
+			}
+			if !slices.Equal(diffuses, tt.wantDiffuses) || !slices.Equal(lightMaps, tt.wantLightMaps) ||
+				meshes[0].textureDefaultFile != tt.wantDiffuses[0] {
+				t.Fatalf(
+					"default = %q, diffuses = %v, light maps = %v, want %v and %v",
+					meshes[0].textureDefaultFile,
+					diffuses,
+					lightMaps,
+					tt.wantDiffuses,
+					tt.wantLightMaps,
+				)
+			}
+		})
+	}
 }
 
 func TestAttachSlotBoundDiffuseReplacesLinearPsT0WithSRGBSlot(t *testing.T) {
