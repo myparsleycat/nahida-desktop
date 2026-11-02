@@ -114,20 +114,6 @@ function parseToonStyleRecord(stored: string): Record<string, unknown> {
     }
 }
 
-export type ModelViewerRealtimeShapeKey = {
-    targetMeshPrefixes: string[];
-    basePath: string;
-    vertexStride: number;
-    positionOffset: number;
-    normalOffset: number;
-    tangentOffset: number;
-    dimensions: Array<{
-        variableId: string;
-        smallerPath: string;
-        biggerPath: string;
-    }>;
-};
-
 export type ModelViewerAnimationFrameMesh = {
     meshName: string;
     indicesBufferId?: string;
@@ -215,8 +201,6 @@ export type ModelViewerSurfaceProps = {
     payloadEval?: EvaluatedViewerState;
     /** The form payloadEval was evaluated for; animation frames keep it. */
     form?: string;
-    variantState?: Record<string, ModelViewerVariantStateValue>;
-    shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;
     animationFrame?: number;
     /** The variables a compute deformer reads while it plays. */

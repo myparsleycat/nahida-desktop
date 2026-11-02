@@ -1,3 +1,10 @@
+import {
+    ModelViewerComputeDeformerKind,
+    ModelViewerComputeSourceEncoding,
+    ModelViewerDualQuaternionVariant,
+    ModelViewerMaterialProfile,
+    ModelViewerShapeTargetMode,
+} from "@bindings/tools/model_viewer";
 import type {
     ModelViewerDNF,
     ModelViewerTextureTransport,
@@ -5,8 +12,8 @@ import type {
 } from "@bindings/tools/model_viewer";
 import type {
     Dnf,
+    GoEnumValue,
     ModViewerTransport,
-    ViewerMaterialProfile,
     ViewerStateValue,
     ViewerDDSFormat,
     ViewerTextureRole,
@@ -82,15 +89,23 @@ function normalizeTextureRole(value: string): ViewerTextureRole {
     }
 }
 
-function normalizeMaterialProfile(value?: string): ViewerMaterialProfile | undefined {
-    return value === "zzmi" || value === "wuwa:rabbitfx" || value === "efmi" ? value : undefined;
+function goEnumParser<T extends string>(values: Record<string, T>) {
+    const known = new Set<string>(Object.values(values).filter(Boolean));
+    return (value: string | null | undefined): GoEnumValue<T> | undefined =>
+        value && known.has(value) ? (value as GoEnumValue<T>) : undefined;
 }
+
+const parseMaterialProfile = goEnumParser(ModelViewerMaterialProfile);
+const parseComputeSourceEncoding = goEnumParser(ModelViewerComputeSourceEncoding);
+const parseShapeTargetMode = goEnumParser(ModelViewerShapeTargetMode);
+const parseComputeDeformerKind = goEnumParser(ModelViewerComputeDeformerKind);
+const parseDualQuaternionVariant = goEnumParser(ModelViewerDualQuaternionVariant);
 
 function normalizeComputeSource(source: {
     url: string;
     byteLength: number;
     stride: number;
-    encoding?: string;
+    encoding?: ModelViewerComputeSourceEncoding;
 }): ViewerComputeBinarySource {
     if (!source.url || source.byteLength <= 0 || source.stride <= 0) {
         throw new TypeError("Invalid model viewer compute source.");
@@ -99,7 +114,7 @@ function normalizeComputeSource(source: {
         url: source.url,
         byteLength: source.byteLength,
         stride: source.stride,
-        encoding: source.encoding === "packed_f32_v1" ? source.encoding : undefined,
+        encoding: parseComputeSourceEncoding(source.encoding),
     };
 }
 
@@ -133,7 +148,7 @@ export function normalizeModelViewerTransport(
         modPath: value.modPath,
         name: value.name,
         defaultYaw: value.defaultYaw,
-        materialProfile: normalizeMaterialProfile(value.materialProfile),
+        materialProfile: parseMaterialProfile(value.materialProfile),
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,
             component: mesh.component,
@@ -173,7 +188,7 @@ export function normalizeModelViewerTransport(
             shapeTargets: (mesh.shapeTargets ?? []).map((target) => ({
                 var: target.var,
                 positionsUrl: target.positionsUrl,
-                mode: target.mode === "midpoint_pair" ? target.mode : undefined,
+                mode: parseShapeTargetMode(target.mode),
                 lowPositionsUrl: target.lowPositionsUrl,
                 divisor: target.divisor || undefined,
                 wave: target.wave
@@ -276,85 +291,70 @@ export function normalizeModelViewerTransport(
                 values: normalizeState(frame.values),
             })),
         })),
-        computeDeformers: (value.computeDeformers ?? []).flatMap((deformer) => {
-            const dualQuaternionVariant = deformer.pose?.dualQuaternionVariant;
-            if (
-                (dualQuaternionVariant &&
-                    dualQuaternionVariant !== "object" &&
-                    dualQuaternionVariant !== "object_direct" &&
-                    dualQuaternionVariant !== "efmi_typed" &&
-                    dualQuaternionVariant !== "efmi_compact") ||
-                (deformer.kind !== "gimi_shape_pose_v1" &&
-                    deformer.kind !== "gimi_packed_dual_quaternion_v1" &&
-                    deformer.kind !== "gimi_cyclic_packed_v1" &&
-                    deformer.kind !== "gimi_cyclic_packed_shape_v1" &&
-                    deformer.kind !== "gimi_merged_delta_shape_v1")
-            ) {
-                return [];
+        computeDeformers: (value.computeDeformers ?? []).map((deformer) => {
+            const kind = parseComputeDeformerKind(deformer.kind);
+            const dualQuaternionVariant = parseDualQuaternionVariant(
+                deformer.pose?.dualQuaternionVariant,
+            );
+            if (!kind || (deformer.pose?.dualQuaternionVariant && !dualQuaternionVariant)) {
+                throw new TypeError(
+                    `Unsupported model viewer compute deformer: ${deformer.kind} ${deformer.pose?.dualQuaternionVariant ?? ""}`,
+                );
             }
-            return [
-                {
-                    kind: deformer.kind,
-                    id: deformer.id,
-                    meshIds: deformer.meshIds ?? [],
-                    meshSourceIndices: deformer.meshSourceIndices ?? undefined,
-                    vertexCount: deformer.vertexCount,
-                    base: normalizeComputeSource(deformer.base),
-                    shapePasses: (deformer.shapePasses ?? []).map((pass) => ({
-                        target: normalizeComputeSource(pass.target),
-                        phaseRate: pass.phaseRate,
-                        wrapAt: pass.wrapAt,
-                        phaseStart: pass.phaseStart,
-                        phaseOffset: pass.phaseOffset,
-                        angularScale: pass.angularScale,
-                        amplitude: pass.amplitude,
-                        bias: pass.bias,
-                    })),
-                    shapeStages: (deformer.shapeStages ?? []).map((stage) => ({
-                        base: normalizeComputeSource(stage.base),
-                        target: normalizeComputeSource(stage.target),
-                        phaseRate: stage.phaseRate,
-                        wrapAt: stage.wrapAt,
-                        phaseStart: stage.phaseStart,
-                        phaseOffset: stage.phaseOffset,
-                        angularScale: stage.angularScale,
-                        amplitude: stage.amplitude,
-                        bias: stage.bias,
-                        duration: stage.duration,
-                    })),
-                    pose: deformer.pose
-                        ? {
-                              dualQuaternionVariant:
-                                  dualQuaternionVariant === "object_direct" ||
-                                  dualQuaternionVariant === "efmi_typed" ||
-                                  dualQuaternionVariant === "efmi_compact"
-                                      ? dualQuaternionVariant
-                                      : dualQuaternionVariant
-                                        ? ("object" as const)
-                                        : undefined,
-                              blend: normalizeComputeSource(deformer.pose.blend),
-                              frames: normalizeComputeSource(deformer.pose.frames),
-                              boneCount: deformer.pose.boneCount,
-                              frameCount: deformer.pose.frameCount,
-                          }
-                        : undefined,
-                    mergedDeltas: deformer.mergedDeltas
-                        ? {
-                              url: deformer.mergedDeltas.url,
-                              groups: (deformer.mergedDeltas.groups ?? []).map((group) => ({
-                                  autoPlayVar: group.autoPlayVar,
-                                  speedVar: group.speedVar,
-                                  weightVar: group.weightVar,
-                                  steps: group.steps ?? [],
-                                  stepLimit: group.stepLimit,
-                                  frameEnd: group.frameEnd,
-                                  wrap: group.wrap,
-                              })),
-                              keys: deformer.mergedDeltas.keys ?? [],
-                          }
-                        : undefined,
-                },
-            ];
+            return {
+                kind,
+                id: deformer.id,
+                meshIds: deformer.meshIds ?? [],
+                meshSourceIndices: deformer.meshSourceIndices ?? undefined,
+                vertexCount: deformer.vertexCount,
+                base: normalizeComputeSource(deformer.base),
+                shapePasses: (deformer.shapePasses ?? []).map((pass) => ({
+                    target: normalizeComputeSource(pass.target),
+                    phaseRate: pass.phaseRate,
+                    wrapAt: pass.wrapAt,
+                    phaseStart: pass.phaseStart,
+                    phaseOffset: pass.phaseOffset,
+                    angularScale: pass.angularScale,
+                    amplitude: pass.amplitude,
+                    bias: pass.bias,
+                })),
+                shapeStages: (deformer.shapeStages ?? []).map((stage) => ({
+                    base: normalizeComputeSource(stage.base),
+                    target: normalizeComputeSource(stage.target),
+                    phaseRate: stage.phaseRate,
+                    wrapAt: stage.wrapAt,
+                    phaseStart: stage.phaseStart,
+                    phaseOffset: stage.phaseOffset,
+                    angularScale: stage.angularScale,
+                    amplitude: stage.amplitude,
+                    bias: stage.bias,
+                    duration: stage.duration,
+                })),
+                pose: deformer.pose
+                    ? {
+                          dualQuaternionVariant,
+                          blend: normalizeComputeSource(deformer.pose.blend),
+                          frames: normalizeComputeSource(deformer.pose.frames),
+                          boneCount: deformer.pose.boneCount,
+                          frameCount: deformer.pose.frameCount,
+                      }
+                    : undefined,
+                mergedDeltas: deformer.mergedDeltas
+                    ? {
+                          url: deformer.mergedDeltas.url,
+                          groups: (deformer.mergedDeltas.groups ?? []).map((group) => ({
+                              autoPlayVar: group.autoPlayVar,
+                              speedVar: group.speedVar,
+                              weightVar: group.weightVar,
+                              steps: group.steps ?? [],
+                              stepLimit: group.stepLimit,
+                              frameEnd: group.frameEnd,
+                              wrap: group.wrap,
+                          })),
+                          keys: deformer.mergedDeltas.keys ?? [],
+                      }
+                    : undefined,
+            };
         }),
         forms: (value.forms ?? []).map((form) => ({
             id: form.id,

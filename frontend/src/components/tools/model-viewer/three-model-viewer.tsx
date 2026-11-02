@@ -46,7 +46,6 @@ import type {
   ModelViewerBodyShapeOverride,
   ModelViewerCameraState,
   ModelViewerHandle,
-  ModelViewerRealtimeShapeKey,
   ModelViewerSurfaceProps,
   ModelViewerToonStyle,
 } from "./model-viewer-contract";
@@ -129,16 +128,6 @@ const modelViewerRenderer = createThreeRenderer({
   antialias: true,
 });
 
-type LoadedShapeKey = {
-  metadata: ModelViewerRealtimeShapeKey;
-  base: Float32Array;
-  dimensions: Array<{
-    variableId: string;
-    smaller: Float32Array;
-    bigger: Float32Array;
-  }>;
-};
-
 type LoadedAnimationFrame = {
   index: number;
   meshes: Array<{
@@ -166,7 +155,6 @@ export const ThreeModelViewer = memo(
       payloadEval,
       payloadTransport,
       form,
-      shapeKeys,
       src,
       threeEnvironment = "studio",
       threeExposure = 1,
@@ -175,7 +163,6 @@ export const ThreeModelViewer = memo(
       toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
       normalMaps = true,
       highlightGameTextures = false,
-      variantState,
       onSurfacePick,
       onVisibleMeshesChange,
       overlay,
@@ -249,7 +236,6 @@ export const ThreeModelViewer = memo(
             computeState={computeState}
             bodyShapeOverrides={bodyShapeOverrides}
             orientation={orientation}
-            shapeKeys={shapeKeys}
             src={src}
             threeEnvironment={threeEnvironment}
             threeExposure={threeExposure}
@@ -263,7 +249,6 @@ export const ThreeModelViewer = memo(
             payloadEval={payloadEval}
             payloadTransport={payloadTransport}
             form={form}
-            variantState={variantState}
             onSurfacePick={onSurfacePick}
             onVisibleMeshesChange={onVisibleMeshesChange}
             overlay={overlay}
@@ -288,7 +273,6 @@ function ThreeModelScene({
   payloadEval,
   payloadTransport,
   form,
-  shapeKeys,
   src,
   threeEnvironment = "studio",
   threeExposure = 1,
@@ -297,7 +281,6 @@ function ThreeModelScene({
   toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
   normalMaps = true,
   highlightGameTextures = false,
-  variantState,
   onSurfacePick,
   onVisibleMeshesChange,
   overlay,
@@ -341,9 +324,6 @@ function ThreeModelScene({
   >([]);
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
-  const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
-  const lastAppliedModelRootRef = useRef<Object3D | null>(null);
-  const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
   const lastAppliedAnimationSignatureRef = useRef<string | null>(null);
   const bodyShapeBaselineRef = useRef<WeakMap<Mesh, BodyShapeBaseline>>(new WeakMap());
   const desiredCameraDistanceRef = useRef<number | null>(null);
@@ -1128,9 +1108,6 @@ function ThreeModelScene({
         activeObjectRef.current = null;
       }
       materialRef.current = [];
-      lastAppliedVariantSnapshotRef.current = null;
-      lastAppliedModelRootRef.current = null;
-      lastAppliedShapeKeysRef.current = undefined;
       lastAppliedAnimationSignatureRef.current = null;
     };
   }, [gl]);
@@ -1281,52 +1258,6 @@ function ThreeModelScene({
     payloadTransport,
   ]);
 
-  useEffect(() => {
-    if (!modelRoot || hasBodyShapeOverrides || !shapeKeys?.length) {
-      lastAppliedVariantSnapshotRef.current = null;
-      lastAppliedModelRootRef.current = modelRoot;
-      lastAppliedShapeKeysRef.current = shapeKeys;
-      return;
-    }
-
-    const currentVariantSnapshot = variantState ? { ...variantState } : null;
-    const didApplySameInputs =
-      lastAppliedModelRootRef.current === modelRoot &&
-      lastAppliedShapeKeysRef.current === shapeKeys &&
-      areVariantSnapshotsEqual(lastAppliedVariantSnapshotRef.current, currentVariantSnapshot);
-    if (didApplySameInputs) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      const loadedShapeKeys = (
-        await Promise.all(
-          shapeKeys.map((shapeKey) => loadShapeKey(shapeKey, floatBufferCacheRef.current)),
-        )
-      ).filter((shapeKey): shapeKey is LoadedShapeKey => !!shapeKey);
-
-      if (cancelled || loadedShapeKeys.length === 0) {
-        return;
-      }
-
-      applyShapeKeysToScene(modelRoot, loadedShapeKeys, variantState);
-      lastAppliedVariantSnapshotRef.current = currentVariantSnapshot;
-      lastAppliedModelRootRef.current = modelRoot;
-      lastAppliedShapeKeysRef.current = shapeKeys;
-      invalidate();
-    })().catch((error) => {
-      if (!cancelled) {
-        onErrorRef.current?.(error);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasBodyShapeOverrides, invalidate, modelRoot, shapeKeys, variantState]);
-
   return (
     <>
       <OrbitControls
@@ -1354,62 +1285,6 @@ function ThreeModelScene({
       </group>
     </>
   );
-}
-
-function areVariantSnapshotsEqual(
-  left: Record<string, number | string> | null,
-  right: Record<string, number | string> | null,
-): boolean {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  for (const [key, value] of leftEntries) {
-    if (right[key] !== value) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-async function loadShapeKey(
-  shapeKey: ModelViewerRealtimeShapeKey,
-  cache: Map<string, Promise<Float32Array>>,
-): Promise<LoadedShapeKey | null> {
-  const [base, ...dimensionBuffers] = await Promise.all([
-    loadFloatBuffer(shapeKey.basePath, cache),
-    ...shapeKey.dimensions.flatMap((dimension) => [
-      loadFloatBuffer(dimension.smallerPath, cache),
-      loadFloatBuffer(dimension.biggerPath, cache),
-    ]),
-  ]);
-
-  if (!base) {
-    return null;
-  }
-
-  const dimensions = shapeKey.dimensions.map((dimension, index) => ({
-    variableId: dimension.variableId,
-    smaller: dimensionBuffers[index * 2]!,
-    bigger: dimensionBuffers[index * 2 + 1]!,
-  }));
-
-  return {
-    metadata: shapeKey,
-    base,
-    dimensions,
-  };
 }
 
 async function loadFloatBuffer(
@@ -1545,27 +1420,6 @@ async function loadOptionalUint32AnimationBuffer(
 ): Promise<Uint32Array | undefined> {
   const resolvedPath = resolveAnimationBufferPath(bufferId, sourcePath, sharedBufferPathMap);
   return resolvedPath ? await loadUint32Buffer(resolvedPath, cache) : undefined;
-}
-
-function applyShapeKeysToScene(
-  root: Object3D,
-  shapeKeys: LoadedShapeKey[],
-  variantState?: Record<string, number | string>,
-) {
-  root.traverse((object) => {
-    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
-      return;
-    }
-
-    const shapeKey = shapeKeys.find((candidate) =>
-      candidate.metadata.targetMeshPrefixes.some((prefix) => object.name.startsWith(prefix)),
-    );
-    if (!shapeKey) {
-      return;
-    }
-
-    applyShapeKeyToGeometry(object.geometry, shapeKey, variantState);
-  });
 }
 
 function applyAnimationFrameToScene(root: Object3D, frame: LoadedAnimationFrame) {
@@ -1855,170 +1709,6 @@ function applyIndexToGeometry(geometry: BufferGeometry, indices: Uint32Array) {
 
   const nextIndices = maxUint32(indices) <= 65535 ? Uint16Array.from(indices) : indices.slice();
   geometry.setIndex(new BufferAttribute(nextIndices, 1));
-}
-
-function applyShapeKeyToGeometry(
-  geometry: BufferGeometry,
-  shapeKey: LoadedShapeKey,
-  variantState?: Record<string, number | string>,
-) {
-  const positionAttribute = geometry.getAttribute("position");
-  const normalAttribute = geometry.getAttribute("normal");
-  const tangentAttribute = geometry.getAttribute("tangent");
-  if (!(positionAttribute instanceof BufferAttribute)) {
-    return;
-  }
-
-  const positionArray = positionAttribute.array as Float32Array;
-  const normalArray =
-    normalAttribute instanceof BufferAttribute ? (normalAttribute.array as Float32Array) : null;
-  const tangentArray =
-    tangentAttribute instanceof BufferAttribute ? (tangentAttribute.array as Float32Array) : null;
-  const stride = shapeKey.metadata.vertexStride / 4;
-  const base = shapeKey.base;
-  const vertexCount = positionAttribute.count;
-  if (base.length < vertexCount * stride) {
-    return;
-  }
-
-  for (let index = 0; index < vertexCount; index += 1) {
-    const baseOffset = index * stride;
-    const tangentIndex = index * 4;
-    let sumPosX = 0;
-    let sumPosY = 0;
-    let sumPosZ = 0;
-    let sumNormX = 0;
-    let sumNormY = 0;
-    let sumNormZ = 0;
-    let sumTangX = 0;
-    let sumTangY = 0;
-    let sumTangZ = 0;
-    let sumTangW = 0;
-    let preservedTangW = tangentArray ? Math.sign(tangentArray[tangentIndex + 3]) || 1 : 1;
-    let contributionCount = 0;
-
-    for (const dimension of shapeKey.dimensions) {
-      const rawValue = Number(variantState?.[dimension.variableId] ?? 0.5);
-      const value = Math.min(1, Math.max(0, rawValue));
-      const useSmaller = value <= 0.5;
-      const t = useSmaller ? value / 0.5 : (value - 0.5) / 0.5;
-      const source = useSmaller ? dimension.smaller : dimension.bigger;
-      const left = useSmaller ? source : base;
-      const right = useSmaller ? base : source;
-
-      const pos = lerpVec3FromBuffers(
-        left,
-        right,
-        baseOffset,
-        shapeKey.metadata.positionOffset / 4,
-        t,
-      );
-      const norm = normalizeVec3(
-        lerpVec3FromBuffers(left, right, baseOffset, shapeKey.metadata.normalOffset / 4, t),
-      );
-      const tang = lerpVec4FromBuffers(
-        left,
-        right,
-        baseOffset,
-        shapeKey.metadata.tangentOffset / 4,
-        t,
-      );
-      const normalizedTang = normalizeVec3([tang[0], tang[1], tang[2]]);
-      if (tang[3] !== 0) {
-        preservedTangW = tang[3] < 0 ? -1 : 1;
-      }
-
-      sumPosX += pos[0];
-      sumPosY += pos[1];
-      sumPosZ += pos[2];
-      sumNormX += norm[0];
-      sumNormY += norm[1];
-      sumNormZ += norm[2];
-      sumTangX += normalizedTang[0];
-      sumTangY += normalizedTang[1];
-      sumTangZ += normalizedTang[2];
-      sumTangW += tang[3];
-      contributionCount += 1;
-    }
-
-    const positionIndex = index * 3;
-    if (contributionCount === 0) {
-      positionArray[positionIndex] = base[baseOffset + shapeKey.metadata.positionOffset / 4];
-      positionArray[positionIndex + 1] =
-        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 1];
-      positionArray[positionIndex + 2] =
-        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 2];
-      continue;
-    }
-
-    positionArray[positionIndex] = sumPosX / contributionCount;
-    positionArray[positionIndex + 1] = sumPosY / contributionCount;
-    positionArray[positionIndex + 2] = sumPosZ / contributionCount;
-
-    if (normalArray) {
-      const normalized = normalizeVec3([sumNormX, sumNormY, sumNormZ]);
-      normalArray[positionIndex] = normalized[0];
-      normalArray[positionIndex + 1] = normalized[1];
-      normalArray[positionIndex + 2] = normalized[2];
-    }
-
-    if (tangentArray) {
-      const normalized = normalizeVec3([sumTangX, sumTangY, sumTangZ]);
-      tangentArray[tangentIndex] = normalized[0];
-      tangentArray[tangentIndex + 1] = normalized[1];
-      tangentArray[tangentIndex + 2] = normalized[2];
-      tangentArray[tangentIndex + 3] = Math.sign(sumTangW) || preservedTangW;
-    }
-  }
-
-  positionAttribute.needsUpdate = true;
-  if (normalAttribute instanceof BufferAttribute) {
-    normalAttribute.needsUpdate = true;
-  }
-  if (tangentAttribute instanceof BufferAttribute) {
-    tangentAttribute.needsUpdate = true;
-  }
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-}
-
-function lerpVec3FromBuffers(
-  left: Float32Array,
-  right: Float32Array,
-  baseOffset: number,
-  offset: number,
-  t: number,
-): [number, number, number] {
-  const index = baseOffset + offset;
-  return [
-    left[index] + (right[index] - left[index]) * t,
-    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
-    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
-  ];
-}
-
-function lerpVec4FromBuffers(
-  left: Float32Array,
-  right: Float32Array,
-  baseOffset: number,
-  offset: number,
-  t: number,
-): [number, number, number, number] {
-  const index = baseOffset + offset;
-  return [
-    left[index] + (right[index] - left[index]) * t,
-    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
-    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
-    left[index + 3] + (right[index + 3] - left[index + 3]) * t,
-  ];
-}
-
-function normalizeVec3(value: [number, number, number]): [number, number, number] {
-  const length = Math.hypot(value[0], value[1], value[2]);
-  if (!length) {
-    return [0, 0, 0];
-  }
-  return [value[0] / length, value[1] / length, value[2] / length];
 }
 
 function maxUint32(values: Uint32Array): number {

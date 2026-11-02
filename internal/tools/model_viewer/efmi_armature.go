@@ -24,20 +24,20 @@ import (
 // buffer merge those buffers into one palette, each after the previous bones.
 
 const (
-	modelViewerEFMIArmatureVariant    = "efmi_typed"
-	modelViewerEFMICompactVariant     = "efmi_compact"
-	modelViewerEFMIVertexStride       = 16
-	modelViewerEFMIBlendStride        = 16
-	modelViewerEFMICompactBlendStride = 12
-	modelViewerEFMIPoseStride         = 56
-	modelViewerEFMIDecodedBlend       = 32
-	modelViewerEFMIDecodedVertex      = 28
-	modelViewerEFMIShapeConfigBytes   = (2 + 33) * 16
-	modelViewerEFMIShapeKeyLimit      = 127
+	modelViewerEFMIArmatureVariant    ModelViewerDualQuaternionVariant = "efmi_typed"
+	modelViewerEFMICompactVariant     ModelViewerDualQuaternionVariant = "efmi_compact"
+	modelViewerEFMIVertexStride                                        = 16
+	modelViewerEFMIBlendStride                                         = 16
+	modelViewerEFMICompactBlendStride                                  = 12
+	modelViewerEFMIPoseStride                                          = 56
+	modelViewerEFMIDecodedBlend                                        = 32
+	modelViewerEFMIDecodedVertex                                       = 28
+	modelViewerEFMIShapeConfigBytes                                    = (2 + 33) * 16
+	modelViewerEFMIShapeKeyLimit                                       = 127
 )
 
 type modelViewerEFMIArmatureKernel struct {
-	variant     string
+	variant     ModelViewerDualQuaternionVariant
 	blendStride int
 	signatures  []string
 }

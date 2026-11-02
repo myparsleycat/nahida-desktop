@@ -25,7 +25,7 @@ func prepareModelViewerPayload(
 		textureJobs = append(textureJobs, work.jobs...)
 	}
 	transport.MaterialProfile = detectModelViewerMaterialProfile(prepared.sections)
-	settings.MaterialProfile = transport.MaterialProfile
+	settings.MaterialProfile = string(transport.MaterialProfile)
 	texturesByBatch, textureStats, err := runModelViewerTextureJobs(ctx, settings, len(prepared.textures), textureJobs)
 
 	if err != nil {

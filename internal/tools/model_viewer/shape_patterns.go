@@ -370,7 +370,8 @@ func collectMultiModelViewerShapeKeys(
 }
 
 func directModelViewerShape(
-	variable, baseName, lowName, highName, mode string,
+	variable, baseName, lowName, highName string,
+	mode ModelViewerShapeTargetMode,
 	resources map[string]modelViewerResource,
 	modDir string,
 ) (modelViewerShapeKey, bool) {

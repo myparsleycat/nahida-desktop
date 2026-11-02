@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	modelViewerMergedDeltaKind = "gimi_merged_delta_shape_v1"
+	modelViewerMergedDeltaKind ModelViewerComputeDeformerKind = "gimi_merged_delta_shape_v1"
 	// Records of the served delta buffer: the vertex, then the position delta.
 	modelViewerMergedDeltaRecordBytes = 16
 	modelViewerMergedDeltaUnusedSlot  = 255

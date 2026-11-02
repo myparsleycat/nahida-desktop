@@ -63,7 +63,7 @@ func unscopedModelViewerVariable(name string) string {
 	return modelViewerScopeTokenRE.ReplaceAllString(name, "")
 }
 
-func detectModelViewerMaterialProfile(sections []modINISection) string {
+func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMaterialProfile {
 	wwmi, rabbitFX, zzmi := false, false, false
 	for _, section := range sections {
 		for _, line := range section.Lines {
@@ -73,13 +73,13 @@ func detectModelViewerMaterialProfile(sections []modINISection) string {
 		}
 	}
 	if wwmi && rabbitFX {
-		return "wuwa:rabbitfx"
+		return modelViewerRabbitFXProfile
 	}
 	if zzmi {
-		return "zzmi"
+		return modelViewerZZMIProfile
 	}
 	if isModelViewerEFMI(sections) {
-		return "efmi"
+		return modelViewerEFMIProfile
 	}
 	return ""
 }

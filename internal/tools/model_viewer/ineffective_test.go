@@ -119,9 +119,9 @@ func TestModelViewerIneffectiveValuesIgnoreMeshesOutsideForm(t *testing.T) {
 			Form:         "other",
 		}},
 		Meshes: []ModelViewerMeshTransport{
-			{ID: "body-a", Form: "outfit::a.ini::A"},
+			{ID: "body-a", Form: "outfit::a.ini::A", Conditions: modelViewerDNFTrue()},
 			{ID: "hat-a", Form: "outfit::a.ini::A", Conditions: ModelViewerDNF{{{Var: "hat", Value: "1"}}}},
-			{ID: "body-b", Form: "outfit::a.ini::B"},
+			{ID: "body-b", Form: "outfit::a.ini::B", Conditions: modelViewerDNFTrue()},
 		},
 	}
 	evaluator := newModelViewerEvaluator(context.Background(), payload)

@@ -1,4 +1,14 @@
-import type { ModelViewerBounds } from "@bindings/tools/model_viewer";
+import type {
+    ModelViewerBounds,
+    ModelViewerComputeDeformerKind,
+    ModelViewerComputeSourceEncoding,
+    ModelViewerDualQuaternionVariant,
+    ModelViewerMaterialProfile,
+    ModelViewerShapeTargetMode,
+} from "@bindings/tools/model_viewer";
+
+/** The values of a generated Go string enum, without the Go zero value. */
+export type GoEnumValue<T extends string> = Exclude<`${T}`, "">;
 
 export type DnfClause = {
     var: string;
@@ -13,40 +23,8 @@ export type TextureVariant = {
     texKey: string;
 };
 
-export type ViewerShapeTarget = {
-    var: string;
-    positions: Float32Array;
-    mode?: "midpoint_pair";
-    lowPositions?: Float32Array;
-};
-
 export type PositionVariant = {
     conditions: Dnf;
-};
-
-export type ViewerMesh = {
-    id: string;
-    component: string;
-    positions: Float32Array;
-    normals?: Float32Array;
-    tangents?: Float32Array;
-    uvs?: Float32Array;
-    indices: Uint32Array;
-    conditions: Dnf;
-    texKey: string | null;
-    textureVariants: TextureVariant[];
-    normalMapKey: string | null;
-    normalMapVariants: TextureVariant[];
-    lightMapKey: string | null;
-    lightMapVariants: TextureVariant[];
-    materialMapKey: string | null;
-    materialMapVariants: TextureVariant[];
-    cutoutMapKey: string | null;
-    cutoutMapVariants: TextureVariant[];
-    highlightMapKey?: string | null;
-    rampMapKey?: string | null;
-    shapeTargets: ViewerShapeTarget[];
-    positionVariants: Array<PositionVariant & { positions: Float32Array }>;
 };
 
 export type ViewerTextureRole =
@@ -73,15 +51,7 @@ export type ViewerDDSFormat =
     | "bc6h-sfloat"
     | "bc7-unorm"
     | "bc7-unorm-srgb";
-export type ViewerMaterialProfile = "zzmi" | "wuwa:rabbitfx" | "efmi";
-
-export type ViewerTexture = {
-    texKey: string;
-    role: ViewerTextureRole;
-    bytes: Buffer;
-    mimeType: "image/png" | "image/jpeg";
-    relativePath: string;
-};
+export type ViewerMaterialProfile = GoEnumValue<ModelViewerMaterialProfile>;
 
 export type ViewerVariableValue = {
     value: string | number;
@@ -242,7 +212,7 @@ export type ViewerAnimationClip = {
 };
 
 export type ViewerComputeBinarySource = {
-    encoding?: "packed_f32_v1";
+    encoding?: GoEnumValue<ModelViewerComputeSourceEncoding>;
     url: string;
     byteLength: number;
     stride: number;
@@ -272,12 +242,7 @@ export type ViewerComputeShapeStage = {
     duration: number;
 };
 
-export type ViewerComputeDeformerKind =
-    | "gimi_shape_pose_v1"
-    | "gimi_packed_dual_quaternion_v1"
-    | "gimi_cyclic_packed_v1"
-    | "gimi_cyclic_packed_shape_v1"
-    | "gimi_merged_delta_shape_v1";
+export type ViewerComputeDeformerKind = GoEnumValue<ModelViewerComputeDeformerKind>;
 
 export type ViewerComputeDeformer = {
     kind: ViewerComputeDeformerKind;
@@ -289,7 +254,7 @@ export type ViewerComputeDeformer = {
     shapePasses: ViewerComputeShapePass[];
     shapeStages: ViewerComputeShapeStage[];
     pose?: {
-        dualQuaternionVariant?: "object" | "object_direct" | "efmi_typed" | "efmi_compact";
+        dualQuaternionVariant?: GoEnumValue<ModelViewerDualQuaternionVariant>;
         blend: ViewerComputeBinarySource;
         frames: ViewerComputeBinarySource;
         boneCount: number;
@@ -311,19 +276,6 @@ export type ViewerComputeDeformer = {
         /** Weight is the group weight times scale minus offset, clamped to 0..1. */
         keys: Array<{ group: number; scale: number; offset: number; weight?: number }>;
     };
-};
-
-export type ModViewerPayload = {
-    iniPath: string;
-    modDir: string;
-    materialProfile?: ViewerMaterialProfile;
-    meshes: ViewerMesh[];
-    textures: Record<string, ViewerTexture>;
-    variables: ViewerVariable[];
-    defaultState: Record<string, ViewerStateValue>;
-    stateRules: ViewerStateRule[];
-    uiAssets: ViewerUiAssets;
-    animations: ViewerAnimationClip[];
 };
 
 export type EvaluatedViewerMesh = {
@@ -395,7 +347,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
     shapeTargets: Array<{
         var: string;
         positionsUrl: string;
-        mode?: "midpoint_pair";
+        mode?: GoEnumValue<ModelViewerShapeTargetMode>;
         lowPositionsUrl?: string;
         divisor?: number;
         wave?: ViewerShapeWave;

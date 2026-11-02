@@ -12,19 +12,19 @@ import (
 
 // modelViewerMidpointPairMode blends from the low endpoint below a weight of 0.5
 // and toward the high one above it; no other mode reads the low endpoint.
-const modelViewerMidpointPairMode = "midpoint_pair"
+const modelViewerMidpointPairMode ModelViewerShapeTargetMode = "midpoint_pair"
 
 type modelViewerShapeKeyDimension struct {
-	VariableID      string `json:"variableId"`
-	Mode            string `json:"mode,omitempty"`
-	SmallerPath     string `json:"smallerPath"`
-	BiggerPath      string `json:"biggerPath"`
-	Sparse          bool   `json:"sparse,omitempty"`
-	BufferShapeID   int    `json:"bufferShapeId,omitempty"`
-	SparseOffset    int    `json:"sparseOffset,omitempty"`
-	OffsetPath      string `json:"offsetPath,omitempty"`
-	VertexIDPath    string `json:"vertexIdPath,omitempty"`
-	VertexDeltaPath string `json:"vertexDeltaPath,omitempty"`
+	VariableID      string                     `json:"variableId"`
+	Mode            ModelViewerShapeTargetMode `json:"mode,omitempty"`
+	SmallerPath     string                     `json:"smallerPath"`
+	BiggerPath      string                     `json:"biggerPath"`
+	Sparse          bool                       `json:"sparse,omitempty"`
+	BufferShapeID   int                        `json:"bufferShapeId,omitempty"`
+	SparseOffset    int                        `json:"sparseOffset,omitempty"`
+	OffsetPath      string                     `json:"offsetPath,omitempty"`
+	VertexIDPath    string                     `json:"vertexIdPath,omitempty"`
+	VertexDeltaPath string                     `json:"vertexDeltaPath,omitempty"`
 	// Divisor is what the INI divides the variable by to get the weight; zero means none.
 	Divisor float64 `json:"divisor,omitempty"`
 	wave    *ModelViewerShapeWave

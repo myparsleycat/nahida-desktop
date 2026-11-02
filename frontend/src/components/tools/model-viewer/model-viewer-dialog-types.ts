@@ -1,9 +1,6 @@
 import type { ModViewerTransport } from "@shared/mod-viewer/types";
 
-import type {
-    ModelViewerAnimationClip,
-    ModelViewerRealtimeShapeKey,
-} from "./model-viewer-contract";
+import type { ModelViewerAnimationClip } from "./model-viewer-contract";
 
 export type VariableStateValue = number | string;
 
@@ -49,7 +46,6 @@ export type ModelViewerVariantManifest = {
         slotHoverPath?: string;
         slotActivePath?: string;
     };
-    shapeKeys?: ModelViewerRealtimeShapeKey[];
     animations?: ModelViewerAnimationClip[];
 };
 

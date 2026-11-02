@@ -1,3 +1,8 @@
+import {
+    ModelViewerComputeDeformerKind as Kind,
+    ModelViewerDualQuaternionVariant as PoseVariant,
+    ModelViewerMaterialProfile,
+} from "@bindings/tools/model_viewer";
 import type { ModelViewerTransport as WailsModelViewerTransport } from "@bindings/tools/model_viewer";
 import { describe, expect, it } from "vitest";
 
@@ -129,14 +134,22 @@ describe("normalizeModelViewerTransport", () => {
         } satisfies WailsModelViewerTransport;
 
         expect(
-            normalizeModelViewerTransport({ ...base, materialProfile: "wuwa:rabbitfx" })
-                .materialProfile,
+            normalizeModelViewerTransport({
+                ...base,
+                materialProfile: ModelViewerMaterialProfile.modelViewerRabbitFXProfile,
+            }).materialProfile,
         ).toBe("wuwa:rabbitfx");
         expect(
-            normalizeModelViewerTransport({ ...base, materialProfile: "efmi" }).materialProfile,
+            normalizeModelViewerTransport({
+                ...base,
+                materialProfile: ModelViewerMaterialProfile.modelViewerEFMIProfile,
+            }).materialProfile,
         ).toBe("efmi");
         expect(
-            normalizeModelViewerTransport({ ...base, materialProfile: "unknown" }).materialProfile,
+            normalizeModelViewerTransport({
+                ...base,
+                materialProfile: "unknown" as ModelViewerMaterialProfile,
+            }).materialProfile,
         ).toBeUndefined();
     });
 
@@ -213,7 +226,7 @@ describe("normalizeModelViewerTransport", () => {
             animations: null,
             computeDeformers: [
                 {
-                    kind: "gimi_shape_pose_v1",
+                    kind: Kind.modelViewerGIMIShapePoseKind,
                     id: "cloth",
                     meshIds: ["mesh"],
                     vertexCount: 1,
@@ -229,15 +242,44 @@ describe("normalizeModelViewerTransport", () => {
         ]);
     });
 
+    it("rejects a compute deformer the renderer has no kernel for", () => {
+        const source = { url: "/source", byteLength: 40, stride: 40 };
+        const deformer = {
+            kind: "gimi_future_v9" as Kind,
+            id: "cloth",
+            meshIds: ["mesh"],
+            vertexCount: 1,
+            base: source,
+            shapePasses: null,
+            pose: null,
+        };
+        const input = {
+            memorySessionId: "session",
+            iniPath: "mod.ini",
+            modPath: "mod",
+            name: "Example",
+            meshes: null,
+            textures: null,
+            variables: null,
+            defaultState: null,
+            stateRules: null,
+            uiAssets: {},
+            animations: null,
+            computeDeformers: [deformer],
+        } satisfies WailsModelViewerTransport;
+
+        expect(() => normalizeModelViewerTransport(input)).toThrow(/gimi_future_v9/);
+    });
+
     it.each([
-        ["gimi_cyclic_packed_v1", undefined],
-        ["gimi_packed_dual_quaternion_v1", undefined],
-        ["gimi_packed_dual_quaternion_v1", "object"],
-        ["gimi_packed_dual_quaternion_v1", "object_direct"],
+        [Kind.modelViewerPackedObjectKind, undefined],
+        [Kind.modelViewerPackedDualQuaternionKind, undefined],
+        [Kind.modelViewerPackedDualQuaternionKind, PoseVariant.modelViewerObjectPoseVariant],
+        [Kind.modelViewerPackedDualQuaternionKind, PoseVariant.modelViewerObjectDirectPoseVariant],
     ] as const)(
         "keeps a %s compute descriptor with %s pose variant",
         (kind, dualQuaternionVariant) => {
-            const poseStride = kind === "gimi_packed_dual_quaternion_v1" ? 56 : 48;
+            const poseStride = kind === Kind.modelViewerPackedDualQuaternionKind ? 56 : 48;
             const source = { url: "/source", byteLength: 20, stride: 20 };
             const input = {
                 memorySessionId: "session",
@@ -300,7 +342,7 @@ describe("normalizeModelViewerTransport", () => {
             animations: null,
             computeDeformers: [
                 {
-                    kind: "gimi_cyclic_packed_shape_v1",
+                    kind: Kind.modelViewerPackedShapeKind,
                     id: "kimono",
                     meshIds: ["mesh"],
                     vertexCount: 1,

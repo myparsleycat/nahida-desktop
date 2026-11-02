@@ -178,7 +178,8 @@ filename = objectAPst8.dds`)
 
 func TestDetectModelViewerMaterialProfile(t *testing.T) {
 	tests := []struct {
-		name, ini, want string
+		name, ini string
+		want      ModelViewerMaterialProfile
 	}{
 		{
 			name: "WWMI and RabbitFX",

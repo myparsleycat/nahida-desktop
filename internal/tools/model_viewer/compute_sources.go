@@ -12,7 +12,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-const modelViewerPackedFloatEncoding = "packed_f32_v1"
+const modelViewerPackedFloatEncoding ModelViewerComputeSourceEncoding = "packed_f32_v1"
 
 func (t *Service) prepareModelViewerComputeSources(
 	ctx context.Context,

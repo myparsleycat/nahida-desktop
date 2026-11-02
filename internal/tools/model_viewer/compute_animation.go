@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	modelViewerGIMIShapePoseKind        = "gimi_shape_pose_v1"
-	modelViewerPackedDualQuaternionKind = "gimi_packed_dual_quaternion_v1"
-	maxModelViewerComputePoseFrames     = 65536
-	maxModelViewerComputeShaderBytes    = 1 << 20
+	modelViewerGIMIShapePoseKind        ModelViewerComputeDeformerKind = "gimi_shape_pose_v1"
+	modelViewerPackedDualQuaternionKind ModelViewerComputeDeformerKind = "gimi_packed_dual_quaternion_v1"
+	maxModelViewerComputePoseFrames                                    = 65536
+	maxModelViewerComputeShaderBytes                                   = 1 << 20
 )
 
 var (
@@ -57,8 +57,8 @@ func (p modelViewerComputePass) usableForPackedShape() bool {
 }
 
 type modelViewerKnownBoneKernel struct {
-	kind                  string
-	dualQuaternionVariant string
+	kind                  ModelViewerComputeDeformerKind
+	dualQuaternionVariant ModelViewerDualQuaternionVariant
 	baseStride            int
 	blendStride           int
 	poseStride            int

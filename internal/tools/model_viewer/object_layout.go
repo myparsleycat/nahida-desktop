@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	modelViewerPackedObjectStride   = 20
-	modelViewerPackedObjectStride24 = 24
-	modelViewerPackedObjectStride28 = 28
-	modelViewerPackedObjectKind     = "gimi_cyclic_packed_v1"
-	modelViewerPackedObjectWEpsilon = 0.05
+	modelViewerPackedObjectStride                                  = 20
+	modelViewerPackedObjectStride24                                = 24
+	modelViewerPackedObjectStride28                                = 28
+	modelViewerPackedObjectKind     ModelViewerComputeDeformerKind = "gimi_cyclic_packed_v1"
+	modelViewerPackedObjectWEpsilon                                = 0.05
 
 	modelViewerDrawVertexMihoyo       = "mihoyo"
 	modelViewerDrawVertexWWMI         = "wwmi"

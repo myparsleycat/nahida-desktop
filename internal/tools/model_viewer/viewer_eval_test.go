@@ -17,8 +17,8 @@ func TestViewerEvalDNFSatisfied(t *testing.T) {
 	if viewerEvalDNFSatisfied(dnf, map[string]any{"outfit": "1", "hat": "0"}) {
 		t.Fatal("negated hat still matched")
 	}
-	if !viewerEvalDNFSatisfied(nil, map[string]any{"outfit": "0"}) {
-		t.Fatal("nil DNF should be unconstrained")
+	if viewerEvalDNFSatisfied(nil, map[string]any{"outfit": "0"}) {
+		t.Fatal("nil DNF should be false like an empty one")
 	}
 	if viewerEvalDNFSatisfied(ModelViewerDNF{}, map[string]any{"outfit": "1"}) {
 		t.Fatal("empty DNF should be false")
@@ -31,8 +31,9 @@ func TestEvaluateViewerTransportResolvesLaterTextureAndHidesUnsatisfiedMesh(t *t
 		DefaultState: map[string]any{"outfit": "0", "hat": "0"},
 		Meshes: []ModelViewerMeshTransport{
 			{
-				ID:     "body",
-				TexKey: &texA,
+				ID:         "body",
+				Conditions: modelViewerDNFTrue(),
+				TexKey:     &texA,
 				TextureVariants: []ModelViewerTextureVariant{
 					{Conditions: ModelViewerDNF{{{Var: "outfit", Value: "1"}}}, TexKey: texB},
 				},

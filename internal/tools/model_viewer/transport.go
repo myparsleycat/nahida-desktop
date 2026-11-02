@@ -15,11 +15,15 @@ type ModelViewerTextureVariant struct {
 	TexKey     string         `json:"texKey"`
 }
 
+// ModelViewerShapeTargetMode selects how the renderer blends a shape target.
+// The empty mode adds the target scaled by its weight.
+type ModelViewerShapeTargetMode string
+
 type ModelViewerShapeTarget struct {
-	Var             string `json:"var"`
-	PositionsURL    string `json:"positionsUrl"`
-	Mode            string `json:"mode,omitempty"`
-	LowPositionsURL string `json:"lowPositionsUrl,omitempty"`
+	Var             string                     `json:"var"`
+	PositionsURL    string                     `json:"positionsUrl"`
+	Mode            ModelViewerShapeTargetMode `json:"mode,omitempty"`
+	LowPositionsURL string                     `json:"lowPositionsUrl,omitempty"`
 	// Divisor is what the INI divides Var by to get the weight; zero means none.
 	Divisor float64 `json:"divisor,omitempty"`
 	// Wave replaces the weight with Amplitude*sin(Var*AngularScale)+Bias, where the
@@ -149,11 +153,15 @@ type ModelViewerAnimationClip struct {
 	Frames      []ModelViewerAnimationFrame `json:"frames"`
 }
 
+// ModelViewerComputeSourceEncoding names the record layout the backend decoded
+// a compute source into; the empty encoding serves the source records as stored.
+type ModelViewerComputeSourceEncoding string
+
 type ModelViewerComputeBinarySource struct {
-	URL        string `json:"url"`
-	ByteLength int64  `json:"byteLength"`
-	Stride     int    `json:"stride"`
-	Encoding   string `json:"encoding,omitempty"`
+	URL        string                           `json:"url"`
+	ByteLength int64                            `json:"byteLength"`
+	Stride     int                              `json:"stride"`
+	Encoding   ModelViewerComputeSourceEncoding `json:"encoding,omitempty"`
 	sourcePath string
 	// load builds records that no single file holds; sourcePath then only names them.
 	load func(context.Context) ([]byte, error)
@@ -183,18 +191,31 @@ type ModelViewerComputeShapeStage struct {
 	Duration     float64                        `json:"duration"`
 }
 
+// ModelViewerDualQuaternionVariant names the pose math a packed dual-quaternion
+// export uses. The renderer implements each one, so a new value needs a kernel.
+type ModelViewerDualQuaternionVariant string
+
+const (
+	modelViewerObjectPoseVariant       ModelViewerDualQuaternionVariant = "object"
+	modelViewerObjectDirectPoseVariant ModelViewerDualQuaternionVariant = "object_direct"
+)
+
 type ModelViewerComputePoseSource struct {
 	// Empty keeps the legacy packed dual-quaternion interpolation behavior.
-	DualQuaternionVariant string                         `json:"dualQuaternionVariant,omitempty"`
-	Blend                 ModelViewerComputeBinarySource `json:"blend"`
-	Frames                ModelViewerComputeBinarySource `json:"frames"`
-	BoneCount             int                            `json:"boneCount"`
-	FrameCount            int                            `json:"frameCount"`
+	DualQuaternionVariant ModelViewerDualQuaternionVariant `json:"dualQuaternionVariant,omitempty"`
+	Blend                 ModelViewerComputeBinarySource   `json:"blend"`
+	Frames                ModelViewerComputeBinarySource   `json:"frames"`
+	BoneCount             int                              `json:"boneCount"`
+	FrameCount            int                              `json:"frameCount"`
 }
+
+// ModelViewerComputeDeformerKind names the compute kernel a deformer needs. The
+// renderer implements each one, so a new value needs a kernel.
+type ModelViewerComputeDeformerKind string
 
 type ModelViewerComputeDeformerTransport struct {
 	MeshSourceIndices map[string]string               `json:"meshSourceIndices,omitempty"`
-	Kind              string                          `json:"kind"`
+	Kind              ModelViewerComputeDeformerKind  `json:"kind"`
 	ID                string                          `json:"id"`
 	MeshIDs           []string                        `json:"meshIds"`
 	VertexCount       int                             `json:"vertexCount"`
@@ -207,6 +228,16 @@ type ModelViewerComputeDeformerTransport struct {
 	meshSourceOffsets map[string]uint32
 }
 
+// ModelViewerMaterialProfile selects the game-specific material model the
+// renderer emulates; the empty profile uses a generic one.
+type ModelViewerMaterialProfile string
+
+const (
+	modelViewerZZMIProfile     ModelViewerMaterialProfile = "zzmi"
+	modelViewerRabbitFXProfile ModelViewerMaterialProfile = "wuwa:rabbitfx"
+	modelViewerEFMIProfile     ModelViewerMaterialProfile = "efmi"
+)
+
 type ModelViewerTransport struct {
 	MemorySessionID string  `json:"memorySessionId"`
 	INIPath         string  `json:"iniPath"`
@@ -215,7 +246,7 @@ type ModelViewerTransport struct {
 	PreviewPath     *string `json:"previewPath,omitempty"`
 	// DefaultYaw is the rotation in degrees about viewer Y after upright correction.
 	DefaultYaw       float64                                `json:"defaultYaw,omitempty"`
-	MaterialProfile  string                                 `json:"materialProfile,omitempty"`
+	MaterialProfile  ModelViewerMaterialProfile             `json:"materialProfile,omitempty"`
 	Meshes           []ModelViewerMeshTransport             `json:"meshes"`
 	Textures         map[string]ModelViewerTextureTransport `json:"textures"`
 	Variables        []ModelViewerVariable                  `json:"variables"`

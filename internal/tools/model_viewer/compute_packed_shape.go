@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const modelViewerPackedShapeKind = "gimi_cyclic_packed_shape_v1"
+const modelViewerPackedShapeKind ModelViewerComputeDeformerKind = "gimi_cyclic_packed_shape_v1"
 
 type modelViewerPackedShapeCandidate struct {
 	section                  modINISection

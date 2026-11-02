@@ -35,10 +35,9 @@ func viewerEvalLookup(state map[string]any, variable string) (any, bool) {
 	return nil, false
 }
 
+// viewerEvalDNFSatisfied treats a nil DNF like an empty one, as the DNF
+// builders do: modelViewerDNFAnd returns nil when every alternative contradicts.
 func viewerEvalDNFSatisfied(dnf ModelViewerDNF, state map[string]any) bool {
-	if dnf == nil {
-		return true
-	}
 	if len(dnf) == 0 {
 		return false
 	}

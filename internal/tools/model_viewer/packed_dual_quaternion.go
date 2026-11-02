@@ -17,7 +17,7 @@ import (
 type modelViewerPackedDualQuaternionVariant struct {
 	baseStride     int
 	texcoordOffset int
-	poseVariant    string
+	poseVariant    ModelViewerDualQuaternionVariant
 	vertexStructs  []string
 	required       []string
 }
@@ -106,7 +106,7 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uinttexcoord0;uinttexcoord1;}",
 		},
-		poseVariant: "object",
+		poseVariant: modelViewerObjectPoseVariant,
 		required: append([]string{
 			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
 		}, modelViewerPackedDualQuaternionObjectBody...),
@@ -117,7 +117,7 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord0;uinttexcoord1;}",
 		},
-		poseVariant: "object",
+		poseVariant: modelViewerObjectPoseVariant,
 		required: append([]string{
 			"rw_buffer[i].position.x=(uint)f32tof16(pos_result.z)<<16",
 		}, modelViewerPackedDualQuaternionObjectBody...),
@@ -130,7 +130,7 @@ var modelViewerPackedDualQuaternionVariants = []modelViewerPackedDualQuaternionV
 		vertexStructs: []string{
 			"structvertexattributes{uint2position;uintnormal;uinttangent;uintcolor;uinttexcoord1;uinttexcoord2;}",
 		},
-		poseVariant: "object_direct",
+		poseVariant: modelViewerObjectDirectPoseVariant,
 		required: append([]string{
 			"pos.x=f16tof32(base[i].position.x&0xffff)",
 			"pos.y=f16tof32(base[i].position.x>>16)",
