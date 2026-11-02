@@ -92,6 +92,7 @@ type modelViewerMeshPayload struct {
 	Normals           []float32
 	Tangents          []float32
 	UVs               []float32
+	Colors            []uint8
 	Indices           []uint32
 	ShapePositions    [][]float32
 	ShapeLowPositions [][]float32

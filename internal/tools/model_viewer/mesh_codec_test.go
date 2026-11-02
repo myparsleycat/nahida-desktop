@@ -17,6 +17,7 @@ func TestModelViewerMeshBytesMatchesFrontendFixture(t *testing.T) {
 		Normals:   []float32{0, 0, 1},
 		Tangents:  []float32{1, 0, 0, -1},
 		UVs:       []float32{.25, .75},
+		Colors:    []uint8{255, 128, 0, 64},
 		Indices:   []uint32{0, 0, 0},
 	}
 	fixture, err := os.ReadFile("testdata/model_viewer_mesh.hex")

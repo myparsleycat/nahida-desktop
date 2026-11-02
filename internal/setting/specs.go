@@ -535,6 +535,18 @@ func buildSpecs() map[string]spec {
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },
 		},
+		KeyModelViewerGIMIToonStyle: {
+			def:        definitionsByKey[KeyModelViewerGIMIToonStyle],
+			getDefault: func(*Setting) any { return "" },
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
+		KeyModelViewerGenshinAssetDir: {
+			def:        definitionsByKey[KeyModelViewerGenshinAssetDir],
+			getDefault: func(*Setting) any { return "" },
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
 
 		KeyXXMIPersistToggles: {
 			def:        definitionsByKey[KeyXXMIPersistToggles],

@@ -1,3 +1,4 @@
+import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import type {
     EvaluatedViewerState,
     ModViewerTransport,
@@ -47,7 +48,7 @@ export const DEFAULT_MODEL_VIEWER_TOON_STYLE: ModelViewerToonStyle = {
     outlines: true,
     outlineWidth: 0.5,
     outlineBrightness: 0.5,
-    selfShadow: false,
+    selfShadow: true,
     lightFollowsCamera: true,
     flatFace: true,
     fieldOfView: 20,
@@ -100,6 +101,110 @@ export function parseModelViewerToonStyle(stored: string): ModelViewerToonStyle 
         lightFollowsCamera: flag("lightFollowsCamera"),
         flatFace: flag("flatFace"),
         fieldOfView: number("fieldOfView"),
+    };
+}
+
+export const GENSHIN_FACE_TYPES = ["boy", "girl", "lady", "loli", "male"] as const;
+export type ModelViewerGenshinFaceType = (typeof GENSHIN_FACE_TYPES)[number];
+
+export type ModelViewerGIMIToonStyle = {
+    daytime: boolean;
+    shadowOffset: number;
+    shadowSmoothness: number;
+    shadowBrightness: number;
+    brightness: number;
+    specular: number;
+    metallic: number;
+    rimStrength: number;
+    emission: number;
+    outlines: boolean;
+    outlineWidth: number;
+    selfShadow: boolean;
+    lightFollowsCamera: boolean;
+    toneMapping: boolean;
+    fieldOfView: number;
+    /** Name of a ramp in the user's Genshin texture folder; empty uses the built-in ramp. */
+    ramp: string;
+    /** "auto" takes the body type from the ramp name, such as Avatar_Loli_... */
+    faceType: "auto" | ModelViewerGenshinFaceType;
+};
+
+// Shading values follow kaze-mio's Nahida material in UnityGenshinToonShader, except
+// the shadow offset: with its 0.1, frontal light shades limbs that the game keeps lit
+// to the silhouette.
+export const DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE: ModelViewerGIMIToonStyle = {
+    daytime: true,
+    shadowOffset: 0,
+    shadowSmoothness: 0.4,
+    shadowBrightness: 1.1,
+    brightness: 1,
+    specular: 0.3,
+    metallic: 8,
+    rimStrength: 0.3,
+    emission: 0.2,
+    outlines: true,
+    outlineWidth: 1.6,
+    selfShadow: true,
+    lightFollowsCamera: true,
+    // The curve compresses bright skin channels unevenly and bleaches it.
+    toneMapping: false,
+    fieldOfView: 20,
+    ramp: "",
+    faceType: "auto",
+};
+
+export const MODEL_VIEWER_GIMI_TOON_RANGES = {
+    shadowOffset: { min: -0.5, max: 0.5, step: 0.05 },
+    shadowSmoothness: { min: 0.01, max: 1, step: 0.01 },
+    shadowBrightness: { min: 0.5, max: 2, step: 0.05 },
+    brightness: { min: 0.5, max: 2, step: 0.05 },
+    specular: { min: 0, max: 2, step: 0.05 },
+    metallic: { min: 0, max: 16, step: 0.5 },
+    rimStrength: { min: 0, max: 2, step: 0.05 },
+    emission: { min: 0, max: 2, step: 0.05 },
+    outlineWidth: { min: 0, max: 5, step: 0.1 },
+    fieldOfView: { min: 10, max: 45, step: 1 },
+} as const;
+
+export function parseModelViewerGIMIToonStyle(stored: string): ModelViewerGIMIToonStyle {
+    const parsed = parseToonStyleRecord(stored);
+    const defaults = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE;
+    const number = (key: keyof typeof MODEL_VIEWER_GIMI_TOON_RANGES) => {
+        const value = parsed[key];
+        const range = MODEL_VIEWER_GIMI_TOON_RANGES[key];
+        return typeof value === "number" && Number.isFinite(value)
+            ? Math.min(Math.max(value, range.min), range.max)
+            : defaults[key];
+    };
+    const flag = (
+        key: "daytime" | "outlines" | "selfShadow" | "lightFollowsCamera" | "toneMapping",
+    ) => {
+        const value = parsed[key];
+        return typeof value === "boolean" ? value : defaults[key];
+    };
+    const faceType = parsed.faceType;
+    return {
+        daytime: flag("daytime"),
+        shadowOffset: number("shadowOffset"),
+        shadowSmoothness: number("shadowSmoothness"),
+        shadowBrightness: number("shadowBrightness"),
+        brightness: number("brightness"),
+        specular: number("specular"),
+        metallic: number("metallic"),
+        rimStrength: number("rimStrength"),
+        emission: number("emission"),
+        outlines: flag("outlines"),
+        outlineWidth: number("outlineWidth"),
+        selfShadow: flag("selfShadow"),
+        lightFollowsCamera: flag("lightFollowsCamera"),
+        toneMapping: flag("toneMapping"),
+        fieldOfView: number("fieldOfView"),
+        ramp: typeof parsed.ramp === "string" ? parsed.ramp : defaults.ramp,
+        faceType:
+            faceType === "auto" ||
+            GENSHIN_FACE_TYPES.includes(faceType as ModelViewerGenshinFaceType)
+                ? (faceType as ModelViewerGIMIToonStyle["faceType"])
+                : defaults.faceType,
     };
 }
 
@@ -212,6 +317,9 @@ export type ModelViewerSurfaceProps = {
     threeExposure?: number;
     toonShadows?: boolean;
     toonStyle?: ModelViewerToonStyle;
+    gimiToonStyle?: ModelViewerGIMIToonStyle;
+    /** Textures from the user's Genshin folder; the built-in substitutes are used without them. */
+    genshinAssets?: GenshinToonAssetsTransport;
     normalMaps?: boolean;
     /** Tints the visible meshes the mod binds no diffuse texture to. */
     highlightGameTextures?: boolean;

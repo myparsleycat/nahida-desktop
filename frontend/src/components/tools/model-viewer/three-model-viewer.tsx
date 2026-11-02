@@ -56,8 +56,13 @@ import {
   type ModelViewerAxisView,
 } from "./model-viewer-axis-gizmo";
 import { ModelViewerComputeController } from "./model-viewer-compute-controller";
-import { DEFAULT_MODEL_VIEWER_TOON_STYLE, parseOrientation } from "./model-viewer-contract";
-import { getModelViewerTextureCapabilities } from "./model-viewer-dds";
+import {
+  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+  DEFAULT_MODEL_VIEWER_TOON_STYLE,
+  parseOrientation,
+} from "./model-viewer-contract";
+import { createModelViewerMipmapper, getModelViewerTextureCapabilities } from "./model-viewer-dds";
+import { createGenshinToonTextureCache } from "./model-viewer-genshin-toon";
 import {
   buildPayloadModel,
   clearPayloadModelData,
@@ -66,6 +71,7 @@ import {
   type PreparedPayloadEval,
   preparePayloadEval,
   setPayloadGameTextureHighlight,
+  setPayloadGIMIToon,
   setPayloadNormalMaps,
   setPayloadToonShadows,
   setPayloadToonStyle,
@@ -161,6 +167,8 @@ export const ThreeModelViewer = memo(
       threeToneMapping = "neutral",
       toonShadows = false,
       toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
+      gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+      genshinAssets,
       normalMaps = true,
       highlightGameTextures = false,
       onSurfacePick,
@@ -242,6 +250,8 @@ export const ThreeModelViewer = memo(
             threeToneMapping={threeToneMapping}
             toonShadows={toonShadows}
             toonStyle={toonStyle}
+            gimiToonStyle={gimiToonStyle}
+            genshinAssets={genshinAssets}
             normalMaps={normalMaps}
             highlightGameTextures={highlightGameTextures}
             onError={onError}
@@ -279,6 +289,8 @@ function ThreeModelScene({
   threeToneMapping = "neutral",
   toonShadows = false,
   toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
+  gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+  genshinAssets,
   normalMaps = true,
   highlightGameTextures = false,
   onSurfacePick,
@@ -607,6 +619,7 @@ function ThreeModelScene({
         toonShadowsRef.current,
         loadController.signal,
         getModelViewerTextureCapabilities(gl),
+        createModelViewerMipmapper(gl),
       )
         .then((nextRoot) => {
           if (disposed || pendingLoadIdRef.current !== loadId) {
@@ -755,11 +768,39 @@ function ThreeModelScene({
     invalidate();
   }, [invalidate, modelRoot, toonStyle]);
 
-  const efmiToon = toonShadows && payloadTransport?.materialProfile === "efmi";
-  const selfShadow = efmiToon && toonStyle.selfShadow;
+  const [genshinTextures] = useState(createGenshinToonTextureCache);
+  useEffect(() => () => genshinTextures.dispose(), [genshinTextures]);
+
+  const gimi = payloadTransport?.materialProfile === "gimi";
+  useEffect(() => {
+    if (!modelRoot || !gimi) {
+      return;
+    }
+    let cancelled = false;
+    void genshinTextures.resolve(genshinAssets, gimiToonStyle).then((textures) => {
+      if (cancelled) {
+        return;
+      }
+      setPayloadGIMIToon(modelRoot, { style: gimiToonStyle, textures });
+      invalidate();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [genshinAssets, genshinTextures, gimi, gimiToonStyle, invalidate, modelRoot]);
+
+  const profileToon = !toonShadows
+    ? undefined
+    : payloadTransport?.materialProfile === "efmi"
+      ? toonStyle
+      : gimi
+        ? gimiToonStyle
+        : undefined;
+  const toonLighting = Boolean(profileToon);
+  const selfShadow = profileToon?.selfShadow ?? false;
   useEffect(() => {
     const light = keyLightRef.current;
-    if (!efmiToon || !modelRoot || !light) {
+    if (!toonLighting || !modelRoot || !light) {
       return;
     }
     fitKeyLightShadowToObject(light, modelRoot);
@@ -770,7 +811,7 @@ function ThreeModelScene({
       light.position.set(...MODEL_VIEWER_KEY_LIGHT_POSITION);
       invalidate();
     };
-  }, [efmiToon, invalidate, keyLightRef, modelRoot, orientation]);
+  }, [toonLighting, invalidate, keyLightRef, modelRoot, orientation]);
 
   useEffect(() => {
     const light = keyLightRef.current;
@@ -789,7 +830,7 @@ function ThreeModelScene({
     };
   }, [gl, invalidate, keyLightRef, modelRoot, selfShadow]);
 
-  const fieldOfView = efmiToon ? toonStyle.fieldOfView : MODEL_VIEWER_FIELD_OF_VIEW;
+  const fieldOfView = profileToon?.fieldOfView ?? MODEL_VIEWER_FIELD_OF_VIEW;
   useEffect(() => {
     const controls = controlsRef.current;
     if (!(camera instanceof PerspectiveCamera) || camera.fov === fieldOfView) {
@@ -814,12 +855,12 @@ function ThreeModelScene({
 
   useFrame(() => {
     const light = keyLightRef.current;
-    if (!efmiToon || !light) {
+    if (!profileToon || !light) {
       return;
     }
     aimKeyLight(
       light,
-      toonStyle.lightFollowsCamera
+      profileToon.lightFollowsCamera
         ? modelViewerToonLightDirection(camera.getWorldDirection(toonForward), toonDirection)
         : modelViewerKeyLightDirection(toonDirection),
     );

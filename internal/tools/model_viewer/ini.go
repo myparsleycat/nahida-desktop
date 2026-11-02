@@ -51,7 +51,12 @@ var (
 	modelViewerRabbitFXRE = regexp.MustCompile(
 		`(?i)(?:Resource\\RabbitFX\\(?:Diffuse|NormalMap|LightMap|MaterialMap)|run\s*=\s*CommandList\\RabbitFX\\SetTextures\b)`,
 	)
-	modelViewerScopeTokenRE = regexp.MustCompile(`^` + modelViewerScopeTokenPrefix + `\d+`)
+	modelViewerGIMIMarkerRE = regexp.MustCompile(`(?i)(?:Resource|CommandList|\$)\\GIMI\\`)
+	// Classic GIMI exports carry no namespace marker; their per-part position
+	// override and vertex limit sections are the evidence, as in mod merging.
+	modelViewerGIMISectionRE = regexp.MustCompile(`(?i)(?:Position|VertexLimitRaise)$`)
+	modelViewerSRMIMarkerRE  = regexp.MustCompile(`(?i)(?:(?:Resource|CommandList|\$)\\SRMI\\|HeadBlend|HairBlend)`)
+	modelViewerScopeTokenRE  = regexp.MustCompile(`^` + modelViewerScopeTokenPrefix + `\d+`)
 )
 
 const modelViewerScopeTokenPrefix = "mvscope"
@@ -64,12 +69,17 @@ func unscopedModelViewerVariable(name string) string {
 }
 
 func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMaterialProfile {
-	wwmi, rabbitFX, zzmi := false, false, false
+	wwmi, rabbitFX, zzmi, gimi, srmi := false, false, false, false, false
 	for _, section := range sections {
+		gimi = gimi || strings.EqualFold(section.Header, "TextureOverride") &&
+			modelViewerGIMISectionRE.MatchString(section.Name)
+		srmi = srmi || modelViewerSRMIMarkerRE.MatchString(section.Name)
 		for _, line := range section.Lines {
 			wwmi = wwmi || modelViewerWWMIMarkerRE.MatchString(line)
 			rabbitFX = rabbitFX || modelViewerRabbitFXRE.MatchString(line)
 			zzmi = zzmi || modelViewerZZMIMarkerRE.MatchString(line)
+			gimi = gimi || modelViewerGIMIMarkerRE.MatchString(line)
+			srmi = srmi || modelViewerSRMIMarkerRE.MatchString(line)
 		}
 	}
 	if wwmi && rabbitFX {
@@ -80,6 +90,9 @@ func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMater
 	}
 	if isModelViewerEFMI(sections) {
 		return modelViewerEFMIProfile
+	}
+	if gimi && !wwmi && !srmi {
+		return modelViewerGIMIProfile
 	}
 	return ""
 }

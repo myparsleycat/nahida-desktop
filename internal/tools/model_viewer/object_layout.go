@@ -656,30 +656,32 @@ func loadModelViewerDrawVertexBuffers(
 			}
 			return modelViewerDrawVertexBuffers{}, false, buffersErr
 		}
+		layout := modelViewerFmtLayout{
+			Stride:      buffers.stride,
+			Topology:    "trianglelist",
+			IndexFormat: source.ib.Format,
+			Elements: []modelViewerFmtElement{
+				{
+					SemanticName:      "POSITION",
+					Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
+					AlignedByteOffset: 0,
+					InputSlotClass:    "per-vertex",
+				},
+				{
+					SemanticName:      "TEXCOORD",
+					Format:            buffers.uvFormat,
+					AlignedByteOffset: buffers.uvOffset,
+					InputSlotClass:    "per-vertex",
+				},
+			},
+		}
+		appendModelViewerMihoyoColor(&layout, posStride, buffers.uvOffset)
 		return modelViewerDrawVertexBuffers{
 			combined:  buffers.combined,
 			stride:    buffers.stride,
 			posStride: posStride,
 			hasFrame:  buffers.hasFrame,
-			layout: modelViewerFmtLayout{
-				Stride:      buffers.stride,
-				Topology:    "trianglelist",
-				IndexFormat: source.ib.Format,
-				Elements: []modelViewerFmtElement{
-					{
-						SemanticName:      "POSITION",
-						Format:            "DXGI_FORMAT_R32G32B32_FLOAT",
-						AlignedByteOffset: 0,
-						InputSlotClass:    "per-vertex",
-					},
-					{
-						SemanticName:      "TEXCOORD",
-						Format:            buffers.uvFormat,
-						AlignedByteOffset: buffers.uvOffset,
-						InputSlotClass:    "per-vertex",
-					},
-				},
-			},
+			layout:    layout,
 		}, true, nil
 	default:
 		return modelViewerDrawVertexBuffers{}, false, nil

@@ -1,3 +1,4 @@
+import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -20,12 +21,17 @@ import { BrushIcon, CameraIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
+  ModelViewerGIMIToonStyle,
   ModelViewerThreeEnvironment,
   ModelViewerThreeToneMapping,
   ModelViewerToonStyle,
 } from "./model-viewer-contract";
 
-import { DEFAULT_MODEL_VIEWER_TOON_STYLE, MODEL_VIEWER_TOON_RANGES } from "./model-viewer-contract";
+import {
+  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+  DEFAULT_MODEL_VIEWER_TOON_STYLE,
+  MODEL_VIEWER_TOON_RANGES,
+} from "./model-viewer-contract";
 import {
   DEFAULT_THREE_EXPOSURE,
   MAX_THREE_EXPOSURE,
@@ -33,6 +39,7 @@ import {
   MODEL_ROTATION_ACTIONS,
 } from "./model-viewer-dialog-types";
 import { formatSliderValue } from "./model-viewer-dialog-variants";
+import { ModelViewerGIMIToonMenu } from "./model-viewer-gimi-toon-menu";
 
 const TOON_NUMBER_FIELDS = [
   { key: "fieldOfView", label: "toon_field_of_view" },
@@ -91,6 +98,13 @@ export interface ModelViewerMenuBarProps {
   showToonStyle?: boolean;
   toonStyle?: ModelViewerToonStyle;
   onToonStyleChange?: (value: ModelViewerToonStyle) => void;
+  showGIMIToonStyle?: boolean;
+  gimiToonStyle?: ModelViewerGIMIToonStyle;
+  onGIMIToonStyleChange?: (value: ModelViewerGIMIToonStyle) => void;
+  genshinAssets?: GenshinToonAssetsTransport;
+  genshinAssetDir?: string;
+  onSelectGenshinAssetDir?: () => void;
+  onClearGenshinAssetDir?: () => void;
   showNormalMaps?: boolean;
   normalMaps?: boolean;
   onNormalMapsChange?: (value: boolean) => void;
@@ -139,6 +153,13 @@ export function ModelViewerMenuBar({
   showToonStyle = false,
   toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
   onToonStyleChange,
+  showGIMIToonStyle = false,
+  gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+  onGIMIToonStyleChange,
+  genshinAssets,
+  genshinAssetDir = "",
+  onSelectGenshinAssetDir,
+  onClearGenshinAssetDir,
   showNormalMaps = false,
   normalMaps = true,
   onNormalMapsChange,
@@ -473,6 +494,16 @@ export function ModelViewerMenuBar({
                         </MenubarItem>
                       </MenubarSubContent>
                     </MenubarSub>
+                  ) : null}
+                  {showGIMIToonStyle ? (
+                    <ModelViewerGIMIToonMenu
+                      style={gimiToonStyle}
+                      onStyleChange={onGIMIToonStyleChange}
+                      assets={genshinAssets}
+                      assetDir={genshinAssetDir}
+                      onSelectAssetDir={onSelectGenshinAssetDir}
+                      onClearAssetDir={onClearGenshinAssetDir}
+                    />
                   ) : null}
                 </MenubarGroup>
               </>

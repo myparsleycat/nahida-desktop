@@ -1,8 +1,12 @@
-import { parseModelViewerToonStyle } from "@renderer/components/tools/model-viewer/model-viewer-contract";
+import {
+    parseModelViewerGIMIToonStyle,
+    parseModelViewerToonStyle,
+} from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import { getModelViewerTextureCapabilities } from "@renderer/components/tools/model-viewer/model-viewer-dds";
 import {
     buildPayloadModel,
     clearPayloadModelData,
+    setPayloadGIMIToon,
     setPayloadToonStyle,
 } from "@renderer/components/tools/model-viewer/model-viewer-payload";
 import { ModelViewerPositionLoader } from "@renderer/components/tools/model-viewer/model-viewer-position-loader";
@@ -103,17 +107,21 @@ async function render(request: GridModelPreviewRenderRequest): Promise<Blob> {
         );
         const toonStyle = parseModelViewerToonStyle(settings.toonStyle);
         setPayloadToonStyle(root, toonStyle);
+        const gimiToonStyle = parseModelViewerGIMIToonStyle(settings.gimiToonStyle);
+        setPayloadGIMIToon(root, { style: gimiToonStyle, textures: {} });
         applyModelViewerInitialRotation(root, request.transport.defaultYaw);
         scene.add(root);
         const center = frameCameraOnObject(camera, root);
         if (center) {
             camera.lookAt(center);
         }
-        if (
-            settings.toonShadows &&
-            toonStyle.lightFollowsCamera &&
+        const profileToon =
             request.transport.materialProfile === "efmi"
-        ) {
+                ? toonStyle
+                : request.transport.materialProfile === "gimi"
+                  ? gimiToonStyle
+                  : undefined;
+        if (settings.toonShadows && profileToon?.lightFollowsCamera) {
             const key = scene.children.find(
                 (child): child is DirectionalLight => child instanceof DirectionalLight,
             );

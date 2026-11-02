@@ -39,6 +39,7 @@ const renderSettings = {
     exposure: 0.7,
     toonShadows: false,
     toonStyle: "",
+    gimiToonStyle: "",
 };
 
 class VisibleIntersectionObserver {

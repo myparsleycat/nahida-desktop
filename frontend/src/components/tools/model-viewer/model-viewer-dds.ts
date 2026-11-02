@@ -2,6 +2,10 @@ import type { ViewerDDSFormat, ViewerTextureRole } from "@shared/mod-viewer/type
 import {
     CompressedTexture,
     LinearFilter,
+    LinearMipmapLinearFilter,
+    Mesh,
+    OrthographicCamera,
+    PlaneGeometry,
     RED_GREEN_RGTC2_Format,
     RED_RGTC1_Format,
     RGBA_BPTC_Format,
@@ -12,8 +16,10 @@ import {
     RGB_BPTC_UNSIGNED_Format,
     SIGNED_RED_GREEN_RGTC2_Format,
     SIGNED_RED_RGTC1_Format,
+    ShaderMaterial,
+    WebGLRenderTarget,
 } from "three";
-import type { CompressedPixelFormat, WebGLRenderer } from "three";
+import type { ColorSpace, CompressedPixelFormat, Texture, WebGLRenderer } from "three";
 
 const DDS_MAGIC = 0x20534444;
 const DDS_HEADER_SIZE = 124;
@@ -27,6 +33,12 @@ const DDS_MAX_PIXELS = 8192 * 8192;
 // WebView2 reads a response body while occupying the host UI thread that every
 // window shares, at about 2.4 ms per MB. Smaller responses leave gaps for input.
 const DDS_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
+
+// Mip generation targets textures large enough to alias at the viewer's scale, and
+// caps the result at the size whose RGBA8 chain matches a 4096 BC7 texture in memory.
+const MIPMAP_MIN_DIMENSION = 512;
+const MIPMAP_MAX_DIMENSION = 2048;
+const MIPMAP_MAX_ANISOTROPY = 8;
 
 const FOURCC_DXT1 = fourCC("DXT1");
 const FOURCC_DXT3 = fourCC("DXT3");
@@ -93,6 +105,116 @@ export function canUploadModelViewerDDS(
         return capabilities.bptc && role !== "diffuse";
     }
     return capabilities.bptc;
+}
+
+/**
+ * Mods often ship DDS files without a mip chain, which alias when minified, and WebGL
+ * cannot generate mips for a compressed texture. Four-channel unorm textures are
+ * therefore drawn into an uncompressed render target that can have them. Other
+ * formats keep their compressed upload because their shaders read the packed channels.
+ */
+export function createModelViewerMipmapper(renderer: WebGLRenderer): (texture: Texture) => Texture {
+    const converted = new WeakMap<Texture, Texture>();
+
+    // A restored context starts with empty render targets, while compressed
+    // textures upload again from their data on their own.
+    const live = new Map<Texture, () => void>();
+    const redrawAll = () => {
+        for (const draw of live.values()) {
+            draw();
+        }
+    };
+    return (texture) => {
+        const existing = converted.get(texture);
+        if (existing) {
+            return existing;
+        }
+        const anisotropy = Math.min(
+            MIPMAP_MAX_ANISOTROPY,
+            renderer.capabilities.getMaxAnisotropy(),
+        );
+        texture.anisotropy = anisotropy;
+        const format = (texture.userData.modelViewerDDS as { format?: string } | undefined)?.format;
+        if (
+            !(texture instanceof CompressedTexture) ||
+            texture.mipmaps.length !== 1 ||
+            !/^bc[1237]-unorm/.test(format ?? "")
+        ) {
+            return texture;
+        }
+        const { width, height } = texture.mipmaps[0];
+        if (Math.max(width, height) <= MIPMAP_MIN_DIMENSION) {
+            return texture;
+        }
+
+        const scale = Math.min(1, MIPMAP_MAX_DIMENSION / Math.max(width, height));
+        const target = new WebGLRenderTarget(
+            Math.max(1, Math.round(width * scale)),
+            Math.max(1, Math.round(height * scale)),
+            {
+                anisotropy,
+                colorSpace: texture.colorSpace as ColorSpace,
+                depthBuffer: false,
+                generateMipmaps: true,
+                magFilter: LinearFilter,
+                minFilter: LinearMipmapLinearFilter,
+                wrapS: texture.wrapS,
+                wrapT: texture.wrapT,
+            },
+        );
+        const draw = () => {
+            const quad = new Mesh(
+                new PlaneGeometry(2, 2),
+                new ShaderMaterial({
+                    depthTest: false,
+                    depthWrite: false,
+                    uniforms: { source: { value: texture } },
+                    vertexShader: `varying vec2 vUv;
+void main() {
+    vUv = uv;
+    gl_Position = vec4( position.xy, 0.0, 1.0 );
+}`,
+                    // Written without color space conversion: an sRGB target encodes on write.
+                    fragmentShader: `uniform sampler2D source;
+varying vec2 vUv;
+void main() {
+    gl_FragColor = texture2D( source, vUv );
+}`,
+                }),
+            );
+            quad.frustumCulled = false;
+            const previousTarget = renderer.getRenderTarget();
+            renderer.setRenderTarget(target);
+            renderer.render(quad, new OrthographicCamera());
+            renderer.setRenderTarget(previousTarget);
+            quad.geometry.dispose();
+            quad.material.dispose();
+
+            // Frees only the GPU copy; the mip data stays for a redraw.
+            texture.dispose();
+        };
+        draw();
+
+        const result = target.texture;
+        result.userData = { ...texture.userData };
+        result.repeat.copy(texture.repeat);
+        result.offset.copy(texture.offset);
+        if (live.size === 0) {
+            renderer.domElement.addEventListener("webglcontextrestored", redrawAll);
+        }
+        live.set(result, draw);
+        const disposeTarget = () => {
+            result.removeEventListener("dispose", disposeTarget);
+            live.delete(result);
+            if (live.size === 0) {
+                renderer.domElement.removeEventListener("webglcontextrestored", redrawAll);
+            }
+            target.dispose();
+        };
+        result.addEventListener("dispose", disposeTarget);
+        converted.set(texture, result);
+        return result;
+    };
 }
 
 export function hasModelViewerDDSMipWithinLimit(

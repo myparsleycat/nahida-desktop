@@ -236,6 +236,7 @@ const (
 	modelViewerZZMIProfile     ModelViewerMaterialProfile = "zzmi"
 	modelViewerRabbitFXProfile ModelViewerMaterialProfile = "wuwa:rabbitfx"
 	modelViewerEFMIProfile     ModelViewerMaterialProfile = "efmi"
+	modelViewerGIMIProfile     ModelViewerMaterialProfile = "gimi"
 )
 
 type ModelViewerTransport struct {

@@ -34,6 +34,8 @@ type (
 	ModelViewerResolutionChange         = modelviewer.ModelViewerResolutionChange
 	ModelViewerResolutionSuggestion     = modelviewer.ModelViewerResolutionSuggestion
 	ModelViewerIneffectiveValue         = modelviewer.ModelViewerIneffectiveValue
+	GenshinToonAssetsTransport          = modelviewer.GenshinToonAssetsTransport
+	GenshinToonRampTransport            = modelviewer.GenshinToonRampTransport
 )
 
 func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
@@ -42,6 +44,10 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (ModelViewerT
 
 func (t *Tools) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.modelViewer.LoadModGridPreview(ctx, modPath)
+}
+
+func (t *Tools) ListGenshinToonAssets(ctx context.Context, dir string) (GenshinToonAssetsTransport, error) {
+	return t.modelViewer.ListGenshinToonAssets(ctx, dir)
 }
 
 func (t *Tools) CleanupModelViewer(ctx context.Context, memorySessionID string) (bool, error) {

@@ -47,7 +47,21 @@ import {
     hasModelViewerDDSMipWithinLimit,
     parseModelViewerDDS,
 } from "./model-viewer-dds";
+import {
+    configureGenshinToonMaterialShader,
+    markGenshinMeshes,
+    setGenshinToonLightMap,
+    syncGenshinToon,
+    TOON_VERTEX_COLOR_ATTRIBUTE,
+    type GenshinToonMeshData,
+    type GenshinToonSettings,
+} from "./model-viewer-genshin-toon";
 import { decodeModelViewerMesh } from "./model-viewer-mesh-codec";
+import {
+    averagedNormals,
+    replaceShaderAnchor,
+    textureUvTransform,
+} from "./model-viewer-shader-utils";
 
 type PayloadMeshUserData = {
     meshId: string;
@@ -90,7 +104,7 @@ type PayloadMeshUserData = {
         highlightMapKey?: string | null;
         rampMapKey?: string | null;
     };
-};
+} & GenshinToonMeshData;
 
 type RabbitFXShaderState = {
     lightMap: { value: Texture };
@@ -206,6 +220,7 @@ export async function buildPayloadModel(
     toonShadows = false,
     loadSignal?: AbortSignal,
     textureCapabilities: ModelViewerTextureCapabilities = noCompressedTextureCapabilities,
+    prepareTexture: (texture: Texture) => Texture = (texture) => texture,
 ): Promise<Group> {
     const controller = new AbortController();
     const signal = loadSignal
@@ -245,7 +260,7 @@ export async function buildPayloadModel(
                     texture.colorSpace = entry.role === "diffuse" ? SRGBColorSpace : NoColorSpace;
                     texture.wrapS = RepeatWrapping;
                     texture.wrapT = RepeatWrapping;
-                    textures.set(key, texture);
+                    textures.set(key, prepareTexture(texture));
                 }
             },
         ),
@@ -258,6 +273,8 @@ export async function buildPayloadModel(
         }
         if (transport.materialProfile === "efmi") {
             markEFMIHeadMeshes(transport, objects);
+        } else if (transport.materialProfile === "gimi") {
+            markGenshinMeshes(transport, objects);
         }
         const prepared = await preparePayloadEval(group, evalResult, positionLoader, signal);
         signal.throwIfAborted();
@@ -367,6 +384,20 @@ export function setPayloadToonShadows(root: Object3D, enabled: boolean): void {
             state.toonEnabled.value = enabled ? 1 : 0;
         }
         syncEFMIToon(object, material, userData);
+        syncGenshinToon(object, material, userData);
+    });
+}
+
+export function setPayloadGIMIToon(root: Object3D, settings: GenshinToonSettings): void {
+    root.traverse((object) => {
+        if (!(object instanceof Mesh) || !object.userData.meshId) {
+            return;
+        }
+        const userData = object.userData as PayloadMeshUserData;
+        userData.genshinToon = settings;
+        if (object.material instanceof MeshStandardMaterial) {
+            syncGenshinToon(object, object.material, userData);
+        }
     });
 }
 
@@ -618,6 +649,8 @@ function applyEvaluatedMaps(
         configureRabbitFXMaterialShader(material, userData.toonShadows);
     } else if (userData.materialProfile === "efmi") {
         configureEFMIToonMaterialShader(material);
+    } else if (userData.materialProfile === "gimi") {
+        configureGenshinToonMaterialShader(material);
     }
     configureDDSMaterialShader(material);
     const normal = object.geometry.attributes.normal;
@@ -742,6 +775,15 @@ function applyEvaluatedMaps(
         efmiToonState.rampMap.value = rampMap ?? rabbitFXFallbackLightMap;
         efmiToonState.rampEnabled.value = rampMap ? 1 : 0;
     }
+    if (userData.materialProfile === "gimi") {
+        // One- and two-channel containers have no material ID or specular mask to read.
+        const lightMap = evaluated.lightMapKey ? textures.get(evaluated.lightMapKey) : undefined;
+        const format = ddsTextureMetadata(lightMap)?.format ?? "";
+        setGenshinToonLightMap(
+            material,
+            format.startsWith("bc4-") || format.startsWith("bc5-") ? undefined : lightMap,
+        );
+    }
     updateDDSShaderState(material, userData.materialProfile);
     if (
         hadMap !== Boolean(material.map) ||
@@ -754,6 +796,7 @@ function applyEvaluatedMaps(
         material.needsUpdate = true;
     }
     syncEFMIToon(object, material, userData);
+    syncGenshinToon(object, material, userData);
     userData.lastMaps = {
         texKey: evaluated.texKey,
         normalMapKey: evaluated.normalMapKey,
@@ -1078,19 +1121,19 @@ function configureRabbitFXMaterialShader(
         shader.uniforms.rabbitFXCutoutEnabled = state.cutoutEnabled;
         shader.uniforms.rabbitFXCutoutTransform = state.cutoutTransform;
         shader.uniforms.rabbitFXToonEnabled = state.toonEnabled;
-        shader.vertexShader = replaceRabbitFXShaderAnchor(
+        shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
             "#include <common>",
             `#include <common>
 varying vec2 vRabbitFXUv;`,
         );
-        shader.vertexShader = replaceRabbitFXShaderAnchor(
+        shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
             "#include <uv_vertex>",
             `#include <uv_vertex>
 vRabbitFXUv = uv;`,
         );
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <common>",
             `#include <common>
@@ -1114,13 +1157,13 @@ float rabbitFXDirectionalDiffuseFactor( vec3 surfaceNormal, vec3 lightDirection 
         );
 
         // Red also holds a BC4 mask, which has no green channel to sample.
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <map_fragment>",
             `if ( rabbitFXCutoutEnabled > 0.5 && texture2D( rabbitFXCutoutMap, ( rabbitFXCutoutTransform * vec3( vRabbitFXUv, 1.0 ) ).xy ).r < 0.5 ) discard;
 #include <map_fragment>`,
         );
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <lights_fragment_begin>",
             patchRabbitFXDirectionalLights(ShaderChunk.lights_fragment_begin),
@@ -1211,21 +1254,21 @@ function configureEFMIToonMaterialShader(material: MeshStandardMaterial): void {
         shader.uniforms.efmiHighlightTransform = state.highlightTransform;
         shader.uniforms.efmiRampMap = state.rampMap;
         shader.uniforms.efmiRampEnabled = state.rampEnabled;
-        shader.vertexShader = replaceRabbitFXShaderAnchor(
+        shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
             "#include <common>",
             `#include <common>
 varying vec2 vEfmiUv;
 varying vec3 vEfmiModelRight;`,
         );
-        shader.vertexShader = replaceRabbitFXShaderAnchor(
+        shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
             "#include <uv_vertex>",
             `#include <uv_vertex>
 vEfmiUv = uv;
 vEfmiModelRight = normalize( mat3( modelMatrix ) * vec3( 1.0, 0.0, 0.0 ) );`,
         );
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <common>",
             `#include <common>
@@ -1261,7 +1304,7 @@ float efmiLuma( vec3 color ) {
 
 ${EFMI_RAMP_GLSL}`,
         );
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <opaque_fragment>",
             `#if NUM_DIR_LIGHTS > 0
@@ -1353,7 +1396,7 @@ if ( efmiToonEnabled > 0.5 ) {
 
         // The toon result is display-referred like Warfarin's, which applies no tone
         // mapping, so the viewer's exposure and tone mapping would only dim it.
-        shader.fragmentShader = replaceRabbitFXShaderAnchor(
+        shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <tonemapping_fragment>",
             `if ( efmiToonEnabled < 0.5 ) {
@@ -1428,13 +1471,6 @@ function syncEFMIToon(
     uniforms.efmiBrightness.value = style.brightness;
     uniforms.efmiRimStrength.value = style.rimStrength;
     uniforms.efmiRimWidth.value = style.rimWidth;
-}
-
-// Direct DDS textures flip V through this transform, which three applies only to
-// a material's own map slots.
-function textureUvTransform(texture: Texture): Matrix3 {
-    texture.updateMatrix();
-    return texture.matrix;
 }
 
 // An inverted hull sharing the mesh's geometry, so position variants, shape keys
@@ -1584,31 +1620,6 @@ void main() {
     return outline;
 }
 
-// Vertices split along UV seams carry different normals, which would tear the hull
-// open along every seam. The game stores an averaged normal for the same reason.
-function averagedNormals(geometry: BufferGeometry): BufferAttribute {
-    const position = geometry.attributes.position;
-    const normal = geometry.attributes.normal;
-    const sums = new Map<string, [number, number, number]>();
-    const key = (index: number) =>
-        `${position.getX(index).toFixed(5)},${position.getY(index).toFixed(5)},${position.getZ(index).toFixed(5)}`;
-    for (let index = 0; index < position.count; index++) {
-        const sum = sums.get(key(index)) ?? [0, 0, 0];
-        sum[0] += normal.getX(index);
-        sum[1] += normal.getY(index);
-        sum[2] += normal.getZ(index);
-        sums.set(key(index), sum);
-    }
-
-    const output = new Float32Array(position.count * 3);
-    for (let index = 0; index < position.count; index++) {
-        const [x, y, z] = sums.get(key(index)) ?? [0, 0, 0];
-        const length = Math.hypot(x, y, z) || 1;
-        output.set([x / length, y / length, z / length], index * 3);
-    }
-    return new BufferAttribute(output, 3);
-}
-
 function patchRabbitFXDirectionalLights(source: string): string {
     const startAnchor = "#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )";
     const endAnchor = "#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )";
@@ -1618,7 +1629,7 @@ function patchRabbitFXDirectionalLights(source: string): string {
         throw new Error("Three.js directional-light shader anchor changed");
     }
     const declarationsAnchor = "\tDirectionalLight directionalLight;";
-    const section = replaceRabbitFXShaderAnchor(
+    const section = replaceShaderAnchor(
         source.slice(start, end),
         declarationsAnchor,
         `${declarationsAnchor}
@@ -1631,16 +1642,8 @@ function patchRabbitFXDirectionalLights(source: string): string {
         RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
         rabbitFXDirectDiffuseContribution = reflectedLight.directDiffuse - rabbitFXDirectDiffuseBefore;
         reflectedLight.directDiffuse = rabbitFXDirectDiffuseBefore + rabbitFXDirectDiffuseContribution * rabbitFXDirectionalDiffuseFactor( geometryNormal, directLight.direction );`;
-    const patchedSection = replaceRabbitFXShaderAnchor(section, directCall, replacement);
+    const patchedSection = replaceShaderAnchor(section, directCall, replacement);
     return source.slice(0, start) + patchedSection + source.slice(end);
-}
-
-function replaceRabbitFXShaderAnchor(source: string, anchor: string, replacement: string): string {
-    const first = source.indexOf(anchor);
-    if (first < 0 || source.indexOf(anchor, first + anchor.length) >= 0) {
-        throw new Error(`Three.js shader anchor changed: ${anchor}`);
-    }
-    return source.slice(0, first) + replacement + source.slice(first + anchor.length);
 }
 
 function applyPositionVariant(
@@ -1776,7 +1779,7 @@ async function buildGeometry(
 ): Promise<BufferGeometry> {
     const bytes = await fetchBinaryBytes(mesh.geometryUrl, undefined, signal);
     signal.throwIfAborted();
-    const { positions, normals, tangents, uvs, indices } = decodeModelViewerMesh(
+    const { positions, normals, tangents, uvs, colors, indices } = decodeModelViewerMesh(
         bytes.buffer as ArrayBuffer,
     );
     const geometry = new BufferGeometry();
@@ -1789,6 +1792,9 @@ async function buildGeometry(
     }
     if (uvs) {
         geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+    }
+    if (colors) {
+        geometry.setAttribute(TOON_VERTEX_COLOR_ATTRIBUTE, new BufferAttribute(colors, 4, true));
     }
     geometry.setIndex(new BufferAttribute(indices, 1));
     if (!normals) {

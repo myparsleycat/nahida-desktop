@@ -36,6 +36,7 @@ const modelPreviewSettingsConfig = {
   exposure: "modelViewer.exposure",
   toonShadows: "modelViewer.toonShadows",
   toonStyle: "modelViewer.toonStyle",
+  gimiToonStyle: "modelViewer.gimiToonStyle",
 } as const;
 
 export type GridModelPreviewState =
@@ -49,6 +50,7 @@ export type ModelPreviewRenderSettings = {
   exposure: number;
   toonShadows: boolean;
   toonStyle: string;
+  gimiToonStyle: string;
 };
 
 type PreviewListener = (state: GridModelPreviewState) => void;
@@ -442,6 +444,7 @@ export function GridModelPreviewProvider({
             exposure: settings.exposure,
             toonShadows: settings.toonShadows,
             toonStyle: settings.toonStyle,
+            gimiToonStyle: settings.gimiToonStyle,
           }
         : null,
     [
@@ -451,6 +454,7 @@ export function GridModelPreviewProvider({
       settings.toneMapping,
       settings.toonShadows,
       settings.toonStyle,
+      settings.gimiToonStyle,
     ],
   );
 

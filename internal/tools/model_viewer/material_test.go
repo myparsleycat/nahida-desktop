@@ -210,6 +210,19 @@ run = CommandListSkinTexture
 ib = ResourceBodyAIB`, want: "zzmi"},
 		{name: "EFMI", ini: `[CommandList_Draw_Component0]
 run = CommandList\EFMIv1\OverrideTextures`, want: "efmi"},
+		{name: "classic GIMI", ini: `[TextureOverrideCharAPosition]
+hash = 1a2b3c4d
+vb0 = ResourceCharAPosition`, want: "gimi"},
+		{name: "namespaced GIMI", ini: `[CommandListCharABody]
+Resource\GIMI\Diffuse = ref ResourceCharABodyDiffuse`, want: "gimi"},
+		{name: "SRMI position override", ini: `[TextureOverrideCharAPosition]
+hash = 1a2b3c4d
+[TextureOverrideCharAHeadBlend]
+vb1 = ResourceCharAHeadBlend`, want: ""},
+		{name: "SRMI resource marker", ini: `[TextureOverrideCharAVertexLimitRaise]
+hash = 1a2b3c4d
+[CommandListCharA]
+Resource\SRMI\Diffuse = ref ResourceCharADiffuse`, want: ""},
 		{
 			name: "strong WWMI RabbitFX wins stray ZZMI resource",
 			ini: `[Constants]

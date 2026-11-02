@@ -36,11 +36,11 @@ function geometryBytes(
     positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
     normals = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
 ) {
-    const buffer = new ArrayBuffer(24 + (positions.length + normals.length + 3) * 4);
-    new Uint32Array(buffer, 0, 6).set([0x3147564d, positions.length, normals.length, 0, 0, 3]);
-    new Float32Array(buffer, 24, positions.length).set(positions);
-    new Float32Array(buffer, 24 + positions.byteLength, normals.length).set(normals);
-    new Uint32Array(buffer, 24 + positions.byteLength + normals.byteLength, 3).set([0, 1, 2]);
+    const buffer = new ArrayBuffer(28 + (positions.length + normals.length + 3) * 4);
+    new Uint32Array(buffer, 0, 7).set([0x3247564d, positions.length, normals.length, 0, 0, 0, 3]);
+    new Float32Array(buffer, 28, positions.length).set(positions);
+    new Float32Array(buffer, 28 + positions.byteLength, normals.length).set(normals);
+    new Uint32Array(buffer, 28 + positions.byteLength + normals.byteLength, 3).set([0, 1, 2]);
     return new Uint8Array(buffer);
 }
 

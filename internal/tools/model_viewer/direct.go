@@ -182,6 +182,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 	textures, cache, timing := build.textures, build.cache, build.timing
 	legacyStartedAt := time.Now()
 	layoutName := detectModelViewerLayout(sections, resources)
+	colors := detectModelViewerMaterialProfile(sections) == modelViewerGIMIProfile
 	groupsStartedAt := time.Now()
 	groups, err := collectModelViewerBufferGroups(modDir, layoutName, resources, cache, nil)
 	if timing != nil {
@@ -345,7 +346,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 				task.entry.group.Stride,
 				task.entry.layout,
 				active,
-				modelViewerGeometryOptions{includeTangents: true, compact: true},
+				modelViewerGeometryOptions{includeTangents: true, includeColors: colors, compact: true},
 				nil,
 			)
 			if err != nil || geometry == nil {
@@ -694,12 +695,28 @@ func inferModelViewerFmtLayout(
 					InputSlotClass:    "per-vertex",
 				},
 			)
+			appendModelViewerMihoyoColor(&layout, baseOffset, uvOffset)
 		}
 	}
 	if findModelViewerElement(layout, "POSITION", -1) == nil {
 		return layout, fmt.Errorf("could not infer vertex layout for %s", group.Key)
 	}
 	return layout, nil
+}
+
+// appendModelViewerMihoyoColor declares the R8G8B8A8 vertex color that a
+// miHoYo texcoord buffer stores ahead of UV0. GIMI's toon shading reads it as
+// AO (R), ramp width (G), and outline width (A).
+func appendModelViewerMihoyoColor(layout *modelViewerFmtLayout, texcoordOffset, uvOffset int) {
+	if uvOffset != texcoordOffset+4 {
+		return
+	}
+	layout.Elements = append(layout.Elements, modelViewerFmtElement{
+		SemanticName:      "COLOR",
+		Format:            "DXGI_FORMAT_R8G8B8A8_UNORM",
+		AlignedByteOffset: texcoordOffset,
+		InputSlotClass:    "per-vertex",
+	})
 }
 
 func buildModelViewerDirectMeshPayload(
@@ -727,6 +744,7 @@ func buildModelViewerDirectMeshPayload(
 		Normals:       mesh.geometry.Normal,
 		Tangents:      mesh.geometry.Tangent,
 		UVs:           mesh.geometry.Texcoord0,
+		Colors:        modelViewerColorBytes(mesh.geometry.Color0),
 		Indices:       mesh.geometry.Indices,
 		SourceIndices: mesh.geometry.SourceIndices,
 	}
