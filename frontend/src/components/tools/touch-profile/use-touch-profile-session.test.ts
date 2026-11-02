@@ -213,6 +213,7 @@ describe("Touch Profile session", () => {
         await act(async () => pendingA.resolve(inspection("A")));
         expect(hook.result.current.inspection).toBeNull();
         expect(hook.result.current.loading).toBe(true);
+        expect(mocks.close).toHaveBeenCalledWith("A");
         await act(async () => pendingB.resolve(inspection("B")));
         expect(hook.result.current.inspection?.modRoot).toBe("B");
         expect(hook.result.current.loading).toBe(false);

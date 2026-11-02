@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ const touchProgressEventName = "tools:touchProfileProgress"
 type touchAppliedProfile struct {
 	OutputRoot, SourceRoot string
 	Reenable               bool
+	OutputRemoved          bool
 }
 
 type touchSession struct {
@@ -36,7 +38,7 @@ type touchSession struct {
 	PreviewRevision uint64
 	Draft           *TouchDraft
 	Applied         *touchAppliedProfile
-	Operation       string
+	closed          bool
 }
 
 type touchCachedPreview struct {
@@ -142,11 +144,10 @@ func (t *Service) TouchProfileGetMeshDescriptor(
 	ctx context.Context,
 	input TouchProfilePreviewInput,
 ) (TouchMeshDescriptor, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchMeshDescriptor{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
 		return TouchMeshDescriptor{}, err
@@ -222,11 +223,10 @@ func (t *Service) TouchProfileAnalyzeComponents(
 	ctx context.Context,
 	input TouchProfileAnalyzeInput,
 ) (result TouchDraft, err error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return result, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	selected := map[string]bool{}
 	for _, id := range input.ComponentIDs {
@@ -261,16 +261,10 @@ func (t *Service) TouchProfileAnalyzeComponents(
 		lastProgress = max(lastProgress, progress)
 		t.emitTouchProgress(input.SessionID, stage, lastProgress, message, componentID)
 	}
-	defer func() {
-		if err != nil {
-			t.touchMu.Lock()
-			delete(t.touchSessions, input.SessionID)
-			t.touchMu.Unlock()
-			t.protocol.CleanupMemorySession(session.ProtocolID)
-			t.reportCleanup(os.RemoveAll(session.Dir), "TouchProfileAnalyzeComponents")
-		}
-	}()
 	for index, component := range selectedComponents {
+		if err = ctx.Err(); err != nil {
+			return result, err
+		}
 		emitProgress(
 			"preview",
 			.1+float64(index)/float64(max(len(selectedComponents), 1))*.25,
@@ -377,11 +371,10 @@ func (t *Service) TouchProfileAnalyzeComponents(
 
 //wails:ignore
 func (t *Service) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (TouchDraft, error) {
-	session, err := t.requireTouchSession(draft.SessionID)
+	session, err := t.lockTouchSession(draft.SessionID)
 	if err != nil {
 		return TouchDraft{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
 		return TouchDraft{}, err
@@ -408,17 +401,13 @@ func (t *Service) TouchProfileUpdateZoneSettings(
 	ctx context.Context,
 	input TouchProfileUpdateZoneSettingsInput,
 ) (TouchDraft, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchDraft{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
 		return TouchDraft{}, err
-	}
-	if session.Operation != "" {
-		return TouchDraft{}, infra.ContractError(fmt.Sprintf("Touch profile is busy with %s", session.Operation))
 	}
 	if session.Draft == nil {
 		return TouchDraft{}, infra.ContractError(fmt.Sprintf("Touch profile has no draft: %s", input.SessionID))
@@ -464,19 +453,13 @@ func (t *Service) TouchProfileUpdateZoneSettingsBatch(
 	ctx context.Context,
 	input TouchProfileUpdateZoneSettingsBatchInput,
 ) (TouchProfileUpdateResult, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchProfileUpdateResult{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
 		return TouchProfileUpdateResult{}, err
-	}
-	if session.Operation != "" {
-		return TouchProfileUpdateResult{}, infra.ContractError(
-			fmt.Sprintf("Touch profile is busy with %s", session.Operation),
-		)
 	}
 	if session.Draft == nil {
 		return TouchProfileUpdateResult{}, infra.ContractError(
@@ -535,11 +518,10 @@ func (t *Service) TouchProfileGetPreviewDescriptor(
 	ctx context.Context,
 	input TouchProfilePreviewInput,
 ) (TouchProfilePreviewDescriptor, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchProfilePreviewDescriptor{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if err = ctx.Err(); err != nil {
 		return TouchProfilePreviewDescriptor{}, err
@@ -624,6 +606,10 @@ func (t *Service) TouchProfileDiscardDraft(_ context.Context, sessionID string) 
 	delete(t.touchSessions, sessionID)
 	t.touchMu.Unlock()
 	if session != nil {
+		// Wait for a running call so cleanup does not pull the directory or buffers out from under it.
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		session.closed = true
 		t.protocol.CleanupMemorySession(session.ProtocolID)
 		t.reportCleanup(os.RemoveAll(session.Dir), "TouchProfileDiscardDraft")
 	}
@@ -639,28 +625,32 @@ func (t *Service) TouchProfileCloseSession(ctx context.Context, sessionID string
 //
 //wails:ignore
 func (t *Service) TouchProfileSessionPaths(sessionID string) ([]string, error) {
-	session, err := t.requireTouchSession(sessionID)
+	session, err := t.lockTouchSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
-	paths := []string{session.Analysis.ModRoot}
-	if session.Draft != nil && session.Draft.SourceModRoot != session.Analysis.ModRoot {
-		paths = append(paths, session.Draft.SourceModRoot)
+	candidates := []string{session.Analysis.ModRoot}
+	if session.Draft != nil {
+		candidates = append(candidates, session.Draft.SourceModRoot)
 	}
 	if session.Applied != nil {
-		paths = append(paths, session.Applied.OutputRoot, session.Applied.SourceRoot)
+		candidates = append(candidates, session.Applied.OutputRoot, session.Applied.SourceRoot)
+	}
+	paths := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if !slices.ContainsFunc(paths, func(path string) bool { return platform.SamePathFold(path, candidate) }) {
+			paths = append(paths, candidate)
+		}
 	}
 	return paths, nil
 }
 
 func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchApplyResult{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.Draft == nil {
 		return TouchApplyResult{}, infra.ContractError(
@@ -699,10 +689,6 @@ func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApply
 	if !platform.SameOrChildPath(parent, targetRoot) || platform.SamePathFold(sourceRoot, targetRoot) {
 		return TouchApplyResult{}, errors.New("invalid touch output path")
 	}
-	if err = claimTouchOperation(session, "apply"); err != nil {
-		return TouchApplyResult{}, err
-	}
-	defer func() { session.Operation = "" }()
 	validation, err := t.generateTouchOutput(ctx, session, sourceRoot, targetRoot, "apply")
 	if err != nil {
 		t.reportCleanup(os.RemoveAll(targetRoot), "TouchProfileApply")
@@ -715,6 +701,10 @@ func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApply
 		return TouchApplyResult{}, err
 	}
 	session.Applied = &touchAppliedProfile{OutputRoot: targetRoot, SourceRoot: disabledSource, Reenable: reenable}
+	t.relocateTouchSession(session, disabledSource, "touch-profile-apply")
+	nextDraft := *session.Draft
+	nextDraft.SourceModRoot = disabledSource
+	session.Draft = &nextDraft
 	t.emitTouchProgress(input.SessionID, "complete", 1, "Touch mod created", "")
 	return TouchApplyResult{
 		SessionID:                input.SessionID,
@@ -727,11 +717,10 @@ func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApply
 }
 
 func (t *Service) TouchProfileRegenerate(ctx context.Context, input TouchProfileApplyInput) (TouchApplyResult, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchApplyResult{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.Draft == nil {
 		return TouchApplyResult{}, infra.ContractError(
@@ -744,10 +733,6 @@ func (t *Service) TouchProfileRegenerate(ctx context.Context, input TouchProfile
 	if session.Applied == nil {
 		return TouchApplyResult{}, infra.ContractError("Touch profile has not been applied yet.")
 	}
-	if err = claimTouchOperation(session, "regenerate"); err != nil {
-		return TouchApplyResult{}, err
-	}
-	defer func() { session.Operation = "" }()
 	sourceRoot, outputRoot := session.Applied.SourceRoot, session.Applied.OutputRoot
 	id := newTouchID()
 	if len(id) > 8 {
@@ -771,9 +756,11 @@ func (t *Service) TouchProfileRegenerate(ctx context.Context, input TouchProfile
 	if err != nil {
 		return TouchApplyResult{}, err
 	}
-	if err = replaceTouchOutput(staging, outputRoot); err != nil {
+	backup, err := replaceTouchOutput(staging, outputRoot)
+	if err != nil {
 		return TouchApplyResult{}, err
 	}
+	t.reportCleanup(os.RemoveAll(backup), "TouchProfileRegenerate")
 	t.emitTouchProgress(input.SessionID, "complete", 1, "Touch mod regenerated", "")
 	return TouchApplyResult{
 		SessionID:                input.SessionID,
@@ -789,11 +776,10 @@ func (t *Service) TouchProfileRollback(
 	ctx context.Context,
 	input TouchProfileRollbackInput,
 ) (TouchRollbackResult, error) {
-	session, err := t.requireTouchSession(input.SessionID)
+	session, err := t.lockTouchSession(input.SessionID)
 	if err != nil {
 		return TouchRollbackResult{}, err
 	}
-	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.Applied == nil {
 		return TouchRollbackResult{}, infra.ContractError("Touch profile has already been rolled back")
@@ -812,18 +798,21 @@ func (t *Service) TouchProfileRollback(
 			"Touch rollback refused: output and source paths are identical",
 		)
 	}
-	if !pathIsDirectory(outputRoot) {
-		return TouchRollbackResult{}, infra.ContractError(fmt.Sprintf("Touch output mod not found: %s", outputRoot))
-	}
 	if !pathIsDirectory(sourceRoot) {
 		return TouchRollbackResult{}, infra.ContractError(fmt.Sprintf("Touch source mod not found: %s", sourceRoot))
 	}
-	if err = claimTouchOperation(session, "rollback"); err != nil {
-		return TouchRollbackResult{}, err
-	}
-	defer func() { session.Operation = "" }()
-	if err = os.RemoveAll(outputRoot); err != nil {
-		return TouchRollbackResult{}, err
+
+	// Only an output this session already removed may be missing; a retry then only re-enables the source.
+	removedOutput := false
+	switch {
+	case pathIsDirectory(outputRoot):
+		if err = os.RemoveAll(outputRoot); err != nil {
+			return TouchRollbackResult{}, err
+		}
+		session.Applied.OutputRemoved = true
+		removedOutput = true
+	case !session.Applied.OutputRemoved:
+		return TouchRollbackResult{}, infra.ContractError(fmt.Sprintf("Touch output mod not found: %s", outputRoot))
 	}
 	restored := sourceRoot
 	reenabled := false
@@ -833,12 +822,18 @@ func (t *Service) TouchProfileRollback(
 			return TouchRollbackResult{}, err
 		}
 		reenabled = true
+		t.relocateTouchSession(session, restored, "touch-profile-rollback")
 	}
+
+	// The mod folders already changed, so the session follows them even if the write-only draft record fails.
 	if session.Draft != nil {
 		next := *session.Draft
 		next.SourceModRoot = restored
 		if err = writeTouchDraft(session.Dir, next); err != nil {
-			return TouchRollbackResult{}, err
+			_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+				Operation: "touch-profile-rollback", Stage: "persist-draft",
+				Fields: map[string]any{"sessionDir": session.Dir},
+			})
 		}
 		session.Draft = &next
 	}
@@ -846,7 +841,7 @@ func (t *Service) TouchProfileRollback(
 	return TouchRollbackResult{
 		OutputModRoot:   outputRoot,
 		SourceModRoot:   restored,
-		RemovedOutput:   true,
+		RemovedOutput:   removedOutput,
 		ReenabledSource: reenabled,
 	}, nil
 }

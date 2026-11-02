@@ -46,6 +46,7 @@ export default function TouchProfileTool({
     activeZoneId,
     activePreview,
     displayPreview,
+    loadMod,
     selectFolder,
     discardDraft,
     openResult,
@@ -190,9 +191,28 @@ export default function TouchProfileTool({
                     <Input
                       value={modPath}
                       onChange={(event) => setModPath(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== "Enter" ||
+                          event.repeat ||
+                          event.nativeEvent.isComposing ||
+                          loading ||
+                          applying ||
+                          rollingBack
+                        ) {
+                          return;
+                        }
+                        void loadMod();
+                      }}
                       placeholder={t("page.tools.touch_profile.mod_path_placeholder")}
                     />
-                    <Button type="button" variant="outline" size="icon" onClick={selectFolder}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={selectFolder}
+                      disabled={applying || rollingBack}
+                    >
                       <FolderOpenIcon className="size-4" />
                     </Button>
                   </div>

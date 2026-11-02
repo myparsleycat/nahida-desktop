@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
@@ -11,6 +12,7 @@ import (
 )
 
 func rebaseTouchAnalysis(analysis TouchModAnalysis, sourceRoot, targetRoot string) (TouchModAnalysis, error) {
+	analysis.Components = slices.Clone(analysis.Components)
 	analysisRoot := filepath.Join(sourceRoot, analysis.ModRootRelativeToSource)
 	ini, err := resolveTouchRelative(analysisRoot, analysis.INIRelativePath)
 	if err != nil {
@@ -67,6 +69,17 @@ func rebaseTouchAnalysis(analysis TouchModAnalysis, sourceRoot, targetRoot strin
 		}
 	}
 	return analysis, nil
+}
+
+// relocateTouchAnalysis points the absolute paths of an analysis at sourceRoot after the source folder was renamed.
+func relocateTouchAnalysis(analysis TouchModAnalysis, sourceRoot string) (TouchModAnalysis, error) {
+	relocated, err := rebaseTouchAnalysis(analysis, sourceRoot, sourceRoot)
+	if err != nil {
+		return analysis, err
+	}
+	relocated.SourceRoot = sourceRoot
+	relocated.ModRoot = filepath.Join(sourceRoot, analysis.ModRootRelativeToSource)
+	return relocated, nil
 }
 
 func resolveTouchRelative(root, relative string) (string, error) {

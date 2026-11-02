@@ -137,42 +137,25 @@ func touchFolderBaseName(name string) string {
 	return touchDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "") + touchFolderSuffix
 }
 
-func replaceTouchOutput(staging, output string) (err error) {
+// replaceTouchOutput swaps staging into output and returns the moved-aside previous output. The caller removes
+// the backup; once the swap succeeded, the new output stays in place even if that removal fails.
+func replaceTouchOutput(staging, output string) (string, error) {
 	id := newTouchID()
 	if len(id) > 8 {
 		id = id[:8]
 	}
-	backup := output + ".backup-" + id
-	oldMoved, newMoved := false, false
-	defer func() {
-		err = infra.WithCause(err, infra.AnnotateError(os.RemoveAll(staging), infra.Diagnostic{Stage: "cleanup"}))
-	}()
-	if err = os.Rename(output, backup); err != nil {
-		return err
+	// The DISABLED prefix keeps 3DMigoto from loading a backup that a failed cleanup leaves in the Mods folder.
+	backup := filepath.Join(filepath.Dir(output), "DISABLED "+filepath.Base(output)+".backup-"+id)
+	if err := os.Rename(output, backup); err != nil {
+		return "", err
 	}
-	oldMoved = true
-	if err = os.Rename(staging, output); err != nil {
+	if err := os.Rename(staging, output); err != nil {
 		if restoreErr := os.Rename(backup, output); restoreErr != nil {
-			return errors.Join(err, restoreErr)
+			return "", errors.Join(err, restoreErr)
 		}
-		return err
+		return "", err
 	}
-	newMoved = true
-	if err = os.RemoveAll(backup); err != nil {
-		if newMoved {
-			err = infra.WithCause(
-				err,
-				infra.AnnotateError(os.RemoveAll(output), infra.Diagnostic{Stage: "rollback-remove"}),
-			)
-		}
-		if oldMoved {
-			if restoreErr := os.Rename(backup, output); restoreErr != nil {
-				return errors.Join(err, restoreErr)
-			}
-		}
-		return err
-	}
-	return nil
+	return backup, nil
 }
 
 func sanitizeTouchNamespace(root string) string {

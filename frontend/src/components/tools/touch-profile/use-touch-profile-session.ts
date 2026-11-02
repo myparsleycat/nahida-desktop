@@ -1,6 +1,6 @@
 import { Dialog, Shell } from "@bindings/platform";
 import { Tools } from "@bindings/tools";
-import { isCurrentRequest, resolveIfCurrent } from "@renderer/lib/generation-gate";
+import { isCurrentRequest } from "@renderer/lib/generation-gate";
 import type {
     TouchBoneZoneSelection,
     TouchProfileComponentSummary,
@@ -187,15 +187,15 @@ export function useTouchProfileSession({
         try {
             const previousSession = draftSessionRef.current;
             draftSessionRef.current = null;
+            setInspection(null);
             if (previousSession) await Tools.TouchProfileCloseSession(previousSession);
             clearTopology();
             settingsBatch.clear();
-            const next = await resolveIfCurrent(requestId, loadGenerationRef, () =>
-                Tools.TouchProfilePrepare({
-                    modPath: targetPath,
-                }),
-            );
-            if (next === undefined) return;
+            const next = await Tools.TouchProfilePrepare({ modPath: targetPath });
+            if (!isCurrentRequest(requestId, loadGenerationRef)) {
+                void Tools.TouchProfileCloseSession(next.sessionId);
+                return;
+            }
             draftSessionRef.current = next.sessionId;
             setInspection(next as never);
             setSelectedMeshIds(
@@ -232,6 +232,8 @@ export function useTouchProfileSession({
     }, [draft?.sessionId, inspection?.sessionId]);
     useEffect(() => {
         return () => {
+            // Mark an in-flight load as stale so loadMod closes the session it creates.
+            loadGenerationRef.current++;
             const sessionId = draftSessionRef.current;
             if (!sessionId) return;
             cancelPreview();
@@ -256,9 +258,12 @@ export function useTouchProfileSession({
             filters: [],
             properties: ["openDirectory"],
             role: "touch-profile-mod",
+        }).catch((error: unknown) => {
+            toast.error(toErrorMessage(error));
+            return null;
         });
         if (selected && !selected.canceled && selected.filePaths?.[0]) {
-            setModPath(selected.filePaths[0]);
+            await loadMod(selected.filePaths[0]);
         }
     };
     const analyzeSelected = async () => {
@@ -315,6 +320,7 @@ export function useTouchProfileSession({
     const applyDraft = async (force = false) => {
         if (!draft || applying || pendingSettingsSaves > 0) return;
         const regenerating = result !== null;
+        const requestId = loadGenerationRef.current;
         setApplying(true);
         try {
             const next = regenerating
@@ -332,7 +338,8 @@ export function useTouchProfileSession({
                 sourceModRoot: next.sourceModRoot,
                 reenableSourceOnRollback: next.reenableSourceOnRollback,
             };
-            setResult(applyResult);
+            // A mod loaded since the call started owns the view now; the output is still reported below.
+            if (isCurrentRequest(requestId, loadGenerationRef)) setResult(applyResult);
             toast.success(
                 t(
                     regenerating
@@ -581,6 +588,7 @@ export function useTouchProfileSession({
         selectedZone,
         activePreview,
         displayPreview,
+        loadMod,
         selectFolder,
         analyzeSelected,
         backToSelect,

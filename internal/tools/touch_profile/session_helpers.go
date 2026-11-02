@@ -12,22 +12,35 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-func (t *Service) requireTouchSession(id string) (*touchSession, error) {
+// lockTouchSession returns the session with its mutex held. A call that was waiting while the session was
+// discarded sees it closed instead of working on a torn-down session.
+func (t *Service) lockTouchSession(id string) (*touchSession, error) {
 	t.touchMu.Lock()
 	session := t.touchSessions[id]
 	t.touchMu.Unlock()
 	if session == nil {
 		return nil, infra.ContractError(fmt.Sprintf("Touch profile session not found: %s", id))
 	}
+	session.mu.Lock()
+	if session.closed {
+		session.mu.Unlock()
+		return nil, infra.ContractError(fmt.Sprintf("Touch profile session not found: %s", id))
+	}
 	return session, nil
 }
 
-func claimTouchOperation(session *touchSession, operation string) error {
-	if session.Operation != "" {
-		return infra.ContractError(fmt.Sprintf("Touch profile is busy with %s", session.Operation))
+// relocateTouchSession keeps the session's mesh paths valid after apply or rollback renamed the source folder.
+// The rename already happened, so a failure is reported instead of failing the operation.
+func (t *Service) relocateTouchSession(session *touchSession, sourceRoot, operation string) {
+	analysis, err := relocateTouchAnalysis(session.Analysis, sourceRoot)
+	if err != nil {
+		_ = infra.ReportError(t.log, err, "Tools", infra.Diagnostic{
+			Operation: operation, Stage: "relocate-analysis",
+			Fields: map[string]any{"sourceRoot": sourceRoot},
+		})
+		return
 	}
-	session.Operation = operation
-	return nil
+	session.Analysis = analysis
 }
 
 func (t *Service) emitTouchProgress(sessionID, stage string, progress float64, message, componentID string) {
@@ -49,14 +62,11 @@ func (t *Service) shutdownTouchProfiles() error {
 	var err error
 	for _, session := range sessions {
 		session.mu.Lock()
+		session.closed = true
 		if t.protocol != nil {
 			t.protocol.CleanupMemorySession(session.ProtocolID)
 		}
-		if session.Operation != "" {
-			err = errors.Join(err, fmt.Errorf("touch profile is busy with %s", session.Operation))
-		} else {
-			err = errors.Join(err, os.RemoveAll(session.Dir))
-		}
+		err = errors.Join(err, os.RemoveAll(session.Dir))
 		session.mu.Unlock()
 	}
 	return err

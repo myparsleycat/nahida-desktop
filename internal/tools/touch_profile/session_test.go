@@ -3,6 +3,7 @@ package touchprofile
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -53,19 +54,17 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 	}
 	channel := 0
 	label := "Chest"
-	draft, err := service.TouchProfileAnalyzeComponents(
-		ctx,
-		TouchProfileAnalyzeInput{
-			SessionID:    inspection.SessionID,
-			ComponentIDs: []string{inspection.Components[0].ID},
-			BoneSelections: []TouchBoneComponentSelection{
-				{
-					ComponentID: inspection.Components[0].ID,
-					Zones:       []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}},
-				},
+	analyzeInput := TouchProfileAnalyzeInput{
+		SessionID:    inspection.SessionID,
+		ComponentIDs: []string{inspection.Components[0].ID},
+		BoneSelections: []TouchBoneComponentSelection{
+			{
+				ComponentID: inspection.Components[0].ID,
+				Zones:       []TouchBoneZoneSelection{{BoneID: 5, Channel: &channel, Label: &label}},
 			},
 		},
-	)
+	}
+	draft, err := service.TouchProfileAnalyzeComponents(ctx, analyzeInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +147,9 @@ func TestTouchProfileBoneApplyRegenerateRollback(t *testing.T) {
 		TouchProfileApplyInput{SessionID: inspection.SessionID},
 	); err != nil {
 		t.Fatal(err)
+	}
+	if _, err = service.TouchProfileAnalyzeComponents(ctx, analyzeInput); err != nil {
+		t.Fatalf("analyze after regenerate: %v", err)
 	}
 	rolled, err := service.TouchProfileRollback(
 		ctx,
@@ -289,7 +291,6 @@ func TestTouchProfileSaveDraftPreservesClientDraft(t *testing.T) {
 		Preview: map[string]touchCachedPreview{
 			"old": {descriptor: TouchProfilePreviewDescriptor{ComponentID: "old"}},
 		},
-		Operation: "apply",
 	}
 	draft := TouchDraft{
 		SessionID:     "session",
@@ -345,7 +346,7 @@ func TestTouchProfileAnalyzeProgressIsMonotonicForSelectedComponents(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := service.requireTouchSession(inspection.SessionID)
+	session, err := service.lockTouchSession(inspection.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,6 +354,7 @@ func TestTouchProfileAnalyzeProgressIsMonotonicForSelectedComponents(t *testing.
 	second.ID = "body-second"
 	second.Name = "Body Second"
 	session.Analysis.Components = append(session.Analysis.Components, second)
+	session.mu.Unlock()
 	events = nil
 	channel := 0
 	selections := []TouchBoneComponentSelection{
@@ -375,14 +377,14 @@ func TestTouchProfileAnalyzeProgressIsMonotonicForSelectedComponents(t *testing.
 	}
 }
 
-func TestTouchProfileDiscardDraftDoesNotRejectBusySession(t *testing.T) {
+func TestTouchProfileDiscardDraftRemovesSessionDirectory(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "marker")
 	if err := os.WriteFile(marker, []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	service := New()
-	service.touchSessions["session"] = &touchSession{Dir: dir, Operation: "apply"}
+	service.touchSessions["session"] = &touchSession{Dir: dir}
 	result, err := service.TouchProfileDiscardDraft(context.Background(), "session")
 	if err != nil || !result.OK {
 		t.Fatalf("discard = %#v, %v", result, err)
@@ -392,32 +394,108 @@ func TestTouchProfileDiscardDraftDoesNotRejectBusySession(t *testing.T) {
 	}
 }
 
-func TestTouchProfileRollbackKeepsSessionStateWhenDraftWriteFails(t *testing.T) {
+func TestTouchProfileRollbackCompletesWhenDraftWriteFails(t *testing.T) {
 	parent := t.TempDir()
-	output := filepath.Join(parent, "output")
-	source := filepath.Join(parent, "source")
+	output := filepath.Join(parent, "Hero (Touch)")
+	source := filepath.Join(parent, "DISABLED Hero")
 	sessionDir := filepath.Join(parent, "session")
 	for _, dir := range []string{output, source, filepath.Join(sessionDir, "draft.json")} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	draft := TouchDraft{SessionID: "session", SourceModRoot: "original-source"}
-	applied := &touchAppliedProfile{OutputRoot: output, SourceRoot: source}
-	session := &touchSession{Dir: sessionDir, Draft: &draft, Applied: applied}
-	service := New()
+	draft := TouchDraft{SessionID: "session", SourceModRoot: source}
+	session := &touchSession{
+		Analysis: TouchModAnalysis{SourceRoot: source, ModRootRelativeToSource: ".", INIRelativePath: "mod.ini"},
+		Dir:      sessionDir,
+		Draft:    &draft,
+		Applied:  &touchAppliedProfile{OutputRoot: output, SourceRoot: source, Reenable: true},
+	}
+	service := NewWithOptions(Options{Mod: touchTestMod{}})
 	service.touchSessions["session"] = session
 	_, err := service.TouchProfileRollback(context.Background(), TouchProfileRollbackInput{
-		SessionID: "session", OutputModRoot: output, SourceModRoot: source,
+		SessionID: "session", OutputModRoot: output, SourceModRoot: source, ReenableSourceOnRollback: true,
 	})
-	if err == nil {
-		t.Fatal("expected draft persistence error")
+	if err != nil {
+		t.Fatalf("rollback failed after the source was re-enabled: %v", err)
 	}
-	if session.Draft.SourceModRoot != "original-source" {
-		t.Fatalf("draft source mutated despite write failure: %q", session.Draft.SourceModRoot)
+	restored := filepath.Join(parent, "Hero")
+	if session.Applied != nil || session.Draft.SourceModRoot != restored {
+		t.Fatalf("session does not match the re-enabled source: applied=%#v draft=%q",
+			session.Applied, session.Draft.SourceModRoot)
 	}
-	if session.Applied != applied {
-		t.Fatal("applied state was cleared despite write failure")
+}
+
+func TestTouchProfileRollbackRefusesOutputMissingBeforeRemoval(t *testing.T) {
+	parent := t.TempDir()
+	output := filepath.Join(parent, "Hero (Touch)")
+	source := filepath.Join(parent, "DISABLED Hero")
+	if err := os.MkdirAll(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewWithOptions(Options{Mod: touchTestMod{}})
+	service.touchSessions["session"] = &touchSession{
+		Applied: &touchAppliedProfile{OutputRoot: output, SourceRoot: source, Reenable: true},
+	}
+	_, err := service.TouchProfileRollback(context.Background(), TouchProfileRollbackInput{
+		SessionID: "session", OutputModRoot: output, SourceModRoot: source, ReenableSourceOnRollback: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "Touch output mod not found") {
+		t.Fatalf("rollback = %v, want missing output error", err)
+	}
+	if !pathIsDirectory(source) {
+		t.Fatal("source was re-enabled although the generated output was not removed")
+	}
+}
+
+type touchFailingEnableMod struct {
+	touchTestMod
+	failures *int
+}
+
+func (m touchFailingEnableMod) Enable(ctx context.Context, path string) (string, error) {
+	if *m.failures > 0 {
+		*m.failures--
+		return "", errors.New("enable failed")
+	}
+	return m.touchTestMod.Enable(ctx, path)
+}
+
+func TestTouchProfileRollbackRetriesAfterEnableFailure(t *testing.T) {
+	ctx := context.Background()
+	parent := t.TempDir()
+	output := filepath.Join(parent, "Hero (Touch)")
+	source := filepath.Join(parent, "DISABLED Hero")
+	sessionDir := filepath.Join(parent, "session")
+	for _, dir := range []string{output, source, sessionDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failures := 1
+	service := NewWithOptions(Options{Mod: touchFailingEnableMod{failures: &failures}})
+	draft := TouchDraft{SessionID: "session", SourceModRoot: source}
+	service.touchSessions["session"] = &touchSession{
+		Analysis: TouchModAnalysis{SourceRoot: source, ModRootRelativeToSource: ".", INIRelativePath: "mod.ini"},
+		Dir:      sessionDir,
+		Draft:    &draft,
+		Applied:  &touchAppliedProfile{OutputRoot: output, SourceRoot: source, Reenable: true},
+	}
+	input := TouchProfileRollbackInput{
+		SessionID: "session", OutputModRoot: output, SourceModRoot: source, ReenableSourceOnRollback: true,
+	}
+
+	if _, err := service.TouchProfileRollback(ctx, input); err == nil {
+		t.Fatal("expected enable failure")
+	}
+	rolled, err := service.TouchProfileRollback(ctx, input)
+	if err != nil {
+		t.Fatalf("retry rollback: %v", err)
+	}
+	restored := filepath.Join(parent, "Hero")
+	if !rolled.ReenabledSource || rolled.SourceModRoot != restored || !pathIsDirectory(restored) ||
+		pathIsDirectory(output) {
+		t.Fatalf("unexpected rollback retry: %#v", rolled)
 	}
 }
 
