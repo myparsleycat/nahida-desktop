@@ -369,6 +369,9 @@ func writeModelViewerPayload(
 			if err != nil {
 				return err
 			}
+			if target.Mode != modelViewerMidpointPairMode {
+				continue
+			}
 			target.LowPositionsURL, err = write(
 				fmt.Sprintf(".shape.%d.low", targetIndex),
 				modelViewerFloat32Bytes(payload.ShapeLowPositions[targetIndex]),

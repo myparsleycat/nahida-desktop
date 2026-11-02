@@ -496,6 +496,7 @@ export function ModelViewerWorkspace({
     payloadEval?.meshes.filter((mesh) => mesh.visible && !mesh.texKey).length ?? 0;
   const ineffectiveMap = useModelViewerIneffectiveValues(
     open && payloadTransport?.variables.length ? payloadTransport.memorySessionId : undefined,
+    activeForm,
     activeState,
   );
   const variables = payloadTransport?.variables ?? [];

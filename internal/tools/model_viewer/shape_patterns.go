@@ -205,7 +205,7 @@ func collectX88ModelViewerShapeKeys(
 				base,
 				item.low,
 				item.high,
-				"midpoint_pair",
+				modelViewerMidpointPairMode,
 				resources,
 				modDir,
 			); ok {
@@ -357,7 +357,7 @@ func collectMultiModelViewerShapeKeys(
 					set[0],
 					set[slots[1]],
 					set[slots[0]],
-					"midpoint_pair",
+					modelViewerMidpointPairMode,
 					resources,
 					modDir,
 				); ok {

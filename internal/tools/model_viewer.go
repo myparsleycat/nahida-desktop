@@ -50,10 +50,10 @@ func (t *Tools) CleanupModelViewer(ctx context.Context, memorySessionID string) 
 
 func (t *Tools) GetModelViewerIneffectiveValues(
 	ctx context.Context,
-	sessionID string,
+	sessionID, form string,
 	state map[string]any,
 ) ([]ModelViewerIneffectiveValue, error) {
-	return t.modelViewer.GetModelViewerIneffectiveValues(ctx, sessionID, state)
+	return t.modelViewer.GetModelViewerIneffectiveValues(ctx, sessionID, form, state)
 }
 
 // CleanupModelViewerWindow also fences loads completing after the native window closes.

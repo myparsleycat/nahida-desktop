@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// modelViewerMidpointPairMode blends from the low endpoint below a weight of 0.5
+// and toward the high one above it; no other mode reads the low endpoint.
+const modelViewerMidpointPairMode = "midpoint_pair"
+
 type modelViewerShapeKeyDimension struct {
 	VariableID      string `json:"variableId"`
 	Mode            string `json:"mode,omitempty"`
@@ -137,7 +141,7 @@ func collectModelViewerShapeKeys(
 					}
 					dimensions[variable] = modelViewerShapeKeyDimension{
 						VariableID:  variable,
-						Mode:        "midpoint_pair",
+						Mode:        modelViewerMidpointPairMode,
 						SmallerPath: filepath.Join(modDir, filepath.FromSlash(smaller.Filename)),
 						BiggerPath:  filepath.Join(modDir, filepath.FromSlash(bigger.Filename)),
 						Divisor:     divisor,

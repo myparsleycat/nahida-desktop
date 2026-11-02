@@ -858,16 +858,19 @@ func buildModelViewerDirectMeshPayload(
 					mesh.geometry.VertexCount,
 				)
 			}
-			low := mesh.geometry.Position
+			var low []float32
 			var lowErr error
-			if dimension.SmallerPath != "" {
-				low, lowErr = readModelViewerShapePositions(
-					cache,
-					dimension.SmallerPath,
-					shapeKey.VertexStride,
-					mesh.geometry.SourceIndices,
-					mesh.geometry.VertexCount,
-				)
+			if dimension.Mode == modelViewerMidpointPairMode {
+				low = mesh.geometry.Position
+				if dimension.SmallerPath != "" {
+					low, lowErr = readModelViewerShapePositions(
+						cache,
+						dimension.SmallerPath,
+						shapeKey.VertexStride,
+						mesh.geometry.SourceIndices,
+						mesh.geometry.VertexCount,
+					)
+				}
 			}
 			if highErr != nil || lowErr != nil {
 				continue

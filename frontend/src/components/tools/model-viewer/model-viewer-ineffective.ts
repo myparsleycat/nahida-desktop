@@ -29,10 +29,12 @@ export const INEFFECTIVE_VALUES_DEBOUNCE_MS = 150;
 
 export function useModelViewerIneffectiveValues(
     sessionId: string | undefined,
+    form: string,
     state: Record<string, ViewerStateValue>,
 ): IneffectiveMap {
     const [result, setResult] = useState<{
         sessionId: string;
+        form: string;
         values: IneffectiveMap;
     }>();
     useEffect(() => {
@@ -40,7 +42,7 @@ export function useModelViewerIneffectiveValues(
         let ignore = false;
         let request: ReturnType<typeof Tools.GetModelViewerIneffectiveValues> | undefined;
         const timer = window.setTimeout(() => {
-            request = Tools.GetModelViewerIneffectiveValues(sessionId, state);
+            request = Tools.GetModelViewerIneffectiveValues(sessionId, form, state);
             void request
                 .then((entries) => {
                     if (ignore) return;
@@ -56,7 +58,7 @@ export function useModelViewerIneffectiveValues(
                         });
                         values.set(entry.variableId, variable);
                     }
-                    setResult({ sessionId, values });
+                    setResult({ sessionId, form, values });
                 })
                 .catch((error: unknown) => {
                     if (ignore) return;
@@ -69,9 +71,9 @@ export function useModelViewerIneffectiveValues(
             window.clearTimeout(timer);
             void request?.cancel();
         };
-    }, [sessionId, state]);
+    }, [sessionId, form, state]);
 
     // Keep the previous answer visible while the next one is pending so an
     // open dropdown does not flash to "all effective" on every state change.
-    return result && result.sessionId === sessionId ? result.values : empty;
+    return result && result.sessionId === sessionId && result.form === form ? result.values : empty;
 }

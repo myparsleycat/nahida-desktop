@@ -727,6 +727,10 @@ func encodeModelViewerPreparedTextureWithAlpha(
 	}
 	cutout := lowRatio >= .005 && highRatio >= .5 && partialRatio <= .02
 	usesAlpha := cutout || partialRatio > 0 || lowRatio >= .005
+	uncompressed := format == modelViewerUncompressedPNGFormat
+	if uncompressed {
+		format = "png"
+	}
 	format = normalizeModelViewerFormat(format)
 	mimeType := "image/png"
 	if format == "jpeg-force" || format == "jpeg-safe" && !usesAlpha {
@@ -741,8 +745,14 @@ func encodeModelViewerPreparedTextureWithAlpha(
 		if err := jpeg.Encode(writer, background, &jpeg.Options{Quality: normalizeJPEGQuality(quality)}); err != nil {
 			return nil, err
 		}
-	} else if err := png.Encode(writer, rgba); err != nil {
-		return nil, err
+	} else {
+		encoder := png.Encoder{}
+		if uncompressed {
+			encoder.CompressionLevel = png.NoCompression
+		}
+		if err := encoder.Encode(writer, rgba); err != nil {
+			return nil, err
+		}
 	}
 	prepared := &modelViewerPreparedTexture{
 		bytes:    output.Bytes(),
@@ -974,6 +984,10 @@ func downsampleModelViewerTextureHalf(source *image.NRGBA, width, height int) *i
 	}
 	return target
 }
+
+// modelViewerUncompressedPNGFormat suits images encoded on demand for the local
+// renderer and never retained: compressing them costs more than serving the bytes.
+const modelViewerUncompressedPNGFormat = "png-uncompressed"
 
 func normalizeModelViewerFormat(value string) string {
 	switch value {

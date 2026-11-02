@@ -455,17 +455,23 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.CleanupModelViewer(ctx, id) }))
 	registry.add(simpleAction("tools.model_viewer_ineffective_values", "Inspect ineffective model-viewer values.",
 		"tools", RiskRead, objectSchema(map[string]any{
-			"sessionId": stringSchema(), "state": map[string]any{"type": "object"},
+			"sessionId": stringSchema(),
+			"form": map[string]any{
+				"type": "string", "minLength": 1,
+				"description": "A forms[].id of the session's transport; omit to evaluate every form.",
+			},
+			"state": map[string]any{"type": "object"},
 		}, "sessionId", "state"),
 		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
 			var input struct {
 				SessionID string         `json:"sessionId"`
+				Form      string         `json:"form"`
 				State     map[string]any `json:"state"`
 			}
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.Tools.GetModelViewerIneffectiveValues(ctx, input.SessionID, input.State)
+			return deps.Tools.GetModelViewerIneffectiveValues(ctx, input.SessionID, input.Form, input.State)
 		}))
 	registry.add(simpleAction("tools.fixer_4001_state", "Get local 4001 fixer state.", "tools", RiskRead,
 		objectSchema(nil), func(context.Context, actionContext, json.RawMessage) (any, error) {

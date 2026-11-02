@@ -145,11 +145,17 @@ func applyViewerVariableSelection(state map[string]any, variable ModelViewerVari
 }
 
 func evaluateViewerTransport(payload ModelViewerTransport, state map[string]any) viewerEvalState {
+	return evaluateViewerTransportInForm(payload, state, "")
+}
+
+// evaluateViewerTransportInForm hides the meshes outside form the way the
+// renderer's evaluateViewerState does; an empty form selects every mesh.
+func evaluateViewerTransportInForm(payload ModelViewerTransport, state map[string]any, form string) viewerEvalState {
 	resolved := viewerEvalApplyStateRules(mergeViewerEvalState(payload.DefaultState, state), payload.StateRules)
 	evaluated := viewerEvalState{State: resolved, Meshes: make([]viewerEvalMesh, len(payload.Meshes))}
 	for index, mesh := range payload.Meshes {
 		positionIndex := viewerEvalResolvePositionIndex(mesh.PositionVariants, resolved)
-		visible := viewerEvalDNFSatisfied(mesh.Conditions, resolved) &&
+		visible := viewerFormVisible(mesh.Form, form) && viewerEvalDNFSatisfied(mesh.Conditions, resolved) &&
 			(len(mesh.PositionVariants) == 0 || positionIndex != nil)
 		evaluated.Meshes[index] = viewerEvalMesh{
 			ID:                   mesh.ID,
@@ -163,6 +169,10 @@ func evaluateViewerTransport(payload ModelViewerTransport, state map[string]any)
 		}
 	}
 	return evaluated
+}
+
+func viewerFormVisible(meshForm, selected string) bool {
+	return selected == "" || meshForm == "" || meshForm == selected || strings.HasPrefix(selected, meshForm+"::")
 }
 
 type viewerBlockingVar struct {

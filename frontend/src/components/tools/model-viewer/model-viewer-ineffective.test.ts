@@ -47,7 +47,7 @@ it("ignores stale responses after state changes and cancels work on unmount", as
     vi.mocked(Tools.GetModelViewerIneffectiveValues)
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(second.promise);
-    const hook = renderHook(({ state }) => useModelViewerIneffectiveValues("session", state), {
+    const hook = renderHook(({ state }) => useModelViewerIneffectiveValues("session", "", state), {
         initialProps: { state: { outfit: 0 } },
     });
     settle();
@@ -69,7 +69,7 @@ it("ignores stale responses after state changes and cancels work on unmount", as
 
 it("coalesces rapid state changes into one backend request", () => {
     vi.mocked(Tools.GetModelViewerIneffectiveValues).mockReturnValue(pending().promise);
-    const hook = renderHook(({ state }) => useModelViewerIneffectiveValues("session", state), {
+    const hook = renderHook(({ state }) => useModelViewerIneffectiveValues("session", "", state), {
         initialProps: { state: { size: 0 } },
     });
     for (let tick = 1; tick <= 5; tick += 1) {
@@ -81,7 +81,9 @@ it("coalesces rapid state changes into one backend request", () => {
     expect(Tools.GetModelViewerIneffectiveValues).not.toHaveBeenCalled();
     settle();
     expect(Tools.GetModelViewerIneffectiveValues).toHaveBeenCalledOnce();
-    expect(Tools.GetModelViewerIneffectiveValues).toHaveBeenCalledWith("session", { size: 0.5 });
+    expect(Tools.GetModelViewerIneffectiveValues).toHaveBeenCalledWith("session", "", {
+        size: 0.5,
+    });
 });
 
 it("does not display another session's results while the new request is pending", async () => {
@@ -91,7 +93,7 @@ it("does not display another session's results while the new request is pending"
     vi.mocked(Tools.GetModelViewerIneffectiveValues)
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(second.promise);
-    const hook = renderHook(({ session }) => useModelViewerIneffectiveValues(session, state), {
+    const hook = renderHook(({ session }) => useModelViewerIneffectiveValues(session, "", state), {
         initialProps: { session: "first" },
     });
     settle();
@@ -100,5 +102,24 @@ it("does not display another session's results while the new request is pending"
     );
     expect(hook.result.current.size).toBe(1);
     hook.rerender({ session: "second" });
+    expect(hook.result.current.size).toBe(0);
+});
+
+it("does not display another form's results while the new request is pending", async () => {
+    const first = pending();
+    const state = { outfit: 0 };
+    vi.mocked(Tools.GetModelViewerIneffectiveValues)
+        .mockReset()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(pending().promise);
+    const hook = renderHook(({ form }) => useModelViewerIneffectiveValues("session", form, state), {
+        initialProps: { form: "A" },
+    });
+    settle();
+    await act(async () =>
+        first.resolve([{ variableId: "skirt", value: "1", blockingVars: [], suggestions: [] }]),
+    );
+    expect(hook.result.current.size).toBe(1);
+    hook.rerender({ form: "B" });
     expect(hook.result.current.size).toBe(0);
 });

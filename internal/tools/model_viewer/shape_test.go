@@ -124,7 +124,7 @@ stride = 12`)
 		len(payload.ShapeLowPositions) != 1 {
 		t.Fatalf("transport = %#v payload = %#v", transport, payload)
 	}
-	if payload.ShapePositions[0][0] != 1 || payload.ShapePositions[0][3] != 2 || payload.ShapeLowPositions[0][3] != 1 {
+	if payload.ShapePositions[0][0] != 1 || payload.ShapePositions[0][3] != 2 || payload.ShapeLowPositions[0] != nil {
 		t.Fatalf("shape positions = %#v low = %#v", payload.ShapePositions[0], payload.ShapeLowPositions[0])
 	}
 }

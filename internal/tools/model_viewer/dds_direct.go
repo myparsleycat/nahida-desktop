@@ -54,7 +54,7 @@ func prepareModelViewerDDSFallback(ctx context.Context, path string, maxDimensio
 		path,
 		"",
 		modelViewerTextureTransformPassthrough,
-		"png",
+		modelViewerUncompressedPNGFormat,
 		100,
 		false,
 	)

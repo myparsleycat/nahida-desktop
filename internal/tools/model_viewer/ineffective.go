@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -61,7 +62,7 @@ func newModelViewerEvaluator(ctx context.Context, payload ModelViewerTransport) 
 
 func (t *Service) GetModelViewerIneffectiveValues(
 	ctx context.Context,
-	sessionID string,
+	sessionID, form string,
 	state map[string]any,
 ) (result []ModelViewerIneffectiveValue, err error) {
 	t.modelViewerMu.Lock()
@@ -69,7 +70,7 @@ func (t *Service) GetModelViewerIneffectiveValues(
 	t.modelViewerMu.Unlock()
 	defer func() {
 		if err != nil && ctx.Err() == nil {
-			fields := map[string]any{"memorySessionId": sessionID}
+			fields := map[string]any{"memorySessionId": sessionID, "form": form}
 			if session != nil {
 				fields["modPath"] = session.modPath
 			}
@@ -83,6 +84,11 @@ func (t *Service) GetModelViewerIneffectiveValues(
 	}()
 	if session == nil {
 		return nil, fmt.Errorf("model viewer session is unavailable")
+	}
+	if form != "" && !slices.ContainsFunc(session.evaluator.payload.Forms, func(entry ModelViewerForm) bool {
+		return entry.ID == form
+	}) {
+		return nil, fmt.Errorf("unknown model viewer form: %s", form)
 	}
 	for key, value := range state {
 		switch v := value.(type) {
@@ -100,24 +106,28 @@ func (t *Service) GetModelViewerIneffectiveValues(
 	defer cancel()
 	stop := context.AfterFunc(session.evaluator.ctx, cancel)
 	defer stop()
-	return session.evaluator.evaluate(ctx, state)
+	return session.evaluator.evaluate(ctx, form, state)
 }
 
 func (e *modelViewerEvaluator) evaluate(
 	ctx context.Context,
+	form string,
 	state map[string]any,
 ) ([]ModelViewerIneffectiveValue, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	evaluate := func(state map[string]any) viewerEvalState {
+		return evaluateViewerTransportInForm(e.payload, state, form)
+	}
 	resolved := viewerEvalApplyStateRules(mergeViewerEvalState(e.payload.DefaultState, state), e.payload.StateRules)
-	baseline := evaluateViewerTransport(e.payload, resolved)
+	baseline := evaluate(resolved)
 	// A blocking variable's alternative is identical across tested values.
 	// Bound retention to one candidate per variable for this request.
 	alternatives := make(map[string]modelViewerAlternative)
 	result := make([]ModelViewerIneffectiveValue, 0)
 	for _, variable := range e.payload.Variables {
-		if variable.ControlType == "slider" || len(variable.Values) == 0 {
+		if variable.ControlType == "slider" || len(variable.Values) == 0 || !viewerFormVisible(variable.Form, form) {
 			continue
 		}
 		current := modelViewerEvalValue(resolved, variable)
@@ -137,7 +147,7 @@ func (e *modelViewerEvaluator) evaluate(
 			if modelViewerString(entry.Value) == current {
 				continue
 			}
-			next := evaluateViewerTransport(e.payload, applyViewerVariableSelection(resolved, variable, entry.Value))
+			next := evaluate(applyViewerVariableSelection(resolved, variable, entry.Value))
 			if viewerEvalStatesDiffer(baseline, next) {
 				continue
 			}
@@ -148,6 +158,7 @@ func (e *modelViewerEvaluator) evaluate(
 				resolved,
 				baseline,
 				alternatives,
+				evaluate,
 			)
 			if err != nil {
 				return nil, err
@@ -179,6 +190,7 @@ func (e *modelViewerEvaluator) suggestions(
 	state map[string]any,
 	baseline viewerEvalState,
 	alternatives map[string]modelViewerAlternative,
+	evaluate func(map[string]any) viewerEvalState,
 ) ([]ModelViewerResolutionSuggestion, error) {
 	result := make([]ModelViewerResolutionSuggestion, 0)
 	for _, blocking := range e.blocking[tested.ID] {
@@ -199,11 +211,11 @@ func (e *modelViewerEvaluator) suggestions(
 					index: entryIndex,
 					state: applyViewerVariableSelection(state, blocking, entry.Value),
 				}
-				candidate.evaluated = evaluateViewerTransport(e.payload, candidate.state)
+				candidate.evaluated = evaluate(candidate.state)
 				alternatives[blocking.ID] = candidate
 			}
 			testState := applyViewerVariableSelection(candidate.state, tested, value)
-			testEval := evaluateViewerTransport(e.payload, testState)
+			testEval := evaluate(testState)
 			if !viewerEvalStatesDiffer(candidate.evaluated, testEval) ||
 				!viewerEvalStatesDiffer(baseline, testEval) {
 				continue

@@ -54,7 +54,7 @@ func TestModelViewerIneffectiveServiceResolvesEffectsAndSuggestions(t *testing.T
 		evaluator: newModelViewerEvaluator(ctx, payload),
 		cancel:    cancel,
 	}
-	result, err := service.GetModelViewerIneffectiveValues(context.Background(), "test", map[string]any{})
+	result, err := service.GetModelViewerIneffectiveValues(context.Background(), "test", "", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,13 +87,62 @@ func TestModelViewerIneffectiveServiceResolvesEffectsAndSuggestions(t *testing.T
 	}
 	cancelled, stop := context.WithCancel(context.Background())
 	stop()
-	if _, err := service.GetModelViewerIneffectiveValues(cancelled, "test", nil); !errors.Is(err, context.Canceled) {
+	_, err = service.GetModelViewerIneffectiveValues(cancelled, "test", "", nil)
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled evaluation=%v", err)
+	}
+	if _, err := service.GetModelViewerIneffectiveValues(context.Background(), "test", "missing", nil); err == nil {
+		t.Fatal("unknown form accepted")
 	}
 	if _, err := service.CleanupModelViewer(context.Background(), "test"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.GetModelViewerIneffectiveValues(context.Background(), "test", nil); err == nil {
+	if _, err := service.GetModelViewerIneffectiveValues(context.Background(), "test", "", nil); err == nil {
 		t.Fatal("cleaned session accepted")
+	}
+}
+
+func TestModelViewerIneffectiveValuesIgnoreMeshesOutsideForm(t *testing.T) {
+	payload := ModelViewerTransport{
+		DefaultState: map[string]any{"hat": "0"},
+		Variables: []ModelViewerVariable{{
+			ID:           "hat",
+			Label:        "Hat",
+			DefaultValue: "0",
+			Values:       []ModelViewerVariableValue{{Value: "0"}, {Value: "1"}},
+			Form:         "outfit",
+		}, {
+			ID:           "cape",
+			Label:        "Cape",
+			DefaultValue: "0",
+			Values:       []ModelViewerVariableValue{{Value: "0"}, {Value: "1"}},
+			Form:         "other",
+		}},
+		Meshes: []ModelViewerMeshTransport{
+			{ID: "body-a", Form: "outfit::a.ini::A"},
+			{ID: "hat-a", Form: "outfit::a.ini::A", Conditions: ModelViewerDNF{{{Var: "hat", Value: "1"}}}},
+			{ID: "body-b", Form: "outfit::a.ini::B"},
+		},
+	}
+	evaluator := newModelViewerEvaluator(context.Background(), payload)
+	for _, test := range []struct {
+		form        string
+		ineffective bool
+	}{{"", false}, {"outfit::a.ini::A", false}, {"outfit::a.ini::B", true}} {
+		result, err := evaluator.evaluate(context.Background(), test.form, map[string]any{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hat, cape := false, false
+		for _, entry := range result {
+			hat = hat || entry.VariableID == "hat" && entry.Value == "1"
+			cape = cape || entry.VariableID == "cape"
+		}
+		if hat != test.ineffective {
+			t.Errorf("form %q: hat=1 ineffective=%t, want %t (result=%+v)", test.form, hat, test.ineffective, result)
+		}
+		if cape != (test.form == "") {
+			t.Errorf("form %q: other form's variable reported=%t (result=%+v)", test.form, cape, result)
+		}
 	}
 }
