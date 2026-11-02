@@ -856,6 +856,8 @@ func TestLoadModViewerPrefersWWMISRGBSlotsOverHelperMaps(t *testing.T) {
 		{name: "conditional slot preserves default dump", want: "color", partialSlot: true},
 		{name: "valid legacy diffuse", ps0: "ResourceA4", want: "legacy"},
 		{name: "authored diffuse", ps0: "ResourceAuthoredDiffuse", want: "helper"},
+		{name: "primary mask at ps-t0", ps0: "ResourceA1", want: "color"},
+		{name: "primary mask at ps-t0 without rival", ps0: "ResourceA1", want: "primary", onlyMask: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -929,6 +931,40 @@ filename = Textures/Components-2-6 t=beef0012.png
 				}
 			}
 		})
+	}
+}
+
+func TestLoadModViewerKeepsResourcesNamedOnlyByNonASCIISuffix(t *testing.T) {
+	t.Parallel()
+	colors := make([]color.NRGBA, 64)
+	for index := range colors {
+		colors[index] = color.NRGBA{R: uint8(32 + index%8*20), G: uint8(32 + index/8*20), B: 90, A: 255}
+	}
+	srgb := encodeWwmiBC1MipDDS(t, 8, 8, colors)
+	linear := append([]byte(nil), srgb...)
+	binary.LittleEndian.PutUint32(linear[128:132], 71)
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/color.dds", srgb)
+	writeTextureFile(t, dir, "Textures/metal.dds", linear)
+	result := loadViewerMod(t, dir, `[TextureOverrideComponent2]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t1 = ref ResourceTexture金属
+ps-t2 = ref ResourceTexture颜色
+drawindexed = 3, 0, 0
+[ResourceTexture颜色]
+filename = Textures/color.dds
+[ResourceTexture金属]
+filename = Textures/metal.dds
+`+viewerBodyResources)
+	if len(result.Meshes) != 1 {
+		t.Fatalf("meshes = %d, want 1", len(result.Meshes))
+	}
+	mesh := result.Meshes[0]
+	got := viewerEvalResolveTexture(mesh.TextureVariants, mesh.TexKey, nil)
+	if want := "diffuse::Textures/color.dds"; got != want {
+		t.Errorf("texture = %q, want %q", got, want)
 	}
 }
 

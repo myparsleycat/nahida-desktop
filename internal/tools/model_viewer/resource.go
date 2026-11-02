@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 type modelViewerResource struct {
@@ -636,7 +638,8 @@ func modelViewerNormalizeKey(value string) string {
 	}
 	var builder strings.Builder
 	for _, char := range strings.ToLower(value) {
-		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' ||
+			char >= utf8.RuneSelf && (unicode.IsLetter(char) || unicode.IsNumber(char)) {
 			builder.WriteRune(char)
 		}
 	}
