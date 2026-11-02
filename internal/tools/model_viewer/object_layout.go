@@ -365,6 +365,8 @@ type modelViewerDrawVertexSource struct {
 	// that stream for caching, because it has no buffer file of its own.
 	positionData []byte
 	streamKey    string
+	// carrierStart is where the position rows begin in a merged vertex buffer.
+	carrierStart int
 }
 
 func modelViewerInlineObjectForResource(
@@ -638,7 +640,14 @@ func loadModelViewerDrawVertexBuffers(
 		if !ok {
 			return modelViewerDrawVertexBuffers{}, false, nil
 		}
-		buffers, buffersErr := cache.paired(posSource, posStride, tcPath, tcStride, source.positionData)
+		buffers, buffersErr := cache.paired(
+			posSource,
+			posStride,
+			tcPath,
+			tcStride,
+			source.positionData,
+			source.carrierStart,
+		)
 		if buffersErr != nil {
 			if isModelViewerInterleaveValidationError(buffersErr) {
 				return modelViewerDrawVertexBuffers{}, false, nil

@@ -34,6 +34,8 @@ var (
 	modelViewerMergedDeltaConstantRE = regexp.MustCompile(`^\$([\w.]+)\s*=\s*(\d+(?:\.\d+)?)$`)
 	modelViewerMergedDeltaStepRE     = regexp.MustCompile(`(?i)^if\s*\(?\s*\$([\w.]+)\s*>\s*0\s*\)?$`)
 	modelViewerMergedDeltaBelowRE    = regexp.MustCompile(`(?i)^if\s*\(.*\$[\w.]+\s*<\s*(\d+(?:\.\d+)?)\s*\)+$`)
+	// Running back from the end tests the frame with >=, so only a wrap passes this.
+	modelViewerMergedDeltaWrapRE = regexp.MustCompile(`(?i)^if\s*\(?\s*\$([\w.]+)\s*>\s*\$[\w.]+\s*\)?$`)
 )
 
 // ModelViewerComputeShapeStep is how many frames a group steps per game frame at
@@ -44,8 +46,8 @@ type ModelViewerComputeShapeStep struct {
 }
 
 // ModelViewerComputeShapeGroup is a set of shape keys one slider or play button
-// drives. While it plays, its frame runs back and forth between 0 and FrameEnd,
-// stepping at most StepLimit frames per game frame.
+// drives. While it plays, its frame runs between 0 and FrameEnd, stepping at most
+// StepLimit frames per game frame.
 type ModelViewerComputeShapeGroup struct {
 	AutoPlayVar string                        `json:"autoPlayVar"`
 	SpeedVar    string                        `json:"speedVar"`
@@ -53,6 +55,8 @@ type ModelViewerComputeShapeGroup struct {
 	Steps       []ModelViewerComputeShapeStep `json:"steps"`
 	StepLimit   float64                       `json:"stepLimit"`
 	FrameEnd    float64                       `json:"frameEnd"`
+	// Wrap restarts the frame from 0 past FrameEnd instead of running it back.
+	Wrap bool `json:"wrap,omitempty"`
 	// The keys of the variables in the scanned sections, which the public IDs replace.
 	autoPlayKey, speedKey, weightKey string
 }
@@ -76,6 +80,7 @@ type ModelViewerComputeMergedDeltas struct {
 type modelViewerMergedDeltaSegment struct {
 	base, deltas, indices, freqs ModelViewerComputeBinarySource
 	vertexCount, slots           int
+	deltaStride                  int
 	offset                       uint32
 	// keys maps the shader's intensity index to the deformer's key.
 	keys map[uint32]uint32
@@ -111,11 +116,11 @@ func detectModelViewerMergedDeltaAnimation(
 		}
 		for _, pass := range collectModelViewerComputePasses(section) {
 			shader, shaderOK := readModelViewerComputeShader(root, shaderBaseDir, pass.shader)
-			slots, known := modelViewerMergedDeltaShaderSlots(shader)
+			slots, deltaStride, known := modelViewerMergedDeltaShaderLayout(shader)
 			if !shaderOK || !known {
 				continue
 			}
-			segment, ids, ok := resolveModelViewerMergedDeltaSegment(root, pass, slots, resources, meshes)
+			segment, ids, ok := resolveModelViewerMergedDeltaSegment(root, pass, slots, deltaStride, resources, meshes)
 			if !ok || slices.ContainsFunc(segments, func(other modelViewerMergedDeltaSegment) bool {
 				return other.base.sourcePath == segment.base.sourcePath
 			}) {
@@ -188,33 +193,44 @@ func detectModelViewerMergedDeltaAnimation(
 	}
 }
 
-func modelViewerMergedDeltaShaderSlots(shader string) (int, bool) {
+// modelViewerMergedDeltaShaderLayout returns the slots per vertex and the bytes per
+// delta. A delta holds a position, optionally followed by a normal and a tangent
+// the exporter can leave at zero; only the position is applied.
+func modelViewerMergedDeltaShaderLayout(shader string) (slots, deltaStride int, known bool) {
 	compact := compactModelViewerShader(shader)
 	for _, signature := range []string{
 		"structvertexattributes{float3position;float3normal;float4tangent;}",
 		"rwstructuredbuffer<vertexattributes>",
-		"structuredbuffer<float3>merged_shapekey_pos_deltas:register(t51)",
 		"structuredbuffer<int>merged_shapekey_indices:register(t52)",
 		"structuredbuffer<uint>vertex_freq_indices:register(t53)",
 		"iniparams[100+freq_idx_slot0].x",
 		".position+=total_diff_position",
 	} {
 		if !strings.Contains(compact, signature) {
-			return 0, false
+			return 0, 0, false
 		}
+	}
+	switch {
+	case strings.Contains(compact, "structuredbuffer<float3>merged_shapekey_pos_deltas:register(t51)"):
+		deltaStride = 12
+	case strings.Contains(compact, "structshapekeydelta{float3position;float3normal;float3tangent;}") &&
+		strings.Contains(compact, "structuredbuffer<shapekeydelta>merged_shapekey_pos_deltas:register(t51)"):
+		deltaStride = 36
+	default:
+		return 0, 0, false
 	}
 	match := modelViewerMergedDeltaSlotsRE.FindStringSubmatch(compact)
 	if match == nil {
-		return 0, false
+		return 0, 0, false
 	}
 	slots, err := strconv.Atoi(match[1])
-	return slots, err == nil && slots > 0
+	return slots, deltaStride, err == nil && slots > 0
 }
 
 func resolveModelViewerMergedDeltaSegment(
 	root string,
 	pass modelViewerComputePass,
-	slots int,
+	slots, deltaStride int,
 	resources map[string]modelViewerResource,
 	meshes []modelViewerDirectMesh,
 ) (modelViewerMergedDeltaSegment, []string, bool) {
@@ -224,7 +240,7 @@ func resolveModelViewerMergedDeltaSegment(
 	indices, indicesOK := modelViewerComputeSource(root, resources[modelViewerNormalizeKey(pass.t52)])
 	freqs, freqsOK := modelViewerComputeSource(root, resources[modelViewerNormalizeKey(pass.t53)])
 	if !baseOK || !deltasOK || !indicesOK || !freqsOK ||
-		base.Stride != 40 || deltas.Stride != 12 || indices.Stride != 4 || freqs.Stride != 4 {
+		base.Stride != 40 || deltas.Stride != deltaStride || indices.Stride != 4 || freqs.Stride != 4 {
 		return modelViewerMergedDeltaSegment{}, nil, false
 	}
 	vertexCount := int(base.ByteLength / 40)
@@ -237,7 +253,8 @@ func resolveModelViewerMergedDeltaSegment(
 		return modelViewerMergedDeltaSegment{}, nil, false
 	}
 	return modelViewerMergedDeltaSegment{
-		base: base, deltas: deltas, indices: indices, freqs: freqs, vertexCount: vertexCount, slots: slots,
+		base: base, deltas: deltas, indices: indices, freqs: freqs,
+		vertexCount: vertexCount, slots: slots, deltaStride: deltaStride,
 	}, ids, true
 }
 
@@ -262,6 +279,7 @@ func collectModelViewerMergedDeltaGroups(
 	var formulas []formula
 	steps := make(map[string][]ModelViewerComputeShapeStep)
 	stepLimits := make(map[string]int)
+	wraps := make(map[string]bool)
 	pendingUntil := -1.0
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "Present") {
@@ -295,6 +313,8 @@ func collectModelViewerMergedDeltaGroups(
 				}
 			} else if match := modelViewerMergedDeltaStepRE.FindStringSubmatch(line); match != nil {
 				stepLimits[modelViewerNormalizeKey(match[1])]++
+			} else if match := modelViewerMergedDeltaWrapRE.FindStringSubmatch(line); match != nil {
+				wraps[modelViewerNormalizeKey(match[1])] = true
 			} else if match := modelViewerMergedDeltaBelowRE.FindStringSubmatch(line); match != nil {
 				if value, err := strconv.ParseFloat(match[1], 64); err == nil {
 					pendingUntil = value
@@ -331,6 +351,7 @@ func collectModelViewerMergedDeltaGroups(
 			Steps:       groupSteps,
 			StepLimit:   float64(stepLimit),
 			FrameEnd:    frameEnd,
+			Wrap:        wraps[item.frame],
 			autoPlayKey: name("autoplayenabledgroup"),
 			speedKey:    name("speedpercentgroup"),
 			weightKey:   item.weight,
@@ -358,8 +379,8 @@ func modelViewerMergedDeltaKeyFor(
 	return ModelViewerComputeDeltaKey{Group: -1, Weight: value}
 }
 
-// modelViewerMergedDeltaPeriod returns the longest back-and-forth of the groups at
-// their default speeds, which sets the length of the seek bar.
+// modelViewerMergedDeltaPeriod returns the longest cycle of the groups at their
+// default speeds, which sets the length of the seek bar.
 func modelViewerMergedDeltaPeriod(groups []ModelViewerComputeShapeGroup, defaults map[string]any) float64 {
 	period := 1.0
 	for _, group := range groups {
@@ -374,7 +395,10 @@ func modelViewerMergedDeltaPeriod(groups []ModelViewerComputeShapeGroup, default
 				from = step.Until
 			}
 		}
-		period = max(period, 2*ticks/modelViewerMergedDeltaTicksPerSecond)
+		if !group.Wrap {
+			ticks *= 2
+		}
+		period = max(period, ticks/modelViewerMergedDeltaTicksPerSecond)
 	}
 	return period
 }
@@ -421,8 +445,8 @@ func buildModelViewerMergedDeltas(
 				if freq == modelViewerMergedDeltaUnusedSlot || index == -1 || !bound {
 					continue
 				}
-				start := int64(index) * 12
-				if index < 0 || start+12 > int64(len(deltas)) {
+				start := int64(index) * int64(segment.deltaStride)
+				if index < 0 || start+int64(segment.deltaStride) > int64(len(deltas)) {
 					return nil, fmt.Errorf(
 						"merged shape delta %d exceeds %d bytes: %s",
 						index,

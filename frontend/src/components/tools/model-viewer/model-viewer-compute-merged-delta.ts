@@ -166,6 +166,10 @@ export class MergedDeltaPlayback {
         const next =
             this.frames[index]! +
             this.directions[index]! * Math.min((step * speed) / 100, group.stepLimit);
+        if (group.wrap) {
+            this.frames[index] = next > group.frameEnd ? 0 : next;
+            return;
+        }
         if (next >= group.frameEnd) {
             this.directions[index] = -1;
         } else if (next <= 0) {

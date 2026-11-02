@@ -291,6 +291,53 @@ func TestDetectModelViewerMergedDeltaAnimationReadsPlaybackLists(t *testing.T) {
 	}
 }
 
+func TestDetectModelViewerMergedDeltaAnimationReadsPositionOfFullDeltasAndWrap(t *testing.T) {
+	dir := writeMergedDeltaTestMod(t)
+	shader := strings.Replace(
+		mergedDeltaTestShader,
+		"StructuredBuffer<float3> merged_shapekey_pos_deltas",
+		"struct ShapeKeyDelta { float3 position; float3 normal; float3 tangent; };\n"+
+			"StructuredBuffer<ShapeKeyDelta> merged_shapekey_pos_deltas",
+		1,
+	)
+	var deltas []byte
+	for _, value := range []float32{1, 2, 3, 9, 9, 9, 9, 9, 9, 4, 5, 6, 9, 9, 9, 9, 9, 9} {
+		deltas = binary.LittleEndian.AppendUint32(deltas, math.Float32bits(value))
+	}
+	for name, content := range map[string][]byte{"anim.hlsl": []byte(shader), "deltas.buf": deltas} {
+		if err := os.WriteFile(filepath.Join(dir, name), content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ini := strings.NewReplacer(
+		"stride = 12\n", "stride = 36\n",
+		"    if ($step_accum_group1 > 0)\n",
+		"    if ($shapekey_frame_group1 > $frameEnd_group1)\n    endif\n    if ($step_accum_group1 > 0)\n",
+	).Replace(mergedDeltaTestINI)
+	deformer, clips, _, _ := detectMergedDeltaTestINI(t, dir, ini, modelViewerDirectMesh{
+		id: "mesh", positionFile: "pos.buf", geometry: &modelViewerGeometry{VertexCount: 3},
+	})
+
+	raw, err := deformer.MergedDeltas.build(context.Background(), func(vertex uint32) (uint32, bool) {
+		return vertex, true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	float := func(index int) float32 { return math.Float32frombits(binary.LittleEndian.Uint32(raw[index*4:])) }
+	// Key 0 first reads delta 0, then delta 1, each from the start of its 36 bytes.
+	if len(raw) != 2*8+3*modelViewerMergedDeltaRecordBytes || float(5) != 1 || float(9) != 4 || float(11) != 6 {
+		t.Fatalf("records = %v", raw)
+	}
+	if !deformer.MergedDeltas.Groups[0].Wrap {
+		t.Fatalf("group = %+v", deformer.MergedDeltas.Groups[0])
+	}
+	// One way only: the 50 ticks fall under the 1 second minimum, where running back takes 100.
+	if frames := len(clips[0].Frames); frames != 61 {
+		t.Fatalf("clip frames = %d", frames)
+	}
+}
+
 func TestBuildModelViewerMergedDeltasGroupsRecordsByKey(t *testing.T) {
 	deformer, _, _, _ := detectMergedDeltaTestMod(t, writeMergedDeltaTestMod(t))
 

@@ -583,6 +583,7 @@ func (c *modelViewerBufferCache) paired(
 	tcPath string,
 	tcStride int,
 	positionData []byte,
+	carrierStart int,
 ) (modelViewerPairedBuffers, error) {
 	key := strings.ToLower(
 		posSource,
@@ -592,6 +593,8 @@ func (c *modelViewerBufferCache) paired(
 		tcPath,
 	) + "|" + strconv.Itoa(
 		tcStride,
+	) + "|" + strconv.Itoa(
+		carrierStart,
 	)
 	if positionData != nil {
 		key = "stream-output|" + key
@@ -618,6 +621,13 @@ func (c *modelViewerBufferCache) paired(
 		len(tcRaw)/tcStride <= len(posRaw)/posStride {
 		// A draw may bind a UV buffer covering only the first stream-output segment.
 		posRaw = posRaw[:len(tcRaw)/tcStride*posStride]
+	}
+	if carrierStart > 0 && posStride > 0 && tcStride > 0 {
+		// Texcoords redirected to a merged buffer cover every carrier in it.
+		rows := len(posRaw) / posStride
+		if tcRows := len(tcRaw) / tcStride; tcRows != rows && tcRows >= carrierStart+rows {
+			tcRaw = tcRaw[carrierStart*tcStride : (carrierStart+rows)*tcStride]
+		}
 	}
 	combined, stride, _, err := interleaveModelViewerBuffers([][]byte{posRaw, tcRaw}, []int{posStride, tcStride})
 	if err != nil {

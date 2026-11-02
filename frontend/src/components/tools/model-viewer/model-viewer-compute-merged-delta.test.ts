@@ -99,6 +99,18 @@ describe("MergedDeltaPlayback", () => {
         ]);
     });
 
+    it("restarts a wrapping group from zero past the end", () => {
+        const playback = new MergedDeltaPlayback([{ ...group, wrap: true, steps: [] }]);
+        const weights: number[] = [playback.advance(0, 10, playing)[0]!];
+        for (let frame = 1; frame <= 12; frame += 1) {
+            weights.push(playback.advance(frame * tick, 10, playing)[0]!);
+        }
+
+        expect(weights.map((weight) => Math.round(weight * 10))).toEqual([
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 1,
+        ]);
+    });
+
     it("keeps running when the clip wraps", () => {
         const playback = new MergedDeltaPlayback([group]);
         playback.advance(1, 1, playing);

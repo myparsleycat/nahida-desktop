@@ -294,7 +294,7 @@ export type ViewerComputeDeformer = {
     };
     mergedDeltas?: {
         url: string;
-        /** While a group plays, its frame runs back and forth between 0 and frameEnd. */
+        /** While a group plays, its frame runs back and forth between 0 and frameEnd, or wraps. */
         groups: Array<{
             autoPlayVar: string;
             speedVar: string;
@@ -303,6 +303,7 @@ export type ViewerComputeDeformer = {
             steps: Array<{ until: number; step: number }>;
             stepLimit: number;
             frameEnd: number;
+            wrap?: boolean;
         }>;
         /** Weight is the group weight times scale minus offset, clamped to 0..1. */
         keys: Array<{ group: number; scale: number; offset: number; weight?: number }>;

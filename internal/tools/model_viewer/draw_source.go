@@ -38,6 +38,9 @@ type DrawSource struct {
 
 	vertexBuffer string
 	sourceFaces  []uint32
+	// carrierRows is how far BaseVertex reaches past the viewer's Position rows,
+	// when the draw indexes a merged buffer holding them further along.
+	carrierRows int
 }
 
 // DrawSource returns the draw behind meshID of a loaded viewer session.
@@ -216,7 +219,7 @@ func (d DrawSource) TriangleVertices(face int) ([3]uint32, error) {
 	first := d.StartIndex + face*3
 	var vertices [3]uint32
 	for corner := range vertices {
-		vertices[corner] = indices[first+corner] + uint32(d.BaseVertex)
+		vertices[corner] = indices[first+corner] + uint32(d.BaseVertex-d.carrierRows)
 	}
 	return vertices, nil
 }

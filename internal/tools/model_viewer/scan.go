@@ -468,6 +468,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
 	streamOutputs := collectModelViewerStreamOutputs(modDir, sections, resourceMap, cache)
+	mergedSkinStarts := collectModelViewerMergedSkinStarts(modDir, filepath.Dir(iniPath), sections)
 	var packedResources map[string]int
 	var inlineResources map[string]modelViewerInlineObjectLayout
 	if layoutName != "wwmi" {
@@ -530,6 +531,15 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			continue
 		}
 		ib, position := source.ib, source.position
+		// A draw on the merged buffer starts at the carrier's rows, which sit at
+		// the start of the carrier's own Position file.
+		vertexBase := record.draw.BaseVertex
+		if source.kind == modelViewerDrawVertexMihoyo {
+			source.carrierStart = mergedSkinStarts[modelViewerNormalizeKey(position.Name)]
+			if source.carrierStart > 0 && vertexBase >= source.carrierStart {
+				vertexBase -= source.carrierStart
+			}
+		}
 		sourceKey := modelViewerDrawGeometryKey{
 			ib: ib.Name, position: position.Name, vector: source.vector.Name, texcoord: source.texcoord.Name,
 			ibFormat: ib.Format,
@@ -584,7 +594,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		}
 		active := make([]uint32, 0, end-record.draw.StartIndex)
 		for _, index := range indices[record.draw.StartIndex:end] {
-			active = append(active, index+uint32(record.draw.BaseVertex))
+			active = append(active, index+uint32(vertexBase))
 		}
 		if len(active) < 3 {
 			continue
@@ -691,6 +701,8 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				Auto:       record.auto,
 				Implicit:   record.implicit,
 				Reversed:   source.kind == modelViewerDrawVertexWWMI,
+
+				carrierRows: record.draw.BaseVertex - vertexBase,
 			},
 		}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)

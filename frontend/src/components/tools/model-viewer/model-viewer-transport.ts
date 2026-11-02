@@ -336,6 +336,7 @@ export function normalizeModelViewerTransport(
                                   steps: group.steps ?? [],
                                   stepLimit: group.stepLimit,
                                   frameEnd: group.frameEnd,
+                                  wrap: group.wrap,
                               })),
                               keys: deformer.mergedDeltas.keys ?? [],
                           }
