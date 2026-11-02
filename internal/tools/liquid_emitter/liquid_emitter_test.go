@@ -91,17 +91,17 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sites := text.drawSites(bodyDraw)
+	sites := newINIUnit(text).drawSites(bodyDraw)
 	if len(sites) != 2 {
 		t.Fatalf("sites = %+v, want both literal 6,3,0 draws", sites)
 	}
-	text.insertHooks(sites, 7, 6, 0)
+	text.insertHooks(sites, 7, 6, 0, "")
 	patched := string(text.bytes())
 	if strings.Count(patched, "\t; nahida-liquid 7 begin\r\n\tx243 = 7\r\n\ty243 = 6\r\n\tz243 = 0\r\n\t"+
 		captureCommand+"\r\n\t; nahida-liquid 7 end\r\n\tdrawindexed = 6, 3, 0") != 2 {
 		t.Fatalf("hooks not placed above both draws:\n%s", patched)
 	}
-	if again := text.drawSites(
+	if again := newINIUnit(text).drawSites(
 		bodyDraw,
 	); !slices.Equal(again[0].pids, []int{7}) ||
 		!slices.Equal(again[1].pids, []int{7}) {
@@ -110,15 +110,15 @@ func TestINIHooksRoundTrip(t *testing.T) {
 
 	// Another emitter on the same draw stacks its block under the first, and
 	// each comes off on its own.
-	text.insertHooks(text.drawSites(bodyDraw), 8, 9, 0)
-	if again := text.drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8, 7}) ||
+	text.insertHooks(newINIUnit(text).drawSites(bodyDraw), 8, 9, 0, "")
+	if again := newINIUnit(text).drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8, 7}) ||
 		!slices.Equal(again[1].pids, []int{8, 7}) {
 		t.Fatalf("stacked hooks not detected: %+v", again)
 	}
 	if removed := text.removeHooks(func(pid int) bool { return pid == 7 }); removed != 2 {
 		t.Fatalf("removed %d blocks", removed)
 	}
-	if again := text.drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8}) {
+	if again := newINIUnit(text).drawSites(bodyDraw); !slices.Equal(again[0].pids, []int{8}) {
 		t.Fatalf("hook left on the draw = %+v", again)
 	}
 	if removed := text.removeHooks(func(pid int) bool { return pid == 8 }); removed != 2 {
@@ -135,7 +135,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text.insertHooks(text.drawSites(bodyDraw), 7, 6, 0)
+	text.insertHooks(newINIUnit(text).drawSites(bodyDraw), 7, 6, 0, "")
 	if patched := string(text.bytes()); strings.Count(patched, "; nahida-liquid 7 end\ndrawindexed = 6, 3, 0") != 2 {
 		t.Fatalf("hooks not placed above both draws:\n%s", patched)
 	}
@@ -148,7 +148,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	component := modelviewer.DrawSource{Section: "_Component0", StartIndex: 3, IndexCount: 6}
-	if sites := text.drawSites(component); len(sites) != 1 || sites[0].line != 4 {
+	if sites := newINIUnit(text).drawSites(component); len(sites) != 1 || sites[0].line != 4 {
 		t.Fatalf("EFMI draw sites = %+v", sites)
 	}
 
@@ -176,11 +176,11 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		for ib, line := range sample.lines {
 			draw := bodyDraw
 			draw.IB = ib
-			sites := text.drawSites(draw)
+			sites := newINIUnit(text).drawSites(draw)
 			if len(sites) != 1 || sites[0].line != line {
 				t.Fatalf("draw sites over %s = %+v, want line %d in\n%s", ib, sites, line, sample.ini)
 			}
-			if text.sharedDraw(draw, sites) {
+			if newINIUnit(text).ownWalk(draw).sharedDraw() {
 				t.Fatalf("draw over %s reported as shared in\n%s", ib, sample.ini)
 			}
 		}
@@ -195,7 +195,10 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	}
 	sharedBody := bodyDraw
 	sharedBody.IB = "BodyIB"
-	if sites := text.drawSites(sharedBody); len(sites) != 1 || !text.sharedDraw(sharedBody, sites) {
+	if sites := newINIUnit(
+		text,
+	).drawSites(sharedBody); len(sites) != 1 ||
+		!newINIUnit(text).ownWalk(sharedBody).sharedDraw() {
 		t.Fatalf("draw in a command list shared with another buffer = %+v", sites)
 	}
 
@@ -208,7 +211,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	}
 	frame := bodyDraw
 	frame.IB, frame.IBAliases = "BodyIB.1", []string{"BodyIB.0", "BodyIB.1"}
-	if sites := text.drawSites(frame); len(sites) != 2 || text.sharedDraw(frame, sites) {
+	if sites := newINIUnit(text).drawSites(frame); len(sites) != 2 || newINIUnit(text).ownWalk(frame).sharedDraw() {
 		t.Fatalf("draw sites of a frame animation = %+v", sites)
 	}
 
@@ -234,10 +237,10 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		}
 		for _, ib := range frame.IBAliases {
 			frame.IB = ib
-			if sites := text.drawSites(
+			if sites := newINIUnit(text).drawSites(
 				frame,
 			); len(sites) != want.sites ||
-				text.sharedDraw(frame, sites) != want.shared {
+				newINIUnit(text).ownWalk(frame).sharedDraw() != want.shared {
 				t.Fatalf("draw sites over %s = %+v, want %+v in\n%s", ib, sites, want, ini)
 			}
 		}
@@ -252,7 +255,10 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	}
 	for ib, line := range map[string]int{"BodyIB": 3, "DressIB": 6} {
 		draw := modelviewer.DrawSource{Section: "Body", IB: ib, Auto: true}
-		if sites := text.drawSites(draw); len(sites) != 1 || sites[0].line != line || text.sharedDraw(draw, sites) {
+		if sites := newINIUnit(
+			text,
+		).drawSites(draw); len(sites) != 1 || sites[0].line != line ||
+			newINIUnit(text).ownWalk(draw).sharedDraw() {
 			t.Fatalf("auto draw sites over %s = %+v, want line %d", ib, sites, line)
 		}
 	}
@@ -268,14 +274,14 @@ func TestINIHooksRoundTrip(t *testing.T) {
 	head := modelviewer.DrawSource{Section: "AmberHead", IB: "AmberHeadIB", Auto: true, Implicit: true}
 	amberBody := modelviewer.DrawSource{Section: "AmberBody", IB: "AmberBodyIB", Auto: true, Implicit: true}
 	for _, draw := range []modelviewer.DrawSource{head, amberBody} {
-		if sites := text.drawSites(draw); len(sites) != 1 || text.sharedDraw(draw, sites) ||
-			text.bindsVertexBuffersLate(draw) {
+		if sites := newINIUnit(text).drawSites(draw); len(sites) != 1 || newINIUnit(text).ownWalk(draw).sharedDraw() ||
+			newINIUnit(text).ownWalk(draw).bindsVertexBuffersLate() {
 			t.Fatalf("implicit draw sites of %s = %+v", draw.Section, sites)
 		}
 	}
-	text.insertHooks(text.drawSites(head), 7, 6, 0)
-	text.insertHooks(text.drawSites(amberBody), 7, 6, 0)
-	text.insertHooks(text.drawSites(amberBody), 8, 9, 0)
+	text.insertHooks(newINIUnit(text).drawSites(head), 7, 6, 0, "")
+	text.insertHooks(newINIUnit(text).drawSites(amberBody), 7, 6, 0, "")
+	text.insertHooks(newINIUnit(text).drawSites(amberBody), 8, 9, 0, "")
 	patched = string(text.bytes())
 	block := func(pid, first int) string {
 		return "; nahida-liquid " + strconv.Itoa(pid) + " begin\nx243 = " + strconv.Itoa(pid) + "\ny243 = " +
@@ -286,7 +292,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		!strings.HasSuffix(patched, "ib = ResourceAmberBodyIB\n"+block(7, 6)+"\n"+block(8, 9)) {
 		t.Fatalf("hooks not placed below the part buffers:\n%s", patched)
 	}
-	if sites := text.drawSites(amberBody); len(sites) != 1 || !slices.Equal(sites[0].pids, []int{8, 7}) {
+	if sites := newINIUnit(text).drawSites(amberBody); len(sites) != 1 || !slices.Equal(sites[0].pids, []int{8, 7}) {
 		t.Fatalf("stacked implicit hooks = %+v", sites)
 	}
 	if removed := text.removeHooks(func(int) bool { return true }); removed != 3 ||
@@ -301,8 +307,8 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	outfit := modelviewer.DrawSource{Section: "AyakaHead", IB: "AyakaHeadIB.0", Auto: true, Implicit: true}
-	if sites := text.drawSites(outfit); len(sites) != 1 || sites[0].line != 6 || sites[0].indent != "\t" ||
-		text.sharedDraw(outfit, sites) {
+	if sites := newINIUnit(text).drawSites(outfit); len(sites) != 1 || sites[0].line != 6 || sites[0].indent != "\t" ||
+		newINIUnit(text).ownWalk(outfit).sharedDraw() {
 		t.Fatalf("implicit draw sites of one outfit = %+v", sites)
 	}
 
@@ -312,7 +318,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	srmiHead := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
-	text.insertHooks(text.drawSites(srmiHead), 7, 6, 0)
+	text.insertHooks(newINIUnit(text).drawSites(srmiHead), 7, 6, 0, "")
 	if !strings.Contains(string(text.bytes()), "vb1 = ResourceHeadTexcoord\n"+block(7, 6)+"\nps-t0") {
 		t.Fatalf("hook not placed below the vertex buffers:\n%s", text.bytes())
 	}
@@ -333,7 +339,7 @@ func TestINIHooksRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 		draw := modelviewer.DrawSource{Section: "Head", IB: "HeadIB", Auto: true, Implicit: true}
-		if text.bindsVertexBuffersLate(draw) != late {
+		if newINIUnit(text).ownWalk(draw).bindsVertexBuffersLate() != late {
 			t.Fatalf("late vertex buffers = %t, want %t in\n%s", !late, late, ini)
 		}
 	}
@@ -371,6 +377,98 @@ func TestServiceRemoveRefusesDamagedHook(t *testing.T) {
 	}
 	if backup, err := os.ReadFile(f.iniPath + backupSuffix); err != nil || string(backup) != characterINI {
 		t.Fatalf("backup lost (err=%v)", err)
+	}
+}
+
+// An override in another INI of the namespace that runs the same command list
+// over another index buffer makes the draw shared.
+func TestSharedDrawAcrossNamespaceMembers(t *testing.T) {
+	var texts []*iniText
+	for _, ini := range []string{
+		"namespace = Chen\n[TextureOverrideBody]\nib = ResourceBodyIB\nrun = CommandListShared\n",
+		"namespace = Chen\n[CommandListShared]\ndrawindexed = 6, 3, 0\n",
+		"namespace = Chen\n[TextureOverrideHead]\nib = ResourceHeadIB\nrun = CommandListShared\n",
+	} {
+		text, err := parseINIText([]byte(ini))
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts = append(texts, text)
+	}
+	draw := modelviewer.DrawSource{Section: "Body", IB: "BodyIB", StartIndex: 3, IndexCount: 6}
+	if walk := newINIUnit(texts[:2]...).ownWalk(draw); len(walk.sites) != 1 || walk.sites[0].file != 1 ||
+		walk.sharedDraw() {
+		t.Fatalf("draw in a member = %+v", walk.sites)
+	}
+	if !newINIUnit(texts...).ownWalk(draw).sharedDraw() {
+		t.Fatal("command list run by another member's override is not shared")
+	}
+}
+
+// WWMI Tools exports call draw command lists that another INI of the same
+// namespace declares. Only the INIs the viewer resolved the draw over take
+// part, and of a section declared twice only the first INI's runs.
+func TestServiceHooksDrawInNamespaceMember(t *testing.T) {
+	f := newServiceFixture(t)
+	ctx := context.Background()
+	const main = "namespace = Chen\n[TextureOverrideBody]\nhash = 1234\nrun = CommandList\\Chen\\Body\n"
+	const draw = "namespace = Chen\n[CommandListBody]\ndrawindexed = 6, 3, 0\n"
+	drawPath := filepath.Join(f.modRoot, "Main", "Draw.ini")
+	copyPath := filepath.Join(f.modRoot, "Main", "Draw - Copy.ini")
+	unlistedPath := filepath.Join(f.modRoot, "DISABLED Main", "Draw.ini")
+	for _, dir := range []string{filepath.Dir(drawPath), filepath.Dir(unlistedPath)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, data := range map[string]string{f.iniPath: main, drawPath: draw, copyPath: draw, unlistedPath: draw} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	viewer := f.service.viewer.(fakeViewer)
+	source := viewer["mod:body:0"]
+	source.UnitINIPaths = []string{f.iniPath, drawPath, copyPath}
+	viewer["mod:body:0"] = source
+
+	inspection, err := f.service.Apply(ctx, f.applyInput(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inspection.Emitters) != 1 || inspection.Emitters[0].INIPath != "mod.ini" ||
+		!inspection.Emitters[0].Hooked {
+		t.Fatalf("emitters = %+v", inspection.Emitters)
+	}
+	if patched, _ := os.ReadFile(drawPath); !strings.Contains(string(patched), "; nahida-liquid 0 end\ndrawindexed") {
+		t.Fatalf("hook not placed in the namespace member:\n%s", patched)
+	}
+	for name, want := range map[string]string{f.iniPath: main, copyPath: draw, unlistedPath: draw} {
+		if current, _ := os.ReadFile(name); string(current) != want {
+			t.Fatalf("%s was changed:\n%s", name, current)
+		}
+		if _, err := os.Stat(name + backupSuffix); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("backup of unhooked %s written (err=%v)", name, err)
+		}
+	}
+	if backup, err := os.ReadFile(drawPath + backupSuffix); err != nil || string(backup) != draw {
+		t.Fatalf("backup of the hooked INI = %q (err=%v)", backup, err)
+	}
+
+	// Without its profile the hook still names the override, not the command
+	// list holding it.
+	if err := os.RemoveAll(filepath.Join(f.modsRoot, modruntime.GroupDir)); err != nil {
+		t.Fatal(err)
+	}
+	if inspection, err = f.service.Inspect(ctx, f.modRoot); err != nil || len(inspection.Emitters) != 1 ||
+		inspection.Emitters[0].Section != "Body" {
+		t.Fatalf("orphaned emitters = %+v (err=%v)", inspection.Emitters, err)
+	}
+
+	if _, err := f.service.Remove(ctx, RemoveInput{ModPath: f.modRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if restored, _ := os.ReadFile(drawPath); string(restored) != draw {
+		t.Fatalf("remove did not restore the namespace member:\n%s", restored)
 	}
 }
 

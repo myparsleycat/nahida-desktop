@@ -2,6 +2,7 @@ package liquidemitter
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -15,6 +16,11 @@ import (
 const captureCommand = `run = CommandList\LiquidGravityProbe\CaptureSurface`
 
 var hookMarkerRE = regexp.MustCompile(`(?i)^\s*;\s*nahida-liquid\s+(\d+)\s+(begin|end)\s*$`)
+
+// hookSectionRE matches the line of a hook block naming the override it
+// captures for, since the block may sit in a command list of another INI.
+// Blocks written before the line existed lack it.
+var hookSectionRE = regexp.MustCompile(`(?i)^\s*;\s*nahida-liquid\s+section\s+(\S.*?)\s*$`)
 
 // iniText keeps an INI as lines so hooks can be inserted and removed without
 // touching any other byte of the file. Lines split on LF and keep their own
@@ -97,20 +103,26 @@ func (t *iniText) hookPIDs() map[int]bool {
 	return pids
 }
 
-// hookSections maps each hook's pid to the section that holds its first block.
+// hookSections maps each hook's pid to the override its first block names,
+// or for a block written without one, the section that holds it.
 func (t *iniText) hookSections() map[int]string {
 	sections := make(map[int]string)
-	current := ""
+	current, first := "", -1
 	for _, raw := range t.lines {
 		line := strings.TrimSpace(raw)
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			current = strings.TrimSpace(line[1 : len(line)-1])
 			continue
 		}
-		if pid, begin, ok := hookMarker(raw); ok && begin {
-			if _, seen := sections[pid]; !seen {
-				sections[pid] = current
+		if pid, begin, ok := hookMarker(raw); ok {
+			first = -1
+			if _, seen := sections[pid]; begin && !seen {
+				sections[pid], first = current, pid
 			}
+			continue
+		}
+		if match := hookSectionRE.FindStringSubmatch(raw); match != nil && first >= 0 {
+			sections[first] = match[1]
 		}
 	}
 	return sections
@@ -178,6 +190,8 @@ func lineEnding(line string) string {
 var hookPIDLineRE = regexp.MustCompile(`(?i)^\s*x243\s*=\s*\d+\s*$`)
 
 type drawSite struct {
+	// file indexes the unit member holding the site.
+	file int
 	// line is where a new hook block goes: the draw line, or for an implicit
 	// draw the line below the hooks stacked under its ib = line.
 	line int
@@ -188,39 +202,74 @@ type drawSite struct {
 	pids []int
 }
 
+// iniUnit is the INIs of one 3DMigoto namespace, which run each other's
+// command lists by plain name. The first member declares the override.
+type iniUnit struct {
+	texts     []*iniText
+	namespace string
+}
+
+func newINIUnit(texts ...*iniText) iniUnit {
+	return iniUnit{texts: texts, namespace: strings.ToLower(texts[0].namespace())}
+}
+
+func (t *iniText) namespace() string {
+	for _, raw := range t.lines {
+		line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
+		if strings.HasPrefix(line, "[") {
+			return ""
+		}
+		if key, value, ok := strings.Cut(line, "="); ok && strings.EqualFold(strings.TrimSpace(key), "namespace") {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+// linePos is a line of one unit member.
+type linePos struct{ file, line int }
+
+func comparePos(a, b linePos) int {
+	return cmp.Or(cmp.Compare(a.file, b.file), cmp.Compare(a.line, b.line))
+}
+
+// sectionSpan is the line range of one section body in a unit member.
+type sectionSpan struct{ file, start, end int }
+
 // drawSites finds the drawindexed lines with the draw's literal arguments
 // that run under [TextureOverride<section>] with the draw's index buffer
-// bound, following run = and CommandList assignments within the same file.
+// bound, following run = and CommandList assignments across the unit.
 // An implicit draw has no such line, so its sites are the ib = lines that
 // bind its buffer: the capture there runs with the same buffers bound as the
 // drawindexed = auto of the hash that follows.
-func (t *iniText) drawSites(source modelviewer.DrawSource) []drawSite {
-	return t.ownWalk(source).sites
+func (u iniUnit) drawSites(source modelviewer.DrawSource) []drawSite {
+	return u.ownWalk(source).sites
 }
 
 // bindsVertexBuffersLate reports whether the override of an implicit draw
 // binds a vertex buffer on some path after one of its sites has captured, as
 // when it binds the buffer again over other vertex buffers.
-func (t *iniText) bindsVertexBuffersLate(source modelviewer.DrawSource) bool {
-	return source.Implicit && t.ownWalk(source).lateVertexBuffers
+func (w *drawWalk) bindsVertexBuffersLate() bool {
+	return w.source.Implicit && w.lateVertexBuffers
 }
 
-func (t *iniText) ownWalk(source modelviewer.DrawSource) *drawWalk {
-	walk := newDrawWalk(t, t.sectionBodies(), source)
+func (u iniUnit) ownWalk(source modelviewer.DrawSource) *drawWalk {
+	walk := newDrawWalk(u, u.sectionBodies(), source)
 	// An empty name stands for the buffer bound before the override runs.
 	walk.visit(strings.ToLower("TextureOverride"+source.Section), walkState{bound: []string{""}}, map[string]bool{})
 	return walk
 }
 
-// sharedDraw reports whether any of sites can also run with another index
-// buffer bound, through a command list that another section runs or another
-// branch of the same override. The hook above it would fire for that other
-// part as well, and an emitter added there would take this one's slot.
-func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bool {
-	bodies := t.sectionBodies()
+// sharedDraw reports whether any of the walk's sites can also run with
+// another index buffer bound, through a command list that another section
+// runs or another branch of the same override. The hook above it would fire
+// for that other part as well, and an emitter added there would take this
+// one's slot.
+func (w *drawWalk) sharedDraw() bool {
+	source := w.source
 	own := strings.ToLower("TextureOverride" + source.Section)
-	for name := range bodies {
-		walk := newDrawWalk(t, bodies, source)
+	for name := range w.bodies {
+		walk := newDrawWalk(w.unit, w.bodies, source)
 		walk.visit(name, walkState{bound: []string{""}}, map[string]bool{})
 		// The index buffer aliases of a frame animation hold only under its own
 		// override, or a section that is only ever run (a command list or custom
@@ -230,11 +279,12 @@ func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bo
 		called := strings.HasPrefix(name, "commandlist") || strings.HasPrefix(name, "customshader") ||
 			strings.HasPrefix(name, "builtin")
 		foreign := len(source.IBAliases) > 1 && name != own && !called
-		for _, site := range sites {
-			if foreign && len(walk.reached[site.key]) > 0 {
+		for _, site := range w.sites {
+			reached := walk.reached[linePos{site.file, site.key}]
+			if foreign && len(reached) > 0 {
 				return true
 			}
-			if slices.ContainsFunc(walk.reached[site.key], func(ib string) bool {
+			if slices.ContainsFunc(reached, func(ib string) bool {
 				return ib != "" && !source.MatchesIB(ib)
 			}) {
 				return true
@@ -245,34 +295,51 @@ func (t *iniText) sharedDraw(source modelviewer.DrawSource, sites []drawSite) bo
 }
 
 // sectionBodies maps each lowercase section name to the line ranges of its
-// bodies; a name may repeat in one file.
-func (t *iniText) sectionBodies() map[string][][2]int {
-	bodies := make(map[string][][2]int)
-	current := ""
-	for index, raw := range t.lines {
-		line := strings.TrimSpace(raw)
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			current = strings.ToLower(strings.TrimSpace(line[1 : len(line)-1]))
-			bodies[current] = append(bodies[current], [2]int{index + 1, index + 1})
-			continue
-		}
-		if current != "" {
-			ranges := bodies[current]
-			ranges[len(ranges)-1][1] = index + 1
+// bodies. A name may repeat in one file; across the unit, 3DMigoto keeps the
+// section of the first INI that declares it and ignores later duplicates.
+func (u iniUnit) sectionBodies() map[string][]sectionSpan {
+	bodies := make(map[string][]sectionSpan)
+	for file, text := range u.texts {
+		current := ""
+		for index, raw := range text.lines {
+			line := strings.TrimSpace(raw)
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				current = strings.ToLower(strings.TrimSpace(line[1 : len(line)-1]))
+				if spans := bodies[current]; len(spans) > 0 && spans[0].file != file {
+					current = ""
+					continue
+				}
+				bodies[current] = append(bodies[current], sectionSpan{file, index + 1, index + 1})
+				continue
+			}
+			if current != "" {
+				spans := bodies[current]
+				spans[len(spans)-1].end = index + 1
+			}
 		}
 	}
 	return bodies
 }
 
+// sectionName drops the unit's own namespace from a reference such as
+// CommandList\NS\Name, which names the same section as CommandListName.
+func (u iniUnit) sectionName(target string) string {
+	prefix, rest, ok := strings.Cut(target, `\`)
+	if !ok || u.namespace == "" || !strings.HasPrefix(rest, u.namespace+`\`) {
+		return target
+	}
+	return prefix + rest[len(u.namespace)+1:]
+}
+
 type drawWalk struct {
-	text   *iniText
-	bodies map[string][][2]int
+	unit   iniUnit
+	bodies map[string][]sectionSpan
 	source modelviewer.DrawSource
-	found  map[int]bool
+	found  map[linePos]bool
 	sites  []drawSite
 	// reached holds the buffers that may be bound at each draw with the
 	// source's arguments, whether or not they match.
-	reached    map[int][]string
+	reached    map[linePos][]string
 	expansions int
 	// lateVertexBuffers is set when a path binds a vertex buffer after the
 	// capture of an implicit draw's site has run on it. The runtime keeps the
@@ -280,13 +347,13 @@ type drawWalk struct {
 	lateVertexBuffers bool
 	// covered maps each vertex buffer line bound directly below an implicit
 	// site's ib = line to that site; its hook goes below them.
-	covered map[int]int
+	covered map[linePos]linePos
 }
 
-func newDrawWalk(text *iniText, bodies map[string][][2]int, source modelviewer.DrawSource) *drawWalk {
+func newDrawWalk(unit iniUnit, bodies map[string][]sectionSpan, source modelviewer.DrawSource) *drawWalk {
 	return &drawWalk{
-		text: text, bodies: bodies, source: source,
-		found: map[int]bool{}, reached: map[int][]string{}, covered: map[int]int{},
+		unit: unit, bodies: bodies, source: source,
+		found: map[linePos]bool{}, reached: map[linePos][]string{}, covered: map[linePos]linePos{},
 	}
 }
 
@@ -294,15 +361,17 @@ func newDrawWalk(text *iniText, bodies map[string][][2]int, source modelviewer.D
 // be bound and the implicit sites whose capture may already have run.
 type walkState struct {
 	bound    []string
-	captured []int
+	captured []linePos
 }
 
 func unionStates(a, b walkState) walkState {
 	return walkState{bound: unionBuffers(a.bound, b.bound), captured: unionLines(a.captured, b.captured)}
 }
 
-func unionLines(a, b []int) []int {
-	return slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(a), b...))))
+func unionLines(a, b []linePos) []linePos {
+	merged := append(slices.Clone(a), b...)
+	slices.SortFunc(merged, comparePos)
+	return slices.Compact(merged)
 }
 
 func lineKey(line string) string {
@@ -339,8 +408,10 @@ func (w *drawWalk) visit(name string, state walkState, active map[string]bool) w
 		}
 	}
 	for _, span := range w.bodies[name] {
-		for index := span[0]; index < span[1]; index++ {
-			line := strings.TrimSpace(strings.SplitN(w.text.lines[index], ";", 2)[0])
+		text := w.unit.texts[span.file]
+		for index := span.start; index < span.end; index++ {
+			at := linePos{span.file, index}
+			line := strings.TrimSpace(strings.SplitN(text.lines[index], ";", 2)[0])
 			lower := strings.ToLower(line)
 			switch {
 			case strings.HasPrefix(lower, "if "):
@@ -367,51 +438,54 @@ func (w *drawWalk) visit(name string, state walkState, active map[string]bool) w
 			key, value = strings.ToLower(strings.TrimSpace(key)), strings.TrimSpace(value)
 			switch nested := nestedSection(key, value); {
 			case nested != "":
-				state = w.visit(nested, state, active)
+				state = w.visit(w.unit.sectionName(nested), state, active)
 			case key == "ib":
 				state.bound = []string{value}
 				if !w.source.Implicit || strings.EqualFold(value, "null") || !w.source.MatchesIB(value) {
 					continue
 				}
-				w.reached[index] = unionBuffers(w.reached[index], state.bound)
-				state.captured = unionLines(state.captured, []int{index})
-				if !w.found[index] {
-					w.found[index] = true
+				w.reached[at] = unionBuffers(w.reached[at], state.bound)
+				state.captured = unionLines(state.captured, []linePos{at})
+				if !w.found[at] {
+					w.found[at] = true
 					// Vertex buffers bound right below the index buffer, as SRMI binds
 					// vb1, come before the hook.
 					last := index
-					for last+1 < span[1] && vertexBufferKeyRE.MatchString(lineKey(w.text.lines[last+1])) {
+					for last+1 < span.end && vertexBufferKeyRE.MatchString(lineKey(text.lines[last+1])) {
 						last++
-						w.covered[last] = index
+						w.covered[linePos{span.file, last}] = at
 					}
-					at := w.text.belowHooks(last + 1)
+					below := text.belowHooks(last + 1)
 					w.sites = append(w.sites, drawSite{
-						line:   at,
+						file:   span.file,
+						line:   below,
 						key:    index,
-						indent: lineIndent(w.text.lines[index]),
-						pids:   w.text.hooksAbove(at),
+						indent: lineIndent(text.lines[index]),
+						pids:   text.hooksAbove(below),
 					})
 				}
 			case vertexBufferKeyRE.MatchString(key):
-				owner, covered := w.covered[index]
-				w.lateVertexBuffers = w.lateVertexBuffers || slices.ContainsFunc(state.captured, func(site int) bool {
-					return !covered || site != owner
-				})
+				owner, covered := w.covered[at]
+				w.lateVertexBuffers = w.lateVertexBuffers ||
+					slices.ContainsFunc(state.captured, func(site linePos) bool {
+						return !covered || site != owner
+					})
 			case drawMatches(key, value, w.source):
-				w.reached[index] = unionBuffers(w.reached[index], state.bound)
-				if w.found[index] ||
+				w.reached[at] = unionBuffers(w.reached[at], state.bound)
+				if w.found[at] ||
 					!slices.ContainsFunc(
 						state.bound,
 						func(ib string) bool { return ib == "" || w.source.MatchesIB(ib) },
 					) {
 					continue
 				}
-				w.found[index] = true
+				w.found[at] = true
 				w.sites = append(w.sites, drawSite{
+					file:   span.file,
 					line:   index,
 					key:    index,
-					indent: lineIndent(w.text.lines[index]),
-					pids:   w.text.hooksAbove(index),
+					indent: lineIndent(text.lines[index]),
+					pids:   text.hooksAbove(index),
 				})
 			}
 		}
@@ -521,22 +595,26 @@ func (t *iniText) hooksAbove(line int) []int {
 }
 
 // insertHooks puts one hook block directly above each site, below any blocks
-// already stacked there. Sites must come from the current lines.
-func (t *iniText) insertHooks(sites []drawSite, pid, firstIndex, baseVertex int) {
+// already stacked there, naming section when it is set. Sites must come from
+// the current lines of t.
+func (t *iniText) insertHooks(sites []drawSite, pid, firstIndex, baseVertex int, section string) {
 	// drawSites lists sites in traversal order, which need not follow the file;
 	// inserting bottom-up keeps every earlier line number valid.
 	sites = slices.Clone(sites)
 	slices.SortFunc(sites, func(a, b drawSite) int { return b.line - a.line })
 	for _, site := range sites {
 		eol := lineEnding(t.lines[site.key])
-		block := []string{
-			fmt.Sprintf("%s; nahida-liquid %d begin%s", site.indent, pid, eol),
+		block := []string{fmt.Sprintf("%s; nahida-liquid %d begin%s", site.indent, pid, eol)}
+		if section != "" {
+			block = append(block, fmt.Sprintf("%s; nahida-liquid section %s%s", site.indent, section, eol))
+		}
+		block = append(block,
 			fmt.Sprintf("%sx243 = %d%s", site.indent, pid, eol),
 			fmt.Sprintf("%sy243 = %d%s", site.indent, firstIndex, eol),
 			fmt.Sprintf("%sz243 = %d%s", site.indent, baseVertex, eol),
-			site.indent + captureCommand + eol,
+			site.indent+captureCommand+eol,
 			fmt.Sprintf("%s; nahida-liquid %d end%s", site.indent, pid, eol),
-		}
+		)
 		t.lines = append(t.lines[:site.line], append(block, t.lines[site.line:]...)...)
 	}
 }

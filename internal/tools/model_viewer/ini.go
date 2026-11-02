@@ -176,7 +176,9 @@ func discoverModelViewerActiveINIs(folder string, reports ...func(error)) ([]str
 		}
 		var dirs []os.DirEntry
 		for _, entry := range entries {
-			if entry.IsDir() {
+			// 3DMigoto loads nothing below a DISABLED folder, such as the backup a
+			// merge leaves.
+			if entry.IsDir() && !strings.HasPrefix(strings.ToUpper(entry.Name()), "DISABLED") {
 				dirs = append(dirs, entry)
 			}
 		}

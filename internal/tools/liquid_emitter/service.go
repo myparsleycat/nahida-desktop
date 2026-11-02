@@ -351,9 +351,17 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 		return inspection, err
 	}
 	hooks := modHooks(sc.root)
+	// A hook may sit in another INI of the namespace than the override the
+	// profile names.
+	hookedPIDs := make(map[int]bool)
+	for _, sections := range hooks {
+		for pid := range sections {
+			hookedPIDs[pid] = true
+		}
+	}
 	listed := make(map[int]bool)
 	for _, emitter := range doc.Emitters {
-		_, hooked := hooks[emitter.INIPath][emitter.PID]
+		hooked := hookedPIDs[emitter.PID]
 		listed[emitter.PID] = true
 		look := defaultLook()
 		if emitter.Look != nil {
@@ -443,11 +451,6 @@ func (s *Service) apply(
 	} else if len(doc.Emitters) >= maxEmitters {
 		return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterLimit, maxEmitters))
 	}
-	iniRel, err := filepath.Rel(sc.root, source.INIPath)
-	if err != nil {
-		return err
-	}
-	iniRel = filepath.ToSlash(iniRel)
 	original, err := os.ReadFile(source.INIPath)
 	if err != nil {
 		return err
@@ -458,25 +461,50 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
-	others := make(map[string]*iniText)
+	texts := map[string]*iniText{source.INIPath: text}
+	originals := map[string][]byte{source.INIPath: original}
 	err = eachINI(sc.root, func(name string, other *iniText) {
 		if !platform.SamePathFold(name, source.INIPath) {
-			others[name] = other
+			texts[name], originals[name] = other, other.bytes()
 		}
 	})
 	if err != nil {
 		return err
 	}
-	sites := text.drawSites(source)
-	if len(sites) == 0 {
+
+	// The override may run command lists that another INI of its namespace
+	// declares, so the draw and its hook can live in that INI. The viewer
+	// resolved the draw over these INIs.
+	unitPaths := source.UnitINIPaths
+	if !slices.ContainsFunc(unitPaths, func(name string) bool { return platform.SamePathFold(name, source.INIPath) }) {
+		unitPaths = append([]string{source.INIPath}, unitPaths...)
+	}
+	var members []string
+	var unitTexts []*iniText
+	for _, member := range unitPaths {
+		for name, other := range texts {
+			if platform.SamePathFold(name, member) {
+				members, unitTexts = append(members, name), append(unitTexts, other)
+				break
+			}
+		}
+	}
+	unit := newINIUnit(unitTexts...)
+	walk := unit.ownWalk(source)
+	if len(walk.sites) == 0 {
 		return infra.ContractError(ErrorDrawNotFound + ":" + source.Section)
 	}
-	if text.sharedDraw(source, sites) {
+	if walk.sharedDraw() {
 		return infra.ContractError(ErrorSharedDraw + ":" + source.Section)
 	}
-	if text.bindsVertexBuffersLate(source) {
+	if walk.bindsVertexBuffersLate() {
 		return infra.ContractError(ErrorUnsupportedDraw + ":" + source.Section)
 	}
+	iniRel, err := filepath.Rel(sc.root, source.INIPath)
+	if err != nil {
+		return err
+	}
+	iniRel = filepath.ToSlash(iniRel)
 
 	// A hook on the draw that no emitter of this mod stands for is left from
 	// another mod or a lost profile, and would capture without a profile.
@@ -485,7 +513,7 @@ func (s *Service) apply(
 		listed[emitter.PID] = true
 	}
 	replaced := map[int]bool{}
-	for _, site := range sites {
+	for _, site := range walk.sites {
 		for _, hooked := range site.pids {
 			if index.ownerOf(hooked) != key || !listed[hooked] {
 				replaced[hooked] = true
@@ -501,21 +529,35 @@ func (s *Service) apply(
 	replaced[pid] = true
 	sc.fields["pid"], sc.applied = pid, &pid
 	drop := func(candidate int) bool { return replaced[candidate] }
-	text.removeHooks(drop)
+	removed := make(map[string]int, len(texts))
+	for name, other := range texts {
+		removed[name] = other.removeHooks(drop)
+	}
 	firstIndex := source.StartIndex + sourceFace*3
-	text.insertHooks(
-		text.drawSites(source),
-		pid, firstIndex, source.BaseVertex,
-	)
-	changes := []fileChange{{path: source.INIPath, data: text.bytes()}}
-	for _, name := range slices.Sorted(maps.Keys(others)) {
-		other := others[name]
-		if other.removeHooks(drop) == 0 {
+	sites := unit.drawSites(source)
+	hooked := make(map[string]bool)
+	for file, member := range unit.texts {
+		own := slices.DeleteFunc(slices.Clone(sites), func(site drawSite) bool { return site.file != file })
+		if len(own) > 0 {
+			member.insertHooks(own, pid, firstIndex, source.BaseVertex, source.Section)
+			hooked[members[file]] = true
+		}
+	}
+	var changes, backups []fileChange
+	for _, name := range slices.Sorted(maps.Keys(texts)) {
+		other := texts[name]
+		if !hooked[name] && removed[name] == 0 {
 			continue
 		}
 		changes = append(changes, fileChange{path: name, data: other.bytes()})
-		if len(other.hookPIDs()) == 0 {
-			changes = append(changes, fileChange{path: name + backupSuffix, remove: true})
+		backup := name + backupSuffix
+		switch {
+		case hooked[name]:
+			if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
+				backups = append(backups, fileChange{path: backup, data: originals[name]})
+			}
+		case len(other.hookPIDs()) == 0:
+			changes = append(changes, fileChange{path: backup, remove: true})
 		}
 	}
 
@@ -561,11 +603,7 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
-	changes = append(changes, profileChanges...)
-	backup := source.INIPath + backupSuffix
-	if _, err := os.Stat(backup); errors.Is(err, fs.ErrNotExist) {
-		changes = append([]fileChange{{path: backup, data: original}}, changes...)
-	}
+	changes = append(append(backups, changes...), profileChanges...)
 	marker, err := markerChange(sc.root, key, sc.origin, false)
 	if err != nil {
 		return err

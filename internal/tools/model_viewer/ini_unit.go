@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -151,9 +152,13 @@ func scopeModelViewerUnit(
 // hooking that draw edits.
 func attributeModelViewerDrawSources(meshes []modelViewerDirectMesh, unit modelViewerScopedUnit, iniPaths []string) {
 	declaring := make(map[string]string)
+	var members []string
 	for index, section := range unit.sections {
 		if strings.EqualFold(section.Header, "TextureOverride") {
 			declaring[modelViewerNormalizeKey(section.Name)] = iniPaths[unit.origins[index]]
+		}
+		if member := iniPaths[unit.origins[index]]; !slices.Contains(members, member) {
+			members = append(members, member)
 		}
 	}
 	for index := range meshes {
@@ -161,6 +166,7 @@ func attributeModelViewerDrawSources(meshes []modelViewerDirectMesh, unit modelV
 		if source == nil {
 			continue
 		}
+		source.UnitINIPaths = members
 		if iniPath, ok := declaring[modelViewerNormalizeKey(source.Section)]; ok {
 			source.INIPath = iniPath
 		}

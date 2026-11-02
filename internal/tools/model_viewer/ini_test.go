@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,7 @@ func TestDiscoverModelViewerINIsOrderDepthAndLimit(t *testing.T) {
 	writeINI("b.ini")
 	writeINI("a.ini")
 	writeINI("DISABLEDskip.ini")
+	writeINI(filepath.Join("DISABLED backup", "hidden.ini"))
 	for index := range maxModelViewerINIFiles {
 		writeINI(filepath.Join("one", fmt.Sprintf("c%02d.ini", index)))
 	}
@@ -71,7 +73,7 @@ func TestDiscoverModelViewerINIsOrderDepthAndLimit(t *testing.T) {
 		t.Fatalf("order = %#v", paths)
 	}
 	for _, path := range paths {
-		if filepath.Base(path) == "ignored.ini" || filepath.Base(path) == "DISABLEDskip.ini" {
+		if base := filepath.Base(path); base == "ignored.ini" || base == "DISABLEDskip.ini" || base == "hidden.ini" {
 			t.Fatalf("unexpected path %q", path)
 		}
 	}
@@ -226,12 +228,20 @@ global persist $outfit = 1
 		t.Fatalf("mesh drawn only when outfit >= 2 is visible at outfit 1: %#v", result.Meshes[0].Conditions)
 	}
 
-	// A tool hooking a draw edits the INI declaring its TextureOverride.
+	// A tool hooking a draw edits the INI declaring its TextureOverride, or the
+	// INI of its namespace declaring the command list it runs.
 	for _, mesh := range result.Meshes {
 		want := map[string]string{"Body": "mod.ini", "Head": "draw.ini"}[mesh.Component]
 		source, ok := fixture.service.DrawSource(result.MemorySessionID, mesh.ID)
 		if !ok || filepath.Base(source.INIPath) != want {
 			t.Fatalf("draw source of %s = %#v", mesh.Component, source)
+		}
+		var unit []string
+		for _, iniPath := range source.UnitINIPaths {
+			unit = append(unit, filepath.Base(iniPath))
+		}
+		if !slices.Equal(unit, []string{"mod.ini", "const.ini", "draw.ini", "res.ini"}) {
+			t.Fatalf("namespace INIs of %s = %v", mesh.Component, unit)
 		}
 	}
 }

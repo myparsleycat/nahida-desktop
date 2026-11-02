@@ -15,7 +15,10 @@ import (
 // through sourceFaces; vertex compaction does not change that mapping.
 type DrawSource struct {
 	INIPath string
-	Section string
+	// UnitINIPaths are the INIs of INIPath's 3DMigoto namespace in discovery
+	// order, INIPath included, which run each other's sections by plain name.
+	UnitINIPaths []string
+	Section      string
 	// IB is the resource bound as the draw's index buffer, as ib = names it
 	// without the Resource prefix; empty when unknown.
 	IB string

@@ -179,6 +179,17 @@ func (s *Service) applyAsNewMod(
 			return Inspection{}, fmt.Errorf("draw INI %q is outside %q", source.INIPath, sourceRoot)
 		}
 		source.INIPath = filepath.Join(target, rel)
+		unitPaths := make([]string, 0, len(source.UnitINIPaths))
+		for _, member := range source.UnitINIPaths {
+			if rel, err := filepath.Rel(
+				sourceRoot,
+				member,
+			); err == nil &&
+				platform.SameOrChildPath(sourceRoot, member) {
+				unitPaths = append(unitPaths, filepath.Join(target, rel))
+			}
+		}
+		source.UnitINIPaths = unitPaths
 		sc.root, sc.origin = target, origin
 		if err := s.apply(sc, rt.layout(), source, triangle, anchor, emitterPID, look); err != nil {
 			return Inspection{}, err
