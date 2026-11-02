@@ -22,6 +22,20 @@ type ModelViewerShapeTarget struct {
 	LowPositionsURL string `json:"lowPositionsUrl,omitempty"`
 	// Divisor is what the INI divides Var by to get the weight; zero means none.
 	Divisor float64 `json:"divisor,omitempty"`
+	// Wave replaces the weight with Amplitude*sin(Var*AngularScale)+Bias, where the
+	// renderer advances the phase in Var itself.
+	Wave *ModelViewerShapeWave `json:"wave,omitempty"`
+}
+
+// ModelViewerShapeWave advances its phase by Rate times SpeedVar per second, or by
+// Rate alone without SpeedVar, while When holds; otherwise the weight is zero.
+type ModelViewerShapeWave struct {
+	SpeedVar     string         `json:"speedVar,omitempty"`
+	Rate         float64        `json:"rate"`
+	AngularScale float64        `json:"angularScale"`
+	Amplitude    float64        `json:"amplitude"`
+	Bias         float64        `json:"bias"`
+	When         ModelViewerDNF `json:"when"`
 }
 
 type ModelViewerPositionVariant struct {
@@ -258,6 +272,11 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 				mesh.PositionVariants[variantIndex].Conditions,
 				tracked,
 			)
+		}
+		for _, target := range mesh.ShapeTargets {
+			if target.Wave != nil {
+				target.Wave.When = normalizeModelViewerDNFWithTracked(target.Wave.When, tracked)
+			}
 		}
 	}
 }

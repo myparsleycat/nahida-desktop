@@ -7,6 +7,7 @@ import (
 	"math"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -836,7 +837,7 @@ func buildModelViewerDirectMeshPayload(
 		if !matched && len(shapeKey.TargetMeshPrefixes) == 0 && shapeKey.BasePath != "" && mesh.positionFile != "" {
 			positionPath := mesh.positionFile
 			if !filepath.IsAbs(positionPath) {
-				positionPath = filepath.Join(filepath.Dir(shapeKey.BasePath), filepath.FromSlash(positionPath))
+				positionPath = filepath.Join(shapeKey.modDir, filepath.FromSlash(positionPath))
 			}
 			matched = platform.SamePathFold(shapeKey.BasePath, positionPath)
 		}
@@ -871,10 +872,22 @@ func buildModelViewerDirectMeshPayload(
 			if highErr != nil || lowErr != nil {
 				continue
 			}
-			item.ShapeTargets = append(
-				item.ShapeTargets,
-				ModelViewerShapeTarget{Var: dimension.VariableID, Mode: dimension.Mode, Divisor: dimension.Divisor},
-			)
+			// A sparse key usually touches few of a large mod's draws.
+			if dimension.Sparse && slices.Equal(high, mesh.geometry.Position) {
+				continue
+			}
+			target := ModelViewerShapeTarget{
+				Var:     dimension.VariableID,
+				Mode:    dimension.Mode,
+				Divisor: dimension.Divisor,
+			}
+			if dimension.wave != nil {
+				// Each target owns its copy because public names are remapped in place.
+				wave := *dimension.wave
+				wave.When = cloneModelViewerDNF(wave.When)
+				target.Wave = &wave
+			}
+			item.ShapeTargets = append(item.ShapeTargets, target)
 			payload.ShapePositions = append(payload.ShapePositions, high)
 			payload.ShapeLowPositions = append(payload.ShapeLowPositions, low)
 		}

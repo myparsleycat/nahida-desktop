@@ -5,6 +5,7 @@ import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import { fetchFloat32, fetchUint32 } from "@renderer/wails/binary-memory";
 import { evaluateViewerState } from "@shared/mod-viewer/eval";
+import { isEqual } from "es-toolkit";
 import {
   type ElementRef,
   forwardRef,
@@ -85,6 +86,7 @@ import {
   modelViewerToonLightDirection,
 } from "./model-viewer-scene";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+import { ShapeWavePlayback } from "./model-viewer-shape-wave";
 import {
   raycastModelViewerSurface,
   resolveModelViewerSurfacePick,
@@ -323,6 +325,7 @@ function ThreeModelScene({
   const animationClipRef = useRef(animationClip);
   const animationFrameRef = useRef(animationFrame);
   const animationValuesRef = useRef<Record<string, string | number>>({});
+  const shapeWavePlaybackRef = useRef<ShapeWavePlayback | null>(null);
   const modelRootRef = useRef<Object3D | null>(null);
   const applyPayloadVisualsRef = useRef<(options?: { interactive?: boolean }) => void>(() => {});
   const lastInteractiveCommitAtRef = useRef(Number.NEGATIVE_INFINITY);
@@ -469,6 +472,10 @@ function ThreeModelScene({
 
   useEffect(() => {
     payloadTransportRef.current = payloadTransport;
+    const waves = new ShapeWavePlayback(
+      payloadTransport?.meshes.flatMap((mesh) => mesh.shapeTargets) ?? [],
+    );
+    shapeWavePlaybackRef.current = waves.empty ? null : waves;
   }, [payloadTransport]);
 
   useEffect(() => {
@@ -948,10 +955,27 @@ function ThreeModelScene({
         } else {
           const frameIndex = Math.min(Math.max(index, 0), clip.frames.length - 1);
           const frame = clip.frames[frameIndex];
-          animationValuesRef.current = frame?.values ?? {};
+          const waves = shapeWavePlaybackRef.current;
           animationFrameIndexRef.current = frameIndex;
           if (clip.deformerId) {
             computeControllerRef.current?.request({ clip, frameIndex });
+          }
+          if (waves && frame) {
+            const values = {
+              ...frame.values,
+              ...waves.advance(clip.id, frame.time, clip.frames.length / clip.fps, {
+                ...payloadEvalRef.current?.state,
+                ...frame.values,
+              }),
+            };
+            // A wave clip plays even while every wave is off, which leaves nothing to redraw.
+            const unchanged = isEqual(values, animationValuesRef.current);
+            animationValuesRef.current = values;
+            if (unchanged) {
+              return;
+            }
+          } else {
+            animationValuesRef.current = frame?.values ?? {};
           }
         }
         applyPayloadVisualsRef.current();
@@ -1128,7 +1152,8 @@ function ThreeModelScene({
   }) {
     const clip = animationClipRef.current;
     const currentIndex = animationFrameIndexRef.current;
-    if (!clip?.frames.length || currentIndex === null) {
+    // A wave phase depends on the frames before it, which a frame alone does not tell.
+    if (!clip?.frames.length || currentIndex === null || shapeWavePlaybackRef.current) {
       preparedAnimationRingRef.current = [];
       return;
     }

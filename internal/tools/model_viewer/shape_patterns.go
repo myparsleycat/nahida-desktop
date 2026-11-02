@@ -21,7 +21,7 @@ var (
 	modelViewerSparseValueRE       = regexp.MustCompile(`(?i)^\$\\WWMIv1\\shapekey_value\s*=\s*\$(\w+)\s*$`)
 	modelViewerSparseBindRE        = regexp.MustCompile(`(?i)^(cs-t(?:0|1|6|33))\s*=\s*(?:copy\s+|ref\s+)?(\S+)\s*$`)
 	modelViewerSparseBatchRE       = regexp.MustCompile(
-		`(?i)^global\s+\$shapekey_vertex_offset_batch(\d+)\s*=\s*(\d+)\s*$`,
+		`(?i)^global\s+\$(?:mvscope\d+)?shapekey_?vertex_?offset_?batch(\d+)\s*=\s*(\d+)\s*$`,
 	)
 	modelViewerMultiBufferRE = regexp.MustCompile(`(?i)^cs-t(5[0-4])\s*=\s*copy\s+(\S+)\s*$`)
 	modelViewerMultiScalarRE = regexp.MustCompile(`(?i)^x(88|89)\s*=\s*\$(\w+)\s*$`)
@@ -265,6 +265,27 @@ func collectSparseModelViewerShapeKeys(
 		deltas.Filename == "" {
 		return nil
 	}
+	stride := base.Stride
+	if stride == 0 {
+		stride = 12
+	}
+	// A batch holds 127 shape keys in 128 slots of the offset table.
+	sparseKey := func(variable string, slot int, wave *ModelViewerShapeWave) modelViewerShapeKey {
+		return modelViewerShapeKey{
+			BasePath:     shapeResourcePath(modDir, base),
+			VertexStride: stride,
+			Dimensions: []modelViewerShapeKeyDimension{{
+				VariableID:      variable,
+				Sparse:          true,
+				BufferShapeID:   slot,
+				SparseOffset:    batchOffsets[slot/128],
+				OffsetPath:      shapeResourcePath(modDir, offsets),
+				VertexIDPath:    shapeResourcePath(modDir, vertexIDs),
+				VertexDeltaPath: shapeResourcePath(modDir, deltas),
+				wave:            wave,
+			}},
+		}
+	}
 	var output []modelViewerShapeKey
 	seen := make(map[string]bool)
 	for _, variable := range sliders {
@@ -273,31 +294,10 @@ func collectSparseModelViewerShapeKeys(
 			continue
 		}
 		seen[variable] = true
-		batch := shapeID / 127
-		dimension := modelViewerShapeKeyDimension{
-			VariableID:    variable,
-			Sparse:        true,
-			BufferShapeID: shapeID + batch,
-			SparseOffset:  batchOffsets[batch],
-			OffsetPath: shapeResourcePath(
-				modDir,
-				offsets,
-			),
-			VertexIDPath:    shapeResourcePath(modDir, vertexIDs),
-			VertexDeltaPath: shapeResourcePath(modDir, deltas),
-		}
-		stride := base.Stride
-		if stride == 0 {
-			stride = 12
-		}
-		output = append(
-			output,
-			modelViewerShapeKey{
-				BasePath:     shapeResourcePath(modDir, base),
-				VertexStride: stride,
-				Dimensions:   []modelViewerShapeKeyDimension{dimension},
-			},
-		)
+		output = append(output, sparseKey(variable, shapeID+shapeID/127, nil))
+	}
+	for _, wave := range findModelViewerShapeWaves(sections, modDir) {
+		output = append(output, sparseKey(wave.phase, wave.slot, &wave.wave))
 	}
 	return output
 }

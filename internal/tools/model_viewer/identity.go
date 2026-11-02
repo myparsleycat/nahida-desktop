@@ -34,7 +34,14 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			}
 		}
 		for targetIndex := range mesh.ShapeTargets {
-			mesh.ShapeTargets[targetIndex].Var = publicName(mesh.ShapeTargets[targetIndex].Var)
+			target := &mesh.ShapeTargets[targetIndex]
+			target.Var = publicName(target.Var)
+			if target.Wave != nil {
+				if target.Wave.SpeedVar != "" {
+					target.Wave.SpeedVar = publicName(target.Wave.SpeedVar)
+				}
+				remapDNF(target.Wave.When)
+			}
 		}
 		for variantIndex := range mesh.PositionVariants {
 			remapDNF(mesh.PositionVariants[variantIndex].Conditions)

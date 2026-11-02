@@ -58,6 +58,10 @@ func prependModelViewerShapeVariables(
 	for _, shapeKey := range shapeKeys {
 		for _, dimension := range shapeKey.Dimensions {
 			id := modelViewerNormalizeKey(dimension.VariableID)
+			if dimension.wave != nil {
+				// The renderer advances the phase itself; only its speed is a control.
+				id = modelViewerNormalizeKey(dimension.wave.SpeedVar)
+			}
 			if id == "" || seen[id] {
 				continue
 			}

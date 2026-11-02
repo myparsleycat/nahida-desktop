@@ -848,6 +848,16 @@ func findModelViewerAccumulatorRate(
 }
 
 func findModelViewerAccumulatorRateInLines(lines []string, variable string, defaults map[string]any) (float64, bool) {
+	token, ok := findModelViewerAccumulatorRateToken(lines, variable)
+	if !ok {
+		return 0, false
+	}
+	return resolveModelViewerNumericToken(token, defaults)
+}
+
+// findModelViewerAccumulatorRateToken returns X of `$v = $v + X * $dt` unresolved,
+// so that a caller can keep a rate variable live instead of its default.
+func findModelViewerAccumulatorRateToken(lines []string, variable string) (string, bool) {
 	pattern := regexp.MustCompile(
 		fmt.Sprintf(
 			`(?i)^\$%s\s*=\s*\$%s\s*\+\s*(\$?[\w.-]+)\s*\*\s*\$[\w.]*dt[\w.]*\s*$`,
@@ -857,10 +867,10 @@ func findModelViewerAccumulatorRateInLines(lines []string, variable string, defa
 	)
 	for _, raw := range lines {
 		if match := pattern.FindStringSubmatch(strings.TrimSpace(raw)); match != nil {
-			return resolveModelViewerNumericToken(match[1], defaults)
+			return match[1], true
 		}
 	}
-	return 0, false
+	return "", false
 }
 
 func findModelViewerAccumulatorLoop(

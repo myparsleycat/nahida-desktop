@@ -422,12 +422,16 @@ type modelViewerOverlayExplorer struct {
 	// states holds what differs from [Constants] on each page found so far.
 	states []map[string]any
 	form   string
+	// sliderKeys are the listed sliders a page may draw.
+	sliderKeys []string
 }
 
 // modelViewerOverlayPageBuild holds a page in the window coordinates the mod drew it in.
 type modelViewerOverlayPageBuild struct {
 	page  ModelViewerOverlayPage
 	drawn []modelViewerOverlayTracedQuad
+	// state is what the page was drawn from, including the positions of its sliders.
+	state map[string]any
 }
 
 func (p *modelViewerOverlayProgram) build(
@@ -460,6 +464,7 @@ func (p *modelViewerOverlayProgram) build(
 		explorer.tracked[internal] = modelViewerOverlayVariable{variable: variable, internal: internal}
 	}
 	explorer.findPageCandidates(initial, menuOnly)
+	explorer.findSliderKeys()
 
 	var pages []*modelViewerOverlayPageBuild
 	for index := 0; index < len(explorer.states); index++ {
@@ -499,11 +504,11 @@ func (p *modelViewerOverlayProgram) build(
 // drawsDifferently reports whether a page built so far would now come out otherwise.
 // A state the budget no longer reaches keeps the page already built.
 func (e *modelViewerOverlayExplorer) drawsDifferently(pages []*modelViewerOverlayPageBuild) bool {
-	for index, page := range pages {
+	for _, page := range pages {
 		if page == nil {
 			continue
 		}
-		run := e.program.tryTrace(e.states[index])
+		run := e.program.tryTrace(page.state)
 		if run != nil && !modelViewerOverlaySameQuads(run.quads, page.drawn, false) {
 			return true
 		}
@@ -535,7 +540,8 @@ func (e *modelViewerOverlayExplorer) findPageCandidates(initial *modelViewerOver
 
 func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewerOverlayPageBuild {
 	p := e.program
-	idle := p.trace(-1, -1, state)
+	drawn, sliders := e.pageSliders(state)
+	idle := p.trace(-1, -1, drawn)
 	if p.unsupported || len(idle.quads) == 0 {
 		p.unsupported = true
 		return nil
@@ -556,10 +562,10 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 		hovered := p.trace(
 			(quad.x+quad.width/2)/modelViewerOverlayWidth,
 			(quad.y+quad.height/2)/modelViewerOverlayHeight,
-			state,
+			drawn,
 		)
 		clicked := hovered.click(hovered.state)
-		target := e.clickTarget(state, idle, hovered, clicked)
+		target := e.clickTarget(state, drawn, idle, hovered, clicked)
 
 		// Prefer the first changed toggle over unchanged initializers. Keep a
 		// clamped toggle as a fallback when the default is already at its bound.
@@ -646,7 +652,7 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 			if err == nil && current == value {
 				continue
 			}
-			overrides := maps.Clone(state)
+			overrides := maps.Clone(drawn)
 			overrides[entry.internal] = value
 			changed := p.trace(-1, -1, overrides)
 			if !modelViewerOverlaySameQuads(changed.quads, idle.quads, true) {
@@ -662,11 +668,101 @@ func (e *modelViewerOverlayExplorer) buildPage(state map[string]any) *modelViewe
 			}
 		}
 	}
-	quads, buttons = insertModelViewerOverlayLayers(quads, layers, buttons)
+	quads = insertModelViewerOverlayLayers(quads, layers, buttons, sliders)
 	return &modelViewerOverlayPageBuild{
-		page:  ModelViewerOverlayPage{Quads: quads, Buttons: buttons},
+		page:  ModelViewerOverlayPage{Quads: quads, Buttons: buttons, Sliders: sliders},
 		drawn: idle.quads,
+		state: drawn,
 	}
+}
+
+// findSliderKeys keeps the listed sliders that something other than the click list
+// reads, sparing the rest the traces that measure a slider on each page.
+func (e *modelViewerOverlayExplorer) findSliderKeys() {
+	read := make(map[string]bool)
+	for _, lines := range e.program.lists {
+		if slices.Equal(lines, e.program.clickLines) {
+			continue
+		}
+		for _, line := range lines {
+			for _, match := range modelViewerVariableRE.FindAllStringSubmatch(line, -1) {
+				read[modelViewerNormalizeKey(match[1])] = true
+			}
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(e.tracked)) {
+		slider := e.tracked[key].variable.Slider
+		if read[key] && slider != nil && slider.Max > slider.Min {
+			e.sliderKeys = append(e.sliderKeys, key)
+		}
+	}
+}
+
+// pageSliders finds the listed sliders whose value moves quads of this page, and
+// returns the state to draw the page from. Each slider is measured at inner values
+// and held at its middle there: a fill has no size at the end of its range, and a
+// quad without a size is not drawn at all.
+func (e *modelViewerOverlayExplorer) pageSliders(state map[string]any) (map[string]any, []ModelViewerOverlaySlider) {
+	valueAt := func(slider *ModelViewerSlider, position float64) float64 {
+		return slider.Min + (slider.Max-slider.Min)*position
+	}
+	if len(e.sliderKeys) == 0 {
+		return state, nil
+	}
+	all := maps.Clone(state)
+	for _, key := range e.sliderKeys {
+		all[key] = valueAt(e.tracked[key].variable.Slider, 0.5)
+	}
+
+	drawn := maps.Clone(state)
+	var sliders []ModelViewerOverlaySlider
+	measured := -1
+	for _, key := range e.sliderKeys {
+		entry := e.tracked[key]
+		trace := func(position float64) *modelViewerOverlayRun {
+			probe := maps.Clone(all)
+			probe[key] = valueAt(entry.variable.Slider, position)
+			return e.program.tryTrace(probe)
+		}
+		low, high := trace(0.25), trace(0.75)
+		if low == nil || high == nil || len(low.quads) != len(high.quads) {
+			continue
+		}
+		slider := ModelViewerOverlaySlider{Handle: -1, Modes: []ModelViewerOverlaySliderMode{{
+			Variable: entry.variable.ID, Label: entry.variable.Label,
+			Min: entry.variable.Slider.Min, Max: entry.variable.Slider.Max,
+		}}}
+		for index := range low.quads {
+			start, end := low.quads[index], high.quads[index]
+			if start.x == end.x && start.width == end.width {
+				continue
+			}
+			if start.width == end.width {
+				slider.Handle = index
+			}
+			slider.Parts = append(slider.Parts, ModelViewerOverlaySliderPart{
+				Quad:       index,
+				StartX:     start.x - (end.x-start.x)/2,
+				StartWidth: start.width - (end.width-start.width)/2,
+				EndX:       end.x + (end.x-start.x)/2,
+				EndWidth:   end.width + (end.width-start.width)/2,
+			})
+		}
+		if slider.Handle >= 0 {
+			drawn[key] = all[key]
+			sliders = append(sliders, slider)
+			measured = len(low.quads)
+		}
+	}
+	if len(sliders) == 0 {
+		return state, nil
+	}
+	// The parts index the quads drawn with every slider in the middle. A slider left
+	// at its own value may hide a sizeless fill and shift the quads after it.
+	if run := e.program.tryTrace(drawn); run == nil || len(run.quads) != measured {
+		return all, sliders
+	}
+	return drawn, sliders
 }
 
 // addModelViewerOverlayLayers records a value that draws a different set of quads:
@@ -763,9 +859,10 @@ func insertModelViewerOverlayLayers(
 	quads []ModelViewerOverlayQuad,
 	layers map[int][]ModelViewerOverlayQuad,
 	buttons []ModelViewerOverlayButton,
-) ([]ModelViewerOverlayQuad, []ModelViewerOverlayButton) {
+	sliders []ModelViewerOverlaySlider,
+) []ModelViewerOverlayQuad {
 	if len(layers) == 0 {
-		return quads, buttons
+		return quads
 	}
 	moved := make([]int, len(quads))
 	merged := make([]ModelViewerOverlayQuad, 0, len(quads)+len(layers))
@@ -781,7 +878,14 @@ func insertModelViewerOverlayLayers(
 			hover.Quad = moved[hover.Quad]
 		}
 	}
-	return merged, buttons
+	for sliderIndex := range sliders {
+		slider := &sliders[sliderIndex]
+		slider.Handle = moved[slider.Handle]
+		for partIndex := range slider.Parts {
+			slider.Parts[partIndex].Quad = moved[slider.Parts[partIndex].Quad]
+		}
+	}
+	return merged
 }
 
 func modelViewerOverlayRectsOverlap(a, b ModelViewerOverlayButton) bool {
@@ -796,7 +900,7 @@ func modelViewerOverlayRectsOverlap(a, b ModelViewerOverlayButton) bool {
 // a click marker copied from the hovered slot: that redraws the menu too, but it
 // describes the click instead of a place in the menu.
 func (e *modelViewerOverlayExplorer) clickTarget(
-	state map[string]any,
+	state, drawn map[string]any,
 	idle, hovered, clicked *modelViewerOverlayRun,
 ) int {
 	p := e.program
@@ -817,7 +921,7 @@ func (e *modelViewerOverlayExplorer) clickTarget(
 		if err != nil || modelViewerOverlaySameValue(clicked.state[key], hovered.state[key]) {
 			continue
 		}
-		probe := maps.Clone(state)
+		probe := maps.Clone(drawn)
 		probe[key] = value
 		run := p.tryTrace(probe)
 		if run == nil || !modelViewerOverlaySameValue(run.state[key], value) ||
@@ -1008,6 +1112,14 @@ func modelViewerOverlayMenuOnlyVariables(transport *ModelViewerTransport) map[st
 	for _, mesh := range transport.Meshes {
 		for _, target := range mesh.ShapeTargets {
 			mark(target.Var)
+			if target.Wave != nil {
+				mark(target.Wave.SpeedVar)
+				for _, group := range target.Wave.When {
+					for _, clause := range group {
+						mark(clause.Var)
+					}
+				}
+			}
 		}
 	}
 	for _, rule := range transport.StateRules {
@@ -1444,25 +1556,29 @@ func (p *modelViewerOverlayProgram) spendStep() bool {
 func (r *modelViewerOverlayRun) chooseBranch(
 	branches []modelViewerDirectConditionalBranch,
 ) *modelViewerDirectConditionalBranch {
+	var taken *modelViewerDirectConditionalBranch
 	for index := range branches {
 		if branches[index].expression == nil || evaluateModelViewerCondition(*branches[index].expression, r.state) {
-			return &branches[index]
+			taken = &branches[index]
+			break
 		}
 	}
-	if r.opened {
-		return nil
+	if r.opened || taken != nil && r.program.linesReachMenu(taken.lines) {
+		return taken
 	}
 	for index := range branches {
 		if branches[index].expression != nil && r.program.selectsPage(*branches[index].expression) {
-			return nil
+			return taken
 		}
 	}
+	// An else on a closed gate, such as the one registering a mod not yet enabled,
+	// is taken as readily as a true condition and must not keep the menu shut.
 	for index := range branches {
 		if r.program.linesReachMenu(branches[index].lines) {
 			return &branches[index]
 		}
 	}
-	return nil
+	return taken
 }
 
 func (p *modelViewerOverlayProgram) selectsPage(expression string) bool {

@@ -23,6 +23,7 @@ type modelViewerShapeKeyDimension struct {
 	VertexDeltaPath string `json:"vertexDeltaPath,omitempty"`
 	// Divisor is what the INI divides the variable by to get the weight; zero means none.
 	Divisor float64 `json:"divisor,omitempty"`
+	wave    *ModelViewerShapeWave
 }
 
 type modelViewerShapeKey struct {
@@ -34,6 +35,8 @@ type modelViewerShapeKey struct {
 	NormalOffset       int                            `json:"normalOffset"`
 	TangentOffset      int                            `json:"tangentOffset"`
 	Dimensions         []modelViewerShapeKeyDimension `json:"dimensions"`
+	// modDir is what resource filenames, and so a mesh's position file, are relative to.
+	modDir string
 }
 
 var (
@@ -169,7 +172,11 @@ func collectModelViewerShapeKeys(
 		}
 		output = append(output, shape)
 	}
-	return append(output, collectAdditionalModelViewerShapeKeys(sections, resourceMap, modDir)...)
+	output = append(output, collectAdditionalModelViewerShapeKeys(sections, resourceMap, modDir)...)
+	for index := range output {
+		output[index].modDir = modDir
+	}
+	return output
 }
 
 func readModelViewerSparseShapePositions(

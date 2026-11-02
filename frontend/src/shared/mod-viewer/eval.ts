@@ -143,10 +143,19 @@ export function evaluateViewerState(
                 highlightMapKey: mesh.highlightMapKey,
                 rampMapKey: mesh.rampMapKey,
                 shapeWeights: Object.fromEntries(
-                    mesh.shapeTargets.map((target) => [
-                        target.var,
-                        Number(lookupStateValue(resolved, target.var) ?? 0) / (target.divisor || 1),
-                    ]),
+                    mesh.shapeTargets.map((target) => {
+                        const value = Number(lookupStateValue(resolved, target.var) ?? 0);
+                        const wave = target.wave;
+                        if (!wave) {
+                            return [target.var, value / (target.divisor || 1)];
+                        }
+                        return [
+                            target.var,
+                            dnfSatisfied(wave.when, resolved)
+                                ? wave.amplitude * Math.sin(value * wave.angularScale) + wave.bias
+                                : 0,
+                        ];
+                    }),
                 ),
                 positionVariantIndex,
             };

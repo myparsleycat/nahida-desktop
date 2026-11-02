@@ -176,6 +176,16 @@ export function normalizeModelViewerTransport(
                 mode: target.mode === "midpoint_pair" ? target.mode : undefined,
                 lowPositionsUrl: target.lowPositionsUrl,
                 divisor: target.divisor || undefined,
+                wave: target.wave
+                    ? {
+                          speedVar: target.wave.speedVar || undefined,
+                          rate: target.wave.rate,
+                          angularScale: target.wave.angularScale,
+                          amplitude: target.wave.amplitude,
+                          bias: target.wave.bias,
+                          when: normalizeDNF(target.wave.when),
+                      }
+                    : undefined,
             })),
             positionVariants: (mesh.positionVariants ?? []).map((variant) => ({
                 conditions: normalizeDNF(variant.conditions),

@@ -309,7 +309,8 @@ func TestModelViewerOverlayMenuReadsClipSpaceSelectionMenu(t *testing.T) {
 		t.Fatalf("quads = %+v, want the backdrop, two icons and a mark for each toggle", quads)
 	}
 	shownMark, hiddenMark := quads[2], quads[4]
-	if filepath.Base(shownMark.Path) != "mark.buf" || shownMark.X != 80 || shownMark.Y != 70 || shownMark.Width != 480 ||
+	if filepath.Base(shownMark.Path) != "mark.buf" || shownMark.X != 80 || shownMark.Y != 70 ||
+		shownMark.Width != 480 ||
 		shownMark.Opacity != 1 ||
 		len(shownMark.States) != 1 ||
 		shownMark.States[0].Value != 0 ||
@@ -394,6 +395,97 @@ filename = mark.buf
 	}
 	if !slices.Equal(drawn, []string{"back.buf", "icon.buf"}) {
 		t.Fatalf("quads = %v, want the backdrop and the icon once each", drawn)
+	}
+}
+
+// A mod not yet enabled takes the else of its gate at the first frame, and the fill
+// of a slider at zero has no size until the slider moves.
+func TestModelViewerOverlayMenuOpensPastElseAndReadsSliders(t *testing.T) {
+	menus := buildOverlayTestMenuFrom(t, context.Background(), `
+[Constants]
+global $enabled = 0
+global $hovering
+global $hoveredSlot
+global $clickedSlot
+global $hair = 0
+global $chest = 0
+[KeyClick]
+condition = $hovering == 1
+key = VK_LBUTTON
+run = CommandListClicked
+[Present]
+if $enabled
+    run = CommandListMenu
+else
+    run = CommandListRegister
+endif
+[CommandListRegister]
+$enabled = 1
+[CommandListClicked]
+$clickedSlot = $hoveredSlot
+if $clickedSlot == 1
+  $hair = ($hair + 1) % 3
+endif
+[CommandListMenu]
+ps-t100 = ResourceBack
+x87 = 600 / window_width
+y87 = 300 / window_height
+z87 = 0
+w87 = 0
+run = CustomShaderElement
+$hovering = 0
+x87 = 64 / window_width
+y87 = 64 / window_height
+z87 = 20 / window_width
+w87 = 20 / window_height
+if cursor_x > z87 && cursor_x < z87 + x87 && cursor_y > w87 && cursor_y < w87 + y87
+    $hovering = 1
+    $hoveredSlot = 1
+endif
+ps-t100 = ResourceFrame
+run = CustomShaderElement
+ps-t100 = ResourceHover
+x87 = $chest / 10 * 400 / window_width
+y87 = 4 / window_height
+z87 = 100 / window_width
+w87 = 200 / window_height
+run = CustomShaderElement
+ps-t100 = ResourceFrame
+x87 = 32 / window_width
+y87 = 32 / window_height
+z87 = (100 + $chest / 10 * 400) / window_width
+run = CustomShaderElement
+[CustomShaderElement]
+ps = .\ui.hlsl
+Draw = 4,0
+[ResourceBack]
+filename = back.png
+[ResourceFrame]
+filename = frame.png
+[ResourceHover]
+filename = hover.png
+`, "frame.png")
+	if len(menus) != 1 {
+		t.Fatalf("menus = %d, want 1", len(menus))
+	}
+	page := menus[0].Pages[0]
+	if len(page.Quads) != 4 || len(page.Buttons) != 1 || page.Buttons[0].Variable != "hair" {
+		t.Fatalf("page = %+v", page)
+	}
+	if len(page.Sliders) != 1 {
+		t.Fatalf("sliders = %+v, want the one chest moves", page.Sliders)
+	}
+	slider := page.Sliders[0]
+	if slider.Handle != 3 || len(slider.Modes) != 1 || slider.Modes[0].Variable != "chest" ||
+		slider.Modes[0].Min != 0 || slider.Modes[0].Max != 10 {
+		t.Fatalf("slider = %+v", slider)
+	}
+	want := []ModelViewerOverlaySliderPart{
+		{Quad: 2, StartX: 100, StartWidth: 0, EndX: 100, EndWidth: 400},
+		{Quad: 3, StartX: 100, StartWidth: 32, EndX: 500, EndWidth: 32},
+	}
+	if !slices.Equal(slider.Parts, want) {
+		t.Fatalf("parts = %+v, want %+v", slider.Parts, want)
 	}
 }
 

@@ -11,6 +11,9 @@ func configureModelViewerState(
 	defaults := collectModelViewerDefaultVariables(allSections)
 	bindings := collectModelViewerSlotBindings(allSections, defaults)
 	animations := append(detectModelViewerPresentAnimations(allSections, defaults, bindings), computeAnimations...)
+	if clip, ok := modelViewerShapeWaveClip(transport.Meshes); ok {
+		animations = append(animations, clip)
+	}
 	stateRules := extractModelViewerDirectStateRules(allSections, defaults)
 	variables := prependModelViewerShapeVariables(
 		buildModelViewerDirectVariables(allSections, bindings, defaults),

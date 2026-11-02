@@ -362,8 +362,22 @@ export type ViewerEvalMesh = {
     cutoutMapVariants: TextureVariant[];
     highlightMapKey?: string | null;
     rampMapKey?: string | null;
-    shapeTargets: Array<{ var: string; divisor?: number }>;
+    shapeTargets: Array<{ var: string; divisor?: number; wave?: ViewerShapeWave }>;
     positionVariants: PositionVariant[];
+};
+
+/**
+ * Weighs a shape target as amplitude * sin(phase * angularScale) + bias while `when`
+ * holds, and zero otherwise; the phase in the target's var advances by rate, times
+ * speedVar when set, per second of playback.
+ */
+export type ViewerShapeWave = {
+    speedVar?: string;
+    rate: number;
+    angularScale: number;
+    amplitude: number;
+    bias: number;
+    when: Dnf;
 };
 
 export type ViewerEvalInput = {
@@ -384,6 +398,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positio
         mode?: "midpoint_pair";
         lowPositionsUrl?: string;
         divisor?: number;
+        wave?: ViewerShapeWave;
     }>;
     positionVariants: Array<PositionVariant & { geometryUrl: string }>;
 };

@@ -6,6 +6,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
@@ -268,6 +270,128 @@ filename = deltas.buf`)
 		dimension.VertexIDPath != filepath.Join(modDir, "vertex-ids.buf") ||
 		dimension.VertexDeltaPath != filepath.Join(modDir, "deltas.buf") {
 		t.Fatalf("shape = %#v", shapes[0])
+	}
+}
+
+// As the load scopes them, with the buffers in a folder as WWMI Tools exports them.
+func TestModelViewerSparseShapeReachesScopedMeshInSubfolder(t *testing.T) {
+	modDir := t.TempDir()
+	sections, _ := scopeModelViewerSections(parseModINI(`[CommandListDrawSliderJaw]
+x87 = $jaw * x87
+[CommandListShapeJaw]
+$\WWMIv1\shapekey_id = 127
+$\WWMIv1\shapekey_value = $jaw
+cs-t6 = ResourcePosition
+cs-t33 = ResourceShapeOffsets
+cs-t0 = ResourceShapeVertexIDs
+cs-t1 = ResourceShapeDeltas
+[Constants]
+global $shapekey_vertex_offset_batch1 = 1
+[ResourcePosition]
+filename = Meshes/position.buf
+[ResourceShapeOffsets]
+filename = Meshes/offsets.buf
+[ResourceShapeVertexIDs]
+filename = Meshes/vertex-ids.buf
+[ResourceShapeDeltas]
+filename = Meshes/deltas.buf`), 0, "", "")
+	shapes := collectModelViewerShapeKeys(sections, collectModelViewerResources(sections), modDir)
+
+	offsets := make([]byte, 130*4)
+	binary.LittleEndian.PutUint32(offsets[129*4:], 1)
+	vertexIDs := make([]byte, 8)
+	binary.LittleEndian.PutUint32(vertexIDs[4:], 1)
+	deltas := make([]byte, 24)
+	binary.LittleEndian.PutUint16(deltas, 0x4000)
+	binary.LittleEndian.PutUint16(deltas[12:], 0x3c00)
+	if err := os.Mkdir(filepath.Join(modDir, "Meshes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"offsets.buf": offsets, "vertex-ids.buf": vertexIDs, "deltas.buf": deltas} {
+		if err := os.WriteFile(filepath.Join(modDir, "Meshes", name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mesh := modelViewerDirectMesh{
+		id:           "body",
+		positionFile: "Meshes/position.buf",
+		geometry:     &modelViewerGeometry{Position: []float32{0, 0, 0, 2, 0, 0}, VertexCount: 2},
+	}
+
+	transport, payload := buildModelViewerDirectMeshPayload(mesh, nil, nil, shapes, newModelViewerBufferCache())
+	if len(transport.ShapeTargets) != 1 || len(payload.ShapePositions) != 1 {
+		t.Fatalf("targets = %+v, want the key on the mesh drawing its position buffer", transport.ShapeTargets)
+	}
+	if !slices.Equal(payload.ShapePositions[0], []float32{0, 0, 0, 3, 0, 0}) {
+		t.Fatalf("positions = %v, want the delta after the batch offset", payload.ShapePositions[0])
+	}
+}
+
+// The mod's own shader writes the shape key's slot in y0 without the per-batch skip
+// of WWMI's setter, while the slider sets its speed and toggles gate it.
+func TestCollectModelViewerSparseWaveShapeKey(t *testing.T) {
+	modDir := t.TempDir()
+	shader := `RWBuffer<float4> CustomShapeKeyValuesRW : register(u5);
+float shape_key_anim = (0.5*(sin(shape_key_value*30)+1));`
+	if err := os.WriteFile(filepath.Join(modDir, "anim.hlsl"), []byte(shader), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(`[Constants]
+global persist $speed = 0.35
+global persist $on = 0
+global persist $toy = 0
+global $freq = 0
+global $shapekey_vertex_offset_batch1 = 9
+[Present]
+if $on == 1 && $toy == 1
+	run = CommandListAnim
+endif
+[CommandListAnim]
+$freq = $freq + $speed * $dt
+run = CustomShaderAnim
+[CustomShaderAnim]
+cs-u5 = ResourceCustomShapeKeyValuesRW
+cs = anim.hlsl
+y0 = 167
+z0 = $freq
+dispatch = 1, 1, 1
+[CommandListShapes]
+cs-t6 = ResourcePosition
+cs-t33 = ResourceShapeOffsets
+cs-t0 = ResourceShapeVertexIDs
+cs-t1 = ResourceShapeDeltas
+[ResourcePosition]
+filename = position.buf
+[ResourceShapeOffsets]
+filename = offsets.buf
+[ResourceShapeVertexIDs]
+filename = vertex-ids.buf
+[ResourceShapeDeltas]
+filename = deltas.buf`)
+
+	shapes := collectModelViewerShapeKeys(sections, collectModelViewerResources(sections), modDir)
+	if len(shapes) != 1 || len(shapes[0].Dimensions) != 1 || shapes[0].Dimensions[0].wave == nil {
+		t.Fatalf("shapes = %#v", shapes)
+	}
+	dimension := shapes[0].Dimensions[0]
+	if dimension.VariableID != "freq" || dimension.BufferShapeID != 167 || dimension.SparseOffset != 9 {
+		t.Fatalf("dimension = %#v, want slot 167 of batch 1", dimension)
+	}
+	want := ModelViewerShapeWave{
+		SpeedVar:     "speed",
+		Rate:         1,
+		AngularScale: 30,
+		Amplitude:    0.5,
+		Bias:         0.5,
+		When:         ModelViewerDNF{{{Var: "on", Value: "1"}, {Var: "toy", Value: "1"}}},
+	}
+	if !reflect.DeepEqual(*dimension.wave, want) {
+		t.Fatalf("wave = %#v, want %#v", *dimension.wave, want)
+	}
+
+	variables := prependModelViewerShapeVariables(nil, shapes, collectModelViewerDefaultVariables(sections))
+	if len(variables) != 1 || variables[0].ID != "speed" || variables[0].Slider == nil {
+		t.Fatalf("variables = %#v, want only the speed as a slider", variables)
 	}
 }
 
