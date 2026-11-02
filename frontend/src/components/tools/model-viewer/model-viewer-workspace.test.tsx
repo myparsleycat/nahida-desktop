@@ -486,6 +486,65 @@ it.each(["source", "close", "external form"])(
   },
 );
 
+it("closes the toggle viewer on a bar click and resizes it on a bar drag", () => {
+  HTMLElement.prototype.setPointerCapture = () => {};
+  const props: ComponentProps<typeof ModelViewerWorkspace> = {
+    open: true,
+    source: createFormSource(),
+    doubleSidedEnabled: true,
+    onDoubleSidedChange: vi.fn(),
+  };
+  const view = render(<ModelViewerWorkspace {...props} />);
+  const bar = screen.getByRole("separator");
+  const grid = bar.parentElement!;
+  const side = bar.nextElementSibling as HTMLElement;
+  const width = () => Number.parseInt(grid.style.getPropertyValue("--model-viewer-side-width"));
+  const closed = () => side.className.includes("lg:hidden");
+  grid.getBoundingClientRect = () => ({ width: 1000 }) as DOMRect;
+  side.getBoundingClientRect = () => ({ width: closed() ? 0 : width() }) as DOMRect;
+  const drag = (toX: number) => {
+    fireEvent.pointerDown(bar, { clientX: 500, pointerId: 1 });
+    fireEvent.pointerMove(bar, { clientX: toX, pointerId: 1 });
+    fireEvent.pointerUp(bar, { pointerId: 1 });
+  };
+
+  drag(503);
+  expect(closed()).toBe(true);
+  expect(width()).toBe(360);
+  expect(screen.getByText("Base outfit")).toBeTruthy();
+  drag(600);
+  expect(closed()).toBe(true);
+  drag(500);
+  expect(closed()).toBe(false);
+  expect(width()).toBe(360);
+
+  drag(400);
+  expect(closed()).toBe(false);
+  expect(width()).toBe(460);
+  drag(-1000);
+  expect(width()).toBe(668);
+  drag(2000);
+  expect(width()).toBe(280);
+
+  fireEvent.pointerDown(bar, { clientX: 500, pointerId: 1 });
+  fireEvent.pointerCancel(bar, { pointerId: 1 });
+  fireEvent.pointerUp(bar, { pointerId: 1 });
+  expect(closed()).toBe(false);
+
+  drag(500);
+  expect(closed()).toBe(true);
+  fireEvent.pointerDown(bar, { clientX: 500, pointerId: 1 });
+  fireEvent.pointerMove(bar, { clientX: 490, pointerId: 1 });
+  expect(closed()).toBe(false);
+  expect(width()).toBe(280);
+  fireEvent.pointerMove(bar, { clientX: 440, pointerId: 1 });
+  fireEvent.pointerUp(bar, { pointerId: 1 });
+  expect(width()).toBe(330);
+
+  view.rerender(<ModelViewerWorkspace {...props} inspector={<div />} />);
+  expect(screen.queryByRole("separator")).toBeNull();
+});
+
 function createFormSource() {
   const mesh = (id: string, form: string): ModViewerTransport["meshes"][number] => ({
     id,

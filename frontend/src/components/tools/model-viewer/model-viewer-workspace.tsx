@@ -83,6 +83,7 @@ import {
 import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
 import { ModelViewerOverlayMenuPanel } from "./model-viewer-overlay-menu";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+import { ModelViewerSideSplit } from "./model-viewer-side-split";
 import { ThreeModelViewer } from "./three-model-viewer";
 
 export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
@@ -831,107 +832,106 @@ export function ModelViewerWorkspace({
           onCapturePreviewClick={handleCapturePreviewClick}
         />
 
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 gap-3",
-            (showToggleViewer || inspector) && "lg:grid-cols-[minmax(0,1fr)_360px]",
-          )}
-        >
-          <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
-            {payloadTransport ? (
-              <>
-                {deferViewer ? null : (
-                  <ThreeModelViewer
-                    ref={viewerRef}
-                    className="absolute inset-0 h-full w-full"
-                    payloadTransport={payloadTransport}
-                    payloadEval={payloadEval ?? undefined}
-                    form={effectiveForm}
-                    orientation={modelOrientation}
-                    animationClip={effectiveAnimation ?? undefined}
-                    computeState={payloadEval?.state}
-                    threeToneMapping={threeToneMapping}
-                    threeEnvironment={threeEnvironment}
-                    threeExposure={threeExposure}
-                    toonShadows={toonShadows}
-                    toonStyle={toonStyle}
-                    normalMaps={normalMaps}
-                    highlightGameTextures={highlightGameTextures}
-                    onLoad={handleViewerLoad}
-                    onError={handleViewerError}
-                    onSurfacePick={onSurfacePick}
-                    onVisibleMeshesChange={onVisibleMeshesChange}
-                    overlay={overlay}
-                  />
-                )}
-                {forms.length > 1 ? (
-                  <FormSwitcher
-                    forms={forms}
-                    value={activeForm}
-                    onChange={selectForm}
-                    onPreviewChange={setPreviewForm}
-                  />
-                ) : null}
-                {isViewerReady && gameTextureMeshCount > 0 ? (
-                  <GameTextureNotice
-                    count={gameTextureMeshCount}
-                    highlighted={highlightGameTextures}
-                    onHighlightedChange={setHighlightGameTextures}
-                  />
-                ) : null}
-                {viewerStatus === "loading" ? (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    aria-label={t("page.tools.model_viewer.loading")}
-                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-muted/70 text-sm text-muted-foreground backdrop-blur-sm"
-                  >
-                    <Loader2Icon className="size-8 animate-spin" aria-hidden="true" />
-                    <span>{t("page.tools.model_viewer.loading")}</span>
-                  </div>
-                ) : viewerStatus === "error" ? (
-                  <div
-                    role="alert"
-                    className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-muted/70 p-6 text-center text-sm text-muted-foreground backdrop-blur-sm"
-                  >
-                    {t("page.tools.model_viewer.toast.load_error")}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                {t("page.tools.model_viewer.model_data_unavailable")}
-              </div>
-            )}
-          </div>
-
-          {showToggleViewer || inspector ? (
-            <div className="flex min-h-0 min-w-0 flex-col gap-3">
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-                {inspector}
-                {showToggleViewer && inspector ? (
-                  // Below a tool panel the column scrolls, so the toggles keep
-                  // their height and fold away until the tool needs them.
-                  <InspectorSection
-                    id="model-viewer:toggles"
-                    title={t("page.tools.model_viewer.toggle_viewer")}
-                    summary={visibleVariables.length}
-                    className="shrink-0 rounded-md bg-muted/30"
-                    headerClassName="px-4 py-3"
-                    panelClassName="border-t"
-                  >
-                    {toggleControls}
-                  </InspectorSection>
-                ) : showToggleViewer ? (
-                  <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
-                    <div className="min-h-0 flex-1 overflow-y-auto">{toggleControls}</div>
-                  </div>
-                ) : null}
-              </div>
-              {inspectorFooter}
+        <ModelViewerSideSplit
+          resizable={showToggleViewer && !inspector}
+          viewer={
+            <div className="relative min-h-80 overflow-hidden rounded-md bg-muted/30">
+              {payloadTransport ? (
+                <>
+                  {deferViewer ? null : (
+                    <ThreeModelViewer
+                      ref={viewerRef}
+                      className="absolute inset-0 h-full w-full"
+                      payloadTransport={payloadTransport}
+                      payloadEval={payloadEval ?? undefined}
+                      form={effectiveForm}
+                      orientation={modelOrientation}
+                      animationClip={effectiveAnimation ?? undefined}
+                      computeState={payloadEval?.state}
+                      threeToneMapping={threeToneMapping}
+                      threeEnvironment={threeEnvironment}
+                      threeExposure={threeExposure}
+                      toonShadows={toonShadows}
+                      toonStyle={toonStyle}
+                      normalMaps={normalMaps}
+                      highlightGameTextures={highlightGameTextures}
+                      onLoad={handleViewerLoad}
+                      onError={handleViewerError}
+                      onSurfacePick={onSurfacePick}
+                      onVisibleMeshesChange={onVisibleMeshesChange}
+                      overlay={overlay}
+                    />
+                  )}
+                  {forms.length > 1 ? (
+                    <FormSwitcher
+                      forms={forms}
+                      value={activeForm}
+                      onChange={selectForm}
+                      onPreviewChange={setPreviewForm}
+                    />
+                  ) : null}
+                  {isViewerReady && gameTextureMeshCount > 0 ? (
+                    <GameTextureNotice
+                      count={gameTextureMeshCount}
+                      highlighted={highlightGameTextures}
+                      onHighlightedChange={setHighlightGameTextures}
+                    />
+                  ) : null}
+                  {viewerStatus === "loading" ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      aria-label={t("page.tools.model_viewer.loading")}
+                      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-muted/70 text-sm text-muted-foreground backdrop-blur-sm"
+                    >
+                      <Loader2Icon className="size-8 animate-spin" aria-hidden="true" />
+                      <span>{t("page.tools.model_viewer.loading")}</span>
+                    </div>
+                  ) : viewerStatus === "error" ? (
+                    <div
+                      role="alert"
+                      className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-muted/70 p-6 text-center text-sm text-muted-foreground backdrop-blur-sm"
+                    >
+                      {t("page.tools.model_viewer.toast.load_error")}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                  {t("page.tools.model_viewer.model_data_unavailable")}
+                </div>
+              )}
             </div>
-          ) : null}
-        </div>
+          }
+          side={
+            showToggleViewer || inspector ? (
+              <>
+                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+                  {inspector}
+                  {showToggleViewer && inspector ? (
+                    // Below a tool panel the column scrolls, so the toggles keep
+                    // their height and fold away until the tool needs them.
+                    <InspectorSection
+                      id="model-viewer:toggles"
+                      title={t("page.tools.model_viewer.toggle_viewer")}
+                      summary={visibleVariables.length}
+                      className="shrink-0 rounded-md bg-muted/30"
+                      headerClassName="px-4 py-3"
+                      panelClassName="border-t"
+                    >
+                      {toggleControls}
+                    </InspectorSection>
+                  ) : showToggleViewer ? (
+                    <div className="flex min-h-0 flex-col overflow-hidden rounded-md bg-muted/30">
+                      <div className="min-h-0 flex-1 overflow-y-auto">{toggleControls}</div>
+                    </div>
+                  ) : null}
+                </div>
+                {inspectorFooter}
+              </>
+            ) : null
+          }
+        />
 
         {activeAnimation && effectiveAnimation ? (
           <ModelViewerAnimationBar

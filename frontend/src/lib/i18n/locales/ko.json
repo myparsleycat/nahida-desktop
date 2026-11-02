@@ -1432,6 +1432,7 @@
         },
         "overlay_switch_page": "메뉴 페이지 전환",
         "toggle_viewer": "토글 뷰어",
+        "toggle_viewer_splitter": "드래그하여 크기를 조절합니다. 클릭하면 토글 뷰어를 표시하거나 숨깁니다.",
         "ineffective_blocked_by": "다음 설정이 함께 적용되어 이 값을 사용할 수 없습니다: {{variables}}",
         "ineffective_suggestion": "이 값을 사용하려면 아래 변수를 변경하세요:",
         "ineffective_apply": "이 조합 적용",
