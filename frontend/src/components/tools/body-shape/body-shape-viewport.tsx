@@ -101,6 +101,23 @@ type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
 const bodyShapeRenderer = createThreeRenderer({ alpha: true, antialias: true });
 
+function orientationEuler(orientation: string): Euler {
+  const [roll, pitch, yaw] = parseOrientation(orientation);
+  return new Euler(
+    MathUtils.degToRad(pitch),
+    MathUtils.degToRad(yaw),
+    MathUtils.degToRad(roll),
+    "YXZ",
+  );
+}
+
+/** The mesh-space direction the viewport shows as up, used as the direction of gravity. */
+export function modelSpaceUp(orientation: string): [number, number, number] {
+  const inverse = new Quaternion().setFromEuler(orientationEuler(orientation)).invert();
+  const up = new Vector3(0, 1, 0).applyQuaternion(inverse);
+  return [up.x, up.y, up.z];
+}
+
 export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeViewportProps>(
   function BodyShapeViewport(props, ref) {
     const controlsRef = useRef<OrbitControlsImpl | null>(null);
@@ -116,15 +133,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
       [],
     );
 
-    const rotation = useMemo(() => {
-      const [roll, pitch, yaw] = parseOrientation(props.orientation);
-      return new Euler(
-        MathUtils.degToRad(pitch),
-        MathUtils.degToRad(yaw),
-        MathUtils.degToRad(roll),
-        "YXZ",
-      );
-    }, [props.orientation]);
+    const rotation = useMemo(() => orientationEuler(props.orientation), [props.orientation]);
 
     return (
       <div className="h-full min-h-80 w-full rounded-md bg-background">

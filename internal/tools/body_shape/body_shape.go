@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -147,13 +148,14 @@ type bodyShapeSession struct {
 }
 
 type BodyShapeChangeSummary struct {
-	Operation       string    `json:"operation"`
-	Amount          float64   `json:"amount"`
-	AxisScale       []float64 `json:"axisScale"`
-	Translation     []float64 `json:"translation"`
-	TaperFactor     float64   `json:"taperFactor"`
-	MovedVertices   int       `json:"movedVertices"`
-	MaxDisplacement float64   `json:"maxDisplacement"`
+	Operation       string             `json:"operation"`
+	Amount          float64            `json:"amount"`
+	AxisScale       []float64          `json:"axisScale"`
+	Translation     []float64          `json:"translation"`
+	TaperFactor     float64            `json:"taperFactor"`
+	Controls        map[string]float64 `json:"controls,omitempty"`
+	MovedVertices   int                `json:"movedVertices"`
+	MaxDisplacement float64            `json:"maxDisplacement"`
 }
 
 type BodyShapeExportMesh struct {
@@ -920,6 +922,13 @@ func bodyShapeSummaryLines(summary *BodyShapeChangeSummary) []string {
 			"- 변경 방식: 본/부위 가중치 + 피벗 높이 기준 테이퍼 (원본 정점 기준 재계산)",
 			fmt.Sprintf("- 강도: %v", summary.Amount),
 			fmt.Sprintf("- 테이퍼 계수: %v", summary.TaperFactor),
+		}
+	case "volume", "limb", "torso":
+		lines = []string{
+			fmt.Sprintf("- 변경 방식: 선택 영역 + 부위 모델(%s) 변위 (원본 정점 기준 재계산)", summary.Operation),
+		}
+		for _, name := range slices.Sorted(maps.Keys(summary.Controls)) {
+			lines = append(lines, fmt.Sprintf("- %s: %v", name, summary.Controls[name]))
 		}
 	default:
 		lines = []string{

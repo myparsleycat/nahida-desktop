@@ -2024,6 +2024,15 @@
         "translate_y": "偏移 Y",
         "translate_z": "偏移 Z",
         "taper_factor": "锥形系数",
+        "deform_volume": "体积（胸部、臀部）",
+        "deform_limb": "四肢粗细（大腿、手臂、小腿）",
+        "deform_torso": "躯干围度（腰部、骨盆）",
+        "anatomy": {
+          "volume": { "size": "大小", "projection": "突出", "lift": "提升", "spacing": "间距" },
+          "limb": { "girth": "粗细", "bias": "上下比例" },
+          "torso": { "girth": "围度", "width": "横向宽度" },
+          "up_hint": "提升和方向以查看器中显示的上方为基准。请先将模型旋转为直立。"
+        },
         "brush_menu": "画笔",
         "brush_enable": "绘制选区",
         "brush_mode": "模式",

@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import {
+    ANATOMY_CONTROLS,
     anisotropicScaleFromOriginal,
     applyBrushStroke,
     applyGeodesicBrush,
     applyMultiRegionDeform,
     applySnorm8VectorCorrection,
     brushFalloff,
+    buildAnatomyBasis,
     buildConnectedComponents,
     buildPositionWeldMap,
     buildSymmetryMap,
@@ -1040,5 +1042,105 @@ describe("body-shape selection refinement", () => {
         assert.equal(updated[6], 127);
         assert.equal(updated[14], 127);
         assert.equal(updated[22], 127);
+    });
+});
+
+describe("body-shape anatomy", () => {
+    const grid = (
+        columns: number,
+        rows: number,
+        point: (column: number, row: number) => number[],
+    ) => {
+        const positions = new Float32Array(columns * rows * 3);
+        for (let row = 0; row < rows; row += 1) {
+            for (let column = 0; column < columns; column += 1) {
+                positions.set(point(column, row), (row * columns + column) * 3);
+            }
+        }
+        const indices: number[] = [];
+        for (let row = 0; row + 1 < rows; row += 1) {
+            for (let column = 0; column + 1 < columns; column += 1) {
+                const a = row * columns + column;
+                indices.push(a, a + 1, a + columns, a + 1, a + columns + 1, a + columns);
+            }
+        }
+        return { positions, indices: new Uint32Array(indices) };
+    };
+
+    it("grows each breast from its own apex and leaves the gap between them", () => {
+        const columns = 51;
+        const rows = 31;
+        const { positions, indices } = grid(columns, rows, (column, row) => {
+            const x = column * 0.1 - 2.5;
+            const y = row * 0.1 - 1.5;
+            const bump = (cx: number) => 0.5 * Math.exp(-((x - cx) ** 2 + y ** 2) / 0.18);
+            return [x, y, bump(-1) + bump(1)];
+        });
+        const vertexAt = (x: number, y: number) =>
+            Math.round((y + 1.5) / 0.1) * columns + Math.round((x + 2.5) / 0.1);
+        const mask = new Float32Array(columns * rows).map((_, vertex) => {
+            const x = positions[vertex * 3];
+            const y = positions[vertex * 3 + 1];
+            const distance = Math.hypot(Math.abs(x) - 1, y);
+            return Math.min(1, Math.max(0, (0.8 - distance) / 0.2));
+        });
+
+        const basis = buildAnatomyBasis({
+            model: "volume",
+            positions,
+            mask,
+            up: [0, 1, 0],
+            adjacency: buildVertexAdjacency(columns * rows, indices),
+            normals: computeVertexNormals(positions, indices),
+        });
+        assert.ok(basis);
+        const size = basis.fields[ANATOMY_CONTROLS.volume.indexOf("size")];
+        const rise = (vertex: number) => size[vertex * 3 + 2];
+
+        const rightApex = vertexAt(1, 0);
+        assert.ok(rise(rightApex) > rise(vertexAt(1, 0.5)));
+        assert.ok(Math.abs(rise(rightApex) - rise(vertexAt(-1, 0))) < 1e-4);
+        // Centered on its own apex, a breast grows the same toward the sternum and the armpit.
+        const inner = rise(vertexAt(0.5, 0));
+        const outer = rise(vertexAt(1.5, 0));
+        assert.ok(Math.abs(inner - outer) < Math.max(inner, outer) * 0.05, `${inner} vs ${outer}`);
+        assert.ok(Math.abs(rise(vertexAt(0, 0))) < rise(rightApex) * 0.01);
+        const outside = vertexAt(0, 1.4);
+        assert.deepEqual([...size.subarray(outside * 3, outside * 3 + 3)], [0, 0, 0]);
+    });
+
+    it("changes limb girth without moving vertices along a tilted limb", () => {
+        const segments = 16;
+        const rings = 21;
+        const axis = [1 / Math.sqrt(5), 2 / Math.sqrt(5), 0];
+        const side = [-axis[1], axis[0], 0];
+        const { positions, indices } = grid(segments, rings, (segment, ring) => {
+            const angle = (segment / segments) * Math.PI * 2;
+            const along = ring * 0.2;
+            return [0, 1, 2].map(
+                (i) =>
+                    axis[i] * along +
+                    side[i] * Math.cos(angle) * 0.3 +
+                    (i === 2 ? Math.sin(angle) * 0.3 : 0),
+            );
+        });
+
+        const basis = buildAnatomyBasis({
+            model: "limb",
+            positions,
+            mask: new Float32Array(segments * rings).fill(1),
+            up: [0, 1, 0],
+            adjacency: buildVertexAdjacency(segments * rings, indices),
+        });
+        assert.ok(basis);
+        const girth = basis.fields[ANATOMY_CONTROLS.limb.indexOf("girth")];
+        for (let vertex = 0; vertex < segments * rings; vertex += 1) {
+            const o = vertex * 3;
+            const axial = girth[o] * axis[0] + girth[o + 1] * axis[1] + girth[o + 2] * axis[2];
+            assert.ok(Math.abs(axial) < 1e-5, `vertex ${vertex} moved ${axial} along the limb`);
+        }
+        const radial = (ring: number) =>
+            Math.hypot(...girth.subarray(ring * segments * 3, ring * segments * 3 + 3));
+        assert.ok(radial(10) > radial(2));
     });
 });

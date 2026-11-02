@@ -4,6 +4,7 @@ import {
   BodyShapeViewport,
   type BodyShapeViewportHandle,
   type BrushStrokeInput,
+  modelSpaceUp,
 } from "@renderer/components/tools/body-shape/body-shape-viewport";
 import {
   formatOrientation,
@@ -45,9 +46,12 @@ import { Switch } from "@renderer/components/ui/switch";
 import { Logger } from "@renderer/lib/logger";
 import { uploadTypedArray } from "@renderer/wails/binary-memory";
 import {
+  ANATOMY_CONTROLS,
   applyBrushStroke,
   applyGeodesicBrush,
   applyMultiRegionDeform,
+  buildAnatomyBasis,
+  combineAnatomyBasis,
   computeMaskPivots,
   computeMeshBounds,
   computeRegionPivot,
@@ -59,6 +63,7 @@ import {
   smoothSelectionWeights,
   syncWeldedWeights,
   type ActiveRegionDeform,
+  type AnatomyModel,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
 import {
@@ -86,13 +91,25 @@ const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
 type WeightSource = { kind: "bone"; segment: number; boneId: number };
 
-type DeformOperation = "scale" | "inflate" | "translate" | "taper";
+const DEFORM_OPERATIONS = [
+  "scale",
+  "inflate",
+  "translate",
+  "taper",
+  "volume",
+  "limb",
+  "torso",
+] as const;
+
+type DeformOperation = (typeof DEFORM_OPERATIONS)[number];
 
 type DeformControl = {
   amount: number;
   axisScale: [number, number, number];
   translation: [number, number, number];
   taperFactor: number;
+  /** Values of `ANATOMY_CONTROLS[operation]` for the anatomy operations. */
+  anatomy: number[];
 };
 
 const DEFAULT_UNIFIED_CONTROL: DeformControl = {
@@ -100,7 +117,16 @@ const DEFAULT_UNIFIED_CONTROL: DeformControl = {
   axisScale: [...DEFAULT_AXIS_SCALE],
   translation: [0, 0, 0],
   taperFactor: 0.5,
+  anatomy: [],
 };
+
+function isAnatomyOperation(operation: DeformOperation): operation is AnatomyModel {
+  return operation in ANATOMY_CONTROLS;
+}
+
+function isDeformOperation(value: unknown): value is DeformOperation {
+  return DEFORM_OPERATIONS.some((operation) => operation === value);
+}
 
 function nearestVertexToPoint(
   positions: Float32Array,
@@ -203,6 +229,8 @@ export default function BodyShapeTool({
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
   const [maskVersion, setMaskVersion] = useState(0);
+  /** Follows `maskVersion` except during a brush stroke, where rebuilding per dab would stall painting. */
+  const [basisVersion, setBasisVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
 
   /* Brush state */
@@ -303,7 +331,7 @@ export default function BodyShapeTool({
   );
 
   const selectionPivots = useMemo(() => {
-    if (!selectedMesh || !hasSelection) return null;
+    if (!selectedMesh || !hasSelection || isAnatomyOperation(deformOperation)) return null;
     return {
       pivot: computeRegionPivot(
         selectedMesh.originalPositions,
@@ -318,7 +346,15 @@ export default function BodyShapeTool({
           )
         : undefined,
     };
-  }, [selectedMesh, hasSelection, maskVersion]);
+  }, [selectedMesh, hasSelection, deformOperation, maskVersion]);
+
+  const deformOptions = DEFORM_OPERATIONS.filter(
+    (operation) =>
+      Boolean(selectedMesh?.originalNormals) || (operation !== "inflate" && operation !== "volume"),
+  ).map((operation) => ({
+    value: operation,
+    label: t(`page.tools.body_shape.deform_${operation}`),
+  }));
 
   const meshExtent = useMemo(() => {
     if (!selectedMesh) return 1;
@@ -326,8 +362,41 @@ export default function BodyShapeTool({
     return Math.max(size[0], size[1], size[2], 1e-3);
   }, [selectedMesh]);
 
+  const anatomyBasis = useMemo(() => {
+    if (!selectedMesh || !hasSelection || !isAnatomyOperation(deformOperation)) return undefined;
+    return buildAnatomyBasis({
+      model: deformOperation,
+      positions: selectedMesh.originalPositions,
+      mask: selectedMesh.selectionWeights,
+      up: modelSpaceUp(modelOrientation),
+      adjacency: selectedMesh.adjacency,
+      normals: selectedMesh.originalNormals,
+      weldMap: selectedMesh.weldMap,
+    });
+  }, [selectedMesh, hasSelection, deformOperation, modelOrientation, basisVersion]);
+
+  const anatomyDisplacement = useMemo(
+    () => anatomyBasis && combineAnatomyBasis(anatomyBasis, unifiedControl.anatomy),
+    [anatomyBasis, unifiedControl.anatomy],
+  );
+
   const activeRegions: ActiveRegionDeform[] = useMemo(() => {
-    if (!selectedMesh || !selectionPivots) return [];
+    if (!selectedMesh) return [];
+    if (isAnatomyOperation(deformOperation)) {
+      if (!anatomyDisplacement) return [];
+      return [
+        {
+          id: "selection",
+          weights: selectedMesh.selectionWeights,
+          amount: 1,
+          axisScale: [1, 1, 1],
+          pivot: selectedMesh.boundsCenter,
+          operation: "displace",
+          displacement: anatomyDisplacement,
+        },
+      ];
+    }
+    if (!selectionPivots) return [];
     const isTranslate = deformOperation === "translate";
     return [
       {
@@ -343,19 +412,28 @@ export default function BodyShapeTool({
         vertexPivots: selectionPivots.vertexPivots,
       },
     ];
-  }, [selectedMesh, selectionPivots, unifiedControl, deformOperation, weightVersion]);
+  }, [
+    selectedMesh,
+    selectionPivots,
+    unifiedControl,
+    deformOperation,
+    anatomyDisplacement,
+    weightVersion,
+  ]);
 
   const bumpMaskVersion = () => {
     setMaskVersion((version) => version + 1);
     setWeightVersion((version) => version + 1);
+    if (!selectionStrokeBeforeRef.current) setBasisVersion((version) => version + 1);
   };
 
   const commitSelectionHistory = (before: Float32Array) => {
-    if (!selectedMesh) return;
+    if (!selectedMesh) return false;
     const entry = createSelectionHistoryEntry(before, selectedMesh.selectionWeights);
-    if (!entry) return;
+    if (!entry) return false;
     pushSelectionHistory(selectionHistoryRef.current, entry);
     updateHistoryState();
+    return true;
   };
 
   const handleBrushStroke = (stroke: BrushStrokeInput) => {
@@ -450,7 +528,7 @@ export default function BodyShapeTool({
   const handleBrushStrokeEnd = () => {
     const before = selectionStrokeBeforeRef.current;
     selectionStrokeBeforeRef.current = null;
-    if (before) commitSelectionHistory(before);
+    if (before && commitSelectionHistory(before)) setBasisVersion((version) => version + 1);
   };
 
   const handleResetPaintedWeights = () => {
@@ -613,11 +691,21 @@ export default function BodyShapeTool({
     setWeightVersion((version) => version + 1);
   };
 
+  const updateAnatomy = (index: number, value: number) => {
+    setUnifiedControl((previous) => {
+      const anatomy = [...previous.anatomy];
+      anatomy[index] = value;
+      return { ...previous, anatomy };
+    });
+    setWeightVersion((version) => version + 1);
+  };
+
   const resetSelected = () => {
     setUnifiedControl({
       ...DEFAULT_UNIFIED_CONTROL,
       axisScale: [...DEFAULT_AXIS_SCALE],
       translation: [0, 0, 0],
+      anatomy: [],
     });
     setWeightVersion((version) => version + 1);
   };
@@ -680,6 +768,14 @@ export default function BodyShapeTool({
           axisScale: [...unifiedControl.axisScale],
           translation: [...unifiedControl.translation],
           taperFactor: unifiedControl.taperFactor,
+          controls: isAnatomyOperation(deformOperation)
+            ? Object.fromEntries(
+                ANATOMY_CONTROLS[deformOperation].map((control, index) => [
+                  control,
+                  unifiedControl.anatomy[index] ?? 0,
+                ]),
+              )
+            : undefined,
           movedVertices: metricsNow.movedVertices,
           maxDisplacement: metricsNow.maxDisplacement,
         },
@@ -1048,36 +1144,15 @@ export default function BodyShapeTool({
                         <FieldLabel>{t("page.tools.body_shape.deform_operation")}</FieldLabel>
                         <Select
                           value={deformOperation}
-                          items={[
-                            { value: "scale", label: t("page.tools.body_shape.deform_scale") },
-                            ...(selectedMesh.originalNormals
-                              ? [
-                                  {
-                                    value: "inflate",
-                                    label: t("page.tools.body_shape.deform_inflate"),
-                                  },
-                                ]
-                              : []),
-                            {
-                              value: "translate",
-                              label: t("page.tools.body_shape.deform_translate"),
-                            },
-                            { value: "taper", label: t("page.tools.body_shape.deform_taper") },
-                          ]}
+                          items={deformOptions}
                           onValueChange={(value) => {
-                            if (
-                              value !== "scale" &&
-                              value !== "inflate" &&
-                              value !== "translate" &&
-                              value !== "taper"
-                            ) {
-                              return;
-                            }
+                            if (!isDeformOperation(value)) return;
                             setDeformOperation(value);
                             setUnifiedControl((previous) => ({
                               ...previous,
                               amount: 0,
                               translation: [0, 0, 0],
+                              anatomy: [],
                             }));
                             setWeightVersion((version) => version + 1);
                           }}
@@ -1087,25 +1162,37 @@ export default function BodyShapeTool({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="scale">
-                                {t("page.tools.body_shape.deform_scale")}
-                              </SelectItem>
-                              {selectedMesh.originalNormals ? (
-                                <SelectItem value="inflate">
-                                  {t("page.tools.body_shape.deform_inflate")}
+                              {deformOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
                                 </SelectItem>
-                              ) : null}
-                              <SelectItem value="translate">
-                                {t("page.tools.body_shape.deform_translate")}
-                              </SelectItem>
-                              <SelectItem value="taper">
-                                {t("page.tools.body_shape.deform_taper")}
-                              </SelectItem>
+                              ))}
                             </SelectGroup>
                           </SelectContent>
                         </Select>
                       </Field>
-                      {deformOperation === "translate" ? (
+                      {isAnatomyOperation(deformOperation) ? (
+                        <>
+                          {ANATOMY_CONTROLS[deformOperation].map((control, index) => (
+                            <RangeField
+                              key={control}
+                              label={t(
+                                `page.tools.body_shape.anatomy.${deformOperation}.${control}`,
+                              )}
+                              value={unifiedControl.anatomy[index] ?? 0}
+                              defaultValue={0}
+                              min={-1}
+                              max={1}
+                              step={0.01}
+                              display={`${((unifiedControl.anatomy[index] ?? 0) * 100).toFixed(0)}%`}
+                              onChange={(value) => updateAnatomy(index, value)}
+                            />
+                          ))}
+                          <p className="text-xs text-muted-foreground">
+                            {t("page.tools.body_shape.anatomy.up_hint")}
+                          </p>
+                        </>
+                      ) : deformOperation === "translate" ? (
                         <>
                           <RangeField
                             label={t("page.tools.body_shape.translate_x")}

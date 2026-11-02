@@ -2027,6 +2027,20 @@
         "translate_y": "Offset Y",
         "translate_z": "Offset Z",
         "taper_factor": "Taper factor",
+        "deform_volume": "Volume (chest, buttocks)",
+        "deform_limb": "Limb girth (thighs, arms, calves)",
+        "deform_torso": "Torso girth (waist, hips)",
+        "anatomy": {
+          "volume": {
+            "size": "Size",
+            "projection": "Projection",
+            "lift": "Lift",
+            "spacing": "Spacing"
+          },
+          "limb": { "girth": "Girth", "bias": "Upper/lower balance" },
+          "torso": { "girth": "Circumference", "width": "Side width" },
+          "up_hint": "Lift and directions follow the up direction shown in the viewer. Rotate the model upright first."
+        },
         "brush_menu": "Brush",
         "brush_enable": "Paint selection",
         "brush_mode": "Mode",

@@ -1,4 +1,11 @@
 export {
+    ANATOMY_CONTROLS,
+    buildAnatomyBasis,
+    combineAnatomyBasis,
+    type AnatomyBasis,
+    type AnatomyModel,
+} from "./anatomy";
+export {
     applySnorm8VectorCorrection,
     assertFinitePositions,
     detectSnorm8VectorLayout,

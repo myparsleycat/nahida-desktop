@@ -2024,6 +2024,15 @@
         "translate_y": "이동 Y",
         "translate_z": "이동 Z",
         "taper_factor": "테이퍼 계수",
+        "deform_volume": "볼륨 (가슴, 엉덩이)",
+        "deform_limb": "팔다리 굵기 (허벅지, 팔, 종아리)",
+        "deform_torso": "몸통 둘레 (허리, 골반)",
+        "anatomy": {
+          "volume": { "size": "크기", "projection": "돌출", "lift": "리프트", "spacing": "간격" },
+          "limb": { "girth": "굵기", "bias": "위아래 비율" },
+          "torso": { "girth": "둘레", "width": "좌우 너비" },
+          "up_hint": "리프트와 방향은 뷰어에 표시된 위쪽을 기준으로 합니다. 먼저 모델이 똑바로 서도록 회전하세요."
+        },
         "brush_menu": "브러시",
         "brush_enable": "선택 영역 칠하기",
         "brush_mode": "모드",

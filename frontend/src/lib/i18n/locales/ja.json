@@ -2024,6 +2024,15 @@
         "translate_y": "オフセット Y",
         "translate_z": "オフセット Z",
         "taper_factor": "テーパー係数",
+        "deform_volume": "ボリューム（胸、お尻）",
+        "deform_limb": "四肢の太さ（太もも、腕、ふくらはぎ）",
+        "deform_torso": "胴回り（腰、骨盤）",
+        "anatomy": {
+          "volume": { "size": "サイズ", "projection": "突出", "lift": "リフト", "spacing": "間隔" },
+          "limb": { "girth": "太さ", "bias": "上下バランス" },
+          "torso": { "girth": "胴回り", "width": "横幅" },
+          "up_hint": "リフトと方向はビューアーに表示される上方向を基準にします。先にモデルが直立するよう回転してください。"
+        },
         "brush_menu": "ブラシ",
         "brush_enable": "選択範囲をペイント",
         "brush_mode": "モード",

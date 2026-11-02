@@ -274,10 +274,12 @@ export type ActiveRegionDeform = {
     pivot: readonly [number, number, number];
     /** Packed xyz pivot per vertex when the mask has separate parts; overrides `pivot`. */
     vertexPivots?: Float32Array;
-    operation?: "scale" | "inflate" | "translate" | "taper";
+    operation?: "scale" | "inflate" | "translate" | "taper" | "displace";
     normals?: Float32Array;
     translation?: readonly [number, number, number];
     taperFactor?: number;
+    /** Packed xyz offsets for "displace"; already shaped, so `weights` only drives the heatmap. */
+    displacement?: Float32Array;
 };
 
 export type DeformMetrics = {
@@ -319,6 +321,14 @@ export function applyMultiRegionDeform(options: {
 
         for (const region of regions) {
             if (region.amount === 0) continue;
+            if (region.operation === "displace") {
+                const displacement = region.displacement;
+                if (!displacement || o + 2 >= displacement.length) continue;
+                dx += displacement[o] * region.amount;
+                dy += displacement[o + 1] * region.amount;
+                dz += displacement[o + 2] * region.amount;
+                continue;
+            }
             const w = region.weights[i] ?? 0;
             if (w <= 0) continue;
 
@@ -563,7 +573,13 @@ export function composeEffectiveScales(
     }
 
     for (const region of regions) {
-        if (region.amount === 0 || region.operation === "inflate") continue;
+        if (
+            region.amount === 0 ||
+            region.operation === "inflate" ||
+            region.operation === "displace"
+        ) {
+            continue;
+        }
         for (let i = 0; i < vertexCount; i++) {
             const w = region.weights[i] ?? 0;
             if (w <= 0) continue;
