@@ -2791,6 +2791,8 @@
           "tab": "런타임",
           "title": "런타임",
           "description": "도구가 이 게임의 Mods 폴더 안 {{folder}} 그룹에 설치하는 전역 모드",
+          "loading": "런타임을 불러오는 중…",
+          "loadFailed": "런타임을 불러올 수 없습니다.",
           "noModsFolder": "이 임포터를 쓰는 게임이 아직 없어 런타임을 설치할 Mods 폴더가 없습니다.",
           "versions": "설치 버전 {{installed}} · 포함 버전 {{bundled}}",
           "bundled": "포함 버전 {{bundled}}",

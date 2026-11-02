@@ -113,8 +113,8 @@ vi.mock("@tanstack/react-query", () => ({
                 ? [{ version: "1.7.5" }, { version: "1.7.6" }]
                 : queryKey[0] === "xxmi:mod-folder"
                   ? { path: "C:\\XXMI\\GIMI\\Mods", linkTarget: "", targetMissing: false }
-                  : queryKey[0] === "mod-runtime"
-                    ? { modsRoot: "", runtimes: [] }
+                  : queryKey[0] === "mod-runtime-support"
+                    ? false
                     : queryKey[0] === "xxmi:diagnostics"
                       ? null
                       : [],

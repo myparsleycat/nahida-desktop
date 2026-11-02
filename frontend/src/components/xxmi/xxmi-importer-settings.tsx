@@ -51,7 +51,7 @@ import {
 } from "@renderer/components/xxmi/xxmi-fields";
 import { importerFolderError } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
-import { modRuntimesQueryKey, XXMIModRuntimes } from "@renderer/components/xxmi/xxmi-mod-runtimes";
+import { XXMIModRuntimes } from "@renderer/components/xxmi/xxmi-mod-runtimes";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -114,9 +114,12 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     queryFn: XXMI.ListCachedLibs,
   });
   const { data: overview } = useQuery({ queryKey: ["xxmi:overview"], queryFn: XXMI.GetOverview });
-  const { data: modRuntimes } = useQuery({
-    queryKey: modRuntimesQueryKey(importer),
-    queryFn: () => ModRuntime.List(importer),
+  // Fixed at build time, and rendered with the config so the tab row never reflows.
+  const runtimesSupport = useQuery({
+    queryKey: ["mod-runtime-support", importer],
+    queryFn: () => ModRuntime.Supports(importer),
+    staleTime: Infinity,
+    retry: false,
   });
   const customDll = !!overview?.importers?.find((entry) => entry.key === importer)?.customDll;
   const running = !!overview?.importers?.find((entry) => entry.key === importer)?.running;
@@ -272,7 +275,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
     withResolver: true,
   });
 
-  if (!config) return null;
+  if (!config || runtimesSupport.isPending) return null;
 
   const hasGameTweaks = !!(config.gimi || config.srmi || config.himi || config.wwmi);
   const xxmiRuntime = config.mode === RuntimeMode.RuntimeXXMI;
@@ -359,7 +362,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <TabsTrigger value="advanced">{t("page.setting.xxmi.builtin.advanced")}</TabsTrigger>
               <TabsTrigger value="d3dx">d3dx.ini</TabsTrigger>
               <TabsTrigger value="tools">{t("page.setting.xxmi.builtin.tools")}</TabsTrigger>
-              {modRuntimes?.runtimes?.length ? (
+              {runtimesSupport.data ? (
                 <TabsTrigger value="runtimes">{t("page.setting.xxmi.modRuntimes.tab")}</TabsTrigger>
               ) : null}
             </TabsList>

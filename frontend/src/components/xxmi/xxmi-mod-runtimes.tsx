@@ -37,7 +37,7 @@ import { formatKeyLabel } from "@shared/key-formatter";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isEqual } from "es-toolkit";
-import { FolderOpenIcon, TriangleAlertIcon } from "lucide-react";
+import { FolderOpenIcon, Loader2Icon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -62,13 +62,42 @@ export function XXMIModRuntimes({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: listing } = useQuery({
+  const query = useQuery({
     queryKey: modRuntimesQueryKey(importer),
     queryFn: () => ModRuntime.List(importer),
   });
+  const listing = query.data;
   const [removing, setRemoving] = useState<Status | null>(null);
 
-  if (!listing) return null;
+  if (!listing) {
+    return (
+      <Section>
+        <SectionHeader>
+          <SectionTitle>{t("page.setting.xxmi.modRuntimes.title")}</SectionTitle>
+          <SectionDescription>
+            {t("page.setting.xxmi.modRuntimes.description", { folder: RUNTIME_GROUP })}
+          </SectionDescription>
+        </SectionHeader>
+        <SectionContent>
+          {query.isError ? (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-destructive">
+                {t("page.setting.xxmi.modRuntimes.loadFailed")}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
+                {t("page.setting.xxmi.dllVersionRetry")}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2Icon className="size-3.5 animate-spin" />
+              {t("page.setting.xxmi.modRuntimes.loading")}
+            </div>
+          )}
+        </SectionContent>
+      </Section>
+    );
+  }
 
   const run = async (
     action: (importer: string, name: string) => Promise<Status>,

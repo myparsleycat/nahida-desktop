@@ -2791,6 +2791,8 @@
           "tab": "运行时",
           "title": "运行时",
           "description": "工具安装到此游戏 Mods 文件夹 {{folder}} 分组中的全局 Mod",
+          "loading": "正在加载运行时…",
+          "loadFailed": "无法加载运行时。",
           "noModsFolder": "还没有游戏使用此导入器，因此没有可安装运行时的 Mods 文件夹。",
           "versions": "已安装 {{installed}} · 内置 {{bundled}}",
           "bundled": "内置 {{bundled}}",

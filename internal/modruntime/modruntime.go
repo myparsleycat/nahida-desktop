@@ -136,6 +136,10 @@ type runtimeSpec struct {
 	namespace *regexp.Regexp
 }
 
+func (s runtimeSpec) supports(importer string) bool {
+	return slices.ContainsFunc(s.Importers, func(name string) bool { return strings.EqualFold(name, importer) })
+}
+
 // variant selects the runtime's variant for the capabilities.
 func (s runtimeSpec) variant(caps Capabilities) string {
 	for _, variant := range s.Variants {
@@ -204,6 +208,12 @@ func New(opts Options) *Manager {
 //wails:ignore
 func (m *Manager) UseClient(client *db.Client) { m.games = client.GamePaths }
 
+// Supports reports whether the importer has any runtime. Unlike List, it does
+// not scan the Mods folder.
+func (m *Manager) Supports(importer string) bool {
+	return slices.ContainsFunc(m.specs, func(spec runtimeSpec) bool { return spec.supports(importer) })
+}
+
 // List reports every runtime the importer can use, in its game's Mods folder.
 func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 	listing := Listing{Runtimes: []Status{}}
@@ -214,7 +224,7 @@ func (m *Manager) List(ctx context.Context, importer string) (Listing, error) {
 	}
 	listing.ModsRoot = modsRoot
 	for _, spec := range m.specs {
-		if !slices.ContainsFunc(spec.Importers, func(name string) bool { return strings.EqualFold(name, importer) }) {
+		if !spec.supports(importer) {
 			continue
 		}
 		if modsRoot == "" {
@@ -598,8 +608,7 @@ func (m *Manager) report(sc *scope, operation string, err error) error {
 
 func (m *Manager) spec(name, importer string) (runtimeSpec, bool) {
 	for _, spec := range m.specs {
-		if spec.Name == name &&
-			slices.ContainsFunc(spec.Importers, func(item string) bool { return strings.EqualFold(item, importer) }) {
+		if spec.Name == name && spec.supports(importer) {
 			return spec, true
 		}
 	}

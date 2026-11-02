@@ -2846,6 +2846,8 @@
           "tab": "Runtimes",
           "title": "Runtimes",
           "description": "Global mods that tools install into the {{folder}} group of this game's Mods folder",
+          "loading": "Loading runtimes…",
+          "loadFailed": "Unable to load runtimes.",
           "noModsFolder": "No game uses this importer yet, so there is no Mods folder to install runtimes into.",
           "versions": "Installed {{installed}} · bundled {{bundled}}",
           "bundled": "Bundled {{bundled}}",
