@@ -16,6 +16,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +63,11 @@ type modelViewerDecodedTexture struct {
 	partialRatio float64
 }
 
-func collectModelViewerTextureBindings(sections []modINISection, variables map[string]any) []modelViewerTextureBinding {
+func collectModelViewerTextureBindings(
+	sections []modINISection,
+	variables map[string]any,
+	wwmiSlots func() bool,
+) []modelViewerTextureBinding {
 	lookup := make(map[string]modINISection)
 	for _, section := range sections {
 		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
@@ -148,6 +153,25 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			sort.SliceStable(slotTextures, func(i, j int) bool {
 				return slotTextures[i].slot < slotTextures[j].slot
 			})
+
+			// WWMI shaders do not use that order. A WuWa character shader reads its
+			// diffuse from ps-t3 of a full ps-t0 to ps-t3 set, and attachWwmiSlotMaps,
+			// which checks the files, gives it the other maps. Other WWMI shaders
+			// bind fewer slots in no known order and keep the lowest as their diffuse.
+			if wwmiSlots() {
+				diffuse := slotTextures[0]
+				if modelViewerBindsWwmiSlotMaps(slotTextures) {
+					diffuse = slotTextures[slices.IndexFunc(
+						slotTextures,
+						func(candidate modelViewerTextureSlotCandidate) bool {
+							return candidate.slot == len(wwmiSlotMapRoles)-1
+						},
+					)]
+				}
+				textureRoles[modelViewerNormalizeKey(diffuse.resource)] = "diffuse"
+				semanticDiffuse = diffuse.resource
+				slotTextures = nil
+			}
 			canonicalRoles := []string{"diffuse", "normal_map", "light_map", "material_map"}
 			roleIndex := 0
 			for _, candidate := range slotTextures {
@@ -206,6 +230,17 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 		}
 	}
 	return bindings
+}
+
+func modelViewerBindsWwmiSlotMaps(slotTextures []modelViewerTextureSlotCandidate) bool {
+	for slot := range wwmiSlotMapRoles {
+		if !slices.ContainsFunc(slotTextures, func(candidate modelViewerTextureSlotCandidate) bool {
+			return candidate.slot == slot
+		}) {
+			return false
+		}
+	}
+	return true
 }
 
 func modelViewerPsSlotNumber(key string) (int, bool) {

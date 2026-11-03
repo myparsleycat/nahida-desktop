@@ -497,13 +497,13 @@ vb1 = ResourceVectorBuffer
 vb2 = ResourceTexCoordBuffer
 ps-t0 = ResourceC1
 ps-t1 = ResourceB1
-ps-t2 = ResourceA1
+ps-t2 = ResourceD1
+ps-t3 = ResourceA1
 if $color == 2
-ps-t2 = ResourceA2
+ps-t3 = ResourceA2
 elif $color == 3
-ps-t2 = ResourceA3
+ps-t3 = ResourceA3
 endif
-ps-t3 = ResourceD1
 [ResourceC1]
 filename = Textures/C1.dds
 [ResourceB1]

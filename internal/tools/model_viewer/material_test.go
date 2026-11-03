@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -25,7 +27,7 @@ ps-t0 = ResourceBodyDiffuse
 
 [ResourceBodyDiffuse]
 filename = body.png`)
-	bindings := collectModelViewerTextureBindings(sections, nil)
+	bindings := collectModelViewerTextureBindings(sections, nil, noWwmiSlots)
 	if len(bindings) != 1 || bindings[0].IBResourceName != "BodyIB" ||
 		bindings[0].DiffuseResourceName != "BodyDiffuse" {
 		t.Fatalf("bindings = %#v", bindings)
@@ -73,7 +75,7 @@ filename = normal.dds
 
 [ResourceTexture18]
 filename = material.dds`)
-	bindings := collectModelViewerTextureBindings(sections, nil)
+	bindings := collectModelViewerTextureBindings(sections, nil, noWwmiSlots)
 	if len(bindings) != 1 {
 		t.Fatalf("bindings = %#v", bindings)
 	}
@@ -124,7 +126,7 @@ filename = objectAPst14.dds`)
 		"objectapst14": "material_map",
 	}
 	for run := range 32 {
-		bindings := collectModelViewerTextureBindings(sections, nil)
+		bindings := collectModelViewerTextureBindings(sections, nil, noWwmiSlots)
 		if len(bindings) != 1 {
 			t.Fatalf("run %d bindings = %#v", run, bindings)
 		}
@@ -144,6 +146,42 @@ filename = objectAPst14.dds`)
 				)
 			}
 		}
+	}
+}
+
+func noWwmiSlots() bool { return false }
+
+// Only the diffuse comes from slot order here: attachWwmiSlotMaps assigns WuWa maps
+// after checking the files, and a fallback role would fill any map it declines.
+func TestModelViewerWWMIUnlabeledPsSlotsInferOnlyDiffuse(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		slots []int
+		want  string
+	}{
+		{name: "WuWa character set", slots: []int{0, 1, 2, 3}, want: "T3"},
+		{name: "partial set", slots: []int{1, 2}, want: "T1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ini := "[TextureOverrideComponent0]\nib = ResourceIB\n"
+			for _, slot := range tt.slots {
+				ini += fmt.Sprintf("ps-t%d = ResourceT%d\n", slot, slot)
+			}
+			ini += "[ResourceIB]\nfilename = index.buf\n"
+			for _, slot := range tt.slots {
+				ini += fmt.Sprintf("[ResourceT%d]\nfilename = t%d.dds\n", slot, slot)
+			}
+
+			bindings := collectModelViewerTextureBindings(parseModINI(ini), nil, func() bool { return true })
+			if len(bindings) != 1 {
+				t.Fatalf("bindings = %#v", bindings)
+			}
+			binding := bindings[0]
+			want := map[string]string{strings.ToLower(tt.want): "diffuse"}
+			if binding.DiffuseResourceName != tt.want || !maps.Equal(binding.TextureRoles, want) {
+				t.Fatalf("diffuse = %q, roles = %v, want %v", binding.DiffuseResourceName, binding.TextureRoles, want)
+			}
+		})
 	}
 }
 
@@ -175,7 +213,7 @@ filename = objectGlow.dds
 
 [ResourceObjectAPst8]
 filename = objectAPst8.dds`)
-	bindings := collectModelViewerTextureBindings(sections, nil)
+	bindings := collectModelViewerTextureBindings(sections, nil, noWwmiSlots)
 	if len(bindings) != 1 {
 		t.Fatalf("bindings = %#v", bindings)
 	}
@@ -208,6 +246,14 @@ $\wwmiv1\shapekey_id = 3
 resource\rabbitfx\diffuse = ref ResourceTexture15`,
 			want: "wuwa:rabbitfx",
 		},
+		{name: "plain WWMI", ini: `[Constants]
+global $required_wwmi_version = 0.70
+[TextureOverrideComponent0]
+ps-t3 = ResourceTexture0`, want: "wwmi"},
+		{name: "WWMI with GIMI-style position section", ini: `[Constants]
+global $required_wwmi_version = 0.70
+[TextureOverrideCharAPosition]
+hash = 1a2b3c4d`, want: "wwmi"},
 		{name: "RabbitFX without WWMI", ini: `[CommandListTextures]
 Resource\RabbitFX\Diffuse = ref ResourceTexture15`, want: ""},
 		{name: "existing ZZMI", ini: `[CommandListTextures]

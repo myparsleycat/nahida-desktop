@@ -9,8 +9,8 @@ import type {
 
 import { efmiMaterialProfile } from "./efmi";
 import { gimiMaterialProfile } from "./gimi";
-import { rabbitFXMaterialProfile } from "./rabbitfx";
 import { srmiMaterialProfile } from "./srmi";
+import { wwmiMaterialProfile } from "./wwmi";
 import { zzmiMaterialProfile } from "./zzmi";
 
 const genericMaterialProfile: ModelViewerMaterialProfile = {
@@ -23,11 +23,22 @@ const genericMaterialProfile: ModelViewerMaterialProfile = {
 // compile here until it has a renderer module.
 const materialProfiles: Record<ViewerMaterialProfile, ModelViewerMaterialProfile> = {
     zzmi: zzmiMaterialProfile,
-    "wuwa:rabbitfx": rabbitFXMaterialProfile,
+    "wuwa:rabbitfx": wwmiMaterialProfile,
+    wwmi: wwmiMaterialProfile,
     efmi: efmiMaterialProfile,
     gimi: gimiMaterialProfile,
     srmi: srmiMaterialProfile,
 };
+
+// RabbitFX mods draw with the WWMI shader, so they share its stored style.
+const toonStyleAliases: Partial<Record<ViewerMaterialProfile, ViewerMaterialProfile>> = {
+    "wuwa:rabbitfx": "wwmi",
+};
+
+/** The profile whose stored toon style a profile reads and writes. */
+export function toonStyleKeyOf(id: ViewerMaterialProfile): ViewerMaterialProfile {
+    return toonStyleAliases[id] ?? id;
+}
 
 export function materialProfileOf(
     id: ModViewerTransport["materialProfile"],
@@ -44,7 +55,7 @@ export function modelViewerToonStyleOf(
     if (!id || !toon) {
         return undefined;
     }
-    return styles?.[id] ?? toon.defaultStyle;
+    return styles?.[toonStyleKeyOf(id)] ?? toon.defaultStyle;
 }
 
 export function parseModelViewerToonStyles(stored: string): ModelViewerToonStyles {
@@ -68,7 +79,7 @@ export function serializeModelViewerToonStyles(styles: ModelViewerToonStyles): s
 function toonProfiles() {
     return (Object.keys(materialProfiles) as ViewerMaterialProfile[]).flatMap((id) => {
         const toon = materialProfiles[id].toon;
-        return toon ? [[id, toon] as const] : [];
+        return toon && toonStyleKeyOf(id) === id ? [[id, toon] as const] : [];
     });
 }
 

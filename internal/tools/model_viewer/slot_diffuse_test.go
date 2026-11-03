@@ -3,7 +3,9 @@ package modelviewer
 import (
 	"encoding/binary"
 	"image/color"
+	"maps"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -187,7 +189,7 @@ func TestAttachSlotBoundDiffuseReplacesLinearPsT0WithSRGBSlot(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			candidates := []modelViewerDirectTextureAssignment{slot(1, "B1")}
 			if !tt.linearOnly {
-				candidates = append(candidates, slot(3, "D1"), slot(2, "A1"))
+				candidates = append(candidates, slot(4, "D1"), slot(2, "A1"))
 			}
 			meshes := []modelViewerDirectMesh{{
 				component:             tt.component,
@@ -208,6 +210,106 @@ func TestAttachSlotBoundDiffuseReplacesLinearPsT0WithSRGBSlot(t *testing.T) {
 					mesh.textureDefaultFile,
 					mesh.textureAssignments,
 					want,
+				)
+			}
+		})
+	}
+}
+
+func TestAttachSlotBoundDiffuseReadsWuWaSlotMaps(t *testing.T) {
+	const (
+		bc7Linear = 98
+		bc7SRGB   = 99
+	)
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "Textures/N.dds", encodeDX10HeaderDDS(8192, 8192, bc7SRGB))
+	writeTextureFile(t, dir, "Textures/L.dds", encodeDX10HeaderDDS(8192, 8192, bc7SRGB))
+	writeTextureFile(t, dir, "Textures/M.dds", encodeDX10HeaderDDS(8192, 8192, bc7Linear))
+	writeTextureFile(t, dir, "Textures/D.dds", encodeDX10HeaderDDS(8192, 8192, bc7SRGB))
+	writeTextureFile(t, dir, "Textures/DLinear.dds", encodeDX10HeaderDDS(8192, 8192, bc7Linear))
+
+	assignment := func(role, name string) modelViewerDirectTextureAssignment {
+		return modelViewerDirectTextureAssignment{
+			role:       role,
+			resource:   "Resource" + name,
+			file:       "Textures/" + name + ".dds",
+			conditions: modelViewerDNFTrue(),
+		}
+	}
+	fullSet := ModelViewerDNF{{{Var: "shader", Value: "1"}}}
+	otherShader := ModelViewerDNF{{{Var: "shader", Value: "2"}}}
+	for _, tt := range []struct {
+		name    string
+		diffuse string
+		// A diffuse that another shader branch binds alone, which never draws with ps-t3.
+		branchDiffuse string
+		want          map[string]string
+	}{
+		{
+			name:    "sRGB ps-t3",
+			diffuse: "D",
+			want:    map[string]string{"normal_map": "N", "light_map": "L", "material_map": "M", "diffuse": "D"},
+		},
+		{
+			name:          "other shader branch",
+			diffuse:       "D",
+			branchDiffuse: "L",
+			want:          map[string]string{"normal_map": "N", "light_map": "L", "material_map": "M", "diffuse": "D"},
+		},
+		// A linear ps-t3 is no color map, so the slots keep their generic handling.
+		{name: "linear ps-t3", diffuse: "DLinear", want: map[string]string{"diffuse": "N"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			withConditions := func(assignment modelViewerDirectTextureAssignment, conditions ModelViewerDNF) modelViewerDirectTextureAssignment {
+				if tt.branchDiffuse != "" {
+					assignment.conditions = conditions
+				}
+				return assignment
+			}
+			normal := withConditions(assignment("diffuse", "N"), fullSet)
+			assignments := []modelViewerDirectTextureAssignment{normal}
+			if tt.branchDiffuse != "" {
+				assignments = append(assignments, withConditions(assignment("diffuse", tt.branchDiffuse), otherShader))
+			}
+			meshes := []modelViewerDirectMesh{{
+				component:          "Component0",
+				textureAssignments: assignments,
+				textureDefaultFile: normal.file,
+				slotTextureCandidates: []modelViewerDirectTextureAssignment{
+					withConditions(assignment(modelViewerSlotTextureRole(1), "L"), fullSet),
+					withConditions(assignment(modelViewerSlotTextureRole(2), "M"), fullSet),
+					withConditions(assignment(modelViewerSlotTextureRole(3), tt.diffuse), fullSet),
+				},
+			}}
+
+			attachSlotBoundDiffuse(meshes, dir, true, false)
+
+			mesh := meshes[0]
+			got := make(map[string]string)
+			var diffuses []string
+			for _, assignment := range mesh.textureAssignments {
+				name := strings.TrimSuffix(strings.TrimPrefix(assignment.file, "Textures/"), ".dds")
+				if assignment.role == "diffuse" {
+					diffuses = append(diffuses, name)
+				}
+				got[assignment.role] = name
+			}
+			wantDiffuses := []string{tt.want["diffuse"]}
+			if tt.branchDiffuse != "" {
+				wantDiffuses = []string{tt.branchDiffuse, tt.want["diffuse"]}
+				got["diffuse"] = tt.want["diffuse"]
+			}
+			slices.Sort(diffuses)
+			slices.Sort(wantDiffuses)
+			if !maps.Equal(got, tt.want) || !slices.Equal(diffuses, wantDiffuses) ||
+				mesh.textureDefaultFile != "Textures/"+tt.want["diffuse"]+".dds" {
+				t.Fatalf(
+					"roles = %v, diffuses = %v, default = %q, want %v and %v",
+					got,
+					diffuses,
+					mesh.textureDefaultFile,
+					tt.want,
+					wantDiffuses,
 				)
 			}
 		})

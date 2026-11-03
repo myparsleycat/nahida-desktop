@@ -126,7 +126,11 @@ func buildModelViewerDirectMeshesPrepared(
 	// Domains go in as defaults: condition parsing extends them with the unit's
 	// own bindings instead of replacing them.
 	maps.Copy(variables, domains)
-	textures := collectModelViewerTextureBindings(sections, variables)
+	// Few overrides reach the slot fallback, so the INI scans run only for them.
+	wwmiSlots := sync.OnceValue(func() bool {
+		return detectModelViewerLayout(sections, resources) == "wwmi" && !isModelViewerEFMI(sections)
+	})
+	textures := collectModelViewerTextureBindings(sections, variables, wwmiSlots)
 	scanned, scanErr := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath,
 		modDir,

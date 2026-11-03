@@ -235,6 +235,7 @@ type ModelViewerMaterialProfile string
 const (
 	modelViewerZZMIProfile     ModelViewerMaterialProfile = "zzmi"
 	modelViewerRabbitFXProfile ModelViewerMaterialProfile = "wuwa:rabbitfx"
+	modelViewerWWMIProfile     ModelViewerMaterialProfile = "wwmi"
 	modelViewerEFMIProfile     ModelViewerMaterialProfile = "efmi"
 	modelViewerGIMIProfile     ModelViewerMaterialProfile = "gimi"
 	modelViewerSRMIProfile     ModelViewerMaterialProfile = "srmi"
@@ -262,7 +263,7 @@ func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
 			losslessMaterialMaps: true,
 			vertexColors:         true,
 		}
-	case modelViewerRabbitFXProfile:
+	case modelViewerRabbitFXProfile, modelViewerWWMIProfile:
 		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true}
 	case modelViewerEFMIProfile:
 		return modelViewerProfileTraits{normalXYReconstruct: true, resampleMiplessDDS: true, outlineMasks: true}

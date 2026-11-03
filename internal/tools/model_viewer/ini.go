@@ -95,10 +95,13 @@ func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMater
 	if isModelViewerEFMI(sections) {
 		return modelViewerEFMIProfile
 	}
-	if gimi && !wwmi && !srmi {
+	if wwmi {
+		return modelViewerWWMIProfile
+	}
+	if gimi && !srmi {
 		return modelViewerGIMIProfile
 	}
-	if srmi && !wwmi {
+	if srmi {
 		return modelViewerSRMIProfile
 	}
 	return ""

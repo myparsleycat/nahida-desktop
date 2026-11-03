@@ -64,6 +64,8 @@ const materialProfileUIs: Partial<Record<ViewerMaterialProfile, MaterialProfileU
   },
   srmi: { label: "srmi_toon_style" },
   zzmi: { label: "zzmi_toon_style" },
+  "wuwa:rabbitfx": { label: "wwmi_toon_style" },
+  wwmi: { label: "wwmi_toon_style" },
 };
 
 export function toonAssetSourceOf(

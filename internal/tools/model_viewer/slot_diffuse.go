@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,10 @@ func isModelViewerEFMI(sections []modINISection) bool {
 	}
 	return false
 }
+
+// wwmiSlotMapRoles is the order WuWa character shaders read their maps from
+// ps-t0 to ps-t3.
+var wwmiSlotMapRoles = []string{"normal_map", "light_map", "material_map", "diffuse"}
 
 func modelViewerSlotTextureRole(slot int) string {
 	return "pst" + strconv.Itoa(slot)
@@ -109,6 +114,9 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 		if len(candidates) == 0 {
 			continue
 		}
+		if wwmi && !efmi && attachWwmiSlotMaps(mesh, candidates, srgbDiffuse) {
+			continue
+		}
 
 		fits, replace := likelyDiffuse, false
 		primaryMaskDiffuse := wwmiMesh && !efmi && meshDiffuseMatches(mesh, hintOf, func(hint *wwmiTextureHint) bool {
@@ -186,6 +194,68 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 			break
 		}
 	}
+}
+
+// attachWwmiSlotMaps gives a WWMI mesh the maps of a WuWa character shader when
+// it binds unnamed textures at each of ps-t0 to ps-t3 and ps-t3 holds an sRGB
+// color map. Other WWMI shaders bind fewer slots, in no known order. The scan
+// took the ps-t0 texture for the diffuse, so it becomes the normal map. A diffuse
+// that never draws with the ps-t3 textures, as in another shader's branch of the
+// same override, stays the diffuse.
+func attachWwmiSlotMaps(
+	mesh *modelViewerDirectMesh,
+	candidates []modelViewerDirectTextureAssignment,
+	srgbDiffuse func(file string) bool,
+) bool {
+	if mesh.textureAuthored || mesh.textureDumpInferred || !meshHasDiffuseTexture(mesh) ||
+		lo.SomeBy(mesh.textureAssignments, func(assignment modelViewerDirectTextureAssignment) bool {
+			return assignment.role != "diffuse" && slices.Contains(wwmiSlotMapRoles, assignment.role)
+		}) {
+		return false
+	}
+	bySlot := lo.GroupBy(
+		lo.Filter(candidates, func(candidate modelViewerDirectTextureAssignment, _ int) bool {
+			return candidate.file != ""
+		}),
+		func(candidate modelViewerDirectTextureAssignment) string { return candidate.role },
+	)
+	for slot := 1; slot < len(wwmiSlotMapRoles); slot++ {
+		if len(bySlot[modelViewerSlotTextureRole(slot)]) == 0 {
+			return false
+		}
+	}
+	diffuses := bySlot[modelViewerSlotTextureRole(len(wwmiSlotMapRoles)-1)]
+	if !lo.EveryBy(diffuses, func(candidate modelViewerDirectTextureAssignment) bool {
+		return srgbDiffuse(candidate.file)
+	}) {
+		return false
+	}
+
+	diffuseConditions := modelViewerDNFFalse()
+	for _, candidate := range diffuses {
+		diffuseConditions = modelViewerDNFOr(diffuseConditions, candidate.conditions)
+	}
+	for index := range mesh.textureAssignments {
+		assignment := &mesh.textureAssignments[index]
+		if assignment.role == "diffuse" && modelViewerDNFIntersects(assignment.conditions, diffuseConditions) {
+			assignment.role = wwmiSlotMapRoles[0]
+		}
+	}
+	for slot := 1; slot < len(wwmiSlotMapRoles); slot++ {
+		for _, candidate := range bySlot[modelViewerSlotTextureRole(slot)] {
+			candidate.role = wwmiSlotMapRoles[slot]
+			mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, candidate)
+		}
+	}
+	defaultDiffuse, found := lo.Find(diffuses, func(candidate modelViewerDirectTextureAssignment) bool {
+		return modelViewerDNFIsTrue(candidate.conditions)
+	})
+	if !found {
+		defaultDiffuse = diffuses[0]
+	}
+	mesh.textureDefaultFile = defaultDiffuse.file
+	mesh.textureAuthored = true
+	return true
 }
 
 // replaceNormalMapDiffuse corrects GIMI mods on the ps-t0 normal, ps-t1 diffuse,

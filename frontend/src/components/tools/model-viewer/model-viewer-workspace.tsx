@@ -66,6 +66,7 @@ import {
   modelViewerToonStyleOf,
   parseModelViewerToonStyles,
   serializeModelViewerToonStyles,
+  toonStyleKeyOf,
 } from "./material-profiles/registry";
 import { ModelViewerAnimationBar } from "./model-viewer-animation-bar";
 import {
@@ -339,13 +340,14 @@ export function ModelViewerWorkspace({
   // cannot have its edits to other profiles replaced by this window's copy.
   const updateToonStyle = (value: ModelViewerToonStyleBase) => {
     if (!materialProfile) return;
-    setToonStyles((current) => ({ ...current, [materialProfile]: value }));
+    const key = toonStyleKeyOf(materialProfile);
+    setToonStyles((current) => ({ ...current, [key]: value }));
     toonStyleWritesRef.current = toonStyleWritesRef.current
       .then(async () => {
         const stored = parseModelViewerToonStyles(await getSetting("modelViewer.toonStyles"));
         await setSetting(
           "modelViewer.toonStyles",
-          serializeModelViewerToonStyles({ ...stored, [materialProfile]: value }),
+          serializeModelViewerToonStyles({ ...stored, [key]: value }),
         );
       })
       .catch((error: unknown) => {

@@ -19,10 +19,12 @@ import type { PositionVariantLoader } from "./model-viewer-position-loader";
 import { DEFAULT_EFMI_TOON_STYLE, markEFMIHeadMeshes } from "./material-profiles/efmi";
 import { DEFAULT_GIMI_TOON_STYLE } from "./material-profiles/gimi";
 import {
+    modelViewerToonStyleOf,
     parseModelViewerToonStyles,
     serializeModelViewerToonStyles,
 } from "./material-profiles/registry";
 import { DEFAULT_SRMI_TOON_STYLE } from "./material-profiles/srmi";
+import { DEFAULT_WWMI_TOON_STYLE } from "./material-profiles/wwmi";
 import { DEFAULT_ZZMI_TOON_STYLE } from "./material-profiles/zzmi";
 import {
     applyPayloadEval,
@@ -794,7 +796,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.normalMap).toBe(normal);
     });
 
-    it("adapts RabbitFX LightMap.G without occupying generic PBR map slots", () => {
+    it("binds RabbitFX maps to the WWMI toon shader without occupying generic PBR map slots", () => {
         const geometry = new BufferGeometry();
         geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
         geometry.setAttribute("uv", new BufferAttribute(new Float32Array(6), 2));
@@ -853,29 +855,26 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.aoMap).toBeNull();
         expect(material.metalnessMap).toBeNull();
         expect(material.roughnessMap).toBeNull();
-        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v3|model-viewer-dds-v1");
+        expect(material.customProgramCacheKey()).toBe("wwmi-toon-v1|model-viewer-dds-v1");
 
         const shader = {
             vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",
             fragmentShader:
-                "#include <common>\nvoid main() {\n#include <map_fragment>\n#include <lights_fragment_begin>\n}",
+                "#include <common>\nvoid main() {\n#include <map_fragment>\n#include <opaque_fragment>\n#include <tonemapping_fragment>\n}",
             uniforms: {},
         };
         material.onBeforeCompile(shader as never, {} as never);
-        expect(shader.vertexShader).toContain("vRabbitFXUv = uv");
+        expect(shader.vertexShader).toContain("vWWMIUv = uv");
         expect(shader.fragmentShader).toContain("mask <= 0.01 || mask >= 0.99");
-        expect(shader.fragmentShader).toContain("step( 0.1, mask )");
-        expect(shader.fragmentShader).toContain("rabbitFXDirectDiffuseContribution");
-        expect(
-            shader.fragmentShader.match(/vec3 rabbitFXDirectDiffuseContribution;/g),
-        ).toHaveLength(1);
-        expect(shader.fragmentShader).not.toContain("#include <lights_fragment_begin>");
-        expect(
-            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
-        ).toBe(firstLight);
-        expect(
-            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXToonEnabled?.value,
-        ).toBe(1);
+        expect((shader.uniforms as Record<string, { value: unknown }>).wwmiLightMap?.value).toBe(
+            firstLight,
+        );
+        expect((shader.uniforms as Record<string, { value: unknown }>).wwmiNormalData?.value).toBe(
+            normal,
+        );
+        expect((shader.uniforms as Record<string, { value: unknown }>).wwmiToonEnabled?.value).toBe(
+            1,
+        );
 
         const version = material.version;
         secondLight.repeat.y = -1;
@@ -897,11 +896,11 @@ describe("applyPayloadEval packed maps", () => {
             ],
         });
         expect(material.version).toBe(version);
+        expect((shader.uniforms as Record<string, { value: unknown }>).wwmiLightMap?.value).toBe(
+            secondLight,
+        );
         expect(
-            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXLightMap?.value,
-        ).toBe(secondLight);
-        expect(
-            (shader.uniforms as Record<string, { value: Matrix3 }>).rabbitFXLightMapTransform?.value
+            (shader.uniforms as Record<string, { value: Matrix3 }>).wwmiLightMapTransform?.value
                 .elements[4],
         ).toBe(-1);
 
@@ -924,16 +923,16 @@ describe("applyPayloadEval packed maps", () => {
             });
         const uniforms = shader.uniforms as Record<string, { value: unknown }>;
         applyCutout("cutout");
-        expect(uniforms.rabbitFXCutoutMap?.value).toBe(cutout);
-        expect(uniforms.rabbitFXCutoutEnabled?.value).toBe(1);
+        expect(uniforms.wwmiCutoutMap?.value).toBe(cutout);
+        expect(uniforms.wwmiCutoutEnabled?.value).toBe(1);
         applyCutout(null);
-        expect(uniforms.rabbitFXCutoutEnabled?.value).toBe(0);
+        expect(uniforms.wwmiCutoutEnabled?.value).toBe(0);
         expect(material.version).toBe(version);
 
         setPayloadToonShadows(root, false);
-        expect(
-            (shader.uniforms as Record<string, { value: unknown }>).rabbitFXToonEnabled?.value,
-        ).toBe(0);
+        expect((shader.uniforms as Record<string, { value: unknown }>).wwmiToonEnabled?.value).toBe(
+            0,
+        );
         expect(material.version).toBe(version);
     });
 
@@ -1186,9 +1185,12 @@ describe("applyPayloadEval packed maps", () => {
             gimi: DEFAULT_GIMI_TOON_STYLE,
             srmi: DEFAULT_SRMI_TOON_STYLE,
             zzmi: DEFAULT_ZZMI_TOON_STYLE,
+            wwmi: DEFAULT_WWMI_TOON_STYLE,
         };
         expect(parseModelViewerToonStyles("")).toEqual(defaults);
         expect(parseModelViewerToonStyles("null")).toEqual(defaults);
+        const wwmi = { ...DEFAULT_WWMI_TOON_STYLE, outlines: false };
+        expect(modelViewerToonStyleOf({ wwmi }, "wuwa:rabbitfx")).toBe(wwmi);
         expect(parseModelViewerToonStyles('{"efmi":null,"gimi":[]}')).toEqual(defaults);
 
         const styles = parseModelViewerToonStyles(
@@ -1246,7 +1248,7 @@ describe("applyPayloadEval packed maps", () => {
             ],
         });
 
-        expect((mesh.material as MeshStandardMaterial).userData.rabbitFXMaterial).toBeUndefined();
+        expect((mesh.material as MeshStandardMaterial).userData.wwmiToonMaterial).toBeUndefined();
     });
 });
 
