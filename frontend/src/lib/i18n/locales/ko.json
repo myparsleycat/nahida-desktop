@@ -1468,6 +1468,7 @@
           "toon_light_follows_camera": "조명 카메라 추종",
           "toon_flat_face": "얼굴 평면 음영",
           "gimi_toon_style": "원신 툰 스타일",
+          "srmi_toon_style": "스타레일 툰 스타일",
           "gimi_toon_ramp": "그림자 램프",
           "gimi_toon_ramp_builtin": "내장",
           "gimi_toon_face_type": "얼굴 그림자 맵",

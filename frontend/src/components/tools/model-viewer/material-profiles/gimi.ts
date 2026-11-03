@@ -55,12 +55,15 @@ import type {
     ModelViewerToonStyleBase,
 } from "./profile";
 
-import { modelViewerDDSFormatOf } from "../model-viewer-dds";
 import {
     averagedNormals,
+    meanNormal,
     replaceShaderAnchor,
+    syncToonOutlineSource,
     textureUvTransform,
+    TOON_STEP_GLSL,
     TOON_VERTEX_COLOR_ATTRIBUTE,
+    toonLightMapOf,
 } from "../model-viewer-shader-utils";
 import { BASE_TOON_FLAGS, readToonFlags } from "./profile";
 
@@ -184,11 +187,7 @@ const neutralLightMap = solidTexture(0, 128, 0, 77);
 let proceduralRamp: DataTexture | undefined;
 let proceduralMetalMap: DataTexture | undefined;
 
-const GENSHIN_COMMON_GLSL = `// A step whose edge spans one screen pixel, so toon boundaries do not alias.
-float genshinStep( float edge, float x ) {
-    float width = max( fwidth( x ), 1e-4 );
-    return smoothstep( edge - width, edge + width, x );
-}
+const GENSHIN_COMMON_GLSL = `${TOON_STEP_GLSL}
 
 float genshinMaterialRow( float id ) {
     if ( id < 0.2 ) return 4.0;
@@ -248,16 +247,14 @@ export const gimiMaterialProfile: ModelViewerMaterialProfile<GIMIToonStyle> = {
     markMeshes: markGenshinMeshes,
     configureMaterial: configureGenshinToonMaterialShader,
 
-    // One- and two-channel containers have no material ID or specular mask to read.
     bindMaps(material, maps, textures) {
         const state = material.userData.genshinToonMaterial as GenshinToonShaderState | undefined;
         if (!state) {
             return;
         }
-        const texture = maps.lightMapKey ? textures.get(maps.lightMapKey) : undefined;
-        const format = modelViewerDDSFormatOf(texture);
-        const lightMap =
-            format.startsWith("bc4-") || format.startsWith("bc5-") ? undefined : texture;
+        const lightMap = toonLightMapOf(
+            maps.lightMapKey ? textures.get(maps.lightMapKey) : undefined,
+        );
         state.lightMap.value = lightMap ?? neutralLightMap;
         state.lightMapEnabled.value = lightMap ? 1 : 0;
         state.lightMapTransform.value = textureUvTransform(state.lightMap.value);
@@ -418,7 +415,7 @@ if ( genshinToonEnabled > 0.5 ) {
         if ( genshinFaceLightMapEnabled > 0.5 ) {
             vec2 faceUv = vGenshinUv;
             if ( forward.y * light.x - forward.x * light.y >= 0.0 ) faceUv.x = 1.0 - faceUv.x;
-            shadow = genshinStep( -0.5 * facing + 0.5, texture2D( genshinFaceLightMap, faceUv ).r );
+            shadow = toonStep( -0.5 * facing + 0.5, texture2D( genshinFaceLightMap, faceUv ).r );
             shadow = mix( shadow, 1.0, texture2D( genshinFaceShadow, vGenshinUv ).a * genshinFaceShadowEnabled );
         } else {
             shadow = smoothstep( -0.35, -0.15, facing );
@@ -431,14 +428,14 @@ if ( genshinToonEnabled > 0.5 ) {
     float rampV = ( row + 5.0 * genshinDaytime + 0.5 ) / 10.0;
     vec3 ramp = texture2D( genshinRamp, vec2( clamp( rampU, 0.004, 0.996 ), rampV ) ).rgb;
     vec3 shade = ramp * mix( vec3( genshinShadowBrightness ), vec3( 1.0 ), smoothstep( 0.9, 1.0, rampU ) );
-    float lit = genshinStep( threshold, shadow );
+    float lit = toonStep( threshold, shadow );
     shade = mix( shade, vec3( 1.0 ), lit );
 
     vec3 halfDirection = normalize( worldLight + worldView );
     float blinnPhong = pow( clamp( dot( worldNormal, halfDirection ), 0.0, 1.0 ), 5.0 );
     vec3 metalMap = texture2D( genshinMetalMap, normalize( normal ).xy * 0.5 + 0.5 ).rgb;
     // Derivatives are undefined inside the per-texel branch below.
-    float highlight = genshinStep( 1.1, lightMap.b + blinnPhong );
+    float highlight = toonStep( 1.1, lightMap.b + blinnPhong );
     vec3 specular = lightMap.r >= 0.9
         ? blinnPhong * lightMap.b * albedo * metalMap * genshinMetallic
         : vec3( highlight * lightMap.r * genshinSpecular );
@@ -530,21 +527,13 @@ function syncGenshinToon(
         return;
     }
 
-    // The extrusion source follows the tangent check, which is unknown until the maps
-    // are applied and is redone when the normal or tangent attributes change.
-    const frameKnown = data.tangentFrameUsable !== undefined;
-    const tangentOutline = data.tangentFrameUsable === false;
-    const outline = data.genshinOutline;
-    if (outline && frameKnown && outline.userData.genshinTangentOutline !== tangentOutline) {
-        outline.removeFromParent();
-        outline.material.dispose();
-        data.genshinOutline = undefined;
-    }
+    data.genshinOutline = syncToonOutlineSource(
+        data.genshinOutline,
+        data.tangentFrameUsable,
+        (tangent) => createGenshinToonOutline(object, tangent),
+    );
     if (!data.genshinOutline) {
-        if (!frameKnown) {
-            return;
-        }
-        data.genshinOutline = createGenshinToonOutline(object, tangentOutline);
+        return;
     }
     const uniforms = data.genshinOutline.material.uniforms;
     data.genshinOutline.visible = showOutline;
@@ -557,8 +546,7 @@ function syncGenshinToon(
 /**
  * Marks faces and hair from mesh and texture names. GIMI mods name parts after the
  * game's own (Head, Body, Dress, and a separately drawn Face), so a name is the
- * only reliable signal. A face also gets its forward direction: the mean of its
- * normals, which points out of the face in whatever space the mod's buffers use.
+ * only reliable signal. A face also gets its forward direction from its normals.
  */
 function markGenshinMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
     transport.meshes.forEach((mesh, index) => {
@@ -570,14 +558,7 @@ function markGenshinMeshes(transport: ModViewerTransport, objects: Mesh[]): void
         if (!data.genshinFace) {
             return;
         }
-        const normal = object.geometry.attributes.normal;
-        const sum = new Vector3();
-        for (let vertex = 0; vertex < normal.count; vertex++) {
-            sum.x += normal.getX(vertex);
-            sum.y += normal.getY(vertex);
-            sum.z += normal.getZ(vertex);
-        }
-        data.genshinFaceForward = sum.lengthSq() > 0 ? sum.normalize() : undefined;
+        data.genshinFaceForward = meanNormal(object.geometry);
     });
 }
 
@@ -716,7 +697,6 @@ void main() {
         }),
     );
     outline.raycast = () => {};
-    outline.userData.genshinTangentOutline = tangentHoldsOutlineNormal;
     object.add(outline);
     return outline;
 }

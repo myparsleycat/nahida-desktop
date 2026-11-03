@@ -55,8 +55,11 @@ var (
 	// Classic GIMI exports carry no namespace marker; their per-part position
 	// override and vertex limit sections are the evidence, as in mod merging.
 	modelViewerGIMISectionRE = regexp.MustCompile(`(?i)(?:Position|VertexLimitRaise)$`)
-	modelViewerSRMIMarkerRE  = regexp.MustCompile(`(?i)(?:(?:Resource|CommandList|\$)\\SRMI\\|HeadBlend|HairBlend)`)
-	modelViewerScopeTokenRE  = regexp.MustCompile(`^` + modelViewerScopeTokenPrefix + `\d+`)
+	modelViewerSRMIMarkerRE  = regexp.MustCompile(`(?i)(?:Resource|CommandList|\$)\\SRMI\\`)
+	// Classic SRMI exports override blend buffers per part. ZZMI mods also name
+	// blend resources after parts, so only the override section counts.
+	modelViewerSRMIBlendSectionRE = regexp.MustCompile(`(?i)(?:Head|Hair)Blend$`)
+	modelViewerScopeTokenRE       = regexp.MustCompile(`^` + modelViewerScopeTokenPrefix + `\d+`)
 )
 
 const modelViewerScopeTokenPrefix = "mvscope"
@@ -73,7 +76,8 @@ func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMater
 	for _, section := range sections {
 		gimi = gimi || strings.EqualFold(section.Header, "TextureOverride") &&
 			modelViewerGIMISectionRE.MatchString(section.Name)
-		srmi = srmi || modelViewerSRMIMarkerRE.MatchString(section.Name)
+		srmi = srmi || strings.EqualFold(section.Header, "TextureOverride") &&
+			modelViewerSRMIBlendSectionRE.MatchString(section.Name)
 		for _, line := range section.Lines {
 			wwmi = wwmi || modelViewerWWMIMarkerRE.MatchString(line)
 			rabbitFX = rabbitFX || modelViewerRabbitFXRE.MatchString(line)
@@ -93,6 +97,9 @@ func detectModelViewerMaterialProfile(sections []modINISection) ModelViewerMater
 	}
 	if gimi && !wwmi && !srmi {
 		return modelViewerGIMIProfile
+	}
+	if srmi && !wwmi {
+		return modelViewerSRMIProfile
 	}
 	return ""
 }

@@ -10,6 +10,7 @@ import type {
 import { efmiMaterialProfile } from "./efmi";
 import { gimiMaterialProfile } from "./gimi";
 import { rabbitFXMaterialProfile } from "./rabbitfx";
+import { srmiMaterialProfile } from "./srmi";
 import { zzmiMaterialProfile } from "./zzmi";
 
 const genericMaterialProfile: ModelViewerMaterialProfile = {
@@ -25,6 +26,7 @@ const materialProfiles: Record<ViewerMaterialProfile, ModelViewerMaterialProfile
     "wuwa:rabbitfx": rabbitFXMaterialProfile,
     efmi: efmiMaterialProfile,
     gimi: gimiMaterialProfile,
+    srmi: srmiMaterialProfile,
 };
 
 export function materialProfileOf(

@@ -80,7 +80,7 @@ func collectModelViewerTextureBindings(sections []modINISection, variables map[s
 			continue
 		}
 		wanted := []string{"ib", "this"}
-		for _, namespace := range []string{"GIMI", "ZZMI", "RabbitFX", "WWMI"} {
+		for _, namespace := range []string{"GIMI", "SRMI", "ZZMI", "RabbitFX", "WWMI"} {
 			for _, role := range []string{"Diffuse", "NormalMap", "LightMap", "MaterialMap"} {
 				wanted = append(wanted, fmt.Sprintf("Resource\\%s\\%s", namespace, role))
 			}

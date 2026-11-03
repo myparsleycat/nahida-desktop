@@ -148,9 +148,18 @@ filename = objectAPst14.dds`)
 }
 
 func TestModelViewerSemanticRolesWinOverSlotOrder(t *testing.T) {
+	for _, namespace := range []string{"ZZMI", "SRMI"} {
+		t.Run(namespace, func(t *testing.T) {
+			testModelViewerSemanticRolesWinOverSlotOrder(t, namespace)
+		})
+	}
+}
+
+func testModelViewerSemanticRolesWinOverSlotOrder(t *testing.T, namespace string) {
+	t.Helper()
 	sections := parseModINI(`[TextureOverrideObjectA]
 ib = ResourceObjectAIB
-Resource\ZZMI\LightMap = ref ResourceObjectALight
+Resource\` + namespace + `\LightMap = ref ResourceObjectALight
 ps-t9 = ref ResourceObjectAGlow
 ps-t10 = ref ResourceObjectAPst8
 
@@ -218,11 +227,16 @@ Resource\GIMI\Diffuse = ref ResourceCharABodyDiffuse`, want: "gimi"},
 		{name: "SRMI position override", ini: `[TextureOverrideCharAPosition]
 hash = 1a2b3c4d
 [TextureOverrideCharAHeadBlend]
-vb1 = ResourceCharAHeadBlend`, want: ""},
+vb1 = ResourceCharAHeadBlend`, want: "srmi"},
 		{name: "SRMI resource marker", ini: `[TextureOverrideCharAVertexLimitRaise]
 hash = 1a2b3c4d
 [CommandListCharA]
-Resource\SRMI\Diffuse = ref ResourceCharADiffuse`, want: ""},
+Resource\SRMI\Diffuse = ref ResourceCharADiffuse`, want: "srmi"},
+		{name: "ZZMI hair blend resource", ini: `[TextureOverrideJane]
+hash = 33a09cfe
+vb2 = ResourceHairBlend
+[ResourceHairBlend]
+filename = hair.buf`, want: ""},
 		{
 			name: "strong WWMI RabbitFX wins stray ZZMI resource",
 			ini: `[Constants]

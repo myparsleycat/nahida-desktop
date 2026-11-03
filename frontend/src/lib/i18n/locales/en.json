@@ -1471,6 +1471,7 @@
           "toon_light_follows_camera": "Light Follows Camera",
           "toon_flat_face": "Flat Face Shading",
           "gimi_toon_style": "Genshin Toon Style",
+          "srmi_toon_style": "Star Rail Toon Style",
           "gimi_toon_ramp": "Shadow Ramp",
           "gimi_toon_ramp_builtin": "Built-in",
           "gimi_toon_face_type": "Face Shadow Map",

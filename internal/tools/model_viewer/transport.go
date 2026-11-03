@@ -237,6 +237,7 @@ const (
 	modelViewerRabbitFXProfile ModelViewerMaterialProfile = "wuwa:rabbitfx"
 	modelViewerEFMIProfile     ModelViewerMaterialProfile = "efmi"
 	modelViewerGIMIProfile     ModelViewerMaterialProfile = "gimi"
+	modelViewerSRMIProfile     ModelViewerMaterialProfile = "srmi"
 )
 
 // modelViewerProfileTraits lists how a profile's textures and buffers are prepared.
@@ -261,7 +262,7 @@ func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
 		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true}
 	case modelViewerEFMIProfile:
 		return modelViewerProfileTraits{normalXYReconstruct: true, resampleMiplessDDS: true, outlineMasks: true}
-	case modelViewerGIMIProfile:
+	case modelViewerGIMIProfile, modelViewerSRMIProfile:
 		return modelViewerProfileTraits{vertexColors: true}
 	default:
 		return modelViewerProfileTraits{}

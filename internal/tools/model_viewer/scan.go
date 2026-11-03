@@ -188,7 +188,7 @@ func modelViewerTextureAssignment(key, value, sectionName string) (string, strin
 
 func modelViewerSemanticTextureRole(key string) (string, bool) {
 	normalized := modelViewerNormalizeKey(key)
-	for _, namespace := range []string{"gimi", "zzmi", "rabbitfx", "wwmi"} {
+	for _, namespace := range []string{"gimi", "srmi", "zzmi", "rabbitfx", "wwmi"} {
 		prefix := "resource" + namespace
 		switch normalized {
 		case prefix + "diffuse":

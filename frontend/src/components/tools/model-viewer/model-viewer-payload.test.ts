@@ -21,6 +21,7 @@ import {
     parseModelViewerToonStyles,
     serializeModelViewerToonStyles,
 } from "./material-profiles/registry";
+import { DEFAULT_SRMI_TOON_STYLE } from "./material-profiles/srmi";
 import {
     applyPayloadEval,
     clearPayloadModelData,
@@ -1157,7 +1158,11 @@ describe("applyPayloadEval packed maps", () => {
     });
 
     it("restores only the toon flags and asset choices from stored settings", () => {
-        const defaults = { efmi: DEFAULT_EFMI_TOON_STYLE, gimi: DEFAULT_GIMI_TOON_STYLE };
+        const defaults = {
+            efmi: DEFAULT_EFMI_TOON_STYLE,
+            gimi: DEFAULT_GIMI_TOON_STYLE,
+            srmi: DEFAULT_SRMI_TOON_STYLE,
+        };
         expect(parseModelViewerToonStyles("")).toEqual(defaults);
         expect(parseModelViewerToonStyles("null")).toEqual(defaults);
         expect(parseModelViewerToonStyles('{"efmi":null,"gimi":[]}')).toEqual(defaults);
