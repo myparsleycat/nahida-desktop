@@ -45,7 +45,7 @@ import {
     parseModelViewerDDS,
 } from "./model-viewer-dds";
 import { decodeModelViewerMesh } from "./model-viewer-mesh-codec";
-import { TOON_VERTEX_COLOR_ATTRIBUTE } from "./model-viewer-shader-utils";
+import { TOON_UV1_ATTRIBUTE, TOON_VERTEX_COLOR_ATTRIBUTE } from "./model-viewer-shader-utils";
 
 type PayloadMeshUserData = {
     meshId: string;
@@ -895,7 +895,7 @@ async function buildGeometry(
 ): Promise<BufferGeometry> {
     const bytes = await fetchBinaryBytes(mesh.geometryUrl, undefined, signal);
     signal.throwIfAborted();
-    const { positions, normals, tangents, uvs, colors, indices } = decodeModelViewerMesh(
+    const { positions, normals, tangents, uvs, uvs1, colors, indices } = decodeModelViewerMesh(
         bytes.buffer as ArrayBuffer,
     );
     const geometry = new BufferGeometry();
@@ -908,6 +908,9 @@ async function buildGeometry(
     }
     if (uvs) {
         geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+    }
+    if (uvs1) {
+        geometry.setAttribute(TOON_UV1_ATTRIBUTE, new BufferAttribute(uvs1, 2));
     }
     if (colors) {
         geometry.setAttribute(TOON_VERTEX_COLOR_ATTRIBUTE, new BufferAttribute(colors, 4, true));

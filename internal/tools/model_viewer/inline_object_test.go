@@ -50,6 +50,8 @@ func writeInlineObjectVertex(buf []byte, offset int, x, y, z, u, v, nx, ny, nz f
 	binary.LittleEndian.PutUint32(buf[offset+20:], math.Float32bits(nz))
 	binary.LittleEndian.PutUint16(buf[offset+24:], modelViewerFloatToHalfBits(u))
 	binary.LittleEndian.PutUint16(buf[offset+26:], modelViewerFloatToHalfBits(v))
+	binary.LittleEndian.PutUint32(buf[offset+28:], math.Float32bits(.875))
+	binary.LittleEndian.PutUint32(buf[offset+32:], math.Float32bits(.125))
 }
 
 func TestModelViewerInlineObjectShaderLayout(t *testing.T) {
@@ -163,6 +165,9 @@ filename = StoveBodyNormalMap.png
 	}
 	if want := []float32{0.25, 0.25, 0.5, 0.5, 0, 0}; !slices.Equal(geometry.Texcoord0, want) {
 		t.Fatalf("diffuse UVs = %v; want the half2 word at byte 24 with V flipped", geometry.Texcoord0)
+	}
+	if want := []float32{.875, .875, .875, .875, .875, .875}; !slices.Equal(geometry.Texcoord1, want) {
+		t.Fatalf("face UVs = %v; want the float2 pair at byte 28 with V flipped", geometry.Texcoord1)
 	}
 
 	service := NewWithOptions(Options{Protocol: infra.NewProtocol()})

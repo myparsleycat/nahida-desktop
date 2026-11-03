@@ -865,7 +865,6 @@ describe("applyPayloadEval packed maps", () => {
         };
         material.onBeforeCompile(shader as never, {} as never);
         expect(shader.vertexShader).toContain("vWWMIUv = uv");
-        expect(shader.fragmentShader).toContain("mask <= 0.01 || mask >= 0.99");
         expect((shader.uniforms as Record<string, { value: unknown }>).wwmiLightMap?.value).toBe(
             firstLight,
         );

@@ -137,7 +137,6 @@ type GenshinToonMeshData = MaterialProfileMeshData & {
 type GenshinToonShaderState = {
     enabled: { value: number };
     lightMap: { value: Texture };
-    lightMapEnabled: { value: number };
     lightMapTransform: { value: Matrix3 };
     ramp: { value: Texture };
     metalMap: { value: Texture };
@@ -249,7 +248,6 @@ export const gimiMaterialProfile: ModelViewerMaterialProfile<GIMIToonStyle> = {
             maps.lightMapKey ? textures.get(maps.lightMapKey) : undefined,
         );
         state.lightMap.value = lightMap ?? neutralLightMap;
-        state.lightMapEnabled.value = lightMap ? 1 : 0;
         state.lightMapTransform.value = textureUvTransform(state.lightMap.value);
     },
     sync: syncGenshinToon,
@@ -263,7 +261,6 @@ function configureGenshinToonMaterialShader(material: MeshStandardMaterial): voi
     const state: GenshinToonShaderState = {
         enabled: { value: 0 },
         lightMap: { value: neutralLightMap },
-        lightMapEnabled: { value: 0 },
         lightMapTransform: { value: neutralLightMap.matrix },
         ramp: { value: genshinProceduralRamp() },
         metalMap: { value: genshinProceduralMetalMap() },
@@ -391,7 +388,7 @@ if ( genshinToonEnabled > 0.5 ) {
             vec2 faceUv = vGenshinUv;
             if ( faceLight.y > 0.5 ) faceUv.x = 1.0 - faceUv.x;
             float faceThreshold = smoothstep( 0.0, 1.0, 0.5 - 0.5 * faceLight.x );
-            lit = toonStep( faceThreshold, texture2D( genshinFaceLightMap, faceUv ).r );
+            lit = toonStep( faceThreshold, texture2D( genshinFaceLightMap, faceUv ).a );
             lit = mix( lit, 1.0, texture2D( genshinFaceShadow, vGenshinUv ).a * genshinFaceShadowEnabled );
         } else {
             lit = smoothstep( -0.35, -0.15, faceLight.x );
@@ -475,7 +472,7 @@ function syncGenshinToon(
     const style = (data.toonStyle as GIMIToonStyle | undefined) ?? DEFAULT_GIMI_TOON_STYLE;
     const textures = (data.toonResources as GenshinToonTextures | undefined) ?? {};
     const enabled = data.toonShadows;
-    const face = Boolean(data.genshinFace) && state.lightMapEnabled.value === 0;
+    const face = Boolean(data.genshinFace);
     state.enabled.value = enabled ? 1 : 0;
     state.ramp.value =
         (data.genshinHair ? (textures.hairRamp ?? textures.bodyRamp) : textures.bodyRamp) ??
@@ -601,7 +598,7 @@ function createGenshinToonTextureLoader() {
             const [bodyRamp, hairRamp, metalMap, faceLightMap, faceShadow] = await Promise.all([
                 load(ramp?.bodyUrl, true),
                 load(ramp?.hairUrl, true),
-                load(assets.metalMapUrl, true),
+                load(assets.metalMapUrl, false),
                 load(faceType ? assets.faceLightmaps?.[faceType] : undefined, false),
                 load(assets.faceShadowUrl, false),
             ]);

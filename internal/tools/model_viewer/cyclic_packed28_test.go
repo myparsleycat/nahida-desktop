@@ -116,6 +116,9 @@ filename = WashroomADiffuse.png
 	if uv := geometry.Texcoord0; !slices.Equal(uv, []float32{0.25, 0.25, 0.25, 0.25, 0.25, 0.25}) {
 		t.Fatalf("diffuse UVs = %v; want the first UV set at byte 20 with V flipped", uv)
 	}
+	if uv := geometry.Texcoord1; !slices.Equal(uv, []float32{.5, .5, .5, .5, .5, .5}) {
+		t.Fatalf("face UVs = %v", uv)
+	}
 
 	service := New()
 	payload, err := service.LoadModViewer(context.Background(), dir)

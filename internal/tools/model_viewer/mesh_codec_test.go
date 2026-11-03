@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"os"
 	"reflect"
@@ -11,16 +12,24 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+func TestModelViewerMeshBytesWritesMVG3(t *testing.T) {
+	data := modelViewerMeshBytes(modelViewerMeshPayload{})
+	if len(data) != 32 || binary.LittleEndian.Uint32(data[:4]) != 0x3347564d {
+		t.Fatalf("mesh header = %x, want an empty MVG3 header", data)
+	}
+}
+
 func TestModelViewerMeshBytesMatchesFrontendFixture(t *testing.T) {
 	payload := modelViewerMeshPayload{
 		Positions: []float32{1, -2, 3},
 		Normals:   []float32{0, 0, 1},
 		Tangents:  []float32{1, 0, 0, -1},
 		UVs:       []float32{.25, .75},
+		UVs1:      []float32{.875, .125},
 		Colors:    []uint8{255, 128, 0, 64},
 		Indices:   []uint32{0, 0, 0},
 	}
-	fixture, err := os.ReadFile("testdata/model_viewer_mesh.hex")
+	fixture, err := os.ReadFile("testdata/model_viewer_mesh_v3.hex")
 	if err != nil {
 		t.Fatal(err)
 	}

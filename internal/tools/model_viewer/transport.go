@@ -264,7 +264,7 @@ func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
 			vertexColors:         true,
 		}
 	case modelViewerRabbitFXProfile, modelViewerWWMIProfile:
-		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true}
+		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true, vertexColors: true}
 	case modelViewerEFMIProfile:
 		return modelViewerProfileTraits{normalXYReconstruct: true, resampleMiplessDDS: true, outlineMasks: true}
 	case modelViewerGIMIProfile, modelViewerSRMIProfile:

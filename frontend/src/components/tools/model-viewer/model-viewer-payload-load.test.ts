@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import {
@@ -81,6 +83,46 @@ function transport(meshes: ViewerMeshTransport[]): ModViewerTransport {
         computeDeformers: [],
     };
 }
+
+it("loads the additional UV set from the Go mesh fixture as an independent toon attribute", async () => {
+    const bytes = Buffer.from(
+        readFileSync(
+            new URL(
+                "../../../../../internal/tools/model_viewer/testdata/model_viewer_mesh_v3.hex",
+                import.meta.url,
+            ),
+            "utf8",
+        ).trim(),
+        "hex",
+    );
+    vi.mocked(fetchBinaryBytes).mockResolvedValue(Uint8Array.from(bytes));
+    const root = await buildPayloadModel(
+        transport([mesh("uv1")]),
+        {
+            state: {},
+            meshes: [
+                {
+                    id: "uv1",
+                    visible: true,
+                    texKey: null,
+                    normalMapKey: null,
+                    lightMapKey: null,
+                    materialMapKey: null,
+                    cutoutMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        },
+        false,
+        { load: vi.fn() },
+    );
+    const geometry = (root.children[0] as Mesh).geometry;
+    expect([...geometry.attributes.uv.array]).toEqual([0.25, 0.75]);
+    expect([...geometry.attributes.toonUv1.array]).toEqual([0.875, 0.125]);
+    expect(geometry.attributes.uv1).toBeUndefined();
+    clearPayloadModelData(root);
+});
 
 it("preserves backend normals and bounds through initial load and variant restoration", async () => {
     const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);

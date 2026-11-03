@@ -133,4 +133,12 @@ func TestInferModelViewerWWMILayoutUsesInterleaveOrder(t *testing.T) {
 	if texcoord == nil || texcoord.AlignedByteOffset != 32 {
 		t.Fatalf("texcoord = %#v", texcoord)
 	}
+	vb := make([]byte, layout.Stride)
+	copy(vb[28:32], []byte{64, 128, 192, 255})
+	geometry, err := extractModelViewerGeometry(vb, layout.Stride, layout, []uint32{0, 0, 0},
+		modelViewerGeometryOptions{includeColors: modelViewerWWMIProfile.traits().vertexColors}, nil)
+	if err != nil || geometry == nil ||
+		!bytes.Equal(modelViewerColorBytes(geometry.Color0), []byte{64, 128, 192, 255}) {
+		t.Fatalf("WWMI vertex colors: geometry=%+v error=%v", geometry, err)
+	}
 }

@@ -658,8 +658,10 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			if timing != nil {
 				timing.Geometries++
 			}
-			for offset := 1; offset < len(geometry.Texcoord0); offset += 2 {
-				geometry.Texcoord0[offset] = 1 - geometry.Texcoord0[offset]
+			for _, coords := range [][]float32{geometry.Texcoord0, geometry.Texcoord1} {
+				for offset := 1; offset < len(coords); offset += 2 {
+					coords[offset] = 1 - coords[offset]
+				}
 			}
 			geometries[sourceKey] = geometry
 		}

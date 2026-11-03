@@ -7,6 +7,8 @@ import { modelViewerDDSFormatOf } from "./model-viewer-dds";
 // would tint the albedo. GIMI stores AO in R, ramp width in G, outline width in A.
 export const TOON_VERTEX_COLOR_ATTRIBUTE = "toonVertexColor";
 
+export const TOON_UV1_ATTRIBUTE = "toonUv1";
+
 /** Bound to texture uniforms that have no map, so samplers never read an unbound unit. */
 export const fallbackWhiteTexture = new DataTexture(
     new Uint8Array([255, 255, 255, 255]),
@@ -57,10 +59,8 @@ if ( receiveShadow ) {
 export const TOON_FACE_GLSL = `// Facing of the light in the horizontal plane, 1 when it shines from the front,
 // and whether it comes from the face's right, where the SDF is read mirrored.
 vec2 toonFaceLight( vec3 faceForward, vec3 worldLight ) {
-    vec2 forward = faceForward.xz;
-    forward = dot( forward, forward ) > 1e-8 ? normalize( forward ) : vec2( 0.0, 1.0 );
-    vec2 light = worldLight.xz;
-    light = dot( light, light ) > 1e-8 ? normalize( light ) : forward;
+    vec2 forward = dot( faceForward, faceForward ) > 1e-8 ? normalize( faceForward ).xz : vec2( 0.0, 1.0 );
+    vec2 light = dot( worldLight, worldLight ) > 1e-8 ? normalize( worldLight ).xz : forward;
     return vec2( dot( forward, light ), forward.y * light.x - forward.x * light.y >= 0.0 ? 1.0 : 0.0 );
 }`;
 
@@ -73,6 +73,7 @@ export function toonLightMapOf(texture: Texture | undefined): Texture | undefine
 /** The mean of a mesh's normals, which points out of a face in whatever space the mod's buffers use. */
 export function meanNormal(geometry: BufferGeometry): Vector3 | undefined {
     const normal = geometry.attributes.normal;
+    if (!normal) return undefined;
     const sum = new Vector3();
     for (let vertex = 0; vertex < normal.count; vertex++) {
         sum.x += normal.getX(vertex);

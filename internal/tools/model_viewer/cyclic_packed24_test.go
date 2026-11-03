@@ -27,7 +27,7 @@ func TestModelViewerCyclicPacked24LoadsAnimationAndDiffuseUVs(t *testing.T) {
 		binary.LittleEndian.PutUint16(position[offset+16:], modelViewerFloatToHalfBits(0.25))
 		binary.LittleEndian.PutUint16(position[offset+18:], modelViewerFloatToHalfBits(0.75))
 		binary.LittleEndian.PutUint16(position[offset+20:], modelViewerFloatToHalfBits(0.5))
-		binary.LittleEndian.PutUint16(position[offset+22:], modelViewerFloatToHalfBits(0.5))
+		binary.LittleEndian.PutUint16(position[offset+22:], modelViewerFloatToHalfBits(0.125))
 	}
 	ini := `[Constants]
 global $VG_count = 2
@@ -116,6 +116,9 @@ filename = WashroomALightMap.png
 	if uv := meshes[0].geometry.Texcoord0; !slices.Equal(uv, []float32{0.25, 0.25, 0.25, 0.25, 0.25, 0.25}) {
 		t.Fatalf("diffuse UVs = %v; want the first UV set at byte 16 with V flipped", uv)
 	}
+	if uv := meshes[0].geometry.Texcoord1; !slices.Equal(uv, []float32{.5, .875, .5, .875, .5, .875}) {
+		t.Fatalf("face UVs = %v; want the second UV set with V flipped", uv)
+	}
 
 	service := New()
 	payload, err := service.LoadModViewer(context.Background(), dir)
@@ -123,6 +126,16 @@ filename = WashroomALightMap.png
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = service.CleanupModelViewer(context.Background(), payload.MemorySessionID) })
+	if uv := readViewerMesh(
+		t,
+		service.protocol,
+		payload.Meshes[0].GeometryURL,
+	).UVs1; !slices.Equal(
+		uv,
+		[]float32{.5, .875, .5, .875, .5, .875},
+	) {
+		t.Fatalf("transported face UVs = %v", uv)
+	}
 	if len(payload.ComputeDeformers) != 1 || len(payload.Animations) != 1 {
 		t.Fatalf("deformers=%d animations=%d", len(payload.ComputeDeformers), len(payload.Animations))
 	}

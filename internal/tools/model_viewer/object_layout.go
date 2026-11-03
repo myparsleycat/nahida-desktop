@@ -550,6 +550,13 @@ func loadModelViewerDrawVertexBuffers(
 						AlignedByteOffset: source.inlineTexcoordOffset,
 						InputSlotClass:    "per-vertex",
 					},
+					{
+						SemanticName:      "TEXCOORD",
+						SemanticIndex:     1,
+						Format:            "DXGI_FORMAT_R32G32_FLOAT",
+						AlignedByteOffset: source.inlineTexcoordOffset + 4,
+						InputSlotClass:    "per-vertex",
+					},
 				},
 			},
 		}, true, nil
@@ -565,11 +572,26 @@ func loadModelViewerDrawVertexBuffers(
 		if texcoordOffset == 16 {
 			texcoordOffset = resolveModelViewerPackedTexcoordOffset(modDir, position, source.packed, stride, cache)
 		}
+		layout := modelViewerPackedObjectLayoutAt(source.ib.Format, stride, texcoordOffset)
+		if source.packedTexcoordDeclared &&
+			(stride == modelViewerPackedObjectStride24 && texcoordOffset == 16 ||
+				stride == modelViewerPackedObjectStride28 && texcoordOffset == 20) {
+			layout.Elements = append(layout.Elements, modelViewerFmtElement{
+				SemanticName: "TEXCOORD", SemanticIndex: 1, Format: "DXGI_FORMAT_R16G16_FLOAT",
+				AlignedByteOffset: texcoordOffset + 4, InputSlotClass: "per-vertex",
+			})
+			if stride == modelViewerPackedObjectStride28 {
+				layout.Elements = append(layout.Elements, modelViewerFmtElement{
+					SemanticName: "COLOR", Format: "DXGI_FORMAT_R8G8B8A8_UNORM",
+					AlignedByteOffset: 16, InputSlotClass: "per-vertex",
+				})
+			}
+		}
 		return modelViewerDrawVertexBuffers{
 			combined:  source.packed,
 			stride:    stride,
 			posStride: stride,
-			layout:    modelViewerPackedObjectLayoutAt(source.ib.Format, stride, texcoordOffset),
+			layout:    layout,
 		}, true, nil
 	case modelViewerDrawVertexWWMI:
 		vectorStride := vector.Stride

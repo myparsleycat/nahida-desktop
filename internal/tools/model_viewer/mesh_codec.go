@@ -5,18 +5,18 @@ import (
 	"math"
 )
 
-// MVG2 stores six element counts followed by position, normal, tangent, and
-// UV float32 arrays, RGBA8 vertex colors, and uint32 indices. All fields are
+// MVG3 stores seven element counts followed by position, normal, tangent, and
+// two UV float32 arrays, RGBA8 vertex colors, and uint32 indices. All fields are
 // little-endian; colors hold four bytes per vertex, so every array stays
 // four-byte aligned.
 func modelViewerMeshBytes(payload modelViewerMeshPayload) []byte {
-	attributes := [][]float32{payload.Positions, payload.Normals, payload.Tangents, payload.UVs}
+	attributes := [][]float32{payload.Positions, payload.Normals, payload.Tangents, payload.UVs, payload.UVs1}
 	count := len(payload.Indices)
 	for _, values := range attributes {
 		count += len(values)
 	}
-	data := make([]byte, 0, 28+count*4+len(payload.Colors))
-	data = append(data, 'M', 'V', 'G', '2')
+	data := make([]byte, 0, 32+count*4+len(payload.Colors))
+	data = append(data, 'M', 'V', 'G', '3')
 	for _, values := range attributes {
 		data = binary.LittleEndian.AppendUint32(data, uint32(len(values)))
 	}

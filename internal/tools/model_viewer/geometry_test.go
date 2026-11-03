@@ -97,6 +97,66 @@ func TestModelViewerGeometryMatchesElectronPayloadPostProcessing(t *testing.T) {
 	}
 }
 
+func TestModelViewerGeometryPreservesAdditionalUVs(t *testing.T) {
+	for _, kind := range []string{"semantic", "packed", "absent", "invalid"} {
+		t.Run(kind, func(t *testing.T) {
+			layout := modelViewerFmtLayout{Topology: "trianglelist", Stride: 28, Elements: []modelViewerFmtElement{
+				{SemanticName: "POSITION", Format: "DXGI_FORMAT_R32G32B32_FLOAT"},
+				{SemanticName: "TEXCOORD", Format: "DXGI_FORMAT_R32G32_FLOAT", AlignedByteOffset: 12},
+			}}
+			switch kind {
+			case "packed":
+				layout.Elements[1].Format = "DXGI_FORMAT_R32G32B32A32_FLOAT"
+			case "semantic", "invalid":
+				offset := 20
+				if kind == "invalid" {
+					offset = 28
+				}
+				layout.Elements = append(layout.Elements, modelViewerFmtElement{
+					SemanticName:      "TEXCOORD",
+					SemanticIndex:     1,
+					Format:            "DXGI_FORMAT_R32G32_FLOAT",
+					AlignedByteOffset: offset,
+				})
+			}
+			vb := make([]byte, 3*layout.Stride)
+			for vertex := range 3 {
+				for component, value := range []float32{float32(vertex), 0, 0, .25, .75, float32(vertex), .125} {
+					binary.LittleEndian.PutUint32(vb[vertex*layout.Stride+component*4:], math.Float32bits(value))
+				}
+			}
+			var warnings []string
+			geometry, err := extractModelViewerGeometry(
+				vb,
+				layout.Stride,
+				layout,
+				[]uint32{2, 0, 2},
+				modelViewerGeometryOptions{
+					compact: true,
+				},
+				func(warning string) { warnings = append(warnings, warning) },
+			)
+			if err != nil || geometry == nil {
+				t.Fatalf("geometry = %+v, error = %v", geometry, err)
+			}
+			if !slices.Equal(geometry.Texcoord0, []float32{.25, .75, .25, .75}) ||
+				!slices.Equal(geometry.SourceIndices, []uint32{0, 2}) {
+				t.Fatalf("compacted geometry = %+v", geometry)
+			}
+			if kind == "semantic" || kind == "packed" {
+				if !slices.Equal(geometry.Texcoord1, []float32{0, .125, 2, .125}) {
+					t.Fatalf("additional UVs = %v", geometry.Texcoord1)
+				}
+			} else if geometry.Texcoord1 != nil {
+				t.Fatalf("unexpected additional UVs: %v", geometry.Texcoord1)
+			}
+			if (kind == "invalid") != (len(warnings) > 0) {
+				t.Fatalf("warnings = %v", warnings)
+			}
+		})
+	}
+}
+
 func TestModelViewerDXGIFormatsAndIndices(t *testing.T) {
 	packed := uint32(1023 | (512 << 10) | (3 << 30))
 	data := make([]byte, 4)

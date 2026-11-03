@@ -49,6 +49,7 @@ func recoverModelViewerGeometry(
 		{name: "normal", values: geometry.Normal, width: 3},
 		{name: "tangent", values: geometry.Tangent, width: 4},
 		{name: "texcoord", values: geometry.Texcoord0, width: 2},
+		{name: "texcoord1", values: geometry.Texcoord1, width: 2},
 		{name: "color", values: geometry.Color0, width: 4},
 	} {
 		if len(attribute.values) != 0 && len(attribute.values)/attribute.width != count ||
@@ -146,6 +147,7 @@ func recoverModelViewerGeometry(
 		result.Normal = compact(geometry.Normal, 3)
 		result.Tangent = compact(geometry.Tangent, 4)
 		result.Texcoord0 = compact(geometry.Texcoord0, 2)
+		result.Texcoord1 = compact(geometry.Texcoord1, 2)
 		result.Color0 = compact(geometry.Color0, 4)
 		result.Indices, result.VertexCount = remapped, len(sources)
 		result.SourceIndices = make([]uint32, len(sources))

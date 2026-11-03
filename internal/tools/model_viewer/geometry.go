@@ -49,6 +49,7 @@ type modelViewerGeometry struct {
 	Normal        []float32
 	Tangent       []float32
 	Texcoord0     []float32
+	Texcoord1     []float32
 	Color0        []float32
 	Indices       []uint32
 	VertexCount   int
@@ -140,6 +141,19 @@ func extractModelViewerGeometry(
 	); valid &&
 		data != nil {
 		mesh.Texcoord0 = data
+	}
+	if texcoord := findModelViewerElement(layout, "TEXCOORD", 1); texcoord != nil {
+		if data, valid := read(texcoord, 2, "TEXCOORD_1", false); valid {
+			mesh.Texcoord1 = data
+		}
+	} else if texcoord := findModelViewerElement(layout, "TEXCOORD", 0); texcoord != nil &&
+		modelViewerFormatComponentCount(texcoord.Format) == 4 {
+		if data, valid := read(texcoord, 4, "TEXCOORD_0", false); valid {
+			mesh.Texcoord1 = make([]float32, vertexCount*2)
+			for vertex := range vertexCount {
+				copy(mesh.Texcoord1[vertex*2:], data[vertex*4+2:vertex*4+4])
+			}
+		}
 	}
 	if color := findModelViewerElement(layout, "COLOR", 0); options.includeColors && color != nil {
 		width := min(4, modelViewerFormatComponentCount(color.Format))

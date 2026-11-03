@@ -356,8 +356,10 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			if err != nil || geometry == nil {
 				return geometry, err
 			}
-			for offset := 1; offset < len(geometry.Texcoord0); offset += 2 {
-				geometry.Texcoord0[offset] = 1 - geometry.Texcoord0[offset]
+			for _, coords := range [][]float32{geometry.Texcoord0, geometry.Texcoord1} {
+				for offset := 1; offset < len(coords); offset += 2 {
+					coords[offset] = 1 - coords[offset]
+				}
 			}
 			return geometry, nil
 		})
@@ -624,6 +626,11 @@ func inferModelViewerFmtLayout(
 				)
 			case "texcoord":
 				texcoordOffset = offset
+			case "color":
+				layout.Elements = append(layout.Elements, modelViewerFmtElement{
+					SemanticName: "COLOR", Format: lo.CoalesceOrEmpty(resource.Format, "DXGI_FORMAT_R8G8B8A8_UNORM"),
+					AlignedByteOffset: offset, InputSlotClass: "per-vertex",
+				})
 			}
 			offset += resource.Stride
 		}
@@ -748,6 +755,7 @@ func buildModelViewerDirectMeshPayload(
 		Normals:       mesh.geometry.Normal,
 		Tangents:      mesh.geometry.Tangent,
 		UVs:           mesh.geometry.Texcoord0,
+		UVs1:          mesh.geometry.Texcoord1,
 		Colors:        modelViewerColorBytes(mesh.geometry.Color0),
 		Indices:       mesh.geometry.Indices,
 		SourceIndices: mesh.geometry.SourceIndices,

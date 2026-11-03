@@ -49,6 +49,7 @@ import {
     TOON_FACE_GLSL,
     TOON_KEY_LIGHT_GLSL,
     TOON_STEP_GLSL,
+    TOON_UV1_ATTRIBUTE,
     TOON_VERTEX_COLOR_ATTRIBUTE,
     toonLightMapOf,
 } from "../model-viewer-shader-utils";
@@ -82,6 +83,7 @@ type ZZMIToonShaderState = {
     hair: { value: number };
     faceForward: { value: Vector3 };
     vertexColorEnabled: { value: number };
+    uv1Enabled: { value: number };
 };
 
 // HoyoToon's material defaults. The game's per-material values come from material
@@ -290,6 +292,7 @@ function configureZZMIMaterialShader(material: MeshStandardMaterial): void {
         hair: { value: 0 },
         faceForward: { value: new Vector3(0, 0, 1) },
         vertexColorEnabled: { value: 0 },
+        uv1Enabled: { value: 0 },
     };
     material.userData.zzmiToonMaterial = state;
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -327,14 +330,19 @@ function configureZZMIMaterialShader(material: MeshStandardMaterial): void {
         shader.uniforms.zzmiHair = state.hair;
         shader.uniforms.zzmiFaceForward = state.faceForward;
         shader.uniforms.zzmiVertexColorEnabled = state.vertexColorEnabled;
+        shader.uniforms.zzmiUv1Enabled = state.uv1Enabled;
         shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
             "#include <common>",
             `#include <common>
 attribute vec4 ${TOON_VERTEX_COLOR_ATTRIBUTE};
+attribute vec2 ${TOON_UV1_ATTRIBUTE};
 uniform float zzmiVertexColorEnabled;
+uniform float zzmiUv1Enabled;
 uniform vec3 zzmiFaceForward;
 varying vec2 vZZMIUv;
+varying vec2 vZZMIFaceUv;
+varying float vZZMIFaceFlag;
 varying vec4 vZZMIColor;
 varying vec3 vZZMIFaceForward;`,
         );
@@ -344,6 +352,8 @@ varying vec3 vZZMIFaceForward;`,
             `#include <uv_vertex>
 vZZMIUv = uv;
 vZZMIColor = zzmiVertexColorEnabled > 0.5 ? ${TOON_VERTEX_COLOR_ATTRIBUTE} : ${NEUTRAL_VERTEX_COLOR};
+vZZMIFaceFlag = mod( floor( floor( vZZMIColor.b * 255.0 + 0.5 ) / 16.0 ), 2.0 );
+vZZMIFaceUv = zzmiVertexColorEnabled > 0.5 && zzmiUv1Enabled > 0.5 && vZZMIFaceFlag < 0.5 ? ${TOON_UV1_ATTRIBUTE} : uv;
 vZZMIFaceForward = normalize( mat3( modelMatrix ) * zzmiFaceForward );`,
         );
         shader.fragmentShader = replaceShaderAnchor(
@@ -351,6 +361,8 @@ vZZMIFaceForward = normalize( mat3( modelMatrix ) * zzmiFaceForward );`,
             "#include <common>",
             `#include <common>
 varying vec2 vZZMIUv;
+varying vec2 vZZMIFaceUv;
+varying float vZZMIFaceFlag;
 varying vec4 vZZMIColor;
 varying vec3 vZZMIFaceForward;
 uniform float zzmiToonEnabled;
@@ -387,11 +399,12 @@ if ( zzmiToonEnabled > 0.5 ) {
     if ( zzmiFace > 0.5 ) {
         // The face SDF turns soft past its threshold; the bands sharpen it again.
         vec2 faceLight = toonFaceLight( vZZMIFaceForward, worldLight );
-        vec2 faceUv = vZZMIUv;
+        vec2 faceUv = vZZMIFaceUv;
         if ( faceLight.y > 0.5 ) faceUv.x = 1.0 - faceUv.x;
         vec4 faceMap = texture2D( zzmiNormalData, ( zzmiNormalDataTransform * vec3( faceUv, 1.0 ) ).xy );
         float threshold = 0.5 - 0.5 * faceLight.x;
-        float faceLit = smoothstep( threshold - 0.5, threshold + 0.5, faceMap.r * 0.9 + 0.1 ) * normalData.a;
+        float faceAO = vZZMIFaceFlag > 0.5 ? faceMap.a : 1.0;
+        float faceLit = smoothstep( threshold - 0.5, threshold + 0.5, faceMap.r * 0.9 + 0.1 ) * faceAO;
         shade = ( faceLit * 2.0 - 1.0 ) * occlusion;
     }
 
@@ -447,6 +460,7 @@ function syncZZMIToon(
     state.vertexColorEnabled.value = object.geometry.attributes[TOON_VERTEX_COLOR_ATTRIBUTE]
         ? 1
         : 0;
+    state.uv1Enabled.value = object.geometry.attributes[TOON_UV1_ATTRIBUTE] ? 1 : 0;
 
     // Coverage cards are flat ink decals: they neither block light nor have a silhouette.
     const coverageMask = Boolean(material.map?.userData.modelViewerCoverageMask);

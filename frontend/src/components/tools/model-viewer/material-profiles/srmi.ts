@@ -79,7 +79,6 @@ type SRMIToonShaderState = {
     lightMapEnabled: { value: number };
     lightMapTransform: { value: Matrix3 };
     face: { value: number };
-    hair: { value: number };
     faceForward: { value: Vector3 };
     vertexColorEnabled: { value: number };
 };
@@ -157,7 +156,6 @@ function configureSRMIToonMaterialShader(material: MeshStandardMaterial): void {
         lightMapEnabled: { value: 0 },
         lightMapTransform: { value: neutralLightMap.matrix },
         face: { value: 0 },
-        hair: { value: 0 },
         faceForward: { value: new Vector3(0, 0, 1) },
         vertexColorEnabled: { value: 0 },
     };
@@ -168,7 +166,6 @@ function configureSRMIToonMaterialShader(material: MeshStandardMaterial): void {
         shader.uniforms.srmiLightMapEnabled = state.lightMapEnabled;
         shader.uniforms.srmiLightMapTransform = state.lightMapTransform;
         shader.uniforms.srmiFace = state.face;
-        shader.uniforms.srmiHair = state.hair;
         shader.uniforms.srmiFaceForward = state.faceForward;
         shader.uniforms.srmiVertexColorEnabled = state.vertexColorEnabled;
         shader.vertexShader = replaceShaderAnchor(
@@ -202,7 +199,6 @@ uniform sampler2D srmiLightMap;
 uniform float srmiLightMapEnabled;
 uniform mat3 srmiLightMapTransform;
 uniform float srmiFace;
-uniform float srmiHair;
 
 ${TOON_STEP_GLSL}
 
@@ -221,9 +217,9 @@ if ( srmiToonEnabled > 0.5 ) {
     vec4 lightMap = texture2D( srmiLightMap, ( srmiLightMapTransform * vec3( vSRMIUv, 1.0 ) ).xy );
 
     // HoyoToon's shadow rate: half-Lambert with the cast shadow, times twice the
-    // light map AO and the vertex AO, lifted into 0.15 to 1.
+    // light map AO and the vertex AO, doubled again by the two-component dot.
     float NoL = dot( worldNormal, worldLight );
-    float rate = min( 1.0, ( NoL * 0.5 + 0.5 ) * occlusion * 2.0 * lightMap.g * vSRMIColor.r );
+    float rate = min( 1.0, ( NoL * 0.5 + 0.5 ) * occlusion * 4.0 * lightMap.g * vSRMIColor.r );
     rate = max( 0.001, rate ) * 0.85 + 0.15;
     float lit = toonStep( ${RAMP_LIT}, rate );
     float band = smoothstep( 0.405, 0.53, rate ) * ( 1.0 - lit );
@@ -251,10 +247,10 @@ if ( srmiToonEnabled > 0.5 ) {
     vec3 shade = mix( mix( shadowColor, shadowColor * shadowColor, band ), vec3( 1.0 ), lit );
 
     // A Blinn-Phong highlight past the light map's blue, faded in over the roughness
-    // and scaled by the shadow rate. Hair reads it from the view angle instead.
+    // and scaled by the shadow rate.
     vec3 halfDirection = normalize( worldLight + worldView );
     float NoV = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
-    float NoH = srmiHair > 0.5 ? NoV * step( 0.0, NoL ) : dot( worldNormal, halfDirection );
+    float NoH = dot( worldNormal, halfDirection );
     float term = rate * pow( max( 0.01, NoH ), ${SPECULAR_SHININESS} );
     float specularSoftness = max( ${SPECULAR_ROUGHNESS}, fwidth( term ) );
     float specularEdge = 1.0 - lightMap.b - specularSoftness;
@@ -300,7 +296,6 @@ function syncSRMIToon(
     const enabled = data.toonShadows;
     state.enabled.value = enabled ? 1 : 0;
     state.face.value = data.srmiFace ? 1 : 0;
-    state.hair.value = data.srmiHair ? 1 : 0;
     if (data.srmiFaceForward) state.faceForward.value.copy(data.srmiFaceForward);
     state.vertexColorEnabled.value = object.geometry.attributes[TOON_VERTEX_COLOR_ATTRIBUTE]
         ? 1

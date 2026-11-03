@@ -1400,14 +1400,14 @@ endif
 func readViewerMesh(t *testing.T, protocol *infra.Protocol, url string) modelViewerMeshPayload {
 	t.Helper()
 	raw := readModelViewerProtocolBytes(t, protocol, url)
-	if len(raw) < 28 || string(raw[:4]) != "MVG2" {
+	if len(raw) < 32 || string(raw[:4]) != "MVG3" {
 		t.Fatal("invalid mesh header")
 	}
-	counts := make([]int, 6)
-	total := 28
+	counts := make([]int, 7)
+	total := 32
 	for index := range counts {
 		counts[index] = int(binary.LittleEndian.Uint32(raw[4+index*4:]))
-		if index == 4 {
+		if index == 5 {
 			total += counts[index]
 		} else {
 			total += counts[index] * 4
@@ -1417,8 +1417,10 @@ func readViewerMesh(t *testing.T, protocol *infra.Protocol, url string) modelVie
 		t.Fatalf("mesh bytes = %d, want %d", len(raw), total)
 	}
 	payload := modelViewerMeshPayload{}
-	offset := 28
-	for index, values := range []*[]float32{&payload.Positions, &payload.Normals, &payload.Tangents, &payload.UVs} {
+	offset := 32
+	for index, values := range []*[]float32{
+		&payload.Positions, &payload.Normals, &payload.Tangents, &payload.UVs, &payload.UVs1,
+	} {
 		if counts[index] == 0 {
 			continue
 		}
@@ -1428,11 +1430,11 @@ func readViewerMesh(t *testing.T, protocol *infra.Protocol, url string) modelVie
 			offset += 4
 		}
 	}
-	if counts[4] > 0 {
-		payload.Colors = append([]uint8(nil), raw[offset:offset+counts[4]]...)
-		offset += counts[4]
+	if counts[5] > 0 {
+		payload.Colors = append([]uint8(nil), raw[offset:offset+counts[5]]...)
+		offset += counts[5]
 	}
-	payload.Indices = make([]uint32, counts[5])
+	payload.Indices = make([]uint32, counts[6])
 	for i := range payload.Indices {
 		payload.Indices[i] = binary.LittleEndian.Uint32(raw[offset:])
 		offset += 4

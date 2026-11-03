@@ -28,6 +28,7 @@ func TestRecoverModelViewerGeometryPreservesAttributesAndSources(t *testing.T) {
 				geometry.Normal = append(geometry.Normal, float32(vertex), 1, 0)
 				geometry.Tangent = append(geometry.Tangent, 1, float32(vertex), 0, -1)
 				geometry.Texcoord0 = append(geometry.Texcoord0, float32(vertex), .5)
+				geometry.Texcoord1 = append(geometry.Texcoord1, .25, float32(vertex))
 				geometry.Color0 = append(geometry.Color0, float32(vertex), 0, 0, 1)
 			}
 			original := modelViewerFloat32Bytes(geometry.Position)
@@ -45,6 +46,7 @@ func TestRecoverModelViewerGeometryPreservesAttributesAndSources(t *testing.T) {
 			if !slices.Equal(recovered.Normal, []float32{1, 1, 0, 3, 1, 0, 4, 1, 0}) ||
 				!slices.Equal(recovered.Tangent, []float32{1, 1, 0, -1, 1, 3, 0, -1, 1, 4, 0, -1}) ||
 				!slices.Equal(recovered.Texcoord0, []float32{1, .5, 3, .5, 4, .5}) ||
+				!slices.Equal(recovered.Texcoord1, []float32{.25, 1, .25, 3, .25, 4}) ||
 				!slices.Equal(recovered.Color0, []float32{1, 0, 0, 1, 3, 0, 0, 1, 4, 0, 0, 1}) {
 				t.Fatalf("recovered attributes = %+v", recovered)
 			}
@@ -53,10 +55,11 @@ func TestRecoverModelViewerGeometryPreservesAttributesAndSources(t *testing.T) {
 			}
 			recovered.Position[0], recovered.Normal[0], recovered.Tangent[0] = 99, 99, 99
 			recovered.Texcoord0[0], recovered.Color0[0], recovered.SourceIndices[0] = 99, 99, 99
+			recovered.Texcoord1[0] = 99
 			recovered.Indices[0] = 99
 			if !bytes.Equal(original, modelViewerFloat32Bytes(geometry.Position)) || geometry.Normal[1*3] != 1 ||
 				geometry.Tangent[1*4+1] != 1 || geometry.Texcoord0[1*2] != 1 || geometry.Color0[1*4] != 1 ||
-				geometry.SourceIndices[0] != 10 || geometry.Indices[0] != 0 {
+				geometry.Texcoord1[0] != .25 || geometry.SourceIndices[0] != 10 || geometry.Indices[0] != 0 {
 				t.Fatalf("source geometry was mutated: %+v", geometry)
 			}
 		})
