@@ -313,12 +313,11 @@ hashDispatch:
 	format := normalizeModelViewerFormat(settings.TextureFormat)
 	quality := normalizeJPEGQuality(settings.JPEGQuality)
 	type encodeVariant struct {
-		invert    bool
-		transform modelViewerTextureTransform
-		format    string
-		quality   int
-		profile   ModelViewerMaterialProfile
-		role      string
+		invert  bool
+		format  string
+		quality int
+		profile ModelViewerMaterialProfile
+		role    string
 	}
 	prepareStartedAt := time.Now()
 	prepareWork := make(chan int)
@@ -351,12 +350,11 @@ hashDispatch:
 						break
 					}
 					variant := encodeVariant{
-						invert:    modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
-						transform: modelViewerTextureTransformFor(settings.MaterialProfile, job.role),
-						format:    modelViewerTextureFormatFor(settings.MaterialProfile, job.role, format),
-						quality:   quality,
-						profile:   settings.MaterialProfile,
-						role:      job.role,
+						invert:  modelViewerTextureShouldInvertAlpha(job.resourceName, decoded),
+						format:  modelViewerTextureFormatFor(settings.MaterialProfile, job.role, format),
+						quality: quality,
+						profile: settings.MaterialProfile,
+						role:    job.role,
 					}
 					texture, exists := variants[variant]
 					if !exists {
@@ -366,7 +364,6 @@ hashDispatch:
 							decoded,
 							job.path,
 							job.resourceName,
-							variant.transform,
 							variant.format,
 							variant.quality,
 						)

@@ -22,6 +22,7 @@ import {
     fallbackWhiteTexture,
     replaceShaderAnchor,
     textureUvTransform,
+    TOON_KEY_LIGHT_GLSL,
 } from "../model-viewer-shader-utils";
 import { BASE_TOON_FLAGS, readToonFlags } from "./profile";
 
@@ -382,27 +383,11 @@ ${EFMI_RAMP_GLSL}`,
             "#include <opaque_fragment>",
             `#if NUM_DIR_LIGHTS > 0
 if ( efmiToonEnabled > 0.5 ) {
-    vec3 worldNormal = inverseTransformDirection( normal, viewMatrix );
-    vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
-    vec3 worldView = inverseTransformDirection( normalize( vViewPosition ), viewMatrix );
+    ${TOON_KEY_LIGHT_GLSL}
     vec3 cameraBack = vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
     vec3 albedo = diffuseColor.rgb;
     vec2 lightMapUv = ( efmiLightMapTransform * vec3( vEfmiUv, 1.0 ) ).xy;
     vec4 packedMap = mix( vec4( 0.0, 1.0, 1.0, 0.5 ), texture2D( efmiLightMap, lightMapUv ), efmiLightMapEnabled );
-
-    float occlusion = 1.0;
-    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-    if ( receiveShadow ) {
-        occlusion = getShadow(
-            directionalShadowMap[ 0 ],
-            directionalLightShadows[ 0 ].shadowMapSize,
-            directionalLightShadows[ 0 ].shadowIntensity,
-            directionalLightShadows[ 0 ].shadowBias,
-            directionalLightShadows[ 0 ].shadowRadius,
-            vDirectionalShadowCoord[ 0 ]
-        );
-    }
-    #endif
 
     float lightCosine = dot( worldNormal, worldLight );
 

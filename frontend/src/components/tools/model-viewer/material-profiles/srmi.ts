@@ -1,5 +1,8 @@
 /*
- * The SRMI shading below follows the character lighting model of StarRailNPRShader
+ * The SRMI shading below follows the Star Rail shader of HoyoToon
+ * (https://github.com/Hoyotoon/HoyoToon, GPL-3.0): its shadow rate, specular, rim
+ * light and outline. The face outline mask, the face SDF read from the light map and
+ * the shadow band come from StarRailNPRShader
  * (https://github.com/stalomeow/StarRailNPRShader), with HonkaiStarRailToonShader
  * (https://github.com/Gaolingx/HonkaiStarRailToonShader) as a secondary reference.
  *
@@ -46,6 +49,8 @@ import {
     replaceShaderAnchor,
     syncToonOutlineSource,
     textureUvTransform,
+    TOON_FACE_GLSL,
+    TOON_KEY_LIGHT_GLSL,
     TOON_STEP_GLSL,
     TOON_VERTEX_COLOR_ATTRIBUTE,
     toonLightMapOf,
@@ -79,22 +84,26 @@ type SRMIToonShaderState = {
     vertexColorEnabled: { value: number };
 };
 
-// Specular, rim and outline values are StarRailNPRShader's material defaults. The
-// game's per-material values come from material files that mods do not ship.
+// Specular, rim and outline values are HoyoToon's defaults. The game's per-material
+// values come from its material value LUT, which mods do not ship.
 const SPECULAR_SHININESS = "10.0";
 const SPECULAR_ROUGHNESS = "0.02";
-const RIM_WIDTH = "0.3";
-const RIM_INTENSITY = "0.5";
-const RIM_DARK = "0.5";
-const OUTLINE_WIDTH = "1.0";
+const SPECULAR_INTENSITY = "0.5";
+const RIM_INTENSITY = "0.1";
+const OUTLINE_WIDTH = "0.1";
+const OUTLINE_SCALE = "0.187";
 
-// StarRailNPRShader samples scene depth this many pixels per unit of rim width; the
-// viewer has no depth texture and measures the distance to the silhouette instead.
-const RIM_PIXELS_PER_WIDTH = "10.0";
+// Pixels inside the silhouette that the rim covers, standing in for HoyoToon's depth
+// texture offset of 0.25 × 0.0055 screen units per unit of inverse distance.
+const RIM_PIXELS = "2.0";
 
 // The game's ramps are per character and not in mods. This is one tint for every
 // material until it is measured against game frames.
 const SHADOW_COLOR = "vec3( 0.85, 0.74, 0.78 )";
+
+// HoyoToon maps half-Lambert × AO into 0.15 to 1 before the ramp lookup. The
+// procedural ramp turns lit where the unmapped product reaches 0.5.
+const RAMP_LIT = "0.575";
 
 // Not measured in game; StarRailNPRShader's default black reads too harsh here.
 const OUTLINE_TINT = "vec3( 0.3, 0.22, 0.24 )";
@@ -195,89 +204,69 @@ uniform mat3 srmiLightMapTransform;
 uniform float srmiFace;
 uniform float srmiHair;
 
-${TOON_STEP_GLSL}`,
+${TOON_STEP_GLSL}
+
+${TOON_FACE_GLSL}`,
         );
 
-        // Replaces the lit result. The light map holds specular strength and rim
-        // width in R, AO in G, the specular threshold in B and the material in A.
-        // directionalLights[0] is the key light, as in the other toon profiles.
+        // Replaces the lit result. The light map holds the rim mask in R, AO in G,
+        // the specular threshold in B and the material in A.
         shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <opaque_fragment>",
             `#if NUM_DIR_LIGHTS > 0
 if ( srmiToonEnabled > 0.5 ) {
-    vec3 worldNormal = inverseTransformDirection( normal, viewMatrix );
-    vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
-    vec3 worldView = inverseTransformDirection( normalize( vViewPosition ), viewMatrix );
+    ${TOON_KEY_LIGHT_GLSL}
     vec3 albedo = diffuseColor.rgb;
     vec4 lightMap = texture2D( srmiLightMap, ( srmiLightMapTransform * vec3( vSRMIUv, 1.0 ) ).xy );
 
-    float occlusion = 1.0;
-    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-    if ( receiveShadow ) {
-        occlusion = getShadow(
-            directionalShadowMap[ 0 ],
-            directionalLightShadows[ 0 ].shadowMapSize,
-            directionalLightShadows[ 0 ].shadowIntensity,
-            directionalLightShadows[ 0 ].shadowBias,
-            directionalLightShadows[ 0 ].shadowRadius,
-            vDirectionalShadowCoord[ 0 ]
-        );
-    }
-    #endif
-
-    // Half-Lambert scaled by AO; AO near 0 or 1 forces shadow or light, over the
-    // self-shadow too.
+    // HoyoToon's shadow rate: half-Lambert with the cast shadow, times twice the
+    // light map AO and the vertex AO, lifted into 0.15 to 1.
     float NoL = dot( worldNormal, worldLight );
-    float ao = lightMap.g * vSRMIColor.r;
-    float shadow = clamp( ( NoL * 0.5 + 0.5 ) * 2.0 * ao, 0.0, 1.0 ) * occlusion;
-    shadow = ao < 0.05 ? 0.0 : ( ao > 0.95 ? 1.0 : shadow );
+    float rate = min( 1.0, ( NoL * 0.5 + 0.5 ) * occlusion * 2.0 * lightMap.g * vSRMIColor.r );
+    rate = max( 0.001, rate ) * 0.85 + 0.15;
+    float lit = toonStep( ${RAMP_LIT}, rate );
+    float band = smoothstep( 0.405, 0.53, rate ) * ( 1.0 - lit );
 
     if ( srmiFace > 0.5 ) {
-        vec2 forward = vSRMIFaceForward.xz;
-        forward = dot( forward, forward ) > 1e-8 ? normalize( forward ) : vec2( 0.0, 1.0 );
-        vec2 light = worldLight.xz;
-        light = dot( light, light ) > 1e-8 ? normalize( light ) : forward;
-        float facing = dot( forward, light );
+        vec2 faceLight = toonFaceLight( vSRMIFaceForward, worldLight );
         if ( srmiLightMapEnabled > 0.5 ) {
             // A map bound on the face is the game's FaceMap: its alpha is the SDF
             // threshold at which the face turns lit, mirrored for light from the
             // other side.
             vec2 faceUv = vSRMIUv;
-            if ( forward.y * light.x - forward.x * light.y >= 0.0 ) faceUv.x = 1.0 - faceUv.x;
+            if ( faceLight.y > 0.5 ) faceUv.x = 1.0 - faceUv.x;
             float threshold = texture2D( srmiLightMap, ( srmiLightMapTransform * vec3( faceUv, 1.0 ) ).xy ).a;
-            shadow = toonStep( 1.0 - threshold, facing * 0.5 + 0.5 );
+            lit = toonStep( 1.0 - threshold, faceLight.x * 0.5 + 0.5 );
         } else {
             // Without a FaceMap, the face turns as one piece.
-            shadow = smoothstep( -0.35, -0.15, facing );
+            lit = smoothstep( -0.35, -0.15, faceLight.x );
         }
-        shadow *= occlusion;
+        lit *= occlusion;
+        band = 0.0;
     }
 
     // A darker band right before the terminator, like the game's ramps.
-    float lit = toonStep( 0.5, shadow );
     vec3 shadowColor = ${SHADOW_COLOR};
-    float band = smoothstep( 0.3, 0.45, shadow ) * ( 1.0 - lit );
     vec3 shade = mix( mix( shadowColor, shadowColor * shadowColor, band ), vec3( 1.0 ), lit );
 
-    // Hair reads its highlight from the view angle instead of the half vector.
+    // A Blinn-Phong highlight past the light map's blue, faded in over the roughness
+    // and scaled by the shadow rate. Hair reads it from the view angle instead.
     vec3 halfDirection = normalize( worldLight + worldView );
     float NoV = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
     float NoH = srmiHair > 0.5 ? NoV * step( 0.0, NoL ) : dot( worldNormal, halfDirection );
-    float blinnPhong = pow( max( 0.01, NoH ), ${SPECULAR_SHININESS} ) * occlusion;
-    float specularThreshold = 1.03 - lightMap.b;
-    float specularSoftness = max( ${SPECULAR_ROUGHNESS}, fwidth( blinnPhong ) );
-    float specular = smoothstep( specularThreshold - specularSoftness, specularThreshold + specularSoftness, blinnPhong );
-    specular *= lightMap.r * ( 1.0 - srmiFace );
+    float term = rate * pow( max( 0.01, NoH ), ${SPECULAR_SHININESS} );
+    float specularSoftness = max( ${SPECULAR_ROUGHNESS}, fwidth( term ) );
+    float specularEdge = 1.0 - lightMap.b - specularSoftness;
+    float specular = smoothstep( 0.0, 1.0, ( term - specularEdge ) / ( 2.0 * specularSoftness ) );
+    specular *= ${SPECULAR_INTENSITY} * 0.35 * ( 1.0 - srmiFace );
 
-    // The depth rim of StarRailNPRShader: a band of fixed pixel width inside the
-    // silhouette, darkened on the side away from the light.
-    float rimPixels = ${RIM_WIDTH} * ${RIM_PIXELS_PER_WIDTH} * lightMap.r;
-    float silhouette = NoV / max( fwidth( NoV ), 1e-4 );
-    float rim = ( 1.0 - smoothstep( rimPixels - 1.0, rimPixels, silhouette ) ) * step( 0.01, lightMap.r );
-    rim *= mix( ${RIM_DARK}, 1.0, clamp( NoL * occlusion, 0.0, 1.0 ) ) * ${RIM_INTENSITY} * ( 1.0 - srmiFace );
+    // The depth rim, masked by the light map's red and fading with distance.
+    float viewDistance = length( vViewPosition );
+    float rim = toonSilhouetteBand( NoV, ${RIM_PIXELS} ) * lightMap.r;
+    rim *= ${RIM_INTENSITY} * max( 0.5, clamp( 1.0 / viewDistance, 0.0, 1.0 ) ) * ( 1.0 - srmiFace );
 
-    outgoingLight = albedo * ( shade + specular ) + vec3( rim );
+    outgoingLight = albedo * shade + vec3( specular + rim );
 }
 #endif
 #include <opaque_fragment>`,
@@ -350,10 +339,11 @@ function markSRMIMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
     });
 }
 
-// The inverted hull of StarRailNPRShader: it extrudes in view space along the
-// smoothed normal stored in TANGENT, tilted away from the camera, by a width that
-// grows with distance within fixed bounds and scales with the vertex color's alpha.
-// On the face, the vertex color's blue hides it where the face turns to the camera.
+// HoyoToon's inverted hull: it extrudes in view space along the smoothed normal stored
+// in TANGENT, tilted away from the camera, by a width that grows with the square root
+// of the field-of-view-scaled depth and scales with the vertex color's alpha; the
+// game drops it where that alpha is below 0.05. On the face, StarRailNPRShader's mask
+// hides it with the vertex color's blue where the face turns to the camera.
 function createSRMIToonOutline(
     object: Mesh,
     tangentHoldsOutlineNormal: boolean,
@@ -385,9 +375,11 @@ uniform float face;
 uniform vec3 faceForward;
 varying vec2 vOutlineUv;
 varying float vOutlineFacing;
+varying float vOutlineWidth;
 void main() {
     vOutlineUv = ( mapTransform * vec3( uv, 1.0 ) ).xy;
     vec4 color = vertexColorEnabled > 0.5 ? ${TOON_VERTEX_COLOR_ATTRIBUTE} : ${NEUTRAL_VERTEX_COLOR};
+    vOutlineWidth = color.a;
     #ifdef SRMI_OUTLINE_TANGENT
     vec3 smoothNormal = normalMatrix * tangent.xyz;
     #else
@@ -399,22 +391,22 @@ void main() {
     vec4 viewPosition = modelViewMatrix * vec4( position, 1.0 );
     vec3 toCamera = normalize( -viewPosition.xyz );
     vOutlineFacing = dot( smoothNormal, toCamera );
-    float depth = abs( viewPosition.z ) * ( 2.414 / projectionMatrix[ 1 ][ 1 ] );
-    float width = ${OUTLINE_WIDTH} * 0.0588 * color.a * clamp( depth * 0.025, 0.04, 0.1 );
+    float width = sqrt( abs( viewPosition.z ) / projectionMatrix[ 1 ][ 1 ] ) * color.a * ${OUTLINE_WIDTH} * ${OUTLINE_SCALE};
     if ( face > 0.5 ) {
         float faceFacing = dot( normalize( normalMatrix * faceForward ), toCamera );
         width *= smoothstep( -0.02, 0.0, 1.0 - faceFacing - color.b );
     }
-    viewPosition.xyz += normalize( vec3( smoothNormal.xy, -0.1 ) ) * width;
+    viewPosition.xyz += normalize( vec3( smoothNormal.xy, -1.0 ) ) * width;
     gl_Position = projectionMatrix * viewPosition;
 }`,
             fragmentShader: `uniform sampler2D map;
 varying vec2 vOutlineUv;
 varying float vOutlineFacing;
+varying float vOutlineWidth;
 void main() {
     // The hull past the silhouette faces sideways. Its far side faces away and is
     // only visible through openings such as a missing face.
-    if ( vOutlineFacing < -0.5 ) discard;
+    if ( vOutlineFacing < -0.5 || vOutlineWidth < 0.05 ) discard;
     gl_FragColor = vec4( texture2D( map, vOutlineUv ).rgb * ${OUTLINE_TINT}, 1.0 );
     #include <colorspace_fragment>
 }`,

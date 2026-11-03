@@ -7,6 +7,7 @@ import {
     Mesh,
     MeshStandardMaterial,
     RED_GREEN_RGTC2_Format,
+    ShaderLib,
     ShaderMaterial,
     Texture,
 } from "three";
@@ -22,6 +23,7 @@ import {
     serializeModelViewerToonStyles,
 } from "./material-profiles/registry";
 import { DEFAULT_SRMI_TOON_STYLE } from "./material-profiles/srmi";
+import { DEFAULT_ZZMI_TOON_STYLE } from "./material-profiles/zzmi";
 import {
     applyPayloadEval,
     clearPayloadModelData,
@@ -326,11 +328,12 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.roughness).toBe(1);
 
         const shader = {
-            fragmentShader:
-                "#include <common>\n#include <map_fragment>\n#include <normal_fragment_maps>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>",
+            vertexShader: ShaderLib.standard.vertexShader,
+            fragmentShader: ShaderLib.standard.fragmentShader,
             uniforms: {},
         };
         material.onBeforeCompile(shader as never, {} as never);
+        expect(shader.fragmentShader).toContain("zzmiShadowTint( shade )");
         expect(shader.fragmentShader).toContain("float modelViewerRoughnessSample = mix(");
         expect(shader.fragmentShader).toContain("float modelViewerMetalnessSample = mix(");
         expect(shader.fragmentShader).not.toContain("#include <roughnessmap_fragment>");
@@ -345,6 +348,26 @@ describe("applyPayloadEval packed maps", () => {
         expect(uniforms.modelViewerNormalMode.value).toBe(2);
         expect(uniforms.modelViewerMetalnessBC4.value).toBe(1);
         expect(uniforms.modelViewerRoughnessBC4.value).toBe(1);
+
+        // Converted ZZMI normal maps keep shading data in blue, so Z comes from X and Y.
+        root.userData.payloadTextures.set("converted", new Texture());
+        applyPayloadEval(root, {
+            state: {},
+            meshes: [
+                {
+                    id: "mesh",
+                    visible: true,
+                    texKey: "diffuse",
+                    normalMapKey: "converted",
+                    lightMapKey: "light",
+                    materialMapKey: "material",
+                    cutoutMapKey: null,
+                    shapeWeights: {},
+                    positionVariantIndex: null,
+                },
+            ],
+        });
+        expect(uniforms.modelViewerNormalMode.value).toBe(1);
     });
 
     it("blends coverage masks only while one is bound", () => {
@@ -1162,6 +1185,7 @@ describe("applyPayloadEval packed maps", () => {
             efmi: DEFAULT_EFMI_TOON_STYLE,
             gimi: DEFAULT_GIMI_TOON_STYLE,
             srmi: DEFAULT_SRMI_TOON_STYLE,
+            zzmi: DEFAULT_ZZMI_TOON_STYLE,
         };
         expect(parseModelViewerToonStyles("")).toEqual(defaults);
         expect(parseModelViewerToonStyles("null")).toEqual(defaults);

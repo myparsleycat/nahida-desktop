@@ -21,6 +21,47 @@ export const TOON_STEP_GLSL = `// A step whose edge spans one screen pixel, so t
 float toonStep( float edge, float x ) {
     float width = max( fwidth( x ), 1e-4 );
     return smoothstep( edge - width, edge + width, x );
+}
+
+// The game rims compare scene depth a few pixels outward along the normal. The
+// viewer has no depth texture, so this is 1 within a band of that many pixels
+// inside the silhouette, measured as N·V over its screen derivative.
+float toonSilhouetteBand( float NoV, float pixels ) {
+    float distance = NoV / max( fwidth( NoV ), 1e-4 );
+    return 1.0 - smoothstep( pixels - 1.0, pixels, distance );
+}`;
+
+/**
+ * Opens a toon block at the opaque fragment: world-space normal, key light and view
+ * directions, and the key light's shadow-map occlusion. directionalLights[0] is the
+ * key light in every toon profile.
+ */
+export const TOON_KEY_LIGHT_GLSL = `vec3 worldNormal = inverseTransformDirection( normal, viewMatrix );
+vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
+vec3 worldView = inverseTransformDirection( normalize( vViewPosition ), viewMatrix );
+float occlusion = 1.0;
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+if ( receiveShadow ) {
+    occlusion = getShadow(
+        directionalShadowMap[ 0 ],
+        directionalLightShadows[ 0 ].shadowMapSize,
+        directionalLightShadows[ 0 ].shadowIntensity,
+        directionalLightShadows[ 0 ].shadowBias,
+        directionalLightShadows[ 0 ].shadowRadius,
+        vDirectionalShadowCoord[ 0 ]
+    );
+}
+#endif`;
+
+/** Turns a face's mean normal and the light into the 2D facing terms of an SDF face map. */
+export const TOON_FACE_GLSL = `// Facing of the light in the horizontal plane, 1 when it shines from the front,
+// and whether it comes from the face's right, where the SDF is read mirrored.
+vec2 toonFaceLight( vec3 faceForward, vec3 worldLight ) {
+    vec2 forward = faceForward.xz;
+    forward = dot( forward, forward ) > 1e-8 ? normalize( forward ) : vec2( 0.0, 1.0 );
+    vec2 light = worldLight.xz;
+    light = dot( light, light ) > 1e-8 ? normalize( light ) : forward;
+    return vec2( dot( forward, light ), forward.y * light.x - forward.x * light.y >= 0.0 ? 1.0 : 0.0 );
 }`;
 
 /** The light map a toon shader may read; one- and two-channel containers have no material ID or specular mask. */

@@ -40,6 +40,8 @@ export type MaterialProfileMeshData = {
     /** What the profile's resource loader resolved, such as textures from a game folder. */
     toonResources?: unknown;
     tangentFrameUsable?: boolean;
+    /** The normal map slot holds other shading data, so it is not bound as a normal map. */
+    normalMapUnused?: boolean;
     /** Drawn only while game textures are highlighted. */
     overlayShadow?: boolean;
 };

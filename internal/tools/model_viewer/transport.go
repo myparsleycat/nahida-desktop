@@ -257,7 +257,11 @@ type modelViewerProfileTraits struct {
 func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
 	switch p {
 	case modelViewerZZMIProfile:
-		return modelViewerProfileTraits{normalXYReconstruct: true}
+		return modelViewerProfileTraits{
+			normalXYReconstruct:  true,
+			losslessMaterialMaps: true,
+			vertexColors:         true,
+		}
 	case modelViewerRabbitFXProfile:
 		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true}
 	case modelViewerEFMIProfile:
@@ -279,7 +283,7 @@ type ModelViewerTransport struct {
 	DefaultYaw      float64                    `json:"defaultYaw,omitempty"`
 	MaterialProfile ModelViewerMaterialProfile `json:"materialProfile,omitempty"`
 	// NormalXYReconstruct tells the renderer that normal maps keep X and Y only, so it
-	// rebuilds Z for direct DDS uploads as the encoder does for converted ones.
+	// rebuilds Z from them.
 	NormalXYReconstruct bool                                   `json:"normalXYReconstruct,omitempty"`
 	Meshes              []ModelViewerMeshTransport             `json:"meshes"`
 	Textures            map[string]ModelViewerTextureTransport `json:"textures"`

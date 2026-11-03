@@ -63,6 +63,7 @@ const materialProfileUIs: Partial<Record<ViewerMaterialProfile, MaterialProfileU
     MenuExtras: GIMIToonMenuExtras,
   },
   srmi: { label: "srmi_toon_style" },
+  zzmi: { label: "zzmi_toon_style" },
 };
 
 export function toonAssetSourceOf(

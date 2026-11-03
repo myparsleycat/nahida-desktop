@@ -62,13 +62,6 @@ type modelViewerDecodedTexture struct {
 	partialRatio float64
 }
 
-type modelViewerTextureTransform string
-
-const (
-	modelViewerTextureTransformPassthrough         modelViewerTextureTransform = ""
-	modelViewerTextureTransformNormalXYReconstruct modelViewerTextureTransform = "normal_xy_reconstruct"
-)
-
 func collectModelViewerTextureBindings(sections []modINISection, variables map[string]any) []modelViewerTextureBinding {
 	lookup := make(map[string]modINISection)
 	for _, section := range sections {
@@ -426,20 +419,9 @@ func prepareModelViewerTexture(
 		decoded,
 		path,
 		resourceName,
-		modelViewerTextureTransformPassthrough,
 		format,
 		quality,
 	)
-}
-
-func modelViewerTextureTransformFor(
-	materialProfile ModelViewerMaterialProfile,
-	role string,
-) modelViewerTextureTransform {
-	if materialProfile.traits().normalXYReconstruct && role == "normal_map" {
-		return modelViewerTextureTransformNormalXYReconstruct
-	}
-	return modelViewerTextureTransformPassthrough
 }
 
 func modelViewerTextureFormatFor(materialProfile ModelViewerMaterialProfile, role, requested string) string {
@@ -653,26 +635,10 @@ func cloneModelViewerNRGBA(source *image.NRGBA) *image.NRGBA {
 	return cloned
 }
 
-func reconstructModelViewerNormalZ(ctx context.Context, rgba *image.NRGBA) error {
-	for offset := 0; offset+3 < len(rgba.Pix); offset += 4 {
-		if offset&0xffff == 0 {
-			if err := modelViewerTextureContextErr(ctx); err != nil {
-				return err
-			}
-		}
-		x := float64(rgba.Pix[offset])/127.5 - 1
-		y := float64(rgba.Pix[offset+1])/127.5 - 1
-		z := math.Sqrt(math.Max(0, 1-x*x-y*y))
-		rgba.Pix[offset+2] = uint8(math.Round((z*0.5 + 0.5) * 255))
-	}
-	return ctx.Err()
-}
-
 func encodeModelViewerPreparedTexture(
 	ctx context.Context,
 	decoded *modelViewerDecodedTexture,
 	path, resourceName string,
-	transform modelViewerTextureTransform,
 	format string,
 	quality int,
 ) (*modelViewerPreparedTexture, error) {
@@ -681,7 +647,6 @@ func encodeModelViewerPreparedTexture(
 		decoded,
 		path,
 		resourceName,
-		transform,
 		format,
 		quality,
 		modelViewerTextureShouldInvertAlpha(resourceName, decoded),
@@ -692,7 +657,6 @@ func encodeModelViewerPreparedTextureWithAlpha(
 	ctx context.Context,
 	decoded *modelViewerDecodedTexture,
 	path, resourceName string,
-	transform modelViewerTextureTransform,
 	format string,
 	quality int,
 	invertAlpha bool,
@@ -702,18 +666,11 @@ func encodeModelViewerPreparedTextureWithAlpha(
 	}
 	rgba := decoded.rgba
 	lowRatio, highRatio, partialRatio := decoded.lowRatio, decoded.highRatio, decoded.partialRatio
-	if transform != modelViewerTextureTransformPassthrough || invertAlpha {
+	if invertAlpha {
 		rgba = cloneModelViewerNRGBA(rgba)
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-	}
-	if transform == modelViewerTextureTransformNormalXYReconstruct {
-		if err := reconstructModelViewerNormalZ(ctx, rgba); err != nil {
-			return nil, err
-		}
-	}
-	if invertAlpha {
 		for offset := 3; offset < len(rgba.Pix); offset += 4 {
 			if offset&0xffff == 3 {
 				if err := modelViewerTextureContextErr(ctx); err != nil {

@@ -1,6 +1,10 @@
 /*
- * The GIMI shading below ports the lighting model of UnityGenshinToonShader
- * (https://github.com/kaze-mio/UnityGenshinToonShader) to Three.js.
+ * The GIMI shading below follows the Genshin Impact shader of HoyoToon
+ * (https://github.com/Hoyotoon/HoyoToon, GPL-3.0): its shadow area and ramp lookup,
+ * face SDF, specular, metal matcap, rim light, outline width and tone curve. The
+ * ramp rows, the procedural ramp and metal map, and the material structure come
+ * from the earlier port of UnityGenshinToonShader
+ * (https://github.com/kaze-mio/UnityGenshinToonShader), whose notice follows.
  *
  * MIT License
  *
@@ -61,6 +65,8 @@ import {
     replaceShaderAnchor,
     syncToonOutlineSource,
     textureUvTransform,
+    TOON_FACE_GLSL,
+    TOON_KEY_LIGHT_GLSL,
     TOON_STEP_GLSL,
     TOON_VERTEX_COLOR_ATTRIBUTE,
     toonLightMapOf,
@@ -72,12 +78,11 @@ export type GenshinFaceType = (typeof GENSHIN_FACE_TYPES)[number];
 
 export type GIMIToonStyle = ModelViewerToonStyleBase & {
     daytime: boolean;
-    shadowOffset: number;
-    shadowSmoothness: number;
+    /** HoyoToon's _LightArea: the shadow area below which a texel is in shadow. */
+    lightArea: number;
     shadowBrightness: number;
     brightness: number;
     specular: number;
-    metallic: number;
     rimStrength: number;
     emission: number;
     outlineWidth: number;
@@ -89,21 +94,19 @@ export type GIMIToonStyle = ModelViewerToonStyleBase & {
     assetDir: string;
 };
 
-// Shading values follow kaze-mio's Nahida material in UnityGenshinToonShader, except
-// the shadow offset: with its 0.1, frontal light shades limbs that the game keeps lit
-// to the silhouette.
+// Shading and outline values are HoyoToon's defaults, except the light area: with its
+// 0.55, frontal light shades limbs that the game keeps lit to the silhouette. The
+// shadow brightness and specular strength come from kaze-mio's Nahida material.
 export const DEFAULT_GIMI_TOON_STYLE: GIMIToonStyle = {
     daytime: true,
-    shadowOffset: 0,
-    shadowSmoothness: 0.4,
+    lightArea: 0.5,
     shadowBrightness: 1.1,
     brightness: 1,
     specular: 0.3,
-    metallic: 8,
-    rimStrength: 0.3,
+    rimStrength: 1,
     emission: 0.2,
     outlines: true,
-    outlineWidth: 1.6,
+    outlineWidth: 0.03,
     selfShadow: true,
     lightFollowsCamera: true,
     // The curve compresses bright skin channels unevenly and bleaches it.
@@ -146,12 +149,10 @@ type GenshinToonShaderState = {
     faceShadowEnabled: { value: number };
     vertexColorEnabled: { value: number };
     daytime: { value: number };
-    shadowOffset: { value: number };
-    shadowSmoothness: { value: number };
+    lightArea: { value: number };
     shadowBrightness: { value: number };
     brightness: { value: number };
     specular: { value: number };
-    metallic: { value: number };
     rimStrength: { value: number };
     emission: { value: number };
     emissionInverted: { value: number };
@@ -174,12 +175,14 @@ const RAMP_SHADOW_COLORS: Array<[number, number, number]> = [
 ];
 const RAMP_NIGHT_TINT: [number, number, number] = [0.82, 0.84, 0.97];
 
-// The outline extrudes by 0.01 * width * mix(near, far, k) in view space, where k
-// interpolates the field-of-view-normalized depth between these distances.
-const OUTLINE_NEAR_DEPTH = 0;
-const OUTLINE_FAR_DEPTH = 6;
-const OUTLINE_NEAR_SCALE = 0.1;
-const OUTLINE_FAR_SCALE = 0.6;
+// HoyoToon's _OutlineWidthAdjustZs and _OutlineWidthAdjustScales: the outline width
+// scale at these field-of-view-normalized depths, interpolated in two pieces.
+const OUTLINE_ADJUST_DEPTHS = "vec3( 0.001, 2.0, 6.0 )";
+const OUTLINE_ADJUST_SCALES = "vec3( 0.01, 0.245, 0.6 )";
+
+// Pixels inside the silhouette that the rim covers, standing in for HoyoToon's
+// 1.5 × 0.00044 screen-width depth offset at a 1080p-class viewport.
+const RIM_PIXELS = "2.5";
 
 const whiteTexture = solidTexture(255, 255, 255, 255);
 const neutralLightMap = solidTexture(0, 128, 0, 77);
@@ -197,26 +200,16 @@ float genshinMaterialRow( float id ) {
     return 3.0;
 }
 
-// Gran Turismo (Uchimura) curve: keeps saturation and rolls off highlights.
+// HoyoToon's Genshin post curve: a bloom-like lift above 0.6, a rational filmic
+// curve, then the game's white balance.
 vec3 genshinToneMap( vec3 x ) {
-    const float P = 1.0;
-    const float a = 1.0;
-    const float m = 0.22;
-    const float l = 0.4;
-    const float c = 1.33;
-    float l0 = ( ( P - m ) * l ) / a;
-    float S0 = m + l0;
-    float S1 = m + a * l0;
-    float C2 = ( a * P ) / ( P - S1 );
-    float CP = -C2 / P;
-    x = max( x, vec3( 0.0 ) );
-    vec3 w0 = 1.0 - smoothstep( vec3( 0.0 ), vec3( m ), x );
-    vec3 w2 = step( vec3( S0 ), x );
-    vec3 w1 = 1.0 - w0 - w2;
-    vec3 toe = m * pow( x / m, vec3( c ) );
-    vec3 shoulder = P - ( P - S1 ) * exp( CP * ( x - S0 ) );
-    vec3 linear = m + a * ( x - m );
-    return toe * w0 + linear * w1 + shoulder * w2;
+    x += max( x - 0.6, vec3( 0.0 ) ) * 0.7;
+    x = clamp( ( ( 1.36 * x + 0.047 ) * x ) / ( ( 0.93 * x + 0.56 ) * x + 0.14 ), 0.0, 1.0 );
+    return vec3(
+        dot( vec3( 1.0, 0.021, -0.019 ), x ),
+        dot( vec3( 0.001, 1.04, 0.01 ), x ),
+        0.951 * x.b
+    );
 }`;
 
 export const gimiMaterialProfile: ModelViewerMaterialProfile<GIMIToonStyle> = {
@@ -282,12 +275,10 @@ function configureGenshinToonMaterialShader(material: MeshStandardMaterial): voi
         faceShadowEnabled: { value: 0 },
         vertexColorEnabled: { value: 0 },
         daytime: { value: defaults.daytime ? 1 : 0 },
-        shadowOffset: { value: defaults.shadowOffset },
-        shadowSmoothness: { value: defaults.shadowSmoothness },
+        lightArea: { value: defaults.lightArea },
         shadowBrightness: { value: defaults.shadowBrightness },
         brightness: { value: defaults.brightness },
         specular: { value: defaults.specular },
-        metallic: { value: defaults.metallic },
         rimStrength: { value: defaults.rimStrength },
         emission: { value: defaults.emission },
         emissionInverted: { value: 0 },
@@ -308,12 +299,10 @@ function configureGenshinToonMaterialShader(material: MeshStandardMaterial): voi
         shader.uniforms.genshinFaceShadowEnabled = state.faceShadowEnabled;
         shader.uniforms.genshinVertexColorEnabled = state.vertexColorEnabled;
         shader.uniforms.genshinDaytime = state.daytime;
-        shader.uniforms.genshinShadowOffset = state.shadowOffset;
-        shader.uniforms.genshinShadowSmoothness = state.shadowSmoothness;
+        shader.uniforms.genshinLightArea = state.lightArea;
         shader.uniforms.genshinShadowBrightness = state.shadowBrightness;
         shader.uniforms.genshinBrightness = state.brightness;
         shader.uniforms.genshinSpecular = state.specular;
-        shader.uniforms.genshinMetallic = state.metallic;
         shader.uniforms.genshinRimStrength = state.rimStrength;
         shader.uniforms.genshinEmission = state.emission;
         shader.uniforms.genshinEmissionInverted = state.emissionInverted;
@@ -327,7 +316,8 @@ uniform float genshinVertexColorEnabled;
 uniform vec3 genshinFaceForward;
 varying vec2 vGenshinUv;
 varying vec4 vGenshinColor;
-varying vec3 vGenshinFaceForward;`,
+varying vec3 vGenshinFaceForward;
+varying float vGenshinDepthScale;`,
         );
         shader.vertexShader = replaceShaderAnchor(
             shader.vertexShader,
@@ -335,7 +325,8 @@ varying vec3 vGenshinFaceForward;`,
             `#include <uv_vertex>
 vGenshinUv = uv;
 vGenshinColor = genshinVertexColorEnabled > 0.5 ? ${TOON_VERTEX_COLOR_ATTRIBUTE} : vec4( 1.0, 0.5, 1.0, 0.5 );
-vGenshinFaceForward = normalize( mat3( modelMatrix ) * genshinFaceForward );`,
+vGenshinFaceForward = normalize( mat3( modelMatrix ) * genshinFaceForward );
+vGenshinDepthScale = 2.414 / projectionMatrix[ 1 ][ 1 ];`,
         );
         shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
@@ -344,6 +335,7 @@ vGenshinFaceForward = normalize( mat3( modelMatrix ) * genshinFaceForward );`,
 varying vec2 vGenshinUv;
 varying vec4 vGenshinColor;
 varying vec3 vGenshinFaceForward;
+varying float vGenshinDepthScale;
 uniform float genshinToonEnabled;
 uniform sampler2D genshinLightMap;
 uniform mat3 genshinLightMapTransform;
@@ -355,102 +347,100 @@ uniform float genshinFaceLightMapEnabled;
 uniform sampler2D genshinFaceShadow;
 uniform float genshinFaceShadowEnabled;
 uniform float genshinDaytime;
-uniform float genshinShadowOffset;
-uniform float genshinShadowSmoothness;
+uniform float genshinLightArea;
 uniform float genshinShadowBrightness;
 uniform float genshinBrightness;
 uniform float genshinSpecular;
-uniform float genshinMetallic;
 uniform float genshinRimStrength;
 uniform float genshinEmission;
 uniform float genshinEmissionInverted;
 uniform float genshinToneMapping;
 
-${GENSHIN_COMMON_GLSL}`,
+${GENSHIN_COMMON_GLSL}
+
+${TOON_FACE_GLSL}`,
         );
 
-        // Replaces the lit result: half-Lambert scaled by the light map's AO picks a
-        // column of the shadow ramp, and the light map's alpha picks its row.
-        // directionalLights[0] is the key light, as in the EFMI shader.
+        // Replaces the lit result with HoyoToon's ramp shading: the light map's AO
+        // and the half-Lambert give a shadow area, whose distance below the light
+        // area picks a column of the shadow ramp; the light map's alpha picks its row.
         shader.fragmentShader = replaceShaderAnchor(
             shader.fragmentShader,
             "#include <opaque_fragment>",
             `#if NUM_DIR_LIGHTS > 0
 if ( genshinToonEnabled > 0.5 ) {
-    vec3 worldNormal = inverseTransformDirection( normal, viewMatrix );
-    vec3 worldLight = inverseTransformDirection( directionalLights[ 0 ].direction, viewMatrix );
-    vec3 worldView = inverseTransformDirection( normalize( vViewPosition ), viewMatrix );
+    ${TOON_KEY_LIGHT_GLSL}
     vec3 albedo = diffuseColor.rgb;
     vec4 lightMap = texture2D( genshinLightMap, ( genshinLightMapTransform * vec3( vGenshinUv, 1.0 ) ).xy );
-
-    float occlusion = 1.0;
-    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-    if ( receiveShadow ) {
-        occlusion = getShadow(
-            directionalShadowMap[ 0 ],
-            directionalLightShadows[ 0 ].shadowMapSize,
-            directionalLightShadows[ 0 ].shadowIntensity,
-            directionalLightShadows[ 0 ].shadowBias,
-            directionalLightShadows[ 0 ].shadowRadius,
-            vDirectionalShadowCoord[ 0 ]
-        );
-    }
-    #endif
-
-    // The game flattens the light's elevation so faces and limbs keep their shape.
-    vec3 flatLight = normalize( worldLight * vec3( 1.0, 0.5, 1.0 ) );
-    float halfLambert = dot( worldNormal, flatLight ) * 0.5 + 0.5;
-    float ao = lightMap.g * vGenshinColor.r;
-    float shadow = ao >= 0.9 ? 1.0 : clamp( 2.0 * halfLambert * ao, 0.0, 1.0 );
+    float NoL = dot( worldNormal, worldLight );
     float row = genshinMaterialRow( lightMap.a );
     float face = genshinFace;
 
+    // The light map's AO is pushed away from 0.5 and scaled by the vertex AO; near
+    // 0 or 1 it forces shadow or light.
+    float aoOffset = lightMap.g - 0.5;
+    float threshold = ( 2.0 * aoOffset * abs( aoOffset ) + 0.5 ) * vGenshinColor.r;
+    float area = threshold > 0.95 ? 1.0 : ( threshold < 0.05 ? 0.0 : ( NoL * 0.5 + 0.5 + threshold ) * 0.5 );
+    float lit = toonStep( genshinLightArea, area );
+    float rampU = 1.0 - min( max( genshinLightArea - area, 0.0 ) / genshinLightArea, 1.0 );
+
     if ( genshinFace > 0.5 ) {
         row = 3.0;
-        vec2 forward = vGenshinFaceForward.xz;
-        forward = dot( forward, forward ) > 1e-8 ? normalize( forward ) : vec2( 0.0, 1.0 );
-        vec2 light = worldLight.xz;
-        light = dot( light, light ) > 1e-8 ? normalize( light ) : forward;
-        float facing = dot( forward, light );
+        vec2 faceLight = toonFaceLight( vGenshinFaceForward, worldLight );
         if ( genshinFaceLightMapEnabled > 0.5 ) {
             vec2 faceUv = vGenshinUv;
-            if ( forward.y * light.x - forward.x * light.y >= 0.0 ) faceUv.x = 1.0 - faceUv.x;
-            shadow = toonStep( -0.5 * facing + 0.5, texture2D( genshinFaceLightMap, faceUv ).r );
-            shadow = mix( shadow, 1.0, texture2D( genshinFaceShadow, vGenshinUv ).a * genshinFaceShadowEnabled );
+            if ( faceLight.y > 0.5 ) faceUv.x = 1.0 - faceUv.x;
+            float faceThreshold = smoothstep( 0.0, 1.0, 0.5 - 0.5 * faceLight.x );
+            lit = toonStep( faceThreshold, texture2D( genshinFaceLightMap, faceUv ).r );
+            lit = mix( lit, 1.0, texture2D( genshinFaceShadow, vGenshinUv ).a * genshinFaceShadowEnabled );
         } else {
-            shadow = smoothstep( -0.35, -0.15, facing );
+            lit = smoothstep( -0.35, -0.15, faceLight.x );
         }
+        rampU = 0.0;
     }
-    shadow *= occlusion;
 
-    float threshold = 0.5 + genshinShadowOffset;
-    float rampU = smoothstep( threshold - genshinShadowSmoothness, threshold, shadow );
+    // The cast shadow darkens like the ramp's deepest column.
+    lit *= occlusion;
+    rampU *= occlusion;
     float rampV = ( row + 5.0 * genshinDaytime + 0.5 ) / 10.0;
     vec3 ramp = texture2D( genshinRamp, vec2( clamp( rampU, 0.004, 0.996 ), rampV ) ).rgb;
     vec3 shade = ramp * mix( vec3( genshinShadowBrightness ), vec3( 1.0 ), smoothstep( 0.9, 1.0, rampU ) );
-    float lit = toonStep( threshold, shadow );
     shade = mix( shade, vec3( 1.0 ), lit );
 
+    // Light map red at 0.9 and above marks metal, drawn from a view-space matcap
+    // with a sharp highlight, both dimmed in shadow.
     vec3 halfDirection = normalize( worldLight + worldView );
-    float blinnPhong = pow( clamp( dot( worldNormal, halfDirection ), 0.0, 1.0 ), 5.0 );
-    vec3 metalMap = texture2D( genshinMetalMap, normalize( normal ).xy * 0.5 + 0.5 ).rgb;
-    // Derivatives are undefined inside the per-texel branch below.
-    float highlight = toonStep( 1.1, lightMap.b + blinnPhong );
-    vec3 specular = lightMap.r >= 0.9
-        ? blinnPhong * lightMap.b * albedo * metalMap * genshinMetallic
-        : vec3( highlight * lightMap.r * genshinSpecular );
-    specular *= 1.0 - face;
+    float NoH = max( dot( worldNormal, halfDirection ), 0.001 );
+    float metal = step( 0.89, lightMap.r );
+    float metalMap = clamp( texture2D( genshinMetalMap, normalize( normal ).xy * 0.5 + 0.5 ).r * 3.0, 0.0, 1.0 );
+    float metalSpecular = clamp( pow( NoH, 90.0 ) * 15.0, 0.0, 1.0 ) * lightMap.r;
+    metalSpecular *= mix( 0.2, 1.0, lit );
+    vec3 metalColor = albedo * mix( vec3( 0.51, 0.3, 0.19 ), vec3( 1.0 ), metalMap ) + 0.5 * metalSpecular;
+    metalColor *= mix( vec3( 0.78, 0.77, 0.82 ), vec3( 1.0 ), lit );
 
-    // A thin rim on the lit side of the silhouette only.
-    float viewCosine = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
-    float rim = smoothstep( 0.72, 0.8, 1.0 - viewCosine ) * lit * ( 1.0 - face );
+    // Other materials get a hard Blinn-Phong highlight past the light map's blue,
+    // tinted 10% toward the surface color.
+    float term = pow( NoH, 10.0 );
+    float specular = toonStep( 1.015 - lightMap.b, term ) * term * lightMap.r * genshinSpecular * 0.5;
+    specular *= ( 1.0 - metal ) * ( 1.0 - face );
+
+    vec3 surface = mix( albedo, metalColor, metal * ( 1.0 - face ) );
+    vec3 toon = ( surface * shade + ( 0.9 + 0.1 * surface ) * specular ) * genshinBrightness;
+
+    // The 4.0+ rim: a thin band inside the silhouette, brightest where the normal
+    // turns away from the camera-to-light direction, fading with distance.
+    float NoV = clamp( dot( worldNormal, worldView ), 0.0, 1.0 );
+    vec3 rimDirection = worldView - worldLight;
+    rimDirection = dot( rimDirection, rimDirection ) > 1e-6 ? normalize( rimDirection ) : worldView;
+    float rimFacing = dot( worldNormal, rimDirection );
+    float rimLight = clamp( pow( max( 1.0 - rimFacing, 0.0 ), 7.5 ), 0.0, 1.0 ) + clamp( pow( max( rimFacing, 0.0 ), 7.5 ), 0.0, 1.0 );
+    float viewDepth = abs( vViewPosition.z ) * vGenshinDepthScale;
+    float rimBand = toonSilhouetteBand( NoV, ${RIM_PIXELS} ) * clamp( 1.0 - viewDepth / 5.0, 0.0, 1.0 );
+    toon += clamp( albedo * 5.0 * rimLight * rimBand, 0.0, 1.0 ) * genshinRimStrength * ( 1.0 - face );
 
     // The emission mask is the texture's own alpha, before the viewer's alpha
     // inversion for diffuse maps that store opacity inverted.
     float emissionMask = mix( diffuseColor.a, 1.0 - diffuseColor.a, genshinEmissionInverted );
-
-    vec3 toon = ( albedo * shade + specular ) * genshinBrightness;
-    toon += albedo * rim * genshinRimStrength;
     toon += albedo * emissionMask * genshinEmission;
     outgoingLight = genshinToneMapping > 0.5 ? genshinToneMap( toon ) : toon;
 }
@@ -501,12 +491,10 @@ function syncGenshinToon(
         ? 1
         : 0;
     state.daytime.value = style.daytime ? 1 : 0;
-    state.shadowOffset.value = style.shadowOffset;
-    state.shadowSmoothness.value = style.shadowSmoothness;
+    state.lightArea.value = style.lightArea;
     state.shadowBrightness.value = style.shadowBrightness;
     state.brightness.value = style.brightness;
     state.specular.value = style.specular;
-    state.metallic.value = style.metallic;
     state.rimStrength.value = style.rimStrength;
     state.toneMapping.value = style.toneMapping ? 1 : 0;
 
@@ -628,9 +616,10 @@ function createGenshinToonTextureLoader() {
     };
 }
 
-// The inverted hull of UnityGenshinToonShader: it extrudes in view space along the
-// smoothed normal GIMI stores in TANGENT, flattened onto the screen, by a width
-// that grows with distance and scales with the vertex color's alpha.
+// HoyoToon's inverted hull: it extrudes in view space along the smoothed normal GIMI
+// stores in TANGENT, flattened onto the screen, by a width that grows with distance
+// in two linear pieces and scales with the vertex color's alpha, and it is pushed
+// slightly away from the camera.
 function createGenshinToonOutline(
     object: Mesh,
     tangentHoldsOutlineNormal: boolean,
@@ -675,10 +664,16 @@ void main() {
     vec4 viewPosition = modelViewMatrix * vec4( position, 1.0 );
     vOutlineFacing = dot( smoothNormal, normalize( -viewPosition.xyz ) ) * inversesqrt( max( dot( smoothNormal, smoothNormal ), 1e-10 ) );
     float depth = abs( viewPosition.z ) * ( 2.414 / projectionMatrix[ 1 ][ 1 ] );
-    float distance = clamp( ( depth - ${OUTLINE_NEAR_DEPTH.toFixed(1)} ) / ${(OUTLINE_FAR_DEPTH - OUTLINE_NEAR_DEPTH).toFixed(1)}, 0.0, 1.0 );
+    vec3 adjustDepths = ${OUTLINE_ADJUST_DEPTHS};
+    vec3 adjustScales = ${OUTLINE_ADJUST_SCALES};
+    vec4 piece = depth < adjustDepths.y
+        ? vec4( adjustDepths.xy, adjustScales.xy )
+        : vec4( adjustDepths.yz, adjustScales.yz );
+    float depthScale = mix( piece.z, piece.w, clamp( ( depth - piece.x ) / max( piece.y - piece.x, 0.001 ), 0.0, 1.0 ) );
     float widthScale = vertexColorEnabled > 0.5 ? ${TOON_VERTEX_COLOR_ATTRIBUTE}.a : 0.5;
-    float width = 0.01 * outlineWidth * mix( ${OUTLINE_NEAR_SCALE.toFixed(2)}, ${OUTLINE_FAR_SCALE.toFixed(2)}, distance ) * widthScale;
-    viewPosition.xyz += 0.001 * normalize( viewPosition.xyz ) + width * direction;
+    float width = outlineWidth * 1.5 * depthScale * 0.414 * widthScale;
+    viewPosition.xyz *= 1.0 + 0.01 * mix( 0.1, 1.0, clamp( 1.0 - depth, 0.0, 1.0 ) );
+    viewPosition.xyz += width * direction;
     gl_Position = projectionMatrix * viewPosition;
 }`,
             fragmentShader: `uniform sampler2D map;

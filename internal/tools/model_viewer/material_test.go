@@ -432,75 +432,6 @@ func TestModelViewerPreviewMipmap(t *testing.T) {
 	}
 }
 
-func TestReconstructModelViewerNormalZ(t *testing.T) {
-	input := image.NewNRGBA(image.Rect(0, 0, 2, 1))
-	input.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 17, A: 77})
-	input.SetNRGBA(1, 0, color.NRGBA{R: 255, G: 128, B: 231, A: 19})
-
-	if err := reconstructModelViewerNormalZ(context.Background(), input); err != nil {
-		t.Fatal(err)
-	}
-
-	center := input.NRGBAAt(0, 0)
-	if center != (color.NRGBA{R: 128, G: 128, B: 255, A: 77}) {
-		t.Fatalf("center pixel = %#v, want reconstructed Z with R/G/A preserved", center)
-	}
-	clamped := input.NRGBAAt(1, 0)
-	if clamped != (color.NRGBA{R: 255, G: 128, B: 128, A: 19}) {
-		t.Fatalf("clamped pixel = %#v, want zero Z with R/G/A preserved", clamped)
-	}
-}
-
-func TestModelViewerTextureTransformForProfileAndRole(t *testing.T) {
-	tests := []struct {
-		name, role string
-		profile    ModelViewerMaterialProfile
-		want       modelViewerTextureTransform
-	}{
-		{
-			name:    "zzmi normal",
-			profile: "zzmi",
-			role:    "normal_map",
-			want:    modelViewerTextureTransformNormalXYReconstruct,
-		},
-		{name: "zzmi diffuse", profile: "zzmi", role: "diffuse", want: modelViewerTextureTransformPassthrough},
-		{name: "zzmi light map", profile: "zzmi", role: "light_map", want: modelViewerTextureTransformPassthrough},
-		{
-			name:    "zzmi material map",
-			profile: "zzmi",
-			role:    "material_map",
-			want:    modelViewerTextureTransformPassthrough,
-		},
-		{
-			name:    "RabbitFX normal",
-			profile: "wuwa:rabbitfx",
-			role:    "normal_map",
-			want:    modelViewerTextureTransformNormalXYReconstruct,
-		},
-		{
-			name:    "RabbitFX light map",
-			profile: "wuwa:rabbitfx",
-			role:    "light_map",
-			want:    modelViewerTextureTransformPassthrough,
-		},
-		{name: "gimi normal", profile: "gimi", role: "normal_map", want: modelViewerTextureTransformPassthrough},
-		{name: "unprofiled normal", role: "normal_map", want: modelViewerTextureTransformPassthrough},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := modelViewerTextureTransformFor(test.profile, test.role); got != test.want {
-				t.Fatalf(
-					"modelViewerTextureTransformFor(%q, %q) = %q, want %q",
-					test.profile,
-					test.role,
-					got,
-					test.want,
-				)
-			}
-		})
-	}
-}
-
 func TestModelViewerTextureFormatForProfileAndRole(t *testing.T) {
 	tests := []struct {
 		profile               ModelViewerMaterialProfile
@@ -510,7 +441,8 @@ func TestModelViewerTextureFormatForProfileAndRole(t *testing.T) {
 		{profile: "wuwa:rabbitfx", role: "light_map", requested: "jpeg-force", want: "png"},
 		{profile: "wuwa:rabbitfx", role: "material_map", requested: "jpeg-safe", want: "png"},
 		{profile: "wuwa:rabbitfx", role: "diffuse", requested: "jpeg-safe", want: "jpeg-safe"},
-		{profile: "zzmi", role: "light_map", requested: "jpeg-safe", want: "jpeg-safe"},
+		{profile: "zzmi", role: "light_map", requested: "jpeg-safe", want: "png"},
+		{profile: "zzmi", role: "diffuse", requested: "jpeg-safe", want: "jpeg-safe"},
 	}
 	for _, test := range tests {
 		if got := modelViewerTextureFormatFor(test.profile, test.role, test.requested); got != test.want {
@@ -700,42 +632,6 @@ func TestRunModelViewerTextureJobsPreservesDetectedAlphaInversion(t *testing.T) 
 	}
 }
 
-func TestRunModelViewerTextureJobsKeepsZZMINormalTransformVariant(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "packed-normal.png")
-	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
-	settings := modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, MaterialProfile: "zzmi"}
-	output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
-		{
-			path:         path,
-			resourceName: "BodyNormalMap",
-			keys:         []string{"normal"},
-			role:         "normal_map",
-			canonicalKey: "normal",
-		},
-		{path: path, resourceName: "BodyDiffuse", keys: []string{"diffuse"}, role: "diffuse", canonicalKey: "diffuse"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stats.Decodes != 1 || stats.Encodes != 2 || stats.LogicalTextures != 2 {
-		t.Fatalf("stats = %#v", stats)
-	}
-	diffuse := output[0]["diffuse"]
-	normal := output[0]["normal"]
-	if len(diffuse.Bytes) == 0 || bytes.Equal(diffuse.Bytes, normal.Bytes) {
-		t.Fatalf("ZZMI normal transform reused passthrough payload: %#v", output)
-	}
-	diffusePixel := decodeModelViewerTestPNGPixel(t, diffuse.Bytes, 0, 0)
-	if diffusePixel != (color.NRGBA{R: 128, G: 128, B: 17, A: 255}) {
-		t.Fatalf("diffuse pixel = %#v, want passthrough source", diffusePixel)
-	}
-	normalPixel := decodeModelViewerTestPNGPixel(t, normal.Bytes, 0, 0)
-	if normalPixel != (color.NRGBA{R: 128, G: 128, B: 255, A: 255}) {
-		t.Fatalf("normal pixel = %#v, want reconstructed Z", normalPixel)
-	}
-}
-
 func TestRunModelViewerTextureJobsUsesLosslessRabbitFXPackedMaps(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "packed.png")
 	file, err := os.Create(path)
@@ -781,47 +677,12 @@ func TestRunModelViewerTextureJobsUsesLosslessRabbitFXPackedMaps(t *testing.T) {
 		output[0]["normal"].Bytes,
 		0,
 		0,
-	); pixel != (color.NRGBA{R: 128, G: 128, B: 255, A: 255}) {
+	); pixel != (color.NRGBA{R: 128, G: 128, B: 17, A: 255}) {
 		t.Fatalf("normal pixel = %#v", pixel)
 	}
 }
 
-func TestRunModelViewerTextureJobsDeduplicatesZZMINormalTransform(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "packed-normal.png")
-	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
-	settings := modelViewerTextureSettings{TextureFormat: "png", JPEGQuality: 85, MaterialProfile: "zzmi"}
-	output, stats, err := runModelViewerTextureJobs(context.Background(), settings, 1, []modelViewerTextureJob{
-		{
-			path:         path,
-			resourceName: "BodyNormalMap",
-			keys:         []string{"normal"},
-			role:         "normal_map",
-			canonicalKey: "normal",
-		},
-		{
-			path:         path,
-			resourceName: "BodyNormalMapCopy",
-			keys:         []string{"normal-copy"},
-			role:         "normal_map",
-			canonicalKey: "normal-copy",
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stats.Decodes != 1 || stats.Encodes != 1 || stats.LogicalTextures != 2 {
-		t.Fatalf("stats = %#v", stats)
-	}
-	if len(output[0]["normal"].Bytes) == 0 || !bytes.Equal(output[0]["normal"].Bytes, output[0]["normal-copy"].Bytes) {
-		t.Fatalf("reconstructed normal payloads were not shared: %#v", output)
-	}
-	if pixel := decodeModelViewerTestPNGPixel(t, output[0]["normal"].Bytes, 0, 0); pixel.B != 255 {
-		t.Fatalf("normal pixel = %#v, want reconstructed B=255", pixel)
-	}
-}
-
-func TestRunModelViewerTextureJobsScopesZZMINormalTransform(t *testing.T) {
+func TestRunModelViewerTextureJobsPassesChannelsThrough(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "texture.png")
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
@@ -833,13 +694,16 @@ func TestRunModelViewerTextureJobsScopesZZMINormalTransform(t *testing.T) {
 		wantBlue uint8
 	}{
 		{
-			name:     "zzmi non-normal roles",
-			profile:  "zzmi",
+			name:     "efmi non-normal roles",
+			profile:  "efmi",
 			roles:    []string{"diffuse", "light_map", "material_map"},
 			encodes:  3,
 			wantBlue: 17,
 		},
-		{name: "non-zzmi normal", profile: "gimi", roles: []string{"diffuse", "normal_map"}, encodes: 2, wantBlue: 17},
+		{name: "efmi normal", profile: "efmi", roles: []string{"diffuse", "normal_map"}, encodes: 2, wantBlue: 17},
+		{name: "gimi normal", profile: "gimi", roles: []string{"diffuse", "normal_map"}, encodes: 2, wantBlue: 17},
+		// ZZMI's normal map blue is the diffuse bias, which its toon shader reads.
+		{name: "zzmi normal", profile: "zzmi", roles: []string{"diffuse", "normal_map"}, encodes: 2, wantBlue: 17},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

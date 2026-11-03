@@ -546,6 +546,7 @@ function applyEvaluatedMaps(
         profile.derivativeTangentFrame && normal && object.geometry.attributes.uv;
     const normalMap =
         !userData.normalMapsDisabled &&
+        !userData.normalMapUnused &&
         evaluated.normalMapKey &&
         (userData.tangentFrameUsable || canUseDerivativeTangentFrame)
             ? (textures.get(evaluated.normalMapKey) ?? null)
@@ -749,9 +750,11 @@ function usesPackedNormalMap(texture: Texture | null | undefined): boolean {
     );
 }
 
+// Converted normal maps keep their source channels, and blue may hold shading data,
+// so Z is rebuilt here too.
 function normalMode(metadata: ModelViewerDDSMetadata | undefined): number {
     if (!metadata) {
-        return 0;
+        return 1;
     }
     const bc4 = metadata.format.startsWith("bc4-");
     const signed = metadata.direct && metadata.format.endsWith("snorm");
