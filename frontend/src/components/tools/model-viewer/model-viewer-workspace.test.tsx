@@ -5,8 +5,10 @@ import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import type { ModViewerTransport } from "@shared/mod-viewer/types";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useImperativeHandle, type ComponentProps } from "react";
+import { useImperativeHandle, type ComponentProps, type ReactElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+import type { ModelViewerToonMenu } from "./material-profiles/profile-ui";
 
 import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
 import { ModelViewerDialog } from "./model-viewer-dialog";
@@ -30,6 +32,7 @@ vi.mock("@bindings/tools", () => ({
     LoadModViewer: vi.fn(),
     CleanupModelViewer: vi.fn(),
     PersistModelViewerToggleState: vi.fn(),
+    ListGenshinToonAssets: vi.fn(),
     GetModelViewerIneffectiveValues: vi.fn(() =>
       Object.assign(Promise.resolve([]), { cancel: vi.fn() }),
     ),
@@ -190,6 +193,57 @@ it("passes payload animation frames to the viewer without recreating them", () =
   expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].animationClip?.frames[0]).toBe(
     transport.animations[0].frames[0],
   );
+});
+
+it("lists the toon asset folder and saves only the edited profile's style", async () => {
+  const listing = {
+    ramps: [{ name: "Avatar_Loli_Ramp", bodyUrl: "body.png", hairUrl: "hair.png" }],
+  };
+  vi.mocked(Tools.ListGenshinToonAssets).mockReturnValue(
+    Object.assign(Promise.resolve(listing), { cancel: vi.fn() }) as never,
+  );
+  let stored = JSON.stringify({ gimi: { assetDir: "D:/Genshin" } });
+  vi.mocked(getSetting).mockImplementation((async (key: string) =>
+    key === "modelViewer.toonShadows"
+      ? true
+      : key === "modelViewer.toonStyles"
+        ? stored
+        : undefined) as typeof getSetting);
+  render(
+    <ModelViewerDialog
+      open
+      onOpenChange={vi.fn()}
+      source={{
+        mode: "payload",
+        transport: { ...normalizeModelViewerTransport(payload), materialProfile: "gimi" },
+        memorySessionId: "workspace",
+        modPath: "C:/mod",
+        name: "Model",
+      }}
+    />,
+  );
+
+  await waitFor(() =>
+    expect(vi.mocked(ThreeModelViewer).mock.lastCall?.[0].toonAssets).toEqual({
+      profile: "gimi",
+      assets: listing,
+    }),
+  );
+  expect(Tools.ListGenshinToonAssets).toHaveBeenCalledWith("D:/Genshin");
+
+  // Another viewer window changed the EFMI style after this one loaded.
+  stored = JSON.stringify({ gimi: { assetDir: "D:/Genshin" }, efmi: { outlines: false } });
+  const toonMenu = vi.mocked(ModelViewerMenuBar).mock.lastCall![0].toonMenu as ReactElement<
+    ComponentProps<typeof ModelViewerToonMenu>
+  >;
+  act(() => toonMenu.props.onStyleChange({ ...toonMenu.props.style, ramp: "Avatar_Loli_Ramp" }));
+  const toonWrites = () =>
+    vi.mocked(setSetting).mock.calls.filter(([key]) => key === "modelViewer.toonStyles");
+  await waitFor(() => expect(toonWrites()).toHaveLength(1));
+  const written = JSON.parse(toonWrites()[0][1] as string);
+  expect(written.efmi.outlines).toBe(false);
+  expect(written.gimi).toMatchObject({ ramp: "Avatar_Loli_Ramp", assetDir: "D:/Genshin" });
+  vi.mocked(getSetting).mockImplementation((async () => undefined) as typeof getSetting);
 });
 
 it("preserves double-sided rendering when the dialog body unmounts and reopens", async () => {

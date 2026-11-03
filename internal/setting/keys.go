@@ -68,9 +68,7 @@ const (
 	KeyModelViewerEnvironment     = "modelViewer.environment"
 	KeyModelViewerExposure        = "modelViewer.exposure"
 	KeyModelViewerToonShadows     = "modelViewer.toonShadows"
-	KeyModelViewerToonStyle       = "modelViewer.toonStyle"
-	KeyModelViewerGIMIToonStyle   = "modelViewer.gimiToonStyle"
-	KeyModelViewerGenshinAssetDir = "modelViewer.genshinAssetDir"
+	KeyModelViewerToonStyles      = "modelViewer.toonStyles"
 	KeyModelViewerOverlayInViewer = "modelViewer.overlayInViewer"
 
 	KeyXXMIRoot               = "xxmi.root"
@@ -175,9 +173,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerEnvironment, ScopeModelViewer, "model_viewer_environment"},
 	{KeyModelViewerExposure, ScopeModelViewer, "model_viewer_exposure"},
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
-	{KeyModelViewerToonStyle, ScopeModelViewer, "model_viewer_toon_style"},
-	{KeyModelViewerGIMIToonStyle, ScopeModelViewer, "model_viewer_gimi_toon_style"},
-	{KeyModelViewerGenshinAssetDir, ScopeModelViewer, "model_viewer_genshin_asset_dir"},
+	{KeyModelViewerToonStyles, ScopeModelViewer, "model_viewer_toon_styles"},
 	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},

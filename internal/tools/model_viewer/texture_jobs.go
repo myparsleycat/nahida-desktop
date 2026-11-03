@@ -15,7 +15,7 @@ import (
 type modelViewerTextureSettings struct {
 	TextureFormat   string
 	JPEGQuality     int
-	MaterialProfile string
+	MaterialProfile ModelViewerMaterialProfile
 	// diagnostics collects textures dropped from the payload; nil drops them silently.
 	diagnostics *infra.DiagnosticBatch
 }
@@ -317,7 +317,7 @@ hashDispatch:
 		transform modelViewerTextureTransform
 		format    string
 		quality   int
-		profile   string
+		profile   ModelViewerMaterialProfile
 		role      string
 	}
 	prepareStartedAt := time.Now()

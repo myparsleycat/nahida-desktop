@@ -1,4 +1,3 @@
-import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -12,25 +11,17 @@ import {
   MenubarRadioGroup,
   MenubarRadioItem,
   MenubarSeparator,
-  MenubarSub,
-  MenubarSubContent,
-  MenubarSubTrigger,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
 import { BrushIcon, CameraIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
-  ModelViewerGIMIToonStyle,
   ModelViewerThreeEnvironment,
   ModelViewerThreeToneMapping,
-  ModelViewerToonStyle,
 } from "./model-viewer-contract";
 
-import {
-  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  DEFAULT_MODEL_VIEWER_TOON_STYLE,
-} from "./model-viewer-contract";
 import {
   DEFAULT_THREE_EXPOSURE,
   MAX_THREE_EXPOSURE,
@@ -38,7 +29,6 @@ import {
   MODEL_ROTATION_ACTIONS,
 } from "./model-viewer-dialog-types";
 import { formatSliderValue } from "./model-viewer-dialog-variants";
-import { ModelViewerGIMIToonMenu } from "./model-viewer-gimi-toon-menu";
 
 export type BrushMode = "paint" | "erase";
 
@@ -78,16 +68,8 @@ export interface ModelViewerMenuBarProps {
   showToonShadows?: boolean;
   toonShadows?: boolean;
   onToonShadowsChange?: (value: boolean) => void;
-  showToonStyle?: boolean;
-  toonStyle?: ModelViewerToonStyle;
-  onToonStyleChange?: (value: ModelViewerToonStyle) => void;
-  showGIMIToonStyle?: boolean;
-  gimiToonStyle?: ModelViewerGIMIToonStyle;
-  onGIMIToonStyleChange?: (value: ModelViewerGIMIToonStyle) => void;
-  genshinAssets?: GenshinToonAssetsTransport;
-  genshinAssetDir?: string;
-  onSelectGenshinAssetDir?: () => void;
-  onClearGenshinAssetDir?: () => void;
+  /** The material profile's style submenu, shown under Toon Shadows. */
+  toonMenu?: ReactNode;
   showNormalMaps?: boolean;
   normalMaps?: boolean;
   onNormalMapsChange?: (value: boolean) => void;
@@ -133,16 +115,7 @@ export function ModelViewerMenuBar({
   showToonShadows = false,
   toonShadows = false,
   onToonShadowsChange,
-  showToonStyle = false,
-  toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
-  onToonStyleChange,
-  showGIMIToonStyle = false,
-  gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  onGIMIToonStyleChange,
-  genshinAssets,
-  genshinAssetDir = "",
-  onSelectGenshinAssetDir,
-  onClearGenshinAssetDir,
+  toonMenu,
   showNormalMaps = false,
   normalMaps = true,
   onNormalMapsChange,
@@ -395,66 +368,7 @@ export function ModelViewerMenuBar({
                   >
                     Toon Shadows
                   </MenubarCheckboxItem>
-                  {showToonStyle ? (
-                    <MenubarSub>
-                      <MenubarSubTrigger>
-                        {t("page.tools.model_viewer.menu.toon_style")}
-                      </MenubarSubTrigger>
-                      <MenubarSubContent className="w-56">
-                        <MenubarGroup>
-                          <MenubarCheckboxItem
-                            checked={toonStyle.outlines}
-                            onSelect={(event) => event.preventDefault()}
-                            onCheckedChange={(checked) =>
-                              onToonStyleChange?.({ ...toonStyle, outlines: checked === true })
-                            }
-                          >
-                            {t("page.tools.model_viewer.menu.toon_outlines")}
-                          </MenubarCheckboxItem>
-                          <MenubarCheckboxItem
-                            checked={toonStyle.selfShadow}
-                            onSelect={(event) => event.preventDefault()}
-                            onCheckedChange={(checked) =>
-                              onToonStyleChange?.({ ...toonStyle, selfShadow: checked === true })
-                            }
-                          >
-                            {t("page.tools.model_viewer.menu.toon_self_shadow")}
-                          </MenubarCheckboxItem>
-                          <MenubarCheckboxItem
-                            checked={toonStyle.lightFollowsCamera}
-                            onSelect={(event) => event.preventDefault()}
-                            onCheckedChange={(checked) =>
-                              onToonStyleChange?.({
-                                ...toonStyle,
-                                lightFollowsCamera: checked === true,
-                              })
-                            }
-                          >
-                            {t("page.tools.model_viewer.menu.toon_light_follows_camera")}
-                          </MenubarCheckboxItem>
-                          <MenubarCheckboxItem
-                            checked={toonStyle.flatFace}
-                            onSelect={(event) => event.preventDefault()}
-                            onCheckedChange={(checked) =>
-                              onToonStyleChange?.({ ...toonStyle, flatFace: checked === true })
-                            }
-                          >
-                            {t("page.tools.model_viewer.menu.toon_flat_face")}
-                          </MenubarCheckboxItem>
-                        </MenubarGroup>
-                      </MenubarSubContent>
-                    </MenubarSub>
-                  ) : null}
-                  {showGIMIToonStyle ? (
-                    <ModelViewerGIMIToonMenu
-                      style={gimiToonStyle}
-                      onStyleChange={onGIMIToonStyleChange}
-                      assets={genshinAssets}
-                      assetDir={genshinAssetDir}
-                      onSelectAssetDir={onSelectGenshinAssetDir}
-                      onClearAssetDir={onClearGenshinAssetDir}
-                    />
-                  ) : null}
+                  {toonMenu}
                 </MenubarGroup>
               </>
             ) : null}

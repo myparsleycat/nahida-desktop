@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -126,7 +128,90 @@ func (c *Client) Reconcile(ctx context.Context) error {
 	if err := c.migrateXXMILibsProviderPinned(ctx); err != nil {
 		return err
 	}
+	if err := c.migrateModelViewerToonStyles(ctx); err != nil {
+		return err
+	}
 	return c.removeLegacyImageCache(ctx)
+}
+
+// migrateModelViewerToonStyles merges the per-game toon style settings into one object keyed by material
+// profile, and the Genshin texture folder into the GIMI style as assetDir. Unreadable values are dropped, and
+// a merged value that already exists is kept.
+func (c *Client) migrateModelViewerToonStyles(ctx context.Context) error {
+	migrated, err := c.SchemaState.Get(ctx, SchemaKeyModelViewerToonStylesMerged)
+	if err != nil {
+		return err
+	}
+	if migrated != nil && migrated.Value == "1" {
+		return nil
+	}
+
+	const assetDirKey = "model_viewer_genshin_asset_dir"
+	styleKeys := map[string]string{"efmi": "model_viewer_toon_style", "gimi": "model_viewer_gimi_toon_style"}
+	if err := c.withImmediate(ctx, func(q queryExec) error {
+		read := func(key string) (string, error) {
+			var value sql.NullString
+			err := q.QueryRowContext(ctx, `SELECT "value" FROM "setting" WHERE "key" = ?`, key).Scan(&value)
+			if errors.Is(err, sql.ErrNoRows) {
+				return "", nil
+			}
+			return value.String, err
+		}
+
+		styles := make(map[string]map[string]any)
+		for profile, key := range styleKeys {
+			stored, err := read(key)
+			if err != nil {
+				return err
+			}
+			var style map[string]any
+			if json.Unmarshal([]byte(stored), &style) == nil && style != nil {
+				styles[profile] = style
+			}
+		}
+		assetDir, err := read(assetDirKey)
+		if err != nil {
+			return err
+		}
+		if assetDir != "" {
+			if styles["gimi"] == nil {
+				styles["gimi"] = make(map[string]any)
+			}
+			styles["gimi"]["assetDir"] = assetDir
+		}
+
+		if len(styles) > 0 {
+			merged, err := json.Marshal(styles)
+			if err != nil {
+				return err
+			}
+			if _, err := q.ExecContext(
+				ctx,
+				`INSERT OR IGNORE INTO "setting" ("key", "value") VALUES (?, ?)`,
+				"model_viewer_toon_styles",
+				string(merged),
+			); err != nil {
+				return err
+			}
+		}
+		_, err = q.ExecContext(
+			ctx,
+			`DELETE FROM "setting" WHERE "key" IN (?, ?, ?)`,
+			styleKeys["efmi"],
+			styleKeys["gimi"],
+			assetDirKey,
+		)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migrate model viewer toon styles: %w", err)
+	}
+
+	return c.SchemaState.Upsert(
+		ctx,
+		SchemaKeyModelViewerToonStylesMerged,
+		"1",
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
 }
 
 func (c *Client) removeLegacyImageCache(ctx context.Context) error {

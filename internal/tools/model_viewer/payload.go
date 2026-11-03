@@ -28,7 +28,8 @@ func prepareModelViewerPayload(
 		textureJobs = append(textureJobs, work.jobs...)
 	}
 	transport.MaterialProfile = detectModelViewerMaterialProfile(prepared.sections)
-	settings.MaterialProfile = string(transport.MaterialProfile)
+	transport.NormalXYReconstruct = transport.MaterialProfile.traits().normalXYReconstruct
+	settings.MaterialProfile = transport.MaterialProfile
 	texturesByBatch, textureStats, err := runModelViewerTextureJobs(ctx, settings, len(prepared.textures), textureJobs)
 
 	if err != nil {
@@ -170,7 +171,7 @@ func writeModelViewerPayload(
 		}
 		texture := textures[key]
 		if texture.DDS != nil {
-			materialProfile := transport.MaterialProfile
+			traits := transport.MaterialProfile.traits()
 			directURL := t.protocol.LocalFileURL(texture.Path, true)
 			directMetadata := *texture.DDS
 			previewLimit, resample := modelViewerDDSPreviewLimit(*texture.DDS, options)
@@ -178,7 +179,7 @@ func writeModelViewerPayload(
 			// Compressed uploads cannot generate mipmaps, and minified normal and light
 			// maps without them turn toon shading into speckles. Dumped EFMI textures are
 			// usually mipless, so they take the decoded fallback, which does.
-			if materialProfile == "efmi" && texture.DDS.MipCount == 1 {
+			if traits.resampleMiplessDDS && texture.DDS.MipCount == 1 {
 				resample = true
 			}
 			if plan, needed := modelViewerDDSPreviewPlanFor(
@@ -263,7 +264,7 @@ func writeModelViewerPayload(
 								texture.Path,
 								texture.Role,
 								texture.DDS.Format,
-								materialProfile,
+								transport.MaterialProfile,
 								time.Since(startedAt).Milliseconds(),
 								loadErr,
 							),
@@ -283,7 +284,7 @@ func writeModelViewerPayload(
 							texture.Path,
 							texture.Role,
 							texture.DDS.Format,
-							materialProfile,
+							transport.MaterialProfile,
 							time.Since(startedAt).Milliseconds(),
 						),
 						"StaticGlb.loadForViewer",
@@ -311,7 +312,7 @@ func writeModelViewerPayload(
 				MipCount:     directMetadata.MipCount,
 				InvertAlpha:  texture.InvertAlpha,
 				CoverageMask: texture.CoverageMask && effectCardTextures[key],
-				OutlineMask:  texture.OutlineMask && materialProfile == "efmi",
+				OutlineMask:  texture.OutlineMask && traits.outlineMasks,
 			}
 			continue
 		}

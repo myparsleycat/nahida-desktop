@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/samber/lo"
 )
 
 func TestReconcileEmptyDatabaseCreatesElectronSchema(t *testing.T) {
@@ -696,6 +698,85 @@ func TestReconcileKeepsSignedXXMILibsProviderForPins(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReconcileMergesModelViewerToonStylesOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := mustNewTemp(t)
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	clearFlag := func() {
+		if _, err := client.db.Exec(
+			`DELETE FROM "_schema_state" WHERE "key" = ?`,
+			SchemaKeyModelViewerToonStylesMerged,
+		); err != nil {
+			t.Fatalf("clear flag: %v", err)
+		}
+	}
+	seed := func(values map[string]string) {
+		for key, value := range values {
+			if err := client.Settings.Upsert(ctx, key, &value); err != nil {
+				t.Fatalf("seed %s: %v", key, err)
+			}
+		}
+	}
+	value := func(key string) *string {
+		row, err := client.Settings.GetValue(ctx, key)
+		if err != nil {
+			t.Fatalf("get %s: %v", key, err)
+		}
+		return row
+	}
+	legacyKeys := []string{
+		"model_viewer_toon_style",
+		"model_viewer_gimi_toon_style",
+		"model_viewer_genshin_asset_dir",
+	}
+
+	clearFlag()
+	seed(map[string]string{
+		"model_viewer_toon_style":        `{"outlines":false,"flatFace":true}`,
+		"model_viewer_gimi_toon_style":   `{"selfShadow":false,"ramp":"Avatar_Loli_Tex_Body_Shadow_Ramp"}`,
+		"model_viewer_genshin_asset_dir": `D:\Genshin Textures`,
+	})
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("migrate reconcile: %v", err)
+	}
+	const want = `{"efmi":{"flatFace":true,"outlines":false},` +
+		`"gimi":{"assetDir":"D:\\Genshin Textures","ramp":"Avatar_Loli_Tex_Body_Shadow_Ramp","selfShadow":false}}`
+	if got := value("model_viewer_toon_styles"); got == nil || *got != want {
+		t.Fatalf("merged styles = %v, want %s", lo.FromPtr(got), want)
+	}
+	for _, key := range legacyKeys {
+		if got := value(key); got != nil {
+			t.Fatalf("%s left behind: %q", key, *got)
+		}
+	}
+
+	// Second pass must be one-shot: rows written afterwards stay untouched.
+	seed(map[string]string{"model_viewer_toon_style": `{"outlines":true}`})
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	if got := value("model_viewer_toon_style"); got == nil || *got != `{"outlines":true}` {
+		t.Fatalf("one-shot migration ran twice: %q", lo.FromPtr(got))
+	}
+
+	// An existing merged value wins, and unreadable legacy values are only removed.
+	clearFlag()
+	seed(map[string]string{"model_viewer_toon_style": `not json`})
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("third reconcile: %v", err)
+	}
+	if got := value("model_viewer_toon_styles"); got == nil || *got != want {
+		t.Fatalf("merged styles overwritten: %q", lo.FromPtr(got))
+	}
+	if got := value("model_viewer_toon_style"); got != nil {
+		t.Fatalf("unreadable legacy value left behind: %q", *got)
 	}
 }
 

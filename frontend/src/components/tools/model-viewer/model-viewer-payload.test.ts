@@ -15,19 +15,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
+import { DEFAULT_EFMI_TOON_STYLE, markEFMIHeadMeshes } from "./material-profiles/efmi";
+import { DEFAULT_GIMI_TOON_STYLE } from "./material-profiles/gimi";
 import {
-    DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-    DEFAULT_MODEL_VIEWER_TOON_STYLE,
-    parseModelViewerGIMIToonStyle,
-    parseModelViewerToonStyle,
-    serializeModelViewerGIMIToonStyle,
-} from "./model-viewer-contract";
+    parseModelViewerToonStyles,
+    serializeModelViewerToonStyles,
+} from "./material-profiles/registry";
 import {
     applyPayloadEval,
     clearPayloadModelData,
     commitPayloadEval,
     finalizePayloadGeometry,
-    markEFMIHeadMeshes,
     preparePayloadEval,
     setPayloadGameTextureHighlight,
     setPayloadNormalMaps,
@@ -280,6 +278,7 @@ describe("applyPayloadEval packed maps", () => {
             ),
             lastPositionVariantIndex: null,
             materialProfile: "zzmi",
+            normalXYReconstruct: true,
         };
         const diffuse = new Texture();
         const normal = new Texture();
@@ -830,7 +829,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(material.aoMap).toBeNull();
         expect(material.metalnessMap).toBeNull();
         expect(material.roughnessMap).toBeNull();
-        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v2|model-viewer-dds-v1");
+        expect(material.customProgramCacheKey()).toBe("wuwa-rabbitfx-v3|model-viewer-dds-v1");
 
         const shader = {
             vertexShader: "#include <common>\nvoid main() {\n#include <uv_vertex>\n}",
@@ -956,7 +955,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(state.enabled.value).toBe(0);
         expect(mesh.children).toHaveLength(0);
 
-        setPayloadToonStyle(root, { ...DEFAULT_MODEL_VIEWER_TOON_STYLE, selfShadow: true });
+        setPayloadToonStyle(root, { ...DEFAULT_EFMI_TOON_STYLE, selfShadow: true });
         setPayloadToonShadows(root, true);
         expect(state.enabled.value).toBe(1);
         expect(mesh.castShadow).toBe(true);
@@ -971,7 +970,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(hits).toHaveLength(0);
 
         setPayloadToonStyle(root, {
-            ...DEFAULT_MODEL_VIEWER_TOON_STYLE,
+            ...DEFAULT_EFMI_TOON_STYLE,
             outlines: false,
             selfShadow: false,
         });
@@ -1017,7 +1016,7 @@ describe("applyPayloadEval packed maps", () => {
         expect(state.face.value).toBe(0);
 
         apply(null);
-        setPayloadToonStyle(root, { ...DEFAULT_MODEL_VIEWER_TOON_STYLE, flatFace: false });
+        setPayloadToonStyle(root, { ...DEFAULT_EFMI_TOON_STYLE, flatFace: false });
         expect(state.face.value).toBe(0);
     });
 
@@ -1112,9 +1111,9 @@ describe("applyPayloadEval packed maps", () => {
             [face, overlay, iris, chest, hair, prop],
         );
         expect(face.userData.efmiHeadMesh).toBe(true);
-        expect(overlay.userData.efmiOverlayShadow).toBe(true);
+        expect(overlay.userData.overlayShadow).toBe(true);
         expect(iris.userData.efmiHeadMesh).toBe(true);
-        expect(iris.userData.efmiOverlayShadow).toBe(false);
+        expect(iris.userData.overlayShadow).toBe(false);
         expect(iris.userData.efmiEyeMesh).toBe(true);
         expect(face.userData.efmiEyeMesh).toBe(false);
         expect(chest.userData.efmiHeadMesh).toBeFalsy();
@@ -1157,32 +1156,39 @@ describe("applyPayloadEval packed maps", () => {
         expect(outline.material.uniforms.widthMaskEnabled.value).toBe(1);
     });
 
-    it("restores only the toon flags from stored settings", () => {
-        expect(parseModelViewerToonStyle("")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
-        expect(parseModelViewerToonStyle("null")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
-        const style = parseModelViewerToonStyle(
-            '{"shadowBrightness":0.2,"outlines":false,"lightFollowsCamera":1}',
-        );
-        expect(style.outlines).toBe(false);
-        expect(style.lightFollowsCamera).toBe(true);
-        expect(style.shadowBrightness).toBe(DEFAULT_MODEL_VIEWER_TOON_STYLE.shadowBrightness);
-    });
+    it("restores only the toon flags and asset choices from stored settings", () => {
+        const defaults = { efmi: DEFAULT_EFMI_TOON_STYLE, gimi: DEFAULT_GIMI_TOON_STYLE };
+        expect(parseModelViewerToonStyles("")).toEqual(defaults);
+        expect(parseModelViewerToonStyles("null")).toEqual(defaults);
+        expect(parseModelViewerToonStyles('{"efmi":null,"gimi":[]}')).toEqual(defaults);
 
-    it("restores only the GIMI toon flags and asset choices from stored settings", () => {
-        const style = parseModelViewerGIMIToonStyle(
-            '{"toneMapping":true,"daytime":false,"emission":2,"outlines":false,' +
-                '"ramp":"Avatar_Loli_Tex_Body_Shadow_Ramp","faceType":"loli"}',
+        const styles = parseModelViewerToonStyles(
+            JSON.stringify({
+                efmi: { shadowBrightness: 0.2, outlines: false, lightFollowsCamera: 1 },
+                gimi: {
+                    toneMapping: true,
+                    daytime: false,
+                    emission: 2,
+                    outlines: false,
+                    ramp: "Avatar_Loli_Tex_Body_Shadow_Ramp",
+                    faceType: "loli",
+                    assetDir: "D:\\Genshin",
+                },
+            }),
         );
-        expect(style).toEqual({
-            ...DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+        expect(styles.efmi).toEqual({ ...DEFAULT_EFMI_TOON_STYLE, outlines: false });
+        expect(styles.gimi).toEqual({
+            ...DEFAULT_GIMI_TOON_STYLE,
             outlines: false,
             ramp: "Avatar_Loli_Tex_Body_Shadow_Ramp",
             faceType: "loli",
+            assetDir: "D:\\Genshin",
         });
 
-        const stored = serializeModelViewerGIMIToonStyle(style);
-        expect(JSON.parse(stored)).not.toHaveProperty("emission");
-        expect(parseModelViewerGIMIToonStyle(stored)).toEqual(style);
+        const stored = serializeModelViewerToonStyles(styles);
+        expect(JSON.parse(stored).gimi).not.toHaveProperty("emission");
+        expect(JSON.parse(stored).efmi).not.toHaveProperty("shadowBrightness");
+        expect(parseModelViewerToonStyles(stored)).toEqual(styles);
     });
 
     it("keeps RabbitFX materials on the stock shader when primary UVs are absent", () => {

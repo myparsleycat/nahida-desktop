@@ -1,12 +1,11 @@
 import {
-    parseModelViewerGIMIToonStyle,
-    parseModelViewerToonStyle,
-} from "@renderer/components/tools/model-viewer/model-viewer-contract";
+    modelViewerToonStyleOf,
+    parseModelViewerToonStyles,
+} from "@renderer/components/tools/model-viewer/material-profiles/registry";
 import { getModelViewerTextureCapabilities } from "@renderer/components/tools/model-viewer/model-viewer-dds";
 import {
     buildPayloadModel,
     clearPayloadModelData,
-    setPayloadGIMIToon,
     setPayloadToonStyle,
 } from "@renderer/components/tools/model-viewer/model-viewer-payload";
 import { ModelViewerPositionLoader } from "@renderer/components/tools/model-viewer/model-viewer-position-loader";
@@ -105,23 +104,18 @@ async function render(request: GridModelPreviewRenderRequest): Promise<Blob> {
             undefined,
             getModelViewerTextureCapabilities(renderer),
         );
-        const toonStyle = parseModelViewerToonStyle(settings.toonStyle);
+        const toonStyle = modelViewerToonStyleOf(
+            parseModelViewerToonStyles(settings.toonStyles),
+            request.transport.materialProfile,
+        );
         setPayloadToonStyle(root, toonStyle);
-        const gimiToonStyle = parseModelViewerGIMIToonStyle(settings.gimiToonStyle);
-        setPayloadGIMIToon(root, { style: gimiToonStyle, textures: {} });
         applyModelViewerInitialRotation(root, request.transport.defaultYaw);
         scene.add(root);
         const center = frameCameraOnObject(camera, root);
         if (center) {
             camera.lookAt(center);
         }
-        const profileToon =
-            request.transport.materialProfile === "efmi"
-                ? toonStyle
-                : request.transport.materialProfile === "gimi"
-                  ? gimiToonStyle
-                  : undefined;
-        if (settings.toonShadows && profileToon?.lightFollowsCamera) {
+        if (settings.toonShadows && toonStyle?.lightFollowsCamera) {
             const key = scene.children.find(
                 (child): child is DirectionalLight => child instanceof DirectionalLight,
             );

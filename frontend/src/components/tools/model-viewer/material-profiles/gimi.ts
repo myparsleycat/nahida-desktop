@@ -27,6 +27,7 @@
 import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import { Logger } from "@renderer/lib/logger";
 import type { ModViewerTransport } from "@shared/mod-viewer/types";
+import { pick } from "es-toolkit";
 import type {
     BufferGeometry,
     Matrix3,
@@ -48,20 +49,71 @@ import {
     Vector3,
 } from "three";
 
-import type { ModelViewerGenshinFaceType, ModelViewerGIMIToonStyle } from "./model-viewer-contract";
+import type {
+    MaterialProfileMeshData,
+    ModelViewerMaterialProfile,
+    ModelViewerToonStyleBase,
+} from "./profile";
 
-import { DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE, GENSHIN_FACE_TYPES } from "./model-viewer-contract";
+import { modelViewerDDSFormatOf } from "../model-viewer-dds";
 import {
     averagedNormals,
     replaceShaderAnchor,
     textureUvTransform,
-} from "./model-viewer-shader-utils";
+    TOON_VERTEX_COLOR_ATTRIBUTE,
+} from "../model-viewer-shader-utils";
+import { BASE_TOON_FLAGS, readToonFlags } from "./profile";
 
-// Kept apart from Three.js "color", which the body-shape editor writes and which
-// would tint the albedo. GIMI stores AO in R, ramp width in G, outline width in A.
-export const TOON_VERTEX_COLOR_ATTRIBUTE = "toonVertexColor";
+export const GENSHIN_FACE_TYPES = ["boy", "girl", "lady", "loli", "male"] as const;
+export type GenshinFaceType = (typeof GENSHIN_FACE_TYPES)[number];
 
-export type GenshinToonTextures = {
+export type GIMIToonStyle = ModelViewerToonStyleBase & {
+    daytime: boolean;
+    shadowOffset: number;
+    shadowSmoothness: number;
+    shadowBrightness: number;
+    brightness: number;
+    specular: number;
+    metallic: number;
+    rimStrength: number;
+    emission: number;
+    outlineWidth: number;
+    toneMapping: boolean;
+    /** Name of a ramp in the user's Genshin texture folder; empty uses the built-in ramp. */
+    ramp: string;
+    /** "auto" takes the body type from the ramp name, such as Avatar_Loli_... */
+    faceType: "auto" | GenshinFaceType;
+    assetDir: string;
+};
+
+// Shading values follow kaze-mio's Nahida material in UnityGenshinToonShader, except
+// the shadow offset: with its 0.1, frontal light shades limbs that the game keeps lit
+// to the silhouette.
+export const DEFAULT_GIMI_TOON_STYLE: GIMIToonStyle = {
+    daytime: true,
+    shadowOffset: 0,
+    shadowSmoothness: 0.4,
+    shadowBrightness: 1.1,
+    brightness: 1,
+    specular: 0.3,
+    metallic: 8,
+    rimStrength: 0.3,
+    emission: 0.2,
+    outlines: true,
+    outlineWidth: 1.6,
+    selfShadow: true,
+    lightFollowsCamera: true,
+    // The curve compresses bright skin channels unevenly and bleaches it.
+    toneMapping: false,
+    fieldOfView: 20,
+    ramp: "",
+    faceType: "auto",
+    assetDir: "",
+};
+
+const GIMI_TOON_FLAGS = ["outlines", "selfShadow", "lightFollowsCamera"] as const;
+
+type GenshinToonTextures = {
     bodyRamp?: Texture;
     hairRamp?: Texture;
     metalMap?: Texture;
@@ -69,19 +121,11 @@ export type GenshinToonTextures = {
     faceShadow?: Texture;
 };
 
-export type GenshinToonSettings = {
-    style: ModelViewerGIMIToonStyle;
-    textures: GenshinToonTextures;
-};
-
-export type GenshinToonMeshData = {
-    toonShadows: boolean;
-    genshinToon?: GenshinToonSettings;
+type GenshinToonMeshData = MaterialProfileMeshData & {
     genshinFace?: boolean;
     genshinHair?: boolean;
     genshinFaceForward?: Vector3;
     genshinOutline?: Mesh<BufferGeometry, ShaderMaterial>;
-    tangentFrameUsable?: boolean;
 };
 
 type GenshinToonShaderState = {
@@ -176,11 +220,56 @@ vec3 genshinToneMap( vec3 x ) {
     return toe * w0 + linear * w1 + shoulder * w2;
 }`;
 
-export function configureGenshinToonMaterialShader(material: MeshStandardMaterial): void {
+export const gimiMaterialProfile: ModelViewerMaterialProfile<GIMIToonStyle> = {
+    baseMaterial: { metalness: 0.05, roughness: 0.65 },
+    derivativeTangentFrame: false,
+    toonShadows: true,
+    toon: {
+        defaultStyle: DEFAULT_GIMI_TOON_STYLE,
+
+        // Keeps everything but the menu's flags and asset choices at the defaults.
+        parse(record) {
+            const style = readToonFlags(record, DEFAULT_GIMI_TOON_STYLE, GIMI_TOON_FLAGS);
+            const faceType = record.faceType;
+            return {
+                ...style,
+                ramp: typeof record.ramp === "string" ? record.ramp : style.ramp,
+                faceType:
+                    faceType === "auto" || GENSHIN_FACE_TYPES.includes(faceType as GenshinFaceType)
+                        ? (faceType as GIMIToonStyle["faceType"])
+                        : style.faceType,
+                assetDir: typeof record.assetDir === "string" ? record.assetDir : style.assetDir,
+            };
+        },
+        serialize: (style) => pick(style, [...GIMI_TOON_FLAGS, "ramp", "faceType", "assetDir"]),
+        flags: BASE_TOON_FLAGS,
+        createResourceLoader: createGenshinToonTextureLoader,
+    },
+    markMeshes: markGenshinMeshes,
+    configureMaterial: configureGenshinToonMaterialShader,
+
+    // One- and two-channel containers have no material ID or specular mask to read.
+    bindMaps(material, maps, textures) {
+        const state = material.userData.genshinToonMaterial as GenshinToonShaderState | undefined;
+        if (!state) {
+            return;
+        }
+        const texture = maps.lightMapKey ? textures.get(maps.lightMapKey) : undefined;
+        const format = modelViewerDDSFormatOf(texture);
+        const lightMap =
+            format.startsWith("bc4-") || format.startsWith("bc5-") ? undefined : texture;
+        state.lightMap.value = lightMap ?? neutralLightMap;
+        state.lightMapEnabled.value = lightMap ? 1 : 0;
+        state.lightMapTransform.value = textureUvTransform(state.lightMap.value);
+    },
+    sync: syncGenshinToon,
+};
+
+function configureGenshinToonMaterialShader(material: MeshStandardMaterial): void {
     if (material.userData.genshinToonMaterial) {
         return;
     }
-    const defaults = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE;
+    const defaults = DEFAULT_GIMI_TOON_STYLE;
     const state: GenshinToonShaderState = {
         enabled: { value: 0 },
         lightMap: { value: neutralLightMap },
@@ -386,30 +475,18 @@ if ( genshinToonEnabled > 0.5 ) {
     material.needsUpdate = true;
 }
 
-export function setGenshinToonLightMap(
-    material: MeshStandardMaterial,
-    lightMap: Texture | undefined,
-): void {
-    const state = material.userData.genshinToonMaterial as GenshinToonShaderState | undefined;
-    if (!state) {
-        return;
-    }
-    state.lightMap.value = lightMap ?? neutralLightMap;
-    state.lightMapEnabled.value = lightMap ? 1 : 0;
-    state.lightMapTransform.value = textureUvTransform(state.lightMap.value);
-}
-
-export function syncGenshinToon(
+function syncGenshinToon(
     object: Mesh,
     material: MeshStandardMaterial,
-    data: GenshinToonMeshData,
+    meshData: MaterialProfileMeshData,
 ): void {
+    const data = meshData as GenshinToonMeshData;
     const state = material.userData.genshinToonMaterial as GenshinToonShaderState | undefined;
     if (!state) {
         return;
     }
-    const style = data.genshinToon?.style ?? DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE;
-    const textures = data.genshinToon?.textures ?? {};
+    const style = (data.toonStyle as GIMIToonStyle | undefined) ?? DEFAULT_GIMI_TOON_STYLE;
+    const textures = (data.toonResources as GenshinToonTextures | undefined) ?? {};
     const enabled = data.toonShadows;
     const face = Boolean(data.genshinFace) && state.lightMapEnabled.value === 0;
     state.enabled.value = enabled ? 1 : 0;
@@ -483,7 +560,7 @@ export function syncGenshinToon(
  * only reliable signal. A face also gets its forward direction: the mean of its
  * normals, which points out of the face in whatever space the mod's buffers use.
  */
-export function markGenshinMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
+function markGenshinMeshes(transport: ModViewerTransport, objects: Mesh[]): void {
     transport.meshes.forEach((mesh, index) => {
         const object = objects[index];
         const names = [mesh.component, mesh.id, mesh.texKey ?? ""].join(" ");
@@ -504,9 +581,7 @@ export function markGenshinMeshes(transport: ModViewerTransport, objects: Mesh[]
     });
 }
 
-export function genshinFaceTypeOf(
-    style: ModelViewerGIMIToonStyle,
-): ModelViewerGenshinFaceType | undefined {
+export function genshinFaceTypeOf(style: GIMIToonStyle): GenshinFaceType | undefined {
     if (style.faceType !== "auto") {
         return style.faceType;
     }
@@ -515,7 +590,7 @@ export function genshinFaceTypeOf(
 }
 
 /** Loads textures from the user's Genshin folder once per URL. */
-export function createGenshinToonTextureCache() {
+function createGenshinToonTextureLoader() {
     const loader = new TextureLoader();
     const cache = new Map<string, Promise<Texture | undefined>>();
     const load = (url: string | undefined, srgb: boolean) => {
@@ -547,10 +622,8 @@ export function createGenshinToonTextureCache() {
     };
 
     return {
-        async resolve(
-            assets: GenshinToonAssetsTransport | undefined,
-            style: ModelViewerGIMIToonStyle,
-        ): Promise<GenshinToonTextures> {
+        async resolve(listed: unknown, style: GIMIToonStyle): Promise<GenshinToonTextures> {
+            const assets = listed as GenshinToonAssetsTransport | undefined;
             if (!assets) {
                 return {};
             }

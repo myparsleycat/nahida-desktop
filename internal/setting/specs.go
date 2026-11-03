@@ -529,20 +529,9 @@ func buildSpecs() map[string]spec {
 		},
 		KeyModelViewerToonShadows:     boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
 		KeyModelViewerOverlayInViewer: boolSpec(definitionsByKey[KeyModelViewerOverlayInViewer], true),
-		KeyModelViewerToonStyle: {
-			def:        definitionsByKey[KeyModelViewerToonStyle],
-			getDefault: func(*Setting) any { return "" },
-			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
-			normalize:  func(_ *Setting, value any) any { return asString(value) },
-		},
-		KeyModelViewerGIMIToonStyle: {
-			def:        definitionsByKey[KeyModelViewerGIMIToonStyle],
-			getDefault: func(*Setting) any { return "" },
-			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
-			normalize:  func(_ *Setting, value any) any { return asString(value) },
-		},
-		KeyModelViewerGenshinAssetDir: {
-			def:        definitionsByKey[KeyModelViewerGenshinAssetDir],
+		// JSON object keyed by material profile; the renderer owns each style's fields.
+		KeyModelViewerToonStyles: {
+			def:        definitionsByKey[KeyModelViewerToonStyles],
 			getDefault: func(*Setting) any { return "" },
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },

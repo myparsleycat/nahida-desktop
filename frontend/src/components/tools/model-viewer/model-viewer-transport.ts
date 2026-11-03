@@ -149,6 +149,7 @@ export function normalizeModelViewerTransport(
         name: value.name,
         defaultYaw: value.defaultYaw,
         materialProfile: parseMaterialProfile(value.materialProfile),
+        normalXYReconstruct: value.normalXYReconstruct || undefined,
         meshes: (value.meshes ?? []).map((mesh) => ({
             id: mesh.id,
             component: mesh.component,

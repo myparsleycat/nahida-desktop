@@ -1,7 +1,5 @@
 import { Mod } from "@bindings/mod";
-import { Dialog } from "@bindings/platform";
 import { Tools } from "@bindings/tools";
-import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import { InspectorSection } from "@renderer/components/tools/inspector-section";
 import {
   AlertDialog,
@@ -40,7 +38,7 @@ import {
 } from "@shared/mod-viewer/eval";
 import type { ViewerForm, ViewerVariable } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
-import { debounce, mapValues } from "es-toolkit";
+import { mapValues } from "es-toolkit";
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react";
 import {
   Fragment,
@@ -55,8 +53,20 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import type {
+  ModelViewerToonAssets,
+  ModelViewerToonStyleBase,
+  ModelViewerToonStyles,
+} from "./material-profiles/profile";
 import type { ModelViewerDialogSource, VariableStateValue } from "./model-viewer-dialog-types";
 
+import { ModelViewerToonMenu, toonAssetSourceOf } from "./material-profiles/profile-ui";
+import {
+  materialProfileOf,
+  modelViewerToonStyleOf,
+  parseModelViewerToonStyles,
+  serializeModelViewerToonStyles,
+} from "./material-profiles/registry";
 import { ModelViewerAnimationBar } from "./model-viewer-animation-bar";
 import {
   formatOrientation,
@@ -66,14 +76,6 @@ import {
   type ModelViewerSurfaceProps,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
-  type ModelViewerGIMIToonStyle,
-  type ModelViewerToonStyle,
-  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  DEFAULT_MODEL_VIEWER_TOON_STYLE,
-  parseModelViewerGIMIToonStyle,
-  parseModelViewerToonStyle,
-  serializeModelViewerGIMIToonStyle,
-  serializeModelViewerToonStyle,
 } from "./model-viewer-contract";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
@@ -175,41 +177,12 @@ export function ModelViewerWorkspace({
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const [toonShadows, setToonShadows] = useState(false);
-  const [toonStyle, setToonStyle] = useState(DEFAULT_MODEL_VIEWER_TOON_STYLE);
-  const [persistToonStyle] = useState(() =>
-    debounce((value: ModelViewerToonStyle) => {
-      void setSetting("modelViewer.toonStyle", serializeModelViewerToonStyle(value)).catch(
-        (error) => {
-          Logger.capture(
-            "components/tools/model-viewer/model-viewer-workspace.tsx",
-            "Failed to persist model viewer toon style",
-            error,
-          );
-          toast.error("Failed to save toon style setting.");
-        },
-      );
-    }, 400),
-  );
-  useEffect(() => () => persistToonStyle.flush(), [persistToonStyle]);
-  const [gimiToonStyle, setGIMIToonStyle] = useState(DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE);
-  const [persistGIMIToonStyle] = useState(() =>
-    debounce((value: ModelViewerGIMIToonStyle) => {
-      void setSetting("modelViewer.gimiToonStyle", serializeModelViewerGIMIToonStyle(value)).catch(
-        (error) => {
-          Logger.capture(
-            "components/tools/model-viewer/model-viewer-workspace.tsx",
-            "Failed to persist model viewer GIMI toon style",
-            error,
-          );
-        },
-      );
-    }, 400),
-  );
-  useEffect(() => () => persistGIMIToonStyle.flush(), [persistGIMIToonStyle]);
-  const [genshinAssetDir, setGenshinAssetDir] = useState("");
-  const [genshinAssetListing, setGenshinAssetListing] = useState<{
+  const [toonStyles, setToonStyles] = useState<ModelViewerToonStyles>({});
+  const toonStyleWritesRef = useRef(Promise.resolve());
+  const [toonAssetListing, setToonAssetListing] = useState<{
+    profile: string;
     dir: string;
-    assets?: GenshinToonAssetsTransport;
+    assets?: unknown;
   }>();
   const [normalMaps, setNormalMaps] = useState(true);
   const [overlayInViewer, setOverlayInViewer] = useState(true);
@@ -285,10 +258,8 @@ export function ModelViewerWorkspace({
       getSetting("modelViewer.environment"),
       getSetting("modelViewer.exposure"),
       getSetting("modelViewer.toonShadows"),
-      getSetting("modelViewer.toonStyle"),
+      getSetting("modelViewer.toonStyles"),
       getSetting("modelViewer.overlayInViewer"),
-      getSetting("modelViewer.gimiToonStyle"),
-      getSetting("modelViewer.genshinAssetDir"),
     ])
       .then(
         ([
@@ -296,10 +267,8 @@ export function ModelViewerWorkspace({
           environment,
           exposure,
           storedToonShadows,
-          storedToonStyle,
+          storedToonStyles,
           storedOverlayInViewer,
-          storedGIMIToonStyle,
-          storedGenshinAssetDir,
         ]) => {
           if (cancelled) {
             return;
@@ -309,10 +278,12 @@ export function ModelViewerWorkspace({
           setThreeEnvironment(normalizeThreeEnvironment(environment));
           setThreeExposure(clampThreeExposure(exposure));
           setToonShadows(storedToonShadows === true);
-          setToonStyle(parseModelViewerToonStyle(storedToonStyle));
+          // Keeps styles edited while the stored ones were loading.
+          setToonStyles((current) => ({
+            ...parseModelViewerToonStyles(storedToonStyles),
+            ...current,
+          }));
           setOverlayInViewer(storedOverlayInViewer !== false);
-          setGIMIToonStyle(parseModelViewerGIMIToonStyle(storedGIMIToonStyle));
-          setGenshinAssetDir(storedGenshinAssetDir);
         },
       )
       .catch((error) => {
@@ -329,32 +300,63 @@ export function ModelViewerWorkspace({
   }, []);
 
   const payloadTransport = source?.transport ?? null;
-  const gimi = payloadTransport?.materialProfile === "gimi";
-
-  const genshinAssets =
-    gimi && genshinAssetListing?.dir === genshinAssetDir ? genshinAssetListing.assets : undefined;
+  const materialProfile = payloadTransport?.materialProfile;
+  const toonStyle = modelViewerToonStyleOf(toonStyles, materialProfile);
+  const toonAssetSource = toonAssetSourceOf(materialProfile);
+  const toonAssetDir = toonAssetSource ? (toonStyle?.assetDir ?? "") : "";
+  const toonAssets: ModelViewerToonAssets | undefined =
+    materialProfile &&
+    toonAssetListing?.profile === materialProfile &&
+    toonAssetListing.dir === toonAssetDir &&
+    toonAssetListing.assets
+      ? { profile: materialProfile, assets: toonAssetListing.assets }
+      : undefined;
 
   useEffect(() => {
-    if (!gimi || !genshinAssetDir) {
+    if (!materialProfile || !toonAssetSource || !toonAssetDir) {
       return;
     }
     let cancelled = false;
-    const request = Tools.ListGenshinToonAssets(genshinAssetDir);
+    const request = toonAssetSource.list(toonAssetDir);
     void request.then(
       (assets) => {
-        if (!cancelled) setGenshinAssetListing({ dir: genshinAssetDir, assets });
+        if (!cancelled)
+          setToonAssetListing({ profile: materialProfile, dir: toonAssetDir, assets });
       },
       () => {
         if (cancelled) return;
-        setGenshinAssetListing({ dir: genshinAssetDir });
-        toast.error(t("page.tools.model_viewer.menu.gimi_toon_assets_failed"));
+        setToonAssetListing({ profile: materialProfile, dir: toonAssetDir });
+        toast.error(t(`page.tools.model_viewer.menu.${toonAssetSource.failedLabel}`));
       },
     );
     return () => {
       cancelled = true;
       void request.cancel();
     };
-  }, [genshinAssetDir, gimi, t]);
+  }, [materialProfile, t, toonAssetDir, toonAssetSource]);
+
+  // Writes only the edited profile over the stored styles, so another viewer window
+  // cannot have its edits to other profiles replaced by this window's copy.
+  const updateToonStyle = (value: ModelViewerToonStyleBase) => {
+    if (!materialProfile) return;
+    setToonStyles((current) => ({ ...current, [materialProfile]: value }));
+    toonStyleWritesRef.current = toonStyleWritesRef.current
+      .then(async () => {
+        const stored = parseModelViewerToonStyles(await getSetting("modelViewer.toonStyles"));
+        await setSetting(
+          "modelViewer.toonStyles",
+          serializeModelViewerToonStyles({ ...stored, [materialProfile]: value }),
+        );
+      })
+      .catch((error: unknown) => {
+        Logger.capture(
+          "components/tools/model-viewer/model-viewer-workspace.tsx",
+          "Failed to persist model viewer toon styles",
+          error,
+        );
+        toast.error("Failed to save toon style setting.");
+      });
+  };
 
   const animationClips = payloadTransport?.animations ?? [];
   const activeAnimation =
@@ -426,29 +428,6 @@ export function ModelViewerWorkspace({
       );
       toast.error("Failed to save toon shadow setting.");
     });
-  };
-
-  const updateGenshinAssetDir = (value: string) => {
-    setGenshinAssetDir(value);
-    void setSetting("modelViewer.genshinAssetDir", value).catch((error) => {
-      Logger.capture(
-        "components/tools/model-viewer/model-viewer-workspace.tsx",
-        "Failed to persist Genshin texture folder",
-        error,
-      );
-    });
-  };
-
-  const selectGenshinAssetDir = async () => {
-    const selected = await Dialog.ShowOpenDialog({
-      title: "",
-      defaultPath: genshinAssetDir,
-      filters: [],
-      properties: ["openDirectory"],
-      role: "model-viewer-genshin-textures",
-    });
-    if (selected.canceled || !selected.filePaths?.[0]) return;
-    updateGenshinAssetDir(selected.filePaths[0]);
   };
 
   const updateOverlayInViewer = (value: boolean) => {
@@ -946,29 +925,19 @@ export function ModelViewerWorkspace({
           exposure={threeExposure}
           onExposureDraftChange={(v) => setThreeExposure(v)}
           onExposureCommit={updateThreeExposure}
-          showToonShadows={
-            payloadTransport?.materialProfile === "wuwa:rabbitfx" ||
-            payloadTransport?.materialProfile === "efmi" ||
-            gimi
-          }
+          showToonShadows={materialProfileOf(materialProfile).toonShadows}
           toonShadows={toonShadows}
           onToonShadowsChange={updateToonShadows}
-          showToonStyle={payloadTransport?.materialProfile === "efmi" && toonShadows}
-          toonStyle={toonStyle}
-          onToonStyleChange={(value) => {
-            setToonStyle(value);
-            persistToonStyle(value);
-          }}
-          showGIMIToonStyle={gimi && toonShadows}
-          gimiToonStyle={gimiToonStyle}
-          onGIMIToonStyleChange={(value) => {
-            setGIMIToonStyle(value);
-            persistGIMIToonStyle(value);
-          }}
-          genshinAssets={genshinAssets}
-          genshinAssetDir={genshinAssetDir}
-          onSelectGenshinAssetDir={() => void selectGenshinAssetDir()}
-          onClearGenshinAssetDir={() => updateGenshinAssetDir("")}
+          toonMenu={
+            materialProfile && toonStyle && toonShadows ? (
+              <ModelViewerToonMenu
+                profile={materialProfile}
+                style={toonStyle}
+                onStyleChange={updateToonStyle}
+                assets={toonAssets?.assets}
+              />
+            ) : null
+          }
           showNormalMaps={payloadTransport?.meshes.some(
             (mesh) => mesh.normalMapKey || mesh.normalMapVariants.length > 0,
           )}
@@ -1013,9 +982,8 @@ export function ModelViewerWorkspace({
                       threeEnvironment={threeEnvironment}
                       threeExposure={threeExposure}
                       toonShadows={toonShadows}
-                      toonStyle={toonStyle}
-                      gimiToonStyle={gimiToonStyle}
-                      genshinAssets={genshinAssets}
+                      toonStyles={toonStyles}
+                      toonAssets={toonAssets}
                       normalMaps={normalMaps}
                       highlightGameTextures={highlightGameTextures}
                       onLoad={handleViewerLoad}

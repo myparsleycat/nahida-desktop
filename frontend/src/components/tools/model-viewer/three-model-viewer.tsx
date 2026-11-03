@@ -47,22 +47,17 @@ import type {
   ModelViewerCameraState,
   ModelViewerHandle,
   ModelViewerSurfaceProps,
-  ModelViewerToonStyle,
 } from "./model-viewer-contract";
 
+import { materialProfileOf, modelViewerToonStyleOf } from "./material-profiles/registry";
 import {
   ModelViewerAxisGizmo,
   type ModelViewerAxisGizmoHandle,
   type ModelViewerAxisView,
 } from "./model-viewer-axis-gizmo";
 import { ModelViewerComputeController } from "./model-viewer-compute-controller";
-import {
-  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  DEFAULT_MODEL_VIEWER_TOON_STYLE,
-  parseOrientation,
-} from "./model-viewer-contract";
+import { parseOrientation } from "./model-viewer-contract";
 import { createModelViewerMipmapper, getModelViewerTextureCapabilities } from "./model-viewer-dds";
-import { createGenshinToonTextureCache } from "./model-viewer-genshin-toon";
 import {
   buildPayloadModel,
   clearPayloadModelData,
@@ -71,7 +66,6 @@ import {
   type PreparedPayloadEval,
   preparePayloadEval,
   setPayloadGameTextureHighlight,
-  setPayloadGIMIToon,
   setPayloadNormalMaps,
   setPayloadToonShadows,
   setPayloadToonStyle,
@@ -166,9 +160,8 @@ export const ThreeModelViewer = memo(
       threeExposure = 1,
       threeToneMapping = "neutral",
       toonShadows = false,
-      toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
-      gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-      genshinAssets,
+      toonStyles,
+      toonAssets,
       normalMaps = true,
       highlightGameTextures = false,
       onSurfacePick,
@@ -249,9 +242,8 @@ export const ThreeModelViewer = memo(
             threeExposure={threeExposure}
             threeToneMapping={threeToneMapping}
             toonShadows={toonShadows}
-            toonStyle={toonStyle}
-            gimiToonStyle={gimiToonStyle}
-            genshinAssets={genshinAssets}
+            toonStyles={toonStyles}
+            toonAssets={toonAssets}
             normalMaps={normalMaps}
             highlightGameTextures={highlightGameTextures}
             onError={onError}
@@ -288,9 +280,8 @@ function ThreeModelScene({
   threeExposure = 1,
   threeToneMapping = "neutral",
   toonShadows = false,
-  toonStyle = DEFAULT_MODEL_VIEWER_TOON_STYLE,
-  gimiToonStyle = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  genshinAssets,
+  toonStyles,
+  toonAssets,
   normalMaps = true,
   highlightGameTextures = false,
   onSurfacePick,
@@ -300,7 +291,6 @@ function ThreeModelScene({
   axisGizmoRef: MutableRefObject<ModelViewerAxisGizmoHandle | null>;
   controllerRef: MutableRefObject<ThreeModelController | null>;
   keyLightRef: MutableRefObject<DirectionalLight | null>;
-  toonStyle?: ModelViewerToonStyle;
 }) {
   const { camera, gl, invalidate, scene } = useThree();
   const axisViewTurnRef = useRef<AxisViewTurn | null>(null);
@@ -760,42 +750,38 @@ function ThreeModelScene({
     invalidate();
   }, [invalidate, modelRoot, toonShadows]);
 
+  const materialProfile = payloadTransport?.materialProfile;
+  const toonStyle = modelViewerToonStyleOf(toonStyles, materialProfile);
+  const profileAssets = toonAssets?.profile === materialProfile ? toonAssets?.assets : undefined;
+  const toonResourceLoader = useMemo(
+    () => materialProfileOf(materialProfile).toon?.createResourceLoader?.(),
+    [materialProfile],
+  );
+  useEffect(() => () => toonResourceLoader?.dispose(), [toonResourceLoader]);
+
   useEffect(() => {
-    if (!modelRoot) {
+    if (!modelRoot || !toonStyle) {
       return;
     }
-    setPayloadToonStyle(modelRoot, toonStyle);
-    invalidate();
-  }, [invalidate, modelRoot, toonStyle]);
-
-  const [genshinTextures] = useState(createGenshinToonTextureCache);
-  useEffect(() => () => genshinTextures.dispose(), [genshinTextures]);
-
-  const gimi = payloadTransport?.materialProfile === "gimi";
-  useEffect(() => {
-    if (!modelRoot || !gimi) {
+    if (!toonResourceLoader) {
+      setPayloadToonStyle(modelRoot, toonStyle);
+      invalidate();
       return;
     }
     let cancelled = false;
-    void genshinTextures.resolve(genshinAssets, gimiToonStyle).then((textures) => {
+    void toonResourceLoader.resolve(profileAssets, toonStyle).then((resources) => {
       if (cancelled) {
         return;
       }
-      setPayloadGIMIToon(modelRoot, { style: gimiToonStyle, textures });
+      setPayloadToonStyle(modelRoot, toonStyle, resources);
       invalidate();
     });
     return () => {
       cancelled = true;
     };
-  }, [genshinAssets, genshinTextures, gimi, gimiToonStyle, invalidate, modelRoot]);
+  }, [invalidate, modelRoot, profileAssets, toonResourceLoader, toonStyle]);
 
-  const profileToon = !toonShadows
-    ? undefined
-    : payloadTransport?.materialProfile === "efmi"
-      ? toonStyle
-      : gimi
-        ? gimiToonStyle
-        : undefined;
+  const profileToon = toonShadows ? toonStyle : undefined;
   const toonLighting = Boolean(profileToon);
   const selfShadow = profileToon?.selfShadow ?? false;
   useEffect(() => {

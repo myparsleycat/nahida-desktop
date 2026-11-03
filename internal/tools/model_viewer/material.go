@@ -432,16 +432,18 @@ func prepareModelViewerTexture(
 	)
 }
 
-func modelViewerTextureTransformFor(materialProfile, role string) modelViewerTextureTransform {
-	if (materialProfile == "zzmi" || materialProfile == "wuwa:rabbitfx" || materialProfile == "efmi") &&
-		role == "normal_map" {
+func modelViewerTextureTransformFor(
+	materialProfile ModelViewerMaterialProfile,
+	role string,
+) modelViewerTextureTransform {
+	if materialProfile.traits().normalXYReconstruct && role == "normal_map" {
 		return modelViewerTextureTransformNormalXYReconstruct
 	}
 	return modelViewerTextureTransformPassthrough
 }
 
-func modelViewerTextureFormatFor(materialProfile, role, requested string) string {
-	if materialProfile == "wuwa:rabbitfx" &&
+func modelViewerTextureFormatFor(materialProfile ModelViewerMaterialProfile, role, requested string) string {
+	if materialProfile.traits().losslessMaterialMaps &&
 		(role == "normal_map" || role == "light_map" || role == "material_map" || role == modelViewerCutoutMapRole) {
 		return "png"
 	}

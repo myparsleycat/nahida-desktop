@@ -239,6 +239,35 @@ const (
 	modelViewerGIMIProfile     ModelViewerMaterialProfile = "gimi"
 )
 
+// modelViewerProfileTraits lists how a profile's textures and buffers are prepared.
+type modelViewerProfileTraits struct {
+	// Normal maps store X and Y only; the shader reconstructs Z.
+	normalXYReconstruct bool
+	// Normal, light, material, and cutout maps are encoded losslessly as PNG.
+	losslessMaterialMaps bool
+	// Mipless DDS textures take the decoded fallback, which gets mipmaps.
+	resampleMiplessDDS bool
+	// Light maps may be outline width masks.
+	outlineMasks bool
+	// Vertex buffers carry toon vertex colors.
+	vertexColors bool
+}
+
+func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
+	switch p {
+	case modelViewerZZMIProfile:
+		return modelViewerProfileTraits{normalXYReconstruct: true}
+	case modelViewerRabbitFXProfile:
+		return modelViewerProfileTraits{normalXYReconstruct: true, losslessMaterialMaps: true}
+	case modelViewerEFMIProfile:
+		return modelViewerProfileTraits{normalXYReconstruct: true, resampleMiplessDDS: true, outlineMasks: true}
+	case modelViewerGIMIProfile:
+		return modelViewerProfileTraits{vertexColors: true}
+	default:
+		return modelViewerProfileTraits{}
+	}
+}
+
 type ModelViewerTransport struct {
 	MemorySessionID string  `json:"memorySessionId"`
 	INIPath         string  `json:"iniPath"`
@@ -246,17 +275,20 @@ type ModelViewerTransport struct {
 	Name            string  `json:"name"`
 	PreviewPath     *string `json:"previewPath,omitempty"`
 	// DefaultYaw is the rotation in degrees about viewer Y after upright correction.
-	DefaultYaw       float64                                `json:"defaultYaw,omitempty"`
-	MaterialProfile  ModelViewerMaterialProfile             `json:"materialProfile,omitempty"`
-	Meshes           []ModelViewerMeshTransport             `json:"meshes"`
-	Textures         map[string]ModelViewerTextureTransport `json:"textures"`
-	Variables        []ModelViewerVariable                  `json:"variables"`
-	DefaultState     map[string]any                         `json:"defaultState"`
-	StateRules       []ModelViewerStateRule                 `json:"stateRules"`
-	UIAssets         ModelViewerUIAssets                    `json:"uiAssets"`
-	OverlayMenus     []ModelViewerOverlayMenu               `json:"overlayMenus,omitempty"`
-	Animations       []ModelViewerAnimationClip             `json:"animations"`
-	ComputeDeformers []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
+	DefaultYaw      float64                    `json:"defaultYaw,omitempty"`
+	MaterialProfile ModelViewerMaterialProfile `json:"materialProfile,omitempty"`
+	// NormalXYReconstruct tells the renderer that normal maps keep X and Y only, so it
+	// rebuilds Z for direct DDS uploads as the encoder does for converted ones.
+	NormalXYReconstruct bool                                   `json:"normalXYReconstruct,omitempty"`
+	Meshes              []ModelViewerMeshTransport             `json:"meshes"`
+	Textures            map[string]ModelViewerTextureTransport `json:"textures"`
+	Variables           []ModelViewerVariable                  `json:"variables"`
+	DefaultState        map[string]any                         `json:"defaultState"`
+	StateRules          []ModelViewerStateRule                 `json:"stateRules"`
+	UIAssets            ModelViewerUIAssets                    `json:"uiAssets"`
+	OverlayMenus        []ModelViewerOverlayMenu               `json:"overlayMenus,omitempty"`
+	Animations          []ModelViewerAnimationClip             `json:"animations"`
+	ComputeDeformers    []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
 	// Forms includes folder groups and named draw groups within one INI.
 	Forms []ModelViewerForm `json:"forms"`
 	INIs  []ModelViewerINI  `json:"inis"`

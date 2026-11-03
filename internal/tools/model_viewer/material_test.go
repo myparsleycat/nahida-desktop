@@ -439,8 +439,9 @@ func TestReconstructModelViewerNormalZ(t *testing.T) {
 
 func TestModelViewerTextureTransformForProfileAndRole(t *testing.T) {
 	tests := []struct {
-		name, profile, role string
-		want                modelViewerTextureTransform
+		name, role string
+		profile    ModelViewerMaterialProfile
+		want       modelViewerTextureTransform
 	}{
 		{
 			name:    "zzmi normal",
@@ -488,7 +489,8 @@ func TestModelViewerTextureTransformForProfileAndRole(t *testing.T) {
 
 func TestModelViewerTextureFormatForProfileAndRole(t *testing.T) {
 	tests := []struct {
-		profile, role, requested, want string
+		profile               ModelViewerMaterialProfile
+		role, requested, want string
 	}{
 		{profile: "wuwa:rabbitfx", role: "normal_map", requested: "jpeg-safe", want: "png"},
 		{profile: "wuwa:rabbitfx", role: "light_map", requested: "jpeg-force", want: "png"},
@@ -811,7 +813,7 @@ func TestRunModelViewerTextureJobsScopesZZMINormalTransform(t *testing.T) {
 	writeModelViewerTestPNG(t, path, color.NRGBA{R: 128, G: 128, B: 17, A: 255})
 	tests := []struct {
 		name     string
-		profile  string
+		profile  ModelViewerMaterialProfile
 		roles    []string
 		encodes  int
 		wantBlue uint8

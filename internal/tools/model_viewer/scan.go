@@ -459,7 +459,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	}
 	stageStartedAt = time.Now()
 	efmi := isModelViewerEFMI(sections)
-	colors := detectModelViewerMaterialProfile(sections) == modelViewerGIMIProfile
+	colors := detectModelViewerMaterialProfile(sections).traits().vertexColors
 	layoutName := detectModelViewerLayout(sections, resources)
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {

@@ -1,4 +1,3 @@
-import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
 import type {
     EvaluatedViewerState,
     ModViewerTransport,
@@ -6,167 +5,13 @@ import type {
     ViewerAnimationFrame,
     ViewerStateValue,
 } from "@shared/mod-viewer/types";
-import { pick } from "es-toolkit";
 import type { ReactNode } from "react";
+
+import type { ModelViewerToonAssets, ModelViewerToonStyles } from "./material-profiles/profile";
 
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
 export type ModelViewerVariantStateValue = ViewerStateValue;
-
-export type ModelViewerToonStyle = {
-    rangeBias: number;
-    softness: number;
-    shadowBrightness: number;
-    shadowSaturation: number;
-    ambient: number;
-    lightStrength: number;
-    brightness: number;
-    specular: number;
-    rimStrength: number;
-    rimWidth: number;
-    outlines: boolean;
-    outlineWidth: number;
-    outlineBrightness: number;
-    selfShadow: boolean;
-    lightFollowsCamera: boolean;
-    flatFace: boolean;
-    fieldOfView: number;
-};
-
-export const DEFAULT_MODEL_VIEWER_TOON_STYLE: ModelViewerToonStyle = {
-    rangeBias: -0.4,
-    softness: 0.02,
-    shadowBrightness: 0.5,
-    shadowSaturation: 1,
-    ambient: 0.8,
-    lightStrength: 0.9,
-    // Warfarin defaults to 2 and clips less because its materials carry tints that mods
-    // lack. This value approximates its output for the same textures.
-    brightness: 1.5,
-    specular: 1,
-    rimStrength: 0.5,
-    rimWidth: 0.3,
-    outlines: true,
-    outlineWidth: 0.5,
-    outlineBrightness: 0.5,
-    selfShadow: true,
-    lightFollowsCamera: true,
-    flatFace: true,
-    fieldOfView: 20,
-};
-
-// Only the flags are user settings. Shading values stay at the defaults even when
-// older versions stored edited values, because the menu no longer shows them.
-export function parseModelViewerToonStyle(stored: string): ModelViewerToonStyle {
-    const parsed = parseToonStyleRecord(stored);
-    const flag = (key: "outlines" | "selfShadow" | "lightFollowsCamera" | "flatFace") => {
-        const value = parsed[key];
-        return typeof value === "boolean" ? value : DEFAULT_MODEL_VIEWER_TOON_STYLE[key];
-    };
-    return {
-        ...DEFAULT_MODEL_VIEWER_TOON_STYLE,
-        outlines: flag("outlines"),
-        selfShadow: flag("selfShadow"),
-        lightFollowsCamera: flag("lightFollowsCamera"),
-        flatFace: flag("flatFace"),
-    };
-}
-
-export function serializeModelViewerToonStyle(style: ModelViewerToonStyle): string {
-    return JSON.stringify(
-        pick(style, ["outlines", "selfShadow", "lightFollowsCamera", "flatFace"]),
-    );
-}
-
-export const GENSHIN_FACE_TYPES = ["boy", "girl", "lady", "loli", "male"] as const;
-export type ModelViewerGenshinFaceType = (typeof GENSHIN_FACE_TYPES)[number];
-
-export type ModelViewerGIMIToonStyle = {
-    daytime: boolean;
-    shadowOffset: number;
-    shadowSmoothness: number;
-    shadowBrightness: number;
-    brightness: number;
-    specular: number;
-    metallic: number;
-    rimStrength: number;
-    emission: number;
-    outlines: boolean;
-    outlineWidth: number;
-    selfShadow: boolean;
-    lightFollowsCamera: boolean;
-    toneMapping: boolean;
-    fieldOfView: number;
-    /** Name of a ramp in the user's Genshin texture folder; empty uses the built-in ramp. */
-    ramp: string;
-    /** "auto" takes the body type from the ramp name, such as Avatar_Loli_... */
-    faceType: "auto" | ModelViewerGenshinFaceType;
-};
-
-// Shading values follow kaze-mio's Nahida material in UnityGenshinToonShader, except
-// the shadow offset: with its 0.1, frontal light shades limbs that the game keeps lit
-// to the silhouette.
-export const DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE: ModelViewerGIMIToonStyle = {
-    daytime: true,
-    shadowOffset: 0,
-    shadowSmoothness: 0.4,
-    shadowBrightness: 1.1,
-    brightness: 1,
-    specular: 0.3,
-    metallic: 8,
-    rimStrength: 0.3,
-    emission: 0.2,
-    outlines: true,
-    outlineWidth: 1.6,
-    selfShadow: true,
-    lightFollowsCamera: true,
-    // The curve compresses bright skin channels unevenly and bleaches it.
-    toneMapping: false,
-    fieldOfView: 20,
-    ramp: "",
-    faceType: "auto",
-};
-
-// Like parseModelViewerToonStyle, keeps everything but the menu's flags and asset
-// choices at the defaults.
-export function parseModelViewerGIMIToonStyle(stored: string): ModelViewerGIMIToonStyle {
-    const parsed = parseToonStyleRecord(stored);
-    const defaults = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE;
-    const flag = (key: "outlines" | "selfShadow" | "lightFollowsCamera") => {
-        const value = parsed[key];
-        return typeof value === "boolean" ? value : defaults[key];
-    };
-    const faceType = parsed.faceType;
-    return {
-        ...defaults,
-        outlines: flag("outlines"),
-        selfShadow: flag("selfShadow"),
-        lightFollowsCamera: flag("lightFollowsCamera"),
-        ramp: typeof parsed.ramp === "string" ? parsed.ramp : defaults.ramp,
-        faceType:
-            faceType === "auto" ||
-            GENSHIN_FACE_TYPES.includes(faceType as ModelViewerGenshinFaceType)
-                ? (faceType as ModelViewerGIMIToonStyle["faceType"])
-                : defaults.faceType,
-    };
-}
-
-export function serializeModelViewerGIMIToonStyle(style: ModelViewerGIMIToonStyle): string {
-    return JSON.stringify(
-        pick(style, ["outlines", "selfShadow", "lightFollowsCamera", "ramp", "faceType"]),
-    );
-}
-
-function parseToonStyleRecord(stored: string): Record<string, unknown> {
-    try {
-        const parsed: unknown = JSON.parse(stored);
-        return typeof parsed === "object" && parsed !== null
-            ? (parsed as Record<string, unknown>)
-            : {};
-    } catch {
-        return {};
-    }
-}
 
 export type ModelViewerAnimationFrameMesh = {
     meshName: string;
@@ -265,10 +110,10 @@ export type ModelViewerSurfaceProps = {
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;
     toonShadows?: boolean;
-    toonStyle?: ModelViewerToonStyle;
-    gimiToonStyle?: ModelViewerGIMIToonStyle;
-    /** Textures from the user's Genshin folder; the built-in substitutes are used without them. */
-    genshinAssets?: GenshinToonAssetsTransport;
+    /** Styles by material profile; the loaded model uses the entry for its own profile. */
+    toonStyles?: ModelViewerToonStyles;
+    /** Game assets for the profile's resource loader; built-in substitutes are used without them. */
+    toonAssets?: ModelViewerToonAssets;
     normalMaps?: boolean;
     /** Tints the visible meshes the mod binds no diffuse texture to. */
     highlightGameTextures?: boolean;

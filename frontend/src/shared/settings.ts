@@ -77,9 +77,7 @@ export interface AppSettings {
     "modelViewer.environment": "studio" | "soft" | "none";
     "modelViewer.exposure": number;
     "modelViewer.toonShadows": boolean;
-    "modelViewer.toonStyle": string;
-    "modelViewer.gimiToonStyle": string;
-    "modelViewer.genshinAssetDir": string;
+    "modelViewer.toonStyles": string;
     "modelViewer.overlayInViewer": boolean;
 
     "xxmi.persistToggles": boolean;
@@ -408,20 +406,10 @@ export const APP_SETTINGS = {
         scope: "modelViewer",
         storageKey: "model_viewer_toon_shadows",
     },
-    "modelViewer.toonStyle": {
-        publicKey: "modelViewer.toonStyle",
+    "modelViewer.toonStyles": {
+        publicKey: "modelViewer.toonStyles",
         scope: "modelViewer",
-        storageKey: "model_viewer_toon_style",
-    },
-    "modelViewer.gimiToonStyle": {
-        publicKey: "modelViewer.gimiToonStyle",
-        scope: "modelViewer",
-        storageKey: "model_viewer_gimi_toon_style",
-    },
-    "modelViewer.genshinAssetDir": {
-        publicKey: "modelViewer.genshinAssetDir",
-        scope: "modelViewer",
-        storageKey: "model_viewer_genshin_asset_dir",
+        storageKey: "model_viewer_toon_styles",
     },
     "modelViewer.overlayInViewer": {
         publicKey: "modelViewer.overlayInViewer",

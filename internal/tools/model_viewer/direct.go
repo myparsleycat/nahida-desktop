@@ -182,7 +182,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 	textures, cache, timing := build.textures, build.cache, build.timing
 	legacyStartedAt := time.Now()
 	layoutName := detectModelViewerLayout(sections, resources)
-	colors := detectModelViewerMaterialProfile(sections) == modelViewerGIMIProfile
+	colors := detectModelViewerMaterialProfile(sections).traits().vertexColors
 	groupsStartedAt := time.Now()
 	groups, err := collectModelViewerBufferGroups(modDir, layoutName, resources, cache, nil)
 	if timing != nil {

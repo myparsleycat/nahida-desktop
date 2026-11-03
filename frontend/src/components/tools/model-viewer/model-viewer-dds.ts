@@ -78,6 +78,23 @@ export type ParsedModelViewerDDS = {
     format: ViewerDDSFormat;
 };
 
+export type ModelViewerDDSMetadata = {
+    format: string;
+    /** Uploaded as compressed DDS blocks rather than decoded to an image. */
+    direct: boolean;
+};
+
+export function modelViewerDDSMetadataOf(
+    texture: Texture | null | undefined,
+): ModelViewerDDSMetadata | undefined {
+    return texture?.userData.modelViewerDDS as ModelViewerDDSMetadata | undefined;
+}
+
+/** The DDS format a loaded texture came from; empty for other images. */
+export function modelViewerDDSFormatOf(texture: Texture | null | undefined): string {
+    return modelViewerDDSMetadataOf(texture)?.format ?? "";
+}
+
 export function getModelViewerTextureCapabilities(
     renderer: WebGLRenderer,
 ): ModelViewerTextureCapabilities {

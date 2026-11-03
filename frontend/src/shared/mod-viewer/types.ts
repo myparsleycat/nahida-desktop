@@ -364,6 +364,8 @@ export type ModViewerTransport = {
     /** Rotation in degrees about viewer Y after upright correction. */
     defaultYaw?: number;
     materialProfile?: ViewerMaterialProfile;
+    /** Normal maps keep X and Y only; the shader rebuilds Z. */
+    normalXYReconstruct?: boolean;
     meshes: ViewerMeshTransport[];
     textures: Record<
         string,

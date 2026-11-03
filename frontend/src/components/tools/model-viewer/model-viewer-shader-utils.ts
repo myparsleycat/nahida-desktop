@@ -1,5 +1,19 @@
 import type { BufferGeometry, Matrix3, Texture } from "three";
-import { BufferAttribute } from "three";
+import { BufferAttribute, DataTexture, NoColorSpace, RGBAFormat } from "three";
+
+// Kept apart from Three.js "color", which the body-shape editor writes and which
+// would tint the albedo. GIMI stores AO in R, ramp width in G, outline width in A.
+export const TOON_VERTEX_COLOR_ATTRIBUTE = "toonVertexColor";
+
+/** Bound to texture uniforms that have no map, so samplers never read an unbound unit. */
+export const fallbackWhiteTexture = new DataTexture(
+    new Uint8Array([255, 255, 255, 255]),
+    1,
+    1,
+    RGBAFormat,
+);
+fallbackWhiteTexture.colorSpace = NoColorSpace;
+fallbackWhiteTexture.needsUpdate = true;
 
 export function replaceShaderAnchor(source: string, anchor: string, replacement: string): string {
     const first = source.indexOf(anchor);
