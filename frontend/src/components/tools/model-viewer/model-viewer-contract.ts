@@ -6,6 +6,7 @@ import type {
     ViewerAnimationFrame,
     ViewerStateValue,
 } from "@shared/mod-viewer/types";
+import { pick } from "es-toolkit";
 import type { ReactNode } from "react";
 
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
@@ -54,54 +55,27 @@ export const DEFAULT_MODEL_VIEWER_TOON_STYLE: ModelViewerToonStyle = {
     fieldOfView: 20,
 };
 
-export const MODEL_VIEWER_TOON_RANGES = {
-    rangeBias: { min: -1, max: 1, step: 0.05 },
-    softness: { min: 0, max: 0.25, step: 0.01 },
-    shadowBrightness: { min: 0, max: 1, step: 0.05 },
-    shadowSaturation: { min: 0, max: 2, step: 0.05 },
-    ambient: { min: 0, max: 1.5, step: 0.05 },
-    lightStrength: { min: 0, max: 2, step: 0.05 },
-    brightness: { min: 0.5, max: 3, step: 0.05 },
-    specular: { min: 0, max: 2, step: 0.05 },
-    rimStrength: { min: 0, max: 2, step: 0.05 },
-    rimWidth: { min: 0, max: 1, step: 0.05 },
-    outlineWidth: { min: 0, max: 5, step: 0.25 },
-    outlineBrightness: { min: 0, max: 1, step: 0.05 },
-    fieldOfView: { min: 10, max: 45, step: 1 },
-} as const;
-
+// Only the flags are user settings. Shading values stay at the defaults even when
+// older versions stored edited values, because the menu no longer shows them.
 export function parseModelViewerToonStyle(stored: string): ModelViewerToonStyle {
     const parsed = parseToonStyleRecord(stored);
-    const number = (key: keyof typeof MODEL_VIEWER_TOON_RANGES) => {
-        const value = parsed[key];
-        const range = MODEL_VIEWER_TOON_RANGES[key];
-        return typeof value === "number" && Number.isFinite(value)
-            ? Math.min(Math.max(value, range.min), range.max)
-            : DEFAULT_MODEL_VIEWER_TOON_STYLE[key];
-    };
     const flag = (key: "outlines" | "selfShadow" | "lightFollowsCamera" | "flatFace") => {
         const value = parsed[key];
         return typeof value === "boolean" ? value : DEFAULT_MODEL_VIEWER_TOON_STYLE[key];
     };
     return {
-        rangeBias: number("rangeBias"),
-        softness: number("softness"),
-        shadowBrightness: number("shadowBrightness"),
-        shadowSaturation: number("shadowSaturation"),
-        ambient: number("ambient"),
-        lightStrength: number("lightStrength"),
-        brightness: number("brightness"),
-        specular: number("specular"),
-        rimStrength: number("rimStrength"),
-        rimWidth: number("rimWidth"),
+        ...DEFAULT_MODEL_VIEWER_TOON_STYLE,
         outlines: flag("outlines"),
-        outlineWidth: number("outlineWidth"),
-        outlineBrightness: number("outlineBrightness"),
         selfShadow: flag("selfShadow"),
         lightFollowsCamera: flag("lightFollowsCamera"),
         flatFace: flag("flatFace"),
-        fieldOfView: number("fieldOfView"),
     };
+}
+
+export function serializeModelViewerToonStyle(style: ModelViewerToonStyle): string {
+    return JSON.stringify(
+        pick(style, ["outlines", "selfShadow", "lightFollowsCamera", "flatFace"]),
+    );
 }
 
 export const GENSHIN_FACE_TYPES = ["boy", "girl", "lady", "loli", "male"] as const;
@@ -153,52 +127,21 @@ export const DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE: ModelViewerGIMIToonStyle = {
     faceType: "auto",
 };
 
-export const MODEL_VIEWER_GIMI_TOON_RANGES = {
-    shadowOffset: { min: -0.5, max: 0.5, step: 0.05 },
-    shadowSmoothness: { min: 0.01, max: 1, step: 0.01 },
-    shadowBrightness: { min: 0.5, max: 2, step: 0.05 },
-    brightness: { min: 0.5, max: 2, step: 0.05 },
-    specular: { min: 0, max: 2, step: 0.05 },
-    metallic: { min: 0, max: 16, step: 0.5 },
-    rimStrength: { min: 0, max: 2, step: 0.05 },
-    emission: { min: 0, max: 2, step: 0.05 },
-    outlineWidth: { min: 0, max: 5, step: 0.1 },
-    fieldOfView: { min: 10, max: 45, step: 1 },
-} as const;
-
+// Like parseModelViewerToonStyle, keeps everything but the menu's flags and asset
+// choices at the defaults.
 export function parseModelViewerGIMIToonStyle(stored: string): ModelViewerGIMIToonStyle {
     const parsed = parseToonStyleRecord(stored);
     const defaults = DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE;
-    const number = (key: keyof typeof MODEL_VIEWER_GIMI_TOON_RANGES) => {
-        const value = parsed[key];
-        const range = MODEL_VIEWER_GIMI_TOON_RANGES[key];
-        return typeof value === "number" && Number.isFinite(value)
-            ? Math.min(Math.max(value, range.min), range.max)
-            : defaults[key];
-    };
-    const flag = (
-        key: "daytime" | "outlines" | "selfShadow" | "lightFollowsCamera" | "toneMapping",
-    ) => {
+    const flag = (key: "outlines" | "selfShadow" | "lightFollowsCamera") => {
         const value = parsed[key];
         return typeof value === "boolean" ? value : defaults[key];
     };
     const faceType = parsed.faceType;
     return {
-        daytime: flag("daytime"),
-        shadowOffset: number("shadowOffset"),
-        shadowSmoothness: number("shadowSmoothness"),
-        shadowBrightness: number("shadowBrightness"),
-        brightness: number("brightness"),
-        specular: number("specular"),
-        metallic: number("metallic"),
-        rimStrength: number("rimStrength"),
-        emission: number("emission"),
+        ...defaults,
         outlines: flag("outlines"),
-        outlineWidth: number("outlineWidth"),
         selfShadow: flag("selfShadow"),
         lightFollowsCamera: flag("lightFollowsCamera"),
-        toneMapping: flag("toneMapping"),
-        fieldOfView: number("fieldOfView"),
         ramp: typeof parsed.ramp === "string" ? parsed.ramp : defaults.ramp,
         faceType:
             faceType === "auto" ||
@@ -206,6 +149,12 @@ export function parseModelViewerGIMIToonStyle(stored: string): ModelViewerGIMITo
                 ? (faceType as ModelViewerGIMIToonStyle["faceType"])
                 : defaults.faceType,
     };
+}
+
+export function serializeModelViewerGIMIToonStyle(style: ModelViewerGIMIToonStyle): string {
+    return JSON.stringify(
+        pick(style, ["outlines", "selfShadow", "lightFollowsCamera", "ramp", "faceType"]),
+    );
 }
 
 function parseToonStyleRecord(stored: string): Record<string, unknown> {

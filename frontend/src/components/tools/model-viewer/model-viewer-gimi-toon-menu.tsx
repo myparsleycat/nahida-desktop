@@ -1,5 +1,4 @@
 import type { GenshinToonAssetsTransport } from "@bindings/tools/model_viewer";
-import { Input } from "@renderer/components/ui/input";
 import {
   MenubarCheckboxItem,
   MenubarGroup,
@@ -12,37 +11,17 @@ import {
   MenubarSubContent,
   MenubarSubTrigger,
 } from "@renderer/components/ui/menubar";
-import { FolderOpenIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { FolderOpenIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { ModelViewerGIMIToonStyle } from "./model-viewer-contract";
 
-import {
-  DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-  GENSHIN_FACE_TYPES,
-  MODEL_VIEWER_GIMI_TOON_RANGES,
-} from "./model-viewer-contract";
-import { formatSliderValue } from "./model-viewer-dialog-variants";
+import { GENSHIN_FACE_TYPES } from "./model-viewer-contract";
 
 const FLAGS = [
-  { key: "daytime", label: "gimi_toon_daytime" },
   { key: "outlines", label: "toon_outlines" },
   { key: "selfShadow", label: "toon_self_shadow" },
   { key: "lightFollowsCamera", label: "toon_light_follows_camera" },
-  { key: "toneMapping", label: "gimi_toon_tone_mapping" },
-] as const;
-
-const NUMBER_FIELDS = [
-  { key: "fieldOfView", label: "toon_field_of_view" },
-  { key: "brightness", label: "toon_brightness" },
-  { key: "shadowOffset", label: "gimi_toon_shadow_offset" },
-  { key: "shadowSmoothness", label: "gimi_toon_shadow_smoothness" },
-  { key: "shadowBrightness", label: "toon_shadow_brightness" },
-  { key: "specular", label: "toon_specular" },
-  { key: "metallic", label: "gimi_toon_metallic" },
-  { key: "rimStrength", label: "toon_rim_strength" },
-  { key: "emission", label: "gimi_toon_emission" },
-  { key: "outlineWidth", label: "toon_outline_width" },
 ] as const;
 
 export function ModelViewerGIMIToonMenu({
@@ -81,31 +60,6 @@ export function ModelViewerGIMIToonMenu({
             </MenubarCheckboxItem>
           ))}
         </MenubarGroup>
-        <MenubarSeparator />
-        {NUMBER_FIELDS.map((field) => (
-          <div key={field.key}>
-            <MenubarLabel className="text-xs text-muted-foreground">
-              {t(`page.tools.model_viewer.menu.${field.label}`)}
-            </MenubarLabel>
-            <div className="px-1.5 py-1">
-              <Input
-                type="number"
-                {...MODEL_VIEWER_GIMI_TOON_RANGES[field.key]}
-                value={formatSliderValue(style[field.key])}
-                onChange={(event) => {
-                  const range = MODEL_VIEWER_GIMI_TOON_RANGES[field.key];
-                  const value = Number.parseFloat(event.target.value);
-                  if (Number.isFinite(value)) {
-                    onStyleChange?.({
-                      ...style,
-                      [field.key]: Math.min(Math.max(value, range.min), range.max),
-                    });
-                  }
-                }}
-              />
-            </div>
-          </div>
-        ))}
         <MenubarSeparator />
         <MenubarItem onClick={onSelectAssetDir}>
           <FolderOpenIcon />
@@ -175,20 +129,6 @@ export function ModelViewerGIMIToonMenu({
             </MenubarRadioGroup>
           </>
         ) : null}
-        <MenubarSeparator />
-        <MenubarItem
-          onSelect={(event) => event.preventDefault()}
-          onClick={() =>
-            onStyleChange?.({
-              ...DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
-              ramp: style.ramp,
-              faceType: style.faceType,
-            })
-          }
-        >
-          <RotateCcwIcon />
-          {t("page.tools.model_viewer.menu.reset")}
-        </MenubarItem>
       </MenubarSubContent>
     </MenubarSub>
   );

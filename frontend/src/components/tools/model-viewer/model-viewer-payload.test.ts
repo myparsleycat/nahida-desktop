@@ -16,8 +16,11 @@ import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec"
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
 import {
+    DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
     DEFAULT_MODEL_VIEWER_TOON_STYLE,
+    parseModelViewerGIMIToonStyle,
     parseModelViewerToonStyle,
+    serializeModelViewerGIMIToonStyle,
 } from "./model-viewer-contract";
 import {
     applyPayloadEval,
@@ -1154,16 +1157,32 @@ describe("applyPayloadEval packed maps", () => {
         expect(outline.material.uniforms.widthMaskEnabled.value).toBe(1);
     });
 
-    it("falls back to default toon values for invalid stored settings", () => {
+    it("restores only the toon flags from stored settings", () => {
         expect(parseModelViewerToonStyle("")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
         expect(parseModelViewerToonStyle("null")).toEqual(DEFAULT_MODEL_VIEWER_TOON_STYLE);
         const style = parseModelViewerToonStyle(
-            '{"shadowBrightness":9,"outlines":false,"rimWidth":"x","lightFollowsCamera":1}',
+            '{"shadowBrightness":0.2,"outlines":false,"lightFollowsCamera":1}',
         );
-        expect(style.shadowBrightness).toBe(1);
-        expect(style.lightFollowsCamera).toBe(true);
         expect(style.outlines).toBe(false);
-        expect(style.rimWidth).toBe(DEFAULT_MODEL_VIEWER_TOON_STYLE.rimWidth);
+        expect(style.lightFollowsCamera).toBe(true);
+        expect(style.shadowBrightness).toBe(DEFAULT_MODEL_VIEWER_TOON_STYLE.shadowBrightness);
+    });
+
+    it("restores only the GIMI toon flags and asset choices from stored settings", () => {
+        const style = parseModelViewerGIMIToonStyle(
+            '{"toneMapping":true,"daytime":false,"emission":2,"outlines":false,' +
+                '"ramp":"Avatar_Loli_Tex_Body_Shadow_Ramp","faceType":"loli"}',
+        );
+        expect(style).toEqual({
+            ...DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
+            outlines: false,
+            ramp: "Avatar_Loli_Tex_Body_Shadow_Ramp",
+            faceType: "loli",
+        });
+
+        const stored = serializeModelViewerGIMIToonStyle(style);
+        expect(JSON.parse(stored)).not.toHaveProperty("emission");
+        expect(parseModelViewerGIMIToonStyle(stored)).toEqual(style);
     });
 
     it("keeps RabbitFX materials on the stock shader when primary UVs are absent", () => {

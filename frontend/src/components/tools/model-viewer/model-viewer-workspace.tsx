@@ -72,6 +72,8 @@ import {
   DEFAULT_MODEL_VIEWER_TOON_STYLE,
   parseModelViewerGIMIToonStyle,
   parseModelViewerToonStyle,
+  serializeModelViewerGIMIToonStyle,
+  serializeModelViewerToonStyle,
 } from "./model-viewer-contract";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
@@ -176,27 +178,31 @@ export function ModelViewerWorkspace({
   const [toonStyle, setToonStyle] = useState(DEFAULT_MODEL_VIEWER_TOON_STYLE);
   const [persistToonStyle] = useState(() =>
     debounce((value: ModelViewerToonStyle) => {
-      void setSetting("modelViewer.toonStyle", JSON.stringify(value)).catch((error) => {
-        Logger.capture(
-          "components/tools/model-viewer/model-viewer-workspace.tsx",
-          "Failed to persist model viewer toon style",
-          error,
-        );
-        toast.error("Failed to save toon style setting.");
-      });
+      void setSetting("modelViewer.toonStyle", serializeModelViewerToonStyle(value)).catch(
+        (error) => {
+          Logger.capture(
+            "components/tools/model-viewer/model-viewer-workspace.tsx",
+            "Failed to persist model viewer toon style",
+            error,
+          );
+          toast.error("Failed to save toon style setting.");
+        },
+      );
     }, 400),
   );
   useEffect(() => () => persistToonStyle.flush(), [persistToonStyle]);
   const [gimiToonStyle, setGIMIToonStyle] = useState(DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE);
   const [persistGIMIToonStyle] = useState(() =>
     debounce((value: ModelViewerGIMIToonStyle) => {
-      void setSetting("modelViewer.gimiToonStyle", JSON.stringify(value)).catch((error) => {
-        Logger.capture(
-          "components/tools/model-viewer/model-viewer-workspace.tsx",
-          "Failed to persist model viewer GIMI toon style",
-          error,
-        );
-      });
+      void setSetting("modelViewer.gimiToonStyle", serializeModelViewerGIMIToonStyle(value)).catch(
+        (error) => {
+          Logger.capture(
+            "components/tools/model-viewer/model-viewer-workspace.tsx",
+            "Failed to persist model viewer GIMI toon style",
+            error,
+          );
+        },
+      );
     }, 400),
   );
   useEffect(() => () => persistGIMIToonStyle.flush(), [persistGIMIToonStyle]);

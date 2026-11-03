@@ -30,7 +30,6 @@ import type {
 import {
   DEFAULT_MODEL_VIEWER_GIMI_TOON_STYLE,
   DEFAULT_MODEL_VIEWER_TOON_STYLE,
-  MODEL_VIEWER_TOON_RANGES,
 } from "./model-viewer-contract";
 import {
   DEFAULT_THREE_EXPOSURE,
@@ -40,22 +39,6 @@ import {
 } from "./model-viewer-dialog-types";
 import { formatSliderValue } from "./model-viewer-dialog-variants";
 import { ModelViewerGIMIToonMenu } from "./model-viewer-gimi-toon-menu";
-
-const TOON_NUMBER_FIELDS = [
-  { key: "fieldOfView", label: "toon_field_of_view" },
-  { key: "brightness", label: "toon_brightness" },
-  { key: "lightStrength", label: "toon_light_strength" },
-  { key: "ambient", label: "toon_ambient" },
-  { key: "rangeBias", label: "toon_range_bias" },
-  { key: "softness", label: "toon_softness" },
-  { key: "shadowBrightness", label: "toon_shadow_brightness" },
-  { key: "shadowSaturation", label: "toon_shadow_saturation" },
-  { key: "specular", label: "toon_specular" },
-  { key: "rimStrength", label: "toon_rim_strength" },
-  { key: "rimWidth", label: "toon_rim_width" },
-  { key: "outlineWidth", label: "toon_outline_width" },
-  { key: "outlineBrightness", label: "toon_outline_brightness" },
-] as const;
 
 export type BrushMode = "paint" | "erase";
 
@@ -417,7 +400,7 @@ export function ModelViewerMenuBar({
                       <MenubarSubTrigger>
                         {t("page.tools.model_viewer.menu.toon_style")}
                       </MenubarSubTrigger>
-                      <MenubarSubContent className="max-h-[70vh] w-56 overflow-y-auto">
+                      <MenubarSubContent className="w-56">
                         <MenubarGroup>
                           <MenubarCheckboxItem
                             checked={toonStyle.outlines}
@@ -459,39 +442,6 @@ export function ModelViewerMenuBar({
                             {t("page.tools.model_viewer.menu.toon_flat_face")}
                           </MenubarCheckboxItem>
                         </MenubarGroup>
-                        <MenubarSeparator />
-                        {TOON_NUMBER_FIELDS.map((field) => (
-                          <div key={field.key}>
-                            <MenubarLabel className="text-xs text-muted-foreground">
-                              {t(`page.tools.model_viewer.menu.${field.label}`)}
-                            </MenubarLabel>
-                            <div className="px-1.5 py-1">
-                              <Input
-                                type="number"
-                                {...MODEL_VIEWER_TOON_RANGES[field.key]}
-                                value={formatSliderValue(toonStyle[field.key])}
-                                onChange={(event) => {
-                                  const range = MODEL_VIEWER_TOON_RANGES[field.key];
-                                  const value = Number.parseFloat(event.target.value);
-                                  if (Number.isFinite(value)) {
-                                    onToonStyleChange?.({
-                                      ...toonStyle,
-                                      [field.key]: Math.min(Math.max(value, range.min), range.max),
-                                    });
-                                  }
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                        <MenubarSeparator />
-                        <MenubarItem
-                          onSelect={(event) => event.preventDefault()}
-                          onClick={() => onToonStyleChange?.(DEFAULT_MODEL_VIEWER_TOON_STYLE)}
-                        >
-                          <RotateCcwIcon />
-                          {t("page.tools.model_viewer.menu.reset")}
-                        </MenubarItem>
                       </MenubarSubContent>
                     </MenubarSub>
                   ) : null}
