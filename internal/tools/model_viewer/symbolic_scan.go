@@ -25,10 +25,11 @@ const (
 var modelViewerShaderFilterGuardRE = regexp.MustCompile(`(?i)(?:^|[^$\w])vs\s*==`)
 
 type modelViewerSymbolicAssignment struct {
-	resource   string
-	authored   bool
-	conditions ModelViewerDNF
-	sequence   int
+	resource    string
+	authored    bool
+	conditions  ModelViewerDNF
+	sequence    int
+	textureSlot int
 }
 
 type modelViewerSymbolicBranchFrame struct {
@@ -342,22 +343,27 @@ func (c *modelViewerSymbolicScanContext) scan(
 				}
 			}
 			if texture {
+				slot, psSlot := modelViewerPsSlotNumber(key)
+				if !psSlot {
+					slot = -1
+				}
 				state.rabbitFXPending = state.rabbitFXPending ||
 					strings.HasPrefix(modelViewerNormalizeKey(key), "resourcerabbitfx")
 				delete(state.resolvedTextures, role)
 				state.textures[role] = append(
 					state.textures[role],
 					modelViewerSymbolicAssignment{
-						resource:   textureResource,
-						authored:   authored,
-						conditions: cloneModelViewerDNF(conditions),
-						sequence:   sequence,
+						resource:    textureResource,
+						authored:    authored,
+						conditions:  cloneModelViewerDNF(conditions),
+						sequence:    sequence,
+						textureSlot: slot,
 					},
 				)
-				state.textures[role] = append(
-					state.textures[role],
-					state.resourceAliases(textureResource, authored, conditions, sequence)...,
-				)
+				for _, alias := range state.resourceAliases(textureResource, authored, conditions, sequence) {
+					alias.textureSlot = slot
+					state.textures[role] = append(state.textures[role], alias)
+				}
 			}
 		}
 	}
@@ -855,7 +861,11 @@ func modelViewerSymbolicTextureHistory(
 	for role, history := range state.textures {
 		resolved, cached := state.resolvedTextures[role]
 		if !cached {
-			resolved = effectiveModelViewerSymbolicAssignments(history)
+			if role == "diffuse" {
+				resolved = effectiveModelViewerDiffuseAssignments(history)
+			} else {
+				resolved = effectiveModelViewerSymbolicAssignments(history)
+			}
 			if state.resolvedTextures == nil {
 				state.resolvedTextures = make(map[string][]modelViewerSymbolicAssignment)
 			}
@@ -878,6 +888,39 @@ func modelViewerSymbolicTextureHistory(
 		}
 	}
 	return output
+}
+
+func effectiveModelViewerDiffuseAssignments(history []modelViewerSymbolicAssignment) []modelViewerSymbolicAssignment {
+	bySlot := make(map[int][]modelViewerSymbolicAssignment)
+	for _, assignment := range history {
+		if assignment.resource == "" {
+			// Releasing a material clears every bound slot under these conditions.
+			for slot := range bySlot {
+				bySlot[slot] = append(bySlot[slot], assignment)
+			}
+			continue
+		}
+		bySlot[assignment.textureSlot] = append(bySlot[assignment.textureSlot], assignment)
+	}
+
+	var candidates []modelViewerSymbolicAssignment
+	for _, assignments := range bySlot {
+		for _, assignment := range effectiveModelViewerSymbolicAssignments(assignments) {
+			if assignment.resource != "" {
+				candidates = append(candidates, assignment)
+			}
+		}
+	}
+
+	// Shader slots coexist: a named diffuse beats inferred ps-t0, then semantic
+	// bindings and lower slots take precedence over auxiliary effect textures.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].authored != candidates[j].authored {
+			return !candidates[i].authored
+		}
+		return candidates[i].textureSlot > candidates[j].textureSlot
+	})
+	return effectiveModelViewerSymbolicAssignments(candidates)
 }
 
 // modelViewerSymbolicOtherStateTextures lists resources the section binds only

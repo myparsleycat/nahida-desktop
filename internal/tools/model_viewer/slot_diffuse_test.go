@@ -10,6 +10,59 @@ import (
 	"testing"
 )
 
+func TestLoadModViewerKeepsBaseDiffuseWithEffectSlots(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		bindings string
+		target   string
+	}{
+		{name: "effect last", bindings: "ps-t1 = ResourceBodyDiffuse\nps-t8 = ResourceEffectDiffuse", target: "ps-t1"},
+		{name: "effect first", bindings: "ps-t6 = ResourceEffectDiffuse\nps-t1 = ResourceBodyDiffuse", target: "ps-t1"},
+		{name: "semantic diffuse", bindings: "Resource\\GIMI\\Diffuse = ref ResourceBodyDiffuse\nps-t0 = ResourceEffectDiffuse", target: `Resource\GIMI\Diffuse`},
+		{name: "only high slot", bindings: "ps-t8 = ResourceBodyDiffuse", target: "ps-t8"},
+		{name: "same slot unnamed replacement", bindings: "ps-t0 = ResourceEffectDiffuse\nps-t0 = ResourceColor", target: "ps-t0"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for index, name := range []string{"BodyDiffuse", "AlternateDiffuse", "EffectDiffuse"} {
+				writeTextureFile(t, dir, name+".png", encodeColorPNG(2+index, 2))
+			}
+			fixture := loadViewerFixture(t, dir, `[Constants]
+global persist $swap = 0
+[KeySwap]
+key = k
+type = cycle
+$swap = 0, 1
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyNormalMap
+`+tt.bindings+`
+if $swap == 1
+`+tt.target+` = ref ResourceAlternateDiffuse
+endif
+ps-t2 = ResourceBodyLightMap
+drawindexed = 3, 0, 0
+[ResourceBodyDiffuse]
+filename = BodyDiffuse.png
+[ResourceColor]
+filename = BodyDiffuse.png
+[ResourceAlternateDiffuse]
+filename = AlternateDiffuse.png
+[ResourceEffectDiffuse]
+filename = EffectDiffuse.png
+`+viewerBodyResources)
+			for swap, name := range []string{"BodyDiffuse", "AlternateDiffuse"} {
+				state := evaluateViewerTransport(fixture.result, map[string]any{"swap": swap})
+				if len(state.Meshes) != 1 || !strings.HasSuffix(state.Meshes[0].TexKey, name+".png") {
+					t.Fatalf("swap %d meshes = %+v, want %s", swap, state.Meshes, name)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadModViewerGIMINormalFirstLightMaps(t *testing.T) {
 	for _, withLightMap := range []bool{true, false} {
 		t.Run(fmt.Sprintf("light map=%t", withLightMap), func(t *testing.T) {
