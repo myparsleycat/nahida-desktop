@@ -97,7 +97,7 @@ func attachSlotBoundDiffuse(meshes []modelViewerDirectMesh, modDir string, wwmi,
 		}
 		normal, cached := normalMaps[resolved]
 		if !cached {
-			normal = isTwoChannelNormalMap(resolved)
+			normal = isModelViewerNormalMap(resolved)
 			normalMaps[resolved] = normal
 		}
 		return normal
@@ -307,9 +307,9 @@ func replaceNormalMapDiffuse(
 	}
 }
 
-// isTwoChannelNormalMap recognizes a normal map that stores X and Y around their
-// midpoint and leaves blue empty, which reads as a flat olive when drawn as color.
-func isTwoChannelNormalMap(path string) bool {
+// Normal maps center X and Y and either omit Z or store it near full blue.
+// Sparse extreme texels must not disqualify an otherwise flat RGB normal map.
+func isModelViewerNormalMap(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -319,7 +319,8 @@ func isTwoChannelNormalMap(path string) bool {
 		return false
 	}
 	analysis := analyzeNRGBA(decoded)
-	return absFloat(analysis.meanR-0.5) <= 0.1 && absFloat(analysis.meanG-0.5) <= 0.1 && analysis.meanB <= 0.08
+	return absFloat(analysis.meanR-0.5) <= 0.1 && absFloat(analysis.meanG-0.5) <= 0.1 &&
+		(analysis.meanB <= 0.08 || analysis.meanB >= 0.9 && analysis.luminanceStdDev <= 0.12)
 }
 
 func meshDiffuseMatches(

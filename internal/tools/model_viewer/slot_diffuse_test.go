@@ -33,6 +33,14 @@ func TestAttachSlotBoundDiffuseReplacesGIMINormalMapNamedDiffuse(t *testing.T) {
 	writeTextureFile(t, dir, "Color.dds", encodeWwmiColorDDS(side))
 	writeTextureFile(t, dir, "Skin.dds", encodeWwmiColorDDS(side))
 	writeTextureFile(t, dir, "Linear.dds", efmiSolidDDS(side, efmiTestLightMap))
+	rgbNormal := slices.Repeat([]color.NRGBA{{R: 128, G: 128, B: 255, A: 255}}, side*side)
+	writeTextureFile(t, dir, "RGBNormal.dds", efmiDX10DDS(side, efmiDXGIBGRA8, rgbNormal))
+	rgbNormal[0] = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+	rgbNormal[1] = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+	writeTextureFile(t, dir, "RGBNormalOutliers.dds", efmiDX10DDS(side, efmiDXGIBGRA8, rgbNormal))
+	writeTextureFile(t, dir, "SRGBNormal.dds", efmiDX10DDS(side, efmiDXGIBGRA8SRGB, rgbNormal))
+	writeTextureFile(t, dir, "BlueColor.dds", efmiDX10DDS(side, efmiDXGIBGRA8,
+		slices.Repeat([]color.NRGBA{{R: 128, G: 128, B: 200, A: 255}}, side*side)))
 	legacy := make([]color.NRGBA, 0, side*side)
 	for y := range side {
 		for x := range side {
@@ -53,6 +61,35 @@ func TestAttachSlotBoundDiffuseReplacesGIMINormalMapNamedDiffuse(t *testing.T) {
 		wantDiffuses  []string
 		wantLightMaps []string
 	}{
+		{
+			name:    "RGB normal map keeps texture toggles",
+			diffuse: "RGBNormal.dds",
+			lightMaps: []modelViewerDirectTextureAssignment{
+				assign("light_map", "Color.dds", modelViewerDNFTrue()),
+				assign("light_map", "Skin.dds", skin),
+			},
+			wantDiffuses: []string{"Color.dds", "Skin.dds"},
+		},
+		{
+			name:         "RGB normal map with sparse channel extremes",
+			diffuse:      "RGBNormalOutliers.dds",
+			lightMaps:    []modelViewerDirectTextureAssignment{assign("light_map", "Color.dds", modelViewerDNFTrue())},
+			wantDiffuses: []string{"Color.dds"},
+		},
+		{
+			name:          "sRGB diffuse resembling a normal map stays",
+			diffuse:       "SRGBNormal.dds",
+			lightMaps:     []modelViewerDirectTextureAssignment{assign("light_map", "Color.dds", modelViewerDNFTrue())},
+			wantDiffuses:  []string{"SRGBNormal.dds"},
+			wantLightMaps: []string{"Color.dds"},
+		},
+		{
+			name:          "blue color diffuse stays",
+			diffuse:       "BlueColor.dds",
+			lightMaps:     []modelViewerDirectTextureAssignment{assign("light_map", "Color.dds", modelViewerDNFTrue())},
+			wantDiffuses:  []string{"BlueColor.dds"},
+			wantLightMaps: []string{"Color.dds"},
+		},
 		{
 			name:    "light map names keep toggles",
 			diffuse: "Normal.dds",
