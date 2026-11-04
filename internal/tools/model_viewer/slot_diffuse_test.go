@@ -2,12 +2,82 @@ package modelviewer
 
 import (
 	"encoding/binary"
+	"fmt"
 	"image/color"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestLoadModViewerGIMINormalFirstLightMaps(t *testing.T) {
+	for _, withLightMap := range []bool{true, false} {
+		t.Run(fmt.Sprintf("light map=%t", withLightMap), func(t *testing.T) {
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "BodyDiffuse.dds", efmiSolidDDS(16, color.NRGBA{R: 128, G: 128, B: 255, A: 255}))
+			for _, suffix := range []string{"A", "B"} {
+				writeTextureFile(t, dir, "BodyLightMap"+suffix+".dds", encodeWwmiColorDDS(16))
+				writeTextureFile(t, dir, "BodyShadow"+suffix+".dds", efmiSolidDDS(16, color.NRGBA{G: 128, A: 255}))
+			}
+			lightA, lightB := "", ""
+			if withLightMap {
+				lightA = "ps-t2 = ResourceBodyShadowA"
+				lightB = "ps-t2 = ResourceBodyShadowB"
+			}
+			fixture := loadViewerFixture(t, dir, fmt.Sprintf(`[Constants]
+global persist $swap = 0
+[KeySwap]
+key = k
+type = cycle
+$swap = 0, 1
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyDiffuse
+if $swap == 0
+ps-t1 = ResourceBodyLightMapA
+%s
+else
+ps-t1 = ResourceBodyLightMapB
+%s
+endif
+drawindexed = 3, 0, 0
+[ResourceBodyDiffuse]
+filename = BodyDiffuse.dds
+[ResourceBodyLightMapA]
+filename = BodyLightMapA.dds
+[ResourceBodyLightMapB]
+filename = BodyLightMapB.dds
+[ResourceBodyShadowA]
+filename = BodyShadowA.dds
+[ResourceBodyShadowB]
+filename = BodyShadowB.dds
+`, lightA, lightB)+viewerBodyResources)
+
+			for swap, suffix := range []string{"A", "B"} {
+				state := evaluateViewerTransport(fixture.result, map[string]any{"swap": swap})
+				if len(state.Meshes) != 1 || !state.Meshes[0].Visible {
+					t.Fatalf("swap %d meshes = %+v", swap, state.Meshes)
+				}
+				mesh := state.Meshes[0]
+				if !strings.HasSuffix(mesh.TexKey, "BodyLightMap"+suffix+".dds") {
+					t.Fatalf("swap %d diffuse = %q", swap, mesh.TexKey)
+				}
+				if !withLightMap {
+					if mesh.LightMapKey != "" {
+						t.Fatalf("color texture reused as light map: %q", mesh.LightMapKey)
+					}
+					continue
+				}
+				if !strings.HasSuffix(mesh.LightMapKey, "BodyShadow"+suffix+".dds") ||
+					fixture.result.Textures[mesh.LightMapKey].Role != "light_map" {
+					t.Fatalf("swap %d light map = %q", swap, mesh.LightMapKey)
+				}
+			}
+		})
+	}
+}
 
 func encodeDX10HeaderDDS(width, height, dxgi uint32) []byte {
 	header := make([]byte, 148)

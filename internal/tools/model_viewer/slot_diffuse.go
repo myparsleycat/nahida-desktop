@@ -305,6 +305,16 @@ func replaceNormalMapDiffuse(
 		replacement.role = "diffuse"
 		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, replacement)
 	}
+
+	// Once the normal-first layout is proven, ps-t2 carries the packed light map,
+	// even when the mod retains an old Shadow resource name.
+	for _, candidate := range mesh.slotTextureCandidates {
+		if candidate.role != modelViewerSlotTextureRole(2) || candidate.file == "" || isColorMap(candidate.file) {
+			continue
+		}
+		candidate.role = "light_map"
+		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, candidate)
+	}
 }
 
 // Normal maps center X and Y and either omit Z or store it near full blue.

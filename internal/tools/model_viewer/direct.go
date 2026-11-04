@@ -870,7 +870,7 @@ func buildModelViewerDirectMeshPayload(
 			}
 			key := modelViewerNormalizeKey(name)
 			availableTexture, available := availableTextures[key]
-			if !available {
+			if !available || availableTexture.Role != role {
 				continue
 			}
 			key = availableTexture.Key
