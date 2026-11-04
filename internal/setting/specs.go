@@ -527,7 +527,7 @@ func buildSpecs() map[string]spec {
 				return formatFloat(clampModelViewerExposure(n))
 			},
 		},
-		KeyModelViewerToonShadows:     boolSpec(definitionsByKey[KeyModelViewerToonShadows], false),
+		KeyModelViewerToonShadows:     boolSpec(definitionsByKey[KeyModelViewerToonShadows], true),
 		KeyModelViewerOverlayInViewer: boolSpec(definitionsByKey[KeyModelViewerOverlayInViewer], true),
 		// JSON object keyed by material profile; the renderer owns each style's fields.
 		KeyModelViewerToonStyles: {

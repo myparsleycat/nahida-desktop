@@ -177,7 +177,7 @@ export function ModelViewerWorkspace({
   const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
-  const [toonShadows, setToonShadows] = useState(false);
+  const [toonShadows, setToonShadows] = useState(true);
   const [toonStyles, setToonStyles] = useState<ModelViewerToonStyles>({});
   const toonStyleWritesRef = useRef(Promise.resolve());
   const [toonAssetListing, setToonAssetListing] = useState<{
