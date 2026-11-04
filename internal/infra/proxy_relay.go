@@ -6,10 +6,16 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	proxyFailureHistory      = 128
+	proxyFailureSummaryLimit = 16
 )
 
 // ProxyRelay adapts WebView HTTP proxy traffic to the same upstream policy as Go.
@@ -22,6 +28,21 @@ type ProxyRelay struct {
 	mu        sync.Mutex
 	tunnels   map[net.Conn]io.Closer
 	closed    bool
+	failures  []proxyFailure
+	nextFail  int
+}
+
+type proxyFailure struct {
+	at   time.Time
+	host string
+	kind string
+}
+
+// ProxyFailureSummary counts relay forwarding failures for one host and failure kind.
+type ProxyFailureSummary struct {
+	Host  string `json:"host"`
+	Kind  string `json:"kind"`
+	Count int    `json:"count"`
 }
 
 func StartProxyRelay(network *ProxyNetwork, log *Log) (*ProxyRelay, error) {
@@ -162,7 +183,69 @@ func stripProxyHeaders(header http.Header) {
 	}
 }
 
+// FailuresSince summarizes forwarding failures recorded at or after since,
+// most frequent first. Only the most recent failures are retained.
+func (r *ProxyRelay) FailuresSince(since time.Time) []ProxyFailureSummary {
+	type failureKey struct{ host, kind string }
+	counts := make(map[failureKey]int)
+	r.mu.Lock()
+	for _, failure := range r.failures {
+		if !failure.at.Before(since) {
+			counts[failureKey{failure.host, failure.kind}]++
+		}
+	}
+	r.mu.Unlock()
+
+	summaries := make([]ProxyFailureSummary, 0, len(counts))
+	for key, count := range counts {
+		summaries = append(summaries, ProxyFailureSummary{Host: key.host, Kind: key.kind, Count: count})
+	}
+	slices.SortFunc(summaries, func(a, b ProxyFailureSummary) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+		return strings.Compare(a.Host+" "+a.Kind, b.Host+" "+b.Kind)
+	})
+	return summaries[:min(len(summaries), proxyFailureSummaryLimit)]
+}
+
+func (r *ProxyRelay) recordFailure(host string, err error) {
+	failure := proxyFailure{at: time.Now(), host: host, kind: proxyFailureKind(err)}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.failures) < proxyFailureHistory {
+		r.failures = append(r.failures, failure)
+		return
+	}
+	r.failures[r.nextFail] = failure
+	r.nextFail = (r.nextFail + 1) % proxyFailureHistory
+}
+
+func proxyFailureKind(err error) string {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		if dnsErr.IsNotFound {
+			return "dns-not-found"
+		}
+		return "dns"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timeout"
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return "connect"
+	}
+	return "other"
+}
+
 func (r *ProxyRelay) fail(w http.ResponseWriter, request *http.Request, err error) {
+	// The browser abandoned the request, which cancels the dial; nothing upstream failed.
+	if request.Context().Err() != nil {
+		return
+	}
+	r.recordFailure(request.URL.Hostname(), err)
 	_ = ReportError(
 		r.log,
 		err,

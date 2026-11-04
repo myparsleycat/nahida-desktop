@@ -124,6 +124,8 @@ type GameBanana struct {
 	shuttingDown      bool
 	openLogin         OpenLoginFunc
 	clearLoginCookies ClearLoginCookiesFunc
+
+	rejectionDiagnostic infra.DiagnosticThrottle
 }
 
 func New() *GameBanana {
@@ -194,7 +196,7 @@ func (g *GameBanana) SetManualRMCToken(ctx context.Context, input string) (Manua
 		g.reportRecovery(err, "load-manual-cookie")
 		return ManualRMCSaveResult{ErrorCode: "GAMEBANANA_MANUAL_RMC_SAVE_FAILED"}, nil
 	}
-	valid, merged, err := g.validateCandidateRMCCookie(ctx, cookie)
+	valid, session, err := g.validateCandidateRMCCookie(ctx, cookie)
 	if err != nil {
 		g.reportRecovery(err, "validate-manual-cookie")
 		code := "GAMEBANANA_MANUAL_RMC_SAVE_FAILED"
@@ -209,6 +211,7 @@ func (g *GameBanana) SetManualRMCToken(ctx context.Context, input string) (Manua
 	if !valid {
 		return ManualRMCSaveResult{ErrorCode: "GAMEBANANA_INVALID_RMC"}, nil
 	}
+	merged := session.cookie
 	if merged == "" {
 		merged = cookie
 	}
@@ -791,8 +794,8 @@ func (g *GameBanana) retryAnonymousRequest(
 	return g.request(ctx, method, rawURL, header, policy)
 }
 
-func (g *GameBanana) validateStoredRMCCookie(ctx context.Context, cookie string) (bool, string, error) {
-	return g.validateRMCCookie(ctx, cookie, requestPolicy{
+func (g *GameBanana) validateStoredRMCCookie(ctx context.Context, cookie string) (bool, memberSession, error) {
+	return g.resolveMemberSession(ctx, cookie, requestPolicy{
 		Cookie:                  cookie,
 		PersistResponseCookies:  false,
 		ClearStoredCookieOnAuth: false,
@@ -800,28 +803,21 @@ func (g *GameBanana) validateStoredRMCCookie(ctx context.Context, cookie string)
 	})
 }
 
-func (g *GameBanana) validateCandidateRMCCookie(ctx context.Context, cookie string) (bool, string, error) {
-	return g.validateRMCCookie(ctx, cookie, requestPolicy{
+func (g *GameBanana) validateCandidateRMCCookie(ctx context.Context, cookie string) (bool, memberSession, error) {
+	return g.resolveMemberSession(ctx, cookie, requestPolicy{
 		Cookie:                  cookie,
 		PersistResponseCookies:  false,
 		ClearStoredCookieOnAuth: false,
 		AuthFallback:            authFallbackNone,
 	})
-}
-
-func (g *GameBanana) validateRMCCookie(
-	ctx context.Context,
-	cookie string,
-	policy requestPolicy,
-) (bool, string, error) {
-	valid, session, err := g.resolveMemberSession(ctx, cookie, policy)
-	return valid, session.cookie, err
 }
 
 // memberSession is the validated identity of a stored or candidate session.
 type memberSession struct {
 	username string
 	cookie   string
+	// rejection keeps the annotated reason a cookie was refused; valid results leave it nil.
+	rejection error
 }
 
 // resolveMemberSession checks a cookie against the member profile endpoint and
@@ -843,7 +839,7 @@ func (g *GameBanana) resolveMemberSession(
 	)
 	if err != nil {
 		if errors.Is(err, ErrAuthFailed) || errors.Is(err, ErrAuthRequired) {
-			return false, memberSession{}, nil
+			return false, memberSession{rejection: err}, nil
 		}
 		return false, memberSession{}, err
 	}
@@ -861,7 +857,8 @@ func (g *GameBanana) resolveMemberSession(
 		return false, memberSession{}, infra.AnnotateError(infra.WithCause(ErrAuthCheckFailed, err), diagnostic)
 	}
 	if value["_sErrorCode"] == "LOGIN_REQUIRED" {
-		return false, memberSession{}, nil
+		diagnostic.Fields["reason"] = "profile-login-required"
+		return false, memberSession{rejection: infra.AnnotateError(ErrAuthRequired, diagnostic)}, nil
 	}
 	username, usernameOK := value["_sUsername"].(string)
 	_, profileOK := value["_sProfileUrl"].(string)

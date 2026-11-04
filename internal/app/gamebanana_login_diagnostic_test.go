@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -188,6 +189,115 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 			if strings.Contains(output.String(), "private-value") ||
 				strings.Contains(output.String(), "candidate-secret") {
 				t.Fatal("cookie value leaked")
+			}
+		})
+	}
+}
+
+func TestGameBananaLoginSessionSummaryOnUserClose(t *testing.T) {
+	var output bytes.Buffer
+	win := newFakeLoginWindow(
+		application.WebviewCookie{Name: "rmc", Value: "rejected-secret"},
+		application.WebviewCookie{Name: "cf_clearance", Value: "clearance-secret"},
+	)
+	login := newGameBananaLogin()
+	login.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	login.pollWait = 5 * time.Millisecond
+	login.factory = func() (loginWindow, error) { return win, nil }
+	login.proxyFailures = func(time.Time) []infra.ProxyFailureSummary {
+		return []infra.ProxyFailureSummary{{Host: "challenges.cloudflare.com", Kind: "dns-not-found", Count: 2}}
+	}
+	rejected := make(chan struct{})
+	validate := func(context.Context, string) (bool, error) {
+		close(rejected)
+		return false, nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := login.Open(context.Background(), validate)
+		done <- err
+	}()
+	select {
+	case <-rejected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("candidate was not validated")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !slices.Contains(win.deletedNames(), "rmc") {
+		if time.Now().After(deadline) {
+			t.Fatal("rejected candidate was not deleted")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	win.Close()
+	if err := <-done; !errors.Is(err, gamebanana.ErrLoginCancelled) {
+		t.Fatalf("Open error = %v", err)
+	}
+
+	log := output.String()
+	for _, want := range []string{
+		"GameBananaLogin.session", `"outcome":"user-closed"`, `"rejectedCount":1`, `"candidateCount":1`,
+		`"cookieNames":["cf_clearance","rmc"]`, `"host":"challenges.cloudflare.com"`,
+	} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("missing %q: %s", want, log)
+		}
+	}
+	if strings.Contains(log, "rejected-secret") || strings.Contains(log, "clearance-secret") {
+		t.Fatalf("cookie value leaked: %s", log)
+	}
+}
+
+func TestGameBananaLoginCleanCloseLogsOnlyProxyFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		appClose bool
+		failures []infra.ProxyFailureSummary
+		want     bool
+	}{
+		{name: "user close", want: false},
+		{name: "app close", appClose: true, want: false},
+		{
+			name:     "user close with proxy failures",
+			failures: []infra.ProxyFailureSummary{{Host: "gamebanana.com", Kind: "timeout", Count: 1}},
+			want:     true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			win := newFakeLoginWindow()
+			login := newGameBananaLogin()
+			login.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+			login.pollWait = 5 * time.Millisecond
+			login.factory = func() (loginWindow, error) { return win, nil }
+			login.proxyFailures = func(time.Time) []infra.ProxyFailureSummary { return tc.failures }
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
+					return false, nil
+				})
+				done <- err
+			}()
+			deadline := time.Now().Add(5 * time.Second)
+			for win.maxFlight.Load() == 0 {
+				if time.Now().After(deadline) {
+					t.Fatal("login window was not polled")
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			if tc.appClose {
+				login.Close()
+			} else {
+				win.Close()
+			}
+			if err := <-done; err == nil {
+				t.Fatal("Open succeeded after the window closed")
+			}
+
+			if got := strings.Contains(output.String(), "GameBananaLogin.session"); got != tc.want {
+				t.Fatalf("session summary logged = %v, want %v: %s", got, tc.want, output.String())
 			}
 		})
 	}

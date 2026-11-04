@@ -43,6 +43,42 @@ func TestEnsureSessionOpensLoginWhenCookieMissing(t *testing.T) {
 	}
 }
 
+func TestEnsureSessionLogsRejectedCandidateResponse(t *testing.T) {
+	var buf bytes.Buffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Cookie") != "rmc=fresh" {
+			w.Header().Set("CF-Ray", "ray-123")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, validMemberJSON)
+	}))
+	t.Cleanup(server.Close)
+	service, _ := gameBananaTestService(t, server)
+	service.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &buf, DisableFile: true})
+	service.openLogin = func(ctx context.Context, validate CookieValidator) (string, error) {
+		if ok, err := validate(ctx, "rmc=rejected-secret"); ok || err != nil {
+			t.Fatalf("rejected candidate = %v, %v", ok, err)
+		}
+		if ok, err := validate(ctx, "rmc=fresh"); !ok || err != nil {
+			t.Fatalf("fresh candidate = %v, %v", ok, err)
+		}
+		return "rmc=fresh", nil
+	}
+
+	if err := service.EnsureSession(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"stage":"reject-candidate-cookie"`, `"status":401`, `"CF-Ray":"ray-123"`} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("missing %q: %s", want, buf.String())
+		}
+	}
+	if strings.Contains(buf.String(), "rejected-secret") {
+		t.Fatalf("cookie value leaked: %s", buf.String())
+	}
+}
+
 func TestEnsureSessionSkipsLoginWhenStoredCookieValid(t *testing.T) {
 	var opens atomic.Int32
 	server := validProfileServer(t, "rmc=saved")
@@ -516,7 +552,8 @@ func TestValidateCandidateDoesNotPersistOrClearStoredCookie(t *testing.T) {
 	if err := service.saveCookie(context.Background(), "rmc=saved"); err != nil {
 		t.Fatal(err)
 	}
-	valid, merged, err := service.validateCandidateRMCCookie(context.Background(), "rmc=candidate")
+	valid, session, err := service.validateCandidateRMCCookie(context.Background(), "rmc=candidate")
+	merged := session.cookie
 	if valid || merged != "" || err != nil {
 		t.Fatalf("valid=%v merged=%q err=%v", valid, merged, err)
 	}
@@ -536,7 +573,8 @@ func TestManualAndAutoValidationShareRules(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	service, client := gameBananaTestService(t, server)
-	valid, merged, err := service.validateCandidateRMCCookie(context.Background(), "rmc=secret")
+	valid, session, err := service.validateCandidateRMCCookie(context.Background(), "rmc=secret")
+	merged := session.cookie
 	if err != nil || !valid || !strings.Contains(merged, "rmc=secret") {
 		t.Fatalf("auto valid=%v merged=%q err=%v", valid, merged, err)
 	}

@@ -168,7 +168,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 		})
 	})
 	viewers := newModelViewerWindows(app, rt)
-	rt.gameBananaLogin.Configure(app, rt.window, rt.log)
+	rt.gameBananaLogin.Configure(app, rt.window, rt.log, rt.proxyFailureSource())
 	if err := rt.updater.Configure(infra.UpdaterOptions{
 		Engine:   app.Updater,
 		Settings: rt.setting,
