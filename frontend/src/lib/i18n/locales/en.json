@@ -927,7 +927,8 @@
             "0": "The {{name}} folder already exists",
             "1": "{{processes}} is using the folder, so it cannot be modified",
             "1-fallback": "The folder is locked and cannot be modified",
-            "2": "Failed to change mod status"
+            "2": "Failed to change mod status",
+            "busy": "Another mod in this folder is still being toggled. Try again when it finishes."
           },
           "rename-mutation": {
             "0": "The {{name}} folder already exists",

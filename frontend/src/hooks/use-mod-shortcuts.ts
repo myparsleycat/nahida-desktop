@@ -87,7 +87,8 @@ export function useModShortcuts(
                 return;
             }
 
-            confirmEnable(mod, () => exclusiveToggleRef.current(mod));
+            const request = { mod, groupPath: modStore.getState().selectedGroup?.path };
+            confirmEnable(mod, () => exclusiveToggleRef.current(request));
             modStore.getState().setSearchQuery("");
         };
 

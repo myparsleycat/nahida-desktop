@@ -39,6 +39,7 @@ export function useModView(runner: ModFixRunner) {
         displayMods.length === 0 &&
         ((isPlaceholderData && activeGroup != null) || showDelayedSkeleton);
 
+    const { confirmEnable } = actions;
     const handleToggle = useCallback(
         (mod: ModInfo, event: ModToggleEvent) => {
             if (isMergeMode) {
@@ -46,17 +47,19 @@ export function useModView(runner: ModFixRunner) {
                 return;
             }
             const isExclusive = event.ctrlKey || event.metaKey;
-            actions.confirmEnable(mod, () => {
+            const request = { mod, groupPath: selectedGroupPath };
+            confirmEnable(mod, () => {
                 if (isExclusive) {
-                    exclusiveToggleModMutation.mutate(mod);
+                    exclusiveToggleModMutation.mutate(request);
                 } else {
-                    toggleModMutation.mutate(mod);
+                    toggleModMutation.mutate(request);
                 }
             });
         },
         [
-            actions,
+            confirmEnable,
             isMergeMode,
+            selectedGroupPath,
             toggleMergeSelection,
             toggleModMutation.mutate,
             exclusiveToggleModMutation.mutate,

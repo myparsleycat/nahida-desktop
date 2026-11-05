@@ -1,6 +1,7 @@
 import { Mod } from "@bindings/mod";
 import { Logger } from "@renderer/lib/logger";
 import { modStore, useModStore } from "@renderer/store/mod";
+import { getParentGroupPath } from "@shared/mod";
 import type {
     ClassificationGroup,
     FolderGroup,
@@ -285,19 +286,46 @@ export function useGameMutations() {
 
 // Toggling renames the mod folder, so a second request for the same mod would target a path that no longer
 // exists. Shared across hook instances because cards, rows, and shortcuts each create their own mutations.
-const togglingModPaths = new Set<string>();
+// Maps each toggling mod to the folder whose listing it belongs to.
+const togglingMods = new Map<string, string>();
+// An exclusive toggle also renames the mod's siblings, so it holds their whole listing. The listing is the
+// displayed group because an NTE pak wrapper's siblings sit in other wrappers below that group.
+const exclusiveTogglingGroups = new Set<string>();
 
-async function toggleOnce(mod: ModInfo, toggle: () => Promise<FolderGroup | null>) {
-    if (togglingModPaths.has(mod.path)) {
+async function toggleOnce(
+    mod: ModInfo,
+    options: { exclusive: boolean; groupPath: string | undefined; onBusy: () => void },
+    toggle: () => Promise<FolderGroup | null>,
+) {
+    if (togglingMods.has(mod.path)) {
         return null;
     }
-    togglingModPaths.add(mod.path);
+    const groupPath = options.groupPath ?? getParentGroupPath(mod.path) ?? mod.path;
+    if (
+        exclusiveTogglingGroups.has(groupPath) ||
+        (options.exclusive && [...togglingMods.values()].includes(groupPath))
+    ) {
+        options.onBusy();
+        return null;
+    }
+
+    togglingMods.set(mod.path, groupPath);
+    if (options.exclusive) {
+        exclusiveTogglingGroups.add(groupPath);
+    }
     try {
         return await toggle();
     } finally {
-        togglingModPaths.delete(mod.path);
+        togglingMods.delete(mod.path);
+        if (options.exclusive) {
+            exclusiveTogglingGroups.delete(groupPath);
+        }
     }
 }
+
+// `groupPath` is the group shown when the user asked for the toggle; a confirmation can delay the request
+// past a selection change.
+type ModToggleRequest = { mod: ModInfo; groupPath: string | undefined };
 
 export function useModMutations() {
     const { t } = useTranslation();
@@ -307,6 +335,10 @@ export function useModMutations() {
     const updateLocalGroupCache = (refreshedGroup: FolderGroup) => {
         queryClient.setQueryData(["modGroup", refreshedGroup.path], refreshedGroup);
         queryClient.setQueryData(["modGroupLight", refreshedGroup.path], refreshedGroup);
+    };
+
+    const showToggleBusy = () => {
+        toast.info(t("page.mod.hooks.use-mod-mutations.toggle-mutation.busy"));
     };
 
     const showToggleMutationError = (error: unknown) => {
@@ -386,11 +418,11 @@ export function useModMutations() {
     };
 
     const toggleModMutation = useMutation({
-        mutationFn: (mod: ModInfo) =>
-            toggleOnce(mod, async () => {
+        mutationFn: ({ mod, groupPath }: ModToggleRequest) =>
+            toggleOnce(mod, { exclusive: false, groupPath, onBusy: showToggleBusy }, async () => {
                 try {
                     await Mod.Toggle(mod.path);
-                    const currentGroupPath = selectedGroup?.path;
+                    const currentGroupPath = groupPath ?? selectedGroup?.path;
                     if (currentGroupPath) {
                         return (await Mod.GetMods(currentGroupPath)) as FolderGroup;
                     }
@@ -408,11 +440,11 @@ export function useModMutations() {
     });
 
     const exclusiveToggleModMutation = useMutation({
-        mutationFn: (mod: ModInfo) =>
-            toggleOnce(mod, async () => {
+        mutationFn: ({ mod, groupPath }: ModToggleRequest) =>
+            toggleOnce(mod, { exclusive: true, groupPath, onBusy: showToggleBusy }, async () => {
                 try {
                     await Mod.ExclusiveToggle(mod.path);
-                    const currentGroupPath = selectedGroup?.path;
+                    const currentGroupPath = groupPath ?? selectedGroup?.path;
                     if (currentGroupPath) {
                         return (await Mod.GetMods(currentGroupPath)) as FolderGroup;
                     }
