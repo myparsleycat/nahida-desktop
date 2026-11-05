@@ -18,6 +18,10 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import isURL from "validator/lib/isURL";
 
+// Matches the backend check, which accepts only absolute http and https URLs.
+const isDownloadURL = (value: string) =>
+  isURL(value, { require_protocol: true, protocols: ["http", "https"] });
+
 interface CustomDownloadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,7 +43,7 @@ export function CustomDownloadDialog({
     },
     onSubmit: async ({ value }) => {
       const trimmedUrl = value.url.trim();
-      if (!groupPath || !isURL(trimmedUrl)) {
+      if (!groupPath || !isDownloadURL(trimmedUrl)) {
         return;
       }
 
@@ -51,6 +55,14 @@ export function CustomDownloadDialog({
 
         if (code === "DOWNLOAD_URL_HTML_PAGE") {
           toast.warning(t("page.mod.content-header.download_dialog.file_only"));
+          return;
+        }
+        if (code === "DOWNLOAD_URL_REQUIRED" || code === "INVALID_DOWNLOAD_URL") {
+          toast.error(t("page.mod.content-header.download_dialog.invalid_url"));
+          return;
+        }
+        if (code === "UNSUPPORTED_DOWNLOAD_URL_PROTOCOL") {
+          toast.error(t("page.mod.content-header.download_dialog.unsupported_protocol"));
           return;
         }
 
@@ -102,7 +114,7 @@ export function CustomDownloadDialog({
                   return t("page.mod.content-header.download_dialog.invalid_url");
                 }
 
-                return isURL(trimmedValue)
+                return isDownloadURL(trimmedValue)
                   ? undefined
                   : t("page.mod.content-header.download_dialog.invalid_url");
               },

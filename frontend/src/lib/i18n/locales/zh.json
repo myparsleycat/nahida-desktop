@@ -481,7 +481,8 @@
           "no_target": "请先在左侧选择角色文件夹",
           "invalid_url": "请输入有效的 URL。",
           "file_only": "仅支持下载文件链接。",
-          "started": "已开始下载。"
+          "started": "已开始下载。",
+          "unsupported_protocol": "仅支持 http 和 https URL。"
         }
       },
       "applied-tools": {

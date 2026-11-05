@@ -481,7 +481,8 @@
           "no_target": "Select a character folder on the left",
           "invalid_url": "Enter a valid URL.",
           "file_only": "Only direct file downloads are supported.",
-          "started": "Download started."
+          "started": "Download started.",
+          "unsupported_protocol": "Only http and https URLs are supported."
         }
       },
       "applied-tools": {

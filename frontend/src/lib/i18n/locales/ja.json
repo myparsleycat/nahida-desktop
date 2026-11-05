@@ -481,7 +481,8 @@
           "no_target": "左側でキャラクターフォルダーを選択してください",
           "invalid_url": "有効なURLを入力してください。",
           "file_only": "ファイルURLのみダウンロードできます。",
-          "started": "ダウンロードを開始しました。"
+          "started": "ダウンロードを開始しました。",
+          "unsupported_protocol": "http と https の URL のみ対応しています。"
         }
       },
       "applied-tools": {
