@@ -9,7 +9,7 @@ export function useModRefreshOnFocus(selectedGame: string | null, queryClient: Q
     useEffect(() => {
         const handleFocus = () => {
             if (selectedGame) {
-                void queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+                void queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
             }
         };
 
@@ -34,7 +34,7 @@ export function useDownloadCompletionHandler(
 
             if (selectedGame) {
                 invalidations.push(
-                    queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] }),
+                    queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
                 );
             }
 
