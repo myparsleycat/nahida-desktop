@@ -310,7 +310,12 @@ func fpsUnlockerFolder() (string, error) {
 	return folder, nil
 }
 
-func (x *XXMI) prepareFPSUnlocker(ctx context.Context, cfg ImporterConfig, gameExe string) error {
+func (x *XXMI) prepareFPSUnlocker(
+	ctx context.Context,
+	cfg ImporterConfig,
+	gameExe string,
+	warn func(string),
+) error {
 	folder, err := fpsUnlockerFolder()
 	if err != nil {
 		releases, listErr := x.ListReleases(ctx, "gi-fps-unlocker")
@@ -361,20 +366,18 @@ func (x *XXMI) prepareFPSUnlocker(ctx context.Context, cfg ImporterConfig, gameE
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	data, info, err := root.readFile("fps_config.json")
-	if errors.Is(err, os.ErrNotExist) {
-		data, _, err = root.readFile("fps_config_template.json")
-	}
+	settings, data, info, err := readFPSUnlockerConfig(ctx, root, func(decodeErr error, backup string) {
+		warn(fmt.Sprintf(
+			"GI FPS Unlocker config %s was unreadable and was reset from the template; the original was saved as %s: %v",
+			filepath.Join(folder, "fps_config.json"),
+			filepath.Join(folder, backup),
+			decodeErr,
+		))
+	})
 	if err != nil {
 		return err
 	}
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return fmt.Errorf("decode GI FPS Unlocker config: %w", err)
-	}
-	if settings == nil {
-		return errors.New("GI FPS Unlocker config must be a JSON object")
-	}
+
 	priority := map[string]int{"Realtime": 0, "High": 1, "AboveNormal": 2, "Normal": 3, "BelowNormal": 4, "Low": 5}
 	windowModes := map[string][3]bool{
 		"Windowed": {false, false, false}, "Borderless": {true, false, false},
@@ -402,4 +405,57 @@ func (x *XXMI) prepareFPSUnlocker(ctx context.Context, cfg ImporterConfig, gameE
 		return nil
 	}
 	return root.writeFileAtomic(ctx, "fps_config.json", bytes.NewReader(encoded), 0o600, info)
+}
+
+// readFPSUnlockerConfig always returns the on-disk bytes and snapshot of fps_config.json, even when the
+// settings come from the template, so the caller rewrites a damaged file. unlockfps_nc.exe rewrites
+// fps_config.json in place on exit, and an interrupted write leaves a NUL-filled file that would otherwise
+// block every launch. The damaged file is copied aside first so unmanaged unlocker options can be recovered.
+func readFPSUnlockerConfig(
+	ctx context.Context,
+	root *installRoot,
+	onCorrupt func(decodeErr error, backup string),
+) (map[string]any, []byte, *installFileSnapshot, error) {
+	data, info, err := root.readFile("fps_config.json")
+	if errors.Is(err, os.ErrNotExist) {
+		template, _, err := root.readFile("fps_config_template.json")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		settings, err := decodeFPSUnlockerConfig("fps_config_template.json", template)
+		return settings, template, nil, err
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	settings, decodeErr := decodeFPSUnlockerConfig("fps_config.json", data)
+	if decodeErr == nil {
+		return settings, data, info, nil
+	}
+	template, _, err := root.readFile("fps_config_template.json")
+	if err != nil {
+		return nil, nil, nil, errors.Join(decodeErr, err)
+	}
+	settings, err = decodeFPSUnlockerConfig("fps_config_template.json", template)
+	if err != nil {
+		return nil, nil, nil, errors.Join(decodeErr, err)
+	}
+	backup := fmt.Sprintf("fps_config.json.corrupt-%d", time.Now().UnixNano())
+	if err := root.writeFileAtomic(ctx, backup, bytes.NewReader(data), 0o600, nil); err != nil {
+		return nil, nil, nil, errors.Join(decodeErr, fmt.Errorf("back up GI FPS Unlocker config: %w", err))
+	}
+	onCorrupt(decodeErr, backup)
+	return settings, data, info, nil
+}
+
+func decodeFPSUnlockerConfig(name string, data []byte) (map[string]any, error) {
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return nil, fmt.Errorf("decode GI FPS Unlocker %s: %w", name, err)
+	}
+	if settings == nil {
+		return nil, fmt.Errorf("GI FPS Unlocker %s must be a JSON object", name)
+	}
+	return settings, nil
 }

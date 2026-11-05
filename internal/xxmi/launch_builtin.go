@@ -430,7 +430,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 	}
 	if usesFPSUnlocker(cfg) {
-		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe); err != nil {
+		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe, warn); err != nil {
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
