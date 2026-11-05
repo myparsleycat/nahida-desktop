@@ -968,7 +968,11 @@
         "rename": "重命名",
         "find-conflict": "查找冲突模组",
         "preset": "预设",
-        "fix_tool": "修复工具"
+        "fix_tool": "修复工具",
+        "group-preview": "预览",
+        "group-fix": "修复",
+        "no_presets": "没有预设",
+        "no_fix_tools": "没有修复工具"
       },
       "toast": {
         "trash-error": "删除失败",
@@ -999,7 +1003,8 @@
         "collapse_ini_list": "收起 INI 列表",
         "expand_ini_list": "展开 INI 列表",
         "preset_count": "预设 ({{total}})",
-        "fix_tool_count": "修复工具 ({{total}})"
+        "fix_tool_count": "修复工具 ({{total}})",
+        "mod_tools": "模组工具"
       },
       "sidebar": {
         "resize": "调整模组侧边栏大小"

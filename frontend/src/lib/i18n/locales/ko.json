@@ -968,7 +968,11 @@
         "rename": "이름 변경",
         "find-conflict": "충돌 모드 찾기",
         "preset": "프리셋",
-        "fix_tool": "수정 도구"
+        "fix_tool": "수정 도구",
+        "group-preview": "미리보기",
+        "group-fix": "수정",
+        "no_presets": "프리셋 없음",
+        "no_fix_tools": "수정 도구 없음"
       },
       "toast": {
         "trash-error": "삭제 실패",
@@ -999,7 +1003,8 @@
         "collapse_ini_list": "INI 목록 접기",
         "expand_ini_list": "INI 목록 펼치기",
         "preset_count": "프리셋 ({{total}})",
-        "fix_tool_count": "수정 도구 ({{total}})"
+        "fix_tool_count": "수정 도구 ({{total}})",
+        "mod_tools": "모드 도구"
       },
       "sidebar": {
         "resize": "모드 사이드바 크기 조절"

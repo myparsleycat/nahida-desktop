@@ -968,7 +968,11 @@
         "rename": "名前を変更",
         "find-conflict": "競合モードを探す",
         "preset": "プリセット",
-        "fix_tool": "修正ツール"
+        "fix_tool": "修正ツール",
+        "group-preview": "プレビュー",
+        "group-fix": "修正",
+        "no_presets": "プリセットがありません",
+        "no_fix_tools": "修正ツールがありません"
       },
       "toast": {
         "trash-error": "削除失敗",
@@ -999,7 +1003,8 @@
         "collapse_ini_list": "INI リストを折りたたむ",
         "expand_ini_list": "INI リストを展開",
         "preset_count": "プリセット ({{total}})",
-        "fix_tool_count": "修正ツール ({{total}})"
+        "fix_tool_count": "修正ツール ({{total}})",
+        "mod_tools": "MOD ツール"
       },
       "sidebar": {
         "resize": "MOD サイドバーのサイズを変更"

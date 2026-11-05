@@ -103,7 +103,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
         {(mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) ?? false) && (
           <>
             <ContextMenuGroup>
-              <ContextMenuLabel>Preview</ContextMenuLabel>
+              <ContextMenuLabel>{t("page.mod.context-menu.group-preview")}</ContextMenuLabel>
               <ContextMenuItem
                 onClick={() => {
                   if (!mod.preview) {
@@ -131,7 +131,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
         {!mod.preview && (
           <>
             <ContextMenuGroup>
-              <ContextMenuLabel>Preview</ContextMenuLabel>
+              <ContextMenuLabel>{t("page.mod.context-menu.group-preview")}</ContextMenuLabel>
               <ContextMenuItem onClick={() => actions.openPastePreview(mod)}>
                 <ClipboardIcon className="mr-2 size-4" />
                 {t("page.mod.context-menu.paste-preview")}
@@ -143,7 +143,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
         {!actions.isNteGame && (
           <>
             <ContextMenuGroup>
-              <ContextMenuLabel>Fix</ContextMenuLabel>
+              <ContextMenuLabel>{t("page.mod.context-menu.group-fix")}</ContextMenuLabel>
               <ContextMenuSub>
                 <ContextMenuSubTrigger>{t("page.mod.context-menu.preset")}</ContextMenuSubTrigger>
                 <ContextMenuSubContent>
@@ -157,7 +157,9 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                       </ContextMenuItem>
                     ))}
                     {actions.fixRunner.presets.length === 0 && (
-                      <ContextMenuItem disabled>No Presets</ContextMenuItem>
+                      <ContextMenuItem disabled>
+                        {t("page.mod.context-menu.no_presets")}
+                      </ContextMenuItem>
                     )}
                   </ContextMenuGroup>
                 </ContextMenuSubContent>
@@ -175,7 +177,9 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                       </ContextMenuItem>
                     ))}
                     {actions.fixRunner.fixTools.length === 0 && (
-                      <ContextMenuItem disabled>No Fix Tools</ContextMenuItem>
+                      <ContextMenuItem disabled>
+                        {t("page.mod.context-menu.no_fix_tools")}
+                      </ContextMenuItem>
                     )}
                   </ContextMenuGroup>
                 </ContextMenuSubContent>

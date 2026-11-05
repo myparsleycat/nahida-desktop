@@ -968,7 +968,11 @@
         "rename": "Rename",
         "find-conflict": "Find Conflict Mods",
         "preset": "Preset",
-        "fix_tool": "Fix Tool"
+        "fix_tool": "Fix Tool",
+        "group-preview": "Preview",
+        "group-fix": "Fix",
+        "no_presets": "No presets",
+        "no_fix_tools": "No fix tools"
       },
       "toast": {
         "trash-error": "Failed to delete",
@@ -999,7 +1003,8 @@
         "collapse_ini_list": "Collapse INI list",
         "expand_ini_list": "Expand INI list",
         "preset_count": "Preset ({{total}})",
-        "fix_tool_count": "Fix Tool ({{total}})"
+        "fix_tool_count": "Fix Tool ({{total}})",
+        "mod_tools": "Mod Tools"
       },
       "sidebar": {
         "resize": "Resize mod sidebar"

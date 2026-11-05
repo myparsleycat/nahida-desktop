@@ -107,7 +107,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 className="w-full max-w-52"
               >
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Mod Tools</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("page.mod.card.mod_tools")}</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={(event) => {
                       event.stopPropagation();
