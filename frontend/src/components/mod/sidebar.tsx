@@ -211,6 +211,31 @@ export default function ModSidebar({
     };
   }, [scheduleSidebarWidthSave, stopDragging]);
 
+  const handleResizeKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? 64 : 16;
+      const target =
+        event.key === "ArrowLeft"
+          ? sidebarWidth - step
+          : event.key === "ArrowRight"
+            ? sidebarWidth + step
+            : event.key === "Home"
+              ? CHARACTER_SIDEBAR_WIDTH_MIN
+              : event.key === "End"
+                ? CHARACTER_SIDEBAR_WIDTH_MAX
+                : null;
+      if (target === null) {
+        return;
+      }
+
+      event.preventDefault();
+      const nextWidth = clampCharacterSidebarWidth(target);
+      setSidebarWidth(nextWidth);
+      scheduleSidebarWidthSave(nextWidth);
+    },
+    [scheduleSidebarWidthSave, sidebarWidth],
+  );
+
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) {
@@ -263,10 +288,15 @@ export default function ModSidebar({
         role="separator"
         aria-orientation="vertical"
         aria-label={t("page.mod.sidebar.resize")}
-        className="group absolute inset-y-0 -right-[1.5px] z-30 flex w-[3px] cursor-col-resize touch-none items-center justify-center"
+        aria-valuenow={sidebarWidth}
+        aria-valuemin={CHARACTER_SIDEBAR_WIDTH_MIN}
+        aria-valuemax={CHARACTER_SIDEBAR_WIDTH_MAX}
+        tabIndex={0}
+        className="group absolute inset-y-0 -right-[1.5px] z-30 flex w-[3px] cursor-col-resize touch-none items-center justify-center outline-none"
         onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
       >
-        <div className="h-full w-px bg-border/60 transition-colors group-hover:bg-primary/70" />
+        <div className="h-full w-px bg-border/60 transition-colors group-hover:bg-primary/70 group-focus-visible:bg-primary" />
       </div>
     </div>
   );
