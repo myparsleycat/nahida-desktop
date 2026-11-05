@@ -527,7 +527,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
             <Button variant="outline" onClick={() => runner.setShowOptionsDialog(false)}>
               {t("g.cancel")}
             </Button>
-            <Button onClick={() => void runner.handleRunWuwaFixer()}>
+            <Button disabled={runner.isRunning} onClick={() => void runner.handleRunWuwaFixer()}>
               {t(`${translationKey}.options.run`)}
             </Button>
           </DialogFooter>

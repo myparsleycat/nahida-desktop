@@ -247,10 +247,11 @@ export function useModFixRunner() {
   };
 
   const handleRunWuwaFixer = async () => {
-    if (!activeModPath) {
+    if (!activeModPath || runInProgressRef.current) {
       return;
     }
 
+    runInProgressRef.current = true;
     setActiveRunKind("wuwa");
     setShowLogModal(true);
     setLogs([]);
@@ -259,9 +260,12 @@ export function useModFixRunner() {
     try {
       await Tools.WuwaFixerRun(activeModPath, wuwaOptions);
     } catch (error) {
+      // Setup failures such as a missing install or a config fetch error return before the run writes any log line.
       Logger.capture("hooks/use-mod-fix-runner.tsx", error);
+      toast.error(toErrorMessage(error));
     } finally {
       setIsRunning(false);
+      runInProgressRef.current = false;
     }
   };
 
