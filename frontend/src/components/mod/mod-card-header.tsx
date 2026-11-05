@@ -14,6 +14,7 @@ import { TruncatedText } from "@renderer/components/ui/truncated-text";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { openModAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
+import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { stripDisabledPrefix } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
@@ -48,7 +49,7 @@ interface ModCardHeaderProps {
 export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCardHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const isConvertingModel = actions.convertingModelPath === mod.path;
+  const isConvertingModel = useModStore((s) => s.convertingModelPath === mod.path);
   const missingDependencies = mod.dependencies?.filter((dependency) => !dependency.installed) ?? [];
 
   return (

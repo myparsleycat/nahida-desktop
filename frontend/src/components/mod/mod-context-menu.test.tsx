@@ -51,7 +51,6 @@ function renderMenu(game: { isEfmiGame: boolean; isNteGame: boolean }) {
   const openEfmiOutlineDialog = vi.fn();
   const actions = {
     ...game,
-    convertingModelPath: null,
     fixRunner: { presets: [], fixTools: [], modFixer: null, isPreparing: false },
     openEfmiOutlineDialog,
   } as unknown as ModActionApi;

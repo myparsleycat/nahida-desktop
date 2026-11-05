@@ -263,6 +263,7 @@ export interface ModInfo {
     previewImages?: string[];
     mtime: number;
     size: number;
+    signature?: string;
     isDownloading?: boolean;
     isDownloadPlaceholder?: boolean;
     inis: {

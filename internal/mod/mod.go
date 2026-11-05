@@ -279,6 +279,9 @@ type ModInfo struct {
 	Dependencies []ModDependency `json:"dependencies,omitempty"`
 	// AppliedTools lists the appliedtool IDs of the tools whose output is in the mod.
 	AppliedTools []string `json:"appliedTools,omitempty"`
+	// Signature changes when any file in the mod is added, removed, renamed, resized, or touched. The full scan
+	// fills it so the renderer can cache derived images across listings.
+	Signature string `json:"signature,omitempty"`
 }
 
 type FolderGroup struct {

@@ -16,12 +16,44 @@ export function useModShortcuts(
     const latestFilteredModsRef = useRef(filteredMods);
     const { exclusiveToggleModMutation } = useModMutations();
     const exclusiveToggleRef = useRef(exclusiveToggleModMutation.mutate);
+    const confirmEnableRef = useRef(confirmEnable);
+    // The filtered list follows a deferred query, so an Enter pressed before it catches up waits for that query.
+    const pendingEnterQueryRef = useRef<string | null>(null);
 
     useLayoutEffect(() => {
         latestSearchQueryRef.current = searchQuery;
         latestFilteredModsRef.current = filteredMods;
         exclusiveToggleRef.current = exclusiveToggleModMutation.mutate;
+        confirmEnableRef.current = confirmEnable;
     });
+
+    useEffect(
+        () =>
+            modStore.subscribe((state, previous) => {
+                if (state.searchQuery !== previous.searchQuery) {
+                    pendingEnterQueryRef.current = null;
+                }
+            }),
+        [],
+    );
+
+    useEffect(() => {
+        if (pendingEnterQueryRef.current !== searchQuery) {
+            return;
+        }
+        pendingEnterQueryRef.current = null;
+        if (
+            document.activeElement === document.getElementById("mod-search-input") &&
+            !modStore.getState().isMergeMode &&
+            filteredMods.length === 1
+        ) {
+            toggleSearchMatch(
+                filteredMods[0],
+                confirmEnableRef.current,
+                exclusiveToggleRef.current,
+            );
+        }
+    }, [filteredMods, searchQuery]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,7 +102,13 @@ export function useModShortcuts(
             }
 
             const modSearch = document.getElementById("mod-search-input");
-            if (document.activeElement !== modSearch || !latestSearchQueryRef.current) {
+            const { searchQuery } = modStore.getState();
+            if (document.activeElement !== modSearch || !searchQuery) {
+                return;
+            }
+            if (latestSearchQueryRef.current !== searchQuery) {
+                e.preventDefault();
+                pendingEnterQueryRef.current = searchQuery;
                 return;
             }
 
@@ -78,23 +116,31 @@ export function useModShortcuts(
                 return;
             }
 
-            const mod = latestFilteredModsRef.current[0];
             e.preventDefault();
-            if (
-                mod.isDownloading ||
-                findModDownloadTransfer(globalStore.getState().transfers, mod.path)
-            ) {
-                return;
-            }
-
-            const request = { mod, groupPath: modStore.getState().selectedGroup?.path };
-            confirmEnable(mod, () => exclusiveToggleRef.current(request));
-            modStore.getState().setSearchQuery("");
+            toggleSearchMatch(
+                latestFilteredModsRef.current[0],
+                confirmEnableRef.current,
+                exclusiveToggleRef.current,
+            );
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [confirmEnable]);
+    }, []);
+}
+
+function toggleSearchMatch(
+    mod: ModInfo,
+    confirmEnable: ModActionApi["confirmEnable"],
+    exclusiveToggle: ReturnType<typeof useModMutations>["exclusiveToggleModMutation"]["mutate"],
+) {
+    if (mod.isDownloading || findModDownloadTransfer(globalStore.getState().transfers, mod.path)) {
+        return;
+    }
+
+    const request = { mod, groupPath: modStore.getState().selectedGroup?.path };
+    confirmEnable(mod, () => exclusiveToggle(request));
+    modStore.getState().setSearchQuery("");
 }
 
 function hasOpenDialogOrOverlay() {

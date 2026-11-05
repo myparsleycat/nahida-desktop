@@ -14,21 +14,28 @@ export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
     const sortType = useModStore((s) => s.sortType);
     const sortOrder = useModStore((s) => s.sortOrder);
 
+    const hasQuery = searchQuery.length > 0;
+    const searchIndex = useMemo(
+        () =>
+            hasQuery
+                ? mods.map((mod) => {
+                      const lowerName = mod.name.toLowerCase();
+                      return {
+                          lowerName,
+                          jamo: disassemble(lowerName),
+                          chosung: getChoseong(lowerName),
+                      };
+                  })
+                : [],
+        [hasQuery, mods],
+    );
+
     return useMemo(() => {
-        const scoredMods = mods.map((m) => {
-            if (!searchQuery) return { mod: m, score: 0 };
-            const query = searchQuery.toLowerCase();
-            const lowerName = m.name.toLowerCase();
-            const cachedData = {
-                lowerName,
-                jamo: disassemble(lowerName),
-                chosung: getChoseong(lowerName),
-            };
-            return {
-                mod: m,
-                score: getSearchScore(m.name, query, cachedData),
-            };
-        });
+        const query = searchQuery.toLowerCase();
+        const scoredMods = mods.map((m, index) => ({
+            mod: m,
+            score: searchQuery ? getSearchScore(m.name, query, searchIndex[index]) : 0,
+        }));
 
         const filtered = searchQuery ? scoredMods.filter((sm) => sm.score > 0) : scoredMods;
 
@@ -58,5 +65,5 @@ export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
                 return sortOrder === "asc" ? comparison : -comparison;
             })
             .map((sm) => sm.mod);
-    }, [mods, searchQuery, sortType, sortOrder]);
+    }, [mods, searchIndex, searchQuery, sortType, sortOrder]);
 }

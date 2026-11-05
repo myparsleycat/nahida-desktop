@@ -48,6 +48,32 @@ func TestWalkModCollectsSizeMtimeIniAndPreviewInOnePass(t *testing.T) {
 	}
 }
 
+func TestWalkModSignatureTracksFileRenamesWithUnchangedMetadata(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	group := filepath.Join(root, "Char")
+	modPath := filepath.Join(group, "Mod")
+	writeModFile(t, modPath, "mod.ini", "[Constants]\n")
+	buffer := writeModFile(t, modPath, "body.buf", "xxxxx")
+
+	first := walkMod(group, modPath)
+	again := walkMod(group, modPath)
+	if first == nil || first.info.Signature == "" || again.info.Signature != first.info.Signature {
+		t.Fatalf("signature is not stable: %#v, %#v", first, again)
+	}
+
+	if err := os.Rename(buffer, filepath.Join(modPath, "head.buf")); err != nil {
+		t.Fatal(err)
+	}
+	renamed := walkMod(group, modPath)
+	if renamed.info.Size != first.info.Size || renamed.info.Mtime != first.info.Mtime {
+		t.Fatalf("rename changed size or mtime: %#v -> %#v", first.info, renamed.info)
+	}
+	if renamed.info.Signature == first.info.Signature {
+		t.Fatal("signature did not change after a file rename")
+	}
+}
+
 func TestOrdinaryScannerExcludesOGGWhileNTEPreviewFinderAcceptsIt(t *testing.T) {
 	t.Parallel()
 

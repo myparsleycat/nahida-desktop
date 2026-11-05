@@ -28,6 +28,10 @@ const MODEL_PREVIEW_SIZE = 512;
 const MODEL_PREVIEW_CACHE_ENTRIES = 64;
 const MODEL_PREVIEW_CACHE_BYTES = 64 * 1024 * 1024;
 const MODEL_PREVIEW_RENDER_TIMEOUT_MS = 30_000;
+// Failures can be transient (timeouts, a busy worker), and the controller outlives listing refreshes,
+// so a failed key is retried once after this delay; a second failure is kept until the controller is rebuilt.
+const MODEL_PREVIEW_FAILURE_RETRY_MS = 60_000;
+const MODEL_PREVIEW_FAILURE_RETRIES = 1;
 
 const modelPreviewSettingsConfig = {
   enabled: "mod.gridModelPreview",
@@ -130,7 +134,7 @@ export class GridModelPreviewCache {
 }
 
 export class GridModelPreviewController {
-  private readonly failedKeys = new Set<string>();
+  private readonly failures = new Map<string, { at: number; count: number }>();
   private readonly cache = new GridModelPreviewCache();
   private readonly entries = new Map<string, PreviewEntry>();
   private readonly queue: PreviewEntry[] = [];
@@ -155,7 +159,12 @@ export class GridModelPreviewController {
       listener({ status: "ready", url: cached });
       return () => {};
     }
-    if (this.failedKeys.has(requestKey)) {
+    const failure = this.failures.get(requestKey);
+    if (
+      failure &&
+      (failure.count > MODEL_PREVIEW_FAILURE_RETRIES ||
+        Date.now() - failure.at < MODEL_PREVIEW_FAILURE_RETRY_MS)
+    ) {
       listener({ status: "unavailable" });
       return () => {};
     }
@@ -217,7 +226,7 @@ export class GridModelPreviewController {
       if (blob) {
         this.settle(entry, { status: "ready", url: this.cache.set(entry.requestKey, blob) });
       } else {
-        this.failedKeys.add(entry.requestKey);
+        this.recordFailure(entry.requestKey);
         this.settle(entry, { status: "unavailable" });
       }
 
@@ -245,7 +254,7 @@ export class GridModelPreviewController {
     }
     this.queue.splice(0);
     this.entries.clear();
-    this.failedKeys.clear();
+    this.failures.clear();
     this.cache.clear();
     this.showRenderTask(null);
 
@@ -260,6 +269,11 @@ export class GridModelPreviewController {
       }
     }
     this.activeTask = null;
+  }
+
+  private recordFailure(requestKey: string) {
+    const count = (this.failures.get(requestKey)?.count ?? 0) + 1;
+    this.failures.set(requestKey, { at: Date.now(), count });
   }
 
   private settle(entry: PreviewEntry, state: GridModelPreviewState) {
@@ -320,7 +334,7 @@ export class GridModelPreviewController {
           { modName: entry.mod.name, modPath: entry.mod.path, sessionId },
           error,
         );
-        this.failedKeys.add(entry.requestKey);
+        this.recordFailure(entry.requestKey);
         this.settle(entry, { status: "unavailable" });
       }
       this.entries.delete(entry.requestKey);
@@ -424,11 +438,9 @@ export class GridModelPreviewRenderer {
 
 export function GridModelPreviewProvider({
   children,
-  sourceRevision,
   viewport,
 }: {
   children: ReactNode;
-  sourceRevision: number;
   viewport: HTMLDivElement | null;
 }) {
   const { settings, isLoading } = useSettings(modelPreviewSettingsConfig);
@@ -462,8 +474,7 @@ export function GridModelPreviewProvider({
 
   useEffect(() => () => renderer?.dispose(), [renderer]);
 
-  // File renames and timestamp-preserving edits can leave the mod metadata unchanged, so a source
-  // refresh drops every cached preview.
+  // Request keys carry each mod's content signature, so cached previews survive listing refreshes.
   const controller = useMemo(() => {
     if (!renderSettings || !renderer) {
       return null;
@@ -483,7 +494,7 @@ export function GridModelPreviewProvider({
       },
     );
     return next;
-  }, [renderSettings, renderer, sourceRevision]);
+  }, [renderSettings, renderer]);
 
   useEffect(() => () => controller?.dispose(), [controller]);
 
@@ -502,11 +513,26 @@ export function useGridModelPreview(mod: ModInfo, eligible: boolean) {
   const context = useContext(GridModelPreviewContext);
   const [node, setNode] = useState<HTMLDivElement | null>(null);
   const identity = createGridModelPreviewIdentity(mod);
+  // The identity stays empty until the controller reports, so only a reported failure schedules a retry.
   const [result, setResult] = useState<{
     identity: string;
     state: GridModelPreviewState;
-  }>({ identity, state: { status: "unavailable" } });
+  }>({ identity: "", state: { status: "unavailable" } });
+  const [retryCount, setRetryCount] = useState(0);
   const enabled = eligible && context.enabled;
+  const failed = enabled && result.identity === identity && result.state.status === "unavailable";
+
+  // A card that stays in view never resubscribes on its own, so a failed preview is retried here.
+  useEffect(() => {
+    if (!failed) {
+      return;
+    }
+    const timer = setTimeout(
+      () => setRetryCount((count) => count + 1),
+      MODEL_PREVIEW_FAILURE_RETRY_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [failed, retryCount]);
 
   useEffect(() => {
     if (!enabled || !node) {
@@ -538,7 +564,7 @@ export function useGridModelPreview(mod: ModInfo, eligible: boolean) {
       observer.disconnect();
       unsubscribeCurrent();
     };
-  }, [context, enabled, identity, mod, node]);
+  }, [context, enabled, identity, mod, node, retryCount]);
 
   const state =
     enabled && result.identity === identity ? result.state : ({ status: "unavailable" } as const);
@@ -548,7 +574,7 @@ export function useGridModelPreview(mod: ModInfo, eligible: boolean) {
 function createGridModelPreviewIdentity(mod: ModInfo) {
   return JSON.stringify([
     mod.path,
-    mod.mtime,
+    mod.signature ?? mod.mtime,
     mod.inis.flatMap((ini) =>
       ini.toggleKeys.map((toggle) => [toggle.iniFileName, toggle.variable, toggle.currentValue]),
     ),
@@ -597,7 +623,13 @@ export function createGridModelPreviewRequestKey(
       toggle.currentValue ?? null,
     ]),
   );
-  return JSON.stringify([mod.path.toLowerCase(), mod.mtime, toggles, settings, "512@1-v1"]);
+  return JSON.stringify([
+    mod.path.toLowerCase(),
+    mod.signature ?? mod.mtime,
+    toggles,
+    settings,
+    "512@1-v1",
+  ]);
 }
 
 async function cleanupModelPreviewSession(sessionId: string) {

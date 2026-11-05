@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"hash"
+	"hash/fnv"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -282,6 +285,9 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 	found := false
 	var buckets previewBuckets
 	var images []previewCandidate
+	signature := fnv.New64a()
+	var signatureBuffer []byte
+	signatureRoot := filepath.Clean(modPath)
 	_ = filepath.WalkDir(modPath, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			reportScanFailure(err, reports)
@@ -302,6 +308,7 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 			if mtime := fileMtimeMS(metadata); mtime > info.Mtime {
 				info.Mtime = mtime
 			}
+			signatureBuffer = writeSignatureEntry(signature, signatureBuffer, signatureRoot, path, metadata)
 		}
 		if strings.EqualFold(filepath.Ext(path), ".ini") &&
 			!strings.HasPrefix(strings.ToLower(entry.Name()), "disabled") {
@@ -320,11 +327,24 @@ func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
 			info.Mtime = fileMtimeMS(metadata)
 		}
 	}
+	info.Signature = strconv.FormatUint(signature.Sum64(), 16)
 	info.Preview = buckets.bestPath()
 	info.PreviewImages = sortedPreviewImages(images)
 	applyDefaultPreview(info, modPath, reports...)
 	applyAppliedTools(info, modPath, reports...)
 	return &walkedMod{info: info, iniPaths: iniPaths}
+}
+
+// root must be cleaned: WalkDir joins child paths with filepath.Join, which cleans the root it was given.
+func writeSignatureEntry(signature hash.Hash, buffer []byte, root, path string, metadata fs.FileInfo) []byte {
+	buffer = append(buffer[:0], strings.TrimPrefix(path, root)...)
+	buffer = append(buffer, 0)
+	buffer = strconv.AppendInt(buffer, metadata.Size(), 10)
+	buffer = append(buffer, 0)
+	buffer = strconv.AppendInt(buffer, metadata.ModTime().UnixNano(), 10)
+	buffer = append(buffer, 0)
+	_, _ = signature.Write(buffer)
+	return buffer
 }
 
 func scanMod(groupPath, modPath string, reports ...func(error)) *ModInfo {

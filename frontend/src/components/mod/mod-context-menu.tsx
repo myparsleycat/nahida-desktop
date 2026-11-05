@@ -15,6 +15,7 @@ import {
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { openModAgent } from "@renderer/lib/agent-navigation";
 import { Logger } from "@renderer/lib/logger";
+import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -57,7 +58,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
   } | null>(null);
   const gameBananaModId =
     gameBananaSource?.modPath === mod.path ? gameBananaSource.modId : undefined;
-  const isConvertingModel = actions.convertingModelPath === mod.path;
+  const isConvertingModel = useModStore((s) => s.convertingModelPath === mod.path);
 
   if (disabled) {
     return children;

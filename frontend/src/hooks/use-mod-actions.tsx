@@ -87,7 +87,6 @@ export interface ModActionApi {
   isNteGame: boolean;
   isEfmiGame: boolean;
   supportsLiquidEmitter: boolean;
-  convertingModelPath: string | null;
   /** Runs enable at once, or after the user confirms when enabling a mod with a missing dependency. */
   confirmEnable: (mod: ModInfo, enable: () => void) => void;
   openDeleteMod: (mod: ModInfo) => void;
@@ -109,12 +108,7 @@ export interface ModActionApi {
 
 type ModActionHandlers = Omit<
   ModActionApi,
-  | "fixRunner"
-  | "isNteGame"
-  | "isEfmiGame"
-  | "supportsLiquidEmitter"
-  | "convertingModelPath"
-  | "confirmEnable"
+  "fixRunner" | "isNteGame" | "isEfmiGame" | "supportsLiquidEmitter" | "confirmEnable"
 >;
 
 function invalidateModGroup(queryClient: QueryClient, groupPath?: string) {
@@ -157,7 +151,7 @@ export function useModActions(
     groupPath?: string;
     mod: ModInfo;
   } | null>(null);
-  const [convertingModelPath, setConvertingModelPath] = useState<string | null>(null);
+  const setConvertingModelPath = useModStore((s) => s.setConvertingModelPath);
   const [modelViewerState, setModelViewerState] = useState<{
     groupPath?: string;
     mod: ModInfo;
@@ -176,7 +170,6 @@ export function useModActions(
 
   if (modelViewerGroupPath !== selectedGroupPath) {
     setModelViewerGroupPath(selectedGroupPath);
-    setConvertingModelPath(null);
     setModelViewerState(null);
     setShowModelViewer(false);
   }
@@ -186,9 +179,10 @@ export function useModActions(
     return () => {
       modelViewerLifetimeRef.current = null;
       modelViewerRequestRef.current = null;
+      setConvertingModelPath(null);
       cleanupModelViewer();
     };
-  }, [selectedGroupPath, cleanupModelViewer]);
+  }, [selectedGroupPath, cleanupModelViewer, setConvertingModelPath]);
 
   const [enableConfirmState, setEnableConfirmState] = useState<{
     mod: ModInfo;
@@ -630,18 +624,9 @@ export function useModActions(
       isNteGame,
       isEfmiGame,
       supportsLiquidEmitter,
-      convertingModelPath,
       confirmEnable,
     }),
-    [
-      confirmEnable,
-      convertingModelPath,
-      fixRunner,
-      isEfmiGame,
-      isNteGame,
-      stableHandlers,
-      supportsLiquidEmitter,
-    ],
+    [confirmEnable, fixRunner, isEfmiGame, isNteGame, stableHandlers, supportsLiquidEmitter],
   );
 
   return { actions, overlays };

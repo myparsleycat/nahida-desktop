@@ -20,6 +20,9 @@ interface ModState {
     setDeletingGame: (game: string | null) => void;
     selectedGroup: FolderGroup | null;
     setSelectedGroup: (group: FolderGroup | null) => void;
+    // Kept out of the memoized mod actions so only the affected card rerenders.
+    convertingModelPath: string | null;
+    setConvertingModelPath: (path: string | null) => void;
     selectedPreset: Preset | null;
     setSelectedPreset: (preset: Preset | null) => void;
     isPresetDialogOpen: boolean;
@@ -101,6 +104,7 @@ export const modStore = createStore<ModState>((set) => ({
     setSelectedGame: (selectedGame) =>
         set({
             selectedGame,
+            convertingModelPath: null,
             isMergeMode: false,
             selectedModPaths: new Set(),
             isMergeDialogOpen: false,
@@ -111,10 +115,13 @@ export const modStore = createStore<ModState>((set) => ({
     setSelectedGroup: (selectedGroup) =>
         set({
             selectedGroup,
+            convertingModelPath: null,
             isMergeMode: false,
             selectedModPaths: new Set(),
             isMergeDialogOpen: false,
         }),
+    convertingModelPath: null,
+    setConvertingModelPath: (convertingModelPath) => set({ convertingModelPath }),
     selectedPreset: null,
     setSelectedPreset: (selectedPreset) => set({ selectedPreset }),
     isPresetDialogOpen: false,

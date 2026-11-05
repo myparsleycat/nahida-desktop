@@ -8,19 +8,15 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { type KeyboardEvent, type MouseEvent, useCallback } from "react";
+import { type KeyboardEvent, type MouseEvent, useCallback, useDeferredValue } from "react";
 
 export type ModToggleEvent = MouseEvent | KeyboardEvent;
 
 export function useModView(runner: ModFixRunner) {
-    const searchQuery = useModStore((s) => s.searchQuery);
+    // The grid is not virtualized, so filtering lags the input instead of blocking each keystroke.
+    const searchQuery = useDeferredValue(useModStore((s) => s.searchQuery));
     const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
-    const {
-        data: activeGroup,
-        dataUpdatedAt,
-        isPlaceholderData,
-        isPending,
-    } = useModGroup(selectedGroupPath);
+    const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
     const { actions, overlays } = useModActions(selectedGroupPath, runner);
 
     const isMergeMode = useModStore((s) => s.isMergeMode);
@@ -69,7 +65,6 @@ export function useModView(runner: ModFixRunner) {
     return {
         searchQuery,
         selectedGroupPath,
-        dataUpdatedAt,
         mods,
         actions,
         overlays,

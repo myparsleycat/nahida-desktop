@@ -24,7 +24,18 @@ vi.mock("@renderer/hooks/use-mod-data", () => ({ useGames: () => ({ data: [] }) 
 vi.mock("@renderer/hooks/use-mod-mutations", () => ({
   useModMutations: () => ({ renameModMutation: { isPending: false } }),
 }));
-vi.mock("@renderer/store/mod", () => ({ useModStore: () => undefined }));
+const store = vi.hoisted(() => {
+  const state = {
+    convertingModelPath: null as string | null,
+    setConvertingModelPath: (path: string | null) => {
+      state.convertingModelPath = path;
+    },
+  };
+  return state;
+});
+vi.mock("@renderer/store/mod", () => ({
+  useModStore: (selector: (state: typeof store) => unknown) => selector(store),
+}));
 vi.mock("@renderer/lib/logger", () => ({ Logger: { warn: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [] }) }));
 vi.mock("@tanstack/react-router", () => ({ useRouteContext: () => ({ queryClient: {} }) }));
@@ -83,6 +94,7 @@ function viewer(actions: { overlays: ReactNode }) {
 }
 
 beforeEach(() => {
+  store.convertingModelPath = null;
   vi.useFakeTimers();
   vi.mocked(Tools.CleanupModelViewer).mockResolvedValue(true);
 });
@@ -161,7 +173,7 @@ it.each(["resolve", "reject"])(
       else old.reject(new Error("old failure"));
       await oldLoad;
     });
-    expect(view.result.current.actions.convertingModelPath).toBe("C:/mods/New");
+    expect(store.convertingModelPath).toBe("C:/mods/New");
     expect(viewer(view.result.current).open).toBe(false);
     expect(toast.error).not.toHaveBeenCalled();
     await act(async () => {
@@ -221,7 +233,7 @@ it("rejects duplicate calls before React renders and retries a failed load", asy
     pending.reject(new Error("load failure"));
     await load;
   });
-  expect(view.result.current.actions.convertingModelPath).toBeNull();
+  expect(store.convertingModelPath).toBeNull();
   expect(Tools.CleanupModelViewer).not.toHaveBeenCalled();
   await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).source?.memorySessionId).toBe("retry");

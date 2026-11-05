@@ -19,16 +19,8 @@ interface ModGridProps {
 export function ModGrid({ runner }: ModGridProps) {
   const { t } = useTranslation();
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
-  const {
-    searchQuery,
-    selectedGroupPath,
-    dataUpdatedAt,
-    mods,
-    actions,
-    overlays,
-    showSkeleton,
-    handleToggle,
-  } = useModView(runner);
+  const { searchQuery, selectedGroupPath, mods, actions, overlays, showSkeleton, handleToggle } =
+    useModView(runner);
   const { updateToggleKeyMutation } = useModMutations();
 
   const { data: gridLayoutSettings } = useModGridLayoutSettings();
@@ -101,11 +93,7 @@ export function ModGrid({ runner }: ModGridProps) {
   }
 
   return (
-    <GridModelPreviewProvider
-      key={selectedGroupPath}
-      sourceRevision={dataUpdatedAt}
-      viewport={viewport}
-    >
+    <GridModelPreviewProvider key={selectedGroupPath} viewport={viewport}>
       <div className="min-h-0 flex-1">
         <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
           <div className="relative w-full p-3">
