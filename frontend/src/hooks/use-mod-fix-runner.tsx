@@ -2,7 +2,12 @@ import { Tools, type ZZMIBackupSession, type ZZMIFixerPrepareResult } from "@bin
 import type { ZZMIFixerRestoreConflict } from "@bindings/tools/zzmi_fixer";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
-import { getFixToolPresets, getFixToolScripts } from "@renderer/wails/fix-tools";
+import {
+  type FixToolPreset,
+  type FixToolScript,
+  getFixToolPresets,
+  getFixToolScripts,
+} from "@renderer/wails/fix-tools";
 import { formatRateResetText } from "@shared/github-rate";
 import {
   type WuwaBackupGroup,
@@ -29,6 +34,10 @@ const defaultWuwaOptions = (): WuwaFixerOptions => ({
   aeroFix: "none",
 });
 
+// Shared defaults keep the lists referentially stable while the queries are pending or failed.
+const NO_FIX_TOOLS: FixToolScript[] = [];
+const NO_PRESETS: FixToolPreset[] = [];
+
 export type ModFixRunner = ReturnType<typeof useModFixRunner>;
 
 export function useModFixRunner() {
@@ -42,12 +51,12 @@ export function useModFixRunner() {
     [selectedImporter, t],
   );
 
-  const { data: fixTools = [] } = useQuery({
+  const { data: fixTools = NO_FIX_TOOLS } = useQuery({
     queryKey: ["ftm:scripts"],
     queryFn: getFixToolScripts,
   });
 
-  const { data: presets = [] } = useQuery({
+  const { data: presets = NO_PRESETS } = useQuery({
     queryKey: ["ftm:presets"],
     queryFn: getFixToolPresets,
   });
