@@ -171,6 +171,8 @@ function ModRouteContent() {
     archiveExtractPrompt?.fileName ?? archiveExtractDialogFileName;
 
   const isInitialized = useRef(false);
+  // The fallback below persists the first game, so it must wait until the stored last game was read.
+  const [isGameRestored, setIsGameRestored] = useState(false);
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -193,6 +195,8 @@ function ModRouteContent() {
         }
       } catch (error) {
         Logger.capture("routes/mod/index.tsx", "Failed to initialize game selection", error);
+      } finally {
+        setIsGameRestored(true);
       }
     };
 
@@ -203,17 +207,17 @@ function ModRouteContent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
-    if (isInitialized.current) {
-      if (games.length > 0 && !games.find((g) => g.game === selectedGame)) {
-        const nextGame = games[0].game;
-        setSelectedGame(nextGame);
-        void Mod.SetLastGame(nextGame);
-      } else if (games.length === 0 && selectedGame !== "") {
-        setSelectedGame("");
-        void Mod.SetLastGame("");
-      }
+    if (!isGameRestored) return;
+
+    if (games.length > 0 && !games.find((g) => g.game === selectedGame)) {
+      const nextGame = games[0].game;
+      setSelectedGame(nextGame);
+      void Mod.SetLastGame(nextGame);
+    } else if (games.length === 0 && selectedGame !== "") {
+      setSelectedGame("");
+      void Mod.SetLastGame("");
     }
-  }, [games, selectedGame, setSelectedGame]);
+  }, [games, isGameRestored, selectedGame, setSelectedGame]);
 
   useEffect(() => {
     const shouldAutoResolve =
