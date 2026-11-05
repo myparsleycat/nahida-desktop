@@ -38,6 +38,12 @@ export function isPreviewImagePath(path: string) {
     );
 }
 
+export function isPreviewVideoPath(path: string) {
+    return PREVIEW_VIDEO_EXTENSIONS.includes(
+        getLowerCaseExtension(path) as (typeof PREVIEW_VIDEO_EXTENSIONS)[number],
+    );
+}
+
 export function isPreviewMediaPath(path: string) {
     return PREVIEW_MEDIA_EXTENSIONS.includes(
         getLowerCaseExtension(path) as (typeof PREVIEW_MEDIA_EXTENSIONS)[number],

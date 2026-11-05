@@ -2,6 +2,8 @@ import { localFileSrc } from "@renderer/lib/local-file";
 import { cn } from "@renderer/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
+import { isPreviewVideoPath } from "./preview-media";
+
 interface PreviewProps {
   path?: string | null;
   alt?: string;
@@ -66,7 +68,7 @@ export function Preview({
 
   if (!path) return <>{fallback}</>;
 
-  const isVideo = path.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/);
+  const isVideo = isPreviewVideoPath(path);
   const src = localFileSrc(path, { cacheKey });
 
   const commonStyles: React.CSSProperties = {

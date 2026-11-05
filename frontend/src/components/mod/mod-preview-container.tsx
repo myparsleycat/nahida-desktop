@@ -28,7 +28,7 @@ import { toast } from "sonner";
 
 import { useGridModelPreview } from "./grid-model-preview";
 import { Preview } from "./preview";
-import { isPreviewMediaPath } from "./preview-media";
+import { isPreviewMediaPath, isPreviewVideoPath } from "./preview-media";
 
 interface ModPreviewContainerProps {
   mod: ModInfo;
@@ -234,7 +234,7 @@ export function ModPreviewContainer({
           onOpenChange={setLightboxOpen}
           thumbnailSrc={localFileSrc(mod.preview, { cacheKey: mod.mtime })}
           fullSrc={localFileSrc(mod.preview, { orig: true, cacheKey: mod.mtime })}
-          isVideo={/\.(mp4|webm|ogg)$/i.test(mod.preview)}
+          isVideo={isPreviewVideoPath(mod.preview)}
           alt={mod.name}
         />
       )}
