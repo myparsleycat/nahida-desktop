@@ -29,6 +29,8 @@ const defaultWuwaOptions = (): WuwaFixerOptions => ({
   aeroFix: "none",
 });
 
+export type ModFixRunner = ReturnType<typeof useModFixRunner>;
+
 export function useModFixRunner() {
   const { t } = useTranslation();
   const selectedGame = useModStore((s) => s.selectedGame);

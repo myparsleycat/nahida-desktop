@@ -3,6 +3,7 @@
 import { Tools } from "@bindings/tools";
 import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
 import { ModelViewerDialog } from "@renderer/components/tools/model-viewer/model-viewer-dialog";
+import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import type { ModInfo } from "@renderer/types/mod";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { Children, isValidElement, StrictMode, type ComponentProps, type ReactNode } from "react";
@@ -20,7 +21,6 @@ vi.mock("@renderer/components/tools/model-viewer/model-viewer-dialog", () => ({
 }));
 vi.mock("@renderer/hooks/use-confirm-trash", () => ({ useConfirmTrash: () => ({}) }));
 vi.mock("@renderer/hooks/use-mod-data", () => ({ useGames: () => ({ data: [] }) }));
-vi.mock("@renderer/hooks/use-mod-fix-runner", () => ({ useModFixRunner: () => ({}) }));
 vi.mock("@renderer/hooks/use-mod-mutations", () => ({
   useModMutations: () => ({ renameModMutation: { isPending: false } }),
 }));
@@ -41,6 +41,7 @@ vi.mock("../components/mod/paste-preview", () => ({ pasteModPreview: vi.fn() }))
 vi.mock("../components/mod/texture-resize-dialog", () => ({ TextureResizeDialog: () => null }));
 vi.mock("../components/mod/touch-profile-dialog", () => ({ TouchProfileDialog: () => null }));
 
+const runner = {} as ModFixRunner;
 const mod: ModInfo = {
   id: "body",
   name: "Body",
@@ -95,7 +96,7 @@ afterEach(async () => {
 
 it("cleans a closed viewer once even when it immediately unmounts", async () => {
   vi.mocked(Tools.LoadModViewer).mockResolvedValue(payload("one"));
-  const view = renderHook(() => useModActions("group"), { wrapper: StrictMode });
+  const view = renderHook(() => useModActions("group", runner), { wrapper: StrictMode });
   await act(() => view.result.current.openModelViewer(mod));
   expect(viewer(view.result.current).open).toBe(true);
   act(() => viewer(view.result.current).onOpenChange(false));
@@ -107,7 +108,7 @@ it("cleans a closed viewer once even when it immediately unmounts", async () => 
 
 it("cleans a loaded viewer on unmount without a close callback", async () => {
   vi.mocked(Tools.LoadModViewer).mockResolvedValue(payload("loaded"));
-  const view = renderHook(() => useModActions("group"));
+  const view = renderHook(() => useModActions("group", runner));
   await act(() => view.result.current.openModelViewer(mod));
   view.unmount();
   await vi.runAllTimersAsync();
@@ -119,7 +120,7 @@ it("cleans a load resolving after unmount", async () => {
   vi.mocked(Tools.LoadModViewer).mockImplementationOnce(
     () => pending.promise as ReturnType<typeof Tools.LoadModViewer>,
   );
-  const view = renderHook(() => useModActions("group"));
+  const view = renderHook(() => useModActions("group", runner));
   let load!: Promise<void>;
   act(() => {
     load = view.result.current.openModelViewer(mod);
@@ -142,7 +143,7 @@ it.each(["resolve", "reject"])(
     vi.mocked(Tools.LoadModViewer)
       .mockImplementationOnce(() => old.promise as ReturnType<typeof Tools.LoadModViewer>)
       .mockImplementationOnce(() => next.promise as ReturnType<typeof Tools.LoadModViewer>);
-    const view = renderHook(({ group }) => useModActions(group), {
+    const view = renderHook(({ group }) => useModActions(group, runner), {
       initialProps: { group: "old" },
     });
     let oldLoad!: Promise<void>;
@@ -177,7 +178,9 @@ it.each(["resolve", "reject"])(
 
 it("clears an already open viewer when the group changes", async () => {
   vi.mocked(Tools.LoadModViewer).mockResolvedValue(payload("old"));
-  const view = renderHook(({ group }) => useModActions(group), { initialProps: { group: "old" } });
+  const view = renderHook(({ group }) => useModActions(group, runner), {
+    initialProps: { group: "old" },
+  });
   await act(() => view.result.current.openModelViewer(mod));
   view.rerender({ group: "new" });
   expect(viewer(view.result.current).open).toBe(false);
@@ -192,7 +195,7 @@ it("cleans a response rejected during normalization and allows retry", async () 
   vi.mocked(Tools.LoadModViewer)
     .mockResolvedValueOnce(invalid)
     .mockResolvedValueOnce(payload("retry"));
-  const view = renderHook(() => useModActions("group"));
+  const view = renderHook(() => useModActions("group", runner));
   await act(() => view.result.current.openModelViewer(mod));
   expect(viewer(view.result.current).open).toBe(false);
   expect(toast.error).toHaveBeenCalledTimes(1);
@@ -207,7 +210,7 @@ it("rejects duplicate calls before React renders and retries a failed load", asy
   vi.mocked(Tools.LoadModViewer)
     .mockImplementationOnce(() => pending.promise as ReturnType<typeof Tools.LoadModViewer>)
     .mockResolvedValueOnce(payload("retry"));
-  const view = renderHook(() => useModActions("group"));
+  const view = renderHook(() => useModActions("group", runner));
   let load!: Promise<void>;
   act(() => {
     load = view.result.current.openModelViewer(mod);

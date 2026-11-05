@@ -5,6 +5,7 @@ import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModsWithDownloadPlaceholders } from "@renderer/hooks/use-mod-download-placeholders";
+import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
@@ -19,16 +20,17 @@ import { ModListRow } from "./mod-list-row";
 
 interface ModListProps {
   isDragging?: boolean;
+  runner: ModFixRunner;
 }
 
-export function ModList(_props: ModListProps) {
+export function ModList({ runner }: ModListProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
-  const actions = useModActions(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath, runner);
 
   const isMergeMode = useModStore((s) => s.isMergeMode);
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);

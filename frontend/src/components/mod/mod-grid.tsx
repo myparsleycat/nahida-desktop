@@ -5,6 +5,7 @@ import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModsWithDownloadPlaceholders } from "@renderer/hooks/use-mod-download-placeholders";
+import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModGridLayoutSettings } from "@renderer/hooks/use-settings";
@@ -19,9 +20,10 @@ import { ModCard } from "./mod-card";
 
 interface ModGridProps {
   isDragging?: boolean;
+  runner: ModFixRunner;
 }
 
-export function ModGrid(_props: ModGridProps) {
+export function ModGrid({ runner }: ModGridProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
@@ -35,7 +37,7 @@ export function ModGrid(_props: ModGridProps) {
     isPlaceholderData,
     isPending,
   } = useModGroup(selectedGroupPath);
-  const actions = useModActions(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath, runner);
 
   const isMergeMode = useModStore((s) => s.isMergeMode);
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);

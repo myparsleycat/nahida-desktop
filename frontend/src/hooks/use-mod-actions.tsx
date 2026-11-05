@@ -28,7 +28,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { modGroupQueryOptions, useGames } from "@renderer/hooks/use-mod-data";
-import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
+import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
@@ -46,7 +46,6 @@ import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
 import { EfmiOutlineDialog } from "../components/mod/efmi-outline-dialog";
 import { LiquidEmitterDialog } from "../components/mod/liquid-emitter-dialog";
 import { ModConflictFinderDialog } from "../components/mod/mod-conflict-finder-dialog";
-import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 import { TouchProfileDialog } from "../components/mod/touch-profile-dialog";
@@ -76,7 +75,7 @@ function scheduleModelViewerCleanup(memorySessionId: string | null) {
 
 export interface ModActionApi {
   overlays: ReactNode;
-  runner: ReturnType<typeof useModFixRunner>;
+  runner: ModFixRunner;
   isNteGame: boolean;
   isEfmiGame: boolean;
   supportsLiquidEmitter: boolean;
@@ -104,12 +103,14 @@ function invalidateModGroup(queryClient: QueryClient, groupPath?: string) {
   return queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
 }
 
-export function useModActions(selectedGroupPath?: string): ModActionApi {
+export function useModActions(
+  selectedGroupPath: string | undefined,
+  runner: ModFixRunner,
+): ModActionApi {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { renameModMutation } = useModMutations();
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
-  const runner = useModFixRunner();
   const selectedGame = useModStore((s) => s.selectedGame);
   const { data: games = [] } = useGames();
   const selectedImporter = games.find((game) => game.game === selectedGame)?.importer;
@@ -529,7 +530,6 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       />
 
       {confirmTrashDialog}
-      <ModFixRunnerDialogs runner={runner} />
     </>
   );
 
