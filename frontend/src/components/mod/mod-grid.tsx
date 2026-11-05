@@ -37,7 +37,7 @@ export function ModGrid({ runner }: ModGridProps) {
     isPlaceholderData,
     isPending,
   } = useModGroup(selectedGroupPath);
-  const actions = useModActions(selectedGroupPath, runner);
+  const { actions, overlays } = useModActions(selectedGroupPath, runner);
 
   const isMergeMode = useModStore((s) => s.isMergeMode);
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
@@ -213,7 +213,7 @@ export function ModGrid({ runner }: ModGridProps) {
             )}
           </div>
         </ScrollArea>
-        {actions.overlays}
+        {overlays}
       </div>
     </GridModelPreviewProvider>
   );

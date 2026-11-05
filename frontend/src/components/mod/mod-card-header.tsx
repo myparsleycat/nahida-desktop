@@ -185,9 +185,9 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     {t("page.mod.context-menu.find-conflict")}
                   </DropdownMenuItem>
 
-                  {actions.runner.modFixer && (
+                  {actions.fixRunner.modFixer && (
                     <DropdownMenuItem
-                      disabled={actions.runner.isPreparing}
+                      disabled={actions.fixRunner.isPreparing}
                       onClick={(event) => {
                         event.stopPropagation();
                         void actions.openModFixer(mod);
@@ -195,13 +195,13 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                     >
                       <img
                         src={
-                          actions.runner.modFixer.id === "zzmi"
+                          actions.fixRunner.modFixer.id === "zzmi"
                             ? zzmiModFixerIcon
                             : wuwaModFixerIcon
                         }
                         className="size-4"
                       />
-                      {actions.runner.modFixer.label}
+                      {actions.fixRunner.modFixer.label}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuGroup>
@@ -209,8 +209,8 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 <DropdownMenuSeparator />
 
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Preset ({actions.runner.presets.length})</DropdownMenuLabel>
-                  {actions.runner.presets.map((preset) => (
+                  <DropdownMenuLabel>Preset ({actions.fixRunner.presets.length})</DropdownMenuLabel>
+                  {actions.fixRunner.presets.map((preset) => (
                     <DropdownMenuItem
                       key={preset.id}
                       onClick={(event) => {
@@ -232,8 +232,10 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 </DropdownMenuGroup>
 
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Fix Tool ({actions.runner.fixTools.length})</DropdownMenuLabel>
-                  {actions.runner.fixTools.map((tool) => (
+                  <DropdownMenuLabel>
+                    Fix Tool ({actions.fixRunner.fixTools.length})
+                  </DropdownMenuLabel>
+                  {actions.fixRunner.fixTools.map((tool) => (
                     <DropdownMenuItem
                       key={tool.id}
                       onClick={(event) => {

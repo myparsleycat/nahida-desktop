@@ -10,7 +10,7 @@ import { Children, isValidElement, StrictMode, type ComponentProps, type ReactNo
 import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { useModActions, type ModActionApi } from "./use-mod-actions";
+import { useModActions } from "./use-mod-actions";
 
 vi.mock("@bindings/tools", () => ({
   Tools: { LoadModViewer: vi.fn(), CleanupModelViewer: vi.fn() },
@@ -69,7 +69,7 @@ function payload(memorySessionId: string): ModelViewerTransport {
   };
 }
 
-function viewer(actions: ModActionApi) {
+function viewer(actions: { overlays: ReactNode }) {
   if (!isValidElement<{ children: ReactNode }>(actions.overlays)) {
     throw new Error("Missing overlays");
   }
@@ -97,7 +97,7 @@ afterEach(async () => {
 it("cleans a closed viewer once even when it immediately unmounts", async () => {
   vi.mocked(Tools.LoadModViewer).mockResolvedValue(payload("one"));
   const view = renderHook(() => useModActions("group", runner), { wrapper: StrictMode });
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).open).toBe(true);
   act(() => viewer(view.result.current).onOpenChange(false));
   view.unmount();
@@ -109,7 +109,7 @@ it("cleans a closed viewer once even when it immediately unmounts", async () => 
 it("cleans a loaded viewer on unmount without a close callback", async () => {
   vi.mocked(Tools.LoadModViewer).mockResolvedValue(payload("loaded"));
   const view = renderHook(() => useModActions("group", runner));
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   view.unmount();
   await vi.runAllTimersAsync();
   expect(Tools.CleanupModelViewer).toHaveBeenCalledExactlyOnceWith("loaded");
@@ -123,7 +123,7 @@ it("cleans a load resolving after unmount", async () => {
   const view = renderHook(() => useModActions("group", runner));
   let load!: Promise<void>;
   act(() => {
-    load = view.result.current.openModelViewer(mod);
+    load = view.result.current.actions.openModelViewer(mod);
   });
   view.unmount();
   await act(async () => {
@@ -148,12 +148,12 @@ it.each(["resolve", "reject"])(
     });
     let oldLoad!: Promise<void>;
     act(() => {
-      oldLoad = view.result.current.openModelViewer(mod);
+      oldLoad = view.result.current.actions.openModelViewer(mod);
     });
     view.rerender({ group: "new" });
     let nextLoad!: Promise<void>;
     act(() => {
-      nextLoad = view.result.current.openModelViewer({ ...mod, path: "C:/mods/New" });
+      nextLoad = view.result.current.actions.openModelViewer({ ...mod, path: "C:/mods/New" });
     });
     expect(Tools.LoadModViewer).toHaveBeenCalledTimes(2);
     await act(async () => {
@@ -161,7 +161,7 @@ it.each(["resolve", "reject"])(
       else old.reject(new Error("old failure"));
       await oldLoad;
     });
-    expect(view.result.current.convertingModelPath).toBe("C:/mods/New");
+    expect(view.result.current.actions.convertingModelPath).toBe("C:/mods/New");
     expect(viewer(view.result.current).open).toBe(false);
     expect(toast.error).not.toHaveBeenCalled();
     await act(async () => {
@@ -181,7 +181,7 @@ it("clears an already open viewer when the group changes", async () => {
   const view = renderHook(({ group }) => useModActions(group, runner), {
     initialProps: { group: "old" },
   });
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   view.rerender({ group: "new" });
   expect(viewer(view.result.current).open).toBe(false);
   expect(viewer(view.result.current).source).toBeNull();
@@ -196,12 +196,12 @@ it("cleans a response rejected during normalization and allows retry", async () 
     .mockResolvedValueOnce(invalid)
     .mockResolvedValueOnce(payload("retry"));
   const view = renderHook(() => useModActions("group", runner));
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).open).toBe(false);
   expect(toast.error).toHaveBeenCalledTimes(1);
   await vi.runAllTimersAsync();
   expect(Tools.CleanupModelViewer).toHaveBeenCalledExactlyOnceWith("invalid");
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).source?.memorySessionId).toBe("retry");
 });
 
@@ -213,16 +213,16 @@ it("rejects duplicate calls before React renders and retries a failed load", asy
   const view = renderHook(() => useModActions("group", runner));
   let load!: Promise<void>;
   act(() => {
-    load = view.result.current.openModelViewer(mod);
-    void view.result.current.openModelViewer(mod);
+    load = view.result.current.actions.openModelViewer(mod);
+    void view.result.current.actions.openModelViewer(mod);
   });
   expect(Tools.LoadModViewer).toHaveBeenCalledTimes(1);
   await act(async () => {
     pending.reject(new Error("load failure"));
     await load;
   });
-  expect(view.result.current.convertingModelPath).toBeNull();
+  expect(view.result.current.actions.convertingModelPath).toBeNull();
   expect(Tools.CleanupModelViewer).not.toHaveBeenCalled();
-  await act(() => view.result.current.openModelViewer(mod));
+  await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).source?.memorySessionId).toBe("retry");
 });

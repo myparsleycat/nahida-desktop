@@ -38,7 +38,16 @@ import { toErrorMessage } from "@shared/utils";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
 import { PackageIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -74,8 +83,7 @@ function scheduleModelViewerCleanup(memorySessionId: string | null) {
 }
 
 export interface ModActionApi {
-  overlays: ReactNode;
-  runner: ModFixRunner;
+  fixRunner: Pick<ModFixRunner, "modFixer" | "isPreparing" | "presets" | "fixTools">;
   isNteGame: boolean;
   isEfmiGame: boolean;
   supportsLiquidEmitter: boolean;
@@ -99,6 +107,16 @@ export interface ModActionApi {
   runTool: (mod: ModInfo, toolId: string) => Promise<void>;
 }
 
+type ModActionHandlers = Omit<
+  ModActionApi,
+  | "fixRunner"
+  | "isNteGame"
+  | "isEfmiGame"
+  | "supportsLiquidEmitter"
+  | "convertingModelPath"
+  | "confirmEnable"
+>;
+
 function invalidateModGroup(queryClient: QueryClient, groupPath?: string) {
   return queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
 }
@@ -106,7 +124,7 @@ function invalidateModGroup(queryClient: QueryClient, groupPath?: string) {
 export function useModActions(
   selectedGroupPath: string | undefined,
   runner: ModFixRunner,
-): ModActionApi {
+): { actions: ModActionApi; overlays: ReactNode } {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { renameModMutation } = useModMutations();
@@ -533,14 +551,7 @@ export function useModActions(
     </>
   );
 
-  return {
-    overlays,
-    runner,
-    isNteGame,
-    isEfmiGame,
-    supportsLiquidEmitter,
-    convertingModelPath,
-    confirmEnable,
+  const handlers: ModActionHandlers = {
     openDeleteMod,
     openDeletePreview,
     openModelViewer,
@@ -581,4 +592,57 @@ export function useModActions(
       await runner.handleRun("tool", toolId, mod.path);
     },
   };
+  // Cards and rows are memoized on this object, so the handlers stay stable and read the latest render.
+  const handlersRef = useRef(handlers);
+  useLayoutEffect(() => {
+    handlersRef.current = handlers;
+  });
+  const stableHandlers = useMemo<ModActionHandlers>(
+    () => ({
+      openDeleteMod: (mod) => handlersRef.current.openDeleteMod(mod),
+      openDeletePreview: (mod) => handlersRef.current.openDeletePreview(mod),
+      openModelViewer: (mod) => handlersRef.current.openModelViewer(mod),
+      openPastePreview: (mod) => handlersRef.current.openPastePreview(mod),
+      openRenameDialog: (mod) => handlersRef.current.openRenameDialog(mod),
+      openTextureResizeDialog: (mod) => handlersRef.current.openTextureResizeDialog(mod),
+      openBodyShapeDialog: (mod) => handlersRef.current.openBodyShapeDialog(mod),
+      openTouchProfileDialog: (mod) => handlersRef.current.openTouchProfileDialog(mod),
+      openEfmiOutlineDialog: (mod) => handlersRef.current.openEfmiOutlineDialog(mod),
+      openLiquidEmitterDialog: (mod) => handlersRef.current.openLiquidEmitterDialog(mod),
+      openConflictFinder: (mod) => handlersRef.current.openConflictFinder(mod),
+      openModFixer: (mod) => handlersRef.current.openModFixer(mod),
+      markAsManualSubGroup: (mod) => handlersRef.current.markAsManualSubGroup(mod),
+      runPreset: (mod, presetId) => handlersRef.current.runPreset(mod, presetId),
+      runTool: (mod, toolId) => handlersRef.current.runTool(mod, toolId),
+    }),
+    [],
+  );
+
+  const { modFixer, isPreparing, presets, fixTools } = runner;
+  const fixRunner = useMemo(
+    () => ({ modFixer, isPreparing, presets, fixTools }),
+    [fixTools, isPreparing, modFixer, presets],
+  );
+  const actions = useMemo<ModActionApi>(
+    () => ({
+      ...stableHandlers,
+      fixRunner,
+      isNteGame,
+      isEfmiGame,
+      supportsLiquidEmitter,
+      convertingModelPath,
+      confirmEnable,
+    }),
+    [
+      confirmEnable,
+      convertingModelPath,
+      fixRunner,
+      isEfmiGame,
+      isNteGame,
+      stableHandlers,
+      supportsLiquidEmitter,
+    ],
+  );
+
+  return { actions, overlays };
 }

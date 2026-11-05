@@ -52,7 +52,7 @@ function renderMenu(game: { isEfmiGame: boolean; isNteGame: boolean }) {
   const actions = {
     ...game,
     convertingModelPath: null,
-    runner: { presets: [], fixTools: [], modFixer: null, isPreparing: false },
+    fixRunner: { presets: [], fixTools: [], modFixer: null, isPreparing: false },
     openEfmiOutlineDialog,
   } as unknown as ModActionApi;
   render(

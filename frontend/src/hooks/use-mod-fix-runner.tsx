@@ -14,7 +14,7 @@ import {
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -37,7 +37,10 @@ export function useModFixRunner() {
   const { data: games = [] } = useGames();
   const selectedGameConfig = games.find((game) => game.game === selectedGame) ?? null;
   const selectedImporter = selectedGameConfig?.importer ?? null;
-  const { showWuwaFixer, showZZMIFixer, modFixer } = getModFixerAvailability(selectedImporter, t);
+  const { showWuwaFixer, showZZMIFixer, modFixer } = useMemo(
+    () => getModFixerAvailability(selectedImporter, t),
+    [selectedImporter, t],
+  );
 
   const { data: fixTools = [] } = useQuery({
     queryKey: ["ftm:scripts"],

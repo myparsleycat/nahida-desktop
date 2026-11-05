@@ -30,7 +30,7 @@ export function ModList({ runner }: ModListProps) {
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
-  const actions = useModActions(selectedGroupPath, runner);
+  const { actions, overlays } = useModActions(selectedGroupPath, runner);
 
   const isMergeMode = useModStore((s) => s.isMergeMode);
   const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
@@ -140,7 +140,7 @@ export function ModList({ runner }: ModListProps) {
           </ScrollArea>
         </>
       )}
-      {actions.overlays}
+      {overlays}
     </div>
   );
 }

@@ -148,7 +148,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                 <ContextMenuSubTrigger>Preset</ContextMenuSubTrigger>
                 <ContextMenuSubContent>
                   <ContextMenuGroup>
-                    {actions.runner.presets.map((preset) => (
+                    {actions.fixRunner.presets.map((preset) => (
                       <ContextMenuItem
                         key={preset.id}
                         onClick={() => void actions.runPreset(mod, preset.id)}
@@ -156,7 +156,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                         {preset.name}
                       </ContextMenuItem>
                     ))}
-                    {actions.runner.presets.length === 0 && (
+                    {actions.fixRunner.presets.length === 0 && (
                       <ContextMenuItem disabled>No Presets</ContextMenuItem>
                     )}
                   </ContextMenuGroup>
@@ -166,7 +166,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                 <ContextMenuSubTrigger>Fix Tool</ContextMenuSubTrigger>
                 <ContextMenuSubContent>
                   <ContextMenuGroup>
-                    {actions.runner.fixTools.map((tool) => (
+                    {actions.fixRunner.fixTools.map((tool) => (
                       <ContextMenuItem
                         key={tool.id}
                         onClick={() => void actions.runTool(mod, tool.id)}
@@ -174,24 +174,24 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                         {tool.name}
                       </ContextMenuItem>
                     ))}
-                    {actions.runner.fixTools.length === 0 && (
+                    {actions.fixRunner.fixTools.length === 0 && (
                       <ContextMenuItem disabled>No Fix Tools</ContextMenuItem>
                     )}
                   </ContextMenuGroup>
                 </ContextMenuSubContent>
               </ContextMenuSub>
-              {actions.runner.modFixer && (
+              {actions.fixRunner.modFixer && (
                 <ContextMenuItem
-                  disabled={actions.runner.isPreparing}
+                  disabled={actions.fixRunner.isPreparing}
                   onClick={() => actions.openModFixer(mod)}
                 >
                   <img
                     src={
-                      actions.runner.modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon
+                      actions.fixRunner.modFixer.id === "zzmi" ? zzmiModFixerIcon : wuwaModFixerIcon
                     }
                     className="size-4"
                   />
-                  {actions.runner.modFixer.label}
+                  {actions.fixRunner.modFixer.label}
                 </ContextMenuItem>
               )}
             </ContextMenuGroup>
