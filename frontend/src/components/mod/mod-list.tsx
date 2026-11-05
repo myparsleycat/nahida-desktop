@@ -19,7 +19,6 @@ import { MOD_LIST_ROW_HEIGHT } from "./mod-list-layout";
 import { ModListRow } from "./mod-list-row";
 
 interface ModListProps {
-  isDragging?: boolean;
   runner: ModFixRunner;
 }
 

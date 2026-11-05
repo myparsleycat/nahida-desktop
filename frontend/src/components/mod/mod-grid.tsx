@@ -19,7 +19,6 @@ import { GridModelPreviewProvider } from "./grid-model-preview";
 import { ModCard } from "./mod-card";
 
 interface ModGridProps {
-  isDragging?: boolean;
   runner: ModFixRunner;
 }
 
