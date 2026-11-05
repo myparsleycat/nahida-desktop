@@ -67,7 +67,8 @@ export function CharacterSidebarRow({
   const persistentGroups = useModStore((s) => s.persistentGroups);
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const lastScrolledPathRef = useRef<string | null>(null);
-  // Holds the path of a clicked row, which is already visible; a stale value only matches that same row.
+  const seenSelectedPathRef = useRef<string | undefined>(undefined);
+  // Holds the path of a clicked row, which is already visible.
   const skipScrollPathRef = useRef<string | null>(null);
   const isSearching = searchTerm.trim().length > 0;
 
@@ -132,12 +133,18 @@ export function CharacterSidebarRow({
   }, [scrollToPath, scrollToPathRef]);
 
   useEffect(() => {
-    if (!selectedGroupPath || lastScrolledPathRef.current === selectedGroupPath) {
-      return;
-    }
-    if (skipScrollPathRef.current === selectedGroupPath) {
+    // Only a selection change consumes the clicked path; a rows-only run keeps it for the pending selection,
+    // and a click that left the selection unchanged loses it at the next change.
+    if (seenSelectedPathRef.current !== selectedGroupPath) {
+      seenSelectedPathRef.current = selectedGroupPath;
+      const isClickedRow = skipScrollPathRef.current === selectedGroupPath;
       skipScrollPathRef.current = null;
-      lastScrolledPathRef.current = selectedGroupPath;
+      if (isClickedRow && selectedGroupPath) {
+        lastScrolledPathRef.current = selectedGroupPath;
+        return;
+      }
+    }
+    if (!selectedGroupPath || lastScrolledPathRef.current === selectedGroupPath) {
       return;
     }
     const frame = requestAnimationFrame(() => {
