@@ -1,4 +1,5 @@
 import { Mod } from "@bindings/mod";
+import { Logger } from "@renderer/lib/logger";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type {
     ClassificationGroup,
@@ -520,7 +521,16 @@ export function usePresetMutations() {
                         "page.mod.hooks.use-mod-mutations.create-preset-mutation.conflict-resolve-failed",
                     ),
                 );
+                return;
             }
+
+            // The create dialog lists the conflicts instead.
+            if (toErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
+                return;
+            }
+
+            Logger.capture("hooks/use-mod-mutations.ts", "Failed to create preset", error);
+            toast.error(t("page.mod.hooks.use-mod-mutations.create-preset-mutation.failed"));
         },
     });
 

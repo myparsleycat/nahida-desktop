@@ -920,7 +920,8 @@
           "locked-description": "Used by: {{processes}}",
           "create-preset-mutation": {
             "duplicate-name": "A preset with that name already exists",
-            "conflict-resolve-failed": "Some duplicate mod folders could not be resolved automatically"
+            "conflict-resolve-failed": "Some duplicate mod folders could not be resolved automatically",
+            "failed": "Failed to create the preset"
           },
           "apply-preset-mutation": {
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",

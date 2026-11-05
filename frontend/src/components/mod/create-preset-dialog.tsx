@@ -31,6 +31,7 @@ import { useForm } from "@tanstack/react-form";
 import { LoaderIcon, Plus } from "lucide-react";
 import { type MouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 interface CreatePresetDialogProps {
   disabled?: boolean;
@@ -46,6 +47,11 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
   const [isResolvingConflicts, setIsResolvingConflicts] = useState(false);
 
   const { createPresetMutation, getPresetCreateConflicts } = usePresetMutations();
+  const loadConflicts = () =>
+    getPresetCreateConflicts().catch((error: unknown) => {
+      toast.error(toErrorMessage(error));
+      return null;
+    });
   const form = useForm({
     defaultValues: {
       name: "",
@@ -57,26 +63,32 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
         return;
       }
 
-      try {
-        const createConflicts = await getPresetCreateConflicts();
-        if (createConflicts.length > 0) {
-          setConflicts(createConflicts);
-          setIsConflictDialogOpen(true);
-          return;
-        }
+      const createConflicts = await loadConflicts();
+      if (!createConflicts) {
+        return;
+      }
+      if (createConflicts.length > 0) {
+        setConflicts(createConflicts);
+        setIsConflictDialogOpen(true);
+        return;
+      }
 
+      try {
         await createPresetMutation.mutateAsync({
           name,
           description: value.description,
         });
       } catch (error) {
+        // The mutation reports every failure other than new conflicts.
         if (!toErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
-          throw error;
+          return;
         }
 
-        const createConflicts = await getPresetCreateConflicts();
-        setConflicts(createConflicts);
-        setIsConflictDialogOpen(true);
+        const nextConflicts = await loadConflicts();
+        if (nextConflicts) {
+          setConflicts(nextConflicts);
+          setIsConflictDialogOpen(true);
+        }
       }
     },
   });
@@ -102,11 +114,13 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
       setConflicts([]);
     } catch (error) {
       if (!isPresetConflictError(error)) {
-        throw error;
+        return;
       }
 
-      const createConflicts = await getPresetCreateConflicts();
-      setConflicts(createConflicts);
+      const createConflicts = await loadConflicts();
+      if (createConflicts) {
+        setConflicts(createConflicts);
+      }
     } finally {
       setIsResolvingConflicts(false);
     }

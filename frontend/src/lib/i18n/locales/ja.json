@@ -920,7 +920,8 @@
           "locked-description": "使用中のプロセス: {{processes}}",
           "create-preset-mutation": {
             "duplicate-name": "そのプリセット名は既に存在します",
-            "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした"
+            "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした",
+            "failed": "プリセットの作成に失敗しました"
           },
           "apply-preset-mutation": {
             "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。",

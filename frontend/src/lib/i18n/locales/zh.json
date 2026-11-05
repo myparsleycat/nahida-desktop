@@ -920,7 +920,8 @@
           "locked-description": "正在被以下进程使用: {{processes}}",
           "create-preset-mutation": {
             "duplicate-name": "该预设名称已存在",
-            "conflict-resolve-failed": "部分重复模组文件夹无法自动整理"
+            "conflict-resolve-failed": "部分重复模组文件夹无法自动整理",
+            "failed": "创建预设失败"
           },
           "apply-preset-mutation": {
             "legacy": "旧版预设无法套用。请删除后重新建立。",
