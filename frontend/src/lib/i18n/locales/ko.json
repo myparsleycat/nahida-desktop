@@ -465,7 +465,8 @@
           "classic_merge": "일반 병합",
           "namespace_merge": "네임스페이스 병합",
           "support": "지원"
-        }
+        },
+        "invalid_name": "이름에 [ ] = ; \" ' $ < > : / \\ | ? * 문자를 사용할 수 없습니다."
       },
       "content-header": {
         "tools": "도구",

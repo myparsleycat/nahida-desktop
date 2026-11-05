@@ -465,7 +465,8 @@
           "classic_merge": "通常結合",
           "namespace_merge": "ネームスペース結合",
           "support": "サポート"
-        }
+        },
+        "invalid_name": "名前に [ ] = ; \" ' $ < > : / \\ | ? * は使用できません"
       },
       "content-header": {
         "tools": "ツール",

@@ -465,7 +465,8 @@
           "classic_merge": "经典合并",
           "namespace_merge": "命名空间合并",
           "support": "支持"
-        }
+        },
+        "invalid_name": "名称不能包含 [ ] = ; \" ' $ < > : / \\ | ? *"
       },
       "content-header": {
         "tools": "工具",

@@ -3,7 +3,7 @@ import { KeyRecorder } from "@renderer/components/mod/key-recorder";
 import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
-import { Field, FieldLabel } from "@renderer/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { Kbd } from "@renderer/components/ui/kbd";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -16,7 +16,7 @@ import {
 } from "@renderer/lib/mod-merge";
 import { useModStore } from "@renderer/store/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
-import { stripDisabledPrefix } from "@shared/mod";
+import { isSafeMergeName, stripDisabledPrefix } from "@shared/mod";
 import type {
   ClassifyMergePacksResult,
   MergeEngine,
@@ -60,12 +60,30 @@ export function MergeModsDialog() {
     setOpen(false);
   }, [classificationError, open, setOpen, t]);
 
+  // A closed dialog drops its classification so a reopen neither replays an old error nor keeps old edits.
+  useEffect(() => {
+    if (!open) {
+      queryClient.removeQueries({ queryKey: ["mod:classifyMergePacks"] });
+    }
+  }, [open, queryClient]);
+
   const [userPlan, setUserPlan] = useState<MergePlanGroup | null>(null);
   const [userPackName, setUserPackName] = useState<string | null>(null);
   const [placement, setPlacement] = useState<MergePlacement>("new_folder");
   const [isMerging, setIsMerging] = useState(false);
   const [editingKey, setEditingKey] = useState<"forward" | "back" | null>(null);
   const [prevClassification, setPrevClassification] = useState(classification);
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setPlacement("new_folder");
+      setUserPlan(null);
+      setUserPackName(null);
+      setEditingKey(null);
+    }
+  }
 
   if (classification !== prevClassification) {
     setPrevClassification(classification);
@@ -107,17 +125,21 @@ export function MergeModsDialog() {
   );
 
   const classicLocked = plan ? planHasClassicViolation(plan, packsByPath) : false;
-  const canSubmit = Boolean(plan && selectedGroupPath && planIsValid(plan) && !classicLocked);
+  const isPackNameValid = !packName.trim() || isSafeMergeName(packName);
+  const rootPlan = plan ? { ...plan, name: packName.replace(/\s+/g, "") || plan.name } : null;
+  const canSubmit = Boolean(
+    rootPlan && selectedGroupPath && isPackNameValid && planIsValid(rootPlan) && !classicLocked,
+  );
 
   const handleMerge = async () => {
-    if (!plan || !selectedGroupPath) return;
+    if (!rootPlan || !selectedGroupPath) return;
     setIsMerging(true);
     try {
       await Mod.MergeMods({
         groupPath: selectedGroupPath,
         placement,
         packName,
-        root: { ...plan, name: packName.replace(/\s+/g, "") || plan.name },
+        root: rootPlan,
       });
       await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
       toast.success(t("page.mod.merge.success"));
@@ -170,7 +192,14 @@ export function MergeModsDialog() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field>
                     <FieldLabel>{t("page.mod.merge.pack_name")}</FieldLabel>
-                    <Input value={packName} onChange={(event) => setPackName(event.target.value)} />
+                    <Input
+                      value={packName}
+                      aria-invalid={!isPackNameValid}
+                      onChange={(event) => setPackName(event.target.value)}
+                    />
+                    {!isPackNameValid && (
+                      <FieldError>{t("page.mod.merge.invalid_name")}</FieldError>
+                    )}
                   </Field>
                   <div className="grid min-w-0 grid-cols-2 gap-3">
                     <KeyField

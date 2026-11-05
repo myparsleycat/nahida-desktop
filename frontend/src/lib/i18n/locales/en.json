@@ -465,7 +465,8 @@
           "classic_merge": "Classic merge",
           "namespace_merge": "Namespace merge",
           "support": "Support"
-        }
+        },
+        "invalid_name": "The name cannot contain [ ] = ; \" ' $ < > : / \\ | ? *"
       },
       "content-header": {
         "tools": "Tools",
