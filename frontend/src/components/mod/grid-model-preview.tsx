@@ -454,14 +454,22 @@ export function GridModelPreviewProvider({
     ],
   );
 
-  // File renames and timestamp-preserving edits can leave the mod metadata unchanged.
-  const preview = useMemo(() => {
-    if (!renderSettings) {
+  // The worker holds no per-mod state, so its WebGL context outlives source refreshes.
+  const renderer = useMemo(
+    () => (renderSettings ? new GridModelPreviewRenderer(renderSettings) : null),
+    [renderSettings],
+  );
+
+  useEffect(() => () => renderer?.dispose(), [renderer]);
+
+  // File renames and timestamp-preserving edits can leave the mod metadata unchanged, so a source
+  // refresh drops every cached preview.
+  const controller = useMemo(() => {
+    if (!renderSettings || !renderer) {
       return null;
     }
 
-    const renderer = new GridModelPreviewRenderer(renderSettings);
-    const controller: GridModelPreviewController = new GridModelPreviewController(
+    const next: GridModelPreviewController = new GridModelPreviewController(
       renderSettings,
       (task) => {
         if (!task) {
@@ -469,26 +477,19 @@ export function GridModelPreviewProvider({
           return;
         }
         renderer.render(task).then(
-          (blob) => controller.complete(task, blob),
-          (error: unknown) => controller.complete(task, null, error),
+          (blob) => next.complete(task, blob),
+          (error: unknown) => next.complete(task, null, error),
         );
       },
     );
-    return { controller, renderer };
-  }, [renderSettings, sourceRevision]);
+    return next;
+  }, [renderSettings, renderer, sourceRevision]);
 
-  useEffect(
-    () => () => {
-      preview?.controller.dispose();
-      preview?.renderer.dispose();
-    },
-    [preview],
-  );
+  useEffect(() => () => controller?.dispose(), [controller]);
 
   const subscribe = useCallback(
-    (mod: ModInfo, listener: PreviewListener) =>
-      preview?.controller.subscribe(mod, listener) ?? (() => {}),
-    [preview],
+    (mod: ModInfo, listener: PreviewListener) => controller?.subscribe(mod, listener) ?? (() => {}),
+    [controller],
   );
   const value = useMemo(() => ({ enabled, subscribe, viewport }), [enabled, subscribe, viewport]);
 

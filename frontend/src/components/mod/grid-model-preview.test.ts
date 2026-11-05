@@ -366,6 +366,33 @@ describe("GridModelPreviewProvider", () => {
         expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-0");
     });
 
+    it("keeps the render worker across a source refresh", async () => {
+        vi.mocked(Tools.LoadModGridPreview)
+            .mockResolvedValueOnce(rawTransport("before-refresh"))
+            .mockResolvedValueOnce(rawTransport("after-refresh"));
+        vi.spyOn(GridModelPreviewRenderer.prototype, "render").mockResolvedValue(new Blob(["png"]));
+        const disposeRenderer = vi.spyOn(GridModelPreviewRenderer.prototype, "dispose");
+        const props = {
+            viewport: null,
+            sourceRevision: 1,
+            children: createElement(PreviewState, { mod: makeMod([]) }),
+        };
+        const view = render(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-0"),
+        );
+
+        props.sourceRevision = 2;
+        view.rerender(createElement(GridModelPreviewProvider, props));
+        await vi.waitFor(() =>
+            expect(screen.getByTestId("preview").textContent).toBe("blob:test-1"),
+        );
+        expect(disposeRenderer).not.toHaveBeenCalled();
+
+        view.unmount();
+        expect(disposeRenderer).toHaveBeenCalledOnce();
+    });
+
     it("discards a model load that finishes after a source refresh", async () => {
         const oldLoad = deferred<ReturnType<typeof rawTransport>>();
         vi.mocked(Tools.LoadModGridPreview)
