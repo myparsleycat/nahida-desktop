@@ -19,7 +19,11 @@
     "rename": "重命名",
     "download": "下载",
     "later": "稍后",
-    "beta": "测试版"
+    "beta": "测试版",
+    "browse": "浏览",
+    "clear": "清除",
+    "move_up": "上移",
+    "move_down": "下移"
   },
   "page": {
     "agent": {
@@ -818,7 +822,8 @@
             "warn_clean": "输入 WIPE 以确认："
           },
           "log": {
-            "input_placeholder": "输入..."
+            "input_placeholder": "输入...",
+            "send_input": "发送输入"
           },
           "only_wwmi": "Wuwa Mod Fixer 仅可用于 WWMI 游戏或未设置导入器的游戏。",
           "unsupported_game": "此游戏不支持 Wuwa Mod Fixer。"
@@ -880,7 +885,8 @@
               "completed": "已完成",
               "partial": "未完成",
               "preparing": "准备中"
-            }
+            },
+            "restore_entry": "恢复此文件"
           }
         }
       },
@@ -1004,7 +1010,8 @@
         "games": "游戏",
         "select_preset": "选择预设",
         "no_presets": "没有预设",
-        "presets": "预设"
+        "presets": "预设",
+        "launch_game": "启动游戏"
       },
       "key-recorder": {
         "prompt": "请按下按键组合...",
@@ -1014,7 +1021,8 @@
       "ini": {
         "key_dialog_description": "按下要设置的按键组合",
         "add_key": "添加按键",
-        "add_back_key": "添加上一个按键"
+        "add_back_key": "添加上一个按键",
+        "open_file": "打开 INI 文件"
       }
     },
     "gamebanana": {

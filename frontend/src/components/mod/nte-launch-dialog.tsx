@@ -89,7 +89,13 @@ export function NteLaunchDialog() {
           <FieldLabel>{t("page.mod.dialog.nte-launch.path_label")}</FieldLabel>
           <div className="flex gap-2">
             <Input value={executablePath} readOnly hideFocusRing />
-            <Button type="button" variant="outline" size="icon" onClick={handlePickExecutable}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={t("g.browse")}
+              onClick={handlePickExecutable}
+            >
               <FolderOpen className="size-4" />
             </Button>
           </div>

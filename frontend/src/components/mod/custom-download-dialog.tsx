@@ -158,6 +158,7 @@ export function CustomDownloadDialog({
                   type="button"
                   variant="outline"
                   size="icon"
+                  aria-label={t("g.cancel")}
                   onClick={() => onOpenChange(false)}
                   disabled={isSubmitting}
                 >
@@ -166,6 +167,7 @@ export function CustomDownloadDialog({
                 <Button
                   form={formId}
                   type="submit"
+                  aria-label={t("g.download")}
                   disabled={!groupPath || !canSubmit || isSubmitting}
                   size="icon"
                 >

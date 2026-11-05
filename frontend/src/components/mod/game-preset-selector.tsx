@@ -155,7 +155,12 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
           {games.length > 0 && (
-            <Button variant="outline" size="icon" onClickPromise={handlePlayClick}>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={t("page.mod.game-selector.launch_game")}
+              onClickPromise={handlePlayClick}
+            >
               <PlayIcon className="size-4" />
             </Button>
           )}
@@ -195,6 +200,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        aria-label={t("page.mod.dialog.edit-game.title")}
                         className="opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={() => {
                           handleEditGameClick(game);

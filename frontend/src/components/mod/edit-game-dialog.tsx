@@ -356,6 +356,7 @@ function EditGameDialogContent({
                     variant="outline"
                     size="icon"
                     disabled={isNteSelected && nte.isResolving}
+                    aria-label={t("g.browse")}
                     onClick={() => void handlePickFolder()}
                   >
                     <FolderOpen className="size-4" />
@@ -407,6 +408,7 @@ function EditGameDialogContent({
                 type="button"
                 variant="outline"
                 size="icon"
+                aria-label={t("g.move_up")}
                 disabled={!canMoveUp}
                 onClick={() => handleMove(-1)}
               >
@@ -416,6 +418,7 @@ function EditGameDialogContent({
                 type="button"
                 variant="outline"
                 size="icon"
+                aria-label={t("g.move_down")}
                 disabled={!canMoveDown}
                 onClick={() => handleMove(1)}
               >

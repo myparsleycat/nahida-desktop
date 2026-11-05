@@ -19,7 +19,11 @@
     "rename": "이름 변경",
     "download": "다운로드",
     "later": "나중에",
-    "beta": "베타"
+    "beta": "베타",
+    "browse": "찾아보기",
+    "clear": "지우기",
+    "move_up": "위로 이동",
+    "move_down": "아래로 이동"
   },
   "page": {
     "agent": {
@@ -818,7 +822,8 @@
             "warn_clean": "확인하려면 WIPE를 입력하세요:"
           },
           "log": {
-            "input_placeholder": "입력..."
+            "input_placeholder": "입력...",
+            "send_input": "입력 보내기"
           },
           "only_wwmi": "Wuwa Mod Fixer는 WWMI 게임 또는 임포터가 없는 게임에서만 사용할 수 있습니다.",
           "unsupported_game": "이 게임은 Wuwa Mod Fixer를 지원하지 않습니다."
@@ -880,7 +885,8 @@
               "completed": "완료",
               "partial": "미완료",
               "preparing": "준비 중"
-            }
+            },
+            "restore_entry": "이 파일 복원"
           }
         }
       },
@@ -1004,7 +1010,8 @@
         "games": "게임",
         "select_preset": "프리셋 선택",
         "no_presets": "프리셋 없음",
-        "presets": "프리셋"
+        "presets": "프리셋",
+        "launch_game": "게임 실행"
       },
       "key-recorder": {
         "prompt": "단축키 조합을 누르세요...",
@@ -1014,7 +1021,8 @@
       "ini": {
         "key_dialog_description": "설정할 단축키 조합을 누르세요",
         "add_key": "키 추가",
-        "add_back_key": "이전 키 추가"
+        "add_back_key": "이전 키 추가",
+        "open_file": "INI 파일 열기"
       }
     },
     "gamebanana": {

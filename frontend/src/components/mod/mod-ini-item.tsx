@@ -190,6 +190,8 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
 });
 
 export const ModIniItem = memo(function ModIniItem({ ini, onOpenKeySetting }: ModIniItemProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-1 text-[13px]">
       <div className="flex items-center justify-between gap-1">
@@ -199,6 +201,7 @@ export const ModIniItem = memo(function ModIniItem({ ini, onOpenKeySetting }: Mo
         <Button
           variant="ghost"
           size="icon"
+          aria-label={t("page.mod.ini.open_file")}
           className="size-7 shrink-0"
           onClick={(e) => {
             e.stopPropagation();

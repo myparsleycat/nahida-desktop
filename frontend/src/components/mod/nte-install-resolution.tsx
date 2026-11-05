@@ -102,7 +102,13 @@ export function NteCustomModFolderField({
       <FieldLabel htmlFor={id}>{t("page.mod.dialog.add-game.nte_custom_mod_folder")}</FieldLabel>
       <div className="flex gap-2">
         <Input id={id} value={value} readOnly hideFocusRing onBlur={onBlur} />
-        <Button type="button" variant="outline" size="icon" onClick={() => void handlePick()}>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={t("g.browse")}
+          onClick={() => void handlePick()}
+        >
           <FolderOpen className="size-4" />
         </Button>
         <Button
@@ -110,6 +116,7 @@ export function NteCustomModFolderField({
           variant="outline"
           size="icon"
           disabled={!value}
+          aria-label={t("g.clear")}
           onClick={() => onChange("")}
         >
           <XIcon className="size-4" />

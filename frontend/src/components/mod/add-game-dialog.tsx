@@ -53,12 +53,17 @@ interface AddGameDialogProps {
 }
 
 export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGameDialogProps) {
+  const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isAddGameDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsAddGameDialogOpen);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger render={<Button variant="outline" size="icon" />}>
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="icon" aria-label={t("page.mod.dialog.add-game.title")} />
+        }
+      >
         <Plus className="size-4" />
       </DialogTrigger>
       {isOpen && (
@@ -323,6 +328,7 @@ function AddGameDialogContent({
                     variant="outline"
                     size="icon"
                     disabled={isNteSelected && nte.isResolving}
+                    aria-label={t("g.browse")}
                     onClick={() => void handlePickFolder()}
                   >
                     <FolderOpen className="size-4" />

@@ -19,7 +19,11 @@
     "rename": "名前を変更",
     "download": "ダウンロード",
     "later": "後で",
-    "beta": "ベータ"
+    "beta": "ベータ",
+    "browse": "参照",
+    "clear": "クリア",
+    "move_up": "上へ移動",
+    "move_down": "下へ移動"
   },
   "page": {
     "agent": {
@@ -818,7 +822,8 @@
             "warn_clean": "確認のため WIPE と入力:"
           },
           "log": {
-            "input_placeholder": "入力..."
+            "input_placeholder": "入力...",
+            "send_input": "入力を送信"
           },
           "only_wwmi": "Wuwa Mod Fixer は WWMI ゲームまたはインポーター未設定のゲームでのみ使用できます。",
           "unsupported_game": "このゲームは Wuwa Mod Fixer に対応していません。"
@@ -880,7 +885,8 @@
               "completed": "完了",
               "partial": "未完了",
               "preparing": "準備中"
-            }
+            },
+            "restore_entry": "このファイルを復元"
           }
         }
       },
@@ -1004,7 +1010,8 @@
         "games": "ゲーム",
         "select_preset": "プリセットを選択",
         "no_presets": "プリセットがありません",
-        "presets": "プリセット"
+        "presets": "プリセット",
+        "launch_game": "ゲームを起動"
       },
       "key-recorder": {
         "prompt": "キーの組み合わせを押してください...",
@@ -1014,7 +1021,8 @@
       "ini": {
         "key_dialog_description": "設定するキーの組み合わせを押してください",
         "add_key": "キーを追加",
-        "add_back_key": "戻るキーを追加"
+        "add_back_key": "戻るキーを追加",
+        "open_file": "INI ファイルを開く"
       }
     },
     "gamebanana": {

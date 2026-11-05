@@ -597,6 +597,7 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
                 variant="outline"
                 size="icon"
                 className="shrink-0"
+                aria-label={t(`${translationKey}.log.send_input`)}
                 onClick={runner.handleSendInput}
                 disabled={!runner.isRunning}
               >

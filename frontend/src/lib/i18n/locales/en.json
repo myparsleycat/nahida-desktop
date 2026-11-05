@@ -19,7 +19,11 @@
     "rename": "Rename",
     "download": "Download",
     "later": "Later",
-    "beta": "Beta"
+    "beta": "Beta",
+    "browse": "Browse",
+    "clear": "Clear",
+    "move_up": "Move up",
+    "move_down": "Move down"
   },
   "page": {
     "agent": {
@@ -818,7 +822,8 @@
             "warn_clean": "Type WIPE to confirm:"
           },
           "log": {
-            "input_placeholder": "Input..."
+            "input_placeholder": "Input...",
+            "send_input": "Send input"
           },
           "only_wwmi": "Wuwa Mod Fixer is only available for WWMI games or games without an importer.",
           "unsupported_game": "This game does not support Wuwa Mod Fixer."
@@ -880,7 +885,8 @@
               "completed": "Completed",
               "partial": "Incomplete",
               "preparing": "Preparing"
-            }
+            },
+            "restore_entry": "Restore this file"
           }
         }
       },
@@ -1004,7 +1010,8 @@
         "games": "Games",
         "select_preset": "Select a preset",
         "no_presets": "No presets",
-        "presets": "Presets"
+        "presets": "Presets",
+        "launch_game": "Launch game"
       },
       "key-recorder": {
         "prompt": "Press any key combination...",
@@ -1014,7 +1021,8 @@
       "ini": {
         "key_dialog_description": "Press the key combination to set",
         "add_key": "Add key",
-        "add_back_key": "Add previous key"
+        "add_back_key": "Add previous key",
+        "open_file": "Open INI file"
       }
     },
     "gamebanana": {

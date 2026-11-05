@@ -353,6 +353,7 @@ function MergeGroupEditor({
                 type="button"
                 size="icon-xs"
                 variant="outline"
+                aria-label={t("g.move_up")}
                 disabled={index === 0}
                 onClick={() =>
                   onChange({
@@ -367,6 +368,7 @@ function MergeGroupEditor({
                 type="button"
                 size="icon-xs"
                 variant="outline"
+                aria-label={t("g.move_down")}
                 disabled={index === node.children.length - 1}
                 onClick={() =>
                   onChange({

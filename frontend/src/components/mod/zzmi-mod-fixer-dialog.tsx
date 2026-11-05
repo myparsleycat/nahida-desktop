@@ -51,7 +51,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
         <DialogContent className="flex max-h-[88vh] max-w-4xl min-w-lg flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <img src={zzmiModFixerIcon} className="size-7 rounded" />
+              <img src={zzmiModFixerIcon} alt="" className="size-7 rounded" />
               ZZMI Mod Fixer
             </DialogTitle>
             <DialogDescription className="break-all">{runner.activeModPath}</DialogDescription>
@@ -229,6 +229,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                               size="icon-sm"
                               variant="ghost"
                               disabled={runner.zzmiRollbackBusy}
+                              aria-label={t("g.delete")}
                               onClick={() => setPendingDelete({ sessionId: session.id })}
                             >
                               <Trash2Icon />
@@ -252,6 +253,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                                 size="icon-sm"
                                 variant="ghost"
                                 disabled={runner.zzmiRollbackBusy}
+                                aria-label={t(`${key}.rollback.restore_entry`)}
                                 onClick={() => void runner.restoreZZMI(session.id, entry.id)}
                               >
                                 <RotateCcwIcon />
@@ -260,6 +262,7 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                                 size="icon-sm"
                                 variant="ghost"
                                 disabled={runner.zzmiRollbackBusy}
+                                aria-label={t("g.delete")}
                                 onClick={() =>
                                   setPendingDelete({ sessionId: session.id, entryId: entry.id })
                                 }
