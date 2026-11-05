@@ -36,7 +36,10 @@ export function NteLaunchDialog() {
   };
 
   const handlePickExecutable = async () => {
-    const path = await Mod.PickExecutable();
+    const path = await Mod.PickExecutable().catch((error: unknown) => {
+      toast.error(toErrorMessage(error));
+      return null;
+    });
     if (path) {
       setExecutablePath(path);
     }

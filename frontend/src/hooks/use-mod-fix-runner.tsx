@@ -170,7 +170,9 @@ export function useModFixRunner() {
   };
 
   const handleCancel = () => {
-    void Tools.CancelRun();
+    void Tools.CancelRun().catch((error: unknown) => {
+      toast.error(toErrorMessage(error));
+    });
   };
 
   const handleSendInput = () => {
@@ -178,7 +180,9 @@ export function useModFixRunner() {
       return;
     }
 
-    void Tools.SendInput(`${inputCmd}\r\n`);
+    void Tools.SendInput(`${inputCmd}\r\n`).catch((error: unknown) => {
+      toast.error(toErrorMessage(error));
+    });
     setInputCmd("");
   };
 

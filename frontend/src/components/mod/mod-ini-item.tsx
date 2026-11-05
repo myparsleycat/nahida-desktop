@@ -4,8 +4,10 @@ import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
 import type { ModIni, ToggleKey } from "@renderer/types/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
+import { toErrorMessage } from "@shared/utils";
 import { FileCogIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, memo, useMemo } from "react";
+import { toast } from "sonner";
 
 interface KeySettingRequest {
   id: string;
@@ -197,7 +199,9 @@ export const ModIniItem = memo(function ModIniItem({ ini, onOpenKeySetting }: Mo
           className="size-7 shrink-0"
           onClick={(e) => {
             e.stopPropagation();
-            void Shell.OpenPath(ini.path);
+            void Shell.OpenPath(ini.path).catch((error: unknown) => {
+              toast.error(toErrorMessage(error));
+            });
           }}
         >
           <FileCogIcon />

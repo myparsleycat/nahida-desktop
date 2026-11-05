@@ -12,6 +12,7 @@ import {
 } from "@renderer/components/ui/select";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
+import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import { isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
@@ -98,7 +99,9 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const handleGameSelect = async (game: string) => {
     markUserSelectedDuringDownload();
     setSelectedGame(game);
-    await Mod.SetLastGame(game);
+    await Mod.SetLastGame(game).catch((error: unknown) => {
+      Logger.capture("components/mod/game-preset-selector.tsx", "Failed to save last game", error);
+    });
   };
 
   const handleEditGameClick = (game: GameConfig) => {
