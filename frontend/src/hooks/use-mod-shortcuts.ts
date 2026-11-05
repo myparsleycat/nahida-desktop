@@ -60,7 +60,8 @@ export function useModShortcuts(
                 return;
             }
 
-            if (e.key !== "Enter") {
+            // Enter that commits an IME composition, such as a Hangul syllable, is not a submit.
+            if (e.key !== "Enter" || e.isComposing) {
                 return;
             }
 
