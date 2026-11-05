@@ -42,15 +42,15 @@ export function useModDragDrop(
     const archivePromptQueueRef = useRef<
         {
             fileName: string;
-            resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+            resolve: (mode: ResolvedArchiveExtractPathMode | null) => void;
         }[]
     >([]);
     const activeArchivePromptRef = useRef<{
         fileName: string;
-        resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+        resolve: (mode: ResolvedArchiveExtractPathMode | null) => void;
     } | null>(null);
 
-    const resolveArchivePrompt = (mode: ResolvedArchiveExtractPathMode) => {
+    const resolveArchivePrompt = (mode: ResolvedArchiveExtractPathMode | null) => {
         const activePrompt = activeArchivePromptRef.current;
         if (!activePrompt) {
             return;
@@ -69,7 +69,9 @@ export function useModDragDrop(
         setArchiveExtractDialogFileName(nextPrompt.fileName);
     };
 
-    const enqueueArchivePrompt = (fileName: string): Promise<ResolvedArchiveExtractPathMode> => {
+    const enqueueArchivePrompt = (
+        fileName: string,
+    ): Promise<ResolvedArchiveExtractPathMode | null> => {
         return new Promise((resolve) => {
             const request = { fileName, resolve };
 
@@ -86,7 +88,7 @@ export function useModDragDrop(
     const resolveArchiveExtractMode = async (
         fileName: string,
         filePath: string,
-    ): Promise<ResolvedArchiveExtractPathMode> => {
+    ): Promise<ResolvedArchiveExtractPathMode | null> => {
         const mode = (await getSetting("mod.archiveExtractPathMode")) as ArchiveExtractPathMode;
 
         if (mode === "ask_every_time") {
@@ -105,12 +107,12 @@ export function useModDragDrop(
     useEffect(() => {
         return () => {
             if (activeArchivePromptRef.current) {
-                activeArchivePromptRef.current.resolve("flatten_single_root");
+                activeArchivePromptRef.current.resolve(null);
                 activeArchivePromptRef.current = null;
             }
 
             for (const pendingPrompt of archivePromptQueueRef.current) {
-                pendingPrompt.resolve("flatten_single_root");
+                pendingPrompt.resolve(null);
             }
 
             archivePromptQueueRef.current = [];
@@ -201,6 +203,9 @@ export function useModDragDrop(
 
                 if (isArch) {
                     const extractMode = await resolveArchiveExtractMode(fileName, filePath);
+                    if (!extractMode) {
+                        continue;
+                    }
 
                     toast.promise(Mod.ExtractArchiveToGroup(filePath, targetPath, extractMode), {
                         loading: t("page.mod.drag_drop.extract.loading", {
@@ -290,6 +295,6 @@ export function useModDragDrop(
         archiveExtractDialogFileName,
         confirmArchiveExtractDialog: () => resolveArchivePrompt("flatten_single_root"),
         keepArchiveRootDialog: () => resolveArchivePrompt("keep_archive_root"),
-        closeArchiveExtractDialog: () => resolveArchivePrompt("flatten_single_root"),
+        closeArchiveExtractDialog: () => resolveArchivePrompt(null),
     };
 }
