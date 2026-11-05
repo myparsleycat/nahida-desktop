@@ -281,10 +281,18 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
   const invalidatePreviewQueries = useCallback(
     async (groupPath: string) => {
+      // A nested folder's own preview is part of its parent's listing.
+      const parentGroupPath = getParentGroupPath(groupPath);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
         queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] }),
         queryClient.invalidateQueries({ queryKey: ["subGroups", groupPath] }),
+        parentGroupPath
+          ? queryClient.invalidateQueries({ queryKey: ["subGroups", parentGroupPath] })
+          : Promise.resolve(),
+        parentGroupPath
+          ? queryClient.invalidateQueries({ queryKey: ["manualSubGroups", parentGroupPath] })
+          : Promise.resolve(),
         selectedGroup?.path && selectedGroup.path !== groupPath
           ? queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup.path] })
           : Promise.resolve(),
