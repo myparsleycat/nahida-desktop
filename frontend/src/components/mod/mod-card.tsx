@@ -38,7 +38,7 @@ export const ModCard = memo(function ModCard({
   onToggle,
   onToggleKeyUpdate,
 }: ModCardProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const hasDependencies = Boolean(mod.dependencies?.length);
   const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const downloadTransfer = useModDownloadTransfer(mod.path);
@@ -101,7 +101,7 @@ export const ModCard = memo(function ModCard({
               >
                 <img
                   src={localFileSrc(mod.preview, { cacheKey: mod.mtime })}
-                  alt="preview"
+                  alt=""
                   className="h-full w-full object-fill"
                 />
               </div>
@@ -175,7 +175,11 @@ export const ModCard = memo(function ModCard({
                     <Separator orientation="vertical" />
                     <button
                       type="button"
-                      aria-label={isIniListExpanded ? "Collapse ini list" : "Expand ini list"}
+                      aria-label={
+                        isIniListExpanded
+                          ? t("page.mod.card.collapse_ini_list")
+                          : t("page.mod.card.expand_ini_list")
+                      }
                       className="pointer-events-auto absolute inset-y-0 left-1/2 z-10 w-6 -translate-x-1/2 bg-transparent"
                       style={{ cursor: "col-resize" }}
                       onClick={(e) => {

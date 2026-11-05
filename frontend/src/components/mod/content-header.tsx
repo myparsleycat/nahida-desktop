@@ -258,7 +258,9 @@ export function ContentHeader({ modFixer, handleOpenModFixer, isPreparing }: Con
                 }}
               >
                 <LayersIcon />
-                {isMergeMode ? t("page.mod.merge.exit") : t("page.mod.merge.enter") + " (Beta)"}
+                {isMergeMode
+                  ? t("page.mod.merge.exit")
+                  : `${t("page.mod.merge.enter")} (${t("g.beta")})`}
               </DropdownMenuItem>
             )}
 

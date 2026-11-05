@@ -7,6 +7,7 @@ import { formatKeyLabel } from "@shared/key-formatter";
 import { toErrorMessage } from "@shared/utils";
 import { FileCogIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 interface KeySettingRequest {
@@ -96,6 +97,8 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
   toggleKey,
   onOpenKeySetting,
 }: ModToggleKeyItemProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-1 rounded-lg bg-foreground/5 p-1 shadow-sm">
       <div className="grid h-4.5 grid-cols-[1.5rem_1fr] p-0">
@@ -137,7 +140,7 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
             className="w-full justify-start text-xs text-muted-foreground"
           >
             <PlusIcon className="mr-1.5 size-3" />
-            Add key
+            {t("page.mod.ini.add_key")}
           </Button>
         </KeySettingTrigger>
       )}
@@ -178,7 +181,7 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
             )}
           >
             <PlusIcon className="mr-1.5 size-3" />
-            Add back
+            {t("page.mod.ini.add_back_key")}
           </Button>
         </KeySettingTrigger>
       )}

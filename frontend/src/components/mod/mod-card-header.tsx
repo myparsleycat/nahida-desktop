@@ -209,7 +209,9 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 <DropdownMenuSeparator />
 
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Preset ({actions.fixRunner.presets.length})</DropdownMenuLabel>
+                  <DropdownMenuLabel>
+                    {t("page.mod.card.preset_count", { total: actions.fixRunner.presets.length })}
+                  </DropdownMenuLabel>
                   {actions.fixRunner.presets.map((preset) => (
                     <DropdownMenuItem
                       key={preset.id}
@@ -233,7 +235,9 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
 
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>
-                    Fix Tool ({actions.fixRunner.fixTools.length})
+                    {t("page.mod.card.fix_tool_count", {
+                      total: actions.fixRunner.fixTools.length,
+                    })}
                   </DropdownMenuLabel>
                   {actions.fixRunner.fixTools.map((tool) => (
                     <DropdownMenuItem

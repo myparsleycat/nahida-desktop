@@ -207,7 +207,7 @@ export function useModFixRunner() {
 
   const handleOpenWuwaFixer = async (modPath: string) => {
     if (!showWuwaFixer) {
-      toast.error("Wuwa Mod Fixer is only available for WWMI or importer-less games.");
+      toast.error(t(`${translationKey}.only_wwmi`));
       return;
     }
 
@@ -218,7 +218,7 @@ export function useModFixRunner() {
       setPrepareResult(result);
 
       if (!result.supported) {
-        toast.error("This game does not support Wuwa Mod Fixer.");
+        toast.error(t(`${translationKey}.unsupported_game`));
         return;
       }
 

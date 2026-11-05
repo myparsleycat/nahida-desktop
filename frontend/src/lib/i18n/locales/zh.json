@@ -819,13 +819,17 @@
           },
           "log": {
             "input_placeholder": "输入..."
-          }
+          },
+          "only_wwmi": "Wuwa Mod Fixer 仅可用于 WWMI 游戏或未设置导入器的游戏。",
+          "unsupported_game": "此游戏不支持 Wuwa Mod Fixer。"
         },
         "zzmi-fix-runner": {
           "only_zzmi": "ZZMI Mod Fixer 仅可用于 ZZMI 游戏。",
           "rules": {
             "source": "规则来源：{{source}}",
-            "refresh": "刷新"
+            "refresh": "刷新",
+            "source_cached": "已下载",
+            "source_embedded": "内置"
           },
           "update": {
             "available": "有新的 ZZMI fixer 规则可用。",
@@ -871,7 +875,12 @@
             "delete_description": "所选备份数据将被永久删除。",
             "delete_all": "全部删除",
             "delete_all_title": "删除所有 ZZMI 备份？",
-            "delete_all_description": "当前所选模组的所有 ZZMI fixer 备份将被永久删除。"
+            "delete_all_description": "当前所选模组的所有 ZZMI fixer 备份将被永久删除。",
+            "status": {
+              "completed": "已完成",
+              "partial": "未完成",
+              "preparing": "准备中"
+            }
           }
         }
       },
@@ -951,7 +960,9 @@
         "open-gamebanana": "在 GameBanana 中查看",
         "mark-manual-subgroup": "指定为子分组",
         "rename": "重命名",
-        "find-conflict": "查找冲突模组"
+        "find-conflict": "查找冲突模组",
+        "preset": "预设",
+        "fix_tool": "修复工具"
       },
       "toast": {
         "trash-error": "删除失败",
@@ -969,12 +980,41 @@
           "error": "保存预览失败",
           "unsupported": "侧边栏只接受 1 个图片或视频文件作为预览拖放。",
           "path-error": "无法解析文件路径。"
-        }
+        },
+        "model-viewer-open-failed": "无法打开模型查看器",
+        "open-preview-failed": "无法打开预览文件"
       },
       "log-dialog": {
         "title": "日志",
         "running": "运行中...",
         "python-required": "运行 Python 修复工具需要 Python。请安装 Python，并确保 python 命令可用。"
+      },
+      "card": {
+        "collapse_ini_list": "收起 INI 列表",
+        "expand_ini_list": "展开 INI 列表",
+        "preset_count": "预设 ({{total}})",
+        "fix_tool_count": "修复工具 ({{total}})"
+      },
+      "sidebar": {
+        "resize": "调整模组侧边栏大小"
+      },
+      "game-selector": {
+        "select_game": "选择游戏",
+        "no_games": "没有游戏",
+        "games": "游戏",
+        "select_preset": "选择预设",
+        "no_presets": "没有预设",
+        "presets": "预设"
+      },
+      "key-recorder": {
+        "prompt": "请按下按键组合...",
+        "manual_edit": "手动编辑",
+        "placeholder": "例如：ctrl alt no_shift vk_up"
+      },
+      "ini": {
+        "key_dialog_description": "按下要设置的按键组合",
+        "add_key": "添加按键",
+        "add_back_key": "添加上一个按键"
       }
     },
     "gamebanana": {

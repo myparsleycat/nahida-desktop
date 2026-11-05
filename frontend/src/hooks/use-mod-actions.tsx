@@ -337,7 +337,7 @@ export function useModActions(
               .trim()
           : rawMessage;
 
-      toast.error("Failed to open model viewer", {
+      toast.error(t("page.mod.toast.model-viewer-open-failed"), {
         description: message,
       });
     } finally {

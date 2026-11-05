@@ -145,7 +145,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
             <ContextMenuGroup>
               <ContextMenuLabel>Fix</ContextMenuLabel>
               <ContextMenuSub>
-                <ContextMenuSubTrigger>Preset</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>{t("page.mod.context-menu.preset")}</ContextMenuSubTrigger>
                 <ContextMenuSubContent>
                   <ContextMenuGroup>
                     {actions.fixRunner.presets.map((preset) => (
@@ -163,7 +163,7 @@ export function ModContextMenu({ mod, actions, children, disabled = false }: Mod
                 </ContextMenuSubContent>
               </ContextMenuSub>
               <ContextMenuSub>
-                <ContextMenuSubTrigger>Fix Tool</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>{t("page.mod.context-menu.fix_tool")}</ContextMenuSubTrigger>
                 <ContextMenuSubContent>
                   <ContextMenuGroup>
                     {actions.fixRunner.fixTools.map((tool) => (

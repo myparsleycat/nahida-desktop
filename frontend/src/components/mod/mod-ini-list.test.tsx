@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModIniList } from "./mod-ini-list";
 
 vi.mock("@bindings/platform", () => ({ Shell: { OpenPath: vi.fn() } }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@renderer/components/ui/dialog", () => {
   const Wrapper = ({ children }: PropsWithChildren) => <div>{children}</div>;
   return {
@@ -109,7 +110,7 @@ describe("ModIniList", () => {
     render(<ModIniList mod={mod} expanded onToggleKeyUpdate={onToggleKeyUpdate} />);
 
     expect(lookup).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Add key" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "page.mod.ini.add_key" })[0]);
 
     expect(lookup).toHaveBeenCalledOnce();
     expect(screen.getByTestId("other-keys").textContent).toBe(

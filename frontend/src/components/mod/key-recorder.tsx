@@ -4,6 +4,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Kbd } from "@renderer/components/ui/kbd";
 import { formatKeyLabel, getBaseKey, getUsedModifiers } from "@shared/key-formatter";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { mapKeyboardEventToInternal } from "./utils";
 
@@ -14,6 +15,7 @@ interface KeyRecorderProps {
 }
 
 export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProps) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(defaultValue);
   const containerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -118,23 +120,25 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
             ))}
           </div>
         ) : (
-          <span className="text-sm text-muted-foreground">Press any key combination...</span>
+          <span className="text-sm text-muted-foreground">{t("page.mod.key-recorder.prompt")}</span>
         )}
       </div>
       <div className="space-y-1" ref={manualRef}>
-        <p className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">Manual Edit</p>
+        <p className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+          {t("page.mod.key-recorder.manual_edit")}
+        </p>
         <Input
           value={value}
           onChange={(e) => setValue(e.target.value)}
           className="font-mono text-sm"
-          placeholder="e.g. ctrl alt no_shift vk_up"
+          placeholder={t("page.mod.key-recorder.placeholder")}
         />
       </div>
       <div ref={footerRef}>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("g.cancel")}</DialogClose>
           <DialogClose render={<Button ref={saveButtonRef} onClick={() => onSave(value)} />}>
-            Save
+            {t("g.save")}
           </DialogClose>
         </DialogFooter>
       </div>

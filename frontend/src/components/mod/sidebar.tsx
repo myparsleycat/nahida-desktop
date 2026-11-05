@@ -9,6 +9,7 @@ import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModFixerAction } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const CHARACTER_SIDEBAR_WIDTH_DEFAULT = 256;
 const CHARACTER_SIDEBAR_WIDTH_MIN = 220;
@@ -33,6 +34,7 @@ export default function ModSidebar({
   modFixer: ModFixerAction | null;
   onOpenModFixer: (path: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const selectedGame = useModStore((s) => s.selectedGame);
   const setDeletingGame = useModStore((s) => s.setDeletingGame);
   const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
@@ -260,7 +262,7 @@ export default function ModSidebar({
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize mod sidebar"
+        aria-label={t("page.mod.sidebar.resize")}
         className="group absolute inset-y-0 -right-[1.5px] z-30 flex w-[3px] cursor-col-resize touch-none items-center justify-center"
         onPointerDown={handleResizePointerDown}
       >

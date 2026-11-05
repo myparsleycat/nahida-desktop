@@ -819,13 +819,17 @@
           },
           "log": {
             "input_placeholder": "입력..."
-          }
+          },
+          "only_wwmi": "Wuwa Mod Fixer는 WWMI 게임 또는 임포터가 없는 게임에서만 사용할 수 있습니다.",
+          "unsupported_game": "이 게임은 Wuwa Mod Fixer를 지원하지 않습니다."
         },
         "zzmi-fix-runner": {
           "only_zzmi": "ZZMI Mod Fixer는 ZZMI 게임에서만 사용할 수 있습니다.",
           "rules": {
             "source": "규칙 출처: {{source}}",
-            "refresh": "새로고침"
+            "refresh": "새로고침",
+            "source_cached": "다운로드됨",
+            "source_embedded": "내장"
           },
           "update": {
             "available": "새 ZZMI fixer 규칙을 사용할 수 있습니다.",
@@ -871,7 +875,12 @@
             "delete_description": "선택한 백업 데이터가 영구적으로 삭제됩니다.",
             "delete_all": "모두 삭제",
             "delete_all_title": "ZZMI 백업을 모두 삭제할까요?",
-            "delete_all_description": "현재 선택한 모드의 모든 ZZMI fixer 백업이 영구적으로 삭제됩니다."
+            "delete_all_description": "현재 선택한 모드의 모든 ZZMI fixer 백업이 영구적으로 삭제됩니다.",
+            "status": {
+              "completed": "완료",
+              "partial": "미완료",
+              "preparing": "준비 중"
+            }
           }
         }
       },
@@ -951,7 +960,9 @@
         "open-gamebanana": "GameBanana에서 보기",
         "mark-manual-subgroup": "하위 그룹으로 지정",
         "rename": "이름 변경",
-        "find-conflict": "충돌 모드 찾기"
+        "find-conflict": "충돌 모드 찾기",
+        "preset": "프리셋",
+        "fix_tool": "수정 도구"
       },
       "toast": {
         "trash-error": "삭제 실패",
@@ -969,12 +980,41 @@
           "error": "미리보기 저장에 실패했습니다",
           "unsupported": "사이드바에는 이미지 또는 동영상 파일 1개만 미리보기로 드롭할 수 있습니다.",
           "path-error": "파일 경로를 확인할 수 없습니다."
-        }
+        },
+        "model-viewer-open-failed": "모델 뷰어를 열지 못했습니다.",
+        "open-preview-failed": "미리보기 파일을 열지 못했습니다."
       },
       "log-dialog": {
         "title": "로그",
         "running": "실행 중...",
         "python-required": "Python 수정 도구를 실행하려면 Python이 필요합니다. Python을 설치하고 python 명령을 사용할 수 있도록 설정하세요."
+      },
+      "card": {
+        "collapse_ini_list": "INI 목록 접기",
+        "expand_ini_list": "INI 목록 펼치기",
+        "preset_count": "프리셋 ({{total}})",
+        "fix_tool_count": "수정 도구 ({{total}})"
+      },
+      "sidebar": {
+        "resize": "모드 사이드바 크기 조절"
+      },
+      "game-selector": {
+        "select_game": "게임 선택",
+        "no_games": "게임 없음",
+        "games": "게임",
+        "select_preset": "프리셋 선택",
+        "no_presets": "프리셋 없음",
+        "presets": "프리셋"
+      },
+      "key-recorder": {
+        "prompt": "단축키 조합을 누르세요...",
+        "manual_edit": "직접 편집",
+        "placeholder": "예: ctrl alt no_shift vk_up"
+      },
+      "ini": {
+        "key_dialog_description": "설정할 단축키 조합을 누르세요",
+        "add_key": "키 추가",
+        "add_back_key": "이전 키 추가"
       }
     },
     "gamebanana": {

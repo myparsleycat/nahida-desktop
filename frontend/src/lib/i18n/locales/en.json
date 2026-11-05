@@ -819,13 +819,17 @@
           },
           "log": {
             "input_placeholder": "Input..."
-          }
+          },
+          "only_wwmi": "Wuwa Mod Fixer is only available for WWMI games or games without an importer.",
+          "unsupported_game": "This game does not support Wuwa Mod Fixer."
         },
         "zzmi-fix-runner": {
           "only_zzmi": "ZZMI Mod Fixer is only available for ZZMI games.",
           "rules": {
             "source": "Rule source: {{source}}",
-            "refresh": "Refresh"
+            "refresh": "Refresh",
+            "source_cached": "Downloaded",
+            "source_embedded": "Built-in"
           },
           "update": {
             "available": "New ZZMI fixer rules are available.",
@@ -871,7 +875,12 @@
             "delete_description": "The selected backup data will be permanently removed.",
             "delete_all": "Delete all",
             "delete_all_title": "Delete all ZZMI backups?",
-            "delete_all_description": "Every ZZMI fixer backup for this selected mod will be permanently removed."
+            "delete_all_description": "Every ZZMI fixer backup for this selected mod will be permanently removed.",
+            "status": {
+              "completed": "Completed",
+              "partial": "Incomplete",
+              "preparing": "Preparing"
+            }
           }
         }
       },
@@ -951,7 +960,9 @@
         "open-gamebanana": "View on GameBanana",
         "mark-manual-subgroup": "Mark as subgroup",
         "rename": "Rename",
-        "find-conflict": "Find Conflict Mods"
+        "find-conflict": "Find Conflict Mods",
+        "preset": "Preset",
+        "fix_tool": "Fix Tool"
       },
       "toast": {
         "trash-error": "Failed to delete",
@@ -969,12 +980,41 @@
           "error": "Failed to save preview",
           "unsupported": "Only one image or video file can be dropped onto the sidebar as a preview.",
           "path-error": "Failed to resolve the file path."
-        }
+        },
+        "model-viewer-open-failed": "Failed to open the model viewer",
+        "open-preview-failed": "Failed to open the preview file"
       },
       "log-dialog": {
         "title": "Log",
         "running": "Running...",
         "python-required": "Python is required to run Python fix tools. Install Python and make sure the python command is available."
+      },
+      "card": {
+        "collapse_ini_list": "Collapse INI list",
+        "expand_ini_list": "Expand INI list",
+        "preset_count": "Preset ({{total}})",
+        "fix_tool_count": "Fix Tool ({{total}})"
+      },
+      "sidebar": {
+        "resize": "Resize mod sidebar"
+      },
+      "game-selector": {
+        "select_game": "Select a game",
+        "no_games": "No games",
+        "games": "Games",
+        "select_preset": "Select a preset",
+        "no_presets": "No presets",
+        "presets": "Presets"
+      },
+      "key-recorder": {
+        "prompt": "Press any key combination...",
+        "manual_edit": "Manual edit",
+        "placeholder": "e.g. ctrl alt no_shift vk_up"
+      },
+      "ini": {
+        "key_dialog_description": "Press the key combination to set",
+        "add_key": "Add key",
+        "add_back_key": "Add previous key"
       }
     },
     "gamebanana": {

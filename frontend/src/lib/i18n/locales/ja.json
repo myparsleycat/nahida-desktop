@@ -819,13 +819,17 @@
           },
           "log": {
             "input_placeholder": "入力..."
-          }
+          },
+          "only_wwmi": "Wuwa Mod Fixer は WWMI ゲームまたはインポーター未設定のゲームでのみ使用できます。",
+          "unsupported_game": "このゲームは Wuwa Mod Fixer に対応していません。"
         },
         "zzmi-fix-runner": {
           "only_zzmi": "ZZMI Mod Fixer は ZZMI ゲームでのみ使用できます。",
           "rules": {
             "source": "ルールの取得元: {{source}}",
-            "refresh": "更新"
+            "refresh": "更新",
+            "source_cached": "ダウンロード済み",
+            "source_embedded": "内蔵"
           },
           "update": {
             "available": "新しい ZZMI fixer ルールを利用できます。",
@@ -871,7 +875,12 @@
             "delete_description": "選択したバックアップデータは完全に削除されます。",
             "delete_all": "すべて削除",
             "delete_all_title": "ZZMI バックアップをすべて削除しますか？",
-            "delete_all_description": "選択した MOD のすべての ZZMI fixer バックアップが完全に削除されます。"
+            "delete_all_description": "選択した MOD のすべての ZZMI fixer バックアップが完全に削除されます。",
+            "status": {
+              "completed": "完了",
+              "partial": "未完了",
+              "preparing": "準備中"
+            }
           }
         }
       },
@@ -951,7 +960,9 @@
         "open-gamebanana": "GameBananaで表示",
         "mark-manual-subgroup": "サブグループとして指定",
         "rename": "名前を変更",
-        "find-conflict": "競合モードを探す"
+        "find-conflict": "競合モードを探す",
+        "preset": "プリセット",
+        "fix_tool": "修正ツール"
       },
       "toast": {
         "trash-error": "削除失敗",
@@ -969,12 +980,41 @@
           "error": "プレビューの保存に失敗しました",
           "unsupported": "サイドバーには画像または動画ファイルを1つだけプレビューとしてドロップできます。",
           "path-error": "ファイルパスを取得できません。"
-        }
+        },
+        "model-viewer-open-failed": "モデルビューアーを開けませんでした",
+        "open-preview-failed": "プレビューファイルを開けませんでした"
       },
       "log-dialog": {
         "title": "ログ",
         "running": "実行中...",
         "python-required": "Python 修正ツールの実行には Python が必要です。Python をインストールし、python コマンドを使用できるように設定してください。"
+      },
+      "card": {
+        "collapse_ini_list": "INI リストを折りたたむ",
+        "expand_ini_list": "INI リストを展開",
+        "preset_count": "プリセット ({{total}})",
+        "fix_tool_count": "修正ツール ({{total}})"
+      },
+      "sidebar": {
+        "resize": "MOD サイドバーのサイズを変更"
+      },
+      "game-selector": {
+        "select_game": "ゲームを選択",
+        "no_games": "ゲームがありません",
+        "games": "ゲーム",
+        "select_preset": "プリセットを選択",
+        "no_presets": "プリセットがありません",
+        "presets": "プリセット"
+      },
+      "key-recorder": {
+        "prompt": "キーの組み合わせを押してください...",
+        "manual_edit": "手動で編集",
+        "placeholder": "例: ctrl alt no_shift vk_up"
+      },
+      "ini": {
+        "key_dialog_description": "設定するキーの組み合わせを押してください",
+        "add_key": "キーを追加",
+        "add_back_key": "戻るキーを追加"
       }
     },
     "gamebanana": {

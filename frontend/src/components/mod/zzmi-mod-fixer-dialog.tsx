@@ -64,7 +64,11 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                 {rules?.activeCommit?.slice(0, 8) ?? "--------"}
               </span>
               <span className="text-muted-foreground">
-                {t(`${key}.rules.source`, { source: rules?.activeSource ?? "embedded" })}
+                {t(`${key}.rules.source`, {
+                  source: t(`${key}.rules.source_${rules?.activeSource ?? "embedded"}`, {
+                    defaultValue: rules?.activeSource,
+                  }),
+                })}
               </span>
             </div>
             <Button
@@ -200,7 +204,9 @@ export function ZZMIModFixerDialog({ runner }: { runner: ModFixRunner }) {
                                     session.status === "completed" ? "secondary" : "destructive"
                                   }
                                 >
-                                  {session.status}
+                                  {t(`${key}.rollback.status.${session.status}`, {
+                                    defaultValue: session.status,
+                                  })}
                                 </Badge>
                               </div>
                               <p className="text-[11px] text-muted-foreground">

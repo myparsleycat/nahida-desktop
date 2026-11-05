@@ -167,11 +167,21 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             }}
           >
             <SelectTrigger className="w-full" disabled={games.length < 1}>
-              <SelectValue placeholder={games.length > 0 ? "Select a Game" : "No games"} />
+              <SelectValue
+                placeholder={
+                  games.length > 0
+                    ? t("page.mod.game-selector.select_game")
+                    : t("page.mod.game-selector.no_games")
+                }
+              />
             </SelectTrigger>
             <SelectContent finalFocus={false} aria-describedby={undefined}>
               <SelectGroup>
-                <SelectLabel>{games.length > 0 ? "Games" : "No games"}</SelectLabel>
+                <SelectLabel>
+                  {games.length > 0
+                    ? t("page.mod.game-selector.games")
+                    : t("page.mod.game-selector.no_games")}
+                </SelectLabel>
                 {games.map((game, idx) => (
                   <div
                     key={idx.toString()}
@@ -226,11 +236,21 @@ export const GamePresetSelector = memo(function GamePresetSelector({
           }}
         >
           <SelectTrigger className="w-full" disabled={presets.length < 1}>
-            <SelectValue placeholder={presets.length > 0 ? "Select a preset" : "No presets"} />
+            <SelectValue
+              placeholder={
+                presets.length > 0
+                  ? t("page.mod.game-selector.select_preset")
+                  : t("page.mod.game-selector.no_presets")
+              }
+            />
           </SelectTrigger>
           <SelectContent finalFocus={false} aria-describedby={undefined}>
             <SelectGroup>
-              <SelectLabel>{presets.length > 0 ? "Presets" : "No presets"}</SelectLabel>
+              <SelectLabel>
+                {presets.length > 0
+                  ? t("page.mod.game-selector.presets")
+                  : t("page.mod.game-selector.no_presets")}
+              </SelectLabel>
               {presets.map((preset) => (
                 <SelectItem key={preset.id} value={preset.id}>
                   {preset.isLegacy

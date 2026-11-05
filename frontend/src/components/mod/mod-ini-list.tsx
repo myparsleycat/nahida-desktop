@@ -10,6 +10,7 @@ import { Separator } from "@renderer/components/ui/separator";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { KeyRecorder } from "./key-recorder";
 import { ModIniItem } from "./mod-ini-item";
@@ -35,6 +36,7 @@ interface ActiveKeySetting {
 }
 
 export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps) {
+  const { t } = useTranslation();
   const [activeKeySetting, setActiveKeySetting] = useState<ActiveKeySetting | null>(null);
 
   return (
@@ -50,7 +52,7 @@ export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps
         <DialogContent onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle className="capitalize">{activeKeySetting?.label ?? ""}</DialogTitle>
-            <DialogDescription>Press the key combination to set</DialogDescription>
+            <DialogDescription>{t("page.mod.ini.key_dialog_description")}</DialogDescription>
           </DialogHeader>
           <KeyRecorder
             key={activeKeySetting?.id ?? "empty"}

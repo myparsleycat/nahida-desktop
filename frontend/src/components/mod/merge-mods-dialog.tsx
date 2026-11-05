@@ -161,7 +161,9 @@ export function MergeModsDialog() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[min(90vh,800px)] w-[min(48rem,calc(100%-2rem))] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] flex-col overflow-hidden sm:max-w-none">
           <DialogHeader>
-            <DialogTitle>{t("page.mod.merge.dialog_title")} (Beta)</DialogTitle>
+            <DialogTitle>
+              {t("page.mod.merge.dialog_title")} ({t("g.beta")})
+            </DialogTitle>
           </DialogHeader>
 
           {isLoading || !classification ? (

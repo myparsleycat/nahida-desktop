@@ -12,6 +12,7 @@ import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { localFileSrc } from "@renderer/lib/local-file";
 import type { FolderGroup, ModInfo } from "@renderer/types/mod";
+import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BoxIcon,
@@ -159,9 +160,9 @@ export function ModPreviewContainer({
             <ContextMenuItem
               onClick={() => {
                 if (!mod.preview) return;
-                Shell.OpenExternal(mod.preview).catch((error) => {
-                  toast.error("Failed to open external", {
-                    description: error.message,
+                Shell.OpenExternal(mod.preview).catch((error: unknown) => {
+                  toast.error(t("page.mod.toast.open-preview-failed"), {
+                    description: toErrorMessage(error),
                   });
                 });
               }}
