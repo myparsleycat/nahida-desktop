@@ -2,7 +2,12 @@ import { Mod } from "@bindings/mod";
 import { type FolderSortDirection, type FolderSortKey, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { Classification } from "@shared/types";
-import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
+import {
+    keepPreviousData,
+    type UseQueryResult,
+    useQueries,
+    useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import {
@@ -11,6 +16,10 @@ import {
     collectManualSubGroupPaths,
     type VisibleSidebarRow,
 } from "./character-sidebar-visible-rows";
+
+// Without a stable combine, useQueries returns a new array on every render and the rows are rebuilt each time.
+const selectQueryData = (results: UseQueryResult<FolderGroup[]>[]) =>
+    results.map((result) => result.data);
 
 export function useCharacterSidebarVisibleRows(
     groups: FolderGroup[],
@@ -39,21 +48,22 @@ export function useCharacterSidebarVisibleRows(
         return [...paths];
     }, [expandedGroups, isSearching, persistentGroups]);
 
-    const subGroupQueries = useQueries({
+    const subGroupData = useQueries({
         queries: subGroupPaths.map((path) => ({
             queryKey: ["subGroups", path] as const,
             queryFn: async () => ((await Mod.GetSubGroups(path, null)) ?? []) as FolderGroup[],
             placeholderData: keepPreviousData,
         })),
+        combine: selectQueryData,
     });
 
     const subGroupsByPath = useMemo(() => {
         const map = new Map<string, FolderGroup[]>();
         for (const [index, path] of subGroupPaths.entries()) {
-            map.set(path, subGroupQueries[index]?.data ?? []);
+            map.set(path, subGroupData[index] ?? []);
         }
         return map;
-    }, [subGroupPaths, subGroupQueries]);
+    }, [subGroupData, subGroupPaths]);
 
     // Classified sub folders are listed without their parent being expanded, so they are walked as roots too.
     const roots = classification
@@ -71,22 +81,23 @@ export function useCharacterSidebarVisibleRows(
     const manualPathsKey = collectedManualPaths.join("\0");
     const manualPaths = useMemo(() => collectedManualPaths, [manualPathsKey]);
 
-    const manualQueries = useQueries({
+    const manualData = useQueries({
         queries: manualPaths.map((path) => ({
             queryKey: ["manualSubGroups", path] as const,
             queryFn: async () =>
                 ((await Mod.GetManualSubGroups(path, null)) ?? []) as FolderGroup[],
             placeholderData: keepPreviousData,
         })),
+        combine: selectQueryData,
     });
 
     const manualSubGroupsByPath = useMemo(() => {
         const map = new Map<string, FolderGroup[]>();
         for (const [index, path] of manualPaths.entries()) {
-            map.set(path, manualQueries[index]?.data ?? []);
+            map.set(path, manualData[index] ?? []);
         }
         return map;
-    }, [manualPaths, manualQueries]);
+    }, [manualData, manualPaths]);
 
     return useMemo(
         () =>
