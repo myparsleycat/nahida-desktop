@@ -18,9 +18,16 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import isURL from "validator/lib/isURL";
 
-// Matches the backend check, which accepts only absolute http and https URLs.
+// Matches the backend check, which accepts any absolute http or https URL with a host, such as localhost.
+// The length cap only bounds the validation work on an accidental large paste; presigned links stay well below it.
 const isDownloadURL = (value: string) =>
-  isURL(value, { require_protocol: true, protocols: ["http", "https"] });
+  isURL(value, {
+    require_protocol: true,
+    require_tld: false,
+    allow_underscores: true,
+    max_allowed_length: 16_384,
+    protocols: ["http", "https"],
+  });
 
 interface CustomDownloadDialogProps {
   open: boolean;
