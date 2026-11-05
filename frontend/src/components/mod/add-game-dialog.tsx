@@ -1,5 +1,4 @@
 // oxlint-disable react/no-children-prop
-import { Mod } from "@bindings/mod";
 import { XXMI } from "@bindings/xxmi";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -26,12 +25,17 @@ import { isNteImporter, NTE_IMPORTER_KEY } from "@shared/mod";
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderOpen, Plus, ShieldAlert, XIcon } from "lucide-react";
+import { FolderOpen, Plus, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
+import {
+  NteCustomModFolderField,
+  resolveNteLinkedModFolderPath,
+  useNteInstallResolution,
+} from "./nte-install-resolution";
 
 const NO_IMPORTER_VALUE = "__none__";
 
@@ -46,14 +50,6 @@ interface AddGameDialogProps {
     gameInstallPath?: string | null,
     gameExecutablePath?: string | null,
   ) => void;
-}
-
-interface NteResolution {
-  gameRootPath: string;
-  executablePath: string;
-  modFolderPath: string;
-  linkedModFolderPath: string;
-  requiresElevation: boolean;
 }
 
 export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGameDialogProps) {
@@ -90,9 +86,7 @@ function AddGameDialogContent({
   const formId = "add-game-dialog-form";
   const { t } = useTranslation();
   const navi = useNavigate();
-  const [nteResolution, setNteResolution] = useState<NteResolution | null>(null);
-  const [isResolvingNte, setIsResolvingNte] = useState(false);
-  const [isNteNotFound, setIsNteNotFound] = useState(false);
+  const nte = useNteInstallResolution();
   const [selectedImporter, setSelectedImporter] = useState(NO_IMPORTER_VALUE);
   const isNteSelected = isNteImporter(selectedImporter);
   const isManualSelected = selectedImporter === NO_IMPORTER_VALUE;
@@ -134,7 +128,7 @@ function AddGameDialogContent({
       }
 
       if (isNte) {
-        const resolution = nteResolution ?? (await resolveNtePath(path).catch(() => null));
+        const resolution = nte.resolution ?? (await nte.resolve(path));
         if (!resolution) {
           return;
         }
@@ -165,18 +159,10 @@ function AddGameDialogContent({
     if (!path) return;
 
     form.setFieldValue("path", path);
-    setNteResolution(null);
-    setIsNteNotFound(false);
+    nte.reset();
 
     if (isNteSelected) {
-      await resolveNtePath(path);
-    }
-  };
-
-  const handlePickCustomModFolder = async () => {
-    const path = await onPickFolder();
-    if (path) {
-      form.setFieldValue("customModFolderPath", path);
+      await nte.resolve(path);
     }
   };
 
@@ -190,8 +176,7 @@ function AddGameDialogContent({
     const nextIsNte = isNteImporter(value);
     onChange(value);
     setSelectedImporter(value);
-    setNteResolution(null);
-    setIsNteNotFound(false);
+    nte.reset();
 
     // The path field holds an NTE install folder or a mod folder, so a value of one kind never carries over.
     if (wasNte !== nextIsNte) {
@@ -203,18 +188,6 @@ function AddGameDialogContent({
 
     if (nextIsNte) {
       form.setFieldValue("name", t("page.mod.dialog.add-game.nte_game_name"));
-    }
-  };
-
-  const resolveNtePath = async (installPath: string) => {
-    setIsResolvingNte(true);
-    try {
-      const resolution = await Mod.ResolveNteInstallPath(installPath);
-      setNteResolution(resolution);
-      setIsNteNotFound(!resolution);
-      return resolution;
-    } finally {
-      setIsResolvingNte(false);
     }
   };
 
@@ -342,29 +315,28 @@ function AddGameDialogContent({
                     onBlur={field.handleBlur}
                     onChange={(e) => {
                       field.handleChange(e.target.value);
-                      setNteResolution(null);
-                      setIsNteNotFound(false);
+                      nte.reset();
                     }}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    disabled={isNteSelected && isResolvingNte}
+                    disabled={isNteSelected && nte.isResolving}
                     onClick={() => void handlePickFolder()}
                   >
                     <FolderOpen className="size-4" />
                   </Button>
                 </div>
-                {isNteSelected && nteResolution ? (
+                {isNteSelected && nte.resolution ? (
                   <p className="text-xs break-all text-muted-foreground">
-                    {nteResolution.modFolderPath}
+                    {nte.resolution.modFolderPath}
                   </p>
                 ) : null}
                 {field.state.meta.isTouched && !field.state.meta.isValid ? (
                   <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
                 ) : null}
-                {isNteSelected && isNteNotFound ? (
+                {isNteSelected && nte.isNotFound ? (
                   <FieldError>{t("page.mod.dialog.add-game.nte_not_found")}</FieldError>
                 ) : null}
               </Field>
@@ -376,43 +348,18 @@ function AddGameDialogContent({
           <form.Field
             name="customModFolderPath"
             children={(field) => (
-              <Field>
-                <FieldLabel>{t("page.mod.dialog.add-game.nte_custom_mod_folder")}</FieldLabel>
-                <div className="flex gap-2">
-                  <Input
-                    id={field.name}
-                    value={field.state.value}
-                    readOnly
-                    hideFocusRing
-                    onBlur={field.handleBlur}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handlePickCustomModFolder}
-                  >
-                    <FolderOpen className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={!field.state.value}
-                    onClick={() => field.handleChange("")}
-                  >
-                    <XIcon className="size-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.mod.dialog.add-game.nte_custom_mod_folder_description")}
-                </p>
-              </Field>
+              <NteCustomModFolderField
+                id={field.name}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={field.handleChange}
+                onPickFolder={onPickFolder}
+              />
             )}
           />
         )}
 
-        {isNteSelected && nteResolution?.requiresElevation ? (
+        {isNteSelected && nte.resolution?.requiresElevation ? (
           <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
             <ShieldAlert className="size-4" />
             <AlertTitle>{t("page.mod.dialog.add-game.nte_system_folder_warning_title")}</AlertTitle>
@@ -442,19 +389,5 @@ function AddGameDialogContent({
         />
       </DialogFooter>
     </DialogContent>
-  );
-}
-
-function resolveNteLinkedModFolderPath(resolution: NteResolution, customModFolderPath: string) {
-  if (customModFolderPath) return resolution.linkedModFolderPath;
-  return isSameNteResolutionPath(resolution.modFolderPath, resolution.linkedModFolderPath)
-    ? null
-    : resolution.linkedModFolderPath;
-}
-
-function isSameNteResolutionPath(left: string, right: string) {
-  return (
-    left.trim().replaceAll("/", "\\").toLowerCase() ===
-    right.trim().replaceAll("/", "\\").toLowerCase()
   );
 }
