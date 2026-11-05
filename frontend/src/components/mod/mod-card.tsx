@@ -89,7 +89,7 @@ export const ModCard = memo(function ModCard({
             onToggle(mod, e);
           }}
           onKeyDown={(e) => {
-            if (isDownloading || e.target !== e.currentTarget) {
+            if (isDownloading || e.repeat || e.target !== e.currentTarget) {
               return;
             }
             if (e.key === "Enter" || e.key === " ") {
