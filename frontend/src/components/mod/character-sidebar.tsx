@@ -46,7 +46,7 @@ import { useClassificationMutations } from "@renderer/hooks/use-mod-mutations";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
-import { useModStore } from "@renderer/store/mod";
+import { modStore, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { getParentGroupPath } from "@shared/mod";
 import type { ModFixerAction } from "@shared/types";
@@ -125,7 +125,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const markUserSelectedDuringDownload = useModStore((s) => s.markUserSelectedDuringDownload);
   const selectedGame = useModStore((s) => s.selectedGame);
-  const selectedGroup = useModStore((s) => s.selectedGroup);
   const { data: games = [] } = useGames();
   const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
@@ -281,6 +280,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
   const invalidatePreviewQueries = useCallback(
     async (groupPath: string) => {
+      // Read at call time so these callbacks keep their identity across selections; every item memoizes on them.
+      const selectedGroupPath = modStore.getState().selectedGroup?.path;
       // A nested folder's own preview is part of its parent's listing.
       const parentGroupPath = getParentGroupPath(groupPath);
       await Promise.all([
@@ -293,12 +294,12 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         parentGroupPath
           ? queryClient.invalidateQueries({ queryKey: ["manualSubGroups", parentGroupPath] })
           : Promise.resolve(),
-        selectedGroup?.path && selectedGroup.path !== groupPath
-          ? queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup.path] })
+        selectedGroupPath && selectedGroupPath !== groupPath
+          ? queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] })
           : Promise.resolve(),
       ]);
     },
-    [queryClient, selectedGame, selectedGroup],
+    [queryClient, selectedGame],
   );
 
   const savePreviewPath = useCallback(
@@ -383,7 +384,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
       await Mod.SetManualSubGroup(group.path, enabled)
         .then(async () => {
-          if (!enabled && selectedGroup?.path === group.path) {
+          if (!enabled && modStore.getState().selectedGroup?.path === group.path) {
             setSelectedGroup(parentGroup);
           }
 
@@ -401,7 +402,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           toast.error(toErrorMessage(error));
         });
     },
-    [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup],
+    [queryClient, selectedGame, setSelectedGroup],
   );
 
   const contentProps = {
