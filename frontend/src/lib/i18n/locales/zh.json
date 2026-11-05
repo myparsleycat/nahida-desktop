@@ -648,7 +648,9 @@
         },
         "preset-management": {
           "legacy-badge": "旧版",
-          "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。"
+          "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。",
+          "delete-title": "确定要删除此预设吗？",
+          "delete-description": "「{{name}}」将被永久删除。"
         },
         "delete-game": {
           "title": "删除游戏",

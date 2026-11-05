@@ -648,7 +648,9 @@
         },
         "preset-management": {
           "legacy-badge": "旧形式",
-          "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"
+          "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。",
+          "delete-title": "このプリセットを削除しますか？",
+          "delete-description": "「{{name}}」は完全に削除されます。"
         },
         "delete-game": {
           "title": "ゲーム削除",

@@ -648,7 +648,9 @@
         },
         "preset-management": {
           "legacy-badge": "Legacy",
-          "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
+          "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it.",
+          "delete-title": "Delete this preset?",
+          "delete-description": "\"{{name}}\" will be deleted permanently."
         },
         "delete-game": {
           "title": "Delete Game",
