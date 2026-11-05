@@ -83,13 +83,13 @@ type SRMIToonShaderState = {
     vertexColorEnabled: { value: number };
 };
 
-// Specular, rim and outline values are HoyoToon's defaults. The game's per-material
+// Specular and rim values are HoyoToon's defaults. The game's per-material
 // values come from its material value LUT, which mods do not ship.
 const SPECULAR_SHININESS = "10.0";
 const SPECULAR_ROUGHNESS = "0.02";
 const SPECULAR_INTENSITY = "0.5";
 const RIM_INTENSITY = "0.1";
-const OUTLINE_WIDTH = "0.1";
+const OUTLINE_WIDTH = "0.05";
 const OUTLINE_SCALE = "0.187";
 
 // Pixels inside the silhouette that the rim covers, standing in for HoyoToon's depth

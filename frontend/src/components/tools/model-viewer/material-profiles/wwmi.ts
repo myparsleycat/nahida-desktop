@@ -95,7 +95,7 @@ const SHADOW_WIDTH = "0.01";
 const SKIN_SUBSURFACE = "vec3( 0.9387, 0.6038, 0.4072 )";
 const TOON_MAX_SPECULAR = "0.1";
 const RIM_COLOR = "vec3( 0.5 )";
-const OUTLINE_WIDTH = "0.0011";
+const OUTLINE_WIDTH = "0.00055";
 const OUTLINE_COLOR = "vec3( 0.765 )";
 
 // Pixels inside the silhouette that the rim covers, standing in for HoyoToon's depth

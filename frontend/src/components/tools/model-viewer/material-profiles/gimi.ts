@@ -94,7 +94,7 @@ export type GIMIToonStyle = ModelViewerToonStyleBase & {
     assetDir: string;
 };
 
-// Shading and outline values are HoyoToon's defaults, except the light area: with its
+// Shading values are HoyoToon's defaults, except the light area: with its
 // 0.55, frontal light shades limbs that the game keeps lit to the silhouette. The
 // shadow brightness and specular strength come from kaze-mio's Nahida material.
 export const DEFAULT_GIMI_TOON_STYLE: GIMIToonStyle = {
@@ -106,7 +106,7 @@ export const DEFAULT_GIMI_TOON_STYLE: GIMIToonStyle = {
     rimStrength: 1,
     emission: 0.2,
     outlines: true,
-    outlineWidth: 0.03,
+    outlineWidth: 0.015,
     selfShadow: true,
     lightFollowsCamera: true,
     // The curve compresses bright skin channels unevenly and bleaches it.

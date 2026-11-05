@@ -56,7 +56,7 @@ export const DEFAULT_EFMI_TOON_STYLE: EFMIToonStyle = {
     rimStrength: 0.5,
     rimWidth: 0.3,
     outlines: true,
-    outlineWidth: 0.5,
+    outlineWidth: 0.25,
     outlineBrightness: 0.5,
     selfShadow: true,
     lightFollowsCamera: true,

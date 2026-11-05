@@ -106,7 +106,7 @@ const UI_SUN_COLOR = "vec3( 1.0, 0.92, 0.9 )";
 
 // HoyoToon's outline width defaults to 0 and takes the game's material value; this
 // is a guess until it is measured against game frames.
-const OUTLINE_WIDTH = "1.0";
+const OUTLINE_WIDTH = "0.5";
 
 // Pixels inside the silhouette that the rim covers, standing in for HoyoToon's depth
 // texture offset of 0.0025 screen units per unit of inverse distance.
