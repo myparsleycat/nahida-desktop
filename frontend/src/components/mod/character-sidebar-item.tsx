@@ -217,6 +217,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
         <button
           ref={ref}
           type="button"
+          aria-current={isSelected || undefined}
+          aria-expanded={isExpanded}
           onClick={handlePrimaryClick}
           className={cn(
             "w-full text-left",
