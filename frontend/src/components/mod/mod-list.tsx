@@ -1,15 +1,7 @@
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
-import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
-import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
-import { useModActions } from "@renderer/hooks/use-mod-actions";
-import { useModGroup } from "@renderer/hooks/use-mod-data";
-import { useModsWithDownloadPlaceholders } from "@renderer/hooks/use-mod-download-placeholders";
 import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
-import { useModMutations } from "@renderer/hooks/use-mod-mutations";
-import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
-import { useModStore } from "@renderer/store/mod";
-import type { ModInfo } from "@renderer/types/mod";
+import { useModView } from "@renderer/hooks/use-mod-view";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,27 +16,9 @@ interface ModListProps {
 
 export function ModList({ runner }: ModListProps) {
   const { t } = useTranslation();
-  const searchQuery = useModStore((s) => s.searchQuery);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
-
-  const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
-  const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
-  const { actions, overlays } = useModActions(selectedGroupPath, runner);
-
-  const isMergeMode = useModStore((s) => s.isMergeMode);
-  const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
-  const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
-
-  const displayMods = useModsWithDownloadPlaceholders(
-    selectedGroupPath,
-    isPlaceholderData ? [] : activeGroup?.mods || [],
-  );
-  const mods = useFilteredMods(displayMods, searchQuery);
-  useModShortcuts(searchQuery, mods, actions.confirmEnable);
-  const isLoading = isPending || isPlaceholderData;
-  const showDelayedSkeleton = useDelayedSkeleton(isLoading);
-  const showSkeleton =
-    displayMods.length === 0 && ((isPlaceholderData && activeGroup != null) || showDelayedSkeleton);
+  const { searchQuery, selectedGroupPath, mods, actions, overlays, showSkeleton, handleToggle } =
+    useModView(runner);
   const getRowKey = useCallback(
     (index: number) => {
       const modPath = mods[index]?.path;
@@ -69,30 +43,6 @@ export function ModList({ runner }: ModListProps) {
     viewport.scrollTo({ top: 0 });
     rowVirtualizer.scrollToOffset(0);
   }, [rowVirtualizer, searchQuery, selectedGroupPath, viewport]);
-
-  const handleToggle = useCallback(
-    (mod: ModInfo, event: React.MouseEvent) => {
-      if (isMergeMode) {
-        toggleMergeSelection(mod.path);
-        return;
-      }
-      const isExclusive = event.ctrlKey || event.metaKey;
-      actions.confirmEnable(mod, () => {
-        if (isExclusive) {
-          exclusiveToggleModMutation.mutate(mod);
-        } else {
-          toggleModMutation.mutate(mod);
-        }
-      });
-    },
-    [
-      actions.confirmEnable,
-      isMergeMode,
-      toggleMergeSelection,
-      toggleModMutation.mutate,
-      exclusiveToggleModMutation.mutate,
-    ],
-  );
 
   if (!selectedGroupPath) {
     return (
