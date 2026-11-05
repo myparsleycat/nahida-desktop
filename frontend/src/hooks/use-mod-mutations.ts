@@ -283,6 +283,22 @@ export function useGameMutations() {
     };
 }
 
+// Toggling renames the mod folder, so a second request for the same mod would target a path that no longer
+// exists. Shared across hook instances because cards, rows, and shortcuts each create their own mutations.
+const togglingModPaths = new Set<string>();
+
+async function toggleOnce(mod: ModInfo, toggle: () => Promise<FolderGroup | null>) {
+    if (togglingModPaths.has(mod.path)) {
+        return null;
+    }
+    togglingModPaths.add(mod.path);
+    try {
+        return await toggle();
+    } finally {
+        togglingModPaths.delete(mod.path);
+    }
+}
+
 export function useModMutations() {
     const { t } = useTranslation();
     const queryClient = useQueryClient();
@@ -370,20 +386,20 @@ export function useModMutations() {
     };
 
     const toggleModMutation = useMutation({
-        mutationFn: async (mod: ModInfo) => {
-            try {
-                await Mod.Toggle(mod.path);
-                const currentGroupPath = selectedGroup?.path;
-                if (currentGroupPath) {
-                    const refreshedGroup = (await Mod.GetMods(currentGroupPath)) as FolderGroup;
-                    return refreshedGroup;
+        mutationFn: (mod: ModInfo) =>
+            toggleOnce(mod, async () => {
+                try {
+                    await Mod.Toggle(mod.path);
+                    const currentGroupPath = selectedGroup?.path;
+                    if (currentGroupPath) {
+                        return (await Mod.GetMods(currentGroupPath)) as FolderGroup;
+                    }
+                    return null;
+                } catch (error) {
+                    showToggleMutationError(error);
+                    throw error;
                 }
-                return null;
-            } catch (error) {
-                showToggleMutationError(error);
-                throw error;
-            }
-        },
+            }),
         onSuccess: (refreshedGroup) => {
             if (refreshedGroup) {
                 updateLocalGroupCache(refreshedGroup);
@@ -392,20 +408,20 @@ export function useModMutations() {
     });
 
     const exclusiveToggleModMutation = useMutation({
-        mutationFn: async (mod: ModInfo) => {
-            try {
-                await Mod.ExclusiveToggle(mod.path);
-                const currentGroupPath = selectedGroup?.path;
-                if (currentGroupPath) {
-                    const refreshedGroup = (await Mod.GetMods(currentGroupPath)) as FolderGroup;
-                    return refreshedGroup;
+        mutationFn: (mod: ModInfo) =>
+            toggleOnce(mod, async () => {
+                try {
+                    await Mod.ExclusiveToggle(mod.path);
+                    const currentGroupPath = selectedGroup?.path;
+                    if (currentGroupPath) {
+                        return (await Mod.GetMods(currentGroupPath)) as FolderGroup;
+                    }
+                    return null;
+                } catch (error) {
+                    showToggleMutationError(error);
+                    throw error;
                 }
-                return null;
-            } catch (error) {
-                showToggleMutationError(error);
-                throw error;
-            }
-        },
+            }),
         onSuccess: (refreshedGroup) => {
             if (refreshedGroup) {
                 updateLocalGroupCache(refreshedGroup);
