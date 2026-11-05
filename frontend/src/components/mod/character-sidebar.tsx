@@ -223,8 +223,13 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           setSearchTerm("");
         }
 
+        // The row layout scrolls its virtualized list; the grid renders every item, so its element can scroll.
         setTimeout(() => {
-          scrollToPathRef.current?.(group.path);
+          if (scrollToPathRef.current) {
+            scrollToPathRef.current(group.path);
+            return;
+          }
+          itemRefs.current.get(group.path)?.element.scrollIntoView({ block: "center" });
         }, 100);
       }
     },

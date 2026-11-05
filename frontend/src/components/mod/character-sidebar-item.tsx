@@ -183,7 +183,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
       setExpandedGroup(group.path, true);
     }
 
-    userClickedRef.current = true;
+    // Reselecting the selected item changes nothing, so a flag set then would swallow a later scroll.
+    userClickedRef.current = !isSelected;
     onClick(group, e, collapseGroupPath);
   };
 

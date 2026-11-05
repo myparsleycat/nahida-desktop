@@ -67,7 +67,8 @@ export function CharacterSidebarRow({
   const persistentGroups = useModStore((s) => s.persistentGroups);
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const lastScrolledPathRef = useRef<string | null>(null);
-  const skipNextScrollRef = useRef(false);
+  // Holds the path of a clicked row, which is already visible; a stale value only matches that same row.
+  const skipScrollPathRef = useRef<string | null>(null);
   const isSearching = searchTerm.trim().length > 0;
 
   const rows = useCharacterSidebarVisibleRows(
@@ -134,8 +135,8 @@ export function CharacterSidebarRow({
     if (!selectedGroupPath || lastScrolledPathRef.current === selectedGroupPath) {
       return;
     }
-    if (skipNextScrollRef.current) {
-      skipNextScrollRef.current = false;
+    if (skipScrollPathRef.current === selectedGroupPath) {
+      skipScrollPathRef.current = null;
       lastScrolledPathRef.current = selectedGroupPath;
       return;
     }
@@ -158,7 +159,7 @@ export function CharacterSidebarRow({
         }
       }
 
-      skipNextScrollRef.current = true;
+      skipScrollPathRef.current = group.path;
       onItemClick(group, e);
     },
     [expandedGroups, isSearching, onItemClick, persistentGroups, setExpandedGroup],
