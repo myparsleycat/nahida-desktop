@@ -2,6 +2,7 @@ import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { TruncatedText } from "@renderer/components/ui/truncated-text";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { useModDownloadTransfer } from "@renderer/hooks/use-mod-download-transfer";
+import type { ModToggleEvent } from "@renderer/hooks/use-mod-view";
 import i18n from "@renderer/lib/i18n";
 import { localFileSrc } from "@renderer/lib/local-file";
 import { cn } from "@renderer/lib/utils";
@@ -25,7 +26,7 @@ export const ModListRow = memo(function ModListRow({
 }: {
   mod: ModInfo;
   actions: ModActionApi;
-  handleToggle: (mod: ModInfo, e: React.MouseEvent) => void;
+  handleToggle: (mod: ModInfo, e: ModToggleEvent) => void;
 }) {
   const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const downloadTransfer = useModDownloadTransfer(mod.path);
@@ -39,8 +40,9 @@ export const ModListRow = memo(function ModListRow({
         role="row"
         aria-busy={isDownloading}
         aria-disabled={isDownloading}
+        tabIndex={isDownloading ? -1 : 0}
         className={cn(
-          "group relative grid h-14 cursor-pointer items-center border-b border-transparent transition-colors",
+          "group relative grid h-14 cursor-pointer items-center border-b border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
           isDownloading
             ? "cursor-wait bg-muted grayscale"
             : getModColorClass(mod.isEnabled, hasMissingDependency(mod)),
@@ -58,6 +60,15 @@ export const ModListRow = memo(function ModListRow({
             return;
           }
           handleToggle(mod, e);
+        }}
+        onKeyDown={(e) => {
+          if (isDownloading || e.target !== e.currentTarget) {
+            return;
+          }
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleToggle(mod, e);
+          }
         }}
       >
         <div className="contents" inert={isDownloading}>

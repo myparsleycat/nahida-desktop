@@ -1,6 +1,7 @@
 import { Separator } from "@renderer/components/ui/separator";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { useModDownloadTransfer } from "@renderer/hooks/use-mod-download-transfer";
+import type { ModToggleEvent } from "@renderer/hooks/use-mod-view";
 import { localFileSrc } from "@renderer/lib/local-file";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
@@ -21,7 +22,7 @@ interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
   actions: ModActionApi;
-  onToggle: (mod: ModInfo, event: React.MouseEvent) => void;
+  onToggle: (mod: ModInfo, event: ModToggleEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
     iniPath: string,
@@ -64,8 +65,9 @@ export const ModCard = memo(function ModCard({
         <div
           aria-busy={isDownloading}
           aria-disabled={isDownloading}
+          tabIndex={isDownloading ? -1 : 0}
           className={cn(
-            "group/mod-card relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg",
+            "group/mod-card relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             isDownloading
               ? "cursor-wait bg-muted grayscale"
               : getModColorClass(mod.isEnabled, hasMissingDependency(mod)),
@@ -85,6 +87,15 @@ export const ModCard = memo(function ModCard({
               return;
             }
             onToggle(mod, e);
+          }}
+          onKeyDown={(e) => {
+            if (isDownloading || e.target !== e.currentTarget) {
+              return;
+            }
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggle(mod, e);
+            }
           }}
           draggable={false}
         >

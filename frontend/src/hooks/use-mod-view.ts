@@ -8,7 +8,9 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { type MouseEvent, useCallback } from "react";
+import { type KeyboardEvent, type MouseEvent, useCallback } from "react";
+
+export type ModToggleEvent = MouseEvent | KeyboardEvent;
 
 export function useModView(runner: ModFixRunner) {
     const searchQuery = useModStore((s) => s.searchQuery);
@@ -38,7 +40,7 @@ export function useModView(runner: ModFixRunner) {
         ((isPlaceholderData && activeGroup != null) || showDelayedSkeleton);
 
     const handleToggle = useCallback(
-        (mod: ModInfo, event: MouseEvent) => {
+        (mod: ModInfo, event: ModToggleEvent) => {
             if (isMergeMode) {
                 toggleMergeSelection(mod.path);
                 return;
