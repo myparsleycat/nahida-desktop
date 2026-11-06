@@ -2,6 +2,7 @@ package setting
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -11,22 +12,17 @@ func TestGitHubTokenIsEncryptedVerifiedAndHidden(t *testing.T) {
 	valid := "github_pat_valid"
 	s, _ := openTemp(t, Options{Hooks: Hooks{
 		VerifyGitHubToken: func(_ context.Context, token string) (int64, error) {
-			if token != valid {
-				return 0, ErrGitHubTokenInvalid
+			switch token {
+			case valid:
+				return 5000, nil
+			case "offline":
+				return 0, errors.New("network unreachable")
 			}
-			return 5000, nil
+			return 0, ErrGitHubTokenInvalid
 		},
 		AfterGitHubTokenChanged: func(token string) { applied = append(applied, token) },
 	}})
 	ctx := context.Background()
-
-	if _, err := s.SetGitHubToken(ctx, GitHubTokenInput{Action: "replace", Token: "rejected"}); err == nil ||
-		!strings.Contains(err.Error(), "githubToken.invalid") {
-		t.Fatalf("invalid token err = %v", err)
-	}
-	if status, _ := s.GetGitHubTokenStatus(ctx); status.Configured || len(applied) != 0 {
-		t.Fatalf("rejected token was saved: status=%+v applied=%q", status, applied)
-	}
 
 	limit, err := s.SetGitHubToken(ctx, GitHubTokenInput{Action: "replace", Token: " " + valid + "\n"})
 	if err != nil || limit != 5000 {
@@ -35,12 +31,27 @@ func TestGitHubTokenIsEncryptedVerifiedAndHidden(t *testing.T) {
 	if raw := rawValue(t, s, githubTokenStorageKey); strings.Contains(raw, valid) {
 		t.Fatal("plaintext token in database")
 	}
-	if token, err := s.LoadGitHubToken(ctx); err != nil || token != valid {
-		t.Fatalf("loaded token=%q err=%v", token, err)
-	}
 	if status, err := s.GetGitHubTokenStatus(ctx); err != nil || !status.Configured || status.Unreadable {
 		t.Fatalf("saved status=%+v err=%v", status, err)
 	}
+
+	// A failed verification, rejected or transient, keeps the saved token.
+	for _, candidate := range []string{"rejected", "offline"} {
+		_, err := s.SetGitHubToken(ctx, GitHubTokenInput{Action: "replace", Token: candidate})
+		if err == nil {
+			t.Fatalf("%s token saved", candidate)
+		}
+		if candidate == "rejected" && !strings.Contains(err.Error(), "githubToken.invalid") {
+			t.Fatalf("invalid token err = %v", err)
+		}
+		if status, _ := s.GetGitHubTokenStatus(ctx); !status.Configured || len(applied) != 1 {
+			t.Fatalf("%s token changed state: status=%+v applied=%q", candidate, status, applied)
+		}
+		if token, err := s.LoadGitHubToken(ctx); err != nil || token != valid {
+			t.Fatalf("after %s: loaded token=%q err=%v", candidate, token, err)
+		}
+	}
+
 	rows, err := s.AdvancedGetAll(ctx)
 	if err != nil {
 		t.Fatal(err)

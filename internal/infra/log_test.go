@@ -363,10 +363,8 @@ func TestRedactSecretsRedactsBareGitHubTokens(t *testing.T) {
 	classic := "ghp_" + strings.Repeat("a1B2", 9)
 	fineGrained := "github_pat_" + strings.Repeat("Z9_y", 20)
 	redacted := redactSecrets("rejected " + classic + " and (" + fineGrained + ")")
-	for _, secret := range []string{classic, fineGrained} {
-		if strings.Contains(redacted, secret) {
-			t.Errorf("token exposed: %s", redacted)
-		}
+	if want := "rejected %REDACTED% and (%REDACTED%)"; redacted != want {
+		t.Fatalf("redacted = %q, want %q", redacted, want)
 	}
 }
 

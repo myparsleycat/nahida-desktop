@@ -310,17 +310,21 @@ func (c *Client) VerifyToken(ctx context.Context, token string) (int64, error) {
 	var body struct {
 		Resources struct {
 			Core struct {
-				Limit int64 `json:"limit"`
+				Limit *int64 `json:"limit"`
 			} `json:"core"`
 		} `json:"resources"`
 	}
-	if err := json.Unmarshal(data, &body); err != nil {
+	err = json.Unmarshal(data, &body)
+	if err == nil && body.Resources.Core.Limit == nil {
+		err = errors.New("missing resources.core.limit")
+	}
+	if err != nil {
 		return 0, infra.AnnotateError(
 			fmt.Errorf("decode GitHub rate limit: %w", err),
 			infra.HTTPDiagnostic(http.MethodGet, rateURL, "decode", response),
 		)
 	}
-	return body.Resources.Core.Limit, nil
+	return *body.Resources.Core.Limit, nil
 }
 
 // RateState returns the last recorded core-rate state, if any.

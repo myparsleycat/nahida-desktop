@@ -214,45 +214,45 @@ func (c *GitHubRateCoordinator) currentIdentity() string {
 }
 
 func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateState, error) {
-	for {
-		c.mu.Lock()
-		store, log, identity := c.store, c.log, c.identity
-		if c.state != nil {
-			state := *c.state
-			c.mu.Unlock()
-			return &state, nil
-		}
+	return c.rateState(ctx, c.currentIdentity())
+}
+
+// rateState returns identity's recorded state. The in-memory copy, including
+// the secondary backoff, is used and filled only while identity is current.
+func (c *GitHubRateCoordinator) rateState(ctx context.Context, identity string) (*GitHubRateState, error) {
+	c.mu.Lock()
+	store, log := c.store, c.log
+	if c.identity == identity && c.state != nil {
+		state := *c.state
 		c.mu.Unlock()
-		if store == nil {
-			return nil, nil
-		}
-		raw, err := store.GetValue(ctx, githubRateKey(identity))
-		if err != nil {
-			return nil, err
-		}
-		var state *GitHubRateState
-		var record githubRateRecord
-		if raw != nil {
-			state = decodeGitHubRateState(*raw, func(err error) { c.warnRefresh(log, err) })
-			_ = json.Unmarshal([]byte(*raw), &record)
-		}
-		c.mu.Lock()
-		if c.identity != identity {
-			c.mu.Unlock()
-			continue
-		}
-		if c.state == nil && state != nil {
-			copyState := *state
-			c.state = &copyState
-			c.secondaryFailures = min(max(record.SecondaryFailures, 0), 5)
-		}
-		if c.state != nil {
-			copyState := *c.state
-			state = &copyState
-		}
-		c.mu.Unlock()
+		return &state, nil
+	}
+	c.mu.Unlock()
+	if store == nil {
+		return nil, nil
+	}
+	raw, err := store.GetValue(ctx, githubRateKey(identity))
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	state := decodeGitHubRateState(*raw, func(err error) { c.warnRefresh(log, err) })
+	var record githubRateRecord
+	_ = json.Unmarshal([]byte(*raw), &record)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.identity != identity {
 		return state, nil
 	}
+	if c.state == nil && state != nil {
+		copyState := *state
+		c.state = &copyState
+		c.secondaryFailures = min(max(record.SecondaryFailures, 0), 5)
+	}
+	if c.state != nil {
+		copyState := *c.state
+		state = &copyState
+	}
+	return state, nil
 }
 
 func decodeGitHubRateState(raw string, reports ...func(error)) *GitHubRateState {
@@ -290,7 +290,11 @@ func (c *GitHubRateCoordinator) currentTime() time.Time {
 }
 
 func (c *GitHubRateCoordinator) CanUseGitHubAPI(ctx context.Context) (bool, *GitHubRateState, error) {
-	state, err := c.GetRateState(ctx)
+	return c.canUseGitHubAPI(ctx, c.currentIdentity())
+}
+
+func (c *GitHubRateCoordinator) canUseGitHubAPI(ctx context.Context, identity string) (bool, *GitHubRateState, error) {
+	state, err := c.rateState(ctx, identity)
 	if err != nil {
 		return false, nil, err
 	}

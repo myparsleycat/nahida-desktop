@@ -283,7 +283,7 @@ func (t *githubTransport) cachedMetadata(
 	entry.useIdentity(identity)
 	now := c.currentTime()
 	if entry.RateFailure != nil && c.IsRateLimited(entry.RateFailure) {
-		state, err := c.GetRateState(request.Context())
+		state, err := c.rateState(request.Context(), identity)
 		if err != nil {
 			return entry, githubTransportResult{err: err}, true
 		}
@@ -301,7 +301,7 @@ func (t *githubTransport) cachedMetadata(
 		}
 	}
 	if policy.refresh || entry.Failures > 0 {
-		allowed, state, err := c.CanUseGitHubAPI(request.Context())
+		allowed, state, err := c.canUseGitHubAPI(request.Context(), identity)
 		if err != nil {
 			return entry, githubTransportResult{err: err}, true
 		}
@@ -344,6 +344,15 @@ func (t *githubTransport) metadata(
 	entry.Version = 1
 	entry.AttemptedAt = now
 	response, identity, err := c.githubRoundTrip(request, base)
+	// A failure that belongs to a token replaced mid-request says nothing about
+	// the current identity; send once more under it.
+	failed := err != nil && !errors.Is(err, context.Canceled) || response != nil && response.StatusCode >= 400
+	if failed && identity != c.currentIdentity() {
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		response, identity, err = c.githubRoundTrip(request, base)
+	}
 	entry.useIdentity(identity)
 	result = githubTransportResult{err: err, header: make(http.Header)}
 	if response != nil {
@@ -507,8 +516,10 @@ func (c *GitHubRateCoordinator) githubRoundTrip(
 	}
 
 	identity, token := c.credentials()
-	if request.Header.Get("Authorization") != "" {
-		token = ""
+	if auth := request.Header.Get("Authorization"); auth != "" {
+		// The caller's own credential has a budget of its own, which is never
+		// the configured one and is not persisted.
+		identity, token = githubTokenIdentity(auth), ""
 	}
 	response, err := c.sendGitHub(request, base, identity, token)
 	if token == "" || response == nil || response.StatusCode != http.StatusUnauthorized {
@@ -543,7 +554,7 @@ func (c *GitHubRateCoordinator) sendGitHub(
 	base http.RoundTripper,
 	identity, token string,
 ) (*http.Response, error) {
-	allowed, state, err := c.CanUseGitHubAPI(request.Context())
+	allowed, state, err := c.canUseGitHubAPI(request.Context(), identity)
 	if err != nil {
 		return nil, err
 	}
@@ -584,17 +595,12 @@ func (c *GitHubRateCoordinator) captureGitHubResponse(
 ) (*GitHubRateState, error) {
 	// A response for an identity replaced mid-request still yields its rate
 	// error, but must not read or update the new identity's state.
-	current := c.currentIdentity() == identity
-	var previous *GitHubRateState
-	if current {
-		var loadErr error
-		previous, loadErr = c.GetRateState(ctx)
-		if loadErr != nil {
-			c.mu.Lock()
-			log := c.log
-			c.mu.Unlock()
-			c.warnRefresh(log, loadErr)
-		}
+	previous, loadErr := c.rateState(ctx, identity)
+	if loadErr != nil {
+		c.mu.Lock()
+		log := c.log
+		c.mu.Unlock()
+		c.warnRefresh(log, loadErr)
 	}
 	state := extractGitHubRateState(response.Header)
 	if state == nil || state.Resource != "core" {
@@ -627,12 +633,12 @@ func (c *GitHubRateCoordinator) captureGitHubResponse(
 	}
 	if secondary {
 		failures := 1
-		if current {
-			c.mu.Lock()
+		c.mu.Lock()
+		if c.identity == identity {
 			c.secondaryFailures = min(c.secondaryFailures+1, 5)
 			failures = c.secondaryFailures
-			c.mu.Unlock()
 		}
+		c.mu.Unlock()
 		until := c.currentTime().Add(githubFailureWait(failures))
 		if hinted, ok := githubRetryAfter(response.Header.Get("Retry-After"), c.currentTime()); ok {
 			until = maxTime(until, hinted)
@@ -640,11 +646,11 @@ func (c *GitHubRateCoordinator) captureGitHubResponse(
 		state.RetryAt = max(state.RetryAt, until.Unix())
 	} else if response.StatusCode >= 200 && response.StatusCode < 300 {
 		state.RetryAt = 0
-		if current {
-			c.mu.Lock()
+		c.mu.Lock()
+		if c.identity == identity {
 			c.secondaryFailures = 0
-			c.mu.Unlock()
 		}
+		c.mu.Unlock()
 	}
 	state.UpdatedAt = c.currentTime().UTC().Format(time.RFC3339Nano)
 	if saveErr := c.saveRateState(ctx, identity, state); saveErr != nil {
