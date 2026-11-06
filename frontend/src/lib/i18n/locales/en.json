@@ -2183,6 +2183,22 @@
           "passwordAction": "Choose a valid password action.",
           "type": "Choose HTTP, SOCKS5 or SOCKS5h.",
           "saveFailed": "Unable to save proxy settings."
+        },
+        "githubToken": {
+          "title": "GitHub token",
+          "description": "Without a token, GitHub API requests are limited to 60 per hour per IP address. A personal access token raises the limit to 5,000 per hour per account. The app only reads public repositories, so a fine-grained token needs no additional permissions. The token is encrypted for the current Windows user before being saved.",
+          "create": "Create a token on GitHub",
+          "label": "Personal access token",
+          "savedPlaceholder": "Enter a new token to replace the saved token.",
+          "remove": "Remove token",
+          "saved": "GitHub token saved. Request limit: {{limit}} per hour.",
+          "rejected": "GitHub rejected the saved token. Requests will be sent without authentication until you replace the token.",
+          "unreadable": "The saved token cannot be decrypted for the current Windows user. Requests will be sent without authentication until you re-enter the token.",
+          "errors": {
+            "empty": "Enter a token.",
+            "invalid": "GitHub could not authenticate this token. Check the token and try again.",
+            "saveFailed": "Unable to save the GitHub token."
+          }
         }
       },
       "title": "Settings",

@@ -41,6 +41,7 @@ type runtime struct {
 	native            *platform.Native
 	updater           *infra.Updater
 	githubRate        *infra.GitHubRateCoordinator
+	github            *github.Client
 	protocol          *infra.Protocol
 	download          *infra.Download
 	archive           *infra.Archive
@@ -155,6 +156,7 @@ func newRuntime() *runtime {
 	protocolService.Configure(httpClient, log)
 	githubRate := infra.NewGitHubRateCoordinator()
 	githubRate.UseLog(log)
+	githubRate.OnTokenRejected(func() { emitAppEvent("github:token-rejected") })
 	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
 	var xxmiService *xxmi.XXMI
 	reshadeService := reshade.New(reshade.Options{
@@ -217,6 +219,7 @@ func newRuntime() *runtime {
 		native:     native,
 		updater:    updaterService,
 		githubRate: githubRate,
+		github:     githubClient,
 		protocol:   protocolService,
 		download:   download,
 		archive:    archive,

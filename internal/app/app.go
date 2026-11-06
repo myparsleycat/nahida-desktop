@@ -115,7 +115,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 	}
 	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
 	rt.setting.UseHooks(
-		runtimeSettingHooks(
+		rt.githubTokenHooks(runtimeSettingHooks(
 			rt.log,
 			rt.transfer,
 			rt.updater,
@@ -125,7 +125,7 @@ func Run(assets embed.FS, icon []byte) (runErr error) {
 			emitAppEvent,
 			syncModelViewerMenu,
 			rt.configureElevatedHelper,
-		),
+		)),
 	)
 	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
 		syncModelViewerMenu(language)

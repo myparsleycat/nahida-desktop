@@ -2175,6 +2175,22 @@
           "passwordAction": "올바른 비밀번호 저장 방식을 선택하세요.",
           "type": "HTTP, SOCKS5, SOCKS5h 중 하나를 선택하세요.",
           "saveFailed": "프록시 설정을 저장하지 못했습니다."
+        },
+        "githubToken": {
+          "title": "GitHub 토큰",
+          "description": "토큰을 사용하지 않으면 GitHub API 요청은 IP 주소별로 시간당 60회로 제한됩니다. 개인용 액세스 토큰을 사용하면 한도가 계정별로 시간당 5,000회로 늘어납니다. 앱은 공개 저장소만 조회하므로 세분화된 토큰(fine-grained token)에 추가 권한을 설정할 필요가 없습니다. 토큰은 현재 Windows 사용자 계정에서만 복호화할 수 있도록 암호화해 저장합니다.",
+          "create": "GitHub에서 토큰 만들기",
+          "label": "개인용 액세스 토큰",
+          "savedPlaceholder": "저장된 토큰을 교체하려면 새 토큰을 입력하세요.",
+          "remove": "토큰 삭제",
+          "saved": "GitHub 토큰을 저장했습니다. 요청 한도: 시간당 {{limit}}회",
+          "rejected": "저장된 토큰으로 GitHub 인증에 실패했습니다. 토큰을 교체할 때까지 인증 없이 요청을 보냅니다.",
+          "unreadable": "현재 Windows 사용자 계정으로 저장된 토큰을 복호화할 수 없습니다. 토큰을 다시 입력할 때까지 인증 없이 요청을 보냅니다.",
+          "errors": {
+            "empty": "토큰을 입력하세요.",
+            "invalid": "GitHub 토큰 인증에 실패했습니다. 토큰을 확인한 후 다시 시도하세요.",
+            "saveFailed": "GitHub 토큰을 저장하지 못했습니다."
+          }
         }
       },
       "title": "설정",

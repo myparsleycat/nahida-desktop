@@ -110,6 +110,7 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	rt.store = store
 	rt.updater.AttachGitHubRate(store.DB.AppState, rt.log)
 	rt.setting.UseClient(store.DB)
+	rt.loadGitHubToken(ctx)
 	rt.setting.UseLocale(platform.SystemLocale())
 	rt.transfer.UseSettings(rt.setting)
 	if err := rt.setting.MigrateElectronStorage(ctx); err != nil {

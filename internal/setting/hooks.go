@@ -1,5 +1,7 @@
 package setting
 
+import "context"
+
 // Hooks are optional afterSet side effects owned by runtime services.
 // Empty Hooks are a no-op so settings remain usable in tests and headless callers.
 type Hooks struct {
@@ -18,6 +20,27 @@ type Hooks struct {
 	AfterToggleViewerHotkeyChanged       func(hotkey string)
 	AfterElevatedHelperChanged           func(enabled bool)
 	AfterRendererReload                  func()
+	// VerifyGitHubToken returns the token's hourly limit or ErrGitHubTokenInvalid.
+	VerifyGitHubToken       func(ctx context.Context, token string) (int64, error)
+	AfterGitHubTokenChanged func(token string)
+	GitHubTokenRejected     func() bool
+}
+
+func (h Hooks) verifyGitHubToken(ctx context.Context, token string) (int64, error) {
+	if h.VerifyGitHubToken == nil {
+		return 0, errGitHubTokenUnverifiable
+	}
+	return h.VerifyGitHubToken(ctx, token)
+}
+
+func (h Hooks) githubTokenChanged(token string) {
+	if h.AfterGitHubTokenChanged != nil {
+		h.AfterGitHubTokenChanged(token)
+	}
+}
+
+func (h Hooks) githubTokenRejected() bool {
+	return h.GitHubTokenRejected != nil && h.GitHubTokenRejected()
 }
 
 func (h Hooks) elevatedHelperChanged(enabled bool) {

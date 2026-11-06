@@ -91,6 +91,17 @@ type githubCacheEntry struct {
 	NextTry       time.Time        `json:"nextTry"`
 	FailureStatus int              `json:"failureStatus,omitempty"`
 	RateFailure   *GitHubRateState `json:"rateFailure,omitempty"`
+	// Identity owns the failure cooldown; the body is public and shared.
+	Identity string `json:"identity,omitempty"`
+}
+
+func (e *githubCacheEntry) useIdentity(identity string) {
+	if e.Identity == identity {
+		return
+	}
+	e.Failures, e.FailureStatus, e.RateFailure = 0, 0, nil
+	e.NextTry = time.Time{}
+	e.Identity = identity
 }
 
 type githubTransportResult struct {
@@ -139,7 +150,7 @@ func (t *githubTransport) RoundTrip(request *http.Request) (*http.Response, erro
 		return nil, err
 	}
 	if !githubMetadataRequest(request) {
-		response, err := t.rate.githubRoundTrip(request, base)
+		response, _, err := t.rate.githubRoundTrip(request, base)
 		if response == nil {
 			done()
 		} else {
@@ -257,6 +268,7 @@ func (t *githubTransport) cachedMetadata(
 	policy githubRequestPolicy,
 ) (githubCacheEntry, githubTransportResult, bool) {
 	c := t.rate
+	identity := c.currentIdentity()
 	entry := c.loadGitHubCache(request.Context(), key)
 	if len(entry.Body) > 0 && !validGitHubMetadata(request, entry.Body) {
 		c.mu.Lock()
@@ -268,6 +280,7 @@ func (t *githubTransport) cachedMetadata(
 		c.cache[key] = entry
 		c.mu.Unlock()
 	}
+	entry.useIdentity(identity)
 	now := c.currentTime()
 	if entry.RateFailure != nil && c.IsRateLimited(entry.RateFailure) {
 		state, err := c.GetRateState(request.Context())
@@ -280,7 +293,7 @@ func (t *githubTransport) cachedMetadata(
 		} else {
 			state.RetryAt = max(state.RetryAt, GitHubRetryTime(entry.RateFailure).Unix())
 		}
-		if err := c.saveRateState(request.Context(), state); err != nil {
+		if err := c.saveRateState(request.Context(), identity, state); err != nil {
 			c.mu.Lock()
 			log := c.log
 			c.mu.Unlock()
@@ -330,7 +343,8 @@ func (t *githubTransport) metadata(
 	now := c.currentTime()
 	entry.Version = 1
 	entry.AttemptedAt = now
-	response, err := c.githubRoundTrip(request, base)
+	response, identity, err := c.githubRoundTrip(request, base)
+	entry.useIdentity(identity)
 	result = githubTransportResult{err: err, header: make(http.Header)}
 	if response != nil {
 		result.status, result.header = response.StatusCode, response.Header.Clone()
@@ -470,22 +484,65 @@ func (c *GitHubRateCoordinator) saveGitHubCache(ctx context.Context, key string,
 	c.warnRefresh(log, err)
 }
 
-func (c *GitHubRateCoordinator) githubRoundTrip(request *http.Request, base http.RoundTripper) (*http.Response, error) {
+// githubRoundTrip sends request under the shared gate and returns the rate
+// identity whose budget the response belongs to.
+func (c *GitHubRateCoordinator) githubRoundTrip(
+	request *http.Request,
+	base http.RoundTripper,
+) (*http.Response, string, error) {
 	c.mu.Lock()
 	closed := c.closed
 	c.mu.Unlock()
 	if closed {
-		return nil, context.Canceled
+		return nil, c.currentIdentity(), context.Canceled
 	}
 	select {
 	case <-request.Context().Done():
-		return nil, request.Context().Err()
+		return nil, c.currentIdentity(), request.Context().Err()
 	case c.gate <- struct{}{}:
 	}
 	defer func() { <-c.gate }()
 	if err := request.Context().Err(); err != nil {
-		return nil, err
+		return nil, c.currentIdentity(), err
 	}
+
+	identity, token := c.credentials()
+	if request.Header.Get("Authorization") != "" {
+		token = ""
+	}
+	response, err := c.sendGitHub(request, base, identity, token)
+	if token == "" || response == nil || response.StatusCode != http.StatusUnauthorized {
+		return response, identity, err
+	}
+
+	// A revoked or expired token fails even public reads; fall back to the
+	// anonymous budget until the user replaces the token.
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	_ = response.Body.Close()
+	if c.rejectToken(identity) {
+		c.mu.Lock()
+		log, notify := c.log, c.onTokenRejected
+		c.mu.Unlock()
+		if notify != nil {
+			notify()
+		}
+		_ = ReportError(log, errors.New("GitHub rejected the configured token"), "GitHubRateCoordinator", Diagnostic{
+			Severity: DiagnosticWarn, Operation: "github-rate", Stage: "token-rejected",
+			Fields: map[string]any{"endpoint": SanitizeLogURL(request.URL.String())},
+		})
+	}
+	// The token may have been replaced meanwhile; keep the identity paired
+	// with the token actually sent so the response lands in its budget.
+	identity, token = c.credentials()
+	response, err = c.sendGitHub(request, base, identity, token)
+	return response, identity, err
+}
+
+func (c *GitHubRateCoordinator) sendGitHub(
+	request *http.Request,
+	base http.RoundTripper,
+	identity, token string,
+) (*http.Response, error) {
 	allowed, state, err := c.CanUseGitHubAPI(request.Context())
 	if err != nil {
 		return nil, err
@@ -494,12 +551,23 @@ func (c *GitHubRateCoordinator) githubRoundTrip(request *http.Request, base http
 		c.recordGitHubRequest(request, "blocked", 0, 0, state)
 		return nil, &GitHubRateError{State: state}
 	}
+	send := request
+	if token != "" {
+		// The header goes on a clone so http.Client never carries it to a
+		// redirect target on another host.
+		send = request.Clone(request.Context())
+		send.Header.Set("Authorization", "Bearer "+token)
+	}
 	started := c.currentTime()
-	response, err := base.RoundTrip(request)
+	response, err := base.RoundTrip(send)
 	status := 0
 	if response != nil {
 		status = response.StatusCode
-		state, err = c.captureGitHubResponse(request.Context(), response)
+		if token != "" && status == http.StatusUnauthorized {
+			c.recordGitHubRequest(request, "request", status, c.currentTime().Sub(started), nil)
+			return response, nil
+		}
+		state, err = c.captureGitHubResponse(request.Context(), identity, response)
 		if err != nil {
 			_ = response.Body.Close()
 			response = nil
@@ -511,14 +579,22 @@ func (c *GitHubRateCoordinator) githubRoundTrip(request *http.Request, base http
 
 func (c *GitHubRateCoordinator) captureGitHubResponse(
 	ctx context.Context,
+	identity string,
 	response *http.Response,
 ) (*GitHubRateState, error) {
-	previous, loadErr := c.GetRateState(ctx)
-	if loadErr != nil {
-		c.mu.Lock()
-		log := c.log
-		c.mu.Unlock()
-		c.warnRefresh(log, loadErr)
+	// A response for an identity replaced mid-request still yields its rate
+	// error, but must not read or update the new identity's state.
+	current := c.currentIdentity() == identity
+	var previous *GitHubRateState
+	if current {
+		var loadErr error
+		previous, loadErr = c.GetRateState(ctx)
+		if loadErr != nil {
+			c.mu.Lock()
+			log := c.log
+			c.mu.Unlock()
+			c.warnRefresh(log, loadErr)
+		}
 	}
 	state := extractGitHubRateState(response.Header)
 	if state == nil || state.Resource != "core" {
@@ -550,10 +626,13 @@ func (c *GitHubRateCoordinator) captureGitHubResponse(
 		state.RetryAt = previous.RetryAt
 	}
 	if secondary {
-		c.mu.Lock()
-		c.secondaryFailures = min(c.secondaryFailures+1, 5)
-		failures := c.secondaryFailures
-		c.mu.Unlock()
+		failures := 1
+		if current {
+			c.mu.Lock()
+			c.secondaryFailures = min(c.secondaryFailures+1, 5)
+			failures = c.secondaryFailures
+			c.mu.Unlock()
+		}
 		until := c.currentTime().Add(githubFailureWait(failures))
 		if hinted, ok := githubRetryAfter(response.Header.Get("Retry-After"), c.currentTime()); ok {
 			until = maxTime(until, hinted)
@@ -561,12 +640,14 @@ func (c *GitHubRateCoordinator) captureGitHubResponse(
 		state.RetryAt = max(state.RetryAt, until.Unix())
 	} else if response.StatusCode >= 200 && response.StatusCode < 300 {
 		state.RetryAt = 0
-		c.mu.Lock()
-		c.secondaryFailures = 0
-		c.mu.Unlock()
+		if current {
+			c.mu.Lock()
+			c.secondaryFailures = 0
+			c.mu.Unlock()
+		}
 	}
 	state.UpdatedAt = c.currentTime().UTC().Format(time.RFC3339Nano)
-	if saveErr := c.saveRateState(ctx, state); saveErr != nil {
+	if saveErr := c.saveRateState(ctx, identity, state); saveErr != nil {
 		c.mu.Lock()
 		log := c.log
 		c.mu.Unlock()

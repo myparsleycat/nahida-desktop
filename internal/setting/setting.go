@@ -26,9 +26,11 @@ type Setting struct {
 	proxyMu      sync.Mutex
 	activeProxy  infra.ProxyConfig
 	proxyInvalid bool
-	client       *db.Client
-	opts         Options
-	specs        map[string]spec
+	// githubTokenMu keeps the stored token and the applied token in step.
+	githubTokenMu sync.Mutex
+	client        *db.Client
+	opts          Options
+	specs         map[string]spec
 }
 
 func New(client *db.Client) *Setting {
@@ -302,7 +304,7 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 	}
 	out := make([]AdvancedRow, 0, len(rows))
 	for _, row := range rows {
-		if row.Key == proxyStorageKey {
+		if row.Key == proxyStorageKey || row.Key == githubTokenStorageKey {
 			continue
 		}
 		out = append(out, AdvancedRow{
@@ -314,9 +316,9 @@ func (s *Setting) AdvancedGetAll(ctx context.Context) ([]AdvancedRow, error) {
 }
 
 func (s *Setting) AdvancedSet(ctx context.Context, key, value string) error {
-	if key == proxyStorageKey {
+	if key == proxyStorageKey || key == githubTokenStorageKey {
 		return settingError(
-			fmt.Errorf("use network settings to change proxy configuration"),
+			fmt.Errorf("use network settings to change %s", key),
 			"advanced-set",
 			"validate-key",
 			key,
