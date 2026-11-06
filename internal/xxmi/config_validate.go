@@ -30,7 +30,7 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 			return fmt.Errorf("invalid %s", name)
 		}
 	}
-	if cfg.CustomDLL != "" && !isCustomDLLID(cfg.CustomDLL) {
+	if cfg.CustomDLL != "" && !isHashID(cfg.CustomDLL) {
 		return fmt.Errorf("invalid custom DLL %q", cfg.CustomDLL)
 	}
 	if _, ok := lookupLibsProvider(cfg.LibsProvider); cfg.LibsProvider != "" && !ok {

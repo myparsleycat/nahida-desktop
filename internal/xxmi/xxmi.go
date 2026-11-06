@@ -129,6 +129,8 @@ type XXMI struct {
 	externalConfigMu sync.Mutex
 	// customDLLMu serializes imports, selection writes, and cleanup of the custom DLL cache.
 	customDLLMu sync.Mutex
+	// shortcutMu serializes writes of Quick Start shortcuts and their icon files.
+	shortcutMu sync.Mutex
 	// libsProviderMu keeps shared provider selections in the order they were made.
 	libsProviderMu sync.Mutex
 	// settingsINIMu orders the d3dx.ini writes that follow saved configs, so the last one writes the latest config.
