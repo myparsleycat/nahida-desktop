@@ -34,10 +34,21 @@ func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporter
 func (x *XXMI) installImporterPackage(
 	ctx context.Context, input InstallImporterPackageInput, lease *elevated.FileLease,
 ) (returnErr error) {
+	stage := "wait-package-lock"
+	watch := infra.NewStallWatch(x.log, "XXMI.installImporterPackage", "install-importer-package", map[string]any{
+		"importer": installDiagnosticValue(input.Importer), "version": installDiagnosticValue(input.Version),
+	})
+	defer watch.Stop()
+	watch.Stage(stage)
+	setStage := func(next string) {
+		stage = next
+		watch.Stage(next)
+	}
+
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
 
-	stage := "validate-input"
+	setStage("validate-input")
 	defer func() {
 		if returnErr != nil {
 			returnErr = infra.ReportError(x.log, returnErr, "XXMI.installImporterPackage", infra.Diagnostic{
@@ -65,14 +76,17 @@ func (x *XXMI) installImporterPackage(
 		if input.Config != nil {
 			return errors.New("importer config is only supported by the built-in launcher")
 		}
-		stage = "pause-importer-watchers"
+		setStage("pause-importer-watchers")
 		resume, err := x.beginImporterMaintenance(ctx)
 		if err != nil {
 			return err
 		}
-		defer resume(nil)
+		defer func() {
+			watch.Stage("resume-importer-watchers")
+			resume(nil)
+		}()
 
-		stage = "install-external-package"
+		setStage("install-external-package")
 		return x.installExternalImporterPackage(ctx, spec, input)
 	}
 	cfg, err := x.GetImporterConfig(ctx, spec.key)
@@ -88,21 +102,24 @@ func (x *XXMI) installImporterPackage(
 			return errors.New("selected package differs from installation version")
 		}
 		if cfg.XXMIVersion.Pinned != "" {
-			stage = "ensure-libraries"
+			setStage("ensure-libraries")
 			if err := x.ensureLibsVersionLocked(ctx, cfg.XXMIVersion.Pinned); err != nil {
 				return err
 			}
 		}
 	}
-	stage = "pause-importer-watchers"
+	setStage("pause-importer-watchers")
 	resume, err := x.beginImporterMaintenance(ctx)
 	if err != nil {
 		return err
 	}
-	defer resume(nil)
+	defer func() {
+		watch.Stage("resume-importer-watchers")
+		resume(nil)
+	}()
 
 	stage = "install-package"
-	return x.installBuiltinImporterPackage(ctx, spec, cfg, input, lease)
+	return x.installBuiltinImporterPackage(ctx, spec, cfg, input, lease, watch)
 }
 
 func installDiagnosticValue(value string) string {

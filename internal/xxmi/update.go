@@ -321,7 +321,11 @@ func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []st
 func (x *XXMI) installUpdates(
 	ctx context.Context, importer string, targets []string, lease *elevated.FileLease,
 ) ([]string, error) {
+	// Each package install below times its own stages.
+	watch := infra.NewStallWatch(x.log, "XXMI.InstallUpdates", "install-updates", map[string]any{"importer": importer})
+	watch.Stage("check-updates")
 	statuses, err := x.CheckUpdates(ctx, false)
+	watch.Stop()
 	if err != nil {
 		return nil, err
 	}

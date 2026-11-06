@@ -38,16 +38,21 @@ func (x *XXMI) startGame(ctx context.Context, importer string, options LaunchOpt
 	defer x.releaseImporter(importer)
 	x.setLaunching(importer, true)
 	defer x.setLaunching(importer, false)
+	watch := infra.NewStallWatch(x.log, "XXMI.StartGame", "launch-game", map[string]any{"importer": importer})
+	defer watch.Stop()
 
+	watch.Stage("launcher-mode")
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {
 		return err
 	}
+	watch.Stage("read-launch-guards")
 	guards, err := x.launchGuards(ctx)
 	if err != nil {
 		return err
 	}
 	if !options.KeepLogging && guards.logging {
+		watch.Stage("check-logging")
 		if err := x.rejectLogging(ctx, importer, external); err != nil {
 			return err
 		}
@@ -56,13 +61,15 @@ func (x *XXMI) startGame(ctx context.Context, importer string, options LaunchOpt
 		if options.IgnoreSmoothMotion {
 			guards.smoothMotion = false
 		}
+		watch.ExternalStage("external-launch")
 		return x.startExternalGame(ctx, importer, guards)
 	}
+	watch.Stage("read-config")
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
 	}
-	return x.launchBuiltinGameLocked(ctx, importer, cfg, options)
+	return x.launchBuiltinGameLocked(ctx, importer, cfg, options, watch)
 }
 
 // The legacy loader injects on its own schedule, so ReShade cannot be ordered ahead of it.

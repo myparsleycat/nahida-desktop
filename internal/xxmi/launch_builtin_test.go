@@ -161,7 +161,7 @@ func TestLaunchReportsGameResolutionFailure(t *testing.T) {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
 	}})
-	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg, LaunchOptions{})
+	err = service.launchBuiltinGameLocked(context.Background(), "GIMI", cfg, LaunchOptions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "XXMI_GAME_FOLDER_NOT_CONFIGURED") {
 		t.Fatalf("launch error = %v", err)
 	}
@@ -589,6 +589,7 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 					"GIMI",
 					cfg,
 					LaunchOptions{IgnoreSmoothMotion: state.ignoreSmoothMotion},
+					nil,
 				)
 				want := state.want
 				if launch == "Direct" {
@@ -665,12 +666,12 @@ func TestWWMIDirectLaunchAsksForResourceTierOnce(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.GameFolder, "Engine"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{})
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{}, nil)
 	if !errors.Is(err, errWWMIResourceTierUndecided) {
 		t.Fatalf("launch error = %v", err)
 	}
 	cfg.WWMI.ResourceTierDecided = true
-	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{})
+	err = New().launchBuiltinGameLocked(context.Background(), "WWMI", cfg, LaunchOptions{}, nil)
 	if err == nil || errors.Is(err, errWWMIResourceTierUndecided) {
 		t.Fatalf("launch after the decision = %v", err)
 	}

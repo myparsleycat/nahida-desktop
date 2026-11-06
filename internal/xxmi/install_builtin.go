@@ -19,10 +19,21 @@ import (
 
 func (x *XXMI) installBuiltinImporterPackage(
 	ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput,
-	lease *elevated.FileLease,
+	lease *elevated.FileLease, watch *infra.StallWatch,
 ) (returnErr error) {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-importer-package")
 	stage := "validate"
+	if watch == nil {
+		watch = infra.NewStallWatch(x.log, "XXMI.installImporterPackage", "install-importer-package", map[string]any{
+			"importer": spec.key, "version": installDiagnosticValue(input.Version),
+		})
+		defer watch.Stop()
+	}
+	watch.Stage(stage)
+	setStage := func(next string) {
+		stage = next
+		watch.Stage(next)
+	}
 	rollbackState := "not-started"
 	defer func() {
 		if returnErr == nil {
@@ -46,7 +57,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if version == "" {
 		return errors.New("invalid importer package version")
 	}
-	stage = "resolve-release"
+	setStage("resolve-release")
 	releases, err := x.github.AllReleases(ctx, spec.repo)
 	if err != nil {
 		return err
@@ -70,12 +81,15 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if signature == "" && !input.AllowUnsigned {
 		return errors.New("XXMI_UNSIGNED_RELEASE")
 	}
-	stage = "download"
+	setStage("download")
 	workDir, err := os.MkdirTemp("", "nahida-xxmi-importer-")
 	if err != nil {
 		return err
 	}
-	defer func() { x.reportCleanup(os.RemoveAll(workDir), "InstallImporterPackage") }()
+	defer func() {
+		watch.Stage("remove-work-dir")
+		x.reportCleanup(os.RemoveAll(workDir), "InstallImporterPackage")
+	}()
 	zipPath := filepath.Join(workDir, "package.zip")
 	if err := x.downloadPackageFile(
 		ctx,
@@ -84,7 +98,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	); err != nil {
 		return err
 	}
-	stage = "verify"
+	setStage("verify")
 	zipInfo, err := os.Stat(zipPath)
 	if err != nil {
 		return err
@@ -111,7 +125,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 			verification.Method = "digest"
 		}
 	}
-	stage = "extract"
+	setStage("extract")
 	extractedPath, err := x.archive.Extract(
 		ctx,
 		zipPath,
@@ -130,7 +144,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if stagedVersion == nil || normalizeVersion(*stagedVersion) != version {
 		return fmt.Errorf("importer package version mismatch: expected %s", version)
 	}
-	stage = "prepare-transaction"
+	setStage("prepare-transaction")
 	if err := os.MkdirAll(filepath.Dir(cfg.ImporterFolder), 0o700); err != nil {
 		return err
 	}
@@ -141,13 +155,18 @@ func (x *XXMI) installBuiltinImporterPackage(
 	var releaseAccess func()
 	transaction.restoreAccess, releaseAccess = x.importerAccessRestorer(lease)
 	defer releaseAccess()
-	defer func() { x.reportCleanup(transaction.Close(), "InstallImporterPackage") }()
+	// The watch names cleanup stages apart from the failed one, which stays in stage for the error report.
+	defer func() {
+		watch.Stage("cleanup-transaction")
+		x.reportCleanup(transaction.Close(), "InstallImporterPackage")
+	}()
 	prepared := false
 	committed := false
 	defer func() {
 		if !prepared || committed {
 			return
 		}
+		watch.Stage("rollback")
 		rollbackState = "rolling-back"
 		if err := transaction.rollback(); err != nil {
 			rollbackState = "rollback-failed"
@@ -174,17 +193,17 @@ func (x *XXMI) installBuiltinImporterPackage(
 			return err
 		}
 	}
-	stage = "pre-install"
+	setStage("pre-install")
 	if _, err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
-	stage = "copy-package"
+	setStage("copy-package")
 	if err := copyTreeFilterToRoot(ctx, stagingDir, stageRoot, shouldSkipImporterMods); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
-	stage = "post-install"
+	setStage("post-install")
 	if _, err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
@@ -222,12 +241,12 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if err := stageRoot.Close(); err != nil {
 		return err
 	}
-	stage = "commit"
+	setStage("commit")
 	if _, _, err := transaction.commit(ctx, nil); err != nil {
 		return err
 	}
 	if input.Config != nil {
-		stage = "save-config"
+		setStage("save-config")
 		// Importer maintenance is still active; resuming it restarts the importer consumers.
 		if _, err := x.saveImporterConfig(ctx, spec.key, cfg); err != nil {
 			return err
@@ -235,6 +254,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	}
 	committed = true
 	rollbackState = "committed"
+	watch.Stage("finish-transaction")
 	x.reportCleanup(transaction.finish(), "InstallImporterPackage")
 	return nil
 }

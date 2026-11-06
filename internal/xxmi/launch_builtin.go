@@ -27,6 +27,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	key string,
 	cfg ImporterConfig,
 	options LaunchOptions,
+	watch *infra.StallWatch,
 ) (returnErr error) {
 	stage := "validate"
 	runtimeSource := "xxmi-libs@latest"
@@ -67,8 +68,19 @@ func (x *XXMI) launchBuiltinGameLocked(
 			})
 		}
 	}()
+	if watch == nil {
+		watch = infra.NewStallWatch(x.log, "XXMI.StartGame", "launch-game", map[string]any{"importer": key})
+		defer watch.Stop()
+	}
+	watch.Stage(stage)
 	progress := func(next string) {
 		stage = next
+		switch next {
+		case "pre-launch", "elevate", "inject-launch", "post-load":
+			watch.ExternalStage(next)
+		default:
+			watch.Stage(next)
+		}
 		if x.eventEmit != nil {
 			x.eventEmit("xxmi:launch-progress", map[string]any{"importer": key, "stage": stage})
 		}
@@ -126,7 +138,10 @@ func (x *XXMI) launchBuiltinGameLocked(
 	// One helper lease covers the launch, so importer and game files that need administrator rights
 	// and the launch itself share a single UAC prompt.
 	lease := elevated.NewFileLease(x.elevated)
-	defer lease.Release()
+	defer func() {
+		watch.Stage("release-elevation")
+		lease.Release()
+	}()
 
 	// Like the reference launcher, a launch that leaves the XXMI DLL out prepares none of the
 	// importer's files, so it also does not need them installed.

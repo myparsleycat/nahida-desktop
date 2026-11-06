@@ -208,7 +208,7 @@ func NewWithOptions(opts Options) *XXMI {
 		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
 	}
 	x.installImporter = func(ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput) error {
-		return x.installBuiltinImporterPackage(ctx, spec, cfg, input, nil)
+		return x.installBuiltinImporterPackage(ctx, spec, cfg, input, nil, nil)
 	}
 	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
