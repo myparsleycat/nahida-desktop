@@ -298,8 +298,9 @@ func readCustomShortcutIcon(dir, key, id string) ([]byte, error) {
 	return data, nil
 }
 
-// pruneShortcutIcons removes the importer's custom icon files other than keep, which may be empty, and temporary
-// files of interrupted writes. The caller must hold shortcutMu, which every write to these folders holds.
+// pruneShortcutIcons removes the importer's custom icon previews other than keep, which may be empty, and temporary
+// files of interrupted writes. The .ico files stay: a shortcut copied or pinned elsewhere, which cannot be found,
+// may still show one. The caller must hold shortcutMu, which every write to these folders holds.
 func pruneShortcutIcons(dir, key, keep string) error {
 	var errs []error
 	for _, folder := range []string{dir, filepath.Join(dir, shortcutCustomIconDir)} {
@@ -314,7 +315,8 @@ func pruneShortcutIcons(dir, key, keep string) error {
 		for _, entry := range entries {
 			name := entry.Name()
 			id, ok := strings.CutPrefix(strings.TrimSuffix(name, filepath.Ext(name)), key+"-")
-			stale := (ok && isHashID(id) && id != keep) || strings.HasPrefix(name, atomicWriteTempPrefix)
+			preview := ok && isHashID(id) && id != keep && strings.EqualFold(filepath.Ext(name), ".png")
+			stale := preview || strings.HasPrefix(name, atomicWriteTempPrefix)
 			if entry.IsDir() || !stale {
 				continue
 			}

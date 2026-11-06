@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -185,15 +186,26 @@ func TestWriteShortcutIconForEveryImporter(t *testing.T) {
 func TestConvertShortcutIcon(t *testing.T) {
 	dir := t.TempDir()
 
-	// A wide JPEG keeps its aspect ratio and is centered between transparent bands.
+	// A wide JPEG keeps its aspect ratio and is centered between transparent bands. Its left half is red and its
+	// right half blue, so where each half lands shows which way the image was turned.
+	red, blue := color.RGBA{R: 255, A: 255}, color.RGBA{B: 255, A: 255}
 	wide := image.NewRGBA(image.Rect(0, 0, 300, 100))
-	draw.Draw(wide, wide.Bounds(), image.NewUniform(color.RGBA{R: 255, A: 255}), image.Point{}, draw.Src)
+	draw.Draw(wide, wide.Bounds(), image.NewUniform(blue), image.Point{}, draw.Src)
+	draw.Draw(wide, image.Rect(0, 0, 150, 100), image.NewUniform(red), image.Point{}, draw.Src)
+	assertPixel := func(name string, icon image.Image, x, y int, want color.RGBA) {
+		t.Helper()
+		r, _, b, alpha := icon.At(x, y).RGBA()
+		if alpha != 0xffff || (r > b) != (want == red) {
+			t.Fatalf("%s: pixel (%d, %d) = red %d blue %d alpha %d, want opaque %v", name, x, y, r, b, alpha, want)
+		}
+	}
 	var encoded bytes.Buffer
 	if err := jpeg.Encode(&encoded, wide, nil); err != nil {
 		t.Fatal(err)
 	}
+	wideJPEG := bytes.Clone(encoded.Bytes())
 	jpegPath := filepath.Join(dir, "wide.jpg")
-	if err := os.WriteFile(jpegPath, encoded.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(jpegPath, wideJPEG, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	data, err := convertShortcutIcon(jpegPath)
@@ -207,47 +219,55 @@ func TestConvertShortcutIcon(t *testing.T) {
 	if _, _, _, alpha := converted.At(128, 10).RGBA(); alpha != 0 {
 		t.Fatalf("band above the image has alpha %d, want transparent", alpha)
 	}
-	if red, _, _, alpha := converted.At(128, 128).RGBA(); alpha != 0xffff || red < 0xf000 {
-		t.Fatalf("image center = red %d alpha %d, want opaque red", red, alpha)
-	}
+	assertPixel("wide.jpg", converted, 64, 128, red)
+	assertPixel("wide.jpg", converted, 192, 128, blue)
 	assertWindowsLoadsIcon(t, filepath.Join(dir, "wide.ico"), data)
-
-	// EXIF orientation 6 turns the stored wide image upright, so it is displayed tall. The JPEG marker carrying it
-	// follows a fill byte, and the PNG carries it in an eXIf chunk after IHDR.
-	tiff := []byte{
-		'I', 'I', 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-	}
-	app1 := append([]byte{0xff, 0xff, 0xe1, 0x00, byte(2 + 6 + len(tiff)), 'E', 'x', 'i', 'f', 0, 0}, tiff...)
-	rotatedJPEG := append(append(append([]byte{}, encoded.Bytes()[:2]...), app1...), encoded.Bytes()[2:]...)
 
 	encoded.Reset()
 	if err := png.Encode(&encoded, wide); err != nil {
 		t.Fatal(err)
 	}
-	const ihdrEnd = 8 + 4 + 4 + 13 + 4
-	chunk := binary.BigEndian.AppendUint32(nil, uint32(len(tiff)))
-	chunk = append(append(chunk, "eXIf"...), tiff...)
-	chunk = binary.BigEndian.AppendUint32(chunk, crc32.ChecksumIEEE(chunk[4:]))
-	rotatedPNG := append(append(append([]byte{}, encoded.Bytes()[:ihdrEnd]...), chunk...), encoded.Bytes()[ihdrEnd:]...)
+	widePNG := encoded.Bytes()
 
-	for name, rotated := range map[string][]byte{"rotated.jpg": rotatedJPEG, "rotated.png": rotatedPNG} {
-		rotatedPath := filepath.Join(dir, name)
-		if err := os.WriteFile(rotatedPath, rotated, 0o600); err != nil {
-			t.Fatal(err)
+	// EXIF orientations 6 and 8 turn the stored wide image upright in opposite directions, so it is displayed tall
+	// with the stored left half on top for 6 and at the bottom for 8. The JPEG marker carrying the orientation
+	// follows a fill byte, and the PNG carries it in an eXIf chunk after IHDR.
+	for _, orientation := range []byte{6, 8} {
+		tiff := []byte{
+			'I', 'I', 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+			0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, orientation, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00,
 		}
-		if data, err = convertShortcutIcon(rotatedPath); err != nil {
-			t.Fatalf("convert %s: %v", name, err)
+		app1 := append([]byte{0xff, 0xff, 0xe1, 0x00, byte(2 + 6 + len(tiff)), 'E', 'x', 'i', 'f', 0, 0}, tiff...)
+		rotatedJPEG := append(append(append([]byte{}, wideJPEG[:2]...), app1...), wideJPEG[2:]...)
+
+		const ihdrEnd = 8 + 4 + 4 + 13 + 4
+		chunk := binary.BigEndian.AppendUint32(nil, uint32(len(tiff)))
+		chunk = append(append(chunk, "eXIf"...), tiff...)
+		chunk = binary.BigEndian.AppendUint32(chunk, crc32.ChecksumIEEE(chunk[4:]))
+		rotatedPNG := append(append(append([]byte{}, widePNG[:ihdrEnd]...), chunk...), widePNG[ihdrEnd:]...)
+
+		top, bottom := red, blue
+		if orientation == 8 {
+			top, bottom = blue, red
 		}
-		if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, _, alpha := converted.At(10, 128).RGBA(); alpha != 0 {
-			t.Fatalf("%s: band left of the upright image has alpha %d, want transparent", name, alpha)
-		}
-		if _, _, _, alpha := converted.At(128, 10).RGBA(); alpha != 0xffff {
-			t.Fatalf("%s: top of the upright image has alpha %d, want opaque", name, alpha)
+		for extension, rotated := range map[string][]byte{"jpg": rotatedJPEG, "png": rotatedPNG} {
+			name := fmt.Sprintf("orientation-%d.%s", orientation, extension)
+			rotatedPath := filepath.Join(dir, name)
+			if err := os.WriteFile(rotatedPath, rotated, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if data, err = convertShortcutIcon(rotatedPath); err != nil {
+				t.Fatalf("convert %s: %v", name, err)
+			}
+			if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, alpha := converted.At(10, 128).RGBA(); alpha != 0 {
+				t.Fatalf("%s: band left of the upright image has alpha %d, want transparent", name, alpha)
+			}
+			assertPixel(name, converted, 128, 64, top)
+			assertPixel(name, converted, 128, 192, bottom)
 		}
 	}
 
@@ -344,8 +364,21 @@ func TestUpdateExistingShortcut(t *testing.T) {
 	defer releaser.Release()
 	link := loadShortcutLink(t, releaser, path)
 	icon, _, err := link.GetIconLocation()
-	if err != nil || !strings.EqualFold(filepath.Base(icon), "SRMI.ico") {
-		t.Fatalf("shortcut icon = %q, want %q, error = %v", icon, second, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Shell links can store an alias of the icon path; compare file identity.
+	iconInfo, err := os.Stat(icon)
+	if err != nil {
+		t.Fatalf("shortcut icon %q: %v", icon, err)
+	}
+	secondInfo, err := os.Stat(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(iconInfo, secondInfo) {
+		t.Fatalf("shortcut icon = %q, want %q", icon, second)
 	}
 	if got, err := link.GetArguments(); err != nil || got != args {
 		t.Fatalf("shortcut arguments = %q, want %q, error = %v", got, args, err)

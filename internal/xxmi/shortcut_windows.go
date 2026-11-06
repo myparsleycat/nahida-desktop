@@ -67,6 +67,7 @@ type ShortcutIconChange struct {
 }
 
 func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
+	key = strings.ToUpper(strings.TrimSpace(key))
 	cfg, err := x.GetImporterConfig(ctx, key)
 	if err != nil {
 		return "", err
@@ -112,11 +113,12 @@ func (x *XXMI) GetShortcutIcon(ctx context.Context, key string) (ShortcutIcon, e
 	if err != nil || id == "" {
 		return ShortcutIcon{}, err
 	}
-	// A missing or damaged custom image leaves the shortcut on the importer's own icon, as resolveShortcutIcon does.
-	if _, err := readCustomShortcutIcon(dir, spec.key, id); err == nil {
-		return ShortcutIcon{Custom: true, Path: customShortcutIconPNG(dir, spec.key, id)}, nil
+	// A missing or damaged custom image is reported so the settings page can offer Reset; meanwhile
+	// resolveShortcutIcon keeps new shortcuts on the importer's own icon.
+	if _, err := readCustomShortcutIcon(dir, spec.key, id); err != nil {
+		return ShortcutIcon{}, fmt.Errorf("read %s custom shortcut icon %s: %w", spec.key, id, err)
 	}
-	return ShortcutIcon{}, nil
+	return ShortcutIcon{Custom: true, Path: customShortcutIconPNG(dir, spec.key, id)}, nil
 }
 
 // SetShortcutIcon converts a PNG, JPEG, or WebP image into the importer's Quick Start icon and applies it to the
@@ -141,7 +143,18 @@ func (x *XXMI) changeShortcutIcon(
 ) (change ShortcutIconChange, returnErr error) {
 	stage := "resolve"
 	id, icon, shortcut, rollback := "", "", "", ""
+	// created lists the custom icon files this call added; they are removed again on failure unless the shortcut
+	// was left pointing at the new icon.
+	var created []string
+	iconInUse := false
 	defer func() {
+		if returnErr != nil && !iconInUse {
+			for _, file := range created {
+				if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+					rollback = strings.TrimPrefix(rollback+"; remove "+file+": "+err.Error(), "; ")
+				}
+			}
+		}
 		if infra.IsCancellationError(returnErr) {
 			return
 		}
@@ -181,11 +194,17 @@ func (x *XXMI) changeShortcutIcon(
 	if id == "" {
 		icon, err = writeShortcutIcon(dir, spec.key)
 	} else {
+		preview := customShortcutIconPNG(dir, spec.key, id)
 		icon = customShortcutIconFile(dir, spec.key, id)
-		if err = writeShortcutFile(customShortcutIconPNG(dir, spec.key, id), data); err == nil {
+		for _, file := range []string{preview, icon} {
+			if _, statErr := os.Lstat(file); errors.Is(statErr, os.ErrNotExist) {
+				created = append(created, file)
+			}
+		}
+		if err = writeShortcutFile(preview, data); err == nil {
 			err = writeIconFile(icon, data)
 		}
-		change.Icon = ShortcutIcon{Custom: true, Path: customShortcutIconPNG(dir, spec.key, id)}
+		change.Icon = ShortcutIcon{Custom: true, Path: preview}
 	}
 	if err != nil {
 		return ShortcutIconChange{}, err
@@ -205,6 +224,7 @@ func (x *XXMI) changeShortcutIcon(
 	if err != nil {
 		return ShortcutIconChange{}, err
 	}
+	iconInUse = change.ShortcutUpdated
 
 	// The shortcut and the stored selection change together: a selection that cannot be saved puts the shortcut
 	// back on the icon the selection still names.
@@ -223,15 +243,15 @@ func (x *XXMI) changeShortcutIcon(
 				_, restoreErr = updateExistingShortcut(restoreCtx, shortcut, previous)
 			}
 			rollback = "restored"
+			iconInUse = false
 			if restoreErr != nil {
 				rollback = "failed: " + restoreErr.Error()
+				iconInUse = true
 			}
 		}
 		return ShortcutIconChange{}, err
 	}
 
-	// A shortcut moved off the desktop or renamed still points at the previous file and loses its icon here;
-	// creating it again restores it.
 	x.reportCleanup(pruneShortcutIcons(dir, spec.key, id), "prune-shortcut-icons")
 	x.log.Info(map[string]any{
 		"importer": spec.key, "icon_id": id, "shortcut_updated": change.ShortcutUpdated,
@@ -318,13 +338,62 @@ func updateExistingShortcut(ctx context.Context, path, icon string) (bool, error
 		if err := link.SetIconLocation(icon, 0); err != nil {
 			return err
 		}
-		return persist.call(persistFileSave, path, 1)
+		return saveShortcut(persist, path)
 	})
 	if err != nil {
 		return false, err
 	}
 	platform.NotifyShellItemUpdated(path)
 	return true, nil
+}
+
+// saveShortcut saves the shell link to a temporary file next to path and replaces path with it, so a failed save
+// leaves the previous shortcut intact.
+func saveShortcut(persist *shortcutPersistFile, path string) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".nhd-shortcut-*.lnk")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	err = temporary.Close()
+	if err == nil {
+		// A false remember flag saves a copy and leaves the link object bound to its loaded file.
+		err = persist.call(persistFileSave, temporaryPath, 0)
+	}
+	if err == nil {
+		err = platform.ReplaceAtomic(temporaryPath, path)
+	}
+	if err != nil {
+		_ = os.Remove(temporaryPath)
+	}
+	return err
+}
+
+// restoreDefaultShortcutIcons puts the desktop shortcuts of the importers in keys back on the importer's own icon
+// and removes their custom icon previews. The caller must hold shortcutMu.
+func (x *XXMI) restoreDefaultShortcutIcons(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	dir, err := shortcutIconRoot()
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, key := range keys {
+		icon, err := writeShortcutIcon(dir, key)
+		if err == nil {
+			var path string
+			if path, err = desktopShortcutPath(key); err == nil {
+				_, err = updateExistingShortcut(ctx, path, icon)
+			}
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("restore %s shortcut icon: %w", key, err))
+		}
+		errs = append(errs, pruneShortcutIcons(dir, key, ""))
+	}
+	return errors.Join(errs...)
 }
 
 func writeShortcut(ctx context.Context, path, key, executable, icon string) error {
@@ -397,5 +466,5 @@ func createWindowsShortcut(ctx context.Context, path, executable, args, icon str
 	if err := link.QueryInterface(releaser, &persist); err != nil {
 		return err
 	}
-	return persist.call(persistFileSave, path, 1)
+	return saveShortcut(persist, path)
 }

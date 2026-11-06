@@ -271,6 +271,21 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		}
 	}
 
+	// The reset forgets custom shortcut icon selections, so shortcuts that showed one return to the importer icon.
+	stage = "read-shortcut-icons"
+	x.shortcutMu.Lock()
+	defer x.shortcutMu.Unlock()
+	customIcons := make([]string, 0, len(importerPackages))
+	for key := range importerPackages {
+		id, err := x.shortcutIconID(ctx, key)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			customIcons = append(customIcons, key)
+		}
+	}
+
 	stage = "delete-state"
 	if err := client.XXMIImporters.Reset(ctx, builtinSettingKeys); err != nil {
 		return err
@@ -279,6 +294,10 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		x.removeDiagnosticsBundle(record)
 		x.emitDiagnosticsChanged(key)
 	}
+	x.reportCleanup(
+		x.restoreDefaultShortcutIcons(context.WithoutCancel(ctx), customIcons),
+		"restore-shortcut-icons",
+	)
 	x.log.Info("Reset built-in XXMI runtime state", "XXMI.resetBuiltinRuntime")
 	return nil
 }
