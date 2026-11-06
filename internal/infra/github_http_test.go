@@ -1416,3 +1416,154 @@ func (s *githubMemoryStore) entry(t *testing.T, url string) githubCacheEntry {
 	}
 	return entry
 }
+
+func TestGitHubTokenIsSentOnlyToAPIAndKeepsMetadataCache(t *testing.T) {
+	t.Parallel()
+	rate := NewGitHubRateCoordinator()
+	defer rate.Close()
+	rate.UseToken("tok")
+	reset := time.Now().Add(time.Hour)
+	var mu sync.Mutex
+	auth := map[string][]string{}
+	client := rate.HTTPClient(
+		&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			mu.Lock()
+			auth[request.URL.Host] = append(auth[request.URL.Host], request.Header.Get("Authorization"))
+			mu.Unlock()
+			if request.URL.Host == "api.github.com" && strings.Contains(request.URL.Path, "/zipball/") {
+				header := githubTestHeaders(4999, reset)
+				header.Set("Location", "https://codeload.example.test/archive.zip")
+				return githubTestResponse(request, http.StatusFound, header, ""), nil
+			}
+			return githubTestResponse(request, 200, githubTestHeaders(4999, reset), `[]`), nil
+		})},
+	)
+
+	for range 2 {
+		if _, err := githubTestGet(t.Context(), client, githubTestReleases); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := githubTestGet(
+		t.Context(),
+		client,
+		"https://api.github.com/repos/test/project/zipball/v1",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if got := auth["api.github.com"]; len(got) != 2 || got[0] != "Bearer tok" || got[1] != "Bearer tok" {
+		t.Fatalf("api.github.com authorization = %q, want one cached release request and one zipball request", got)
+	}
+	if got := auth["codeload.example.test"]; len(got) != 1 || got[0] != "" {
+		t.Fatalf("redirect target authorization = %q, want none", got)
+	}
+}
+
+func TestGitHubTokenUsesSeparateRateBudget(t *testing.T) {
+	t.Parallel()
+	store := newGitHubMemoryStore()
+	rate := NewGitHubRateCoordinator()
+	rate.UseAppState(store)
+	defer rate.Close()
+	reset := time.Now().Add(time.Hour)
+	exhausted := &GitHubRateState{Limit: 60, Remaining: 0, Reset: reset.Unix(), Resource: "core"}
+	if err := rate.saveRateState(t.Context(), "", exhausted); err != nil {
+		t.Fatal(err)
+	}
+	client := rate.HTTPClient(
+		&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return githubTestResponse(request, 200, githubTestHeaders(4999, reset), `{}`), nil
+		})},
+	)
+	const endpoint = "https://api.github.com/repos/test/project/git/ref/tags/v1"
+	var rateErr *GitHubRateError
+
+	if _, err := githubTestGet(t.Context(), client, endpoint); !errors.As(err, &rateErr) {
+		t.Fatalf("anonymous request err = %v, want rate limit", err)
+	}
+	rate.UseToken("tok")
+	if _, err := githubTestGet(t.Context(), client, endpoint); err != nil {
+		t.Fatalf("token request err = %v, want separate budget", err)
+	}
+	rate.UseToken("")
+	if _, err := githubTestGet(t.Context(), client, endpoint); !errors.As(err, &rateErr) {
+		t.Fatalf("anonymous request after clearing token err = %v, want restored rate limit", err)
+	}
+}
+
+func TestGitHubRejectedTokenFallsBackToAnonymous(t *testing.T) {
+	t.Parallel()
+	rate := NewGitHubRateCoordinator()
+	defer rate.Close()
+	rate.UseToken("revoked")
+	reset := time.Now().Add(time.Hour)
+	var authorized, anonymous atomic.Int32
+	client := rate.HTTPClient(
+		&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.Header.Get("Authorization") != "" {
+				authorized.Add(1)
+				return githubTestResponse(
+					request,
+					http.StatusUnauthorized,
+					make(http.Header),
+					`{"message":"Bad credentials"}`,
+				), nil
+			}
+			anonymous.Add(1)
+			return githubTestResponse(request, 200, githubTestHeaders(59, reset), `{}`), nil
+		})},
+	)
+	const endpoint = "https://api.github.com/repos/test/project/git/ref/tags/v1"
+
+	for range 2 {
+		if body, err := githubTestGet(t.Context(), client, endpoint); err != nil || body != `{}` {
+			t.Fatalf("body=%q err=%v", body, err)
+		}
+	}
+	if !rate.TokenRejected() || authorized.Load() != 1 || anonymous.Load() != 2 {
+		t.Fatalf("rejected=%t authorized=%d anonymous=%d", rate.TokenRejected(), authorized.Load(), anonymous.Load())
+	}
+	rate.UseToken("replacement")
+	if rate.TokenRejected() {
+		t.Fatal("replacing the token kept the rejected state")
+	}
+}
+
+func TestGitHubTokenReplacedDuringRejectedRequestRetriesWithNewToken(t *testing.T) {
+	t.Parallel()
+	rate := NewGitHubRateCoordinator()
+	defer rate.Close()
+	rate.UseToken("revoked")
+	reset := time.Now().Add(time.Hour)
+	var mu sync.Mutex
+	var sent []string
+	client := rate.HTTPClient(
+		&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			auth := request.Header.Get("Authorization")
+			mu.Lock()
+			sent = append(sent, auth)
+			mu.Unlock()
+			if auth == "Bearer revoked" {
+				rate.UseToken("replacement")
+				return githubTestResponse(request, http.StatusUnauthorized, make(http.Header), `{}`), nil
+			}
+			return githubTestResponse(request, 200, githubTestHeaders(4999, reset), `{}`), nil
+		})},
+	)
+
+	if _, err := githubTestGet(
+		t.Context(),
+		client,
+		"https://api.github.com/repos/test/project/git/ref/tags/v1",
+	); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(sent) != 2 || sent[1] != "Bearer replacement" || rate.TokenRejected() {
+		t.Fatalf("sent=%q rejected=%t, want retry with the replacement token", sent, rate.TokenRejected())
+	}
+}

@@ -2175,6 +2175,22 @@
           "passwordAction": "请选择有效的密码操作。",
           "type": "请选择 HTTP、SOCKS5 或 SOCKS5h。",
           "saveFailed": "无法保存代理设置。"
+        },
+        "githubToken": {
+          "title": "GitHub 令牌",
+          "description": "不使用令牌时，每个 IP 地址每小时最多可发送 60 次 GitHub API 请求。使用个人访问令牌后，每个账户的请求上限提高到每小时 5,000 次。应用仅访问公开仓库，无需为细粒度令牌（fine-grained token）授予额外权限。令牌经加密后保存，仅当前 Windows 用户可解密。",
+          "create": "在 GitHub 上创建令牌",
+          "label": "个人访问令牌",
+          "savedPlaceholder": "输入新令牌以替换已保存的令牌。",
+          "remove": "删除令牌",
+          "saved": "已保存 GitHub 令牌。请求上限：每小时 {{limit}} 次",
+          "rejected": "已保存的令牌未通过 GitHub 身份验证。更换令牌前，将以未认证方式发送请求。",
+          "unreadable": "当前 Windows 用户无法解密已保存的令牌。重新输入令牌前，将以未认证方式发送请求。",
+          "errors": {
+            "empty": "请输入令牌。",
+            "invalid": "GitHub 令牌验证失败。请检查令牌后重试。",
+            "saveFailed": "无法保存 GitHub 令牌。"
+          }
         }
       },
       "title": "设置",

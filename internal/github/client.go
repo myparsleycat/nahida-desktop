@@ -275,6 +275,58 @@ func (c *Client) GetBytes(ctx context.Context, apiURL string, limit int64) ([]by
 	return readResponse(response, apiURL, limit)
 }
 
+// ErrTokenInvalid reports a token GitHub does not accept.
+var ErrTokenInvalid = errors.New("GitHub token is invalid")
+
+// VerifyToken checks token against GitHub and returns its hourly core request
+// limit. It bypasses the shared rate gate: /rate_limit does not consume the
+// budget, and the candidate's numbers must not replace the active budget.
+func (c *Client) VerifyToken(ctx context.Context, token string) (int64, error) {
+	if c.http == nil {
+		return 0, errHTTPNotConfigured
+	}
+	const rateURL = apiBaseURL + "/rate_limit"
+	header := make(http.Header)
+	header.Set("Accept", "application/vnd.github+json")
+	header.Set("X-GitHub-Api-Version", apiVersion)
+	header.Set("User-Agent", apiUserAgent)
+	header.Set("Authorization", "Bearer "+token)
+	response, err := c.http.Fetch(ctx, rateURL, infra.FetchOptions{
+		Method: http.MethodGet, Header: header, DisableHTTPErrors: true, RetryLimit: new(int),
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusUnauthorized {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maxDiscardBytes))
+		return 0, ErrTokenInvalid
+	}
+
+	data, err := readResponse(response, rateURL, maxJSONBytes)
+	if err != nil {
+		return 0, err
+	}
+	var body struct {
+		Resources struct {
+			Core struct {
+				Limit *int64 `json:"limit"`
+			} `json:"core"`
+		} `json:"resources"`
+	}
+	err = json.Unmarshal(data, &body)
+	if err == nil && body.Resources.Core.Limit == nil {
+		err = errors.New("missing resources.core.limit")
+	}
+	if err != nil {
+		return 0, infra.AnnotateError(
+			fmt.Errorf("decode GitHub rate limit: %w", err),
+			infra.HTTPDiagnostic(http.MethodGet, rateURL, "decode", response),
+		)
+	}
+	return *body.Resources.Core.Limit, nil
+}
+
 // RateState returns the last recorded core-rate state, if any.
 func (c *Client) RateState(ctx context.Context) (*infra.GitHubRateState, error) {
 	return c.rate.GetRateState(ctx)

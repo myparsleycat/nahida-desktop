@@ -206,3 +206,19 @@ func TestTreeRejectsTruncatedTrees(t *testing.T) {
 		t.Fatal("invalid commit accepted")
 	}
 }
+
+func TestVerifyTokenRequiresCoreLimit(t *testing.T) {
+	for _, body := range []string{`{}`, `null`, `{"resources":{"core":{}}}`} {
+		client := newTestClient(t, func(*http.Request) (int, string) { return http.StatusOK, body })
+		if limit, err := client.VerifyToken(context.Background(), "token"); err == nil {
+			t.Fatalf("body %s: limit=%d, want error", body, limit)
+		}
+	}
+
+	client := newTestClient(t, func(*http.Request) (int, string) {
+		return http.StatusOK, `{"resources":{"core":{"limit":5000}}}`
+	})
+	if limit, err := client.VerifyToken(context.Background(), "token"); err != nil || limit != 5000 {
+		t.Fatalf("limit=%d err=%v", limit, err)
+	}
+}

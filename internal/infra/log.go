@@ -31,6 +31,7 @@ var (
 	homeNeedlesOnce      sync.Once
 	homeNeedles          []string
 	bearerPattern        = regexp.MustCompile(`(?i)\bbearer[ \t]+[a-z0-9._~+/=-]+`)
+	githubTokenPattern   = regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})`)
 	logURLPattern        = regexp.MustCompile(`https?://[^\s"<>]+`)
 	modTicketLinkPattern = regexp.MustCompile(`(?i)nahida://download\?[^\s"<>]+`)
 	logJSONStringPattern = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
@@ -410,6 +411,7 @@ func redactSecrets(value string) string {
 	value = modTicketLinkPattern.ReplaceAllString(value, "nahida://download?%REDACTED%")
 	value = redactLogURLs(value)
 	value = bearerPattern.ReplaceAllString(value, "Bearer %REDACTED%")
+	value = githubTokenPattern.ReplaceAllString(value, "%REDACTED%")
 	value = urlUserInfoPattern.ReplaceAllString(value, `${1}%REDACTED%@`)
 	value = authHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)
 	value = cookieHeaderPattern.ReplaceAllString(value, `${1}%REDACTED%`)

@@ -2,6 +2,8 @@ package infra
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -50,6 +52,12 @@ type GitHubRateCoordinator struct {
 	cancel            context.CancelFunc
 	workers           sync.WaitGroup
 	closed            bool
+	// identity separates the anonymous and per-token rate budgets; it is empty
+	// while requests are anonymous, including after GitHub rejects the token.
+	token           string
+	identity        string
+	tokenRejected   bool
+	onTokenRejected func()
 }
 
 func NewGitHubRateCoordinator() *GitHubRateCoordinator {
@@ -112,10 +120,109 @@ func (c *GitHubRateCoordinator) UseLog(log *Log) {
 	c.mu.Unlock()
 }
 
+// UseToken authenticates api.github.com requests with token; an empty token
+// makes them anonymous. Each token has its own persisted rate budget.
+func (c *GitHubRateCoordinator) UseToken(token string) {
+	identity := githubTokenIdentity(token)
+	c.mu.Lock()
+	previous := githubTokenIdentity(c.token)
+	store := c.store
+	c.token, c.tokenRejected = token, false
+	c.switchIdentityLocked(identity)
+	c.mu.Unlock()
+
+	// The anonymous budget is kept; a replaced token's budget is never read again.
+	deleter, ok := store.(interface {
+		Delete(ctx context.Context, key string) error
+	})
+	if previous != "" && previous != identity && ok {
+		if err := deleter.Delete(context.Background(), githubRateKey(previous)); err != nil {
+			c.mu.Lock()
+			log := c.log
+			c.mu.Unlock()
+			c.warnRefresh(log, err)
+		}
+	}
+}
+
+// OnTokenRejected registers fn to run once each time GitHub rejects the
+// configured token.
+func (c *GitHubRateCoordinator) OnTokenRejected(fn func()) {
+	c.mu.Lock()
+	c.onTokenRejected = fn
+	c.mu.Unlock()
+}
+
+func githubTokenIdentity(token string) string {
+	if token == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:8])
+}
+
+// TokenRejected reports whether GitHub rejected the configured token, which
+// leaves requests anonymous until the token changes.
+func (c *GitHubRateCoordinator) TokenRejected() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.tokenRejected
+}
+
+func (c *GitHubRateCoordinator) switchIdentityLocked(identity string) {
+	if c.identity == identity {
+		return
+	}
+	c.identity = identity
+	c.state = nil
+	c.secondaryFailures = 0
+}
+
+// credentials returns the identity and token to send; the token is empty when
+// requests are anonymous.
+func (c *GitHubRateCoordinator) credentials() (string, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tokenRejected {
+		return c.identity, ""
+	}
+	return c.identity, c.token
+}
+
+func (c *GitHubRateCoordinator) rejectToken(identity string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.identity != identity || c.tokenRejected {
+		return false
+	}
+	c.tokenRejected = true
+	c.switchIdentityLocked("")
+	return true
+}
+
+func githubRateKey(identity string) string {
+	if identity == "" {
+		return githubCoreRateKey
+	}
+	return githubCoreRateKey + ":" + identity
+}
+
+func (c *GitHubRateCoordinator) currentIdentity() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.identity
+}
+
 func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateState, error) {
+	return c.rateState(ctx, c.currentIdentity())
+}
+
+// rateState returns identity's recorded state. The in-memory copy, including
+// the secondary backoff, is used and filled only while identity is current.
+func (c *GitHubRateCoordinator) rateState(ctx context.Context, identity string) (*GitHubRateState, error) {
 	c.mu.Lock()
 	store, log := c.store, c.log
-	if c.state != nil {
+	if c.identity == identity && c.state != nil {
 		state := *c.state
 		c.mu.Unlock()
 		return &state, nil
@@ -124,7 +231,7 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 	if store == nil {
 		return nil, nil
 	}
-	raw, err := store.GetValue(ctx, githubCoreRateKey)
+	raw, err := store.GetValue(ctx, githubRateKey(identity))
 	if err != nil || raw == nil {
 		return nil, err
 	}
@@ -132,6 +239,10 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 	var record githubRateRecord
 	_ = json.Unmarshal([]byte(*raw), &record)
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.identity != identity {
+		return state, nil
+	}
 	if c.state == nil && state != nil {
 		copyState := *state
 		c.state = &copyState
@@ -141,7 +252,6 @@ func (c *GitHubRateCoordinator) GetRateState(ctx context.Context) (*GitHubRateSt
 		copyState := *c.state
 		state = &copyState
 	}
-	c.mu.Unlock()
 	return state, nil
 }
 
@@ -180,22 +290,34 @@ func (c *GitHubRateCoordinator) currentTime() time.Time {
 }
 
 func (c *GitHubRateCoordinator) CanUseGitHubAPI(ctx context.Context) (bool, *GitHubRateState, error) {
-	state, err := c.GetRateState(ctx)
+	return c.canUseGitHubAPI(ctx, c.currentIdentity())
+}
+
+func (c *GitHubRateCoordinator) canUseGitHubAPI(ctx context.Context, identity string) (bool, *GitHubRateState, error) {
+	state, err := c.rateState(ctx, identity)
 	if err != nil {
 		return false, nil, err
 	}
 	return !c.IsRateLimited(state), state, nil
 }
 
-func (c *GitHubRateCoordinator) saveRateState(ctx context.Context, state *GitHubRateState) error {
+// saveRateState records state for identity. A response that arrives after the
+// identity changed leaves the current state alone; it is persisted only for the
+// anonymous budget, since a replaced token's budget is deleted.
+func (c *GitHubRateCoordinator) saveRateState(ctx context.Context, identity string, state *GitHubRateState) error {
 	if state == nil {
 		return nil
 	}
 	c.mu.Lock()
 	store := c.store
 	copyState := *state
-	c.state = &copyState
-	record := githubRateRecord{GitHubRateState: copyState, SecondaryFailures: c.secondaryFailures}
+	record := githubRateRecord{GitHubRateState: copyState}
+	if c.identity == identity {
+		c.state = &copyState
+		record.SecondaryFailures = c.secondaryFailures
+	} else if identity != "" {
+		store = nil
+	}
 	c.mu.Unlock()
 	if store == nil {
 		return nil
@@ -204,7 +326,7 @@ func (c *GitHubRateCoordinator) saveRateState(ctx context.Context, state *GitHub
 	if err != nil {
 		return err
 	}
-	return store.Upsert(ctx, githubCoreRateKey, string(raw), c.currentTime().UTC().Format(time.RFC3339Nano))
+	return store.Upsert(ctx, githubRateKey(identity), string(raw), c.currentTime().UTC().Format(time.RFC3339Nano))
 }
 
 func (c *GitHubRateCoordinator) warnRefresh(log *Log, err error) {

@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -144,6 +146,32 @@ func runtimeSettingHooks(
 			}
 		},
 	}
+}
+
+func (rt *runtime) githubTokenHooks(hooks setting.Hooks) setting.Hooks {
+	hooks.VerifyGitHubToken = func(ctx context.Context, token string) (int64, error) {
+		limit, err := rt.github.VerifyToken(ctx, token)
+		if errors.Is(err, github.ErrTokenInvalid) {
+			return 0, setting.ErrGitHubTokenInvalid
+		}
+		return limit, err
+	}
+	hooks.AfterGitHubTokenChanged = rt.githubRate.UseToken
+	hooks.GitHubTokenRejected = rt.githubRate.TokenRejected
+	return hooks
+}
+
+// loadGitHubToken applies the saved token before background GitHub checks
+// start. A token that cannot be read leaves requests anonymous.
+func (rt *runtime) loadGitHubToken(ctx context.Context) {
+	token, err := rt.setting.LoadGitHubToken(ctx)
+	if err != nil {
+		_ = infra.ReportError(rt.log, err, "Runtime", infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "startup", Stage: "load-github-token",
+		})
+		return
+	}
+	rt.githubRate.UseToken(token)
 }
 
 func modelViewerMenuSyncer(log *infra.Log) func(language string) {
