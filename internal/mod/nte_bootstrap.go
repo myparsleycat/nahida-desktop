@@ -208,7 +208,10 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, archive nteBoo
 		return fmt.Errorf("NTE_BOOTSTRAP_DOWNLOAD_FAILED:%s: %w", infra.SanitizeLogURL(archive.url), err)
 	}
 	if err := verifyNteBootstrapArchive(archivePath, archive.sha256); err != nil {
-		return fmt.Errorf("NTE_BOOTSTRAP_CHECKSUM_MISMATCH:%s: %w", archiveName, err)
+		if errors.Is(err, errNteBootstrapChecksum) {
+			return fmt.Errorf("NTE_BOOTSTRAP_CHECKSUM_MISMATCH:%s: %w", archiveName, err)
+		}
+		return fmt.Errorf("NTE_BOOTSTRAP_VERIFY_FAILED:%s: %w", archiveName, err)
 	}
 
 	m.emitNteBootstrapProgress("extracting", nil, archiveName, "")
@@ -241,6 +244,9 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, archive nteBoo
 	return nil
 }
 
+// errNteBootstrapChecksum separates a digest mismatch from a failure to read the archive.
+var errNteBootstrapChecksum = errors.New("checksum mismatch")
+
 func verifyNteBootstrapArchive(path, want string) error {
 	input, err := os.Open(path)
 	if err != nil {
@@ -252,7 +258,7 @@ func verifyNteBootstrapArchive(path, want string) error {
 		return err
 	}
 	if got := hex.EncodeToString(hash.Sum(nil)); !strings.EqualFold(got, want) {
-		return fmt.Errorf("sha256 %s, want %s", got, want)
+		return fmt.Errorf("%w: sha256 %s, want %s", errNteBootstrapChecksum, got, want)
 	}
 	return nil
 }

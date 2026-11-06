@@ -85,7 +85,7 @@ func (m *Mod) GetPresets(ctx context.Context, game string) ([]Preset, error) {
 }
 
 func (m *Mod) GetPresetCreateConflicts(ctx context.Context, game string) ([]PresetConflict, error) {
-	items, err := m.presetSnapshot(ctx, game)
+	items, err := m.presetSnapshot(ctx, game, false)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (m *Mod) CreatePreset(
 	if existing != nil {
 		return Preset{}, errors.New("PRESET_NAME_EXISTS")
 	}
-	items, err := m.presetSnapshot(ctx, game)
+	items, err := m.presetSnapshot(ctx, game, true)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -126,7 +126,7 @@ func (m *Mod) CreatePreset(
 		if err := resolveSnapshotConflicts(conflicts); err != nil {
 			return Preset{}, err
 		}
-		items, err = m.presetSnapshot(ctx, game)
+		items, err = m.presetSnapshot(ctx, game, true)
 		if err != nil {
 			return Preset{}, err
 		}
@@ -173,7 +173,7 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 	if err != nil {
 		return ApplyPresetResult{}, err
 	}
-	current, err := m.presetSnapshot(ctx, preset.Game)
+	current, err := m.presetSnapshot(ctx, preset.Game, false)
 	if err != nil {
 		return ApplyPresetResult{}, err
 	}
@@ -204,8 +204,9 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 			result.Skipped = append(result.Skipped, item.RelativePath)
 			continue
 		}
+		// A mod an active download still writes keeps its state, which the preset reports as not applied.
 		if m.isActiveDownloadDestination(item.ActualPath) {
-			result.Skipped = append(result.Skipped, item.RelativePath)
+			result.Failed = append(result.Failed, item.RelativePath)
 			continue
 		}
 		var actionErr error
@@ -215,11 +216,19 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 			_, actionErr = m.Disable(ctx, item.ActualPath)
 		}
 		if actionErr != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				// A cancelled action whose rollback also failed carries that failure, which is still recorded.
+				if !infra.IsCancellationError(actionErr) {
+					m.logActionError(actionErr, "Mod:applyPreset:"+item.ActualPath)
+					result.Failed = append(result.Failed, item.RelativePath)
+				}
+				return result, ctxErr
+			}
 			if infra.IsCancellationError(actionErr) {
 				return result, actionErr
 			}
 			if actionErr.Error() == "MOD_DOWNLOAD_IN_PROGRESS" {
-				result.Skipped = append(result.Skipped, item.RelativePath)
+				result.Failed = append(result.Failed, item.RelativePath)
 				continue
 			}
 			m.logActionError(actionErr, "Mod:applyPreset:"+item.ActualPath)
@@ -265,7 +274,9 @@ func (m *Mod) UpdatePresetName(ctx context.Context, presetID, newName string) er
 	return client.ModPresets.UpdateName(ctx, presetID, newName, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
-func (m *Mod) presetSnapshot(ctx context.Context, game string) ([]presetSnapshotItem, error) {
+// presetSnapshot lists the mods below a game's folder. A strict snapshot fails on a folder it cannot read, so a
+// new preset never silently leaves those mods out; otherwise the folder is skipped and reported.
+func (m *Mod) presetSnapshot(ctx context.Context, game string, strict bool) ([]presetSnapshotItem, error) {
 	gamePath, err := m.GetGamePath(ctx, game)
 	if err != nil {
 		return nil, err
@@ -286,8 +297,7 @@ func (m *Mod) presetSnapshot(ctx context.Context, game string) ([]presetSnapshot
 			return err
 		}
 		if walkErr != nil {
-			// One unreadable folder leaves its mods out of the snapshot instead of failing the preset.
-			if path == *gamePath {
+			if path == *gamePath || (strict && !errors.Is(walkErr, fs.ErrNotExist)) {
 				return walkErr
 			}
 			diagnostics.Add(walkErr)

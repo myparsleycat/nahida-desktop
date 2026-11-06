@@ -348,3 +348,28 @@ func TestHeadDownloadIgnoresSizeOfRefusedHead(t *testing.T) {
 		t.Fatalf("head = ok %v, size %v, range %v", head.ok, head.size, head.supportsRange)
 	}
 }
+
+func TestCustomDownloadFallsBackToRequestedURLWhenHeadRedirectsToError(t *testing.T) {
+	archive := nteBootstrapZip(t, map[string]string{"HeadRefused/mod.ini": "payload"})
+	// The client refuses redirects to plain HTTP, so the server uses TLS.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/file.zip" && request.Method == http.MethodHead:
+			http.Redirect(w, request, "/refused", http.StatusFound)
+		case request.URL.Path == "/file.zip":
+			serveCustomDownloadFixture(w, request, archive, "file.zip", true)
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+
+	destination := t.TempDir()
+	service, transfers := customDownloadTestService(t, server, destination, "", false)
+	status, err := service.DownloadFromURL(context.Background(), server.URL+"/file.zip", destination)
+	if err != nil || status != "started" {
+		t.Fatalf("DownloadFromURL = %q, %v", status, err)
+	}
+	processCustomDownloadQueue(t, transfers, int64(len(archive)))
+	assertCustomDownloadFile(t, filepath.Join(destination, "HeadRefused", "mod.ini"), "payload")
+}

@@ -177,7 +177,15 @@ func writeBatch(entries []WriteEntry, reports ...func(error)) error {
 		return err
 	}
 	for i, file := range backups {
-		err := platform.WriteFileAtomic(file.metadataPath, entries[i].Data, 0o644)
+		var err error
+		if file.backupPath != "" {
+			// A read-only nhd.json would refuse the replacement. The backup link shares the attribute, so a
+			// rollback restores a writable file.
+			err = os.Chmod(file.metadataPath, 0o644)
+		}
+		if err == nil {
+			err = platform.WriteFileAtomic(file.metadataPath, entries[i].Data, 0o644, reports...)
+		}
 		if err == nil {
 			err = hideFile(file.metadataPath)
 		}

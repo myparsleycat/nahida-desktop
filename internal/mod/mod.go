@@ -108,23 +108,26 @@ type Mod struct {
 	paths                  *pathSelector
 	downloader             *infra.ParallelDownloader
 	extractMu              sync.Mutex
-	groups                 groupLocks
-	extractPrompts         map[string]chan string
-	mu                     sync.Mutex
-	watchMu                sync.Mutex
-	gameWatcher            *managedWatcher
-	characterWatcher       *managedWatcher
-	emit                   func(string, ...any)
-	inspectAddedMods       func([]string)
-	github                 *github.Client
-	nteBootstrapArchives   []nteBootstrapArchive
-	compression            *compressionCoordinator
-	classifiedMu           sync.Mutex
-	classifiedFolders      map[string]*classifiedFolderIndex
-	classifiedChanges      uint64
-	libraryMu              sync.Mutex
-	libraryIndexes         map[string]libraryIndex
-	libraryChanges         uint64
+	// gameMu serializes game path changes. Their duplicate checks and NTE folder moves are separate steps that
+	// another change to the same folders must not interleave.
+	gameMu               sync.Mutex
+	groups               groupLocks
+	extractPrompts       map[string]chan string
+	mu                   sync.Mutex
+	watchMu              sync.Mutex
+	gameWatcher          *managedWatcher
+	characterWatcher     *managedWatcher
+	emit                 func(string, ...any)
+	inspectAddedMods     func([]string)
+	github               *github.Client
+	nteBootstrapArchives []nteBootstrapArchive
+	compression          *compressionCoordinator
+	classifiedMu         sync.Mutex
+	classifiedFolders    map[string]*classifiedFolderIndex
+	classifiedChanges    uint64
+	libraryMu            sync.Mutex
+	libraryIndexes       map[string]libraryIndex
+	libraryChanges       uint64
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -411,6 +414,9 @@ func (m *Mod) AddGame(
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	importerKey, xxmiGame := xxmiImporterKey(importer)
 	if game == "" || (!xxmiGame && strings.TrimSpace(modFolderPath) == "") {
@@ -509,6 +515,9 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	importerKey, xxmiGame := xxmiImporterKey(updates.Importer)
 	if game == "" || (!xxmiGame && strings.TrimSpace(updates.ModFolderPath) == "") {
@@ -586,6 +595,9 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	existing, err := client.GamePaths.GetByGame(ctx, game)
 	if err != nil {
@@ -892,7 +904,8 @@ func (m *Mod) GetCharacters(
 	}
 	listing := m.newGroupListing(ctx, client, gameConfig(*row), search, diagnostics.Add)
 	groups := m.listSubGroups(listing, row.ModFolderPath, nil, diagnostics.Add)
-	return m.loadClassifiedSubGroups(listing, groups, true, diagnostics.Add), nil
+	// An empty listing may be a mod folder that could not be read, which must not forget every indexed folder.
+	return m.loadClassifiedSubGroups(listing, groups, len(groups) > 0, diagnostics.Add), nil
 }
 
 func (m *Mod) GetSubGroups(

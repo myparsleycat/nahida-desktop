@@ -200,8 +200,11 @@ func sameMergePath(left, right string) bool {
 }
 
 // copyMergePack copies a pack for a new-folder merge. A pack's textures can reach gigabytes, so the copy
-// takes the disk slots of both volumes and stops between packs when the merge is cancelled.
+// takes the disk slots of both volumes and stops between files when the merge is cancelled.
 func copyMergePack(ctx context.Context, source, destination string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	release, err := diskio.AcquireDir(ctx, source, filepath.Dir(destination))
 	if err != nil {
 		return err
@@ -212,7 +215,7 @@ func copyMergePack(ctx context.Context, source, destination string) error {
 	if err := os.Mkdir(destination, 0o755); err != nil {
 		return err
 	}
-	if err := copyDirectory(source, destination); err != nil {
+	if err := copyDirectory(ctx, source, destination); err != nil {
 		return errors.Join(err, os.RemoveAll(destination))
 	}
 	return nil

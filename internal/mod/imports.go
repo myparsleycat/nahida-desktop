@@ -187,7 +187,7 @@ func (m *Mod) CopyFolderToGroup(
 			return target, nil
 		}
 	}
-	if err := copyDirectory(source, target); err != nil {
+	if err := copyDirectory(ctx, source, target); err != nil {
 		m.reportCleanup(os.RemoveAll(target), "CopyFolderToGroup")
 		return "", err
 	}
@@ -387,8 +387,11 @@ func safePreviewExtension(value string) string {
 	return ".png"
 }
 
-func copyDirectory(source, target string) error {
+func copyDirectory(ctx context.Context, source, target string) error {
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			return walkErr
 		}

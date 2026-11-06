@@ -28,13 +28,27 @@ function Same-Path([string]$Left, [string]$Right) {
   return (Normalize-PathValue $Left).Equals((Normalize-PathValue $Right), [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# An entry that cannot be listed fails the script rather than counting as empty, because an empty folder may be
+# deleted.
 function Has-Any-FileSystemContent([string]$PathValue) {
-  foreach ($Child in Get-ChildItem -LiteralPath $PathValue -Force -ErrorAction SilentlyContinue) {
+  foreach ($Child in Get-ChildItem -LiteralPath $PathValue -Force) {
     if (-not $Child.PSIsContainer) { return $true }
     if (($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $true }
     if (Has-Any-FileSystemContent $Child.FullName) { return $true }
   }
   return $false
+}
+
+# Remove-EmptyTree deletes a folder that holds only empty folders. A file fails the delete, so content is never
+# removed even if it appeared after the emptiness check.
+function Remove-EmptyTree([string]$PathValue) {
+  foreach ($Child in Get-ChildItem -LiteralPath $PathValue -Force -Directory) {
+    if (($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) { Remove-EmptyTree $Child.FullName }
+    else { [System.IO.Directory]::Delete($Child.FullName, $false) }
+  }
+  $Folder = [System.IO.DirectoryInfo]::new($PathValue)
+  $Folder.Attributes = $Folder.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+  $Folder.Delete($false)
 }
 
 function Move-Contents([string]$From, [string]$To) {
@@ -44,8 +58,11 @@ function Move-Contents([string]$From, [string]$To) {
   if ($FromRoot.Equals($ToRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     try {
       Get-ChildItem -LiteralPath $From -Force | Move-Item -Destination $To -Force
-    } catch { exit 36 }
-    return
+      return
+    } catch {
+      # Move-Item cannot merge into a folder an earlier run already staged, nor cross a volume mounted below
+      # the same drive letter. robocopy handles both.
+    }
   }
   & robocopy.exe $From $To /E /MOVE /SJ /SL /COPY:DAT /DCOPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
   if ($LASTEXITCODE -ge 8) { exit 36 }
@@ -82,7 +99,7 @@ if (Test-Path -LiteralPath $LinkPath) {
       if (-not $Resuming) { exit 0 }
       # The junction already serves the library, so leftover staging may only fill an empty library.
       if (Has-Any-FileSystemContent $TargetPath) { exit 32 }
-      Remove-Item -LiteralPath $TargetPath -Recurse -Force
+      Remove-EmptyTree $TargetPath
       [System.IO.Directory]::Move($Staging, $TargetPath)
       exit 0
     }
@@ -95,9 +112,9 @@ if (Test-Path -LiteralPath $LinkPath) {
     if (Has-Any-FileSystemContent $TargetPath) { exit 32 }
     Move-Contents $LinkPath $Staging
     if ((Test-Path -LiteralPath $LinkPath) -and (Has-Any-FileSystemContent $LinkPath)) { exit 36 }
-    if (Test-Path -LiteralPath $LinkPath) { Remove-Item -LiteralPath $LinkPath -Recurse -Force }
+    if (Test-Path -LiteralPath $LinkPath) { Remove-EmptyTree $LinkPath }
   } else {
-    Remove-Item -LiteralPath $LinkPath -Recurse -Force
+    Remove-EmptyTree $LinkPath
   }
 }
 
@@ -109,12 +126,12 @@ if (Test-Path -LiteralPath $Staging) {
       # robocopy removes the staging folder itself after moving across volumes.
       if (Test-Path -LiteralPath $Staging) {
         if (Has-Any-FileSystemContent $Staging) { exit 36 }
-        Remove-Item -LiteralPath $Staging -Recurse -Force
+        Remove-EmptyTree $Staging
       }
     }
     exit 32
   }
-  Remove-Item -LiteralPath $TargetPath -Recurse -Force
+  Remove-EmptyTree $TargetPath
   [System.IO.Directory]::Move($Staging, $TargetPath)
 }
 
@@ -146,7 +163,7 @@ if (Test-Path -LiteralPath $ModFolderPath) {
   if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
     if (-not (Test-Path -LiteralPath $Staging)) { exit 0 }
     if (Has-Any-FileSystemContent $ModFolderPath) { exit 36 }
-    Remove-Item -LiteralPath $ModFolderPath -Recurse -Force
+    Remove-EmptyTree $ModFolderPath
   } else {
     $TargetPath = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [string]$Item.Target }
     if ((Test-Path -LiteralPath $TargetPath) -and (Has-Any-FileSystemContent $TargetPath)) {
@@ -168,12 +185,16 @@ if (Test-Path -LiteralPath $Staging) {
 `, ntePSLiteral(linkPath), nteMoveScript)
 }
 
+// nteMoveFailedCode is the one contract code an elevated run can resolve: a move denied by the folder's
+// permissions. The script resumes from its staging folder, so the elevated run continues the move.
+const nteMoveFailedCode = 36
+
 func runNteMutation(script, elevationError string, contractErrors map[int]string) error {
 	code, err := executeNtePowerShell(script, false)
 	if err == nil {
 		return nil
 	}
-	if message, ok := contractErrors[code]; ok {
+	if message, ok := contractErrors[code]; ok && code != nteMoveFailedCode {
 		return infra.AnnotateError(
 			infra.WithCause(errors.New(message), err),
 			infra.Diagnostic{
@@ -183,18 +204,25 @@ func runNteMutation(script, elevationError string, contractErrors map[int]string
 			},
 		)
 	}
-	initialErr := err
+	initialCode, initialErr := code, err
 	code, err = executeNtePowerShell(script, true)
 	if err == nil {
 		return nil
 	}
-	if message, ok := contractErrors[code]; ok {
+	elevated := true
+	message, ok := contractErrors[code]
+	if !ok {
+		// A declined or failed elevation keeps the move failure the user can act on.
+		message, ok = contractErrors[initialCode]
+		code, elevated = initialCode, false
+	}
+	if ok {
 		return infra.AnnotateError(
 			infra.WithCause(errors.New(message), errors.Join(initialErr, err)),
 			infra.Diagnostic{
 				Operation: "nte-mutation",
 				Stage:     "execute",
-				Fields:    map[string]any{"exitCode": code, "elevated": true},
+				Fields:    map[string]any{"exitCode": code, "elevated": elevated},
 			},
 		)
 	}

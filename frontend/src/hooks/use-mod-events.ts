@@ -159,10 +159,20 @@ function selectedGroupSubGroupKeys(
 
 export function useDownloadArchiveExtractPromptHandler() {
     useEffect(() => {
-        const off = Events.On("mod:archiveExtractPrompt", (event) => {
+        const offPrompt = Events.On("mod:archiveExtractPrompt", (event) => {
             modStore.getState().setArchiveExtractPrompt(event.data);
         });
+        // The backend drops a prompt whose download was cancelled, so its dialog can no longer be answered.
+        const offDismissed = Events.On("mod:archiveExtractPromptDismissed", (event) => {
+            const state = modStore.getState();
+            if (state.archiveExtractPrompt?.requestId === event.data.requestId) {
+                state.setArchiveExtractPrompt(null);
+            }
+        });
 
-        return off;
+        return () => {
+            offPrompt();
+            offDismissed();
+        };
     }, []);
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -382,9 +383,31 @@ func TestDisableRestoresShaderFixesWhenRenameFails(t *testing.T) {
 	}
 }
 
+// rendezvousSettings holds the first sibling disable until a second one arrives. Two toggles of one group
+// can only both arrive when they read the sibling list at the same time, which the group lock prevents.
+type rendezvousSettings struct {
+	testSettings
+	calls  atomic.Int32
+	second chan struct{}
+}
+
+func (s *rendezvousSettings) GetDisabledPrefixStyle(context.Context) (string, error) {
+	switch s.calls.Add(1) {
+	case 1:
+		select {
+		case <-s.second:
+		case <-time.After(200 * time.Millisecond):
+		}
+	case 2:
+		close(s.second)
+	}
+	return "space", nil
+}
+
 func TestConcurrentExclusiveTogglesLeaveOneModEnabled(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{style: "space"})
+	service.settings = &rendezvousSettings{second: make(chan struct{})}
 	modsRoot := filepath.Join(root, "mods")
 	group := filepath.Join(modsRoot, "Character")
 	for _, name := range []string{"DISABLED A", "DISABLED B", "C"} {

@@ -49,6 +49,24 @@ func TestWriteReplacesContents(t *testing.T) {
 	}
 }
 
+func TestWriteReplacesReadOnlyFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := Initialize(dir, []byte(`{"id":"first"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dir, fileName), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	updated := []byte(`{"id":"second"}`)
+	if err := Write(dir, updated); err != nil {
+		t.Fatalf("write read-only metadata: %v", err)
+	}
+	raw, err := Read(dir)
+	if err != nil || string(raw) != string(updated) {
+		t.Fatalf("read written metadata = %q, %v", raw, err)
+	}
+}
+
 func TestWriteRejectsInvalidJSONWithoutChangingFile(t *testing.T) {
 	dir := t.TempDir()
 	original := []byte(`{"id":"first"}`)

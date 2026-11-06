@@ -47,7 +47,9 @@ func WriteFileAtomic(path string, content []byte, mode os.FileMode, reports ...f
 	report := func(err error) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			for _, callback := range reports {
-				callback(err)
+				if callback != nil {
+					callback(err)
+				}
 			}
 		}
 	}

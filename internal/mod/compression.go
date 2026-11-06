@@ -757,8 +757,14 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	state := c.snapshot()
 	zstdActive := state.Method == "zstd" && (state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
 	// Without zstd no pass writes archives, so a folder holding none needs neither a restore nor a preempted pass.
-	if !zstdActive && !hasZstdArchives(folder) {
-		return nil
+	if !zstdActive {
+		found, err := hasZstdArchives(ctx, folder)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
 	}
 	c.mu.Lock()
 	cancel, done := c.cancel, c.done

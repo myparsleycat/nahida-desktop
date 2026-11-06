@@ -329,11 +329,19 @@ func isManagedZstdPath(path string) bool {
 }
 
 // hasZstdArchives reports whether a managed archive lies anywhere below folder. An unreadable entry counts as
-// one, so the caller restores rather than skipping archives it could not see.
-func hasZstdArchives(folder string) bool {
-	defer holdScanDisk(folder)()
+// one, so the caller restores rather than skipping archives it could not see. The only error is cancellation.
+func hasZstdArchives(ctx context.Context, folder string) (bool, error) {
+	release, err := diskio.AcquireDir(ctx, folder)
+	if err != nil {
+		return false, err
+	}
+	defer release()
+
 	found := false
-	_ = filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			found = true
 			return fs.SkipAll
@@ -345,7 +353,10 @@ func hasZstdArchives(folder string) bool {
 		}
 		return nil
 	})
-	return found
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(walkErr, ctxErr) {
+		return false, ctxErr
+	}
+	return found, nil
 }
 
 func isZstdArchivePath(path string) bool {
@@ -416,6 +427,10 @@ func compressZstdFileIfSmaller(
 	}
 	err = streamCompressZstdWithLimit(ctx, sourcePath, tempPath, info.Size())
 	if errors.Is(err, errZstdNoGain) {
+		// The stream already tried to remove the partial archive and attached any failure as a cause.
+		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			return true, removeErr
+		}
 		return true, nil
 	}
 	if err != nil {
@@ -498,9 +513,16 @@ func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark c
 			return infra.WithCause(err, os.Remove(tempPath))
 		}
 		// A file written to the source path during the restore is newer than the archive, which is
-		// handled like a source that was already present.
+		// handled like a source that was already present. Anything else keeps the archive.
 		if err := os.Remove(tempPath); err != nil {
 			return err
+		}
+		sourceInfo, err := os.Lstat(sourcePath)
+		if err != nil {
+			return err
+		}
+		if !sourceInfo.Mode().IsRegular() {
+			return fmt.Errorf("zstd source is not a regular file: %s", sourcePath)
 		}
 	}
 	return os.Remove(targetPath)

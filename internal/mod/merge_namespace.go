@@ -197,7 +197,8 @@ func pickNamespaceRepresentative(sources []namespaceWrapSource) *namespaceWrapSo
 }
 
 // collectNamespaceChildren lists the INIs an existing master switches between. Paths named in the master's
-// header come from the mod's own files, so only INIs inside groupPath are accepted.
+// header come from the mod's own files, so only INIs physically inside groupPath are accepted: a junction in
+// the group must not lead the merge to rewrite a file elsewhere.
 func collectNamespaceChildren(masterPath, groupPath string) ([]string, error) {
 	masterDir := filepath.Dir(masterPath)
 	raw, err := os.ReadFile(masterPath)
@@ -207,10 +208,20 @@ func collectNamespaceChildren(masterPath, groupPath string) ([]string, error) {
 	text := string(raw)
 	namespace := extractMergeNamespace(text)
 	var listed []string
+	physicalGroup, groupErr := platform.FinalPath(groupPath)
 	for _, entry := range extractMergedModPaths(text) {
+		if groupErr != nil {
+			break
+		}
 		candidate := resolveAgainst(masterDir, entry)
+		name := filepath.Base(candidate)
 		if !strings.EqualFold(filepath.Ext(candidate), ".ini") || isMasterIniPath(candidate) ||
+			isFileDisabledIniName(name) || isBackupIniName(name) ||
 			!platform.SameOrChildPath(groupPath, candidate) || !fileExists(candidate) {
+			continue
+		}
+		physical, err := platform.FinalPath(candidate)
+		if err != nil || !platform.SameOrChildPath(physicalGroup, physical) {
 			continue
 		}
 		listed = append(listed, candidate)
@@ -403,11 +414,16 @@ func buildNamespaceSources(iniRoots, existingChildren []string, includeVanilla b
 		if isMasterIniPath(iniPath) {
 			return false
 		}
-		resolved := strings.ToLower(resolveAgainst("", iniPath))
-		if _, ok := seen[resolved]; ok {
+		// The physical path makes an INI reached through a directory alias take one slot, not two.
+		key, err := platform.FinalPath(iniPath)
+		if err != nil {
+			key = resolveAgainst("", iniPath)
+		}
+		key = strings.ToLower(key)
+		if _, ok := seen[key]; ok {
 			return false
 		}
-		seen[resolved] = struct{}{}
+		seen[key] = struct{}{}
 		return true
 	}
 	var groups [][]string

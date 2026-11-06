@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/samber/lo"
 
@@ -448,12 +450,14 @@ func (m *Mod) loadClassifiedSubGroups(
 		listed := lo.SliceToMap(folders, func(folder FolderGroup) (string, struct{}) {
 			return strings.ToLower(folder.Path), struct{}{}
 		})
-		missed := lo.Reject(findClassifiedFolders(groups, reports...), func(path string, _ int) bool {
+		found, searched := findClassifiedFolders(groups, reports...)
+		missed := lo.Reject(found, func(path string, _ int) bool {
 			_, ok := listed[strings.ToLower(path)]
 			return ok
 		})
 		folders = append(folders, m.listClassifiedFolders(listing, missed, reports...)...)
-		if complete {
+		// A folder the search could not read may hold assignments, so the search stays open for the next listing.
+		if complete && searched {
 			m.finishClassifiedSearch(game, since)
 		}
 	}
@@ -471,15 +475,20 @@ func (m *Mod) loadClassifiedSubGroups(
 	return groups
 }
 
-// findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json.
-func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []string {
-	return lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
+// findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json. It also
+// reports whether every folder could be listed.
+func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) ([]string, bool) {
+	var failed atomic.Bool
+	paths := lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
 		defer holdScanDisk(group.Path)()
 		var found []string
 		var walk func(dir string, remaining int)
 		walk = func(dir string, remaining int) {
 			entries, err := os.ReadDir(dir)
 			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					failed.Store(true)
+				}
 				reportScanFailure(err, reports)
 				return
 			}
@@ -499,6 +508,7 @@ func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []strin
 		walk(group.Path, classifiedSubGroupDepth)
 		return found
 	}))
+	return paths, !failed.Load()
 }
 
 // listClassifiedFolders builds the sidebar entries for the given folders only, leaving their siblings unread,

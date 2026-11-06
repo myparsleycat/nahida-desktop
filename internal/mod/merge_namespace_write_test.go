@@ -542,9 +542,11 @@ func TestCollectNamespaceChildrenIgnoresListedPathsOutsideGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	listedChild := writeNamespaceChild(t, root, "Listed.ini", namespaceChildINI)
+	// A junction inside the group that leads outside it.
+	createJunction(t, outside, filepath.Join(root, "Escape"))
 	masterPath := filepath.Join(root, "MasterCharA.ini")
 	header := "; Merged Mod: " + listedChild + "\n; Merged Mod: " + outsideINI +
-		"\n; Merged Mod: ..\\Sibling.ini\nnamespace = CharA\\Master\n"
+		"\n; Merged Mod: ..\\Sibling.ini\n; Merged Mod: .\\Escape\\d3dx.ini\nnamespace = CharA\\Master\n"
 	if err := os.WriteFile(masterPath, []byte(header), 0o644); err != nil {
 		t.Fatal(err)
 	}

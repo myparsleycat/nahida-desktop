@@ -44,8 +44,10 @@ func (m *Mod) DownloadFromURL(ctx context.Context, rawURL, groupPath string) (st
 		return "", err
 	}
 	if !head.ok {
-		// Servers that refuse HEAD answer with an error page; the download itself decides.
+		// Servers that refuse HEAD answer with an error page, possibly after a redirect; the download of the
+		// requested URL decides.
 		head.header = http.Header{}
+		head.finalURL = trimmed
 	}
 	if isHTMLContentType(head.header) {
 		return "", errors.New("DOWNLOAD_URL_HTML_PAGE")
@@ -557,8 +559,12 @@ func (m *Mod) promptArchiveExtractMode(ctx context.Context, archivePath string) 
 	case mode = <-ch:
 	case <-ctx.Done():
 		m.extractMu.Lock()
+		_, pending := m.extractPrompts[requestID]
 		delete(m.extractPrompts, requestID)
 		m.extractMu.Unlock()
+		if pending && m.emit != nil {
+			m.emit("mod:archiveExtractPromptDismissed", map[string]string{"requestId": requestID})
+		}
 		return "", ctx.Err()
 	}
 	if mode == "" {

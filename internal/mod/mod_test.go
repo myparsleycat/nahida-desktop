@@ -659,7 +659,7 @@ func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
 	}
 }
 
-func TestApplyPresetSkipsActiveDownloadDestination(t *testing.T) {
+func TestApplyPresetReportsActiveDownloadDestinationAsFailed(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{style: "space"})
 	modsRoot := filepath.Join(root, "mods")
@@ -692,8 +692,8 @@ func TestApplyPresetSkipsActiveDownloadDestination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Applied) != 0 || len(result.Skipped) != 1 ||
-		!strings.EqualFold(result.Skipped[0], filepath.ToSlash(filepath.Join("Character", "Costume"))) {
+	if len(result.Applied) != 0 || len(result.Skipped) != 0 || len(result.Failed) != 1 ||
+		!strings.EqualFold(result.Failed[0], filepath.ToSlash(filepath.Join("Character", "Costume"))) {
 		t.Fatalf("apply result = %#v", result)
 	}
 	if _, err := os.Stat(enabledPath); err != nil {
