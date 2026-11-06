@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"nahida.live/desktop/internal/infra"
@@ -193,9 +195,24 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 
 // builtinSettingKeys are the setting rows owned by the built-in runtime. The launcher mode is not one of them,
 // and neither are the provider DLL hashes: they vouch for package cache entries, which a reset keeps.
-var builtinSettingKeys = []string{
+var builtinSettingKeys = append([]string{
 	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
 	sharedLibsProviderKey, diagnosticsSessionsKey,
+}, shortcutIconSettingKeys()...)
+
+// shortcutIconSettingKey names the setting row holding the custom Quick Start icon ID of an importer. It lives
+// outside ImporterConfig because the icon applies at once, while a config is saved from a draft that would
+// overwrite it.
+func shortcutIconSettingKey(key string) string {
+	return "xxmi_shortcut_icon_" + strings.ToLower(key)
+}
+
+func shortcutIconSettingKeys() []string {
+	keys := make([]string, 0, len(importerPackages))
+	for _, key := range slices.Sorted(maps.Keys(importerPackages)) {
+		keys = append(keys, shortcutIconSettingKey(key))
+	}
+	return keys
 }
 
 // ResetBuiltinRuntime returns the built-in runtime to its unconfigured state by forgetting importer configs,
@@ -254,6 +271,21 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		}
 	}
 
+	// The reset forgets custom shortcut icon selections, so shortcuts that showed one return to the importer icon.
+	stage = "read-shortcut-icons"
+	x.shortcutMu.Lock()
+	defer x.shortcutMu.Unlock()
+	customIcons := make([]string, 0, len(importerPackages))
+	for key := range importerPackages {
+		id, err := x.shortcutIconID(ctx, key)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			customIcons = append(customIcons, key)
+		}
+	}
+
 	stage = "delete-state"
 	if err := client.XXMIImporters.Reset(ctx, builtinSettingKeys); err != nil {
 		return err
@@ -262,6 +294,10 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		x.removeDiagnosticsBundle(record)
 		x.emitDiagnosticsChanged(key)
 	}
+	x.reportCleanup(
+		x.restoreDefaultShortcutIcons(context.WithoutCancel(ctx), customIcons),
+		"restore-shortcut-icons",
+	)
 	x.log.Info("Reset built-in XXMI runtime state", "XXMI.resetBuiltinRuntime")
 	return nil
 }

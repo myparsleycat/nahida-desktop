@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -17,8 +16,6 @@ import (
 const modelViewerMenuKeyPath = `Software\Classes\Directory\shell\nahida.live.ModelViewer`
 
 const shcneAssocChanged = 0x08000000
-
-var shellChangeNotify = windows.NewLazySystemDLL("shell32.dll").NewProc("SHChangeNotify")
 
 var modelViewerMenuLabels = map[string]string{
 	"en": "Open in Model Viewer",

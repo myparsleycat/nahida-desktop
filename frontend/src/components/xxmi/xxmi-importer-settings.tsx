@@ -52,6 +52,7 @@ import {
 import { importerFolderError } from "@renderer/components/xxmi/xxmi-importer-folder-error";
 import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
 import { XXMIModRuntimes } from "@renderer/components/xxmi/xxmi-mod-runtimes";
+import { XXMIShortcutIconField } from "@renderer/components/xxmi/xxmi-shortcut-icon";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -1419,6 +1420,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <SectionTitle>{t("page.setting.xxmi.builtin.maintenance")}</SectionTitle>
                   </SectionHeader>
                   <SectionContent>
+                    <XXMIShortcutIconField importer={importer} />
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"

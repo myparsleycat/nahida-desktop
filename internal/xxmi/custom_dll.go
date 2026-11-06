@@ -127,7 +127,7 @@ func (x *XXMI) customDLLID(ctx context.Context, cfg ImporterConfig) (string, err
 }
 
 func (x *XXMI) requireCustomDLL(id string) error {
-	if !isCustomDLLID(id) {
+	if !isHashID(id) {
 		return fmt.Errorf("invalid custom DLL %q", id)
 	}
 	root, err := xxmiCacheRoot()
@@ -180,7 +180,7 @@ func (x *XXMI) pruneCustomDLLsLocked(ctx context.Context) error {
 		return err
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || !isCustomDLLID(entry.Name()) || referenced[entry.Name()] ||
+		if !entry.IsDir() || !isHashID(entry.Name()) || referenced[entry.Name()] ||
 			x.importedCustomDLLs[entry.Name()] {
 			continue
 		}
@@ -281,12 +281,8 @@ func validateCustomDLLImage(data []byte) error {
 	return nil
 }
 
-func isCustomDLLID(id string) bool {
-	return len(id) == 12 && strings.Trim(id, "0123456789abcdef") == ""
-}
-
 func readCustomDLLInfo(root, id string) (CustomDLL, error) {
-	if !isCustomDLLID(id) {
+	if !isHashID(id) {
 		return CustomDLL{}, fmt.Errorf("invalid custom DLL %q", id)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "packages", customDLLPackage, id, customDLLMetadata))
@@ -329,7 +325,7 @@ func listCustomDLLs(root string) ([]CustomDLL, error) {
 	}
 	result := make([]CustomDLL, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() || !isCustomDLLID(entry.Name()) {
+		if !entry.IsDir() || !isHashID(entry.Name()) {
 			continue
 		}
 		dll, err := readCustomDLLInfo(root, entry.Name())

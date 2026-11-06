@@ -20,6 +20,7 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/wailsapp/wails/v3 v3.1.0
 	golang.org/x/arch v0.30.0
+	golang.org/x/image v0.45.0
 	golang.org/x/mod v0.42.0
 	golang.org/x/net v0.61.0
 	golang.org/x/sync v0.24.0
@@ -177,7 +178,6 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
