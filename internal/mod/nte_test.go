@@ -17,6 +17,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -199,7 +200,7 @@ func TestResolveNteInstallPathUsesInjectedAppDataFallback(t *testing.T) {
 // nteBootstrapFiles is what the archives served by nteBootstrapService install next to the game.
 var nteBootstrapFiles = map[string]string{
 	"dsound.dll": "new-dsound", "UniversalSigBypasser.asi": "sig-bypasser", "winhttp.dll": "asi-loader",
-	"UniversalSigBypasser.asi.sha512": "sig-hash", "winhttp.dll.sha512": "loader-hash",
+	"UniversalSigBypasser.asi.sha512": "sig-hash",
 }
 
 // nteBootstrapService downloads the bootstrap archives from a local server instead of GitHub.
@@ -211,8 +212,7 @@ func nteBootstrapService(t *testing.T, options Options) *Mod {
 		"release/UniversalSigBypasser.asi.sha512": "sig-hash",
 	})
 	loaderArchive := nteBootstrapZip(t, map[string]string{
-		"loader/winhttp.dll":        "asi-loader",
-		"loader/winhttp.dll.sha512": "loader-hash",
+		"dinput8.dll": "asi-loader",
 	})
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -228,10 +228,28 @@ func nteBootstrapService(t *testing.T, options Options) *Mod {
 
 	options.Archive = infra.NewArchive()
 	options.HTTP = infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()})
+	download := infra.NewDownload()
+	download.UseClient(options.HTTP)
+	options.GitHub = github.New(github.Options{HTTP: options.HTTP, Download: download})
 	service := NewWithOptions(options)
-	service.nteSigBypasserURL = server.URL + "/sig.zip"
-	service.nteASILoaderURL = server.URL + "/loader.zip"
+	service.nteBootstrapArchives = []nteBootstrapArchive{
+		nteTestArchive(server.URL+"/sig.zip", "sig.zip", sigArchive, nil),
+		nteTestArchive(
+			server.URL+"/loader.zip",
+			"loader.zip",
+			loaderArchive,
+			map[string]string{"dinput8.dll": "winhttp.dll"},
+		),
+	}
 	return service
+}
+
+func nteTestArchive(url, name string, content []byte, renames map[string]string) nteBootstrapArchive {
+	sum := sha256.Sum256(content)
+	return nteBootstrapArchive{
+		repo: github.Repo{Owner: "test", Name: "test"}, name: name, url: url,
+		sha256: hex.EncodeToString(sum[:]), renames: renames,
+	}
 }
 
 // recordingElevatedFiles stands in for the elevated helper, so no test asks for UAC consent. It
@@ -384,7 +402,7 @@ func TestEnsureNteBootstrapFilesInstallsProtectedFilesWithOnePrompt(t *testing.T
 		{name: "commit", finish: (*nteBootstrapInstall).Commit, wantDsound: "new-dsound"},
 		{
 			name: "rollback", finish: (*nteBootstrapInstall).Rollback,
-			wantAfter:  []string{"remove", "remove", "remove", "remove", "copy dsound.dll"},
+			wantAfter:  []string{"remove", "remove", "remove", "copy dsound.dll"},
 			wantDsound: "old-dsound",
 		},
 	} {
@@ -819,4 +837,22 @@ func TestNtePreviewDiscovery(t *testing.T) {
 		previewEqual(t, withSearch.Preview, nestedPreview)
 		previewEqual(t, withoutSearch.Preview, "")
 	})
+}
+
+func TestEnsureNteBootstrapFilesRejectsArchiveWithWrongChecksum(t *testing.T) {
+	service := nteBootstrapService(t, Options{})
+	service.nteBootstrapArchives[1].sha256 = strings.Repeat("0", 64)
+	targetDir := t.TempDir()
+	executable := filepath.Join(targetDir, nteExecutableName)
+	if err := os.WriteFile(executable, []byte("exe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := service.ensureNteBootstrapFiles(context.Background(), executable)
+	if err == nil || !strings.Contains(err.Error(), "NTE_BOOTSTRAP_CHECKSUM_MISMATCH") {
+		t.Fatalf("ensureNteBootstrapFiles error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, "winhttp.dll")); !os.IsNotExist(err) {
+		t.Fatalf("winhttp.dll was installed from an unverified archive: %v", err)
+	}
 }

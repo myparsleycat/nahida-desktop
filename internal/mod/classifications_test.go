@@ -722,3 +722,34 @@ func classificationGame(t *testing.T, service *Mod) GameConfig {
 	t.Fatal("fixture game is missing")
 	return GameConfig{}
 }
+
+func TestResolveDownloadTargetKeepsClassifiedFoldersOfOtherGroups(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newClassificationFixture(t)
+	child := filepath.Join(root, "mods", "Diluc", "Costume")
+	classification, err := service.SaveClassification(
+		ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupID := classification.Groups[0].ID
+	if err := service.SetCharacterClassification(ctx, child, classification.ID, &groupID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Resolving builds only the matched group, which must not finish the search for the whole game.
+	target, err := service.ResolveDownloadTarget(ctx, "Furina", nil)
+	if err != nil || target == nil || target.Group.Name != "Furina" {
+		t.Fatalf("target = %#v, err = %v", target, err)
+	}
+	if got := classifiedSubGroups(t, service, "Game"); len(got["Diluc"]) != 1 || got["Diluc"][0].Path != child {
+		t.Fatalf("classified sub groups after resolving another group = %#v", got)
+	}
+
+	target, err = service.ResolveDownloadTarget(ctx, "Diluc", nil)
+	if err != nil || target == nil || len(target.Group.ClassifiedSubGroups) != 1 {
+		t.Fatalf("resolved group = %#v, err = %v", target, err)
+	}
+}

@@ -86,11 +86,12 @@ func getStagingPaths(fileName string, sanitize func(string) string) (stagingPath
 	return stagingPath, filepath.Join(stagingPath, fileName)
 }
 
-func getPreviewTargetDir(stagedPath string) string {
-	if filepath.Ext(stagedPath) != "" {
-		return filepath.Dir(stagedPath)
-	}
-	return stagedPath
+// previewTargetDir is the staged mod folder that receives the GameBanana preview. A download that stayed a
+// single file has no folder of its own; writing the preview next to it would land in the destination group
+// and replace that group's preview.
+func previewTargetDir(stagedPath string) (string, bool) {
+	info, err := os.Stat(stagedPath)
+	return stagedPath, err == nil && info.IsDir()
 }
 
 func archiveRootName(fileName string, sanitize func(string) string) string {

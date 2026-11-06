@@ -265,8 +265,8 @@ func TestZstdCoordinatorWaitsForCanceledWorkers(t *testing.T) {
 		t.Run(fmt.Sprintf("shutdown=%t", shutdown), func(t *testing.T) {
 			m := New()
 			c := m.compression
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
 			c.state = CompressionState{Enabled: true, Method: "zstd", Status: "compressing"}
 			c.cancel, c.done = cancel, make(chan struct{})
 			started, canceled := make(chan struct{}, 2), make(chan struct{}, 2)
@@ -1170,5 +1170,20 @@ func TestMarkSelfChangesReusesExpiryTimer(t *testing.T) {
 	}
 	if firstGeneration != secondGeneration {
 		t.Fatalf("timer generation changed from %d to %d", firstGeneration, secondGeneration)
+	}
+}
+
+func TestPreemptedCompressionRunQueuesItsWorkAgain(t *testing.T) {
+	c := New().compression
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(errCompressionPreempted)
+	c.running = true
+
+	c.run(ctx, make(chan struct{}), compressionWork{full: true})
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.pendingFull {
+		t.Fatal("preempted full pass was dropped")
 	}
 }

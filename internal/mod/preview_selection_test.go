@@ -421,3 +421,30 @@ func assertSavedPreview(t *testing.T, modPath, want string) {
 		t.Fatalf("lost keep: %s", raw)
 	}
 }
+
+func TestRenameRewritesNestedPreviewToRenamedPath(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	modsRoot := filepath.Join(root, "mods")
+	character := filepath.Join(modsRoot, "Character")
+	outfit := filepath.Join(character, "Outfit")
+	selected := writePreviewFile(t, filepath.Join(outfit, "foo"), "shot.jpg")
+	if err := service.AddGame(ctx, "game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{outfit, character} {
+		if err := metadata.Initialize(dir, []byte(`{}`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.SetDefaultPreview(ctx, dir, selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := service.Rename(ctx, filepath.Join(outfit, "foo"), "bar"); err != nil {
+		t.Fatal(err)
+	}
+	assertSavedPreview(t, outfit, "bar/shot.jpg")
+	assertSavedPreview(t, character, "Outfit/bar/shot.jpg")
+}

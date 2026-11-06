@@ -97,8 +97,8 @@ func TestSuspendImporterWatchersDrainsCompressionAndBlocksNewWork(t *testing.T) 
 	m := New()
 	t.Cleanup(func() { _ = m.ServiceShutdown() })
 	c := m.compression
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
 	c.cancel, c.done = cancel, make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once

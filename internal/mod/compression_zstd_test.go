@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -508,4 +509,29 @@ func canonicalPath(t *testing.T, path string) string {
 		return filepath.Clean(resolved)
 	}
 	return filepath.Clean(absolute)
+}
+
+func TestCompressionWalksIgnoreFoldersThatDisappeared(t *testing.T) {
+	root := t.TempDir()
+	present := filepath.Join(root, "DISABLED Present")
+	if err := os.MkdirAll(present, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(present, "payload.bin"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(root, "DISABLED Renamed")
+
+	files, err := walkCompressionFiles(
+		t.Context(),
+		[]string{gone, present},
+		func(string, fs.FileInfo) bool { return true },
+	)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("files = %#v, err = %v", files, err)
+	}
+	folders, err := disabledModFolders(t.Context(), []string{filepath.Join(root, "Renamed"), root})
+	if err != nil || len(folders) != 1 {
+		t.Fatalf("folders = %#v, err = %v", folders, err)
+	}
 }

@@ -168,24 +168,11 @@ func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 		}
 	}
 
-	var preview *string
-	var walked []*walkedMod
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		defer holdScanDisk(groupPath)()
-		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
-	}()
-	go func() {
-		defer wg.Done()
-		walked = mapParallel(modDirs, func(modPath string) *walkedMod {
-			return walkMod(groupPath, modPath, reports...)
-		})
-	}()
-	wg.Wait()
+	// The group's own preview comes from GetCharacters and GetSubGroups; a mod listing leaves it empty.
+	walked := mapParallel(modDirs, func(modPath string) *walkedMod {
+		return walkMod(groupPath, modPath, reports...)
+	})
 
-	result.Preview = preview
 	result.Mods = collectWalkedMods(walked, reports...)
 	result.ModCount = len(result.Mods)
 	for _, info := range result.Mods {
@@ -213,33 +200,18 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 		}
 	}
 
-	var preview *string
-	var mods []ModInfo
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		defer holdScanDisk(groupPath)()
-		preview = findScannerGroupPreview(groupPath, previewSearchDepth, reports...)
-	}()
-	go func() {
-		defer wg.Done()
-		scanned := mapParallel(modDirs, func(modPath string) *ModInfo {
-			return scanModLight(groupPath, modPath, reports...)
-		})
-		mods = make([]ModInfo, 0, len(scanned))
-		for _, info := range scanned {
-			if info != nil {
-				mods = append(mods, *info)
-			}
+	scanned := mapParallel(modDirs, func(modPath string) *ModInfo {
+		return scanModLight(groupPath, modPath, reports...)
+	})
+	mods := make([]ModInfo, 0, len(scanned))
+	for _, info := range scanned {
+		if info != nil {
+			mods = append(mods, *info)
 		}
-		sort.Slice(mods, func(i, j int) bool {
-			return naturalLess(mods[i].Name, mods[j].Name)
-		})
-	}()
-	wg.Wait()
-
-	result.Preview = preview
+	}
+	sort.Slice(mods, func(i, j int) bool {
+		return naturalLess(mods[i].Name, mods[j].Name)
+	})
 	result.Mods = mods
 	result.ModCount = len(result.Mods)
 	for _, info := range result.Mods {

@@ -564,6 +564,55 @@ func TestManualSubGroupIsDecoratedAndHiddenFromParentMods(t *testing.T) {
 	if len(manualGroups) != 1 || manualGroups[0].Name != "Variants" || !manualGroups[0].IsManualSubGroup {
 		t.Fatalf("manual groups = %#v", manualGroups)
 	}
+
+	// An exclusive or bulk toggle renames the subgroup folder like any sibling mod.
+	disabled := filepath.Join(group, "DISABLED Variants")
+	if err := os.Rename(manual, disabled); err != nil {
+		t.Fatal(err)
+	}
+	mods, err = service.GetMods(ctx, group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mods.Mods) != 1 || mods.Mods[0].Name != "Regular" {
+		t.Fatalf("mods after disabling the subgroup folder = %#v", mods.Mods)
+	}
+	manualGroups, err = service.GetManualSubGroups(ctx, group, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manualGroups) != 1 || !manualGroups[0].IsManualSubGroup {
+		t.Fatalf("manual groups after disabling the subgroup folder = %#v", manualGroups)
+	}
+}
+
+func TestManualSubGroupMarkedWhileDisabledSurvivesEnabling(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Character")
+	disabled := filepath.Join(group, "DISABLED Variants")
+	if err := os.MkdirAll(filepath.Join(disabled, "Blue"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetManualSubGroup(ctx, disabled, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(disabled, filepath.Join(group, "Variants")); err != nil {
+		t.Fatal(err)
+	}
+
+	manualGroups, err := service.GetManualSubGroups(ctx, group, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manualGroups) != 1 || manualGroups[0].Name != "Variants" {
+		t.Fatalf("manual groups = %#v", manualGroups)
+	}
 }
 
 func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
@@ -610,7 +659,7 @@ func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
 	}
 }
 
-func TestApplyPresetSkipsActiveDownloadDestination(t *testing.T) {
+func TestApplyPresetReportsActiveDownloadDestinationAsFailed(t *testing.T) {
 	ctx := context.Background()
 	service, root := newTestMod(t, testSettings{style: "space"})
 	modsRoot := filepath.Join(root, "mods")
@@ -643,8 +692,8 @@ func TestApplyPresetSkipsActiveDownloadDestination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Applied) != 0 || len(result.Skipped) != 1 ||
-		!strings.EqualFold(result.Skipped[0], filepath.ToSlash(filepath.Join("Character", "Costume"))) {
+	if len(result.Applied) != 0 || len(result.Skipped) != 0 || len(result.Failed) != 1 ||
+		!strings.EqualFold(result.Failed[0], filepath.ToSlash(filepath.Join("Character", "Costume"))) {
 		t.Fatalf("apply result = %#v", result)
 	}
 	if _, err := os.Stat(enabledPath); err != nil {

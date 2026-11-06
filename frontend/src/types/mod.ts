@@ -60,4 +60,5 @@ export interface ApplyPresetResult {
         expectedFolderName: string;
         expectedRelativePath: string;
     }[];
+    failed: string[];
 }

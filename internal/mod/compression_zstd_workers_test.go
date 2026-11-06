@@ -3,6 +3,7 @@ package mod
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -209,7 +210,16 @@ func TestZstdParallelRoundTripDeduplicatesRoots(t *testing.T) {
 		}
 	}
 	roots := []string{folder, folder}
-	if err := compressDisabledZstd(t.Context(), roots, 1, setTotals, progress, mark, onError); err != nil {
+	if err := compressDisabledZstd(
+		t.Context(),
+		roots,
+		1,
+		setTotals,
+		progress,
+		mark,
+		&compressionDeclinedFiles{},
+		onError,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if totals != 12 || processed != 12 || totalBytes != int64(12*len(want)) || processedBytes != totalBytes {
@@ -340,5 +350,41 @@ func awaitZstdResult(t *testing.T, ch <-chan error) error {
 	case <-time.After(5 * time.Second):
 		t.Fatal("workers did not finish")
 		return nil
+	}
+}
+
+func TestCompressDisabledZstdSkipsFilesThatDidNotShrink(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "DISABLED Mod")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	noise := make([]byte, 256*1024)
+	if _, err := rand.Read(noise); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(folder, "noise.bin")
+	if err := os.WriteFile(path, noise, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "preview.png"), bytes.Repeat([]byte("a"), 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	declined := &compressionDeclinedFiles{}
+	var totals int
+	setTotals := func(count int, _ int64) { totals = count }
+	onError := func(path string, err error) { t.Errorf("%s: %v", path, err) }
+
+	for pass, want := range []int{1, 0} {
+		err := compressDisabledZstd(t.Context(), []string{folder}, 1, setTotals, func(string, int64, bool) {},
+			ignoreCompressionMutations, declined, onError)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if totals != want {
+			t.Fatalf("pass %d: candidates = %d, want %d", pass, totals, want)
+		}
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, noise) {
+		t.Fatalf("incompressible source changed: %v", err)
 	}
 }

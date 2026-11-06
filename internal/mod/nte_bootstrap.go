@@ -3,6 +3,8 @@ package mod
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -15,16 +17,44 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/elevated"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
-const (
-	defaultNteSigBypasserURL = "https://github.com/rm-NoobInCoding/UniversalSigBypasser/releases/download/v1.2/SigBypasser_v1.2.zip"
-	defaultNteASILoaderURL   = "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/winhttp-x64.zip"
-	nteSigBypasserArchive    = "SigBypasser_v1.2.zip"
-	nteASILoaderArchive      = "winhttp-x64.zip"
-	nteBootstrapEvent        = "mod:nte-bootstrap-progress"
-)
+const nteBootstrapEvent = "mod:nte-bootstrap-progress"
+
+// nteBootstrapArchive is a pinned release file installed into the NTE game folder. The files run inside
+// the game process, so each archive is checked against its SHA-256 before it is extracted.
+type nteBootstrapArchive struct {
+	repo   github.Repo
+	name   string
+	url    string
+	sha256 string
+	// renames maps an archive entry to the name it is installed under.
+	renames map[string]string
+}
+
+func defaultNteBootstrapArchives() []nteBootstrapArchive {
+	sigBypasser := github.Repo{Owner: "rm-NoobInCoding", Name: "UniversalSigBypasser"}
+	asiLoader := github.Repo{Owner: "ThirteenAG", Name: "Ultimate-ASI-Loader"}
+	return []nteBootstrapArchive{
+		{
+			repo:   sigBypasser,
+			name:   "SigBypasser_v1.2.zip",
+			url:    github.ReleaseFileURL(sigBypasser, "v1.2", "SigBypasser_v1.2.zip"),
+			sha256: "c2a1f2d72aa2b7c5c47b1074d589c358d5a1bc5812cc48980af6ba57bbbfa344",
+		},
+		{
+			// The loader picks the DLL it proxies from its own file name.
+			repo:    asiLoader,
+			name:    "Ultimate-ASI-Loader_x64.zip",
+			url:     github.ReleaseFileURL(asiLoader, "v10.0.2", "Ultimate-ASI-Loader_x64.zip"),
+			sha256:  "a99e188e1f40d7aac9db9c0339990332152d372e0359faa06a52fa339e8b218f",
+			renames: map[string]string{"dinput8.dll": "winhttp.dll"},
+		},
+	}
+}
 
 var nteBootstrapRequiredFiles = []string{"dsound.dll", "UniversalSigBypasser.asi", "winhttp.dll"}
 
@@ -96,7 +126,7 @@ func (m *Mod) ensureNteBootstrapFiles(
 		m.emitNteBootstrapProgress("completed", lo.ToPtr[float64](100), "", "")
 		return nil, nil
 	}
-	if m.archive == nil || m.http == nil {
+	if m.archive == nil || m.github == nil {
 		err := errors.New("NTE_BOOTSTRAP_SERVICE_NOT_CONFIGURED")
 		m.emitNteBootstrapProgress("failed", nil, "", err.Error())
 		return nil, err
@@ -120,13 +150,15 @@ func (m *Mod) ensureNteBootstrapFiles(
 		m.emitNteBootstrapProgress("failed", nil, "", returnErr.Error())
 	}()
 
-	m.emitNteBootstrapProgress("fetching-release", nil, nteSigBypasserArchive, "")
-	if err := m.downloadAndExtractNteBootstrap(ctx, m.nteSigBypasserURL, nteSigBypasserArchive, tempDir); err != nil {
-		return nil, err
-	}
-	m.emitNteBootstrapProgress("fetching-release", lo.ToPtr[float64](93), nteASILoaderArchive, "")
-	if err := m.downloadAndExtractNteBootstrap(ctx, m.nteASILoaderURL, nteASILoaderArchive, tempDir); err != nil {
-		return nil, err
+	for index, archive := range m.nteBootstrapArchives {
+		var progress *float64
+		if index > 0 {
+			progress = lo.ToPtr(float64(90 + 3*index))
+		}
+		m.emitNteBootstrapProgress("fetching-release", progress, archive.name, "")
+		if err := m.downloadAndExtractNteBootstrap(ctx, archive, tempDir); err != nil {
+			return nil, err
+		}
 	}
 
 	files, err := collectNteBootstrapFiles(tempDir)
@@ -162,15 +194,24 @@ func (m *Mod) ensureNteBootstrapFiles(
 	return install, nil
 }
 
-func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, rawURL, archiveName, tempDir string) error {
+func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, archive nteBootstrapArchive, tempDir string) error {
+	archiveName := archive.name
 	archivePath := filepath.Join(tempDir, archiveName)
 	extractDir, err := os.MkdirTemp(tempDir, "extract-*")
 	if err != nil {
 		return err
 	}
 	m.emitNteBootstrapProgress("downloading", nil, archiveName, "")
-	if err := m.download.File(ctx, infra.DownloadRequest{URL: rawURL, Destination: archivePath}); err != nil {
-		return fmt.Errorf("NTE_BOOTSTRAP_DOWNLOAD_FAILED:%s: %w", rawURL, err)
+	if err := m.github.DownloadFile(ctx, github.FileRequest{
+		Repo: archive.repo, URL: archive.url, Destination: archivePath,
+	}); err != nil {
+		return fmt.Errorf("NTE_BOOTSTRAP_DOWNLOAD_FAILED:%s: %w", infra.SanitizeLogURL(archive.url), err)
+	}
+	if err := verifyNteBootstrapArchive(archivePath, archive.sha256); err != nil {
+		if errors.Is(err, errNteBootstrapChecksum) {
+			return fmt.Errorf("NTE_BOOTSTRAP_CHECKSUM_MISMATCH:%s: %w", archiveName, err)
+		}
+		return fmt.Errorf("NTE_BOOTSTRAP_VERIFY_FAILED:%s: %w", archiveName, err)
 	}
 
 	m.emitNteBootstrapProgress("extracting", nil, archiveName, "")
@@ -183,6 +224,41 @@ func (m *Mod) downloadAndExtractNteBootstrap(ctx context.Context, rawURL, archiv
 		nil,
 	); err != nil {
 		return fmt.Errorf("NTE_BOOTSTRAP_EXTRACT_FAILED:%s: %w", archiveName, err)
+	}
+	if len(archive.renames) == 0 {
+		return nil
+	}
+	files, err := collectNteBootstrapFiles(extractDir)
+	if err != nil {
+		return err
+	}
+	for from, to := range archive.renames {
+		source := findNteBootstrapFile(files, from)
+		if source == "" {
+			return fmt.Errorf("NTE_BOOTSTRAP_FILE_MISSING:%s", from)
+		}
+		if err := os.Rename(source, filepath.Join(filepath.Dir(source), to)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// errNteBootstrapChecksum separates a digest mismatch from a failure to read the archive.
+var errNteBootstrapChecksum = errors.New("checksum mismatch")
+
+func verifyNteBootstrapArchive(path, want string) error {
+	input, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = input.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, input); err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(hash.Sum(nil)); !strings.EqualFold(got, want) {
+		return fmt.Errorf("%w: sha256 %s, want %s", errNteBootstrapChecksum, got, want)
 	}
 	return nil
 }
@@ -281,16 +357,24 @@ func copyNteBootstrapFile(sourcePath, targetPath string) error {
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return err
 	}
-	output, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	// The DLLs are loaded by the game, so a copy cut short must never take the place of a working file;
+	// whether the install is complete is later judged by the files existing.
+	output, err := os.CreateTemp(filepath.Dir(targetPath), ".nhd-write-*")
 	if err != nil {
 		return err
 	}
+	temporary := output.Name()
 	_, copyErr := io.Copy(output, input)
-	closeErr := output.Close()
-	if copyErr != nil {
-		return copyErr
+	if copyErr == nil {
+		copyErr = output.Sync()
 	}
-	return closeErr
+	if err := errors.Join(copyErr, output.Close()); err != nil {
+		return infra.WithCause(err, os.Remove(temporary))
+	}
+	if err := platform.ReplaceAtomic(temporary, targetPath); err != nil {
+		return infra.WithCause(err, os.Remove(temporary))
+	}
+	return nil
 }
 
 func (i *nteBootstrapInstall) Rollback() error {

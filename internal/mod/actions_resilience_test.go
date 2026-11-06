@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"fmt"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
@@ -350,5 +353,99 @@ func registerActiveModDownload(t *testing.T, service *Mod, pid, destinationPath 
 		DestinationPaths: []string{destinationPath}, ManualStart: true,
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDisableRestoresShaderFixesWhenRenameFails(t *testing.T) {
+	for _, installed := range []bool{true, false} {
+		t.Run(fmt.Sprintf("installed=%v", installed), func(t *testing.T) {
+			h := newShaderFixesHarness(t)
+			modPath := filepath.Join(h.modsPath, "Group", "Mod")
+			writeFile(t, filepath.Join(modPath, "ShaderFixes", "a.ini"), "shader")
+			if installed {
+				if _, err := h.service.HandleShaders(modPath, true); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := &Mod{shaders: h.service, settings: &flakyActionSettings{disableFailures: 1}}
+
+			if _, err := m.disableWithShaders(context.Background(), modPath); err == nil {
+				t.Fatal("disable should fail")
+			}
+			// Restoring must bring back what was installed and must not install what never was.
+			if got := exists(filepath.Join(h.importerPath, "ShaderFixes", "a.ini")); got != installed {
+				t.Fatalf("global shader copy exists = %v, want %v", got, installed)
+			}
+			if !exists(modPath) {
+				t.Fatal("mod folder should keep its enabled name")
+			}
+		})
+	}
+}
+
+// rendezvousSettings holds the first sibling disable until a second one arrives. Two toggles of one group
+// can only both arrive when they read the sibling list at the same time, which the group lock prevents.
+type rendezvousSettings struct {
+	testSettings
+	calls  atomic.Int32
+	second chan struct{}
+}
+
+func (s *rendezvousSettings) GetDisabledPrefixStyle(context.Context) (string, error) {
+	switch s.calls.Add(1) {
+	case 1:
+		select {
+		case <-s.second:
+		case <-time.After(200 * time.Millisecond):
+		}
+	case 2:
+		close(s.second)
+	}
+	return "space", nil
+}
+
+func TestConcurrentExclusiveTogglesLeaveOneModEnabled(t *testing.T) {
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{style: "space"})
+	service.settings = &rendezvousSettings{second: make(chan struct{})}
+	modsRoot := filepath.Join(root, "mods")
+	group := filepath.Join(modsRoot, "Character")
+	for _, name := range []string{"DISABLED A", "DISABLED B", "C"} {
+		if err := os.MkdirAll(filepath.Join(group, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	for _, name := range []string{"DISABLED A", "DISABLED B"} {
+		go func() {
+			<-start
+			_, err := service.ExclusiveToggle(ctx, filepath.Join(group, name))
+			errs <- err
+		}()
+	}
+	close(start)
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := os.ReadDir(group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var enabled []string
+	for _, entry := range entries {
+		if !isDisabled(entry.Name()) {
+			enabled = append(enabled, entry.Name())
+		}
+	}
+	if len(enabled) != 1 {
+		t.Fatalf("enabled mods = %v, want exactly one", enabled)
 	}
 }

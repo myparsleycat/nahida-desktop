@@ -326,6 +326,7 @@ export interface ApplyPresetResult {
         expectedFolderName: string;
         expectedRelativePath: string;
     }[];
+    failed: string[];
 }
 
 export interface PresetCreateConflictCandidate {
@@ -422,6 +423,7 @@ export type IpcEvents = {
     "fn:navi": (path: string) => void;
     "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
     "mod:archiveExtractPrompt": (data: { requestId: string; fileName: string }) => void;
+    "mod:archiveExtractPromptDismissed": (data: { requestId: string }) => void;
     "pathSelector:modeSelect": (data: {
         selectionId: string;
         suggestedName?: string;

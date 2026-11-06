@@ -1,12 +1,15 @@
 package mod
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 type classicEntry struct {
@@ -25,6 +28,7 @@ type classicSection struct {
 }
 
 func (m *Mod) executeClassicMerge(
+	ctx context.Context,
 	node MergePlanNode,
 	packs []MergePackClassification,
 	request MergeModsRequest,
@@ -42,7 +46,7 @@ func (m *Mod) executeClassicMerge(
 	for i, pack := range packs {
 		destination := filepath.Join(container, names[i])
 		if request.Placement == "new_folder" {
-			if err := copyDirectory(pack.Path, destination); err != nil {
+			if err := copyMergePack(ctx, pack.Path, destination); err != nil {
 				return "", err
 			}
 			*created = append(*created, mergeRollback{kind: "remove", path: destination})
@@ -112,8 +116,24 @@ func writeClassicMergedINI(
 		sections = append(sections, parseClassicSections(string(raw), filepath.Dir(source.path), source.index)...)
 	}
 	type commandGroup struct {
-		key      string
+		name     string
 		sections []classicSection
+	}
+	// Section names must be unique in the merged file. The packs' own command lists keep their names,
+	// because their overrides call them by name, so a generated list or override yields instead.
+	used := map[string]bool{}
+	for _, section := range sections {
+		if section.header == "CommandList" && classicEntryValue(section, "hash") == "" {
+			used[strings.ToLower(section.header+section.name)] = true
+		}
+	}
+	uniqueName := func(header, name string) string {
+		candidate := name
+		for suffix := 2; used[strings.ToLower(header+candidate)]; suffix++ {
+			candidate = fmt.Sprintf("%s.%d", name, suffix)
+		}
+		used[strings.ToLower(header+candidate)] = true
+		return candidate
 	}
 	commandIndex := map[string]int{}
 	commandGroups := []commandGroup{}
@@ -126,19 +146,25 @@ func writeClassicMergedINI(
 			if !exists {
 				index = len(commandGroups)
 				commandIndex[key] = index
-				commandGroups = append(commandGroups, commandGroup{key: key})
-				overrides = append(overrides, buildClassicOverride(section, forwardKey != ""))
+				group := commandGroup{}
+				if !isVertexLimitRaise(section.name) {
+					group.name = uniqueName("CommandList", section.name)
+				}
+				commandGroups = append(commandGroups, group)
+				overrides = append(overrides, buildClassicOverride(
+					section, uniqueName(section.header, section.name), group.name, forwardKey != "",
+				))
 			}
 			commandGroups[index].sections = append(commandGroups[index].sections, section)
 			continue
 		}
 		if section.header == "CommandList" {
-			key := section.name + "::0"
+			key := "commandlist::" + strings.ToLower(section.name)
 			index, exists := commandIndex[key]
 			if !exists {
 				index = len(commandGroups)
 				commandIndex[key] = index
-				commandGroups = append(commandGroups, commandGroup{key: key})
+				commandGroups = append(commandGroups, commandGroup{name: section.name})
 			}
 			commandGroups[index].sections = append(commandGroups[index].sections, section)
 			continue
@@ -149,8 +175,8 @@ func writeClassicMergedINI(
 	}
 	commands := []string{}
 	for _, group := range commandGroups {
-		if len(group.sections) > 0 && !strings.Contains(group.sections[0].name, "VertexLimitRaise") {
-			commands = append(commands, buildClassicCommandList(group.sections))
+		if len(group.sections) > 0 && group.name != "" && !isVertexLimitRaise(group.sections[0].name) {
+			commands = append(commands, buildClassicCommandList(group.name, group.sections))
 		}
 	}
 	values := make([]string, len(sources))
@@ -182,7 +208,7 @@ func writeClassicMergedINI(
 	if err := recordMergeWrite(output, created); err != nil {
 		return err
 	}
-	if err := os.WriteFile(output, []byte(content), 0o644); err != nil {
+	if err := platform.WriteFileAtomic(output, []byte(content), 0o644); err != nil {
 		return err
 	}
 	for _, source := range sources {
@@ -207,16 +233,20 @@ func parseClassicSections(text, location string, groupIndex int) []classicSectio
 	}
 	result := []classicSection{}
 	current := -1
+	text = strings.TrimPrefix(text, "\ufeff")
 	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		trimmed := strings.TrimSpace(raw)
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
 			name := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+			lower := strings.ToLower(name)
 			current = -1
 			for _, header := range recognized {
-				if strings.HasPrefix(name, header) && !strings.Contains(name, "CommandListReflectionTexture") &&
-					!strings.Contains(name, "CommandListOutline") {
+				// 3DMigoto matches section names without regard to case.
+				if len(name) >= len(header) && strings.EqualFold(name[:len(header)], header) &&
+					!strings.Contains(lower, "commandlistreflectiontexture") &&
+					!strings.Contains(lower, "commandlistoutline") {
 					result = append(result, classicSection{
-						header: header, name: strings.TrimPrefix(name, header),
+						header: header, name: name[len(header):],
 						location: location, groupIndex: groupIndex,
 					})
 					current = len(result) - 1
@@ -245,8 +275,13 @@ func parseClassicSections(text, location string, groupIndex int) []classicSectio
 	return result
 }
 
-func buildClassicOverride(section classicSection, setActive bool) string {
-	lines := []string{"[" + section.header + section.name + "]", "hash = " + classicEntryValue(section, "hash")}
+func isVertexLimitRaise(name string) bool {
+	return strings.Contains(strings.ToLower(name), "vertexlimitraise")
+}
+
+// buildClassicOverride writes the override of one hash. An empty commandName leaves out the run line.
+func buildClassicOverride(section classicSection, name, commandName string, setActive bool) string {
+	lines := []string{"[" + section.header + name + "]", "hash = " + classicEntryValue(section, "hash")}
 	if value := classicEntryValue(section, "match_first_index"); value != "" {
 		lines = append(lines, "match_first_index = "+value)
 	}
@@ -257,10 +292,10 @@ func buildClassicOverride(section classicSection, setActive bool) string {
 			lines = append(lines, entry.key+" = "+entry.value)
 		}
 	}
-	if !strings.Contains(section.name, "VertexLimitRaise") {
-		lines = append(lines, "run = CommandList"+section.name)
+	if commandName != "" {
+		lines = append(lines, "run = CommandList"+commandName)
 	}
-	if setActive && strings.Contains(section.name, "Position") {
+	if setActive && strings.Contains(strings.ToLower(section.name), "position") {
 		lines = append(lines, "$active = 1")
 	}
 	return strings.Join(append(lines, ""), "\n")
@@ -285,8 +320,8 @@ func buildClassicResource(section classicSection, outputDir string) string {
 	return strings.Join(append(lines, ""), "\n")
 }
 
-func buildClassicCommandList(group []classicSection) string {
-	lines := []string{"[CommandList" + group[0].name + "]"}
+func buildClassicCommandList(name string, group []classicSection) string {
+	lines := []string{"[CommandList" + name + "]"}
 	excluded := map[string]bool{"hash": true, "match_first_index": true, "allow_duplicate_hash": true,
 		"override_vertex_count": true, "override_byte_stride": true}
 	for index, section := range group {
@@ -353,23 +388,29 @@ func isControlFlowLine(line string) bool {
 		lower == "else" || lower == "endif"
 }
 
+var (
+	classicNumberRE       = regexp.MustCompile(`^\d+(?:\.\d+)?$`)
+	classicResourceWordRE = regexp.MustCompile(`(?i)\bResource\w*`)
+	classicSlotKeyRE      = regexp.MustCompile(`(?i)^(?:vb|ib|ps-t|vs-t|ps-u|cs-u|cs-t)\d*`)
+	classicKeywordRE      = regexp.MustCompile(`(?i)^[a-z_]+$`)
+	classicResourceNameRE = regexp.MustCompile(`(?i)\bResource[^\s,;]+`)
+)
+
 func isClassicResourceReference(key, value string) bool {
 	trimmed := strings.TrimSpace(value)
 	lower := strings.ToLower(trimmed)
 	if lower == "null" || lower == "auto" || strings.HasPrefix(lower, "commandlist") ||
-		regexp.MustCompile(`^\d+(?:\.\d+)?$`).MatchString(trimmed) {
+		classicNumberRE.MatchString(trimmed) {
 		return false
 	}
-	if regexp.MustCompile(`(?i)\bResource\w*`).MatchString(trimmed) {
+	if classicResourceWordRE.MatchString(trimmed) {
 		return true
 	}
-	return regexp.MustCompile(`(?i)^(?:vb|ib|ps-t|vs-t|ps-u|cs-u|cs-t)\d*`).MatchString(key) &&
-		!regexp.MustCompile(`(?i)^[a-z_]+$`).MatchString(trimmed)
+	return classicSlotKeyRE.MatchString(key) && !classicKeywordRE.MatchString(trimmed)
 }
 
 func appendClassicResourceSuffix(value string, index int) string {
-	re := regexp.MustCompile(`(?i)\bResource[^\s,;]+`)
-	location := re.FindStringIndex(value)
+	location := classicResourceNameRE.FindStringIndex(value)
 	if location == nil {
 		return fmt.Sprintf("%s.%d", value, index)
 	}

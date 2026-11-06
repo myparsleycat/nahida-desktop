@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/samber/lo"
 
@@ -249,14 +251,19 @@ func (m *Mod) SetCharacterClassification(
 		return json.Marshal(document)
 	}
 	if groupID != nil {
-		if err := metadata.Upsert(folderPath, change); err != nil {
+		if err := metadata.Upsert(folderPath, change, m.reportMetadataCleanup); err != nil {
 			return err
 		}
 		m.rememberClassifiedFolder(*game, folderPath)
 		return nil
 	}
 	// Clearing an assignment must not create metadata for a folder that never had any.
-	if err := metadata.Update(folderPath, change); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := metadata.Update(
+		folderPath,
+		change,
+		m.reportMetadataCleanup,
+	); err != nil &&
+		!errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	m.forgetClassifiedFolder(*game, folderPath)
@@ -414,10 +421,13 @@ func (m *Mod) invalidateClassifiedFolders(game string) {
 }
 
 // loadClassifiedSubGroups attaches to each top-level folder the nested folders that carry an assignment,
-// so the sidebar can list them under their classification group without expanding the parent.
+// so the sidebar can list them under their classification group without expanding the parent. Only a
+// complete listing of the game's top-level groups may finish the classified search, since it forgets
+// folders it did not see.
 func (m *Mod) loadClassifiedSubGroups(
 	listing groupListing,
 	groups []FolderGroup,
+	complete bool,
 	reports ...func(error),
 ) []FolderGroup {
 	if !listing.classified {
@@ -440,12 +450,16 @@ func (m *Mod) loadClassifiedSubGroups(
 		listed := lo.SliceToMap(folders, func(folder FolderGroup) (string, struct{}) {
 			return strings.ToLower(folder.Path), struct{}{}
 		})
-		missed := lo.Reject(findClassifiedFolders(groups, reports...), func(path string, _ int) bool {
+		found, searched := findClassifiedFolders(groups, reports...)
+		missed := lo.Reject(found, func(path string, _ int) bool {
 			_, ok := listed[strings.ToLower(path)]
 			return ok
 		})
 		folders = append(folders, m.listClassifiedFolders(listing, missed, reports...)...)
-		m.finishClassifiedSearch(game, since)
+		// A folder the search could not read may hold assignments, so the search stays open for the next listing.
+		if complete && searched {
+			m.finishClassifiedSearch(game, since)
+		}
 	}
 
 	topLevel := make(map[string]int, len(groups))
@@ -461,15 +475,20 @@ func (m *Mod) loadClassifiedSubGroups(
 	return groups
 }
 
-// findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json.
-func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []string {
-	return lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
+// findClassifiedFolders searches the folders below each group for assignments, reading only nhd.json. It also
+// reports whether every folder could be listed.
+func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) ([]string, bool) {
+	var failed atomic.Bool
+	paths := lo.Flatten(mapParallel(groups, func(group FolderGroup) []string {
 		defer holdScanDisk(group.Path)()
 		var found []string
 		var walk func(dir string, remaining int)
 		walk = func(dir string, remaining int) {
 			entries, err := os.ReadDir(dir)
 			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					failed.Store(true)
+				}
 				reportScanFailure(err, reports)
 				return
 			}
@@ -489,6 +508,7 @@ func findClassifiedFolders(groups []FolderGroup, reports ...func(error)) []strin
 		walk(group.Path, classifiedSubGroupDepth)
 		return found
 	}))
+	return paths, !failed.Load()
 }
 
 // listClassifiedFolders builds the sidebar entries for the given folders only, leaving their siblings unread,

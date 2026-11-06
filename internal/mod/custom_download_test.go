@@ -309,3 +309,67 @@ func assertCustomDownloadFile(t *testing.T, path, want string) {
 		t.Fatalf("downloaded file %s = %q, %v", path, raw, err)
 	}
 }
+
+func TestPreviewTargetDirRequiresStagedFolder(t *testing.T) {
+	staging := t.TempDir()
+	folder := filepath.Join(staging, "Furina_v1.2")
+	if err := os.Mkdir(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(staging, "Furina.ini")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if dir, ok := previewTargetDir(folder); !ok || dir != folder {
+		t.Fatalf("dotted folder: dir = %q, ok = %v", dir, ok)
+	}
+	if _, ok := previewTargetDir(file); ok {
+		t.Fatal("a single staged file should not receive a preview")
+	}
+}
+
+func TestHeadDownloadIgnoresSizeOfRefusedHead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Length", "13")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+	defer server.Close()
+	service := NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()}),
+	})
+
+	head, err := service.headDownload(context.Background(), server.URL+"/file.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.ok || head.size != nil || head.supportsRange != nil {
+		t.Fatalf("head = ok %v, size %v, range %v", head.ok, head.size, head.supportsRange)
+	}
+}
+
+func TestCustomDownloadFallsBackToRequestedURLWhenHeadRedirectsToError(t *testing.T) {
+	archive := nteBootstrapZip(t, map[string]string{"HeadRefused/mod.ini": "payload"})
+	// The client refuses redirects to plain HTTP, so the server uses TLS.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/file.zip" && request.Method == http.MethodHead:
+			http.Redirect(w, request, "/refused", http.StatusFound)
+		case request.URL.Path == "/file.zip":
+			serveCustomDownloadFixture(w, request, archive, "file.zip", true)
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+
+	destination := t.TempDir()
+	service, transfers := customDownloadTestService(t, server, destination, "", false)
+	status, err := service.DownloadFromURL(context.Background(), server.URL+"/file.zip", destination)
+	if err != nil || status != "started" {
+		t.Fatalf("DownloadFromURL = %q, %v", status, err)
+	}
+	processCustomDownloadQueue(t, transfers, int64(len(archive)))
+	assertCustomDownloadFile(t, filepath.Join(destination, "HeadRefused", "mod.ini"), "payload")
+}

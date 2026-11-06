@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -39,6 +40,7 @@ func compressDisabledZstd(
 	setTotals func(int, int64),
 	progress func(string, int64, bool),
 	mark compressionMutationMarker,
+	declined *compressionDeclinedFiles,
 	onError func(string, error),
 ) error {
 	folders, err := disabledModFolders(ctx, roots)
@@ -48,7 +50,10 @@ func compressDisabledZstd(
 	var files []compressionFile
 	for _, folder := range folders {
 		found, err := collectZstdFiles(ctx, []string{folder}, func(path string, info fs.FileInfo) bool {
-			return info.Size() >= threshold && !isZstdArchivePath(path) && !isCompressionInProgressPath(path)
+			// Media and archives are compressed already; reading them every pass gains nothing.
+			_, compressed := xpressSkippedExtensions[strings.ToLower(filepath.Ext(path))]
+			return info.Size() >= threshold && !compressed && !isZstdArchivePath(path) &&
+				!isCompressionInProgressPath(path)
 		}, mark, onError)
 		files = append(files, found...)
 		if err != nil {
@@ -56,10 +61,16 @@ func compressDisabledZstd(
 		}
 	}
 	files = uniqueZstdFiles(files)
+	declined.retain(folders, files)
+	files = slices.DeleteFunc(files, declined.contains)
 	setCompressionTotals(files, setTotals)
 	mark = serialZstdMarker(mark)
 	return runZstdWorkers(ctx, files, runtime.GOMAXPROCS(0), func(file compressionFile) error {
-		return compressZstdFile(ctx, file.path, mark)
+		noGain, err := compressZstdFileIfSmaller(ctx, file.path, mark)
+		if noGain {
+			declined.add(file)
+		}
+		return err
 	}, progress, onError)
 }
 
@@ -248,7 +259,9 @@ func disabledModFolders(ctx context.Context, roots []string) ([]string, error) {
 				return err
 			}
 			if walkErr != nil {
-				errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
+				if !errors.Is(walkErr, fs.ErrNotExist) {
+					errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
+				}
 				return nil
 			}
 			if !entry.IsDir() {
@@ -259,7 +272,9 @@ func disabledModFolders(ctx context.Context, roots []string) ([]string, error) {
 			}
 			info, err := entry.Info()
 			if err != nil {
-				errs = append(errs, err)
+				if !errors.Is(err, fs.ErrNotExist) {
+					errs = append(errs, err)
+				}
 				return filepath.SkipDir
 			}
 			if info.Mode()&os.ModeSymlink != 0 || isReparsePoint(info) {
@@ -313,6 +328,37 @@ func isManagedZstdPath(path string) bool {
 	return strings.HasSuffix(strings.ToLower(path), managedZstdExtension)
 }
 
+// hasZstdArchives reports whether a managed archive lies anywhere below folder. An unreadable entry counts as
+// one, so the caller restores rather than skipping archives it could not see. The only error is cancellation.
+func hasZstdArchives(ctx context.Context, folder string) (bool, error) {
+	release, err := diskio.AcquireDir(ctx, folder)
+	if err != nil {
+		return false, err
+	}
+	defer release()
+
+	found := false
+	walkErr := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			found = true
+			return fs.SkipAll
+		}
+		if err == nil && entry.Type().IsRegular() &&
+			strings.HasSuffix(strings.ToLower(entry.Name()), managedZstdExtension) {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(walkErr, ctxErr) {
+		return false, ctxErr
+	}
+	return found, nil
+}
+
 func isZstdArchivePath(path string) bool {
 	lower := strings.ToLower(path)
 	return strings.HasSuffix(lower, ".zst") || strings.HasSuffix(lower, managedZstdExtension)
@@ -341,54 +387,83 @@ func zstdPathIsDisabled(path string, roots []string) bool {
 }
 
 func compressZstdFile(ctx context.Context, sourcePath string, mark compressionMutationMarker) error {
+	_, err := compressZstdFileIfSmaller(ctx, sourcePath, mark)
+	return err
+}
+
+// compressZstdFileIfSmaller replaces sourcePath with its archive. It reports noGain, leaving the source as it
+// is, when the archive would not be smaller.
+func compressZstdFileIfSmaller(
+	ctx context.Context,
+	sourcePath string,
+	mark compressionMutationMarker,
+) (noGain bool, returnErr error) {
 	release, err := diskio.Acquire(ctx, sourcePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer release()
 
 	info, err := os.Stat(sourcePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	targetPath := sourcePath + managedZstdExtension
 	tempPath := targetPath + compressionTempMarker
 	if targetInfo, err := os.Lstat(targetPath); err == nil {
 		if !targetInfo.Mode().IsRegular() {
-			return fmt.Errorf("zstd destination is not a regular file: %s", targetPath)
+			return false, fmt.Errorf("zstd destination is not a regular file: %s", targetPath)
 		}
 		mark(targetPath)
 		if err := os.Remove(targetPath); err != nil {
-			return err
+			return false, err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return false, err
 	}
 	mark(tempPath)
 	if err := os.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return false, err
 	}
-	if err := streamCompressZstd(ctx, sourcePath, tempPath); err != nil {
-		return infra.WithCause(fmt.Errorf("compress %q: %w", sourcePath, err), os.Remove(tempPath))
+	err = streamCompressZstdWithLimit(ctx, sourcePath, tempPath, info.Size())
+	if errors.Is(err, errZstdNoGain) {
+		// The stream already tried to remove the partial archive and attached any failure as a cause.
+		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			return true, removeErr
+		}
+		return true, nil
+	}
+	if err != nil {
+		return false, infra.WithCause(fmt.Errorf("compress %q: %w", sourcePath, err), os.Remove(tempPath))
 	}
 	tempInfo, err := os.Stat(tempPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if tempInfo.Size() >= info.Size() {
-		return os.Remove(tempPath)
+		return true, os.Remove(tempPath)
 	}
 	if err := os.Chmod(tempPath, info.Mode()); err != nil {
-		return err
+		return false, err
 	}
 	if err := os.Chtimes(tempPath, info.ModTime(), info.ModTime()); err != nil {
-		return err
+		return false, err
+	}
+	// The source stays writable while it is compressed. A write in that window would leave the archive
+	// with old content and then delete the new file, so the source is kept and retried on a later pass.
+	if current, err := os.Stat(sourcePath); err != nil || current.Size() != info.Size() ||
+		!current.ModTime().Equal(info.ModTime()) {
+		removeErr := os.Remove(tempPath)
+		if err != nil {
+			return false, infra.WithCause(err, removeErr)
+		}
+		return false, removeErr
 	}
 	mark(sourcePath, targetPath)
 	if err := os.Rename(tempPath, targetPath); err != nil {
-		return err
+		return false, err
 	}
-	return os.Remove(sourcePath)
+	return false, os.Remove(sourcePath)
 }
 
 func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark compressionMutationMarker) error {
@@ -433,13 +508,51 @@ func restoreZstdFile(ctx context.Context, targetPath string, limit int64, mark c
 		return infra.WithCause(err, os.Remove(tempPath))
 	}
 	mark(sourcePath, targetPath)
-	if err := os.Rename(tempPath, sourcePath); err != nil {
-		return infra.WithCause(err, os.Remove(tempPath))
+	if err := platform.MoveNoReplace(tempPath, sourcePath); err != nil {
+		if !errors.Is(err, fs.ErrExist) {
+			return infra.WithCause(err, os.Remove(tempPath))
+		}
+		// A file written to the source path during the restore is newer than the archive, which is
+		// handled like a source that was already present. Anything else keeps the archive.
+		if err := os.Remove(tempPath); err != nil {
+			return err
+		}
+		sourceInfo, err := os.Lstat(sourcePath)
+		if err != nil {
+			return err
+		}
+		if !sourceInfo.Mode().IsRegular() {
+			return fmt.Errorf("zstd source is not a regular file: %s", sourcePath)
+		}
 	}
 	return os.Remove(targetPath)
 }
 
-func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (returnErr error) {
+// errZstdNoGain stops a compression whose output has reached the size of its source.
+var errZstdNoGain = errors.New("zstd output is not smaller than its source")
+
+type zstdLimitWriter struct {
+	writer  io.Writer
+	limit   int64
+	written int64
+}
+
+func (w *zstdLimitWriter) Write(data []byte) (int, error) {
+	if w.written+int64(len(data)) >= w.limit {
+		return 0, errZstdNoGain
+	}
+	written, err := w.writer.Write(data)
+	w.written += int64(written)
+	return written, err
+}
+
+func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) error {
+	return streamCompressZstdWithLimit(ctx, sourcePath, tempPath, 0)
+}
+
+// streamCompressZstdWithLimit fails with errZstdNoGain as soon as the output reaches limit bytes, so an
+// incompressible file is not read to its end. A limit of 0 or less disables the check.
+func streamCompressZstdWithLimit(ctx context.Context, sourcePath, tempPath string, limit int64) (returnErr error) {
 	source, err := os.Open(sourcePath)
 	if err != nil {
 		return err
@@ -468,7 +581,11 @@ func streamCompressZstd(ctx context.Context, sourcePath, tempPath string) (retur
 			return err
 		}
 	}
-	encoder.Reset(temp)
+	var output io.Writer = temp
+	if limit > 0 {
+		output = &zstdLimitWriter{writer: temp, limit: limit}
+	}
+	encoder.Reset(output)
 	_, copyErr := io.Copy(encoder, &contextReader{ctx: ctx, reader: source})
 	closeErr := encoder.Close()
 	if copyErr != nil || closeErr != nil {

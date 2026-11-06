@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 type namespaceMergeSource struct {
@@ -57,7 +59,7 @@ func writeNamespaceMerge(options namespaceMergeOptions) (string, error) {
 		if err := recordMergeWrite(source.iniPath, created); err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(source.iniPath, []byte(wrapped), 0o644); err != nil {
+		if err := platform.WriteFileAtomic(source.iniPath, []byte(wrapped), 0o644); err != nil {
 			return "", err
 		}
 		wrapSources = append(wrapSources, namespaceWrapSource{iniPath: source.iniPath, text: wrapped})
@@ -154,7 +156,7 @@ func writeNamespaceMerge(options namespaceMergeOptions) (string, error) {
 	if err := recordMergeWrite(masterPath, created); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(masterPath, []byte(strings.Join(master, "\n")), 0o644); err != nil {
+	if err := platform.WriteFileAtomic(masterPath, []byte(strings.Join(master, "\n")), 0o644); err != nil {
 		return "", err
 	}
 	return masterPath, nil
@@ -194,7 +196,10 @@ func pickNamespaceRepresentative(sources []namespaceWrapSource) *namespaceWrapSo
 	return &sources[0]
 }
 
-func collectNamespaceChildren(masterPath string) ([]string, error) {
+// collectNamespaceChildren lists the INIs an existing master switches between. Paths named in the master's
+// header come from the mod's own files, so only INIs physically inside groupPath are accepted: a junction in
+// the group must not lead the merge to rewrite a file elsewhere.
+func collectNamespaceChildren(masterPath, groupPath string) ([]string, error) {
 	masterDir := filepath.Dir(masterPath)
 	raw, err := os.ReadFile(masterPath)
 	if err != nil {
@@ -203,9 +208,20 @@ func collectNamespaceChildren(masterPath string) ([]string, error) {
 	text := string(raw)
 	namespace := extractMergeNamespace(text)
 	var listed []string
+	physicalGroup, groupErr := platform.FinalPath(groupPath)
 	for _, entry := range extractMergedModPaths(text) {
+		if groupErr != nil {
+			break
+		}
 		candidate := resolveAgainst(masterDir, entry)
-		if _, readErr := os.ReadFile(candidate); readErr != nil {
+		name := filepath.Base(candidate)
+		if !strings.EqualFold(filepath.Ext(candidate), ".ini") || isMasterIniPath(candidate) ||
+			isFileDisabledIniName(name) || isBackupIniName(name) ||
+			!platform.SameOrChildPath(groupPath, candidate) || !fileExists(candidate) {
+			continue
+		}
+		physical, err := platform.FinalPath(candidate)
+		if err != nil || !platform.SameOrChildPath(physicalGroup, physical) {
 			continue
 		}
 		listed = append(listed, candidate)
@@ -398,11 +414,16 @@ func buildNamespaceSources(iniRoots, existingChildren []string, includeVanilla b
 		if isMasterIniPath(iniPath) {
 			return false
 		}
-		resolved := resolveAgainst("", iniPath)
-		if _, ok := seen[resolved]; ok {
+		// The physical path makes an INI reached through a directory alias take one slot, not two.
+		key, err := platform.FinalPath(iniPath)
+		if err != nil {
+			key = resolveAgainst("", iniPath)
+		}
+		key = strings.ToLower(key)
+		if _, ok := seen[key]; ok {
 			return false
 		}
-		seen[resolved] = struct{}{}
+		seen[key] = struct{}{}
 		return true
 	}
 	var groups [][]string

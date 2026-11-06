@@ -45,7 +45,8 @@ func TestPastePreviewPreservesSupportedVideoPathExtension(t *testing.T) {
 }
 
 func TestPastePreviewUsesSupportedAudioMIMEExtension(t *testing.T) {
-	content := []byte("ogg bytes")
+	// An Ogg page whose first packet is an Opus header, which content detection reports as audio/ogg.
+	content := append(append([]byte("OggS"), make([]byte, 24)...), []byte("OpusHead")...)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "audio/ogg; codecs=opus")
 		_, _ = w.Write(content)
@@ -127,5 +128,39 @@ func TestPreviewExtensionNormalizesVideoMIMEAliases(t *testing.T) {
 		if got := previewExtension(contentType, nil); got != want {
 			t.Errorf("previewExtension(%q) = %q, want %q", contentType, got, want)
 		}
+	}
+}
+
+func TestPastePreviewRejectsPageServedInsteadOfImage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html><body>Hotlinking is not allowed</body></html>"))
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	service.http = infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()})
+	modsRoot := filepath.Join(root, "mods")
+	modPath := filepath.Join(modsRoot, "Mod")
+	existing := filepath.Join(modPath, "preview.jpg")
+	if err := os.MkdirAll(modPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existing, []byte("jpeg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.PastePreview(ctx, modPath, server.URL+"/image.png", "url", nil); err == nil {
+		t.Fatal("an HTML page was accepted as a preview")
+	}
+	if raw, err := os.ReadFile(existing); err != nil || string(raw) != "jpeg" {
+		t.Fatalf("existing preview = %q, %v", raw, err)
+	}
+	if _, err := os.Stat(filepath.Join(modPath, "preview.png")); !os.IsNotExist(err) {
+		t.Fatalf("page written as preview: %v", err)
 	}
 }

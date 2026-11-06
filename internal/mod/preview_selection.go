@@ -92,10 +92,10 @@ func (m *Mod) SetDefaultPreview(ctx context.Context, modPath, imagePath string) 
 		return errors.New("INVALID_PREVIEW_IMAGE")
 	}
 	stage = "metadata"
-	return updateSelectedPreview(modPath, absolute)
+	return updateSelectedPreview(modPath, absolute, m.reportMetadataCleanup)
 }
 
-func refreshSelectedPreviewAfterPaste(modPath, imagePath string) error {
+func refreshSelectedPreviewAfterPaste(modPath, imagePath string, reports ...func(error)) error {
 	raw, err := metadata.Read(modPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -112,10 +112,10 @@ func refreshSelectedPreviewAfterPaste(modPath, imagePath string) error {
 	if document.Preview == "" || !previewImagePath(imagePath) {
 		return nil
 	}
-	return updateSelectedPreview(modPath, imagePath)
+	return updateSelectedPreview(modPath, imagePath, reports...)
 }
 
-func updateSelectedPreview(modPath, imagePath string) error {
+func updateSelectedPreview(modPath, imagePath string, reports ...func(error)) error {
 	relative, err := filepath.Rel(modPath, imagePath)
 	if err != nil || relative == "." || relative == ".." ||
 		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
@@ -137,7 +137,7 @@ func updateSelectedPreview(modPath, imagePath string) error {
 		}
 		document["preview"] = encoded
 		return json.Marshal(document)
-	})
+	}, reports...)
 }
 
 func (m *Mod) previewBoundary(ctx context.Context, path string) string {
@@ -164,7 +164,7 @@ func (m *Mod) previewBoundary(ctx context.Context, path string) string {
 // The saved path must use the returned folder name, including a collision suffix.
 // Segment matching does not strip disabled prefixes, so an enabled duplicate that
 // would normalize to the same path is left unchanged.
-func relocateSelectedPreviews(oldPath, newPath, boundary string) error {
+func relocateSelectedPreviews(oldPath, newPath, boundary string, reports ...func(error)) error {
 	oldPath = filepath.Clean(oldPath)
 	newPath = filepath.Clean(newPath)
 	dir := filepath.Dir(oldPath)
@@ -191,7 +191,7 @@ func relocateSelectedPreviews(oldPath, newPath, boundary string) error {
 			return nil, false, fmt.Errorf("rewrite preview metadata in %s: %w", dir, err)
 		}
 		return updated, ok, nil
-	}); err != nil {
+	}, reports...); err != nil {
 		return fmt.Errorf("update preview after rename: %w", err)
 	}
 	return nil

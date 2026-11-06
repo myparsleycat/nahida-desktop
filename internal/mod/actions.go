@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"nahida.live/desktop/internal/infra"
@@ -20,6 +21,7 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer m.groups.lock(modGroupPath(*game, modPath))()
 	release, err := m.rejectActiveDownloadAction(modPath)
 	if err != nil {
 		return "", err
@@ -45,6 +47,7 @@ func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer m.groups.lock(modGroupPath(*game, modPath))()
 	release, err := m.rejectActiveDownloadAction(modPath)
 	if err != nil {
 		return "", err
@@ -63,6 +66,7 @@ func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
+	defer m.groups.lock(filepath.Dir(modPath))()
 	return m.disableWithShaders(ctx, modPath)
 }
 
@@ -76,6 +80,7 @@ func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer m.groups.lock(modGroupPath(*game, modPath))()
 	release, err := m.rejectActiveDownloadAction(modPath)
 	if err != nil {
 		return "", err
@@ -96,10 +101,8 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 	}
 	if isNTEImporter(game.Importer) {
 		roots := nteRootsFor(*game)
-		groupPath := filepath.Dir(modPath)
-		if isNtePakWrapper(roots, groupPath) {
-			groupPath = filepath.Dir(groupPath)
-		}
+		groupPath := modGroupPath(*game, modPath)
+		defer m.groups.lock(groupPath)()
 		entries := collectNteModEntries(roots, groupPath)
 		paths := make([]string, len(entries)+1)
 		paths[0] = modPath
@@ -127,6 +130,8 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 			return m.setNteModEnabled(ctx, modPath, true)
 		})
 	}
+	// The sibling list read below must still be current when the siblings are renamed.
+	defer m.groups.lock(modGroupPath(*game, modPath))()
 	if !isDisabled(filepath.Base(modPath)) {
 		release, err := m.rejectActiveDownloadAction(modPath)
 		if err != nil {
@@ -171,10 +176,11 @@ func (m *Mod) ExclusiveToggle(ctx context.Context, modPath string) (string, erro
 func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, error) {
 	defer m.InvalidateLibraries()
 
-	_, modPath, err := m.ownedTarget(ctx, modPath)
+	game, modPath, err := m.ownedTarget(ctx, modPath)
 	if err != nil {
 		return "", err
 	}
+	defer m.groups.lock(modGroupPath(*game, modPath))()
 	release, err := m.rejectActiveDownloadAction(modPath)
 	if err != nil {
 		return "", err
@@ -201,10 +207,15 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 			return "", err
 		}
 	}
+	boundary := m.previewBoundary(ctx, modPath)
 	if err := os.Rename(modPath, next); err != nil {
 		return "", m.lockedFolderError(err, modPath)
 	}
-	return next, nil
+	renamed, err := finishFolderRename(modPath, next, boundary, m.reportMetadataCleanup)
+	if err != nil {
+		m.logActionError(err, "Mod:rename:preview")
+	}
+	return renamed, err
 }
 
 func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
@@ -214,6 +225,7 @@ func (m *Mod) EnableAll(ctx context.Context, groupPath string) error {
 	if err != nil {
 		return err
 	}
+	defer m.groups.lock(groupPath)()
 	if isNTEImporter(game.Importer) {
 		m.setAllNteBestEffort(ctx, collectNteModEntries(nteRootsFor(*game), groupPath), true)
 		return nil
@@ -247,6 +259,7 @@ func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
 	if err != nil {
 		return err
 	}
+	defer m.groups.lock(groupPath)()
 	if isNTEImporter(game.Importer) {
 		m.setAllNteBestEffort(ctx, collectNteModEntries(nteRootsFor(*game), groupPath), false)
 		return nil
@@ -271,6 +284,59 @@ func (m *Mod) DisableAll(ctx context.Context, groupPath string) error {
 		}
 	}
 	return nil
+}
+
+// groupLocks serializes the actions that read a group's folders and rename them, so two actions on one
+// group never act on the same stale listing.
+type groupLocks struct {
+	mu    sync.Mutex
+	locks map[string]*groupLock
+}
+
+type groupLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// modGroupPath is the group whose lock covers modPath. An NTE pak wrapper belongs to the group
+// that holds it, which is the folder ExclusiveToggle lists.
+func modGroupPath(game GameConfig, modPath string) string {
+	groupPath := filepath.Dir(modPath)
+	if isNTEImporter(game.Importer) && isNtePakWrapper(nteRootsFor(game), groupPath) {
+		return filepath.Dir(groupPath)
+	}
+	return groupPath
+}
+
+func (l *groupLocks) lock(groupPath string) (unlock func()) {
+	key := filepath.Clean(groupPath)
+	if physical, err := platform.PhysicalPath(key); err == nil {
+		key = physical
+	}
+	key = strings.ToLower(key)
+
+	l.mu.Lock()
+	if l.locks == nil {
+		l.locks = make(map[string]*groupLock)
+	}
+	entry := l.locks[key]
+	if entry == nil {
+		entry = &groupLock{}
+		l.locks[key] = entry
+	}
+	entry.refs++
+	l.mu.Unlock()
+
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+		l.mu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(l.locks, key)
+		}
+		l.mu.Unlock()
+	}
 }
 
 func (m *Mod) retryExclusiveToggleOperation(
@@ -359,15 +425,15 @@ func (m *Mod) enable(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", m.lockedFolderError(err, path)
 	}
-	renamed, err := finishFolderRename(path, result, boundary)
+	renamed, err := finishFolderRename(path, result, boundary, m.reportMetadataCleanup)
 	if err != nil {
 		m.logActionError(err, "Mod:enable:preview")
 	}
 	return renamed, err
 }
 
-func finishFolderRename(oldPath, newPath, boundary string) (string, error) {
-	if err := relocateSelectedPreviews(oldPath, newPath, boundary); err != nil {
+func finishFolderRename(oldPath, newPath, boundary string, reports ...func(error)) (string, error) {
+	if err := relocateSelectedPreviews(oldPath, newPath, boundary, reports...); err != nil {
 		if undoErr := os.Rename(newPath, oldPath); undoErr != nil {
 			return "", errors.Join(err, fmt.Errorf("restore renamed folder: %w", undoErr))
 		}
@@ -397,7 +463,7 @@ func (m *Mod) disable(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", m.lockedFolderError(err, path)
 	}
-	renamed, err := finishFolderRename(path, result, boundary)
+	renamed, err := finishFolderRename(path, result, boundary, m.reportMetadataCleanup)
 	if err != nil {
 		m.logActionError(err, "Mod:disable:preview")
 	}
@@ -447,6 +513,10 @@ func (m *Mod) disableWithShaders(ctx context.Context, path string) (string, erro
 	if isDisabled(filepath.Base(path)) {
 		return filepath.Clean(path), nil
 	}
+	// Only a mod that had its shaders installed gets them back when the rename fails; reinstalling would
+	// otherwise copy shaders the user never had installed.
+	manifest, manifestErr := m.shaders.readShaderFixesModManifest(path)
+	installed := manifest != nil || manifestErr != nil
 	if _, err := m.shaders.HandleShaders(path, false); err != nil {
 		if _, rollbackErr := m.shaders.HandleShaders(path, true); rollbackErr != nil {
 			m.logShaderError(rollbackErr, "Mod:disable:rollbackShaders:"+path)
@@ -454,10 +524,16 @@ func (m *Mod) disableWithShaders(ctx context.Context, path string) (string, erro
 		return "", err
 	}
 	result, err := m.disable(ctx, path)
-	if err == nil {
-		m.compression.scheduleScope(result)
+	if err != nil {
+		if installed {
+			if _, rollbackErr := m.shaders.HandleShaders(path, true); rollbackErr != nil {
+				m.logShaderError(rollbackErr, "Mod:disable:rollbackShaders:"+path)
+			}
+		}
+		return "", err
 	}
-	return result, err
+	m.compression.scheduleScope(result)
+	return result, nil
 }
 
 func (m *Mod) lockedFolderError(err error, modPath string) error {

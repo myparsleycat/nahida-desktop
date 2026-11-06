@@ -35,6 +35,10 @@ func (m *Mod) UpdateToggleKey(
 	if _, err := m.ownedPath(ctx, iniPath); err != nil {
 		return err
 	}
+	// Two key changes to one INI must not both start from the same content, or the later write
+	// drops the earlier change.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	content, err := os.ReadFile(iniPath)
 	if err != nil {
 		return err
@@ -92,23 +96,11 @@ func (m *Mod) UpdateToggleKey(
 	if !updated {
 		return nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return writeToggleKeyFile(iniPath, []byte(strings.Join(newLines, newline)))
-}
-
-func writeToggleKeyFile(path string, content []byte) error {
-	err := os.Chmod(path, 0o666)
-	if err == nil {
-		err = os.WriteFile(path, content, 0o666)
-	}
-	if err == nil || !errors.Is(err, os.ErrPermission) {
+	// A read-only INI would refuse the replacement, so the attribute is cleared first.
+	if err := os.Chmod(iniPath, 0o666); err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	return os.WriteFile(path, content, 0o666)
+	return platform.WriteFileAtomic(iniPath, []byte(strings.Join(newLines, newline)), 0o666)
 }
 
 func (m *Mod) ExtractArchiveToGroup(
@@ -195,7 +187,7 @@ func (m *Mod) CopyFolderToGroup(
 			return target, nil
 		}
 	}
-	if err := copyDirectory(source, target); err != nil {
+	if err := copyDirectory(ctx, source, target); err != nil {
 		m.reportCleanup(os.RemoveAll(target), "CopyFolderToGroup")
 		return "", err
 	}
@@ -229,7 +221,7 @@ func (m *Mod) PastePreview(
 	filePath := filepath.Join(modPath, "preview"+extension)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := atomicWriteFile(filePath, content, 0o644, func(err error) {
+	if err := platform.WriteFileAtomic(filePath, content, 0o644, func(err error) {
 		_ = infra.ReportError(
 			m.log,
 			err,
@@ -260,7 +252,7 @@ func (m *Mod) PastePreview(
 			return filePath, err
 		}
 	}
-	if err := refreshSelectedPreviewAfterPaste(modPath, filePath); err != nil {
+	if err := refreshSelectedPreviewAfterPaste(modPath, filePath, m.reportMetadataCleanup); err != nil {
 		return filePath, infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
 			Operation: "paste-preview", Stage: "metadata", Fields: map[string]any{"modPath": modPath, "path": filePath},
 		})
@@ -311,7 +303,12 @@ func (m *Mod) previewContent(ctx context.Context, data, pasteType string) ([]byt
 		if err != nil {
 			return nil, "", err
 		}
-		return content, previewExtension(response.Header.Get("Content-Type"), content), nil
+		// A page served in place of the image, such as hotlink protection, must not replace the preview.
+		mediaType, ok := infra.DetectMediaType(content)
+		if !ok || !isPreviewMediaType(mediaType) {
+			return nil, "", errors.New("INVALID_PREVIEW_IMAGE")
+		}
+		return content, previewExtension(mediaType, content), nil
 	case "base64":
 		extension := ".png"
 		encoded := data
@@ -377,6 +374,11 @@ func previewExtension(contentType string, content []byte) string {
 	return ".png"
 }
 
+func isPreviewMediaType(mediaType string) bool {
+	return strings.HasPrefix(mediaType, "image/") || strings.HasPrefix(mediaType, "video/") ||
+		mediaType == "audio/ogg" || mediaType == "application/ogg"
+}
+
 func safePreviewExtension(value string) string {
 	extension := "." + strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), ".")
 	if mediaExtensions[extension] {
@@ -385,37 +387,11 @@ func safePreviewExtension(value string) string {
 	return ".png"
 }
 
-func atomicWriteFile(path string, content []byte, mode os.FileMode, reports ...func(error)) error {
-	report := func(err error) {
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			for _, callback := range reports {
-				callback(err)
-			}
-		}
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".nhd-write-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer func() { report(os.Remove(temporaryPath)) }()
-	if _, err := temporary.Write(content); err != nil {
-		return infra.WithCause(err, temporary.Close())
-	}
-	if err := temporary.Sync(); err != nil {
-		return infra.WithCause(err, temporary.Close())
-	}
-	if err := temporary.Chmod(mode); err != nil {
-		return infra.WithCause(err, temporary.Close())
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return platform.ReplaceAtomic(temporaryPath, path)
-}
-
-func copyDirectory(source, target string) error {
+func copyDirectory(ctx context.Context, source, target string) error {
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			return walkErr
 		}

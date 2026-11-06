@@ -8,7 +8,7 @@ import (
 	"nahida.live/desktop/internal/mod/metadata"
 )
 
-func writeDownloadMetadataToPaths[T any](paths []string, makeDocument func() T) error {
+func writeDownloadMetadataToPaths[T any](paths []string, report func(error), makeDocument func() T) error {
 	dirs := make([]string, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
@@ -35,5 +35,5 @@ func writeDownloadMetadataToPaths[T any](paths []string, makeDocument func() T) 
 		}
 		entries = append(entries, metadata.WriteEntry{Dir: dir, Data: append(raw, '\n')})
 	}
-	return metadata.WriteBatch(entries)
+	return metadata.WriteBatch(entries, report)
 }

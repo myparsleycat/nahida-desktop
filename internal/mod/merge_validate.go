@@ -53,7 +53,8 @@ func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest
 		if err != nil {
 			return err
 		}
-		if !strictChildPath(group, resolved) {
+		// A leaf nested deeper would sit in another folder's group, whose lock the merge does not hold.
+		if !samePath(filepath.Dir(resolved), group) {
 			return &mergeValidationError{message: outsideMergeGroupMessage}
 		}
 	}

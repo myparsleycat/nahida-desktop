@@ -26,14 +26,22 @@ type diagnosticEpisode struct {
 //
 //wails:ignore
 func (t *DiagnosticThrottle) Report(log *Log, err error, where string, diagnostic Diagnostic) {
+	_ = t.ReportError(log, err, where, diagnostic)
+}
+
+// ReportError is Report for a caller that also returns the failure. The result is marked as reported
+// even when the throttle suppressed the log line, so a Wails boundary does not log it again.
+//
+//wails:ignore
+func (t *DiagnosticThrottle) ReportError(log *Log, err error, where string, diagnostic Diagnostic) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err == nil {
 		clear(t.entries)
-		return
+		return nil
 	}
 	if log == nil || IsCancellationError(err) {
-		return
+		return err
 	}
 	now := log.now()
 	identity := fmt.Sprintf("%s:%s:%v", diagnostic.Operation, diagnostic.Stage, diagnostic.Fields["path"])
@@ -50,7 +58,7 @@ func (t *DiagnosticThrottle) Report(log *Log, err error, where string, diagnosti
 	if key == episode.key && now.Sub(episode.last) < 5*time.Minute {
 		episode.suppressed++
 		t.entries[identity] = episode
-		return
+		return &diagnosticError{err: err, diagnostic: mergeDiagnostics(err, diagnostic), reported: true}
 	}
 	fields := make(map[string]any, len(diagnostic.Fields)+1)
 	for name, value := range diagnostic.Fields {
@@ -58,7 +66,7 @@ func (t *DiagnosticThrottle) Report(log *Log, err error, where string, diagnosti
 	}
 	fields["suppressedCount"] = episode.suppressed
 	diagnostic.Fields = fields
-	_ = ReportError(log, err, where, diagnostic)
+	reported := ReportError(log, err, where, diagnostic)
 	if len(t.entries) >= 64 {
 		var oldest string
 		var oldestTime time.Time
@@ -70,4 +78,5 @@ func (t *DiagnosticThrottle) Report(log *Log, err error, where string, diagnosti
 		delete(t.entries, oldest)
 	}
 	t.entries[identity] = diagnosticEpisode{key: key, last: now}
+	return reported
 }

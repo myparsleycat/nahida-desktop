@@ -325,6 +325,7 @@ func getWatchedPathSnapshot(path string) (*watchedPathSnapshot, error) {
 	}
 
 	snapshot.directoryCount = 1
+	defer holdScanDisk(path)()
 	pending := []string{path}
 	for len(pending) > 0 {
 		index := len(pending) - 1
@@ -336,6 +337,8 @@ func getWatchedPathSnapshot(path string) (*watchedPathSnapshot, error) {
 		}
 		for _, entry := range entries {
 			entryPath := filepath.Join(current, entry.Name())
+			// Stat opens the file, which reports the size of a file still being written; the directory
+			// listing can lag behind it.
 			entryInfo, err := os.Stat(entryPath)
 			if err != nil {
 				return nil, err
@@ -345,7 +348,10 @@ func getWatchedPathSnapshot(path string) (*watchedPathSnapshot, error) {
 			}
 			if entryInfo.IsDir() {
 				snapshot.directoryCount++
-				pending = append(pending, entryPath)
+				// A junction is not followed: it can lead outside the watched folder or back above it.
+				if entry.Type()&(fs.ModeSymlink|fs.ModeIrregular) == 0 {
+					pending = append(pending, entryPath)
+				}
 				continue
 			}
 			if entryInfo.Mode().IsRegular() {

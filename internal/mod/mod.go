@@ -21,6 +21,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/gamebanana"
+	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
@@ -77,7 +78,9 @@ type Options struct {
 	Transfer      *transfer.Transfer
 	GameBanana    *gamebanana.GameBanana
 	Native        *platform.Native
-	Focus         func()
+	// GitHub downloads the pinned NTE bootstrap release files.
+	GitHub *github.Client
+	Focus  func()
 	// Elevated changes files in a game folder this process cannot write to; nil fails those writes.
 	Elevated elevated.FileGateway
 }
@@ -105,22 +108,26 @@ type Mod struct {
 	paths                  *pathSelector
 	downloader             *infra.ParallelDownloader
 	extractMu              sync.Mutex
-	extractPrompts         map[string]chan string
-	mu                     sync.Mutex
-	watchMu                sync.Mutex
-	gameWatcher            *managedWatcher
-	characterWatcher       *managedWatcher
-	emit                   func(string, ...any)
-	inspectAddedMods       func([]string)
-	nteSigBypasserURL      string
-	nteASILoaderURL        string
-	compression            *compressionCoordinator
-	classifiedMu           sync.Mutex
-	classifiedFolders      map[string]*classifiedFolderIndex
-	classifiedChanges      uint64
-	libraryMu              sync.Mutex
-	libraryIndexes         map[string]libraryIndex
-	libraryChanges         uint64
+	// gameMu serializes game path changes. Their duplicate checks and NTE folder moves are separate steps that
+	// another change to the same folders must not interleave.
+	gameMu               sync.Mutex
+	groups               groupLocks
+	extractPrompts       map[string]chan string
+	mu                   sync.Mutex
+	watchMu              sync.Mutex
+	gameWatcher          *managedWatcher
+	characterWatcher     *managedWatcher
+	emit                 func(string, ...any)
+	inspectAddedMods     func([]string)
+	github               *github.Client
+	nteBootstrapArchives []nteBootstrapArchive
+	compression          *compressionCoordinator
+	classifiedMu         sync.Mutex
+	classifiedFolders    map[string]*classifiedFolderIndex
+	classifiedChanges    uint64
+	libraryMu            sync.Mutex
+	libraryIndexes       map[string]libraryIndex
+	libraryChanges       uint64
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }
@@ -139,10 +146,10 @@ func NewWithOptions(opts Options) *Mod {
 		xxmi:     opts.XXMI, log: opts.Log, dialog: opts.Dialog, emit: opts.EventEmit,
 		transfer: opts.Transfer, gamebanana: opts.GameBanana, native: opts.Native, elevated: opts.Elevated,
 		shaders: newShaderFixes(), extractPrompts: map[string]chan string{},
-		gameProcesses:     opts.GameProcesses,
-		downloader:        infra.NewParallelDownloader(),
-		nteSigBypasserURL: defaultNteSigBypasserURL,
-		nteASILoaderURL:   defaultNteASILoaderURL,
+		gameProcesses:        opts.GameProcesses,
+		downloader:           infra.NewParallelDownloader(),
+		github:               opts.GitHub,
+		nteBootstrapArchives: defaultNteBootstrapArchives(),
 	}
 	m.paths = newPathSelector(opts.Dialog, opts.FS, opts.EventEmit, opts.Focus)
 	m.downloader.SetRequestConcurrency(16)
@@ -166,6 +173,16 @@ func NewWithOptions(opts Options) *Mod {
 	m.shaders.logError = m.logShaderError
 	m.compression = newCompressionCoordinator(m)
 	return m
+}
+
+// reportMetadataCleanup logs a metadata cleanup failure that did not fail the write.
+func (m *Mod) reportMetadataCleanup(err error) {
+	if m.log == nil {
+		return
+	}
+	_ = infra.ReportError(m.log, err, "Mod:metadata", infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "write-metadata", Stage: "cleanup",
+	})
 }
 
 //wails:ignore
@@ -397,6 +414,9 @@ func (m *Mod) AddGame(
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	importerKey, xxmiGame := xxmiImporterKey(importer)
 	if game == "" || (!xxmiGame && strings.TrimSpace(modFolderPath) == "") {
@@ -495,6 +515,9 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	importerKey, xxmiGame := xxmiImporterKey(updates.Importer)
 	if game == "" || (!xxmiGame && strings.TrimSpace(updates.ModFolderPath) == "") {
@@ -572,6 +595,9 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	existing, err := client.GamePaths.GetByGame(ctx, game)
 	if err != nil {
@@ -878,7 +904,8 @@ func (m *Mod) GetCharacters(
 	}
 	listing := m.newGroupListing(ctx, client, gameConfig(*row), search, diagnostics.Add)
 	groups := m.listSubGroups(listing, row.ModFolderPath, nil, diagnostics.Add)
-	return m.loadClassifiedSubGroups(listing, groups, diagnostics.Add), nil
+	// An empty listing may be a mod folder that could not be read, which must not forget every indexed folder.
+	return m.loadClassifiedSubGroups(listing, groups, len(groups) > 0, diagnostics.Add), nil
 }
 
 func (m *Mod) GetSubGroups(
@@ -986,6 +1013,23 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 	}
 	group := m.filterManualMods(ctx, *game, groupPath, scanGroup(groupPath, diagnostics.Add))
 	m.attachDependencies(ctx, *game, &group, diagnostics.Add)
+	return group, nil
+}
+
+// GetModsWithPreview is GetMods with the group's own preview, which the renderer reads from the group
+// listing instead.
+//
+//wails:ignore
+func (m *Mod) GetModsWithPreview(ctx context.Context, groupPath string) (FolderGroup, error) {
+	group, err := m.GetMods(ctx, groupPath)
+	if err != nil || group.Preview != nil {
+		return group, err
+	}
+	release := holdScanDisk(group.Path)
+	defer release()
+	group.Preview = findScannerGroupPreview(group.Path, previewSearchDepth, func(err error) {
+		m.logActionError(err, "Mod:GetModsWithPreview:"+group.Path)
+	})
 	return group, nil
 }
 

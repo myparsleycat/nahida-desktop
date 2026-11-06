@@ -36,6 +36,7 @@ func (m *Mod) MergeMods(ctx context.Context, request MergeModsRequest) (result M
 	if err := m.validateMergeRequest(ctx, request); err != nil {
 		return result, err
 	}
+	defer m.groups.lock(request.GroupPath)()
 	leaves := []string{}
 	collectMergeLeafPaths(request.Root, &leaves)
 	blocked, release := m.guardActiveDownloadActions(leaves)
@@ -89,7 +90,7 @@ func (m *Mod) executeMergeNode(
 				return "", fmt.Errorf("CLASSIC_LOCKED:%s", pack.Path)
 			}
 		}
-		return m.executeClassicMerge(node, packs, request, created)
+		return m.executeClassicMerge(ctx, node, packs, request, created)
 	}
-	return m.executeNamespaceMerge(node, packs, request, created)
+	return m.executeNamespaceMerge(ctx, node, packs, request, created)
 }

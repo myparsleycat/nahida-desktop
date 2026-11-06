@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	"golang.org/x/text/unicode/norm"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 const downloadTargetMatchThreshold = 0.85
@@ -17,71 +19,85 @@ type DownloadTarget struct {
 	Score float64     `json:"score"`
 }
 
+// ResolveDownloadTarget ranks folder names alone and builds only the groups it may return,
+// because building every group of every game reads each mod's files.
 func (m *Mod) ResolveDownloadTarget(
 	ctx context.Context,
 	input string,
 	gameFilter *string,
 ) (*DownloadTarget, error) {
-	games, err := m.listGames(ctx)
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "ResolveDownloadTarget")
+
+	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
 	}
+	rows, err := client.GamePaths.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	search, err := m.resolvePreviewSetting(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	type candidate struct {
-		game  string
-		group FolderGroup
+		listing groupListing
+		name    string
+		score   float64
+		length  int
 	}
-	candidates := []candidate{}
-	for _, game := range games {
-		if gameFilter != nil && game.Game != *gameFilter {
+	normalizedInput := normalizeFuzzyString(input)
+	tokens := tokenizeFuzzyInput(input)
+	var candidates []candidate
+	for _, row := range rows {
+		if (gameFilter != nil && row.Game != *gameFilter) || row.ModFolderPath == "" {
 			continue
 		}
-		groups, groupErr := m.GetCharacters(ctx, game.Game, nil)
-		if groupErr != nil {
-			continue
-		}
-		for _, group := range groups {
-			candidates = append(candidates, candidate{game: game.Game, group: group})
-		}
+		listing := m.newGroupListing(ctx, client, gameConfig(row), search, diagnostics.Add)
+		m.listSubGroups(listing, row.ModFolderPath, func(name string) bool {
+			normalized := normalizeFuzzyString(name)
+			candidates = append(candidates, candidate{
+				listing: listing, name: name, length: len([]rune(normalized)),
+				score: scoreFuzzyCandidate(normalized, normalizedInput, tokens),
+			})
+			return false
+		}, diagnostics.Add)
 	}
-	if len(candidates) == 0 {
-		return nil, nil
-	}
-	type ranked struct {
-		index  int
-		score  float64
-		length int
-	}
-	ranks := make([]ranked, len(candidates))
-	for i := range candidates {
-		normalized := normalizeFuzzyString(candidates[i].group.Name)
-		ranks[i] = ranked{
-			index: i, length: len([]rune(normalized)),
-			score: scoreFuzzyCandidate(normalized, normalizeFuzzyString(input), tokenizeFuzzyInput(input)),
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
 		}
-	}
-	sort.SliceStable(ranks, func(i, j int) bool {
-		if ranks[i].score != ranks[j].score {
-			return ranks[i].score > ranks[j].score
-		}
-		return ranks[i].length < ranks[j].length
+		return candidates[i].length < candidates[j].length
 	})
-	best := ranks[0]
-	if best.score < downloadTargetMatchThreshold {
-		return nil, nil
+
+	// A listed folder can still be left out of the groups, such as an NTE pak wrapper.
+	list := func(c candidate) []FolderGroup {
+		return m.listSubGroups(c.listing, c.listing.game.ModFolderPath, func(name string) bool {
+			return name == c.name
+		}, diagnostics.Add)
 	}
-	name := candidates[best.index].group.Name
-	matches := 0
-	for _, candidate := range candidates {
-		if candidate.group.Name == name {
-			matches++
+	for i, best := range candidates {
+		if best.score < downloadTargetMatchThreshold {
+			return nil, nil
 		}
+		groups := list(best)
+		if len(groups) == 0 {
+			continue
+		}
+		for _, other := range candidates[i+1:] {
+			if other.name != best.name {
+				continue
+			}
+			if len(list(other)) > 0 {
+				return nil, nil
+			}
+		}
+		group := m.loadClassifiedSubGroups(best.listing, groups, false, diagnostics.Add)[0]
+		return &DownloadTarget{Game: best.listing.game.Game, Group: group, Score: best.score}, nil
 	}
-	if matches != 1 {
-		return nil, nil
-	}
-	return &DownloadTarget{
-		Game: candidates[best.index].game, Group: candidates[best.index].group, Score: best.score,
-	}, nil
+	return nil, nil
 }
 
 func normalizeFuzzyString(value string) string {

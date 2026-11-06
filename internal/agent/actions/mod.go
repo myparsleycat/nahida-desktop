@@ -3,7 +3,9 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"nahida.live/desktop/internal/infra"
 	modservice "nahida.live/desktop/internal/mod"
 )
 
@@ -35,7 +37,7 @@ func registerModActions(registry *Registry, deps Dependencies) {
 		}))
 	registry.add(pathAction("mod.get_mods", "List mods in a group.", RiskRead,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {
-			return deps.Mod.GetMods(ctx, path)
+			return deps.Mod.GetModsWithPreview(ctx, path)
 		}))
 	registry.add(pathAction("mod.toggle", "Toggle a mod between enabled and disabled.", RiskWrite,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {
@@ -129,7 +131,18 @@ func registerModActions(registry *Registry, deps Dependencies) {
 		),
 	)
 	registry.add(idAction("mod.apply_preset", "Apply a local mod preset.", "presetId", RiskConfirm,
-		func(ctx context.Context, id string) (any, error) { return deps.Mod.ApplyPreset(ctx, id) }))
+		func(ctx context.Context, id string) (any, error) {
+			result, err := deps.Mod.ApplyPreset(ctx, id)
+			if err == nil && len(result.Failed) > 0 {
+				// The mod service logged each failure. This error only marks the approval failed, and the result
+				// still reaches the model.
+				err = infra.AnnotateError(
+					fmt.Errorf("MOD_PRESET_PARTIALLY_APPLIED:%d", len(result.Failed)),
+					infra.Diagnostic{Severity: infra.DiagnosticWarn},
+				)
+			}
+			return result, err
+		}))
 	registry.add(idAction("mod.delete_preset", "Delete a local mod preset.", "presetId", RiskConfirm,
 		func(ctx context.Context, id string) (any, error) { return actionOK(deps.Mod.DeletePreset(ctx, id)) }))
 	registry.add(simpleAction("mod.rename_preset", "Rename a local mod preset.", "mod", RiskWrite,

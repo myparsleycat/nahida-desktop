@@ -50,11 +50,16 @@ func TestClassifyMergePacksMatchesElectronFamilies(t *testing.T) {
 		"DISABLEDCharA.ini": ordinaryIni,
 		"help.ini":          "[KeyHelp]\n",
 	})
+	// Classic merge disables one INI per pack, so a second override INI would stay active.
+	twoOverrides := makeOwnedMergePack(t, service, modsRoot, "TwoOverrides", map[string]string{
+		"CharA.ini":  ordinaryIni,
+		"Weapon.ini": "[TextureOverrideWeapon]\nhash = 12345678\n",
+	})
 	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	result, err := service.ClassifyMergePacks(ctx, []string{
-		ordinary, toggle, classic, namespaced, support, folderDisabled, fileDisabled,
+		ordinary, toggle, classic, namespaced, support, folderDisabled, fileDisabled, twoOverrides,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +76,10 @@ func TestClassifyMergePacksMatchesElectronFamilies(t *testing.T) {
 		family[fileDisabled] != "support" {
 		t.Fatalf("families = %#v", family)
 	}
-	if !allows[ordinary] || allows[toggle] {
+	if family[twoOverrides] != "ordinary" {
+		t.Fatalf("two override family = %q", family[twoOverrides])
+	}
+	if !allows[ordinary] || allows[toggle] || allows[twoOverrides] {
 		t.Fatalf("allowsClassic = %#v", allows)
 	}
 }

@@ -946,7 +946,8 @@
           "apply-preset-mutation": {
             "legacy": "旧版预设无法套用。请删除后重新建立。",
             "success": "预设已应用",
-            "missing": "预设已应用，但有 {{count}} 个模组缺失"
+            "missing": "预设已应用，但有 {{count}} 个模组缺失",
+            "failed": "预设已应用，但有 {{count}} 个模组的状态无法更改"
           }
         }
       },

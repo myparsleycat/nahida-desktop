@@ -336,3 +336,56 @@ func TestParseClassicSectionsIgnoresCommentContainingEquals(t *testing.T) {
 		}
 	}
 }
+
+func TestParseClassicSectionsMatchesHeadersWithoutCaseAndAfterBOM(t *testing.T) {
+	t.Parallel()
+
+	sections := parseClassicSections(
+		string(rune(0xFEFF))+"[TextureOverrideBodyPosition]\nhash = 1\n\n[textureoverrideHead]\nhash = 2\n",
+		".",
+		0,
+	)
+	if len(sections) != 2 || sections[0].header != "TextureOverride" || sections[0].name != "BodyPosition" ||
+		sections[1].header != "TextureOverride" || sections[1].name != "Head" {
+		t.Fatalf("sections = %#v", sections)
+	}
+}
+
+func TestWriteClassicMergedINIKeepsSectionNamesUnique(t *testing.T) {
+	root := t.TempDir()
+	aIni := writeMergePackINI(t, filepath.Join(root, "A"), "CharA.ini", `[TextureOverrideBody]
+hash = abcdef01
+run = CommandListBody
+
+[CommandListBody]
+vb0 = ResourceBody
+`)
+	bIni := writeMergePackINI(t, filepath.Join(root, "B"), "CharA.ini", `[TextureOverrideBody]
+hash = 12345678
+vb0 = ResourceBody
+`)
+	created := []mergeRollback{}
+	if err := writeClassicMergedINI(root, []classicSource{
+		{path: aIni, index: 0}, {path: bIni, index: 1},
+	}, "vk_right", "", &created); err != nil {
+		t.Fatal(err)
+	}
+	text, err := os.ReadFile(filepath.Join(root, "merged.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(text), "\n") {
+		if !strings.HasPrefix(line, "[") {
+			continue
+		}
+		key := strings.ToLower(line)
+		if seen[key] {
+			t.Fatalf("duplicate section %s in:\n%s", line, text)
+		}
+		seen[key] = true
+	}
+	if !strings.Contains(string(text), "[CommandListBody]") {
+		t.Fatalf("pack command list was renamed:\n%s", text)
+	}
+}
