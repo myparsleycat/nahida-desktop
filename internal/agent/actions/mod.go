@@ -35,7 +35,7 @@ func registerModActions(registry *Registry, deps Dependencies) {
 		}))
 	registry.add(pathAction("mod.get_mods", "List mods in a group.", RiskRead,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {
-			return deps.Mod.GetMods(ctx, path)
+			return deps.Mod.GetModsWithPreview(ctx, path)
 		}))
 	registry.add(pathAction("mod.toggle", "Toggle a mod between enabled and disabled.", RiskWrite,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {

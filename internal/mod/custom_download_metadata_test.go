@@ -29,7 +29,7 @@ func TestWriteDownloadMetadataToPathsWritesOncePerDirectory(t *testing.T) {
 	}
 
 	created := 0
-	if err := writeDownloadMetadataToPaths([]string{first, filePath, second}, func() metadata.DirectDownload {
+	if err := writeDownloadMetadataToPaths([]string{first, filePath, second}, nil, func() metadata.DirectDownload {
 		created++
 		return metadata.DirectDownload{
 			ID:           uuid.NewString(),

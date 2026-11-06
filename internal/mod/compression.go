@@ -68,7 +68,7 @@ type compressionCoordinator struct {
 	pendingFull          bool
 	pendingScopes        map[string]struct{}
 	debounceTimer        *time.Timer
-	cancel               context.CancelFunc
+	cancel               context.CancelCauseFunc
 	done                 chan struct{}
 	watcher              *watcher.Watcher
 	configWatcher        *watcher.Watcher
@@ -81,6 +81,7 @@ type compressionCoordinator struct {
 	selfChangeGeneration uint64
 	wofOwnership         compressionFileOwnership
 	xpressDeclined       compressionDeclinedFiles
+	zstdDeclined         compressionDeclinedFiles
 	lastProgressEmit     time.Time
 	stopped              atomic.Bool
 }
@@ -100,12 +101,10 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 	defer m.watchMu.Unlock()
 
 	if err := m.compression.loadState(ctx); err != nil {
-		m.compression.fail(err, "load-state", "", "")
-		return err
+		return m.compression.fail(err, "load-state", "", "")
 	}
 	if err := m.compression.cleanupLegacyState(ctx); err != nil {
-		m.compression.fail(err, "cleanup-legacy-state", "", "")
-		return err
+		return m.compression.fail(err, "cleanup-legacy-state", "", "")
 	}
 	m.compression.stopped.Store(false)
 	m.RefreshCompressionImporters(ctx)
@@ -170,7 +169,7 @@ func (m *Mod) SetCompressionConfig(ctx context.Context, config CompressionConfig
 	m.compression.publish()
 	if err := settings.SetCompressionConfig(ctx, config.Method, config.ThresholdMiB); err != nil {
 		m.compression.reloadConfigState(ctx, settings)
-		m.compression.fail(err, "save-config", config.Method, "")
+		_ = m.compression.fail(err, "save-config", config.Method, "")
 		return m.compression.snapshot(), errors.New("MOD_COMPRESSION_CONFIG_FAILED")
 	}
 	m.compression.mu.Lock()
@@ -203,18 +202,18 @@ func (m *Mod) SetCompressionEnabled(ctx context.Context, enabled bool) (Compress
 	}
 	settings, err := m.compression.settings()
 	if err != nil {
-		m.compression.fail(err, "resolve-settings", state.Method, "")
+		reported := m.compression.fail(err, "resolve-settings", state.Method, "")
 		if interruptingEnable {
 			m.compression.enqueueFullLocked()
 		}
-		return m.compression.snapshot(), err
+		return m.compression.snapshot(), reported
 	}
 	if err := settings.SetCompressionEnabled(ctx, enabled); err != nil {
-		m.compression.fail(err, "save-enabled", state.Method, "")
+		reported := m.compression.fail(err, "save-enabled", state.Method, "")
 		if interruptingEnable {
 			m.compression.enqueueFullLocked()
 		}
-		return m.compression.snapshot(), err
+		return m.compression.snapshot(), reported
 	}
 	m.compression.mu.Lock()
 	m.compression.state.Enabled = enabled
@@ -274,6 +273,10 @@ func (c *compressionCoordinator) schedule() {
 	c.enqueueFullLocked()
 	c.requestMu.Unlock()
 }
+
+// errCompressionPreempted cancels a running pass that a mod action needs to get out of the way. The pass
+// queues its work again instead of dropping it.
+var errCompressionPreempted = errors.New("compression pass preempted")
 
 type compressionWork struct {
 	full   bool
@@ -341,7 +344,7 @@ func (c *compressionCoordinator) startPendingLocked() {
 		return
 	}
 	work := c.takePendingLocked()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	c.running, c.cancel, c.done = true, cancel, make(chan struct{})
 	c.resetCheckingLocked()
 	c.deriveCapabilitiesLocked()
@@ -365,7 +368,7 @@ func (c *compressionCoordinator) cancelCurrentWorkLocked() {
 	cancel, done := c.cancel, c.done
 	c.mu.Unlock()
 	if cancel != nil {
-		cancel()
+		cancel(context.Canceled)
 	}
 	if done != nil {
 		<-done
@@ -377,6 +380,9 @@ func (c *compressionCoordinator) run(ctx context.Context, done chan struct{}, wo
 	for {
 		c.reconcile(ctx, work)
 		c.mu.Lock()
+		if errors.Is(context.Cause(ctx), errCompressionPreempted) {
+			c.requeueLocked(work)
+		}
 		if ctx.Err() != nil || !c.pendingFull && len(c.pendingScopes) == 0 {
 			c.running, c.cancel = false, nil
 			c.deriveCapabilitiesLocked()
@@ -406,6 +412,21 @@ func (c *compressionCoordinator) waitForRun(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// requeueLocked returns the work of a preempted run to the queue so the next run finishes it.
+func (c *compressionCoordinator) requeueLocked(work compressionWork) {
+	if work.full {
+		c.pendingFull = true
+		clear(c.pendingScopes)
+		return
+	}
+	if c.pendingFull {
+		return
+	}
+	for _, scope := range work.scopes {
+		addCompressionScope(c.pendingScopes, scope)
 	}
 }
 
@@ -456,7 +477,7 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 	method, threshold := state.Method, state.ThresholdMiB
 	currentRoots, err := c.roots(ctx)
 	if err != nil {
-		c.fail(err, "resolve-importers", "", "")
+		_ = c.fail(err, "resolve-importers", "", "")
 		return
 	}
 	c.resetProgress("checking", target, method, threshold)
@@ -486,6 +507,7 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 					c.addCompressTotals,
 					c.progress,
 					c.markSelfChanges,
+					&c.zstdDeclined,
 					logFileError("compress-file"),
 				),
 			)
@@ -523,11 +545,11 @@ func (c *compressionCoordinator) reconcile(ctx context.Context, work compression
 			)
 		}
 	}
-	if errors.Is(err, context.Canceled) {
+	if infra.IsCancellationError(err) {
 		return
 	}
 	if err != nil {
-		c.fail(err, "reconcile", method, "")
+		_ = c.fail(err, "reconcile", method, "")
 		return
 	}
 	c.mu.Lock()
@@ -712,7 +734,7 @@ func (c *compressionCoordinator) stop() error {
 	clear(c.selfChanges)
 	c.selfChangeMu.Unlock()
 	if cancel != nil {
-		cancel()
+		cancel(context.Canceled)
 	}
 	if done != nil {
 		<-done
@@ -727,18 +749,22 @@ func closeCompressionWatcher(value *watcher.Watcher) error {
 	return value.Close()
 }
 
+// restoreBeforeEnable restores the zstd archives of a disabled folder before the caller renames it.
+// It runs whatever the compression settings are, because archives left by an interrupted or switched
+// method would otherwise stay in the enabled folder. A running pass is preempted so it cannot collect
+// paths under the old name, and its work is queued again.
 func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder string) error {
 	state := c.snapshot()
-	compressionApplies := state.Method == "zstd" &&
-		(state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
-	if !compressionApplies {
+	zstdActive := state.Method == "zstd" && (state.Enabled || state.TargetEnabled != nil && *state.TargetEnabled)
+	// Without zstd no pass writes archives, so a folder holding none needs neither a restore nor a preempted pass.
+	if !zstdActive && !hasZstdArchives(folder) {
 		return nil
 	}
 	c.mu.Lock()
 	cancel, done := c.cancel, c.done
 	c.mu.Unlock()
 	if cancel != nil {
-		cancel()
+		cancel(errCompressionPreempted)
 	}
 	if done != nil {
 		<-done
@@ -749,17 +775,25 @@ func (c *compressionCoordinator) restoreBeforeEnable(ctx context.Context, folder
 	if physical, err := platform.FinalEntryPath(folder); err == nil {
 		folder = physical
 	}
+	defer c.scheduleScope(folder)
 	c.opMu.Lock()
 	err := restoreZstdFolder(ctx, folder, c.markSelfChanges, func(path string, err error) {
 		c.logError(err, "restore-file-before-enable", "zstd", path)
 	})
 	c.opMu.Unlock()
-	if err != nil {
-		c.fail(err, "restore-before-enable", "zstd", folder)
-		return err
+	if err == nil {
+		return nil
 	}
-	c.scheduleScope(folder)
-	return nil
+	// Leftover archives under another method are not a failure of the compression feature the user sees.
+	if !zstdActive {
+		if infra.IsCancellationError(err) {
+			return err
+		}
+		return c.diagnostic.ReportError(
+			c.owner.log, err, "Mod:compression", compressionDiagnostic("restore-before-enable", "zstd", folder),
+		)
+	}
+	return c.fail(err, "restore-before-enable", "zstd", folder)
 }
 
 func (c *compressionCoordinator) settings() (compressionSettings, error) {
@@ -882,13 +916,9 @@ func (c *compressionCoordinator) clearExpiredSelfChanges(generation uint64) {
 func (c *compressionCoordinator) isSelfChange(path string) bool {
 	now := time.Now()
 	key := strings.ToLower(filepath.Clean(path))
+	// Expired entries are pruned by the self-change timer, so a watcher event only looks up its own path.
 	c.selfChangeMu.Lock()
 	defer c.selfChangeMu.Unlock()
-	for candidate, expires := range c.selfChanges {
-		if !expires.After(now) {
-			delete(c.selfChanges, candidate)
-		}
-	}
 	expires, ok := c.selfChanges[key]
 	return ok && expires.After(now)
 }
@@ -928,11 +958,18 @@ func (c *compressionCoordinator) resetProgress(status string, target bool, metho
 	c.publish()
 }
 
-func (c *compressionCoordinator) fail(err error, stage, method, path string) {
-	if errors.Is(err, context.Canceled) {
-		return
+// fail records a pass-level failure in the state shown to the renderer and returns the error marked as
+// reported for callers that pass it on.
+func (c *compressionCoordinator) fail(err error, stage, method, path string) error {
+	if infra.IsCancellationError(err) {
+		return err
 	}
-	c.logError(err, stage, method, path)
+	reported := c.diagnostic.ReportError(
+		c.owner.log,
+		err,
+		"Mod:compression",
+		compressionDiagnostic(stage, method, path),
+	)
 	c.mu.Lock()
 	c.state.Status = "error"
 	c.state.Error = "MOD_COMPRESSION_FAILED"
@@ -940,22 +977,22 @@ func (c *compressionCoordinator) fail(err error, stage, method, path string) {
 	c.deriveCapabilitiesLocked()
 	c.mu.Unlock()
 	c.publish()
+	return reported
 }
 
 func (c *compressionCoordinator) logError(err error, stage, method, path string) {
 	if err == nil {
 		return
 	}
-	c.diagnostic.Report(
-		c.owner.log,
-		err,
-		"Mod:compression",
-		infra.Diagnostic{
-			Operation: "compression",
-			Stage:     stage,
-			Fields:    map[string]any{"method": method, "path": path, "cleanup": "pending"},
-		},
-	)
+	c.diagnostic.Report(c.owner.log, err, "Mod:compression", compressionDiagnostic(stage, method, path))
+}
+
+func compressionDiagnostic(stage, method, path string) infra.Diagnostic {
+	return infra.Diagnostic{
+		Operation: "compression",
+		Stage:     stage,
+		Fields:    map[string]any{"method": method, "path": path, "cleanup": "pending"},
+	}
 }
 
 func (c *compressionCoordinator) snapshot() CompressionState {
@@ -1147,7 +1184,10 @@ func walkCompressionFiles(
 				return err
 			}
 			if walkErr != nil {
-				errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
+				// A mod renamed or deleted while the pass walks it has nothing left to process.
+				if !errors.Is(walkErr, fs.ErrNotExist) {
+					errs = append(errs, fmt.Errorf("access %q: %w", path, walkErr))
+				}
 				if entry != nil && entry.IsDir() {
 					return filepath.SkipDir
 				}
@@ -1160,6 +1200,9 @@ func walkCompressionFiles(
 				return nil
 			}
 			info, err := entry.Info()
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			if err != nil {
 				errs = append(errs, fmt.Errorf("stat %q: %w", path, err))
 				return nil

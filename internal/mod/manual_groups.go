@@ -291,6 +291,11 @@ func manualRelativePath(value string) string {
 	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '\\' })
 	for i := range parts {
 		parts[i] = strings.ToLower(parts[i])
+		// Bulk and exclusive toggles rename subgroup folders too, so the key ignores the DISABLED prefix. A
+		// name that is nothing but the prefix keeps it, or the key would name the parent folder.
+		if stripped := stripDisabled(parts[i]); stripped != "" {
+			parts[i] = stripped
+		}
 	}
 	return strings.Join(parts, "/")
 }

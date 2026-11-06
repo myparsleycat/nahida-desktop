@@ -43,6 +43,10 @@ func (m *Mod) DownloadFromURL(ctx context.Context, rawURL, groupPath string) (st
 	if err != nil {
 		return "", err
 	}
+	if !head.ok {
+		// Servers that refuse HEAD answer with an error page; the download itself decides.
+		head.header = http.Header{}
+	}
 	if isHTMLContentType(head.header) {
 		return "", errors.New("DOWNLOAD_URL_HTML_PAGE")
 	}
@@ -118,7 +122,7 @@ func (m *Mod) DownloadGameBananaFile(ctx context.Context, props GameBananaDownlo
 	destination := *result.Path
 	finalName := suggested
 	if result.FileName != nil && *result.FileName != "" {
-		finalName = *result.FileName
+		finalName = m.sanitizeName(*result.FileName)
 	}
 	stagingPath, stagedDownloadPath := getStagingPaths(finalName, m.sanitizeName)
 	size := int64(0)
@@ -213,8 +217,8 @@ func (m *Mod) headDownload(ctx context.Context, rawURL string) (downloadHead, er
 		ok:     response.StatusCode >= 200 && response.StatusCode < 300,
 		status: response.StatusCode, statusText: statusText,
 	}
-	head.size = parseContentLength(response.Header.Get("Content-Length"))
 	if head.ok {
+		head.size = parseContentLength(response.Header.Get("Content-Length"))
 		supported := strings.ToLower(strings.TrimSpace(response.Header.Get("Accept-Ranges"))) == "bytes"
 		head.supportsRange = &supported
 	}
@@ -325,11 +329,15 @@ func (m *Mod) runGroupDownload(
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "CustomDownloader:downloadToGroup")
 	}
 	downloadedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := writeDownloadMetadataToPaths(finalized.DestinationPaths, func() metadata.DirectDownload {
-		return metadata.DirectDownload{
-			ID: uuid.NewString(), Source: metadata.DirectSource, DownloadedAt: downloadedAt,
-		}
-	}); err != nil {
+	if err := writeDownloadMetadataToPaths(
+		finalized.DestinationPaths,
+		m.reportMetadataCleanup,
+		func() metadata.DirectDownload {
+			return metadata.DirectDownload{
+				ID: uuid.NewString(), Source: metadata.DirectSource, DownloadedAt: downloadedAt,
+			}
+		},
+	); err != nil {
 		return m.finishDownloadError(
 			ctx,
 			transfers,
@@ -399,8 +407,8 @@ func (m *Mod) runGameBananaDownload(
 		}
 		stagedPath = renamed
 	}
-	if payload.PreviewURL != nil && *payload.PreviewURL != "" {
-		previewPath := filepath.Join(getPreviewTargetDir(stagedPath), "preview.jpg")
+	if previewDir, ok := previewTargetDir(stagedPath); ok && payload.PreviewURL != nil && *payload.PreviewURL != "" {
+		previewPath := filepath.Join(previewDir, "preview.jpg")
 		previewHead := downloadHead{finalURL: *payload.PreviewURL, header: http.Header{}}
 		if err := m.downloadFileTo(
 			ctx,
@@ -419,20 +427,24 @@ func (m *Mod) runGameBananaDownload(
 		return m.finishDownloadError(ctx, transfers, target.pid, err, "GameBanana:downloadFromGB:context")
 	}
 	downloadedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := writeDownloadMetadataToPaths(finalized.DestinationPaths, func() metadata.GameBananaDownload {
-		return metadata.GameBananaDownload{
-			ID:           uuid.NewString(),
-			Source:       metadata.GameBananaSource,
-			DownloadedAt: downloadedAt,
-			Mod: &metadata.GameBananaMod{
-				ID: int64(payload.ModID), PageURL: payload.ModPageURL, Version: payload.Version,
-			},
-			Author: metadata.GameBananaAuthor{Name: payload.AuthorName, URL: payload.AuthorURL},
-			File: metadata.GameBananaFile{
-				DownloadURL: payload.FileURL, MD5: payload.FileMD5,
-			},
-		}
-	}); err != nil {
+	if err := writeDownloadMetadataToPaths(
+		finalized.DestinationPaths,
+		m.reportMetadataCleanup,
+		func() metadata.GameBananaDownload {
+			return metadata.GameBananaDownload{
+				ID:           uuid.NewString(),
+				Source:       metadata.GameBananaSource,
+				DownloadedAt: downloadedAt,
+				Mod: &metadata.GameBananaMod{
+					ID: int64(payload.ModID), PageURL: payload.ModPageURL, Version: payload.Version,
+				},
+				Author: metadata.GameBananaAuthor{Name: payload.AuthorName, URL: payload.AuthorURL},
+				File: metadata.GameBananaFile{
+					DownloadURL: payload.FileURL, MD5: payload.FileMD5,
+				},
+			}
+		},
+	); err != nil {
 		return m.finishDownloadError(
 			ctx,
 			transfers,
@@ -526,10 +538,10 @@ func (m *Mod) resolveArchiveExtractMode(ctx context.Context, archivePath string)
 	if !single {
 		return "flatten_single_root", nil
 	}
-	return m.promptArchiveExtractMode(archivePath)
+	return m.promptArchiveExtractMode(ctx, archivePath)
 }
 
-func (m *Mod) promptArchiveExtractMode(archivePath string) (string, error) {
+func (m *Mod) promptArchiveExtractMode(ctx context.Context, archivePath string) (string, error) {
 	requestID := uuid.NewString()
 	ch := make(chan string, 1)
 	m.extractMu.Lock()
@@ -540,7 +552,15 @@ func (m *Mod) promptArchiveExtractMode(archivePath string) (string, error) {
 			"requestId": requestID, "fileName": filepath.Base(archivePath),
 		})
 	}
-	mode := <-ch
+	var mode string
+	select {
+	case mode = <-ch:
+	case <-ctx.Done():
+		m.extractMu.Lock()
+		delete(m.extractPrompts, requestID)
+		m.extractMu.Unlock()
+		return "", ctx.Err()
+	}
 	if mode == "" {
 		return "", errors.New("aborted")
 	}

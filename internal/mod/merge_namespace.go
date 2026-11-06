@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 type namespaceMergeSource struct {
@@ -57,7 +59,7 @@ func writeNamespaceMerge(options namespaceMergeOptions) (string, error) {
 		if err := recordMergeWrite(source.iniPath, created); err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(source.iniPath, []byte(wrapped), 0o644); err != nil {
+		if err := platform.WriteFileAtomic(source.iniPath, []byte(wrapped), 0o644); err != nil {
 			return "", err
 		}
 		wrapSources = append(wrapSources, namespaceWrapSource{iniPath: source.iniPath, text: wrapped})
@@ -154,7 +156,7 @@ func writeNamespaceMerge(options namespaceMergeOptions) (string, error) {
 	if err := recordMergeWrite(masterPath, created); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(masterPath, []byte(strings.Join(master, "\n")), 0o644); err != nil {
+	if err := platform.WriteFileAtomic(masterPath, []byte(strings.Join(master, "\n")), 0o644); err != nil {
 		return "", err
 	}
 	return masterPath, nil
@@ -194,7 +196,9 @@ func pickNamespaceRepresentative(sources []namespaceWrapSource) *namespaceWrapSo
 	return &sources[0]
 }
 
-func collectNamespaceChildren(masterPath string) ([]string, error) {
+// collectNamespaceChildren lists the INIs an existing master switches between. Paths named in the master's
+// header come from the mod's own files, so only INIs inside groupPath are accepted.
+func collectNamespaceChildren(masterPath, groupPath string) ([]string, error) {
 	masterDir := filepath.Dir(masterPath)
 	raw, err := os.ReadFile(masterPath)
 	if err != nil {
@@ -205,7 +209,8 @@ func collectNamespaceChildren(masterPath string) ([]string, error) {
 	var listed []string
 	for _, entry := range extractMergedModPaths(text) {
 		candidate := resolveAgainst(masterDir, entry)
-		if _, readErr := os.ReadFile(candidate); readErr != nil {
+		if !strings.EqualFold(filepath.Ext(candidate), ".ini") || isMasterIniPath(candidate) ||
+			!platform.SameOrChildPath(groupPath, candidate) || !fileExists(candidate) {
 			continue
 		}
 		listed = append(listed, candidate)
@@ -398,7 +403,7 @@ func buildNamespaceSources(iniRoots, existingChildren []string, includeVanilla b
 		if isMasterIniPath(iniPath) {
 			return false
 		}
-		resolved := resolveAgainst("", iniPath)
+		resolved := strings.ToLower(resolveAgainst("", iniPath))
 		if _, ok := seen[resolved]; ok {
 			return false
 		}

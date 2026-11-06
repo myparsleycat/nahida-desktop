@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/samber/lo"
 )
@@ -135,8 +136,14 @@ func classifyMergePack(modPath string) (MergePackClassification, error) {
 	result.Hashes = extractMergeHashes(primary.text)
 	result.ObjectGuid = regexFirst(objectGUIDRE, primary.text)
 	result.Warnings = mergeWarnings(result.Family, result.Dialect, primary.text)
+	// A classic merge switches and disables one INI per pack, so a second INI with overrides would stay
+	// active for every slot.
+	overrideINIs := lo.CountBy(scored, func(ini scoredINI) bool {
+		return textureOverrideRE.MatchString(ini.text) && !isSupportINIText(ini.text, filepath.Base(ini.path))
+	})
 	result.AllowsClassic = result.Family == "ordinary" && result.Dialect != "wwmi" &&
-		result.Dialect != "efmi" && result.Dialect != "unknown" && !controlFlowRE.MatchString(primary.text)
+		result.Dialect != "efmi" && result.Dialect != "unknown" && !controlFlowRE.MatchString(primary.text) &&
+		overrideINIs <= 1
 	return result, nil
 }
 
@@ -310,9 +317,15 @@ func regexFirst(expression *regexp.Regexp, text string) *string {
 	return &value
 }
 
+var mergePatterns sync.Map
+
 func regexAny(text string, expressions ...string) bool {
 	for _, expression := range expressions {
-		if regexp.MustCompile(expression).MatchString(text) {
+		compiled, ok := mergePatterns.Load(expression)
+		if !ok {
+			compiled, _ = mergePatterns.LoadOrStore(expression, regexp.MustCompile(expression))
+		}
+		if compiled.(*regexp.Regexp).MatchString(text) {
 			return true
 		}
 	}

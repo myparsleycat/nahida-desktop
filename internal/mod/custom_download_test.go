@@ -309,3 +309,42 @@ func assertCustomDownloadFile(t *testing.T, path, want string) {
 		t.Fatalf("downloaded file %s = %q, %v", path, raw, err)
 	}
 }
+
+func TestPreviewTargetDirRequiresStagedFolder(t *testing.T) {
+	staging := t.TempDir()
+	folder := filepath.Join(staging, "Furina_v1.2")
+	if err := os.Mkdir(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(staging, "Furina.ini")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if dir, ok := previewTargetDir(folder); !ok || dir != folder {
+		t.Fatalf("dotted folder: dir = %q, ok = %v", dir, ok)
+	}
+	if _, ok := previewTargetDir(file); ok {
+		t.Fatal("a single staged file should not receive a preview")
+	}
+}
+
+func TestHeadDownloadIgnoresSizeOfRefusedHead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Length", "13")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+	defer server.Close()
+	service := NewWithOptions(Options{
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()}),
+	})
+
+	head, err := service.headDownload(context.Background(), server.URL+"/file.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.ok || head.size != nil || head.supportsRange != nil {
+		t.Fatalf("head = ok %v, size %v, range %v", head.ok, head.size, head.supportsRange)
+	}
+}

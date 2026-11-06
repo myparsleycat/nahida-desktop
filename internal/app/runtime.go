@@ -193,7 +193,7 @@ func newRuntime() *runtime {
 		FS: fs, Settings: settings, Archive: archive, HTTP: httpClient, EventEmit: eventEmit,
 		XXMI: xxmiService, Log: log, Dialog: dialog, Transfer: transferService,
 		GameBanana: gameBananaService, Native: native, Download: download, Elevated: elevatedFiles,
-		GameProcesses: xxmiService.GameProcesses,
+		GameProcesses: xxmiService.GameProcesses, GitHub: githubClient,
 	})
 	download.UseClient(httpClient)
 	modRuntime := modruntime.New(modruntime.Options{

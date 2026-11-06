@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/samber/lo"
+
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 var (
 	rollbackRemovePath = os.RemoveAll
 	rollbackMovePath   = movePathOverwrite
-	rollbackWriteFile  = os.WriteFile
+	rollbackWriteFile  = func(path string, content []byte, mode os.FileMode) error {
+		return platform.WriteFileAtomic(path, content, mode)
+	}
 )
 
 type mergeRollback struct {
@@ -45,11 +50,20 @@ type mergeFailureLog struct {
 
 func rollbackMerge(actions []mergeRollback) []mergeRollbackFailure {
 	failures := make([]mergeRollbackFailure, 0)
+	// A move that could not be undone leaves user data at its source. Removing a created folder that
+	// still contains that source would delete the data, so such a removal is skipped.
+	var stranded []string
 	for i := len(actions) - 1; i >= 0; i-- {
 		action := actions[i]
 		var err error
 		switch action.kind {
 		case "remove":
+			if holder, ok := lo.Find(stranded, func(from string) bool {
+				return platform.SameOrChildPath(action.path, from)
+			}); ok {
+				err = fmt.Errorf("keep %q: it holds %q, which could not be moved back", action.path, holder)
+				break
+			}
 			err = rollbackRemovePath(action.path)
 		case "move":
 			if _, statErr := os.Stat(action.from); statErr == nil {
@@ -63,6 +77,9 @@ func rollbackMerge(actions []mergeRollback) []mergeRollbackFailure {
 			err = fmt.Errorf("unknown merge rollback action %q", action.kind)
 		}
 		if err != nil {
+			if action.kind == "move" {
+				stranded = append(stranded, action.from)
+			}
 			failures = append(failures, mergeRollbackFailure{action: action, err: err})
 		}
 	}

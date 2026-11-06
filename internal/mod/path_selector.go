@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -42,13 +43,6 @@ type folderPathSelectionError struct {
 func (e *folderPathSelectionError) Error() string { return e.err.Error() }
 
 func (e *folderPathSelectionError) Unwrap() error { return e.err }
-
-type folderPathSelectionErrorLog struct {
-	SelectionID string `json:"selectionId"`
-	Stage       string `json:"stage"`
-	Path        string `json:"path,omitempty"`
-	Error       string `json:"error"`
-}
 
 type pathSelectionDialog interface {
 	SaveFile(platform.SaveFileOptions) (platform.DialogResult, error)
@@ -157,10 +151,7 @@ func (p *pathSelector) getSelectedPathWithModeModal(
 
 func (m *Mod) SelectFolderPath(ctx context.Context, selectionID string) (bool, error) {
 	selected, err := m.paths.selectFolderPath(ctx, selectionID)
-	if err != nil {
-		m.logFolderPathSelectionError(selectionID, err)
-	}
-	return selected, err
+	return selected, m.reportFolderPathSelectionError(selectionID, err)
 }
 
 func (m *Mod) SelectModManagerPath(_ context.Context, selectionID, path string, fileName *string) error {
@@ -253,18 +244,19 @@ func (p *pathSelector) selectFolderPath(ctx context.Context, selectionID string)
 	return true, nil
 }
 
-func (m *Mod) logFolderPathSelectionError(selectionID string, err error) {
+func (m *Mod) reportFolderPathSelectionError(selectionID string, err error) error {
 	if err == nil {
-		return
+		return nil
 	}
-	entry := folderPathSelectionErrorLog{SelectionID: selectionID, Stage: "unknown", Error: err.Error()}
+	diagnostic := infra.Diagnostic{
+		Operation: "SelectFolderPath", Stage: "unknown", Fields: map[string]any{"selectionId": selectionID},
+	}
 	var selectionErr *folderPathSelectionError
 	if errors.As(err, &selectionErr) {
-		entry.Stage = selectionErr.stage
-		entry.Path = selectionErr.path
-		entry.Error = selectionErr.err.Error()
+		diagnostic.Stage = selectionErr.stage
+		diagnostic.Fields["path"] = selectionErr.path
 	}
-	m.log.Error(entry, "Mod:SelectFolderPath")
+	return infra.ReportError(m.log, err, "Mod:SelectFolderPath", diagnostic)
 }
 
 func newFolderPathSelectionError(stage, path string, err error) error {

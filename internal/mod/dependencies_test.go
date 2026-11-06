@@ -194,4 +194,12 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies with the library enabled = %#v, want %#v", got, want)
 	}
+
+	// A rescan reads an INI again once it changed, rather than keeping what it declared before.
+	writeModFile(t, filepath.Join(modsRoot, "Utils", "RabbitFX"), "RabbitFX.ini", "namespace = Something\n")
+	service.InvalidateLibraries()
+	want[0].Installed = false
+	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
+		t.Fatalf("dependencies after the library INI changed = %#v, want %#v", got, want)
+	}
 }

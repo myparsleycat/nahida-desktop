@@ -41,6 +41,33 @@ func TestRollbackMergeContinuesInReverseOrderAndCollectsFailures(t *testing.T) {
 	}
 }
 
+func TestRollbackMergeKeepsContainerWhenMovingPackBackFails(t *testing.T) {
+	realMove := rollbackMovePath
+	t.Cleanup(func() { rollbackMovePath = realMove })
+	rollbackMovePath = func(string, string) error { return errors.New("simulated access denied") }
+
+	root := t.TempDir()
+	container := filepath.Join(root, "Merged")
+	moved := filepath.Join(container, "PackB")
+	if err := os.MkdirAll(moved, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moved, "mod.ini"), []byte("user data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	failures := rollbackMerge([]mergeRollback{
+		{kind: "remove", path: container},
+		{kind: "move", from: moved, to: filepath.Join(root, "PackB")},
+	})
+	if len(failures) != 2 {
+		t.Fatalf("rollback failures = %#v", failures)
+	}
+	if raw, err := os.ReadFile(filepath.Join(moved, "mod.ini")); err != nil || string(raw) != "user data" {
+		t.Fatalf("stranded pack = %q, %v", raw, err)
+	}
+}
+
 func TestRollbackMergeMoveOverwritesRecreatedDestination(t *testing.T) {
 	root := t.TempDir()
 	from := filepath.Join(root, "disabled.ini")

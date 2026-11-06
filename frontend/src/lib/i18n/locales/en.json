@@ -946,7 +946,8 @@
           "apply-preset-mutation": {
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",
             "success": "Preset applied",
-            "missing": "Preset applied, but {{count}} mods were missing"
+            "missing": "Preset applied, but {{count}} mods were missing",
+            "failed": "Preset applied, but {{count}} mods could not be changed"
           }
         }
       },

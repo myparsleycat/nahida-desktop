@@ -1,6 +1,7 @@
 package mod
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 )
 
 func (m *Mod) executeNamespaceMerge(
+	ctx context.Context,
 	node MergePlanNode,
 	packs []MergePackClassification,
 	request MergeModsRequest,
@@ -58,7 +60,7 @@ func (m *Mod) executeNamespaceMerge(
 		}
 		for i, pack := range workingPacks {
 			destination := filepath.Join(masterDir, names[i])
-			if err := copyDirectory(pack.Path, destination); err != nil {
+			if err := copyMergePack(ctx, pack.Path, destination); err != nil {
 				return "", err
 			}
 			*created = append(*created, mergeRollback{kind: "remove", path: destination})
@@ -95,7 +97,7 @@ func (m *Mod) executeNamespaceMerge(
 
 	var existingChildren []string
 	if existingMasterPath != "" {
-		existingChildren, err = collectNamespaceChildren(existingMasterPath)
+		existingChildren, err = collectNamespaceChildren(existingMasterPath, request.GroupPath)
 		if err != nil {
 			return "", err
 		}
@@ -140,16 +142,29 @@ func wrapNamespaceHashes(text, name string, index int) string {
 		wrapping = false
 		output = append(output, buildNamespaceWrappedBlock(block, name, index)...)
 	}
+	// sectionStart is where the lines of the current section begin in output, until its hash line is seen.
+	sectionStart := -1
 	for _, raw := range lines {
-		trimmed := strings.TrimSpace(raw)
-		lower := strings.ToLower(trimmed)
+		trimmed := strings.TrimSpace(strings.TrimPrefix(raw, string(rune(0xFEFF))))
 		isComment := strings.HasPrefix(trimmed, ";")
 		isHeader := !isComment && strings.HasPrefix(trimmed, "[")
-		isHash := !isComment && (strings.HasPrefix(lower, "hash =") || strings.HasPrefix(lower, "hash="))
+		key, _, isKey := mergeINIKeyValue(raw)
+		isHash := !isComment && !isHeader && isKey && strings.EqualFold(key, "hash")
 		if wrapping && (isHeader || isHash) {
 			flush()
 		}
+		if isHeader {
+			output = append(output, raw)
+			sectionStart = len(output)
+			continue
+		}
 		if !wrapping && isHash {
+			// Commands written above the hash line belong to the same override and switch with it.
+			if sectionStart >= 0 {
+				pending = append(pending, output[sectionStart:]...)
+				output = output[:sectionStart]
+				sectionStart = -1
+			}
 			output = append(output, raw)
 			wrapping = true
 			continue

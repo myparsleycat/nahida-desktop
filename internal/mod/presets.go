@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/infra"
 )
 
 const modPresetVersion int64 = 2
@@ -51,6 +53,8 @@ type ApplyPresetResult struct {
 	Applied  []string            `json:"applied"`
 	Skipped  []string            `json:"skipped"`
 	Missing  []MissingPresetItem `json:"missing"`
+	// Failed lists the mods whose enabled state could not be changed.
+	Failed []string `json:"failed"`
 }
 
 type presetSnapshotItem struct {
@@ -181,6 +185,7 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 	}
 	result := ApplyPresetResult{
 		PresetID: presetID, Applied: []string{}, Skipped: []string{}, Missing: []MissingPresetItem{},
+		Failed: []string{},
 	}
 	sort.Slice(stored, func(i, j int) bool { return stored[i].ItemOrder < stored[j].ItemOrder })
 	for _, wanted := range stored {
@@ -210,9 +215,15 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 			_, actionErr = m.Disable(ctx, item.ActualPath)
 		}
 		if actionErr != nil {
+			if infra.IsCancellationError(actionErr) {
+				return result, actionErr
+			}
 			if actionErr.Error() == "MOD_DOWNLOAD_IN_PROGRESS" {
 				result.Skipped = append(result.Skipped, item.RelativePath)
+				continue
 			}
+			m.logActionError(actionErr, "Mod:applyPreset:"+item.ActualPath)
+			result.Failed = append(result.Failed, item.RelativePath)
 			continue
 		}
 		result.Applied = append(result.Applied, item.RelativePath)
@@ -262,10 +273,28 @@ func (m *Mod) presetSnapshot(ctx context.Context, game string) ([]presetSnapshot
 	if gamePath == nil {
 		return nil, fmt.Errorf("no mod folder path set for %s", game)
 	}
+	release, err := diskio.AcquireDir(ctx, *gamePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	diagnostics := &infra.DiagnosticBatch{}
+	defer diagnostics.Report(m.log, "Mod", "presetSnapshot")
 	paths := map[string]string{}
 	err = filepath.WalkDir(*gamePath, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
-			return walkErr
+			// One unreadable folder leaves its mods out of the snapshot instead of failing the preset.
+			if path == *gamePath {
+				return walkErr
+			}
+			diagnostics.Add(walkErr)
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.Type().IsRegular() && strings.EqualFold(filepath.Ext(path), ".ini") {
 			parent := filepath.Dir(path)

@@ -384,7 +384,7 @@ func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testin
 	) {
 		t.Fatalf("extracted = %#v", got)
 	}
-	discovered, err := collectNamespaceChildren(masterPath)
+	discovered, err := collectNamespaceChildren(masterPath, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestWriteNamespaceMergeRoundTripsCommaPathsAndRediscoversChildren(t *testin
 		forwardKey: "]", backKey: "[",
 		existingMasterPath: masterPath,
 	})
-	rediscovered, err := collectNamespaceChildren(updatedMasterPath)
+	rediscovered, err := collectNamespaceChildren(updatedMasterPath, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +491,7 @@ func TestCollectNamespaceChildrenScansWhenListedPathsAreMissing(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	discovered, err := collectNamespaceChildren(masterPath)
+	discovered, err := collectNamespaceChildren(masterPath, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,11 +518,42 @@ func TestCollectNamespaceChildrenUnionsListedAndScanned(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	discovered, err := collectNamespaceChildren(masterPath)
+	discovered, err := collectNamespaceChildren(masterPath, root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !mergeResolvedPathSetsEqual(discovered, []string{listedChild, scannedChild}) {
+		t.Fatalf("discovered = %#v", discovered)
+	}
+}
+
+func TestCollectNamespaceChildrenIgnoresListedPathsOutsideGroup(t *testing.T) {
+	outside := t.TempDir()
+	outsideINI := filepath.Join(outside, "d3dx.ini")
+	if err := os.WriteFile(outsideINI, []byte("[ShaderOverride]\nhash = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "Group")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sibling := filepath.Join(filepath.Dir(root), "Sibling.ini")
+	if err := os.WriteFile(sibling, []byte(namespaceChildINI), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	listedChild := writeNamespaceChild(t, root, "Listed.ini", namespaceChildINI)
+	masterPath := filepath.Join(root, "MasterCharA.ini")
+	header := "; Merged Mod: " + listedChild + "\n; Merged Mod: " + outsideINI +
+		"\n; Merged Mod: ..\\Sibling.ini\nnamespace = CharA\\Master\n"
+	if err := os.WriteFile(masterPath, []byte(header), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	discovered, err := collectNamespaceChildren(masterPath, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mergeResolvedPathSetsEqual(discovered, []string{listedChild}) {
 		t.Fatalf("discovered = %#v", discovered)
 	}
 }
@@ -710,4 +741,19 @@ func mergeResolvedPathSetsEqual(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestWrapNamespaceHashesRecognizesSpacedHashAndWrapsEarlierCommands(t *testing.T) {
+	t.Parallel()
+
+	wrapped := wrapNamespaceHashes(
+		"[TextureOverrideBody]\nhandling = skip\nhash\t= abcdef01\nvb0 = ResourceBody\n",
+		"CharA",
+		2,
+	)
+	want := "[TextureOverrideBody]\nhash\t= abcdef01\nmatch_priority = 2\n" +
+		`if $\CharA\Master\swapvar==2` + "\n\thandling = skip\n\tvb0 = ResourceBody\nendif\n"
+	if wrapped != want {
+		t.Fatalf("wrapped =\n%s\nwant\n%s", wrapped, want)
+	}
 }

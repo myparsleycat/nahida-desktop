@@ -596,14 +596,23 @@ export function usePresetMutations() {
             void queryClient.invalidateQueries({ queryKey: ["modGroup"] });
             void queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
             setIsSelectedPresetDialogOpen(false);
-            if ((result.missing ?? []).length > 0) {
+            const failedCount = (result.failed ?? []).length;
+            const missingCount = (result.missing ?? []).length;
+            if (failedCount > 0) {
                 toast.warning(
-                    t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.missing", {
-                        count: (result.missing ?? []).length,
+                    t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.failed", {
+                        count: failedCount,
                     }),
                 );
-                return;
             }
+            if (missingCount > 0) {
+                toast.warning(
+                    t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.missing", {
+                        count: missingCount,
+                    }),
+                );
+            }
+            if (failedCount > 0 || missingCount > 0) return;
             toast.success(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.success"));
         },
         onError: (error) => {

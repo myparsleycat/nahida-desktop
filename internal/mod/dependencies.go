@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // ModDependency is a shared 3DMigoto library that a mod references without shipping it.
@@ -40,10 +41,18 @@ var modLibraries = []modLibrary{
 type libraryMask uint8
 
 // libraryIndex is the installed libraries of one mod folder and importer as of a
-// libraryChanges count.
+// libraryChanges count, with the INIs it read so that a rescan reads only the changed ones.
 type libraryIndex struct {
 	installed libraryMask
 	changes   uint64
+	files     map[string]libraryFile
+}
+
+// libraryFile is the library an INI declared when it had this size and modification time.
+type libraryFile struct {
+	size     int64
+	modTime  time.Time
+	declares libraryMask
 }
 
 // libraryReferencePrefixes are the lowercase words that qualify a namespaced symbol,
@@ -186,15 +195,16 @@ func (m *Mod) installedLibraries(ctx context.Context, game GameConfig, reports .
 		return cached.installed
 	}
 
-	installed := scanInstalledLibraries(m.libraryRoots(ctx, game), reports...)
+	installed, files := scanInstalledLibraries(m.libraryRoots(ctx, game), cached.files, reports...)
 
-	// An invalidation during the scan leaves the result unstored, so the next lookup scans again.
+	// The index keeps the count from before the scan, so an invalidation during the scan
+	// makes the next lookup scan again; the file entries stay valid on their own.
 	m.libraryMu.Lock()
-	if m.libraryChanges == changes {
+	if current, ok := m.libraryIndexes[key]; !ok || current.changes <= changes {
 		if m.libraryIndexes == nil {
 			m.libraryIndexes = map[string]libraryIndex{}
 		}
-		m.libraryIndexes[key] = libraryIndex{installed: installed, changes: changes}
+		m.libraryIndexes[key] = libraryIndex{installed: installed, changes: changes, files: files}
 	}
 	m.libraryMu.Unlock()
 	return installed
@@ -264,8 +274,14 @@ func (m *Mod) libraryRoots(ctx context.Context, game GameConfig) []string {
 }
 
 // scanInstalledLibraries reads the namespace of every INI below roots that 3DMigoto loads.
-func scanInstalledLibraries(roots []string, reports ...func(error)) libraryMask {
+// An INI whose size and modification time match its entry in previous is not read again.
+func scanInstalledLibraries(
+	roots []string,
+	previous map[string]libraryFile,
+	reports ...func(error),
+) (libraryMask, map[string]libraryFile) {
 	var installed libraryMask
+	files := make(map[string]libraryFile, len(previous))
 	for _, root := range roots {
 		release := holdScanDisk(root)
 		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -279,27 +295,43 @@ func scanInstalledLibraries(roots []string, reports ...func(error)) libraryMask 
 				}
 				return nil
 			}
-			if entry.Type().IsRegular() && strings.EqualFold(filepath.Ext(path), ".ini") {
-				installed |= declaredLibrary(readININamespace(path, reports...))
+			if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(path), ".ini") {
+				return nil
 			}
+			info, err := entry.Info()
+			if err != nil {
+				reportScanFailure(err, reports)
+				return nil
+			}
+			if known, ok := previous[path]; ok && known.size == info.Size() && known.modTime.Equal(info.ModTime()) {
+				files[path] = known
+				installed |= known.declares
+				return nil
+			}
+			namespace, err := readININamespace(path)
+			if err != nil {
+				reportScanFailure(err, reports)
+				return nil
+			}
+			declares := declaredLibrary(namespace)
+			files[path] = libraryFile{size: info.Size(), modTime: info.ModTime(), declares: declares}
+			installed |= declares
 			return nil
 		})
 		release()
 	}
-	return installed
+	return installed, files
 }
 
-func readININamespace(path string, reports ...func(error)) string {
+func readININamespace(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		reportScanFailure(err, reports)
-		return ""
+		return "", err
 	}
 	defer func() { _ = file.Close() }()
 	head, err := io.ReadAll(io.LimitReader(file, libraryHeadSize))
 	if err != nil {
-		reportScanFailure(err, reports)
-		return ""
+		return "", err
 	}
 
 	// Dropping the zero bytes of a UTF-16 head leaves its ASCII text, which is all a
@@ -314,10 +346,10 @@ func readININamespace(path string, reports ...func(error)) string {
 			break
 		}
 		if namespace, ok := iniNamespace(line); ok {
-			return namespace
+			return namespace, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // libraryDisabledPath reports whether a folder below root carries the DISABLED prefix.

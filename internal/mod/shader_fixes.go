@@ -939,7 +939,7 @@ func writeShaderFixesJSON(path string, value any) error {
 	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode().Perm()
 	}
-	return atomicWriteFile(path, raw, mode)
+	return platform.WriteFileAtomic(path, raw, mode)
 }
 
 func copyShaderFixesFile(source, target string) error {

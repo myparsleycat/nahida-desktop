@@ -1,12 +1,16 @@
 package mod
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/platform"
 )
 
 func createUniqueMergeFolder(parent, name string, created *[]mergeRollback) (string, error) {
@@ -192,7 +196,26 @@ func allocateStagePath(sourcePath string) (string, error) {
 }
 
 func sameMergePath(left, right string) bool {
-	return strings.EqualFold(resolveAgainst("", left), resolveAgainst("", right))
+	return platform.SamePathFold(resolveAgainst("", left), resolveAgainst("", right))
+}
+
+// copyMergePack copies a pack for a new-folder merge. A pack's textures can reach gigabytes, so the copy
+// takes the disk slots of both volumes and stops between packs when the merge is cancelled.
+func copyMergePack(ctx context.Context, source, destination string) error {
+	release, err := diskio.AcquireDir(ctx, source, filepath.Dir(destination))
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	// Creating the folder first proves it is new, so a failed copy can remove it without touching another folder.
+	if err := os.Mkdir(destination, 0o755); err != nil {
+		return err
+	}
+	if err := copyDirectory(source, destination); err != nil {
+		return errors.Join(err, os.RemoveAll(destination))
+	}
+	return nil
 }
 
 func disableINIForMerge(path string, created *[]mergeRollback) error {
@@ -228,7 +251,7 @@ func ensureMergeBackup(path string, created *[]mergeRollback) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(destination, input, 0o644); err != nil {
+	if err := platform.WriteFileAtomic(destination, input, 0o644); err != nil {
 		return err
 	}
 	*created = append(*created, mergeRollback{kind: "remove", path: destination})
