@@ -111,7 +111,7 @@ export const ModCard = memo(function ModCard({
           >
             {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
               <div
-                className="pointer-events-none absolute inset-0 z-0 scale-110 opacity-25 blur-lg"
+                className="pointer-events-none absolute inset-0 z-0 scale-110 opacity-10 blur-lg dark:opacity-25"
                 style={{ transform: "translateZ(0)", willChange: "filter" }}
               >
                 <img

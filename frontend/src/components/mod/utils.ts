@@ -116,12 +116,12 @@ export const hasMissingDependency = (mod: Pick<ModInfo, "dependencies">) =>
 // An enabled mod whose dependency is missing is loaded but broken, so it is neither green nor red.
 export const getModColorClass = (isEnabled: boolean, isMissingDependency = false) => {
     if (isEnabled && isMissingDependency) {
-        return "dark:bg-[#4d4208] bg-[#dcc75c]";
+        return "dark:bg-[#4d4208] bg-[oklch(0.9_0.08_95)]";
     }
     if (isEnabled) {
-        return "dark:bg-[#0d430d] bg-[#6aad6a]";
+        return "dark:bg-[#0d430d] bg-[oklch(0.89_0.07_145)]";
     } else {
-        return "dark:bg-[#58151b] bg-[#f1afb4]";
+        return "dark:bg-[#58151b] bg-[oklch(0.9_0.055_15)]";
     }
 };
 
