@@ -1,5 +1,4 @@
 import { Input } from "@renderer/components/ui/input";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -123,7 +122,7 @@ export function CategoryPanel({
           disableNext={disableNext}
         />
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-4 p-4">
           {categoryOverviewQuery.isLoading && <OverviewSkeleton />}
           {categoryOverviewQuery.error && (
@@ -164,7 +163,7 @@ export function CategoryPanel({
             </section>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

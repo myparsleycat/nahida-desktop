@@ -1,7 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/avatar";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
@@ -86,7 +85,7 @@ export function CategorySidebar({
           />
         </div>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-0.5 px-3 pb-3">
           {isLoading && (
             <>
@@ -140,7 +139,7 @@ export function CategorySidebar({
               );
             })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

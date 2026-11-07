@@ -1,4 +1,3 @@
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
 
 import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../-types";
@@ -45,7 +44,7 @@ export function GameHomePanel({
           disableNext={disableNext}
         />
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-3 p-4">
           {subfeedQuery.isLoading && <OverviewSkeleton />}
           {subfeedQuery.error && (
@@ -71,7 +70,7 @@ export function GameHomePanel({
             ))}
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

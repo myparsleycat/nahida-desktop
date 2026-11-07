@@ -1,6 +1,5 @@
 import { Mod } from "@bindings/mod";
 import { Badge } from "@renderer/components/ui/badge";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { getGameBananaAuthErrorCode } from "@renderer/lib/gamebanana-auth";
 import { Logger } from "@renderer/lib/logger";
@@ -119,7 +118,7 @@ export function ModFilesSidebar({
         <h2 className="text-sm font-medium text-muted-foreground">{t("page.gamebanana.files")}</h2>
         <Badge variant="outline">{formatNumber(files.length, language)}</Badge>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-0.5 px-3 pb-3">
           {modOverviewQuery.isLoading && (
             <>
@@ -177,7 +176,7 @@ export function ModFilesSidebar({
               );
             })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

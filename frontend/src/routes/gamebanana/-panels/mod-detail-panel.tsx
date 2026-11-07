@@ -3,7 +3,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/ava
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
   Section,
   SectionAction,
@@ -223,10 +222,7 @@ export function ModDetailPanel({
 
   return (
     <>
-      <ScrollArea
-        className="h-full min-h-0 min-w-0"
-        viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
-      >
+      <div className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto">
         <div className="max-w-full min-w-0 space-y-8 p-4">
           <div>
             {modOverviewQuery.isLoading ? (
@@ -500,7 +496,7 @@ export function ModDetailPanel({
             </SectionContent>
           </Section>
         </div>
-      </ScrollArea>
+      </div>
 
       {lightboxPreviewIndex !== null && lightboxPreview && (
         <PreviewLightbox
