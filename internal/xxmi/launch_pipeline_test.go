@@ -87,6 +87,13 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Loader]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	packageFile := filepath.Join(cfg.ImporterFolder, "Core", "EFMI", "main.ini")
+	if err := os.MkdirAll(filepath.Dir(packageFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(packageFile, []byte("global $version = 1.4.9\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	gameExe := filepath.Join(cfg.GameFolder, "Endfield.exe")
 	if err := os.WriteFile(gameExe, []byte("test game"), 0o600); err != nil {
 		t.Fatal(err)

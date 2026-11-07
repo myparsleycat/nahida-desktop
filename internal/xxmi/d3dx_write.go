@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -90,6 +91,7 @@ func (in importerINIInput) render(data []byte) (doc *iniDocument, lost bool) {
 		} else {
 			doc.RemoveOption("Loader", "loader")
 		}
+		addPackageInclude(doc, in.key)
 	}
 	for _, write := range settingsINIWrites(in.key, in.cfg, in.support) {
 		if write.fallback && len(before.optionIndexes(write.section, write.key)) > 0 {
@@ -264,6 +266,36 @@ func (x *XXMI) updateLaunchINI(
 		}
 	}
 	return nil
+}
+
+// addPackageInclude puts the include that loads the importer package ahead of the first option of the [Include] of
+// doc, unless the section mentions it, set or commented out. The provider ships one d3dx.ini for every importer
+// without that line, so neither a rebuild from it nor an edit in place brings back a file that lost it, and 3DMigoto
+// then loads no mod that depends on the package.
+func addPackageInclude(doc *iniDocument, key string) {
+	spec, ok := lookupImporterPackage(key)
+	start, end := doc.sectionBounds("Include")
+	if !ok || start < 0 {
+		return
+	}
+
+	include := "include = " + strings.ReplaceAll(spec.versionFile, "/", `\`)
+	id := iniIncludeID(iniOptionPattern.FindStringSubmatch(include))
+	body := doc.lines[start+1 : end]
+	if slices.ContainsFunc(body, func(line string) bool {
+		match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(line, " \t;#"))
+		return len(match) != 0 && iniIncludeID(match) == id
+	}) {
+		return
+	}
+	at := slices.IndexFunc(body, iniOptionPattern.MatchString)
+	if at < 0 {
+		at = doc.sectionEnd("Include")
+	} else {
+		at += start + 1
+	}
+	doc.lines = slices.Insert(doc.lines, at, include)
+	doc.changed = true
 }
 
 // iniBaseName is the provider's d3dx.ini the importer's d3dx.ini was last rebuilt from, kept in the importer

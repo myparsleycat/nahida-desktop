@@ -501,6 +501,55 @@ func TestLaunchProcessNameResolution(t *testing.T) {
 	}
 }
 
+// writeLegacyLaunchFixture writes the files a legacy unsafe-mode GIMI launch reads from the importer folder, with or
+// without the importer package.
+func writeLegacyLaunchFixture(t *testing.T, folder string, withPackage bool) {
+	t.Helper()
+	files := map[string]string{
+		"d3dx.ini": "[Loader]\n", "d3d11.dll": "dll", "3DMigoto Loader.exe": "loader",
+		runtimeManifestName: fmt.Sprintf(`{"mode":%q,"source":"legacy@abcdef123456"}`, RuntimeLegacy),
+	}
+	if withPackage {
+		files[filepath.Join("Core", "GIMI", "main.ini")] = "global $version = 1.23\n"
+	}
+	for name, content := range files {
+		path := filepath.Join(folder, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestLaunchRequiresImporterPackageWhenFollowingLatest(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.Mode, cfg.GameLaunch = true, RuntimeLegacy, "Manual"
+	cfg.Migoto.UnsafeMode = true
+	if cfg.PackageVersion.Pinned != "" {
+		t.Fatalf("default package pin = %q; want the latest followed", cfg.PackageVersion.Pinned)
+	}
+	writeLegacyLaunchFixture(t, cfg.ImporterFolder, false)
+
+	service := New()
+	service.UseClient(newXXMITestClient(t))
+	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
+	settings := fakeLaunch{dcr: true}
+	service.launchSettings = &settings
+	err = service.launchBuiltinGameLocked(t.Context(), "GIMI", cfg, LaunchOptions{}, nil)
+	if err == nil || !strings.Contains(err.Error(), "XXMI_IMPORTER_NOT_INSTALLED") {
+		t.Fatalf("launch error = %v; want XXMI_IMPORTER_NOT_INSTALLED", err)
+	}
+	if settings.dcrDisabled != 0 || settings.dcrReads != 0 || settings.smoothReads != 0 {
+		t.Fatalf("host settings were changed before the package check: %+v", settings)
+	}
+}
+
 func TestLaunchWithoutGameFolder(t *testing.T) {
 	t.Parallel()
 	registryMissing := fmt.Errorf("%w: genshin impact registry key is not found", errGimiDCRUnreadable)
@@ -559,19 +608,7 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 				if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
 					t.Fatal(err)
 				}
-				manifest := fmt.Sprintf(`{"mode":%q,"source":"legacy@abcdef123456"}`, RuntimeLegacy)
-				for name, content := range map[string]string{
-					"d3dx.ini": "[Loader]\n", runtimeManifestName: manifest, "d3d11.dll": "dll",
-					"3DMigoto Loader.exe": "loader",
-				} {
-					if err := os.WriteFile(
-						filepath.Join(cfg.ImporterFolder, name),
-						[]byte(content),
-						0o600,
-					); err != nil {
-						t.Fatal(err)
-					}
-				}
+				writeLegacyLaunchFixture(t, cfg.ImporterFolder, true)
 				client := newXXMITestClient(t)
 				if state.guardOff {
 					off := "false"

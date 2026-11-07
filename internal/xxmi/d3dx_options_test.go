@@ -425,3 +425,54 @@ func TestINIOptionDropsTrailingComment(t *testing.T) {
 		t.Error("missing option reported as set")
 	}
 }
+
+func TestUpdateLaunchINIRestoresImporterPackageInclude(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	// The provider ships one d3dx.ini for every importer, without the include that loads the package. The reported
+	// file had the provider's [Include] word for word.
+	provider := "; head\n[Include]\n; include notes\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n" +
+		"\n; system\n[System]\nkeep = 1\n"
+	commented := "[Include]\n;include = Core/EFMI/main.ini\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n"
+	for _, tc := range []struct {
+		name, previous, want string
+		provider             []byte
+	}{
+		{name: "rebuilt", previous: provider, provider: []byte(provider), want: "include = Core\\EFMI\\main.ini\n"},
+		{name: "edited in place", previous: provider, want: "include = Core\\EFMI\\main.ini\n"},
+		{name: "commented out", previous: commented, provider: []byte(provider), want: ";include = Core/EFMI/main.ini\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			folder := t.TempDir()
+			path := filepath.Join(folder, "d3dx.ini")
+			if err := os.WriteFile(path, []byte(tc.previous), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			// The base a launch before this fix stored.
+			if tc.provider != nil {
+				if err := storeINIBase(t.Context(), folder, tc.provider); err != nil {
+					t.Fatal(err)
+				}
+			}
+			service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+			cfg := ImporterConfig{
+				ImporterFolder: folder,
+				Mode:           RuntimeXXMI,
+				Migoto:         MigotoOptions{LogLevel: "Disabled"},
+			}
+			for launch := range 2 {
+				if err := service.updateLaunchINI(t.Context(), "EFMI", cfg, "Endfield.exe", tc.provider); err != nil {
+					t.Fatal(err)
+				}
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := string(data)
+				if !strings.Contains(got, tc.want) ||
+					strings.Count(got, "EFMI\\main.ini")+strings.Count(got, "EFMI/main.ini") != 1 {
+					t.Fatalf("launch %d wrote %q; want one %q", launch+1, got, tc.want)
+				}
+			}
+		})
+	}
+}

@@ -220,6 +220,13 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 
 	progress("launch-guard")
+	// An importer that follows the latest package passes the pin check without one, and 3DMigoto then loads the
+	// mods without the package they depend on. Checked after the auto-update, which may have installed it.
+	if migotoDLLUsed {
+		if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, packageSpec.versionFile)); err != nil {
+			return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
+		}
+	}
 	guards, err := x.launchGuards(ctx)
 	if err != nil {
 		return err

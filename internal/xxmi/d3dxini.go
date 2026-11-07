@@ -349,7 +349,7 @@ func withoutTemplateLines(previous, base *iniDocument) (filtered *iniDocument, i
 		}
 		if iniVerbatimSection(block.name) {
 			if _, ok := commands[key]; !ok {
-				commands[key] = iniCommands(block.body)
+				commands[key] = iniCommands(block.name, block.body)
 			}
 			continue
 		}
@@ -401,7 +401,7 @@ func withoutTemplateLines(previous, base *iniDocument) (filtered *iniDocument, i
 			seen[key] = true
 			if first {
 				baseCommands, ok := commands[key]
-				matched[key] = ok && baseCommands == iniCommands(previous.lines[start+1:end])
+				matched[key] = ok && baseCommands == iniCommands(name, previous.lines[start+1:end])
 			}
 			for index := start; matched[key] && index < end; index++ {
 				line := strings.TrimSpace(previous.lines[index])
@@ -460,13 +460,23 @@ func iniOptionState(line string) (state, comment string, ok bool) {
 	return state, strings.TrimSpace(comment), true
 }
 
-// iniCommands returns the lines of a section body that are neither blank nor comments.
-func iniCommands(body []string) string {
+// iniCommands returns the lines of a section body that are neither blank nor comments. In [Include] a commented-out
+// include counts too: it turns off one the template may set, so a body that has it is not the template's.
+func iniCommands(section string, body []string) string {
+	include := strings.EqualFold(section, "include")
 	var commands []string
 	for _, line := range body {
-		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, ";") {
-			commands = append(commands, line)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
+		if strings.HasPrefix(line, ";") {
+			match := iniOptionPattern.FindStringSubmatch(strings.TrimLeft(line, " \t;#"))
+			if !include || len(match) == 0 || !strings.EqualFold(match[2], "include") {
+				continue
+			}
+		}
+		commands = append(commands, line)
 	}
 	return strings.Join(commands, "\n")
 }
