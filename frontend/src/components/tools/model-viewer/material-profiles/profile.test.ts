@@ -64,7 +64,7 @@ describe("toon material inputs", () => {
     });
 
     it("loads GIMI metal data without sRGB conversion", async () => {
-        const texture = new Texture();
+        const texture = new Texture<HTMLImageElement>();
         const load = vi.spyOn(TextureLoader.prototype, "loadAsync").mockResolvedValue(texture);
         const loader = gimiMaterialProfile.toon!.createResourceLoader!();
         try {

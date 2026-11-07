@@ -51,6 +51,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: [
                 {
                     id: "animation",
@@ -110,6 +112,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: null,
         };
@@ -129,6 +133,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: null,
         } satisfies WailsModelViewerTransport;
@@ -164,6 +170,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: null,
         } satisfies Omit<WailsModelViewerTransport, "textures">;
@@ -223,6 +231,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: [
                 {
@@ -264,6 +274,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: [deformer],
         } satisfies WailsModelViewerTransport;
@@ -292,6 +304,8 @@ describe("normalizeModelViewerTransport", () => {
                 defaultState: null,
                 stateRules: null,
                 uiAssets: {},
+                forms: null,
+                inis: null,
                 animations: null,
                 computeDeformers: [
                     {
@@ -339,6 +353,8 @@ describe("normalizeModelViewerTransport", () => {
             defaultState: null,
             stateRules: null,
             uiAssets: {},
+            forms: null,
+            inis: null,
             animations: null,
             computeDeformers: [
                 {

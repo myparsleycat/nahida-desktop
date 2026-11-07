@@ -28,7 +28,9 @@ afterEach(() => {
 describe("touch settings batch", () => {
     it("trailing-debounces and coalesces each zone to its latest settings", async () => {
         vi.useFakeTimers();
-        const save = vi.fn(async () => ({ previewChanged: true }));
+        const save = vi
+            .fn<(changes: TouchZoneSettingsChange[]) => Promise<{ previewChanged: boolean }>>()
+            .mockResolvedValue({ previewChanged: true });
         const preview = vi.fn();
         const batch = createTouchSettingsBatch({
             debounceMs: 120,

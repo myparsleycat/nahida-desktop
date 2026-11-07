@@ -80,6 +80,8 @@ function payload(memorySessionId: string): ModelViewerTransport {
     defaultState: {},
     stateRules: [],
     uiAssets: {},
+    forms: [],
+    inis: [],
     animations: [],
     computeDeformers: [],
   };
@@ -108,7 +110,7 @@ function pasteDialog(actions: { overlays: ReactNode }) {
   if (!isValidElement<ComponentProps<typeof AlertDialog>>(dialog)) {
     throw new Error("Missing paste preview dialog");
   }
-  return { ...dialog.props, imageSrc: findImageSrc(dialog.props.children) };
+  return { ...dialog.props, imageSrc: findImageSrc(dialog.props.children as ReactNode) };
 }
 
 function findImageSrc(node: ReactNode): string | undefined {

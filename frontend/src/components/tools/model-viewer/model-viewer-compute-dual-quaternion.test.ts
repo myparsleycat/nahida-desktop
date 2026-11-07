@@ -84,7 +84,12 @@ describe("packed dual-quaternion kernel", () => {
     it("skins EFMI records through the shader's axes after applying shape passes", () => {
         const pose = [2, 3, 4, 5, 6, 7, 0, 0, 0, 1, 1, 2, 3, 0];
         const { deformer, buffers } = fixture([...pose, ...pose]);
-        const source = { url: "/base", byteLength: 28, stride: 28, encoding: "packed_f32_v1" };
+        const source = {
+            url: "/base",
+            byteLength: 28,
+            stride: 28,
+            encoding: "packed_f32_v1" as const,
+        };
         deformer.base = source;
         deformer.pose!.dualQuaternionVariant = "efmi_typed";
         buffers.base = new Float32Array([1, 2, 3, 1, 0, 0, 1]).buffer;

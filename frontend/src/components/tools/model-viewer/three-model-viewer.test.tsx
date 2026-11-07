@@ -70,8 +70,8 @@ const three = {
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
-  onmessage: Worker["onmessage"] = null;
-  onerror: Worker["onerror"] = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
   messages: Array<{ type: string; generation: number; poseFrame?: number }> = [];
   terminate = vi.fn();
 
@@ -112,6 +112,8 @@ const transport: ModViewerTransport = {
   defaultState: {},
   stateRules: [],
   uiAssets: {},
+  forms: [],
+  inis: [],
   animations: [],
   computeDeformers: ["first", "second"].map((id) => ({
     id,

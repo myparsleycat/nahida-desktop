@@ -25,12 +25,19 @@ it("keeps folder-shared meshes visible in an INI form without showing sibling fo
         ].map((form) => ({
             id: form || "shared",
             form,
+            conditions: [[]],
             texKey: null,
+            textureVariants: [],
             normalMapKey: null,
+            normalMapVariants: [],
             lightMapKey: null,
+            lightMapVariants: [],
             materialMapKey: null,
+            materialMapVariants: [],
             cutoutMapKey: null,
+            cutoutMapVariants: [],
             shapeTargets: [],
+            positionVariants: [],
         })),
     };
 

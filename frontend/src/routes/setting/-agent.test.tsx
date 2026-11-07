@@ -64,6 +64,7 @@ const view: AgentSettingsView = {
   maxOutputTokens: 4096,
   reasoning: "auto",
   supportsImages: false,
+  autoRunScripts: false,
   credential: { kind: "api" },
   headers: [
     { name: "X-Title", value: "Nahida Desktop", secret: false, configured: true },
@@ -632,7 +633,7 @@ it("signs out of the ChatGPT account", async () => {
     credential: { kind: "oauth", accountLabel: "user@example.com" },
   });
   vi.mocked(Agent.SignOutProvider).mockResolvedValue({
-    ...(catalogView.providers?.[0] as never),
+    ...catalogView.providers![0],
     credential: { kind: "none" },
   });
   vi.mocked(Agent.ListProviders).mockResolvedValue(

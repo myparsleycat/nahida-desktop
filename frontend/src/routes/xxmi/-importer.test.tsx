@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { type ImporterConfig, RuntimeMode } from "@bindings/xxmi/models";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -32,14 +33,16 @@ const packageVerification = vi.hoisted(() => ({
   data: null as { version: string; method: string } | null,
 }));
 
-const config = {
+const config: ImporterConfig = {
+  schemaVersion: 0,
   enabled: true,
   importerFolder: "C:\\XXMI\\GIMI",
   gameFolder: "",
-  mode: "xxmi",
+  mode: RuntimeMode.RuntimeXXMI,
   packageVersion: { follow: "latest" },
   xxmiVersion: { follow: "latest" },
   customDll: "",
+  libsProvider: "",
   legacyRuntime: "",
   overwriteINI: true,
   useLaunchOptions: false,
@@ -51,10 +54,16 @@ const config = {
   skipPlatformGameLauncher: true,
   xxmiDLLInjectMode: "Hook",
   processStartMethod: "Native",
+  injectionMethod: "Default",
   processPriority: "Normal",
   xxmiDLLInitDelay: 0,
   windowMode: "Borderless",
   configureGame: false,
+  autoUpdateModRuntimes: false,
+  launchCount: 0,
+  woundedFXDecided: false,
+  d3d11ModeNoticeShown: false,
+  skipD3D11Switch: false,
   gimi: null,
   srmi: null,
   himi: null,
@@ -378,7 +387,7 @@ it("lets an importer whose game folder no longer holds the game be disabled and 
 
 afterEach(() => {
   cleanup();
-  config.mode = "xxmi";
+  config.mode = RuntimeMode.RuntimeXXMI;
   config.gameFolder = "";
   config.packageVersion = { follow: "latest" };
   overview.sharedLibsProvider = "spectrumqt";
@@ -473,7 +482,7 @@ it("follows the latest release again when the pinned version's provider changes"
 });
 
 it("pins a legacy importer's XXMI version to the signed libraries under a shared provider", async () => {
-  config.mode = "legacy";
+  config.mode = RuntimeMode.RuntimeLegacy;
   overview.sharedLibsProvider = "myparsleycat";
   xxmi.SaveImporterConfig.mockResolvedValue(undefined);
   xxmi.EnsureLibsVersion.mockResolvedValue(undefined);
@@ -605,7 +614,7 @@ it("keeps a version that alone follows the shared settings until it is changed",
 });
 
 it("explains the legacy runtime's XXMI version and hides it for the native injector", () => {
-  config.mode = "legacy";
+  config.mode = RuntimeMode.RuntimeLegacy;
 
   try {
     const view = render(<XXMIImporterSettings importer="GIMI" />);
@@ -799,6 +808,9 @@ it("keeps Configure game settings for WWMI, whose game-side options are optional
     unlockFPS: false,
     forceMaxLODBias: false,
     disableWoundedFX: false,
+    meshLODDistanceBaseFOV: 0,
+    resourceTier: "HD",
+    resourceTierDecided: false,
   };
 
   try {

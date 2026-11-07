@@ -4,6 +4,7 @@ import { Updater } from "@bindings/infra";
 import { globalStore } from "@renderer/store/global";
 import type { UpdaterStatus } from "@shared/updater";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { CancellablePromise } from "@wailsio/runtime";
 import { Suspense, type ComponentType } from "react";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
@@ -74,7 +75,7 @@ async function clickCheck() {
 it.each(["success", "failure"])(
   "waits for a stale candidate refresh to settle with %s",
   async (outcome) => {
-    const check = Promise.withResolvers<void>();
+    const check = CancellablePromise.withResolvers<void>();
     vi.mocked(Updater.CheckForUpdates).mockReturnValue(check.promise);
     const { result } = await clickCheck();
     const settled = vi.fn();
@@ -100,7 +101,7 @@ it.each(["success", "failure"])(
 );
 
 it("reports a confirmed release without waiting for the automatic download", async () => {
-  const check = Promise.withResolvers<void>();
+  const check = CancellablePromise.withResolvers<void>();
   vi.mocked(Updater.CheckForUpdates).mockReturnValue(check.promise);
   const { result } = await clickCheck();
   await act(async () => {

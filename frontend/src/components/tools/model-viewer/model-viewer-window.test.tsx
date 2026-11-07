@@ -30,6 +30,8 @@ const payload = (memorySessionId: string): ModelViewerTransport => ({
   defaultState: {},
   stateRules: [],
   uiAssets: {},
+  forms: [],
+  inis: [],
   animations: [],
   computeDeformers: [],
 });

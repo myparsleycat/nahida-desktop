@@ -52,6 +52,7 @@ const agentSettings: AgentSettingsView = {
   maxOutputTokens: 4096,
   reasoning: "auto",
   supportsImages: false,
+  autoRunScripts: false,
   credential: { kind: "none" },
 };
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { Tools } from "@bindings/tools";
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { CancellablePromise } from "@wailsio/runtime";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -22,17 +23,10 @@ afterEach(() => {
 function pending() {
     type Result = Awaited<ReturnType<typeof Tools.GetModelViewerIneffectiveValues>>;
     let resolve!: (result: Result) => void;
-    const promise = new Promise<Result>((done) => {
+    const promise = new CancellablePromise<Result>((done) => {
         resolve = done;
     });
-    const cancel = vi.fn(async () => {});
-    return {
-        resolve,
-        cancel,
-        promise: Object.assign(promise, { cancel }) as ReturnType<
-            typeof Tools.GetModelViewerIneffectiveValues
-        >,
-    };
+    return { resolve, cancel: vi.spyOn(promise, "cancel"), promise };
 }
 
 function settle() {

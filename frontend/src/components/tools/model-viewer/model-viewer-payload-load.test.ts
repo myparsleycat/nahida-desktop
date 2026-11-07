@@ -4,6 +4,7 @@ import { fetchBinaryBytes, fetchFloat32 } from "@renderer/wails/binary-memory";
 import type { ModViewerTransport, ViewerMeshTransport } from "@shared/mod-viewer/types";
 import {
     BufferGeometry,
+    CompressedTexture,
     Mesh,
     MeshStandardMaterial,
     Texture,
@@ -79,6 +80,8 @@ function transport(meshes: ViewerMeshTransport[]): ModViewerTransport {
         defaultState: {},
         stateRules: [],
         uiAssets: {},
+        forms: [],
+        inis: [],
         animations: [],
         computeDeformers: [],
     };
@@ -161,6 +164,8 @@ it("preserves backend normals and bounds through initial load and variant restor
         defaultState: {},
         stateRules: [],
         uiAssets: {},
+        forms: [],
+        inis: [],
         animations: [],
         computeDeformers: [],
     };
@@ -366,7 +371,7 @@ it("loads a supported DDS as a GPU compressed texture", async () => {
         { maxTextureSize: 8192, s3tc: true, s3tcSRGB: true, rgtc: true, bptc: true },
     );
     const texture = (root.userData.payloadTextures as Map<string, Texture>).get("body");
-    expect(texture?.isCompressedTexture).toBe(true);
+    expect(texture).toBeInstanceOf(CompressedTexture);
     expect(texture?.colorSpace).toBe(SRGBColorSpace);
     expect(texture?.userData.modelViewerDDS).toEqual({ format: "bc1-unorm", direct: true });
     texture?.updateMatrix();
@@ -436,8 +441,8 @@ it("deduplicates texture transfers and preserves texture decoding settings", asy
     vi.stubGlobal("fetch", fetchTexture);
     const input = transport([mesh("mesh")]);
     input.textures = {
-        first: { url: "image", role: "diffuse" },
-        second: { url: "image", role: "diffuse" },
+        first: { url: "image", role: "diffuse", encoding: "image" },
+        second: { url: "image", role: "diffuse", encoding: "image" },
     };
     const root = await buildPayloadModel(input, { state: {}, meshes: [] }, true, { load: vi.fn() });
     const textures = root.userData.payloadTextures as Map<string, Texture>;
@@ -468,7 +473,10 @@ it("cancels pending texture transfers and leaves queued textures unrequested", a
     vi.stubGlobal("fetch", fetchTexture);
     const input = transport([mesh("mesh")]);
     input.textures = Object.fromEntries(
-        Array.from({ length: 20 }, (_, i) => [String(i), { url: String(i), role: "diffuse" }]),
+        Array.from({ length: 20 }, (_, i) => [
+            String(i),
+            { url: String(i), role: "diffuse" as const, encoding: "image" as const },
+        ]),
     );
     const pending = buildPayloadModel(
         input,
@@ -505,7 +513,7 @@ it("closes an image decoded after cancellation", async () => {
     );
     const controller = new AbortController();
     const input = transport([mesh("mesh")]);
-    input.textures = { image: { url: "image", role: "diffuse" } };
+    input.textures = { image: { url: "image", role: "diffuse", encoding: "image" } };
     const pending = buildPayloadModel(
         input,
         { state: {}, meshes: [] },
@@ -525,7 +533,7 @@ it("closes an image decoded after cancellation", async () => {
 it("keeps the existing fallback when an optional texture cannot be loaded", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
     const input = transport([mesh("mesh")]);
-    input.textures = { missing: { url: "missing", role: "diffuse" } };
+    input.textures = { missing: { url: "missing", role: "diffuse", encoding: "image" } };
     const root = await buildPayloadModel(input, { state: {}, meshes: [] }, true, { load: vi.fn() });
     expect(root.children).toHaveLength(1);
     expect(root.userData.payloadTextures.size).toBe(0);

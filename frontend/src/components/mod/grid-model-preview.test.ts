@@ -458,6 +458,8 @@ function makeTransport(variables: ViewerVariable[]): ModViewerTransport {
         defaultState: {},
         stateRules: [],
         uiAssets: {},
+        forms: [],
+        inis: [],
         animations: [],
         computeDeformers: [],
     };
@@ -497,6 +499,8 @@ function rawTransport(sessionId: string) {
         defaultState: {},
         stateRules: [],
         uiAssets: {},
+        forms: [],
+        inis: [],
         animations: [],
         computeDeformers: [],
     } as Awaited<ReturnType<typeof Tools.LoadModGridPreview>>;

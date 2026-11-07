@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { XXMI } from "@bindings/xxmi";
-import { LauncherMode, RuntimeXXMI, type Overview } from "@bindings/xxmi/models";
+import { LauncherMode, RuntimeMode, type Overview } from "@bindings/xxmi/models";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { act, cleanup, render, screen } from "@testing-library/react";
@@ -56,10 +56,14 @@ beforeEach(() => {
     configured: true,
     root: "C:\\XXMI",
     sharedLibsVersion: "",
+    sharedCustomDll: "",
+    sharedLibsProvider: "",
+    libsProviders: [],
+    customDlls: [],
     importers: [
       {
         key: "GIMI",
-        mode: RuntimeXXMI,
+        mode: RuntimeMode.RuntimeXXMI,
         importerFolder: "C:\\XXMI\\GIMI",
         gameFolder: "C:\\Games\\Genshin Impact",
         running: true,

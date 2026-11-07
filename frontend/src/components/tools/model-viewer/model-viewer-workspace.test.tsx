@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { useImperativeHandle, type ComponentProps, type ReactElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import type { GIMIToonStyle } from "./material-profiles/gimi";
 import type { ModelViewerToonMenu } from "./material-profiles/profile-ui";
 
 import { useModelViewerAnimationClock } from "./model-viewer-animation-clock";
@@ -78,6 +79,7 @@ const payload: ModelViewerTransport = {
   defaultState: { outfit: 1 },
   stateRules: [],
   uiAssets: {},
+  forms: [],
   computeDeformers: [],
   animations: [
     {
@@ -100,6 +102,7 @@ beforeEach(() => {
   vi.mocked(Tools.CleanupModelViewer).mockResolvedValue(true);
   vi.mocked(Tools.PersistModelViewerToggleState).mockResolvedValue({
     updatedVariables: ["outfit"],
+    repairedVariables: [],
   });
   vi.mocked(Mod.PastePreview).mockResolvedValue("C:/mod/preview.png");
 });
@@ -236,14 +239,18 @@ it("lists the toon asset folder and saves only the edited profile's style", asyn
   const toonMenu = vi.mocked(ModelViewerMenuBar).mock.lastCall![0].toonMenu as ReactElement<
     ComponentProps<typeof ModelViewerToonMenu>
   >;
-  act(() => toonMenu.props.onStyleChange({ ...toonMenu.props.style, ramp: "Avatar_Loli_Ramp" }));
+  const style: GIMIToonStyle = {
+    ...(toonMenu.props.style as GIMIToonStyle),
+    ramp: "Avatar_Loli_Ramp",
+  };
+  act(() => toonMenu.props.onStyleChange(style));
   const toonWrites = () =>
     vi.mocked(setSetting).mock.calls.filter(([key]) => key === "modelViewer.toonStyles");
   await waitFor(() => expect(toonWrites()).toHaveLength(1));
   const written = JSON.parse(toonWrites()[0][1] as string);
   expect(written.efmi.outlines).toBe(false);
   expect(written.gimi).toMatchObject({ ramp: "Avatar_Loli_Ramp", assetDir: "D:/Genshin" });
-  vi.mocked(getSetting).mockImplementation((async () => undefined) as typeof getSetting);
+  vi.mocked(getSetting).mockReset();
 });
 
 it("preserves double-sided rendering when the dialog body unmounts and reopens", async () => {
@@ -660,7 +667,7 @@ it("keeps an overlay menu in the side column when the user turned the viewer dis
     />,
   );
   await waitFor(() => expect(screen.getByRole("separator")).toBeTruthy());
-  vi.mocked(getSetting).mockImplementation((async () => undefined) as typeof getSetting);
+  vi.mocked(getSetting).mockReset();
 });
 
 function createOverlaySource() {

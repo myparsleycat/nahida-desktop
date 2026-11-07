@@ -4,6 +4,7 @@ import { XXMI } from "@bindings/xxmi";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { QueryClient, QueryClientProvider, useQueries, useQuery } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { CancellablePromise } from "@wailsio/runtime";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -17,7 +18,8 @@ vi.mock("@bindings/xxmi", () => ({ XXMI: { ListReleases: vi.fn() } }));
 vi.mock("@renderer/lib/logger", () => ({ Logger: { capture: vi.fn() } }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: events.i18n }) }));
-vi.mock("@wailsio/runtime", () => ({
+vi.mock("@wailsio/runtime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@wailsio/runtime")>()),
   Events: {
     On: (name: string, listener: (event: { data: unknown }) => void) => {
       events.listeners.set(name, listener);
@@ -54,15 +56,17 @@ function useReleaseLists() {
 beforeEach(() => {
   includePrereleases = false;
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  vi.mocked(XXMI.ListReleases).mockImplementation(async () =>
-    (includePrereleases ? ["2.0.0-beta", "1.0.0"] : ["1.0.0"]).map((version) => ({
-      version,
-      tag: `v${version}`,
-      publishedAt: "2026-10-04T00:00:00Z",
-      prerelease: version.includes("beta"),
-      signed: true,
-      notes: "",
-    })),
+  vi.mocked(XXMI.ListReleases).mockImplementation(() =>
+    CancellablePromise.resolve(
+      (includePrereleases ? ["2.0.0-beta", "1.0.0"] : ["1.0.0"]).map((version) => ({
+        version,
+        tag: `v${version}`,
+        publishedAt: "2026-10-04T00:00:00Z",
+        prerelease: version.includes("beta"),
+        signed: true,
+        notes: "",
+      })),
+    ),
   );
 });
 

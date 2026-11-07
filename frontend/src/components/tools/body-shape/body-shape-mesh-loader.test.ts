@@ -8,8 +8,8 @@ import type {
 import { BodyShapeMeshWorkerClient } from "./body-shape-mesh-loader";
 
 class FakeWorker {
-    onmessage: Worker["onmessage"] = null;
-    onerror: Worker["onerror"] = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: ((event: ErrorEvent) => void) | null = null;
     messages: unknown[] = [];
     terminate = vi.fn();
 

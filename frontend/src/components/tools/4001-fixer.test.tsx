@@ -3,6 +3,7 @@
 import { Tools } from "@bindings/tools";
 import { type LauncherMode, XXMI } from "@bindings/xxmi";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { CancellablePromise } from "@wailsio/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import FourThousandOneFixer from "./4001-fixer";
@@ -19,7 +20,10 @@ vi.mock("@renderer/components/tools/4001-fixer-build-tools-path", () => ({
   FourThousandOneFixerBuildToolsPath: () => null,
 }));
 vi.mock("@renderer/lib/logger", () => ({ Logger: { capture: vi.fn() } }));
-vi.mock("@wailsio/runtime", () => ({ Events: { On: () => vi.fn() } }));
+vi.mock("@wailsio/runtime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@wailsio/runtime")>()),
+  Events: { On: () => vi.fn() },
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 beforeEach(() => {
@@ -61,7 +65,7 @@ describe("4001 Fixer release loading", () => {
     let resolveReleases!: (releases: string[]) => void;
     vi.mocked(Tools.FourThousandOneFixerGetProviderReleases).mockImplementation(
       () =>
-        new Promise((resolve) => {
+        new CancellablePromise((resolve) => {
           resolveReleases = resolve;
         }),
     );

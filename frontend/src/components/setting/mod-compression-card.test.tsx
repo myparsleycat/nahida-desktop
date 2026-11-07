@@ -3,6 +3,7 @@
 import { Mod, type CompressionState } from "@bindings/mod";
 import { TooltipProvider } from "@renderer/components/ui/tooltip";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { CancellablePromise } from "@wailsio/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let currentState: CompressionState;
@@ -131,7 +132,7 @@ describe("ModCompressionCard", () => {
       canToggle: true,
       canConfigure: false,
     });
-    vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new Promise(() => {}));
+    vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new CancellablePromise(() => {}));
     renderCard();
 
     const toggle = screen.getByRole("switch");
@@ -160,7 +161,7 @@ describe("ModCompressionCard", () => {
 
   it("locks immediately and suppresses duplicate toggle requests", () => {
     currentState = state();
-    vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new Promise(() => {}));
+    vi.mocked(Mod.SetCompressionEnabled).mockReturnValue(new CancellablePromise(() => {}));
     renderCard();
 
     const toggle = screen.getByRole("switch");

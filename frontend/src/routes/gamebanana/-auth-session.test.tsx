@@ -67,17 +67,15 @@ async function renderRoute() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  let view: ReturnType<typeof render> | undefined;
   await act(async () => {
-    view = render(
+    render(
       <Suspense fallback={null}>
         <Component />
       </Suspense>,
       { wrapper },
     );
   });
-  if (!view) throw new Error("Route failed to mount");
-  return { view, invalidateQueries };
+  return { invalidateQueries };
 }
 
 async function renderLoadedRoute() {

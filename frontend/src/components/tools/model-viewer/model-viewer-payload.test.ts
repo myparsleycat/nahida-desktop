@@ -16,7 +16,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { ModelViewerPositionGeometry } from "./model-viewer-position-codec";
 import type { PositionVariantLoader } from "./model-viewer-position-loader";
 
-import { DEFAULT_EFMI_TOON_STYLE, markEFMIHeadMeshes } from "./material-profiles/efmi";
+import {
+    DEFAULT_EFMI_TOON_STYLE,
+    type EFMIToonStyle,
+    markEFMIHeadMeshes,
+} from "./material-profiles/efmi";
 import { DEFAULT_GIMI_TOON_STYLE } from "./material-profiles/gimi";
 import {
     modelViewerToonStyleOf,
@@ -1038,7 +1042,8 @@ describe("applyPayloadEval packed maps", () => {
         expect(state.face.value).toBe(0);
 
         apply(null);
-        setPayloadToonStyle(root, { ...DEFAULT_EFMI_TOON_STYLE, flatFace: false });
+        const roundFace: EFMIToonStyle = { ...DEFAULT_EFMI_TOON_STYLE, flatFace: false };
+        setPayloadToonStyle(root, roundFace);
         expect(state.face.value).toBe(0);
     });
 

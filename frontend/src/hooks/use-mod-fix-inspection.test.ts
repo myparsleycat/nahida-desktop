@@ -5,6 +5,7 @@ import { Logger } from "@renderer/lib/logger";
 import { modStore } from "@renderer/store/mod";
 import { titlebarActivityStore } from "@renderer/store/titlebar-activity";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { Wrench } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -113,7 +114,7 @@ describe("syncFixInspectionActivities", () => {
             id: "unrelated",
             label: "Unrelated",
             status: "running",
-            icon: () => null,
+            icon: Wrench,
         });
 
         syncFixInspectionActivities(

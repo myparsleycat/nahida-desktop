@@ -27,7 +27,7 @@ describe("model viewer scrub playback", () => {
         expect(event.currentTarget.setPointerCapture).toHaveBeenCalledWith(1);
 
         rerender({ playing: false });
-        result.current.onPointerUp(event);
+        result.current.onPointerUp();
         expect(setPlaying).toHaveBeenLastCalledWith(true);
     });
 
@@ -38,7 +38,7 @@ describe("model viewer scrub playback", () => {
         );
 
         result.current.onPointerDown(createPointerEvent());
-        result.current.onPointerUp(createPointerEvent());
+        result.current.onPointerUp();
         expect(setPlaying).not.toHaveBeenCalledWith(true);
     });
 
@@ -49,8 +49,8 @@ describe("model viewer scrub playback", () => {
         );
 
         result.current.onPointerDown(createPointerEvent());
-        result.current.onLostPointerCapture(createPointerEvent());
-        result.current.onPointerUp(createPointerEvent());
+        result.current.onLostPointerCapture();
+        result.current.onPointerUp();
         expect(setPlaying).toHaveBeenLastCalledWith(true);
         expect(setPlaying).toHaveBeenCalledTimes(2);
     });
@@ -63,7 +63,7 @@ describe("model viewer scrub playback", () => {
         );
 
         result.current.onPointerDown({ ...event, button: 2 } as PointerEvent<HTMLInputElement>);
-        result.current.onPointerUp(event);
+        result.current.onPointerUp();
         expect(setPlaying).not.toHaveBeenCalled();
     });
 });
