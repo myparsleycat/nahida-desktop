@@ -233,7 +233,6 @@ export function ModPreviewContainer({
         <PreviewLightbox
           open={lightboxOpen}
           onOpenChange={setLightboxOpen}
-          thumbnailSrc={localFileSrc(mod.preview, { cacheKey: mod.mtime })}
           fullSrc={localFileSrc(mod.preview, { orig: true, cacheKey: mod.mtime })}
           isVideo={isPreviewVideoPath(mod.preview)}
           alt={mod.name}

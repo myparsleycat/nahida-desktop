@@ -1,23 +1,37 @@
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Button } from "@renderer/components/ui/button";
-import { XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { cn } from "@renderer/lib/utils";
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-interface PreviewLightboxProps {
-  thumbnailSrc: string;
+interface PreviewLightboxGallery {
+  index: number;
+  count: number;
+  onIndexChange: (index: number) => void;
+}
+
+interface PreviewLightboxBaseProps {
   fullSrc: string;
   isVideo: boolean;
   alt?: string;
-  className?: string;
-  open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  gallery?: PreviewLightboxGallery;
 }
 
+type PreviewLightboxProps = PreviewLightboxBaseProps &
+  (
+    | { open?: undefined; thumbnailSrc: string; className?: string }
+    | { open: boolean; thumbnailSrc?: never; className?: never }
+  );
+
 export function PreviewLightbox(props: PreviewLightboxProps) {
+  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = props.open !== undefined;
 
   const open = isControlled ? props.open : internalOpen;
+  const gallery = props.gallery && props.gallery.count > 1 ? props.gallery : undefined;
 
   const change = (next: boolean) => {
     if (!isControlled) {
@@ -26,14 +40,10 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
     props.onOpenChange?.(next);
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") change(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, isControlled, props.onOpenChange]);
+  const step = (direction: -1 | 1) => {
+    if (!gallery) return;
+    gallery.onIndexChange((gallery.index + direction + gallery.count) % gallery.count);
+  };
 
   return (
     <>
@@ -66,19 +76,28 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
         </div>
       )}
 
-      {open &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-100 flex animate-in items-center justify-center bg-black/80 backdrop-blur-sm fade-in-0"
+      <DialogPrimitive.Root open={open} onOpenChange={(next) => change(next)}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Popup
+            aria-label={props.alt}
+            finalFocus={false}
+            className="fixed inset-0 z-100 flex animate-in items-center justify-center bg-black/80 backdrop-blur-sm fade-in-0 outline-none"
             onClick={(e) => {
               e.stopPropagation();
               change(false);
             }}
             onContextMenu={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (gallery && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+                e.preventDefault();
+                step(e.key === "ArrowLeft" ? -1 : 1);
+              }
+            }}
           >
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("g.close")}
               className="absolute top-10 right-4 text-white hover:bg-white/20 hover:text-white"
               onClick={(e) => {
                 e.stopPropagation();
@@ -87,6 +106,30 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
             >
               <XIcon className="size-6" />
             </Button>
+
+            {gallery &&
+              ([-1, 1] as const).map((direction) => (
+                <Button
+                  key={direction}
+                  variant="ghost"
+                  size="icon"
+                  aria-label={direction === -1 ? t("g.previous") : t("g.next")}
+                  className={cn(
+                    "absolute text-white hover:bg-white/20 hover:text-white",
+                    direction === -1 ? "left-4" : "right-4",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    step(direction);
+                  }}
+                >
+                  {direction === -1 ? (
+                    <ChevronLeftIcon className="size-6" />
+                  ) : (
+                    <ChevronRightIcon className="size-6" />
+                  )}
+                </Button>
+              ))}
 
             <div
               className="relative flex h-[80vh] w-[80vw] cursor-zoom-out items-center justify-center"
@@ -114,9 +157,15 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
                 />
               )}
             </div>
-          </div>,
-          document.body,
-        )}
+
+            {gallery && (
+              <div className="absolute bottom-6 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+                {gallery.index + 1} / {gallery.count}
+              </div>
+            )}
+          </DialogPrimitive.Popup>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </>
   );
 }

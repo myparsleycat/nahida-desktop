@@ -2,6 +2,7 @@ import { GameBanana } from "@bindings/gamebanana";
 import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/avatar";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
+import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
   Section,
@@ -30,17 +31,8 @@ import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  HeartIcon,
-  ImageIcon,
-  Loader2Icon,
-  MessageSquareIcon,
-  XIcon,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { HeartIcon, ImageIcon, Loader2Icon, MessageSquareIcon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
@@ -49,116 +41,6 @@ import { signInGameBanana } from "../-shared/auth-error";
 import { ErrorState } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
-
-function SubmissionPreviewLightbox({
-  previews,
-  previewIndex,
-  preview,
-  open,
-  onOpenChange,
-  onPreviewIndexChange,
-}: {
-  previews: { fullUrl: string; alt: string }[];
-  previewIndex: number | null;
-  preview: { fullUrl: string; alt: string } | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onPreviewIndexChange: (index: number) => void;
-}) {
-  const canNavigate = previews.length > 1 && previewIndex !== null;
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onOpenChange(false);
-      }
-      if (event.key === "ArrowLeft" && canNavigate && previewIndex !== null) {
-        event.preventDefault();
-        onPreviewIndexChange((previewIndex - 1 + previews.length) % previews.length);
-      }
-      if (event.key === "ArrowRight" && canNavigate && previewIndex !== null) {
-        event.preventDefault();
-        onPreviewIndexChange((previewIndex + 1) % previews.length);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [canNavigate, onOpenChange, onPreviewIndexChange, open, previewIndex, previews.length]);
-
-  if (!open || !preview) {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={() => onOpenChange(false)}
-      onContextMenu={(event) => event.stopPropagation()}
-    >
-      {canNavigate && previewIndex !== null && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute left-4 text-white hover:bg-white/20 hover:text-white"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPreviewIndexChange((previewIndex - 1 + previews.length) % previews.length);
-          }}
-        >
-          <ChevronLeftIcon className="size-6" />
-        </Button>
-      )}
-
-      {canNavigate && previewIndex !== null && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-16 text-white hover:bg-white/20 hover:text-white"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPreviewIndexChange((previewIndex + 1) % previews.length);
-          }}
-        >
-          <ChevronRightIcon className="size-6" />
-        </Button>
-      )}
-
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-10 right-4 text-white hover:bg-white/20 hover:text-white"
-        onClick={(event) => {
-          event.stopPropagation();
-          onOpenChange(false);
-        }}
-      >
-        <XIcon className="size-6" />
-      </Button>
-
-      <div
-        className="relative flex h-[88vh] w-[88vw] items-center justify-center"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <img
-          src={preview.fullUrl}
-          alt={preview.alt}
-          className="max-h-full max-w-full rounded-md object-contain shadow-2xl"
-          draggable={false}
-        />
-      </div>
-
-      {canNavigate && previewIndex !== null && (
-        <div className="absolute bottom-6 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
-          {previewIndex + 1} / {previews.length}
-        </div>
-      )}
-    </div>,
-    document.body,
-  );
-}
 
 function getPosterInitials(name?: string) {
   if (!name) return "?";
@@ -244,6 +126,7 @@ export function ModDetailPanel({
 }) {
   const modId = selection?.id;
   const modelName = selection?.modelName ?? "Mod";
+  const submissionKey = modId ? `${modelName}:${modId}` : null;
   const queryClient = useQueryClient();
   const previews = modOverviewQuery.data
     ? getSubmissionPreviewImages(modOverviewQuery.data.profile)
@@ -254,7 +137,10 @@ export function ModDetailPanel({
     ? previews.slice(0, maxVisiblePreviews - 1)
     : previews;
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
-  const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<{ key: string; index: number } | null>(null);
+  const lightboxPreviewIndex = lightbox?.key === submissionKey ? lightbox.index : null;
+  const setLightboxPreviewIndex = (index: number | null) =>
+    setLightbox(index === null || !submissionKey ? null : { key: submissionKey, index });
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
   const [pendingLikeKey, setPendingLikeKey] = useState<string | null>(null);
   const [likeOverride, setLikeOverride] = useState<{
@@ -269,7 +155,7 @@ export function ModDetailPanel({
   const profile = modOverviewQuery.data?.profile;
   const likeAccess = modOverviewQuery.data?.config._aAccess;
   const baseIsLiked = profile?._bAccessorHasLiked ?? likeAccess?.Like_Trash === true;
-  const likeOperationKey = modId ? `${modelName}:${modId}` : null;
+  const likeOperationKey = submissionKey;
   const isLikePending = pendingLikeKey === likeOperationKey;
   const isLiked = likeOverride?.key === likeOperationKey ? likeOverride.liked : baseIsLiked;
   const canToggleLike = likeAccess?.Like_Add === true || likeAccess?.Like_Trash === true;
@@ -616,18 +502,24 @@ export function ModDetailPanel({
         </div>
       </ScrollArea>
 
-      <SubmissionPreviewLightbox
-        previews={previews}
-        previewIndex={lightboxPreviewIndex}
-        preview={lightboxPreview}
-        open={lightboxPreview !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setLightboxPreviewIndex(null);
-          }
-        }}
-        onPreviewIndexChange={(index) => setLightboxPreviewIndex(index)}
-      />
+      {lightboxPreviewIndex !== null && lightboxPreview && (
+        <PreviewLightbox
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setLightboxPreviewIndex(null);
+            }
+          }}
+          fullSrc={lightboxPreview.fullUrl}
+          isVideo={false}
+          alt={lightboxPreview.alt}
+          gallery={{
+            index: lightboxPreviewIndex,
+            count: previews.length,
+            onIndexChange: setLightboxPreviewIndex,
+          }}
+        />
+      )}
     </>
   );
 }
