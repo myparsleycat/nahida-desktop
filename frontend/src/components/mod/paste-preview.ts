@@ -7,94 +7,96 @@ import { toast } from "sonner";
 
 import { isPreviewImagePath } from "./preview-media";
 
-interface PasteModPreviewOptions {
+export type ClipboardPreview =
+    | { kind: "path"; path: string }
+    | { kind: "url"; url: string }
+    | { kind: "blob"; blob: Blob };
+
+export async function readClipboardPreview(): Promise<ClipboardPreview | null> {
+    const files = (await Shell.GetClipboardFiles()) ?? [];
+    if (files.length > 0 && isPreviewImagePath(files[0])) {
+        return { kind: "path", path: files[0] };
+    }
+
+    const text = await navigator.clipboard.readText();
+    if (text.startsWith("http") && isPreviewImagePath(text)) {
+        return { kind: "url", url: text };
+    }
+
+    for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((value) => value === "image/png" || value === "image/jpeg");
+        if (type) {
+            return { kind: "blob", blob: await item.getType(type) };
+        }
+    }
+    return null;
+}
+
+interface SavePastedPreviewOptions {
     modPath: string;
+    preview: ClipboardPreview;
     selectedGroupPath?: string;
     queryClient: QueryClient;
 }
 
-export async function pasteModPreview({
+export function savePastedPreview({
     modPath,
+    preview,
     selectedGroupPath,
     queryClient,
-}: PasteModPreviewOptions) {
-    try {
-        const files = (await Shell.GetClipboardFiles()) ?? [];
-        if (files.length > 0) {
-            const filePath = files[0];
-            if (isPreviewImagePath(filePath)) {
-                Mod.PastePreview(modPath, filePath, "path", null)
-                    .then(() => {
-                        void queryClient.invalidateQueries({
-                            queryKey: ["modGroup", selectedGroupPath],
-                        });
-                    })
-                    .catch((error) => {
-                        Logger.capture("components/mod/paste-preview.ts", error);
-                        toast.error(i18n.t("page.mod.toast.paste-preview.copy-error"));
-                    });
-                return;
-            }
-        }
+}: SavePastedPreviewOptions) {
+    const invalidate = () =>
+        void queryClient.invalidateQueries({
+            queryKey: ["modGroup", selectedGroupPath],
+        });
 
-        const text = await navigator.clipboard.readText();
-        if (text.startsWith("http") && isPreviewImagePath(text)) {
-            // The download can take a while, so the loading toast stays until the preview itself shows the result.
-            const id = toast.loading(i18n.t("page.mod.toast.paste-preview.downloading"));
-            Mod.PastePreview(modPath, text, "url", null)
-                .then(() => {
-                    toast.dismiss(id);
-                    void queryClient.invalidateQueries({
-                        queryKey: ["modGroup", selectedGroupPath],
-                    });
-                })
-                .catch((error) => {
-                    Logger.capture("components/mod/paste-preview.ts", error);
-                    toast.error(i18n.t("page.mod.toast.paste-preview.download-error"), { id });
-                });
+    if (preview.kind === "path") {
+        Mod.PastePreview(modPath, preview.path, "path", null)
+            .then(invalidate)
+            .catch((error) => {
+                Logger.capture("components/mod/paste-preview.ts", error);
+                toast.error(i18n.t("page.mod.toast.paste-preview.copy-error"));
+            });
+        return;
+    }
+
+    if (preview.kind === "url") {
+        // The download can take a while, so the loading toast stays until the preview itself shows the result.
+        const id = toast.loading(i18n.t("page.mod.toast.paste-preview.downloading"));
+        Mod.PastePreview(modPath, preview.url, "url", null)
+            .then(() => {
+                toast.dismiss(id);
+                invalidate();
+            })
+            .catch((error) => {
+                Logger.capture("components/mod/paste-preview.ts", error);
+                toast.error(i18n.t("page.mod.toast.paste-preview.download-error"), { id });
+            });
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+        Logger.capture("components/mod/paste-preview.ts", reader.error);
+        toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
+    };
+    reader.onloadend = () => {
+        const base64data = reader.result;
+        if (typeof base64data !== "string") {
+            Logger.capture(
+                "components/mod/paste-preview.ts",
+                "Failed to read clipboard image as data URL",
+            );
+            toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
             return;
         }
 
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-            if (item.types.includes("image/png") || item.types.includes("image/jpeg")) {
-                const type = item.types.find((t) => t.startsWith("image/"))!;
-                const blob = await item.getType(type);
-                const reader = new FileReader();
-                reader.onerror = () => {
-                    Logger.capture("components/mod/paste-preview.ts", reader.error);
-                    toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
-                };
-                reader.onloadend = () => {
-                    const base64data = reader.result;
-                    if (typeof base64data !== "string") {
-                        Logger.capture(
-                            "components/mod/paste-preview.ts",
-                            "Failed to read clipboard image as data URL",
-                        );
-                        toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
-                        return;
-                    }
-
-                    Mod.PastePreview(modPath, base64data, "base64", null)
-                        .then(() => {
-                            void queryClient.invalidateQueries({
-                                queryKey: ["modGroup", selectedGroupPath],
-                            });
-                        })
-                        .catch((error) => {
-                            Logger.capture("components/mod/paste-preview.ts", error);
-                            toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
-                        });
-                };
-                reader.readAsDataURL(blob);
-                return;
-            }
-        }
-
-        toast.warning(i18n.t("page.mod.toast.paste-preview.no-image"));
-    } catch (error) {
-        Logger.capture("components/mod/paste-preview.ts", error);
-        toast.error(i18n.t("page.mod.toast.paste-preview.clipboard-error"));
-    }
+        Mod.PastePreview(modPath, base64data, "base64", null)
+            .then(invalidate)
+            .catch((error) => {
+                Logger.capture("components/mod/paste-preview.ts", error);
+                toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
+            });
+    };
+    reader.readAsDataURL(preview.blob);
 }

@@ -3,6 +3,7 @@
 import { Tools } from "@bindings/tools";
 import type { ModelViewerTransport } from "@bindings/tools/model_viewer";
 import { ModelViewerDialog } from "@renderer/components/tools/model-viewer/model-viewer-dialog";
+import { AlertDialog } from "@renderer/components/ui/alert-dialog";
 import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import type { ModInfo } from "@renderer/types/mod";
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -10,6 +11,7 @@ import { Children, isValidElement, StrictMode, type ComponentProps, type ReactNo
 import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { readClipboardPreview } from "../components/mod/paste-preview";
 import { useModActions } from "./use-mod-actions";
 
 vi.mock("@bindings/tools", () => ({
@@ -40,7 +42,7 @@ vi.mock("@renderer/lib/logger", () => ({ Logger: { warn: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: [] }) }));
 vi.mock("@tanstack/react-router", () => ({ useRouteContext: () => ({ queryClient: {} }) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), warning: vi.fn() } }));
 vi.mock("../components/mod/body-shape-dialog", () => ({ BodyShapeDialog: () => null }));
 vi.mock("../components/mod/efmi-outline-dialog", () => ({ EfmiOutlineDialog: () => null }));
 vi.mock("../components/mod/liquid-emitter-dialog", () => ({ LiquidEmitterDialog: () => null }));
@@ -48,7 +50,10 @@ vi.mock("../components/mod/mod-conflict-finder-dialog", () => ({
   ModConflictFinderDialog: () => null,
 }));
 vi.mock("../components/mod/mod-fix-runner-dialogs", () => ({ ModFixRunnerDialogs: () => null }));
-vi.mock("../components/mod/paste-preview", () => ({ pasteModPreview: vi.fn() }));
+vi.mock("../components/mod/paste-preview", () => ({
+  readClipboardPreview: vi.fn(),
+  savePastedPreview: vi.fn(),
+}));
 vi.mock("../components/mod/texture-resize-dialog", () => ({ TextureResizeDialog: () => null }));
 vi.mock("../components/mod/touch-profile-dialog", () => ({ TouchProfileDialog: () => null }));
 
@@ -91,6 +96,29 @@ function viewer(actions: { overlays: ReactNode }) {
     throw new Error("Missing model viewer dialog");
   }
   return dialog.props;
+}
+
+function pasteDialog(actions: { overlays: ReactNode }) {
+  if (!isValidElement<{ children: ReactNode }>(actions.overlays)) {
+    throw new Error("Missing overlays");
+  }
+  const dialog = Children.toArray(actions.overlays.props.children).find(
+    (child) => isValidElement(child) && child.type === AlertDialog,
+  );
+  if (!isValidElement<ComponentProps<typeof AlertDialog>>(dialog)) {
+    throw new Error("Missing paste preview dialog");
+  }
+  return { ...dialog.props, imageSrc: findImageSrc(dialog.props.children) };
+}
+
+function findImageSrc(node: ReactNode): string | undefined {
+  for (const child of Children.toArray(node)) {
+    if (!isValidElement<{ src?: string; children?: ReactNode }>(child)) continue;
+    if (child.type === "img") return child.props.src;
+    const src = findImageSrc(child.props.children);
+    if (src) return src;
+  }
+  return undefined;
 }
 
 beforeEach(() => {
@@ -237,4 +265,54 @@ it("rejects duplicate calls before React renders and retries a failed load", asy
   expect(Tools.CleanupModelViewer).not.toHaveBeenCalled();
   await act(() => view.result.current.actions.openModelViewer(mod));
   expect(viewer(view.result.current).source?.memorySessionId).toBe("retry");
+});
+
+it("opens the paste dialog only for an image and keeps its content until the close completes", async () => {
+  const createObjectURL = vi.fn(() => "blob:clipboard");
+  const revokeObjectURL = vi.fn();
+  Object.assign(URL, { createObjectURL, revokeObjectURL });
+  const view = renderHook(() => useModActions("group", runner));
+
+  vi.mocked(readClipboardPreview).mockResolvedValueOnce(null);
+  act(() => view.result.current.actions.openPastePreview(mod));
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(toast.warning).toHaveBeenCalledWith("page.mod.toast.paste-preview.no-image");
+  expect(pasteDialog(view.result.current).open).toBe(false);
+
+  vi.mocked(readClipboardPreview).mockResolvedValueOnce({ kind: "blob", blob: new Blob() });
+  act(() => view.result.current.actions.openPastePreview(mod));
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(pasteDialog(view.result.current)).toMatchObject({
+    open: true,
+    imageSrc: "blob:clipboard",
+  });
+
+  act(() => pasteDialog(view.result.current).onOpenChange?.(false, {} as never));
+  expect(pasteDialog(view.result.current)).toMatchObject({
+    open: false,
+    imageSrc: "blob:clipboard",
+  });
+  expect(revokeObjectURL).not.toHaveBeenCalled();
+
+  act(() => pasteDialog(view.result.current).onOpenChangeComplete?.(false));
+  expect(pasteDialog(view.result.current).imageSrc).toBeUndefined();
+  expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:clipboard");
+});
+
+it("drops a clipboard read that resolves after the group changes", async () => {
+  const createObjectURL = vi.fn(() => "blob:late");
+  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+  const pending = Promise.withResolvers<Awaited<ReturnType<typeof readClipboardPreview>>>();
+  vi.mocked(readClipboardPreview).mockReturnValueOnce(pending.promise);
+  const view = renderHook(({ group }) => useModActions(group, runner), {
+    initialProps: { group: "old" },
+  });
+
+  act(() => view.result.current.actions.openPastePreview(mod));
+  view.rerender({ group: "new" });
+  pending.resolve({ kind: "blob", blob: new Blob() });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+
+  expect(pasteDialog(view.result.current).open).toBe(false);
+  expect(createObjectURL).not.toHaveBeenCalled();
 });

@@ -728,6 +728,11 @@
           "description": "\"{{name}}\"에는 이미 미리보기가 있습니다. 계속하면 기존 미리보기를 새 파일로 덮어씁니다.",
           "confirm": "덮어쓰기"
         },
+        "paste-preview": {
+          "title": "미리보기를 붙여넣을까요?",
+          "description": "클립보드의 이 이미지를 \"{{name}}\"의 미리보기로 저장합니다.",
+          "confirm": "붙여넣기"
+        },
         "add-preset": {
           "name-placeholder": "프리셋 이름",
           "description-placeholder": "설명 (선택 사항)",

@@ -30,6 +30,7 @@ import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { modGroupQueryOptions, useGames } from "@renderer/hooks/use-mod-data";
 import type { ModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { localFileSrc } from "@renderer/lib/local-file";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup, ModInfo } from "@renderer/types/mod";
@@ -55,7 +56,11 @@ import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
 import { EfmiOutlineDialog } from "../components/mod/efmi-outline-dialog";
 import { LiquidEmitterDialog } from "../components/mod/liquid-emitter-dialog";
 import { ModConflictFinderDialog } from "../components/mod/mod-conflict-finder-dialog";
-import { pasteModPreview } from "../components/mod/paste-preview";
+import {
+  type ClipboardPreview,
+  readClipboardPreview,
+  savePastedPreview,
+} from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 import { TouchProfileDialog } from "../components/mod/touch-profile-dialog";
 import { hasMissingDependency } from "../components/mod/utils";
@@ -150,7 +155,11 @@ export function useModActions(
   const [pastePreviewState, setPastePreviewState] = useState<{
     groupPath?: string;
     mod: ModInfo;
+    preview: ClipboardPreview;
+    src: string;
   } | null>(null);
+  // The dialog keeps its content until the close animation ends, so open is tracked separately.
+  const [pastePreviewOpen, setPastePreviewOpen] = useState(false);
   const setConvertingModelPath = useModStore((s) => s.setConvertingModelPath);
   const [modelViewerState, setModelViewerState] = useState<{
     groupPath?: string;
@@ -159,7 +168,7 @@ export function useModActions(
   } | null>(null);
   const [showModelViewer, setShowModelViewer] = useState(false);
   const [modelViewerGroupPath, setModelViewerGroupPath] = useState(selectedGroupPath);
-  const modelViewerLifetimeRef = useRef<symbol | null>(null);
+  const groupLifetimeRef = useRef<symbol | null>(null);
   const modelViewerRequestRef = useRef<symbol | null>(null);
   const modelViewerSessionRef = useRef<string | null>(null);
   const cleanupModelViewer = useCallback(() => {
@@ -175,9 +184,9 @@ export function useModActions(
   }
 
   useEffect(() => {
-    modelViewerLifetimeRef.current = Symbol();
+    groupLifetimeRef.current = Symbol();
     return () => {
-      modelViewerLifetimeRef.current = null;
+      groupLifetimeRef.current = null;
       modelViewerRequestRef.current = null;
       setConvertingModelPath(null);
       cleanupModelViewer();
@@ -243,13 +252,13 @@ export function useModActions(
     });
   }, [renameDialogState]);
 
-  const handlePastePreview = async (mod: ModInfo, groupPath = selectedGroupPath) => {
-    await pasteModPreview({
-      modPath: mod.path,
-      selectedGroupPath: groupPath,
-      queryClient,
-    });
-  };
+  useEffect(() => {
+    if (pastePreviewState?.preview.kind !== "blob") {
+      return;
+    }
+    const { src } = pastePreviewState;
+    return () => URL.revokeObjectURL(src);
+  }, [pastePreviewState]);
 
   const openDeleteMod = (mod: ModInfo) => {
     confirmTrash({
@@ -278,17 +287,32 @@ export function useModActions(
     });
   };
 
-  const openPastePreview = (mod: ModInfo) => {
-    if (mod.preview) {
-      setPastePreviewState({ mod, groupPath: selectedGroupPath });
+  const openPastePreview = async (mod: ModInfo) => {
+    const lifetime = groupLifetimeRef.current;
+    const groupPath = selectedGroupPath;
+    const preview = await readClipboardPreview().catch((error: unknown) => {
+      Logger.capture("hooks/use-mod-actions.tsx", error);
+      toast.error(t("page.mod.toast.paste-preview.clipboard-error"));
+      return undefined;
+    });
+    if (!lifetime || groupLifetimeRef.current !== lifetime || preview === undefined) {
+      return;
+    }
+    if (!preview) {
+      toast.warning(t("page.mod.toast.paste-preview.no-image"));
       return;
     }
 
-    void handlePastePreview(mod, selectedGroupPath);
+    const src =
+      preview.kind === "blob"
+        ? URL.createObjectURL(preview.blob)
+        : localFileSrc(preview.kind === "path" ? preview.path : preview.url);
+    setPastePreviewState({ mod, groupPath, preview, src });
+    setPastePreviewOpen(true);
   };
 
   const openModelViewer = async (mod: ModInfo) => {
-    const lifetime = modelViewerLifetimeRef.current;
+    const lifetime = groupLifetimeRef.current;
     if (!lifetime || modelViewerRequestRef.current || modelViewerSessionRef.current) {
       return;
     }
@@ -298,7 +322,7 @@ export function useModActions(
     setConvertingModelPath(mod.path);
     try {
       const result = await Tools.LoadModViewer(mod.path);
-      if (modelViewerLifetimeRef.current !== lifetime) {
+      if (groupLifetimeRef.current !== lifetime) {
         scheduleModelViewerCleanup(result.memorySessionId);
         return;
       }
@@ -317,7 +341,7 @@ export function useModActions(
       });
       setShowModelViewer(true);
     } catch (error) {
-      if (modelViewerLifetimeRef.current !== lifetime) {
+      if (groupLifetimeRef.current !== lifetime) {
         return;
       }
       cleanupModelViewer();
@@ -367,21 +391,39 @@ export function useModActions(
     }
   };
 
+  const pastePreviewDialogKey = pastePreviewState?.mod.preview
+    ? "page.mod.dialog.overwrite-preview"
+    : "page.mod.dialog.paste-preview";
+
   const overlays = (
     <>
       <AlertDialog
-        open={pastePreviewState !== null}
-        onOpenChange={(open) => !open && setPastePreviewState(null)}
+        open={pastePreviewOpen}
+        onOpenChange={setPastePreviewOpen}
+        onOpenChangeComplete={(open) => !open && setPastePreviewState(null)}
       >
         <AlertDialogContent onClick={(event) => event.stopPropagation()}>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("page.mod.dialog.overwrite-preview.title")}</AlertDialogTitle>
+            <AlertDialogTitle>{t(`${pastePreviewDialogKey}.title`)}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("page.mod.dialog.overwrite-preview.description", {
+              {t(`${pastePreviewDialogKey}.description`, {
                 name: pastePreviewState?.mod.name ?? "",
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {pastePreviewState && (
+            // A remote URL can refuse the WebView while the backend download still succeeds.
+            <img
+              key={pastePreviewState.src}
+              src={pastePreviewState.src}
+              alt=""
+              className="max-h-64 w-full rounded-md bg-muted object-contain"
+              draggable={false}
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
             <AlertDialogAction
@@ -390,11 +432,16 @@ export function useModActions(
                   return;
                 }
 
-                void handlePastePreview(pastePreviewState.mod, pastePreviewState.groupPath);
-                setPastePreviewState(null);
+                savePastedPreview({
+                  modPath: pastePreviewState.mod.path,
+                  preview: pastePreviewState.preview,
+                  selectedGroupPath: pastePreviewState.groupPath,
+                  queryClient,
+                });
+                setPastePreviewOpen(false);
               }}
             >
-              {t("page.mod.dialog.overwrite-preview.confirm")}
+              {t(`${pastePreviewDialogKey}.confirm`)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -549,7 +596,7 @@ export function useModActions(
     openDeleteMod,
     openDeletePreview,
     openModelViewer,
-    openPastePreview,
+    openPastePreview: (mod) => void openPastePreview(mod),
     openRenameDialog: (mod) => {
       setRenameValue(getRenameDefaultValue(mod.name));
       setRenameDialogState({ mod, groupPath: selectedGroupPath });

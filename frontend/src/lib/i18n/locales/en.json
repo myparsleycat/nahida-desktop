@@ -728,6 +728,11 @@
           "description": "\"{{name}}\" already has a preview. Continue to replace it with the new file.",
           "confirm": "Overwrite"
         },
+        "paste-preview": {
+          "title": "Paste Preview?",
+          "description": "Saves this clipboard image as the preview of \"{{name}}\".",
+          "confirm": "Paste"
+        },
         "add-preset": {
           "title": "Create New Preset",
           "name-placeholder": "Preset name",

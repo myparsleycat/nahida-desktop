@@ -728,6 +728,11 @@
           "description": "“{{name}}”已经有预览了。继续后会用新文件覆盖现有预览。",
           "confirm": "覆盖"
         },
+        "paste-preview": {
+          "title": "要粘贴预览吗？",
+          "description": "将剪贴板中的这张图片保存为“{{name}}”的预览。",
+          "confirm": "粘贴"
+        },
         "add-preset": {
           "name-placeholder": "预设名称",
           "description-placeholder": "说明（可选）",

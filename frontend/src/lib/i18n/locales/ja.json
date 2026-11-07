@@ -728,6 +728,11 @@
           "description": "「{{name}}」にはすでにプレビューがあります。続行すると既存のプレビューが新しいファイルで上書きされます。",
           "confirm": "上書き"
         },
+        "paste-preview": {
+          "title": "プレビューを貼り付けますか？",
+          "description": "クリップボードのこの画像を「{{name}}」のプレビューとして保存します。",
+          "confirm": "貼り付け"
+        },
         "add-preset": {
           "name-placeholder": "プリセット名",
           "description-placeholder": "説明（任意）",
