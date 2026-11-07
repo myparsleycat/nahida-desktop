@@ -1,10 +1,13 @@
 // oxlint-disable no-unused-vars
+import { cn } from "@renderer/lib/utils";
+
 import { CharacterSidebarModCountBadge } from "./character-sidebar-mod-count-badge";
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemGridProps {
   group: {
     name: string;
+    isEnabled?: boolean;
     preview?: string;
     modCount?: number;
     enabledModCount?: number;
@@ -24,6 +27,7 @@ export function CharacterSidebarItemGrid({
   // A sub folder listed in a classification section sits at depth 0, so its parent is named on the preview.
   const listedParentName = depth === 0 ? parentGroupName : undefined;
   const isNestedGridItem = depth > 0;
+  const disabled = group.isEnabled === false;
 
   return (
     <>
@@ -37,18 +41,20 @@ export function CharacterSidebarItemGrid({
 
       <div className="flex flex-col gap-0.5 p-1">
         <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-          <Preview
-            path={group.preview}
-            alt={group.name}
-            cacheKey={previewCacheKey}
-            objectFit="cover"
-            fallback={
-              <span className="flex h-full w-full items-center justify-center text-center font-bold">
-                ?
-              </span>
-            }
-            allowPlay={true}
-          />
+          <div className={cn("h-full w-full", disabled && "opacity-50")}>
+            <Preview
+              path={group.preview}
+              alt={group.name}
+              cacheKey={previewCacheKey}
+              objectFit="cover"
+              fallback={
+                <span className="flex h-full w-full items-center justify-center text-center font-bold">
+                  ?
+                </span>
+              }
+              allowPlay={true}
+            />
+          </div>
           {listedParentName && (
             <span className="absolute top-1.5 left-1.5 max-w-[calc(100%-2.75rem)] truncate rounded bg-background/85 px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm">
               {listedParentName}
@@ -60,7 +66,12 @@ export function CharacterSidebarItemGrid({
           />
         </div>
         <div className="flex min-w-0 items-center justify-center">
-          <div className="truncate text-center text-xs font-medium text-foreground">
+          <div
+            className={cn(
+              "truncate text-center text-xs font-medium",
+              disabled ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
             {group.name}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { globalStore, useGlobalStore } from "@renderer/store/global";
 import { modStore } from "@renderer/store/mod";
+import { siblingDisplayName } from "@shared/mod";
 import type { ModInfo, TransferWithoutData } from "@shared/types";
 import { useCallback, useEffect, useMemo } from "react";
 
@@ -116,6 +117,7 @@ export function mergeDownloadPlaceholders(
         targetPaths.has(normalizeModDownloadPath(mod.path)) ? { ...mod, isDownloading: true } : mod,
     );
     const installedPaths = new Set(installedMods.map((mod) => normalizeModDownloadPath(mod.path)));
+    const folderNames = [...installedMods, ...targets].map((item) => getWindowsBaseName(item.path));
     const placeholders = targets.flatMap((target): ModInfo[] => {
         if (installedPaths.has(target.normalizedPath)) {
             return [];
@@ -123,7 +125,7 @@ export function mergeDownloadPlaceholders(
         return [
             {
                 id: `download:${target.pid}:${target.normalizedPath}`,
-                name: getWindowsBaseName(target.path),
+                name: siblingDisplayName(getWindowsBaseName(target.path), folderNames),
                 path: target.path,
                 isEnabled: false,
                 mtime: target.startTime,

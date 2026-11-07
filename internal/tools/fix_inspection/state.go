@@ -7,13 +7,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
@@ -22,8 +22,6 @@ const (
 	fixInspectionChangedEvent = "tools:fix-inspections"
 	fixInspectionSettleDelay  = 800 * time.Millisecond
 )
-
-var fixInspectionDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
 
 // Fix inspection records are process-local and intentionally never persisted.
 type FixInspectionRecord struct {
@@ -87,7 +85,7 @@ func (t *Service) InspectModForFix(ctx context.Context, modPath, importer string
 
 	record := FixInspectionRecord{
 		ModPath:     resolved,
-		DisplayName: filepath.Base(resolved),
+		DisplayName: modname.DisplayName(resolved),
 		Result:      cloneFixInspectionResult(*result),
 	}
 	changed, watchErr := t.storeFixInspection(record)
@@ -431,6 +429,8 @@ func (t *Service) refreshFixInspectionLocked(
 	}
 
 	record.Result = cloneFixInspectionResult(*result)
+	// A folder of the same name can appear next to the mod later, which decides whether the prefix is shown.
+	record.DisplayName = modname.DisplayName(record.ModPath)
 	t.fixInspectionMu.Lock()
 	current := t.fixInspections[key]
 	if t.fixInspectionClosed || current == nil {
@@ -456,7 +456,7 @@ func (t *Service) migrateFixInspectionRename(
 	dismissed, stopped := t.removeFixInspectionWithDismissal(record.ModPath)
 
 	record.ModPath = renamedPath
-	record.DisplayName = filepath.Base(renamedPath)
+	record.DisplayName = modname.DisplayName(renamedPath)
 	_, watchErr := t.storeFixInspection(record)
 	t.logError(watchErr, "FixInspector.watch")
 	t.carryFixInspectionDismissal(fixInspectionKey(renamedPath), dismissed)
@@ -495,15 +495,11 @@ func fixInspectionIdentity(path string) (fs.FileInfo, error) {
 }
 
 func isDisabledFixInspectionRename(previousName, candidateName string) bool {
-	previousName = strings.TrimSpace(previousName)
-	candidateName = strings.TrimSpace(candidateName)
-	previousDisabled := fixInspectionDisabledPrefixRE.MatchString(previousName)
-	candidateDisabled := fixInspectionDisabledPrefixRE.MatchString(candidateName)
-	if !previousDisabled && !candidateDisabled {
+	if !modname.IsDisabled(previousName) && !modname.IsDisabled(candidateName) {
 		return false
 	}
-	previousBase := strings.TrimSpace(fixInspectionDisabledPrefixRE.ReplaceAllString(previousName, ""))
-	candidateBase := strings.TrimSpace(fixInspectionDisabledPrefixRE.ReplaceAllString(candidateName, ""))
+	previousBase := modname.StripDisabled(previousName)
+	candidateBase := modname.StripDisabled(candidateName)
 	return previousBase != "" && strings.EqualFold(previousBase, candidateBase)
 }
 

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
 
@@ -34,7 +35,7 @@ func (touchTestMod) Disable(_ context.Context, path string) (string, error) {
 }
 
 func (touchTestMod) Enable(_ context.Context, path string) (string, error) {
-	target := filepath.Join(filepath.Dir(path), touchDisabledPrefixRE.ReplaceAllString(filepath.Base(path), ""))
+	target := filepath.Join(filepath.Dir(path), modname.StripDisabled(filepath.Base(path)))
 	return target, os.Rename(path, target)
 }
 

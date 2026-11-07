@@ -14,6 +14,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
@@ -694,7 +695,7 @@ func (t *Service) TouchProfileApply(ctx context.Context, input TouchProfileApply
 		t.reportCleanup(os.RemoveAll(targetRoot), "TouchProfileApply")
 		return TouchApplyResult{}, err
 	}
-	reenable := !touchDisabledPrefixRE.MatchString(filepath.Base(sourceRoot))
+	reenable := !modname.IsDisabled(filepath.Base(sourceRoot))
 	disabledSource, err := t.mod.Disable(ctx, sourceRoot)
 	if err != nil {
 		t.reportCleanup(os.RemoveAll(targetRoot), "TouchProfileApply")

@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod/metadata"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -177,7 +178,7 @@ func (m *Mod) CopyFolderToGroup(
 		return "", errors.New("COPY_TARGET_INSIDE_SOURCE")
 	}
 	if _, err := os.Stat(target); err == nil {
-		return "", fmt.Errorf("ALREADY_EXISTS:%s", filepath.Base(source))
+		return "", fmt.Errorf("ALREADY_EXISTS:%s", modname.DisplayName(target))
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}

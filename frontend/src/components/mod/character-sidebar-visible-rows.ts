@@ -1,5 +1,6 @@
 import type { FolderSortDirection, FolderSortKey } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import { getParentGroupPath, stripDisabledPrefix } from "@shared/mod";
 import type { Classification } from "@shared/types";
 
 export interface VisibleGroupRow {
@@ -90,8 +91,14 @@ export function collectClassifiedSubGroups(groups: FolderGroup[], classification
     );
 }
 
-export function parentFolderName(path: string) {
-    return path.split(/[\\/]/).at(-2);
+// A listed parent keeps the DISABLED prefix the backend left in its name when a sibling folder has the same name
+// without it; the path alone cannot tell that, so it is only the fallback.
+export function parentFolderName(path: string, listedGroups: ReadonlyMap<string, FolderGroup>) {
+    const parentPath = getParentGroupPath(path);
+    const listed = parentPath === null ? undefined : listedGroups.get(parentPath);
+    if (listed) return listed.name;
+    const name = path.split(/[\\/]/).at(-2);
+    return name === undefined ? undefined : stripDisabledPrefix(name);
 }
 
 // Mirrors classifiedSubGroupDepth in internal/mod/classifications.go: how many levels below a
@@ -197,10 +204,9 @@ export function buildVisibleSidebarRows(
         return rows;
     }
 
-    for (const section of partitionByClassification(
-        [...groups, ...classifiedSubGroups],
-        options.classification,
-    )) {
+    const listedGroups = [...groups, ...classifiedSubGroups];
+    const listedGroupsByPath = new Map(listedGroups.map((group) => [group.path, group]));
+    for (const section of partitionByClassification(listedGroups, options.classification)) {
         const visibleGroups = getVisibleGroups(
             section.groups,
             options.sortKey,
@@ -229,7 +235,9 @@ export function buildVisibleSidebarRows(
             visit(
                 group,
                 0,
-                classifiedPaths.has(group.path) ? parentFolderName(group.path) : undefined,
+                classifiedPaths.has(group.path)
+                    ? parentFolderName(group.path, listedGroupsByPath)
+                    : undefined,
                 undefined,
             );
         }

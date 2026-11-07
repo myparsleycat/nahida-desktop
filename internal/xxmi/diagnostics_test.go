@@ -596,10 +596,24 @@ func TestListDiagnosticsModsListsSubfoldersBelowTheModsFolder(t *testing.T) {
 	ctx := context.Background()
 	service, cfg := newDiagnosticsTestService(t, "[Logging]\r\nlog_level = disabled\r\n")
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Mods", "DISABLED a", "b", "c", "mod.ini"), nil)
+	// A file does not make a folder ambiguous; a folder of the same name without the prefix does.
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Mods", "a"), nil)
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Mods", "DISABLED d", "mod.ini"), nil)
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Mods", "D", "mod.ini"), nil)
 
 	top, err := service.ListDiagnosticsMods(ctx, "GIMI", "")
-	if err != nil || len(top) != 1 || !top[0].HasChildren {
+	if err != nil || len(top) != 3 {
 		t.Fatalf("top = %+v, err = %v", top, err)
+	}
+	names := map[string]DiagnosticsMod{}
+	for _, mod := range top {
+		names[mod.Relative] = mod
+	}
+	if got := names["DISABLED a"]; got.Name != "a" || !got.HasChildren {
+		t.Fatalf("DISABLED a = %+v", got)
+	}
+	if names["DISABLED d"].Name != "DISABLED d" || names["D"].Name != "D" {
+		t.Fatalf("same-name folders = %+v", top)
 	}
 	// XXMI skips everything below a disabled folder, so a nested folder is disabled too.
 	nested, err := service.ListDiagnosticsMods(ctx, "GIMI", "DISABLED a/b")

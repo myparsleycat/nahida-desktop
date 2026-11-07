@@ -1,6 +1,10 @@
 package mod
 
-import "strings"
+import (
+	"strings"
+
+	"nahida.live/desktop/internal/modname"
+)
 
 const disabledFileSuffix = ".disabled"
 
@@ -20,7 +24,7 @@ func isDisabledFolderName(folderName string) bool {
 }
 
 func restoreDisabledPrefix(sourceFolderName, folderName string) string {
-	match := disabledPrefixRE.FindString(strings.TrimSpace(sourceFolderName))
+	match := modname.DisabledPrefix(sourceFolderName)
 	if match == "" {
 		return folderName
 	}

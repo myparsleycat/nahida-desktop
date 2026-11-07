@@ -147,6 +147,8 @@ type Look struct {
 
 type Inspection struct {
 	ModPath string `json:"modPath"`
+	// ModName is the folder name of ModPath as the mod list shows it.
+	ModName string `json:"modName"`
 	// Importer names the game whose runtime Runtime describes, as the mod
 	// runtime manager addresses it.
 	Importer string            `json:"importer"`

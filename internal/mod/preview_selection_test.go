@@ -59,7 +59,7 @@ func TestPreviewSelectionScansAndPersists(t *testing.T) {
 	}
 	for _, scan := range []func(string) *ModInfo{
 		func(path string) *ModInfo { return scanMod(group, path) },
-		func(path string) *ModInfo { return scanModLight(group, path) },
+		func(path string) *ModInfo { return scanModLight(group, path, filepath.Base(path)) },
 	} {
 		previewEqual(t, scan(modPath).Preview, nested)
 	}
@@ -87,7 +87,7 @@ func TestScansReportAppliedTools(t *testing.T) {
 	if got := scanMod(group, modPath).AppliedTools; !reflect.DeepEqual(got, want) {
 		t.Fatalf("full scan applied tools = %v", got)
 	}
-	if got := scanModLight(group, modPath).AppliedTools; !reflect.DeepEqual(got, want) {
+	if got := scanModLight(group, modPath, filepath.Base(modPath)).AppliedTools; !reflect.DeepEqual(got, want) {
 		t.Fatalf("light scan applied tools = %v", got)
 	}
 }
@@ -327,7 +327,11 @@ func TestToggleRewritesNestedPreviewToRenamedPath(t *testing.T) {
 	assertSavedPreview(t, outfit, "foo (2)/shot.jpg")
 	assertSavedPreview(t, character, "Outfit/foo (2)/shot.jpg")
 	previewEqual(t, scanMod(character, outfit).Preview, filepath.Join(renamed, "shot.jpg"))
-	previewEqual(t, scanModLight(modsRoot, character).Preview, filepath.Join(renamed, "shot.jpg"))
+	previewEqual(
+		t,
+		scanModLight(modsRoot, character, filepath.Base(character)).Preview,
+		filepath.Join(renamed, "shot.jpg"),
+	)
 	if _, err := os.Stat(duplicate); err != nil {
 		t.Fatal(err)
 	}

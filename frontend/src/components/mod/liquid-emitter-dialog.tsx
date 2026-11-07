@@ -31,12 +31,12 @@ export function LiquidEmitterDialog({
 }: LiquidEmitterDialogProps) {
   const { t } = useTranslation();
   // The folder the tool moved to, kept only while the dialog shows the mod it was opened for.
-  const [moved, setMoved] = useState<{ from: string; to: string } | null>(null);
+  const [moved, setMoved] = useState<{ from: string; to: string; name: string } | null>(null);
   const [unsaved, setUnsaved] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const currentPath = moved?.from === modPath ? moved.to : modPath;
-  const currentName =
-    currentPath === modPath ? modName : (currentPath.split(/[\\/]/).pop() ?? currentPath);
+  const current = moved?.from === modPath ? moved : null;
+  const currentPath = current?.to ?? modPath;
+  const currentName = current?.name ?? modName;
   const close = () => {
     setMoved(null);
     setConfirmClose(false);
@@ -67,8 +67,8 @@ export function LiquidEmitterDialog({
             <LiquidEmitterTool
               key={currentPath}
               modPath={currentPath}
-              onModPathChange={(next) => {
-                setMoved({ from: modPath, to: next });
+              onModPathChange={(next, name) => {
+                setMoved({ from: modPath, to: next, name });
                 onModsChanged?.();
               }}
               onUnsavedChange={setUnsaved}

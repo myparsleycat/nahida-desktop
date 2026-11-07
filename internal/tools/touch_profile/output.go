@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 )
 
 func (t *Service) generateTouchOutput(
@@ -131,10 +132,8 @@ func (t *Service) generateTouchOutput(
 	return validation, nil
 }
 
-var touchDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
-
 func touchFolderBaseName(name string) string {
-	return touchDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "") + touchFolderSuffix
+	return modname.StripDisabled(name) + touchFolderSuffix
 }
 
 // replaceTouchOutput swaps staging into output and returns the moved-aside previous output. The caller removes
@@ -161,10 +160,10 @@ func replaceTouchOutput(staging, output string) (string, error) {
 func sanitizeTouchNamespace(root string) string {
 	base := filepath.Base(root)
 	if regexp.MustCompile(`(?i)^(body|face|hair|leg|legs|outfit|parts?)$`).
-		MatchString(touchDisabledPrefixRE.ReplaceAllString(base, "")) {
+		MatchString(modname.StripDisabled(base)) {
 		base = filepath.Base(filepath.Dir(root))
 	}
-	base = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(touchDisabledPrefixRE.ReplaceAllString(base, ""), "")
+	base = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(modname.StripDisabled(base), "")
 	if len(base) > 24 {
 		base = base[:24]
 	}

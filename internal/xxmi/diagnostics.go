@@ -14,6 +14,7 @@ import (
 
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -401,6 +402,7 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer, parent string)
 	if err != nil {
 		return nil, err
 	}
+	siblings := modname.EntrySiblings(entries)
 	for _, entry := range entries {
 		path := filepath.Join(folder, entry.Name())
 		if !isModFolder(path, entry) {
@@ -420,7 +422,7 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer, parent string)
 			linkedAt = relative
 		}
 		mods = append(mods, DiagnosticsMod{
-			Name: entry.Name(), Path: final, Relative: relative, LinkedAt: linkedAt,
+			Name: siblings.Display(entry.Name()), Path: final, Relative: relative, LinkedAt: linkedAt,
 			Disabled:    parentDisabled || isDisabledModName(entry.Name()),
 			HasChildren: hasModSubfolder(path),
 		})

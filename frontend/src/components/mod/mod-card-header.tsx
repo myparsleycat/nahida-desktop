@@ -16,7 +16,6 @@ import { openModAgent } from "@renderer/lib/agent-navigation";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { stripDisabledPrefix } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
 import {
   BoxIcon,
@@ -69,7 +68,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
           </Tooltip>
         )}
         <ModAppliedToolIcons tools={mod.appliedTools} />
-        <TruncatedText className="text-sm font-semibold" text={stripDisabledPrefix(mod.name)} />
+        <TruncatedText className="text-sm font-semibold" text={mod.name} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Tooltip disableHoverablePopup>

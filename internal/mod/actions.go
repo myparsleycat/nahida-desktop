@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -202,7 +203,7 @@ func (m *Mod) Rename(ctx context.Context, modPath, newName string) (string, erro
 	next := filepath.Join(filepath.Dir(modPath), newName)
 	if !samePath(modPath, next) {
 		if _, err := os.Stat(next); err == nil {
-			return "", fmt.Errorf("ALREADY_EXISTS:%s", newName)
+			return "", fmt.Errorf("ALREADY_EXISTS:%s", modname.DisplayName(next))
 		} else if !os.IsNotExist(err) {
 			return "", err
 		}

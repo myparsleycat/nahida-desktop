@@ -20,6 +20,7 @@ import (
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod/appliedtool"
+	"nahida.live/desktop/internal/modname"
 )
 
 var mediaExtensions = map[string]bool{
@@ -54,6 +55,7 @@ func listGroupsWhere(root string, fallback bool, keep func(name string) bool, re
 		reportScanFailure(err, reports)
 		return []FolderGroup{}
 	}
+	siblings := modname.EntrySiblings(entries)
 	groups := make([]FolderGroup, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() || (keep != nil && !keep(entry.Name())) {
@@ -62,11 +64,12 @@ func listGroupsWhere(root string, fallback bool, keep func(name string) bool, re
 		path := filepath.Join(root, entry.Name())
 		count, enabled := countChildMods(path, reports...)
 		groups = append(groups, FolderGroup{
-			Name: entry.Name(), Path: path, Mods: []ModInfo{}, Preview: findPreview(path, fallback, reports...),
-			ModCount: count, EnabledModCount: enabled,
+			Name: siblings.Display(entry.Name()), Path: path, IsEnabled: !isDisabled(entry.Name()), Mods: []ModInfo{},
+			Preview: findPreview(path, fallback, reports...), ModCount: count, EnabledModCount: enabled,
 		})
 	}
-	sort.Slice(groups, func(i, j int) bool { return naturalLess(groups[i].Name, groups[j].Name) })
+	// Names without the DISABLED prefix can tie, so a stable sort keeps the directory order for them.
+	sort.SliceStable(groups, func(i, j int) bool { return naturalLess(groups[i].Name, groups[j].Name) })
 	return groups
 }
 
@@ -154,7 +157,8 @@ func mapParallel[T, R any](items []T, fn func(T) R) []R {
 func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 	groupPath = filepath.Clean(groupPath)
 	result := FolderGroup{
-		Name: filepath.Base(groupPath), Path: groupPath, Mods: []ModInfo{},
+		Name: modname.DisplayName(groupPath), Path: groupPath, IsEnabled: !isDisabled(filepath.Base(groupPath)),
+		Mods: []ModInfo{},
 	}
 	entries, err := os.ReadDir(groupPath)
 	if err != nil {
@@ -169,8 +173,9 @@ func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 	}
 
 	// The group's own preview comes from GetCharacters and GetSubGroups; a mod listing leaves it empty.
+	siblings := modname.EntrySiblings(entries)
 	walked := mapParallel(modDirs, func(modPath string) *walkedMod {
-		return walkMod(groupPath, modPath, reports...)
+		return walkMod(groupPath, modPath, siblings.Display(filepath.Base(modPath)), reports...)
 	})
 
 	result.Mods = collectWalkedMods(walked, reports...)
@@ -186,7 +191,8 @@ func scanGroup(groupPath string, reports ...func(error)) FolderGroup {
 func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 	groupPath = filepath.Clean(groupPath)
 	result := FolderGroup{
-		Name: filepath.Base(groupPath), Path: groupPath, Mods: []ModInfo{},
+		Name: modname.DisplayName(groupPath), Path: groupPath, IsEnabled: !isDisabled(filepath.Base(groupPath)),
+		Mods: []ModInfo{},
 	}
 	entries, err := os.ReadDir(groupPath)
 	if err != nil {
@@ -200,8 +206,9 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 		}
 	}
 
+	siblings := modname.EntrySiblings(entries)
 	scanned := mapParallel(modDirs, func(modPath string) *ModInfo {
-		return scanModLight(groupPath, modPath, reports...)
+		return scanModLight(groupPath, modPath, siblings.Display(filepath.Base(modPath)), reports...)
 	})
 	mods := make([]ModInfo, 0, len(scanned))
 	for _, info := range scanned {
@@ -209,7 +216,7 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 			mods = append(mods, *info)
 		}
 	}
-	sort.Slice(mods, func(i, j int) bool {
+	sort.SliceStable(mods, func(i, j int) bool {
 		return naturalLess(mods[i].Name, mods[j].Name)
 	})
 	result.Mods = mods
@@ -222,7 +229,8 @@ func scanGroupLight(groupPath string, reports ...func(error)) FolderGroup {
 	return result
 }
 
-func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
+// displayName is the folder name shown to the user, which depends on the other folders of groupPath.
+func scanModLight(groupPath, modPath, displayName string, reports ...func(error)) *ModInfo {
 	defer holdScanDisk(modPath)()
 	if !hasModContent(modPath, reports...) {
 		return nil
@@ -230,7 +238,7 @@ func scanModLight(groupPath, modPath string, reports ...func(error)) *ModInfo {
 	name := filepath.Base(modPath)
 	buckets, images := scanPreviewWalk(modPath, previewSearchDepth, scannerMediaExtensions, true, reports...)
 	info := &ModInfo{
-		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
+		ID: stableID(groupPath, modPath), Name: displayName, Path: modPath,
 		IsEnabled: !isDisabled(name), Inis: []IniResult{},
 	}
 	info.Preview = buckets.bestPath()
@@ -246,11 +254,12 @@ func applyAppliedTools(info *ModInfo, modPath string, reports ...func(error)) {
 	info.AppliedTools = tools
 }
 
-func walkMod(groupPath, modPath string, reports ...func(error)) *walkedMod {
+// displayName is the folder name shown to the user, which depends on the other folders of groupPath.
+func walkMod(groupPath, modPath, displayName string, reports ...func(error)) *walkedMod {
 	defer holdScanDisk(modPath)()
 	name := filepath.Base(modPath)
 	info := &ModInfo{
-		ID: stableID(groupPath, modPath), Name: name, Path: modPath,
+		ID: stableID(groupPath, modPath), Name: displayName, Path: modPath,
 		IsEnabled: !isDisabled(name), Inis: []IniResult{},
 	}
 	iniPaths := []string{}
@@ -320,7 +329,7 @@ func writeSignatureEntry(signature hash.Hash, buffer []byte, root, path string, 
 }
 
 func scanMod(groupPath, modPath string, reports ...func(error)) *ModInfo {
-	walked := walkMod(groupPath, modPath, reports...)
+	walked := walkMod(groupPath, modPath, modname.DisplayName(modPath), reports...)
 	if walked == nil {
 		return nil
 	}
@@ -346,7 +355,7 @@ func collectWalkedMods(walked []*walkedMod, reports ...func(error)) []ModInfo {
 			mods = append(mods, *info)
 		}
 	}
-	sort.Slice(mods, func(i, j int) bool {
+	sort.SliceStable(mods, func(i, j int) bool {
 		return naturalLess(mods[i].Name, mods[j].Name)
 	})
 	return mods

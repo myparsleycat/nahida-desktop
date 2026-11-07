@@ -1,9 +1,12 @@
+import { cn } from "@renderer/lib/utils";
+
 import { CharacterSidebarModCountBadge } from "./character-sidebar-mod-count-badge";
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemRowProps {
   group: {
     name: string;
+    isEnabled?: boolean;
     preview?: string;
     modCount?: number;
     enabledModCount?: number;
@@ -22,6 +25,7 @@ export function CharacterSidebarItemRow({
 }: CharacterSidebarItemRowProps) {
   // A sub folder listed in a classification section sits at depth 0, so its parent is named instead of indented.
   const listedParentName = depth === 0 ? parentGroupName : undefined;
+  const disabled = group.isEnabled === false;
 
   return (
     <>
@@ -32,7 +36,12 @@ export function CharacterSidebarItemRow({
         />
       )}
 
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted",
+          disabled && "opacity-50",
+        )}
+      >
         <Preview
           path={group.preview}
           alt={group.name}
@@ -45,11 +54,25 @@ export function CharacterSidebarItemRow({
 
       {listedParentName ? (
         <span className="flex min-w-0 flex-col text-left">
-          <span className="truncate text-sm text-foreground">{group.name}</span>
+          <span
+            className={cn(
+              "truncate text-sm",
+              disabled ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {group.name}
+          </span>
           <span className="truncate text-xs text-muted-foreground">{listedParentName}</span>
         </span>
       ) : (
-        <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
+        <span
+          className={cn(
+            "min-w-0 truncate text-left text-sm",
+            disabled ? "text-muted-foreground" : "text-foreground",
+          )}
+        >
+          {group.name}
+        </span>
       )}
       <CharacterSidebarModCountBadge group={group} />
     </>

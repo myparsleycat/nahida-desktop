@@ -581,7 +581,7 @@ func TestNteWrappedPakFolders(t *testing.T) {
 			name      string
 			isEnabled bool
 		}{
-			{"DISABLED Shinku", false},
+			{"Shinku", false},
 			{"Shinku Natsu Sparkle 1.3 / shinku", true},
 			{"Shinku Natsu Sparkle 1.3 / shinku burst", true},
 		}
@@ -609,6 +609,23 @@ func TestNteWrappedPakFolders(t *testing.T) {
 		}
 		if got := nteListingGroupPath(roots, disabledShinku); got != shinku {
 			t.Fatalf("listing path disabled = %q", got)
+		}
+	})
+
+	t.Run("keeps the prefix next to a folder of the same name", func(t *testing.T) {
+		t.Parallel()
+		modRoot := t.TempDir()
+		shinku := filepath.Join(modRoot, "Character", "Shinku")
+		sparkle := filepath.Join(shinku, "Sparkle")
+		writePak(t, filepath.Join(shinku, "DISABLED Shinku"), "mod_P.pak.disabled")
+		writePak(t, filepath.Join(shinku, "shinku"), "mod_P.pak")
+		writePak(t, filepath.Join(sparkle, "DISABLED burst"), "burst_P.pak.disabled")
+		writePak(t, filepath.Join(sparkle, "Burst"), "burst_P.pak")
+
+		got := modNames(nteScanGroup(testNteRoots(modRoot), shinku, false))
+		want := []string{"DISABLED Shinku", "shinku", "Sparkle / Burst", "Sparkle / DISABLED burst"}
+		if !slices.Equal(got, want) {
+			t.Fatalf("mods = %#v, want %#v", got, want)
 		}
 	})
 

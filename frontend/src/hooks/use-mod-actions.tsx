@@ -34,7 +34,7 @@ import { localFileSrc } from "@renderer/lib/local-file";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup, ModInfo } from "@renderer/types/mod";
-import { isEfmiImporter, isNteImporter, stripDisabledPrefix } from "@shared/mod";
+import { isEfmiImporter, isNteImporter } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
@@ -64,10 +64,6 @@ import {
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 import { TouchProfileDialog } from "../components/mod/touch-profile-dialog";
 import { hasMissingDependency } from "../components/mod/utils";
-
-function getRenameDefaultValue(name: string) {
-  return stripDisabledPrefix(name);
-}
 
 async function cleanupModelViewerSession(memorySessionId: string) {
   try {
@@ -456,7 +452,7 @@ export function useModActions(
             <AlertDialogTitle>{t("page.mod.dialog.missing-dependencies.title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t("page.mod.dialog.missing-dependencies.description", {
-                name: stripDisabledPrefix(enableConfirmState?.mod.name ?? ""),
+                name: enableConfirmState?.mod.name ?? "",
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -598,7 +594,7 @@ export function useModActions(
     openModelViewer,
     openPastePreview: (mod) => void openPastePreview(mod),
     openRenameDialog: (mod) => {
-      setRenameValue(getRenameDefaultValue(mod.name));
+      setRenameValue(mod.name);
       setRenameDialogState({ mod, groupPath: selectedGroupPath });
     },
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),

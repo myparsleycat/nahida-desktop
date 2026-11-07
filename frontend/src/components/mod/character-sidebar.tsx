@@ -48,7 +48,7 @@ import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import { getParentGroupPath } from "@shared/mod";
+import { getParentGroupPath, hasDisabledPrefix, siblingDisplayName } from "@shared/mod";
 import type { ModFixerAction } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
@@ -95,11 +95,17 @@ function getParentGroup(
     return null;
   }
 
+  const folderName = getGroupName(parentGroupPath);
+  const grandparentPath = getParentGroupPath(parentGroupPath);
+  const siblingNames = [...groupsByPath.keys()]
+    .filter((path) => path !== parentGroupPath && getParentGroupPath(path) === grandparentPath)
+    .map(getGroupName);
   return (
     groupsByPath.get(parentGroupPath) ??
     itemRefs.get(parentGroupPath)?.group ?? {
-      name: getGroupName(parentGroupPath),
+      name: siblingDisplayName(folderName, [folderName, ...siblingNames]),
       path: parentGroupPath,
+      isEnabled: !hasDisabledPrefix(folderName),
       mods: [],
     }
   );

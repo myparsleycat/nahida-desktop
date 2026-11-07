@@ -281,12 +281,14 @@ export interface ModDependency {
 }
 
 // The renderer's view of the bound model. Only the fields listed here differ from it: mods carry
-// renderer-only download state, and folders built in the renderer omit the preview and the counts.
+// renderer-only download state, and folders built in the renderer omit the preview, the counts and the
+// enabled state.
 export interface FolderGroup extends Omit<
     BoundFolderGroup,
-    "mods" | "preview" | "modCount" | "enabledModCount" | "classifiedSubGroups"
+    "mods" | "preview" | "modCount" | "enabledModCount" | "classifiedSubGroups" | "isEnabled"
 > {
     mods: ModInfo[];
+    isEnabled?: boolean;
     preview?: string;
     modCount?: number;
     enabledModCount?: number;

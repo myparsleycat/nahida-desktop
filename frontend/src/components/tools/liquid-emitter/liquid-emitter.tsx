@@ -96,7 +96,7 @@ export function LiquidEmitterTool({
 }: {
   modPath: string;
   /** Called when the tool moves to another folder: a new mod it created, or the restored original. */
-  onModPathChange: (modPath: string) => void;
+  onModPathChange: (modPath: string, modName: string) => void;
   /** Called with whether the anchor or look differs from what the mod has. */
   onUnsavedChange: (unsaved: boolean) => void;
 }) {
@@ -277,7 +277,7 @@ export function LiquidEmitterTool({
             return;
           }
           toast.success(t("page.tools.liquid_emitter.created"), { description: result.modPath });
-          onModPathChange(result.modPath);
+          onModPathChange(result.modPath, result.modName);
         },
         onError: (error) => toast.error(liquidErrorMessage(t, error)),
       },
@@ -337,7 +337,7 @@ export function LiquidEmitterTool({
     session.restore.mutate(undefined, {
       onSuccess: (result) => {
         toast.success(t("page.tools.liquid_emitter.restored"), { description: result.modPath });
-        onModPathChange(result.modPath);
+        onModPathChange(result.modPath, result.modName);
       },
       onError: (error) => toast.error(liquidErrorMessage(t, error)),
     });

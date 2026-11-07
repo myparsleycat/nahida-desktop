@@ -8,7 +8,6 @@ import { localFileSrc } from "@renderer/lib/local-file";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { stripDisabledPrefix } from "@shared/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { FolderIcon } from "lucide-react";
 import { memo } from "react";
@@ -88,10 +87,7 @@ export const ModListRow = memo(function ModListRow({
           </div>
           <div role="cell" className="flex min-w-0 items-center gap-1 p-2 text-left">
             <ModAppliedToolIcons tools={mod.appliedTools} />
-            <TruncatedText
-              className="block w-full text-left font-medium"
-              text={stripDisabledPrefix(mod.name)}
-            />
+            <TruncatedText className="block w-full text-left font-medium" text={mod.name} />
           </div>
           <div role="cell" className="p-2 text-right whitespace-nowrap text-muted-foreground">
             {mod.isDownloadPlaceholder ? "—" : formatSize(mod.size || 0)}

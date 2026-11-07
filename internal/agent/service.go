@@ -25,6 +25,7 @@ import (
 	"nahida.live/desktop/internal/hunting"
 	"nahida.live/desktop/internal/infra"
 	modservice "nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
@@ -2027,7 +2028,7 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 			if pathWithin(physicalRoot, entry) && !platform.SamePathFold(physicalRoot, entry) {
 				name := strings.TrimSpace(scope.ModName)
 				if name == "" {
-					name = filepath.Base(canonical)
+					name = modname.DisplayName(canonical)
 				}
 				validated := AgentScope{Type: "mod", ModPath: canonical, ModName: name}
 				// The rest of the game's Mods folder is there to compare against and to trace shared

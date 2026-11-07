@@ -263,6 +263,10 @@ export function CharacterSidebarContent({
     () => new Set(classifiedSubGroups.map((group) => group.path)),
     [classifiedSubGroups],
   );
+  const listedGroupsByPath = useMemo(
+    () => new Map([...groups, ...classifiedSubGroups].map((group) => [group.path, group])),
+    [groups, classifiedSubGroups],
+  );
 
   const renderGroups = (topLevelGroups: FolderGroup[]) =>
     topLevelGroups.map((group) => (
@@ -290,7 +294,11 @@ export function CharacterSidebarContent({
         itemStyle={itemStyle}
         modFixer={modFixer}
         onOpenModFixer={onOpenModFixer}
-        parentGroupName={classifiedPaths.has(group.path) ? parentFolderName(group.path) : undefined}
+        parentGroupName={
+          classifiedPaths.has(group.path)
+            ? parentFolderName(group.path, listedGroupsByPath)
+            : undefined
+        }
         classifiedPaths={classifiedPaths}
       />
     ));

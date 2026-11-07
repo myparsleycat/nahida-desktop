@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/transfer"
 	"nahida.live/desktop/internal/xxmi"
@@ -33,8 +33,6 @@ const (
 	lastGameSettingKey        = "last_game"
 	expandedGroupsSettingKey  = "expanded_groups"
 )
-
-var disabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
 
 // ErrModFolderLocked marks a toggle blocked by an open mod folder.
 var ErrModFolderLocked = errors.New("MOD_FOLDER_LOCKED")
@@ -282,6 +280,7 @@ type IniResult struct {
 	declares   libraryMask
 }
 
+// ModInfo describes one mod folder. Name omits the DISABLED prefix; IsEnabled carries that state.
 type ModInfo struct {
 	ID            string      `json:"id"`
 	Name          string      `json:"name"`
@@ -302,8 +301,10 @@ type ModInfo struct {
 }
 
 type FolderGroup struct {
+	// Name is the folder name without the DISABLED prefix; IsEnabled carries that state.
 	Name               string    `json:"name"`
 	Path               string    `json:"path"`
+	IsEnabled          bool      `json:"isEnabled"`
 	Mods               []ModInfo `json:"mods"`
 	Preview            *string   `json:"preview,omitempty"`
 	ModCount           int       `json:"modCount"`
@@ -1396,11 +1397,9 @@ func pathWithin(root, target string) bool {
 	return platform.SameOrChildPath(root, target)
 }
 
-func isDisabled(name string) bool { return disabledPrefixRE.MatchString(strings.TrimSpace(name)) }
+func isDisabled(name string) bool { return modname.IsDisabled(name) }
 
-func stripDisabled(name string) string {
-	return strings.TrimSpace(disabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), ""))
-}
+func stripDisabled(name string) string { return modname.StripDisabled(name) }
 
 func stableID(groupPath, modPath string) string {
 	rel, err := filepath.Rel(groupPath, modPath)

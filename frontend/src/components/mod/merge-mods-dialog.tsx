@@ -93,10 +93,7 @@ export function MergeModsDialog() {
 
   const defaultPackName = useMemo(() => {
     if (!classification) return "Merged";
-    return (
-      stripDisabledPrefix(classification.packs?.[0]?.name ?? "Merged").replace(/\s+/g, "") ||
-      "Merged"
-    );
+    return (classification.packs?.[0]?.name ?? "Merged").replace(/\s+/g, "") || "Merged";
   }, [classification]);
 
   const defaultPlan = useMemo(() => {
@@ -463,7 +460,9 @@ function MergeLeafRow({ pack, path: packPath }: { pack?: MergePackClassification
   const { t } = useTranslation();
   return (
     <div className="flex h-full flex-col justify-center rounded-md bg-background/60 px-3 py-2">
-      <div className="truncate font-medium">{pack?.name ?? stripDisabledPrefix(packPath)}</div>
+      <div className="truncate font-medium">
+        {pack?.name ?? stripDisabledPrefix(packPath.split(/[\\/]/).pop() ?? packPath)}
+      </div>
       <div className="text-xs text-muted-foreground">
         {t(`page.mod.merge.family.${pack?.family ?? "ordinary"}`)}
         {pack && !canUseClassic(pack) ? ` · ${t("page.mod.merge.namespace_only")}` : ""}

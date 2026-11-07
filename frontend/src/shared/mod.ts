@@ -34,6 +34,20 @@ export function stripDisabledPrefix(name: string): string {
     return name.replace(DISABLED_PREFIX_REGEX, "").trim();
 }
 
+export function hasDisabledPrefix(name: string): boolean {
+    return DISABLED_PREFIX_REGEX.test(name.trim());
+}
+
+// Mirrors Siblings.Display in internal/modname: the prefix stays when another folder of the same
+// directory has the same name without it. siblingNames includes name itself.
+export function siblingDisplayName(name: string, siblingNames: readonly string[]): string {
+    const key = stripDisabledPrefix(name).toLowerCase();
+    const twins = siblingNames.filter(
+        (sibling) => stripDisabledPrefix(sibling).toLowerCase() === key,
+    ).length;
+    return twins > 1 ? name.trim() : stripDisabledPrefix(name);
+}
+
 const MERGE_NAME_FORBIDDEN_RE = /[\0[\]=\r\n;"'$<>:/\\|?*]/;
 
 export function isSafeMergeName(name: string) {

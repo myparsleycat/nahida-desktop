@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -131,7 +132,7 @@ func (t *Service) loadModViewer(
 		MemorySessionID:  sessionID,
 		INIPath:          iniPaths[0],
 		ModPath:          requestedPath,
-		Name:             filepath.Base(strings.TrimRight(requestedPath, `\/`)),
+		Name:             modname.DisplayName(requestedPath),
 		Meshes:           []ModelViewerMeshTransport{},
 		Textures:         make(map[string]ModelViewerTextureTransport),
 		Variables:        []ModelViewerVariable{},
@@ -659,7 +660,7 @@ func (p *modelViewerPreparedGeometry) scopeMeshes(
 	}
 	label := scope.form
 	if label == "." {
-		label = filepath.Base(folder)
+		label = modname.DisplayName(folder)
 	}
 	p.forms = append(p.forms, ModelViewerForm{ID: scope.form, Label: label})
 }

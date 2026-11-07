@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"nahida.live/desktop/internal/modname"
 )
 
 // Some exporters wrap form-specific draws in CommandList..._<form>Sub and
@@ -33,7 +35,7 @@ func (p *modelViewerPreparedGeometry) scopeCommandForms(
 	if parent == "" {
 		parent = "."
 	}
-	group := filepath.Base(filepath.Dir(iniPath))
+	group := modname.DisplayName(filepath.Dir(iniPath))
 	for _, label := range labels {
 		id := parent + "::" + filepath.Base(iniPath) + "::" + label
 		p.forms = append(p.forms, ModelViewerForm{ID: id, Label: label, Group: group})

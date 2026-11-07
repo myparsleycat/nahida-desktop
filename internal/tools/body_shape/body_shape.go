@@ -19,6 +19,7 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod/appliedtool"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools/modmesh"
 )
@@ -39,8 +40,7 @@ const (
 )
 
 var (
-	bodyDisabledPrefixRE = regexp.MustCompile(`(?i)^(?:disabled[\s_]*)+[\s_]+`)
-	bodyShapedNameRE     = regexp.MustCompile(`(?i)(?:\s*\(Body Shaped\)(?:\s*\(\d+\))?)+$`)
+	bodyShapedNameRE = regexp.MustCompile(`(?i)(?:\s*\(Body Shaped\)(?:\s*\(\d+\))?)+$`)
 )
 
 type BodyShapeMeshCandidate struct {
@@ -1350,6 +1350,6 @@ func writeBodyFileAtomic(target string, data []byte, mode os.FileMode) (returnEr
 }
 
 func bodyShapedFolderBaseName(name string) string {
-	base := bodyDisabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), "")
+	base := modname.StripDisabled(name)
 	return strings.TrimSpace(bodyShapedNameRE.ReplaceAllString(base, "")) + bodyShapedSuffix
 }

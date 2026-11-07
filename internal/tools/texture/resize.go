@@ -16,6 +16,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 )
 
 const (
@@ -95,6 +96,15 @@ func (t *Service) GetTextureResizeState() TextureResizeProgressEvent {
 }
 
 func (t *Service) ResizeTextureFolder(ctx context.Context, input TextureResizeRunInput) (TextureResizeResult, error) {
+	return t.resizeTextureFolder(ctx, input, filepath.Base)
+}
+
+// displayName names the folder in the progress shown to the user.
+func (t *Service) resizeTextureFolder(
+	ctx context.Context,
+	input TextureResizeRunInput,
+	displayName func(path string) string,
+) (TextureResizeResult, error) {
 	target := strings.TrimSpace(input.TargetPath)
 	if target == "" {
 		return TextureResizeResult{}, infra.ContractError("Target path is required.")
@@ -113,6 +123,7 @@ func (t *Service) ResizeTextureFolder(ctx context.Context, input TextureResizeRu
 	return t.runTextureResizeJob(
 		ctx,
 		resolved,
+		displayName(resolved),
 		settings,
 		false,
 		func(jobCtx context.Context) (TextureResizeResult, error) {
@@ -126,7 +137,11 @@ func (t *Service) ResizeTextureMod(
 	modPath string,
 	input TextureResizeModInput,
 ) (TextureResizeResult, error) {
-	return t.ResizeTextureFolder(ctx, TextureResizeRunInput{TargetPath: modPath, Settings: input.Settings})
+	return t.resizeTextureFolder(
+		ctx,
+		TextureResizeRunInput{TargetPath: modPath, Settings: input.Settings},
+		modname.DisplayName,
+	)
 }
 
 func (t *Service) ResizeTextureFile(ctx context.Context, input TextureResizeFileRunInput) (TextureResizeResult, error) {
@@ -145,6 +160,7 @@ func (t *Service) ResizeTextureFile(ctx context.Context, input TextureResizeFile
 	return t.runTextureResizeJob(
 		ctx,
 		resolved,
+		filepath.Base(resolved),
 		settings,
 		true,
 		func(jobCtx context.Context) (TextureResizeResult, error) {
@@ -171,13 +187,14 @@ func (t *Service) saveFullTextureResizeSettings(
 func (t *Service) runTextureResizeJob(
 	ctx context.Context,
 	path string,
+	name string,
 	settings TextureResizeSettings,
 	singleFile bool,
 	work func(context.Context) (TextureResizeResult, error),
 ) (TextureResizeResult, error) {
 	running := TextureResizeProgressEvent{
 		Status: "running", Operation: lo.ToPtr(settings.Operation), FilePath: lo.ToPtr(path),
-		FileName: lo.ToPtr(filepath.Base(path)),
+		FileName: lo.ToPtr(name),
 	}
 	if singleFile {
 		running.TotalFiles, running.ProcessedFiles = lo.ToPtr(1), lo.ToPtr(0)

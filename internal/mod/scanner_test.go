@@ -28,7 +28,7 @@ func TestWalkModCollectsSizeMtimeIniAndPreviewInOnePass(t *testing.T) {
 	writeModFile(t, modPath, "mod.ini", "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
 	writeModFile(t, modPath, "nested/buffer.buf", "xxxxx")
 
-	walked := walkMod(group, modPath)
+	walked := walkMod(group, modPath, filepath.Base(modPath))
 	if walked == nil || walked.info == nil {
 		t.Fatal("walkMod returned nil")
 	}
@@ -56,8 +56,8 @@ func TestWalkModSignatureTracksFileRenamesWithUnchangedMetadata(t *testing.T) {
 	writeModFile(t, modPath, "mod.ini", "[Constants]\n")
 	buffer := writeModFile(t, modPath, "body.buf", "xxxxx")
 
-	first := walkMod(group, modPath)
-	again := walkMod(group, modPath)
+	first := walkMod(group, modPath, filepath.Base(modPath))
+	again := walkMod(group, modPath, filepath.Base(modPath))
 	if first == nil || first.info.Signature == "" || again.info.Signature != first.info.Signature {
 		t.Fatalf("signature is not stable: %#v, %#v", first, again)
 	}
@@ -65,7 +65,7 @@ func TestWalkModSignatureTracksFileRenamesWithUnchangedMetadata(t *testing.T) {
 	if err := os.Rename(buffer, filepath.Join(modPath, "head.buf")); err != nil {
 		t.Fatal(err)
 	}
-	renamed := walkMod(group, modPath)
+	renamed := walkMod(group, modPath, filepath.Base(modPath))
 	if renamed.info.Size != first.info.Size || renamed.info.Mtime != first.info.Mtime {
 		t.Fatalf("rename changed size or mtime: %#v -> %#v", first.info, renamed.info)
 	}
@@ -82,7 +82,7 @@ func TestOrdinaryScannerExcludesOGGWhileNTEPreviewFinderAcceptsIt(t *testing.T) 
 	modPath := filepath.Join(group, "Mod")
 	ogg := writeModFile(t, modPath, "preview.ogg", "audio")
 	writeModFile(t, modPath, "mod.ini", "[Constants]\n")
-	walked := walkMod(group, modPath)
+	walked := walkMod(group, modPath, filepath.Base(modPath))
 	if walked == nil || walked.info == nil {
 		t.Fatal("ordinary scanner returned nil")
 	}
@@ -95,7 +95,7 @@ func TestOrdinaryScannerExcludesOGGWhileNTEPreviewFinderAcceptsIt(t *testing.T) 
 func TestScanGroupScansModsInParallel(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	for _, name := range []string{"Mod B", "Mod A", "DISABLED Mod C"} {
+	for _, name := range []string{"Mod B", "Mod A", "DISABLED Mod C", "DISABLED_mod b"} {
 		writeModFile(t, root, filepath.Join(name, "mod.ini"), "[KeyToggle]\nkey = F1\n$swap = 0, 1\n")
 		writeModFile(t, root, filepath.Join(name, "preview.png"), "image")
 	}
@@ -104,15 +104,42 @@ func TestScanGroupScansModsInParallel(t *testing.T) {
 	}
 
 	group := scanGroup(root)
-	if group.ModCount != 3 || group.EnabledModCount != 2 {
+	if group.ModCount != 4 || group.EnabledModCount != 2 {
 		t.Fatalf("counts = %+v", group)
-	}
-	if len(group.Mods) != 3 || group.Mods[0].Name != "DISABLED Mod C" || group.Mods[1].Name != "Mod A" {
-		t.Fatalf("sorted mods = %#v", group.Mods)
 	}
 	for _, info := range group.Mods {
 		if info.Preview == nil || len(info.Inis) != 1 {
 			t.Fatalf("mod missing preview/ini: %#v", info)
+		}
+	}
+
+	// The DISABLED prefix is left out of the name unless a sibling folder has the same name without it, and the
+	// enabled state still comes from the folder name on disk.
+	want := map[string]struct {
+		name    string
+		enabled bool
+	}{
+		"Mod A":          {"Mod A", true},
+		"Mod B":          {"Mod B", true},
+		"DISABLED Mod C": {"Mod C", false},
+		"DISABLED_mod b": {"DISABLED_mod b", false},
+	}
+	for _, info := range group.Mods {
+		expected := want[filepath.Base(info.Path)]
+		if info.Name != expected.name || info.IsEnabled != expected.enabled {
+			t.Fatalf("mod %q = {%q, %v}, want %+v", filepath.Base(info.Path), info.Name, info.IsEnabled, expected)
+		}
+	}
+	for _, listed := range listGroups(root, false) {
+		expected, ok := want[filepath.Base(listed.Path)]
+		if ok && (listed.Name != expected.name || listed.IsEnabled != expected.enabled) {
+			t.Fatalf(
+				"group %q = {%q, %v}, want %+v",
+				filepath.Base(listed.Path),
+				listed.Name,
+				listed.IsEnabled,
+				expected,
+			)
 		}
 	}
 }

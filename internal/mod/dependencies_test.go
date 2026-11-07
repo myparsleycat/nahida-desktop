@@ -161,8 +161,8 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 
 	got := dependencies()
 	want := []ModDependency{{Name: "RabbitFX"}, {Name: "ORFix", Installed: true}}
-	if !slices.Equal(got["DISABLED Needs"], want) {
-		t.Fatalf("dependencies = %#v, want %#v", got["DISABLED Needs"], want)
+	if !slices.Equal(got["Needs"], want) {
+		t.Fatalf("dependencies = %#v, want %#v", got["Needs"], want)
 	}
 	for _, name := range []string{"Bundled", "Plain", "Inactive"} {
 		if len(got[name]) != 0 {
@@ -179,19 +179,19 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 	}
 	writeModFile(t, library, "RabbitFX.ini", string(content))
 	service.InvalidateLibraries()
-	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
+	if got := dependencies()["Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies with a disabled library = %#v, want %#v", got, want)
 	}
 
 	if err := os.Rename(library, filepath.Join(modsRoot, "Utils", "RabbitFX")); err != nil {
 		t.Fatal(err)
 	}
-	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
+	if got := dependencies()["Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies before invalidation = %#v, want the cached %#v", got, want)
 	}
 	service.InvalidateLibraries()
 	want[0].Installed = true
-	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
+	if got := dependencies()["Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies with the library enabled = %#v, want %#v", got, want)
 	}
 
@@ -199,7 +199,7 @@ func TestGetModsReportsLibraryDependencies(t *testing.T) {
 	writeModFile(t, filepath.Join(modsRoot, "Utils", "RabbitFX"), "RabbitFX.ini", "namespace = Something\n")
 	service.InvalidateLibraries()
 	want[0].Installed = false
-	if got := dependencies()["DISABLED Needs"]; !slices.Equal(got, want) {
+	if got := dependencies()["Needs"]; !slices.Equal(got, want) {
 		t.Fatalf("dependencies after the library INI changed = %#v, want %#v", got, want)
 	}
 }

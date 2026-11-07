@@ -13,6 +13,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 )
 
 func modelViewerArgument(args []string, workingDir string) string {
@@ -217,7 +218,7 @@ func (v *modelViewerWindows) Open(path string) {
 	}
 	opts := application.WebviewWindowOptions{
 		Name:             key,
-		Title:            filepath.Base(path) + " — Nahida Model Viewer",
+		Title:            modname.DisplayName(path) + " — Nahida Model Viewer",
 		URL:              "/#/model-viewer-window?" + url.Values{"path": {path}}.Encode(),
 		Width:            1200,
 		Height:           800,

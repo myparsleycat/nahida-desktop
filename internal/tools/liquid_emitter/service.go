@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
@@ -318,6 +319,7 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 	sc.stage = stageLoad
 	inspection := Inspection{
 		ModPath:     sc.root,
+		ModName:     modname.DisplayName(sc.root),
 		Importer:    sc.importer,
 		Runtime:     rt.status,
 		Emitters:    []Emitter{},
