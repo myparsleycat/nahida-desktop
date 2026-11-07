@@ -83,7 +83,11 @@ export const ModCard = memo(function ModCard({
               return;
             }
             const target = mouseDownTargetRef.current as HTMLElement;
-            if (target && (target.tagName === "INPUT" || target.closest("button"))) {
+            if (
+              target &&
+              (target.tagName === "INPUT" ||
+                target.closest("button, [data-slot='scroll-area-scrollbar']"))
+            ) {
               return;
             }
             onToggle(mod, e);
