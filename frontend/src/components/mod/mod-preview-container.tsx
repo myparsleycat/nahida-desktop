@@ -205,7 +205,7 @@ export function ModPreviewContainer({
         previewContent
       )}
       {hasMediaPreview && images.length > 1 && (
-        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between">
+        <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between opacity-0 transition-opacity duration-150 group-hover/mod-card:opacity-100 focus-within:opacity-100">
           {([-1, 1] as const).map((direction) => (
             <Button
               key={direction}
