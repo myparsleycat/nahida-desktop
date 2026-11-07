@@ -198,19 +198,19 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 var builtinSettingKeys = append([]string{
 	"xxmi_root", "xxmi_auto_update", "xxmi_include_prereleases", sharedLibsVersionKey, sharedCustomDLLKey,
 	sharedLibsProviderKey, diagnosticsSessionsKey,
-}, shortcutIconSettingKeys()...)
+}, importerIconSettingKeys()...)
 
-// shortcutIconSettingKey names the setting row holding the custom Quick Start icon ID of an importer. It lives
-// outside ImporterConfig because the icon applies at once, while a config is saved from a draft that would
-// overwrite it.
-func shortcutIconSettingKey(key string) string {
+// importerIconSettingKey names the setting row holding the custom icon ID of an importer. It lives outside
+// ImporterConfig because the icon applies at once, while a config is saved from a draft that would overwrite it.
+// The row keeps its name from when the icon applied only to the shortcut, so existing selections stay.
+func importerIconSettingKey(key string) string {
 	return "xxmi_shortcut_icon_" + strings.ToLower(key)
 }
 
-func shortcutIconSettingKeys() []string {
+func importerIconSettingKeys() []string {
 	keys := make([]string, 0, len(importerPackages))
 	for _, key := range slices.Sorted(maps.Keys(importerPackages)) {
-		keys = append(keys, shortcutIconSettingKey(key))
+		keys = append(keys, importerIconSettingKey(key))
 	}
 	return keys
 }
@@ -271,13 +271,13 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		}
 	}
 
-	// The reset forgets custom shortcut icon selections, so shortcuts that showed one return to the importer icon.
+	// The reset forgets custom importer icon selections, so shortcuts that showed one return to the importer icon.
 	stage = "read-shortcut-icons"
 	x.shortcutMu.Lock()
 	defer x.shortcutMu.Unlock()
 	customIcons := make([]string, 0, len(importerPackages))
 	for key := range importerPackages {
-		id, err := x.shortcutIconID(ctx, key)
+		id, err := x.importerIconID(ctx, key)
 		if err != nil {
 			return err
 		}

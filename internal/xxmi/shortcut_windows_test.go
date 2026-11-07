@@ -22,6 +22,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/gen2brain/avif"
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
 	"github.com/rodrigocfd/windigo/x/cosh"
@@ -183,7 +184,7 @@ func TestWriteShortcutIconForEveryImporter(t *testing.T) {
 	}
 }
 
-func TestConvertShortcutIcon(t *testing.T) {
+func TestConvertImporterIcon(t *testing.T) {
 	dir := t.TempDir()
 
 	// A wide JPEG keeps its aspect ratio and is centered between transparent bands. Its left half is red and its
@@ -208,7 +209,7 @@ func TestConvertShortcutIcon(t *testing.T) {
 	if err := os.WriteFile(jpegPath, wideJPEG, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	data, err := convertShortcutIcon(jpegPath)
+	data, err := convertImporterIcon(jpegPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +258,7 @@ func TestConvertShortcutIcon(t *testing.T) {
 			if err := os.WriteFile(rotatedPath, rotated, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if data, err = convertShortcutIcon(rotatedPath); err != nil {
+			if data, err = convertImporterIcon(rotatedPath); err != nil {
 				t.Fatalf("convert %s: %v", name, err)
 			}
 			if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
@@ -280,8 +281,82 @@ func TestConvertShortcutIcon(t *testing.T) {
 	if err := os.WriteFile(webpPath, pixel, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := convertShortcutIcon(webpPath); err != nil {
+	if _, err := convertImporterIcon(webpPath); err != nil {
 		t.Fatalf("convert WebP: %v", err)
+	}
+
+	// AVIF goes through its own decoder, which must still fit the image like the other formats.
+	encoded.Reset()
+	if err := avif.Encode(&encoded, wide, avif.Options{Lossless: true}); err != nil {
+		t.Fatal(err)
+	}
+	avifPath := filepath.Join(dir, "wide.avif")
+	if err := os.WriteFile(avifPath, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if data, err = convertImporterIcon(avifPath); err != nil {
+		t.Fatalf("convert AVIF: %v", err)
+	}
+	if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	assertPixel("wide.avif", converted, 64, 128, red)
+	assertPixel("wide.avif", converted, 192, 128, blue)
+
+	// An irot angle of 1 turns the image a quarter anticlockwise, which puts the stored left half at the bottom.
+	rotatedPath := filepath.Join(dir, "rotated.avif")
+	if err := os.WriteFile(rotatedPath, withAVIFRotation(t, encoded.Bytes(), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if data, err = convertImporterIcon(rotatedPath); err != nil {
+		t.Fatalf("convert rotated AVIF: %v", err)
+	}
+	if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, alpha := converted.At(10, 128).RGBA(); alpha != 0 {
+		t.Fatalf("rotated.avif: band left of the upright image has alpha %d, want transparent", alpha)
+	}
+	assertPixel("rotated.avif", converted, 128, 64, blue)
+	assertPixel("rotated.avif", converted, 128, 192, red)
+
+	// Many AVIF files have the major brand mif1 and name avif only among the compatible brands.
+	mif1 := bytes.Clone(encoded.Bytes())
+	copy(mif1[8:12], "mif1")
+	mif1Path := filepath.Join(dir, "mif1.avif")
+	if err := os.WriteFile(mif1Path, mif1, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if data, err = convertImporterIcon(mif1Path); err != nil {
+		t.Fatalf("convert AVIF with major brand mif1: %v", err)
+	}
+	if converted, err = png.Decode(bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	assertPixel("mif1.avif", converted, 64, 128, red)
+
+	t.Run("rejects oversized AVIF sequence", func(t *testing.T) {
+		// The primary item's ispe reports 1x1, but the sequence track has two 4097x4096 frames.
+		path := filepath.Join("testdata", "oversized-avif-sequence.avif")
+		if _, err := convertImporterIcon(path); err == nil ||
+			!strings.HasPrefix(err.Error(), "XXMI_SHORTCUT_ICON_INVALID:") {
+			t.Fatalf("convert oversized AVIF sequence error = %v", err)
+		}
+	})
+
+	// An empty pitm box panics the AVIF box parser; the file is rejected instead of closing the application.
+	malformed := filepath.Join(dir, "malformed.avif")
+	if err := os.WriteFile(malformed, []byte{
+		0, 0, 0, 16, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f', 0, 0, 0, 0,
+		0, 0, 0, 36, 'm', 'e', 't', 'a', 0, 0, 0, 0,
+		0, 0, 0, 8, 'p', 'i', 't', 'm',
+		0, 0, 0, 16, 'i', 'p', 'r', 'p', 0, 0, 0, 8, 'i', 'p', 'c', 'o',
+	}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := convertImporterIcon(malformed); err == nil ||
+		!strings.HasPrefix(err.Error(), "XXMI_SHORTCUT_ICON_INVALID:") {
+		t.Fatalf("convert malformed AVIF error = %v", err)
 	}
 
 	// A pixel count past the limit is rejected from the header, before the pixels are decoded.
@@ -293,7 +368,7 @@ func TestConvertShortcutIcon(t *testing.T) {
 	if err := os.WriteFile(large, encoded.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := convertShortcutIcon(large); err == nil ||
+	if _, err := convertImporterIcon(large); err == nil ||
 		!strings.HasPrefix(err.Error(), "XXMI_SHORTCUT_ICON_INVALID:") {
 		t.Fatalf("convert oversized image error = %v", err)
 	}
@@ -400,4 +475,129 @@ func loadShortcutLink(t *testing.T, releaser *win.OleReleaser, path string) *win
 		t.Fatal(err)
 	}
 	return link
+}
+
+func TestGetImporterIconsFallsBackForDamagedIcon(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+	ctx := context.Background()
+	service := New()
+	service.UseClient(newXXMITestClient(t))
+	dir, err := shortcutIconRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// SRMI keeps a valid custom icon, GIMI names one whose preview is gone, and ZZMI one whose preview no longer
+	// matches its ID.
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewNRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	valid := hashBytes(encoded.Bytes())[:12]
+	if err := writeShortcutFile(customImporterIconPNG(dir, "SRMI", valid), encoded.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	const damaged = "0123456789ab"
+	if err := writeShortcutFile(customImporterIconPNG(dir, "ZZMI", damaged), encoded.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	for key, id := range map[string]string{"GIMI": "abcdef012345", "SRMI": valid, "ZZMI": damaged} {
+		if err := service.client.Settings.Upsert(ctx, importerIconSettingKey(key), &id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	icons, err := service.GetImporterIcons(ctx)
+	if err != nil || len(icons) != len(importerPackages) {
+		t.Fatalf("icons = %+v, error = %v", icons, err)
+	}
+	for _, icon := range icons {
+		want := ImporterIcon{Key: icon.Key}
+		switch icon.Key {
+		case "SRMI":
+			want.Custom, want.Path = true, customImporterIconPNG(dir, "SRMI", valid)
+		case "GIMI", "ZZMI":
+			want.Custom, want.Unavailable = true, true
+		}
+		if icon != want {
+			t.Fatalf("%s icon = %+v, want %+v", icon.Key, icon, want)
+		}
+	}
+}
+
+// withAVIFRotation adds an irot property with angle to the primary item of an AVIF written by avif.Encode. The new
+// bytes sit inside meta, ahead of mdat, so the item locations in iloc move by the same amount.
+func withAVIFRotation(t *testing.T, data []byte, angle byte) []byte {
+	t.Helper()
+	type box struct{ start, payload, end int }
+	children := func(from, to int) map[string]box {
+		found := map[string]box{}
+		for offset := from; offset+8 <= to; {
+			size := int(binary.BigEndian.Uint32(data[offset:]))
+			if size < 8 || offset+size > to {
+				t.Fatalf("AVIF box at %d has size %d", offset, size)
+			}
+			found[string(data[offset+4:offset+8])] = box{offset, offset + 8, offset + size}
+			offset += size
+		}
+		return found
+	}
+	meta, ok := children(0, len(data))["meta"]
+	if !ok {
+		t.Fatal("AVIF has no meta box")
+	}
+	inMeta := children(meta.payload+4, meta.end)
+	iprp, iloc, pitm := inMeta["iprp"], inMeta["iloc"], inMeta["pitm"]
+	inIprp := children(iprp.payload, iprp.end)
+	ipco, ipma := inIprp["ipco"], inIprp["ipma"]
+	if iprp.end == 0 || iloc.end == 0 || pitm.end == 0 || ipco.end == 0 || ipma.end == 0 {
+		t.Fatalf("AVIF meta lacks iprp, iloc, pitm, ipco, or ipma: %v %v", inMeta, inIprp)
+	}
+	property := len(children(ipco.payload, ipco.end)) + 1
+	primary := binary.BigEndian.Uint16(data[pitm.payload+4:])
+
+	// Version 0 ipma with 7-bit property indices: item ID, association count, then one byte per association.
+	if data[ipma.payload] != 0 || data[ipma.payload+3]&1 != 0 || property >= 0x80 {
+		t.Fatal("ipma layout is not the one this helper writes")
+	}
+	association, count := -1, 0
+	for entry, offset := 0, ipma.payload+8; entry < int(binary.BigEndian.Uint32(data[ipma.payload+4:])); entry++ {
+		count = int(data[offset+2])
+		if binary.BigEndian.Uint16(data[offset:]) == primary {
+			association = offset
+			break
+		}
+		offset += 3 + count
+	}
+	if association < 0 {
+		t.Fatal("ipma has no entry for the primary item")
+	}
+
+	// Version 0 iloc with 4-byte extent offsets and no base offset.
+	const grown = 9 + 1
+	patched := bytes.Clone(data)
+	if data[iloc.payload] != 0 || data[iloc.payload+4] != 0x44 || data[iloc.payload+5]>>4 != 0 {
+		t.Fatal("iloc layout is not the one this helper writes")
+	}
+	for item, offset := 0, iloc.payload+8; item < int(binary.BigEndian.Uint16(data[iloc.payload+6:])); item++ {
+		extents := int(binary.BigEndian.Uint16(data[offset+4:]))
+		for extent := range extents {
+			at := offset + 6 + extent*8
+			binary.BigEndian.PutUint32(patched[at:], binary.BigEndian.Uint32(data[at:])+grown)
+		}
+		offset += 6 + extents*8
+	}
+	for _, header := range []struct {
+		at, by int
+	}{{meta.start, grown}, {iprp.start, grown}, {ipco.start, 9}, {ipma.start, 1}} {
+		binary.BigEndian.PutUint32(patched[header.at:], binary.BigEndian.Uint32(data[header.at:])+uint32(header.by))
+	}
+	patched[association+2]++
+
+	irot := []byte{0, 0, 0, 9, 'i', 'r', 'o', 't', angle}
+	associationEnd := association + 3 + count
+	rotated := append(bytes.Clone(patched[:ipco.end]), irot...)
+	rotated = append(rotated, patched[ipco.end:associationEnd]...)
+	rotated = append(rotated, 0x80|byte(property))
+	return append(rotated, patched[associationEnd:]...)
 }

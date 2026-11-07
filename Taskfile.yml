@@ -11,6 +11,11 @@ vars:
   # Taskfile via this variable.
   GOOS: '{{.GOOS | default OS}}'
 
+# internal/xxmi refuses to compile without nodynamic, which keeps github.com/gen2brain/avif from loading
+# libavif.dll at startup. Commands that pass their own -tags, such as the application build, list it themselves.
+env:
+  GOFLAGS: -tags=nodynamic
+
 includes:
   common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml

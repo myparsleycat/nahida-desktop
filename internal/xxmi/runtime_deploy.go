@@ -738,7 +738,7 @@ func hashBytes(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// isHashID reports whether id is the 12-digit hashBytes prefix that names custom DLL and shortcut icon cache entries.
+// isHashID reports whether id is the 12-digit hashBytes prefix that names custom DLL and importer icon cache entries.
 func isHashID(id string) bool {
 	return len(id) == 12 && strings.Trim(id, "0123456789abcdef") == ""
 }

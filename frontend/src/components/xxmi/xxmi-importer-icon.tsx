@@ -1,69 +1,59 @@
 import { Dialog } from "@bindings/platform";
 import { XXMI } from "@bindings/xxmi";
-import type { ShortcutIconChange } from "@bindings/xxmi/models";
+import type { ImporterIconChange } from "@bindings/xxmi/models";
 import { GameIcon } from "@renderer/components/game-icon";
 import { Button } from "@renderer/components/ui/button";
-import { localFileSrc } from "@renderer/lib/local-file";
+import { importerIconsQueryKey, useImporterIcons } from "@renderer/hooks/use-importer-icons";
 import { toErrorMessage } from "@shared/utils";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ImageUpIcon, RotateCcwIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-// Keep in sync with convertShortcutIcon in internal/xxmi/shortcut_icon_windows.go.
+// Keep in sync with convertImporterIcon in internal/xxmi/importer_icon_windows.go.
 const invalidIconCode = "XXMI_SHORTCUT_ICON_INVALID";
 
-export function XXMIShortcutIconField({ importer }: { importer: string }) {
+export function XXMIImporterIconField({ importer }: { importer: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const queryKey = ["xxmi:shortcut-icon", importer];
-  const { data: icon, isError } = useQuery({
-    queryKey,
-    queryFn: () => XXMI.GetShortcutIcon(importer),
-  });
+  const { data: icons, isError } = useImporterIcons();
+  const icon = icons?.find((entry) => entry.key === importer);
+  const unavailable = isError || icon?.unavailable;
 
-  const apply = async (change: Promise<ShortcutIconChange>) => {
+  const apply = async (change: Promise<ImporterIconChange>) => {
     try {
       const result = await change;
       toast.success(
         t(
           result.shortcutUpdated
-            ? "page.setting.xxmi.builtin.shortcutIconShortcutUpdated"
-            : "page.setting.xxmi.builtin.shortcutIconChanged",
+            ? "page.setting.xxmi.builtin.importerIconShortcutUpdated"
+            : "page.setting.xxmi.builtin.importerIconChanged",
         ),
       );
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(
         message.includes(invalidIconCode)
-          ? t("page.setting.xxmi.builtin.shortcutIconInvalid")
+          ? t("page.setting.xxmi.builtin.importerIconInvalid")
           : message,
       );
     } finally {
-      await queryClient.invalidateQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey: importerIconsQueryKey });
     }
   };
 
   return (
     <div className="flex items-center justify-between gap-6">
       <div className="flex min-w-0 items-center gap-3">
-        {icon?.custom ? (
-          <img
-            src={localFileSrc(icon.path)}
-            alt={importer}
-            className="size-10 shrink-0 rounded-md object-contain"
-          />
-        ) : (
-          <GameIcon gameName={importer} className="size-10 shrink-0 rounded-md object-contain" />
-        )}
+        <GameIcon gameName={importer} className="size-10 shrink-0 rounded-md object-contain" />
         <div className="min-w-0 space-y-0.5">
-          <span className="text-sm font-medium">{t("page.setting.xxmi.builtin.shortcutIcon")}</span>
+          <span className="text-sm font-medium">{t("page.setting.xxmi.builtin.importerIcon")}</span>
           <p className="text-xs text-muted-foreground">
-            {t("page.setting.xxmi.builtin.shortcutIconDescription")}
+            {t("page.setting.xxmi.builtin.importerIconDescription")}
           </p>
-          {isError && (
+          {unavailable && (
             <p className="text-xs text-destructive">
-              {t("page.setting.xxmi.builtin.shortcutIconLoadFailed")}
+              {t("page.setting.xxmi.builtin.importerIconLoadFailed")}
             </p>
           )}
         </div>
@@ -73,10 +63,10 @@ export function XXMIShortcutIconField({ importer }: { importer: string }) {
           <Button
             variant="outline"
             size="sm"
-            onClickPromise={() => apply(XXMI.ResetShortcutIcon(importer))}
+            onClickPromise={() => apply(XXMI.ResetImporterIcon(importer))}
           >
             <RotateCcwIcon />
-            {t("page.setting.xxmi.builtin.shortcutIconReset")}
+            {t("page.setting.xxmi.builtin.importerIconReset")}
           </Button>
         )}
         <Button
@@ -84,26 +74,26 @@ export function XXMIShortcutIconField({ importer }: { importer: string }) {
           size="sm"
           onClickPromise={async () => {
             const picked = await Dialog.ShowOpenDialog({
-              title: t("page.setting.xxmi.builtin.shortcutIconChange"),
+              title: t("page.setting.xxmi.builtin.importerIconChange"),
               defaultPath: "",
               filters: [
                 {
-                  name: t("page.setting.xxmi.builtin.shortcutIconFilter"),
-                  extensions: ["png", "jpg", "jpeg", "webp"],
+                  name: t("page.setting.xxmi.builtin.importerIconFilter"),
+                  extensions: ["png", "jpg", "jpeg", "webp", "avif"],
                 },
               ],
               properties: ["openFile"],
-              role: "xxmi-shortcut-icon",
+              role: "xxmi-importer-icon",
             }).catch((error: unknown) => {
               toast.error(toErrorMessage(error));
               return undefined;
             });
             if (!picked || picked.canceled || !picked.filePaths?.[0]) return;
-            await apply(XXMI.SetShortcutIcon(importer, picked.filePaths[0]));
+            await apply(XXMI.SetImporterIcon(importer, picked.filePaths[0]));
           }}
         >
           <ImageUpIcon />
-          {t("page.setting.xxmi.builtin.shortcutIconChange")}
+          {t("page.setting.xxmi.builtin.importerIconChange")}
         </Button>
       </div>
     </div>

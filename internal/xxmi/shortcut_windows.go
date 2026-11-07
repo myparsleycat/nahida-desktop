@@ -18,7 +18,6 @@ import (
 	"github.com/rodrigocfd/windigo/x/cosh"
 	"github.com/rodrigocfd/windigo/x/winsh"
 
-	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -51,19 +50,6 @@ func (p *shortcutPersistFile) call(method int, path string, argument uintptr) er
 		return co.HRESULT(result)
 	}
 	return nil
-}
-
-// ShortcutIcon is the icon an importer's Quick Start shortcut uses.
-type ShortcutIcon struct {
-	Custom bool `json:"custom"`
-	// Path is the converted 256x256 PNG of a custom icon; it is empty for the importer's own icon.
-	Path string `json:"path"`
-}
-
-type ShortcutIconChange struct {
-	Icon ShortcutIcon `json:"icon"`
-	// ShortcutUpdated reports that an existing desktop shortcut was rewritten with the new icon.
-	ShortcutUpdated bool `json:"shortcutUpdated"`
 }
 
 func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
@@ -100,177 +86,6 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	return path, nil
 }
 
-func (x *XXMI) GetShortcutIcon(ctx context.Context, key string) (ShortcutIcon, error) {
-	spec, ok := lookupImporterPackage(key)
-	if !ok {
-		return ShortcutIcon{}, fmt.Errorf("unknown importer %q", key)
-	}
-	dir, err := shortcutIconRoot()
-	if err != nil {
-		return ShortcutIcon{}, err
-	}
-	id, err := x.shortcutIconID(ctx, spec.key)
-	if err != nil || id == "" {
-		return ShortcutIcon{}, err
-	}
-	// A missing or damaged custom image is reported so the settings page can offer Reset; meanwhile
-	// resolveShortcutIcon keeps new shortcuts on the importer's own icon.
-	if _, err := readCustomShortcutIcon(dir, spec.key, id); err != nil {
-		return ShortcutIcon{}, fmt.Errorf("read %s custom shortcut icon %s: %w", spec.key, id, err)
-	}
-	return ShortcutIcon{Custom: true, Path: customShortcutIconPNG(dir, spec.key, id)}, nil
-}
-
-// SetShortcutIcon converts a PNG, JPEG, or WebP image into the importer's Quick Start icon and applies it to the
-// desktop shortcut when one exists.
-func (x *XXMI) SetShortcutIcon(ctx context.Context, key, imagePath string) (ShortcutIconChange, error) {
-	imagePath = strings.TrimSpace(imagePath)
-	if imagePath == "" {
-		return ShortcutIconChange{}, errors.New("XXMI_SHORTCUT_ICON_INVALID: no image path")
-	}
-	return x.changeShortcutIcon(ctx, key, imagePath, "XXMI.SetShortcutIcon")
-}
-
-// ResetShortcutIcon returns the importer's Quick Start shortcut to its own icon.
-func (x *XXMI) ResetShortcutIcon(ctx context.Context, key string) (ShortcutIconChange, error) {
-	return x.changeShortcutIcon(ctx, key, "", "XXMI.ResetShortcutIcon")
-}
-
-// changeShortcutIcon stores the icon converted from imagePath, or forgets the custom icon when imagePath is empty.
-func (x *XXMI) changeShortcutIcon(
-	ctx context.Context,
-	key, imagePath, where string,
-) (change ShortcutIconChange, returnErr error) {
-	stage := "resolve"
-	id, icon, shortcut, rollback := "", "", "", ""
-	// created lists the custom icon files this call added; they are removed again on failure unless the shortcut
-	// was left pointing at the new icon.
-	var created []string
-	iconInUse := false
-	defer func() {
-		if returnErr != nil && !iconInUse {
-			for _, file := range created {
-				if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
-					rollback = strings.TrimPrefix(rollback+"; remove "+file+": "+err.Error(), "; ")
-				}
-			}
-		}
-		if infra.IsCancellationError(returnErr) {
-			return
-		}
-		returnErr = infra.ReportError(x.log, returnErr, where, infra.Diagnostic{
-			Operation: "change-shortcut-icon", Stage: stage,
-			Fields: map[string]any{
-				"importer": key, "source_path": installDiagnosticValue(imagePath), "icon_id": id, "icon_path": icon,
-				"shortcut_path": shortcut, "rollback": rollback,
-			},
-		})
-	}()
-	spec, ok := lookupImporterPackage(key)
-	if !ok {
-		return ShortcutIconChange{}, fmt.Errorf("unknown importer %q", key)
-	}
-	client, err := x.settingsClient()
-	if err != nil {
-		return ShortcutIconChange{}, err
-	}
-	dir, err := shortcutIconRoot()
-	if err != nil {
-		return ShortcutIconChange{}, err
-	}
-
-	var data []byte
-	if imagePath != "" {
-		stage = "convert"
-		if data, err = convertShortcutIcon(imagePath); err != nil {
-			return ShortcutIconChange{}, err
-		}
-		id = hashBytes(data)[:12]
-	}
-
-	x.shortcutMu.Lock()
-	defer x.shortcutMu.Unlock()
-	stage = "store"
-	if id == "" {
-		icon, err = writeShortcutIcon(dir, spec.key)
-	} else {
-		preview := customShortcutIconPNG(dir, spec.key, id)
-		icon = customShortcutIconFile(dir, spec.key, id)
-		for _, file := range []string{preview, icon} {
-			if _, statErr := os.Lstat(file); errors.Is(statErr, os.ErrNotExist) {
-				created = append(created, file)
-			}
-		}
-		if err = writeShortcutFile(preview, data); err == nil {
-			err = writeIconFile(icon, data)
-		}
-		change.Icon = ShortcutIcon{Custom: true, Path: preview}
-	}
-	if err != nil {
-		return ShortcutIconChange{}, err
-	}
-
-	stage = "update-shortcut"
-	err = withShellCOM(func() error {
-		path, pathErr := desktopShortcutPath(spec.key)
-		if pathErr != nil {
-			return pathErr
-		}
-		shortcut = path
-		updated, updateErr := updateExistingShortcut(ctx, path, icon)
-		change.ShortcutUpdated = updated
-		return updateErr
-	})
-	if err != nil {
-		return ShortcutIconChange{}, err
-	}
-	iconInUse = change.ShortcutUpdated
-
-	// The shortcut and the stored selection change together: a selection that cannot be saved puts the shortcut
-	// back on the icon the selection still names.
-	stage = "save-setting"
-	settingKey := shortcutIconSettingKey(spec.key)
-	if id == "" {
-		err = client.Settings.Delete(ctx, settingKey)
-	} else {
-		err = client.Settings.Upsert(ctx, settingKey, &id)
-	}
-	if err != nil {
-		if change.ShortcutUpdated {
-			restoreCtx := context.WithoutCancel(ctx)
-			previous, restoreErr := x.resolveShortcutIcon(restoreCtx, dir, spec.key)
-			if restoreErr == nil {
-				_, restoreErr = updateExistingShortcut(restoreCtx, shortcut, previous)
-			}
-			rollback = "restored"
-			iconInUse = false
-			if restoreErr != nil {
-				rollback = "failed: " + restoreErr.Error()
-				iconInUse = true
-			}
-		}
-		return ShortcutIconChange{}, err
-	}
-
-	x.reportCleanup(pruneShortcutIcons(dir, spec.key, id), "prune-shortcut-icons")
-	x.log.Info(map[string]any{
-		"importer": spec.key, "icon_id": id, "shortcut_updated": change.ShortcutUpdated,
-	}, where)
-	return change, nil
-}
-
-func (x *XXMI) shortcutIconID(ctx context.Context, key string) (string, error) {
-	client, err := x.settingsClient()
-	if err != nil {
-		return "", err
-	}
-	value, err := client.Settings.GetValue(ctx, shortcutIconSettingKey(key))
-	if err != nil || value == nil {
-		return "", err
-	}
-	return strings.TrimSpace(*value), nil
-}
-
 // resolveShortcutIcon writes the icon file the importer's shortcut uses and returns its path. A custom icon whose
 // converted image is missing or damaged falls back to the importer's own icon.
 func (x *XXMI) resolveShortcutIcon(ctx context.Context, dir, key string) (string, error) {
@@ -278,14 +93,14 @@ func (x *XXMI) resolveShortcutIcon(ctx context.Context, dir, key string) (string
 	if !ok {
 		return "", fmt.Errorf("unknown importer %q", key)
 	}
-	id, err := x.shortcutIconID(ctx, spec.key)
+	id, err := x.importerIconID(ctx, spec.key)
 	if err != nil {
 		return "", err
 	}
 	if id == "" {
 		return writeShortcutIcon(dir, spec.key)
 	}
-	data, err := readCustomShortcutIcon(dir, spec.key, id)
+	data, err := readCustomImporterIcon(dir, spec.key, id)
 	if err != nil {
 		x.log.Warn(map[string]any{
 			"importer": spec.key, "icon_id": id, "error": err.Error(),

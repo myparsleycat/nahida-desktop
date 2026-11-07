@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/gen2brain/avif" // Registered with the image package in the application, as it is here.
 	"github.com/myparsleycat/ddsutil"
 
 	"nahida.live/desktop/internal/infra"
@@ -352,6 +353,22 @@ func TestModelViewerTextureRejectsDeclaredOversizedPNG(t *testing.T) {
 	_, err := prepareModelViewerTexture(context.Background(), path, "Diffuse", "png", 85)
 	if err == nil || !strings.Contains(err.Error(), "input safety limit") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The application links an AVIF decoder that registers itself with the image package, and its box parser panics
+// on this file. A texture renamed to .jpg must not reach it.
+func TestModelViewerTextureRejectsUnsupportedImageFormat(t *testing.T) {
+	t.Parallel()
+	malformedAVIF := []byte{
+		0, 0, 0, 16, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f', 0, 0, 0, 0,
+		0, 0, 0, 36, 'm', 'e', 't', 'a', 0, 0, 0, 0,
+		0, 0, 0, 8, 'p', 'i', 't', 'm',
+		0, 0, 0, 16, 'i', 'p', 'r', 'p', 0, 0, 0, 8, 'i', 'p', 'c', 'o',
+	}
+	if _, _, err := modelViewerTextureDimensions(malformedAVIF, ".jpg"); err == nil ||
+		!strings.Contains(err.Error(), "not a PNG, JPEG, or WebP") {
+		t.Fatalf("AVIF texture err = %v", err)
 	}
 }
 

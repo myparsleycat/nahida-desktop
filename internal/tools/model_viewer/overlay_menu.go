@@ -11,7 +11,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1074,6 +1073,23 @@ func modelViewerOverlayVisibleBounds(quad ModelViewerOverlayQuad) (left, top, ri
 		return left, top, right, bottom
 	}
 	defer func() { _ = file.Close() }()
+
+	// The same formats and input limit as textures apply, checked from the header before the pixels are allocated.
+	header := make([]byte, 512)
+	count, err := io.ReadFull(file, header)
+	if (err != nil && !errors.Is(err, io.ErrUnexpectedEOF)) || modelViewerImageContentType(header[:count]) == "" {
+		return left, top, right, bottom
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return left, top, right, bottom
+	}
+	config, _, err := image.DecodeConfig(file)
+	if err != nil || int64(config.Width)*int64(config.Height) > maxModelViewerTextureInputPixels {
+		return left, top, right, bottom
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return left, top, right, bottom
+	}
 	decoded, _, err := image.Decode(file)
 	if err != nil {
 		return left, top, right, bottom
@@ -1307,11 +1323,7 @@ func modelViewerOverlayImageType(path string) string {
 	if bytes.HasPrefix(header[:count], []byte("DDS ")) {
 		return modelViewerOverlayDDSType
 	}
-	switch contentType := http.DetectContentType(header[:count]); contentType {
-	case "image/png", "image/jpeg", "image/webp":
-		return contentType
-	}
-	return ""
+	return modelViewerImageContentType(header[:count])
 }
 
 // flipbook samples the frame expression over time, since menus compute their

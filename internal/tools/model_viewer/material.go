@@ -14,6 +14,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -760,6 +761,17 @@ func encodeModelViewerPreparedTextureWithAlpha(
 	return prepared, nil
 }
 
+// modelViewerImageContentType returns the content type of a PNG, JPEG, or WebP image, or nothing. The image package
+// also decodes formats that other packages register for the whole process, such as AVIF, whose decoder reads the
+// whole file into memory and is not hardened against arbitrary mod files.
+func modelViewerImageContentType(header []byte) string {
+	switch contentType := http.DetectContentType(header); contentType {
+	case "image/png", "image/jpeg", "image/webp":
+		return contentType
+	}
+	return ""
+}
+
 func decodeModelViewerImage(raw []byte, extension string) (*image.NRGBA, error) {
 	if strings.EqualFold(extension, ".dds") {
 		return decodeModelViewerDDS(raw)
@@ -931,6 +943,9 @@ func modelViewerTextureDimensions(raw []byte, extension string) (int, int, error
 		}
 		return int(width), int(height), nil
 	default:
+		if modelViewerImageContentType(raw) == "" {
+			return 0, 0, fmt.Errorf("viewer texture is not a PNG, JPEG, or WebP image")
+		}
 		configuration, _, err := image.DecodeConfig(bytes.NewReader(raw))
 		if err != nil {
 			return 0, 0, err

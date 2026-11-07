@@ -89,6 +89,7 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 - Windows build: `task build`
 - Windows package: `task package APP_VERSION=<version>`
 - Go tests: `task test` (runs `go test ./...`)
+- Go commands run outside `task` need `-tags nodynamic`; `internal/xxmi` fails to compile without it so `github.com/gen2brain/avif` never loads `libavif.dll` at startup. The Taskfile sets it through `GOFLAGS`.
 - Go lint: `task lint`
 - Go lint with fixes: `task lint:fix`
 - Go formatting: `task fmt -- <files-or-directories...>` (gofmt, goimports, golines; 120 columns)

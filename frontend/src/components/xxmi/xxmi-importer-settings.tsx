@@ -50,9 +50,9 @@ import {
   ToggleRow,
 } from "@renderer/components/xxmi/xxmi-fields";
 import { importerFolderError } from "@renderer/components/xxmi/xxmi-importer-folder-error";
+import { XXMIImporterIconField } from "@renderer/components/xxmi/xxmi-importer-icon";
 import { modFolderQueryKey, XXMIModFolderField } from "@renderer/components/xxmi/xxmi-mod-folder";
 import { XXMIModRuntimes } from "@renderer/components/xxmi/xxmi-mod-runtimes";
-import { XXMIShortcutIconField } from "@renderer/components/xxmi/xxmi-shortcut-icon";
 import { useLaunchGuard } from "@renderer/hooks/use-launch-guard";
 import { cn } from "@renderer/lib/utils";
 import { FileDropTargetID } from "@renderer/wails/file-drop";
@@ -401,6 +401,7 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
               <TabsContent value="general" className="flex flex-col gap-6">
                 <Section>
                   <SectionContent>
+                    <XXMIImporterIconField importer={importer} />
                     <ToggleRow
                       label={t("page.setting.xxmi.builtin.enabled")}
                       checked={config.enabled}
@@ -1420,7 +1421,6 @@ export function XXMIImporterSettings({ importer }: { importer: string }) {
                     <SectionTitle>{t("page.setting.xxmi.builtin.maintenance")}</SectionTitle>
                   </SectionHeader>
                   <SectionContent>
-                    <XXMIShortcutIconField importer={importer} />
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"

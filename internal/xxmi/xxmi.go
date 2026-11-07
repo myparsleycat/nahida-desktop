@@ -131,6 +131,8 @@ type XXMI struct {
 	customDLLMu sync.Mutex
 	// shortcutMu serializes writes of Quick Start shortcuts and their icon files.
 	shortcutMu sync.Mutex
+	// iconDiagnostic keeps a damaged custom icon from being logged on every icon list refresh.
+	iconDiagnostic infra.DiagnosticThrottle
 	// libsProviderMu keeps shared provider selections in the order they were made.
 	libsProviderMu sync.Mutex
 	// settingsINIMu orders the d3dx.ini writes that follow saved configs, so the last one writes the latest config.

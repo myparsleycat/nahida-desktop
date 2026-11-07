@@ -5,6 +5,7 @@
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
+  "go.buildTags": "nodynamic",
   "go.formatTool": "custom",
   "go.alternateTools": {
     "customFormatter": "${workspaceFolder}/.task/bin/golangci-lint.exe"
