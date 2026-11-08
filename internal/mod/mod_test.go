@@ -490,6 +490,45 @@ func TestActionsRejectSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestToggleFolderRenamesFolderButNeverTheModRoot(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service, root := newTestMod(t, testSettings{})
+	modsRoot := filepath.Join(root, "mods")
+	folder := filepath.Join(modsRoot, "Foo")
+	if err := os.MkdirAll(filepath.Join(folder, "DISABLED ModA"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.ToggleFolder(ctx, modsRoot); err == nil || err.Error() != "FOLDER_TOGGLE_UNSUPPORTED" {
+		t.Fatalf("mod root toggle error = %v", err)
+	}
+	if _, err := os.Stat(modsRoot); err != nil {
+		t.Fatalf("mod root after rejected toggle: %v", err)
+	}
+
+	disabled, err := service.ToggleFolder(ctx, folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled != filepath.Join(modsRoot, "DISABLED Foo") {
+		t.Fatalf("disabled path = %q", disabled)
+	}
+	enabled, err := service.ToggleFolder(ctx, disabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enabled != folder {
+		t.Fatalf("enabled path = %q", enabled)
+	}
+	if _, err := os.Stat(filepath.Join(folder, "DISABLED ModA")); err != nil {
+		t.Fatalf("inner disabled mod after folder toggle: %v", err)
+	}
+}
+
 func TestExclusiveToggleDisablesSiblings(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

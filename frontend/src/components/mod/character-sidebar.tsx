@@ -42,13 +42,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useClassifications, useGames } from "@renderer/hooks/use-mod-data";
-import { useClassificationMutations } from "@renderer/hooks/use-mod-mutations";
+import { showModToggleError, useClassificationMutations } from "@renderer/hooks/use-mod-mutations";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { setSetting } from "@renderer/lib/settings";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import { getParentGroupPath, hasDisabledPrefix, siblingDisplayName } from "@shared/mod";
+import {
+  getParentGroupPath,
+  hasDisabledPrefix,
+  isNteImporter,
+  isSameOrChildPath,
+  replacePathPrefix,
+  siblingDisplayName,
+} from "@shared/mod";
 import type { ModFixerAction } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
@@ -134,6 +141,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const { data: games = [] } = useGames();
   const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
+  const renameGroupPath = useModStore((s) => s.renameGroupPath);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchGame, setSearchGame] = useState(selectedGame);
   if (searchGame !== selectedGame) {
@@ -379,6 +387,64 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     [confirmTrash, queryClient, selectedGame, t],
   );
 
+  const handleToggleFolder = useCallback(
+    async (group: FolderGroup) => {
+      const newPath = await Mod.ToggleFolder(group.path).catch((error: unknown) => {
+        showModToggleError(t, error);
+        return null;
+      });
+      if (newPath === null) {
+        return;
+      }
+
+      // The route drops a selection missing from the listed folders, so the list moves in the same tick.
+      const rename = (path: string) => replacePathPrefix(path, group.path, newPath);
+      queryClient.setQueryData<FolderGroup[]>(["characters", selectedGame], (list) => {
+        if (!list?.some((item) => item.path === group.path)) {
+          return list;
+        }
+
+        return list.map((item) =>
+          item.path === group.path
+            ? {
+                ...item,
+                path: newPath,
+                isEnabled: item.isEnabled === false,
+                preview: item.preview && rename(item.preview),
+                classifiedSubGroups: item.classifiedSubGroups?.map((sub) => ({
+                  ...sub,
+                  path: rename(sub.path),
+                  preview: sub.preview && rename(sub.preview),
+                })),
+              }
+            : item,
+        );
+      });
+      renameGroupPath(group.path, newPath);
+
+      const parentGroupPath = getParentGroupPath(group.path);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+        queryClient.invalidateQueries({
+          predicate: ({ queryKey: [kind, path] }) =>
+            ["modGroup", "modGroupLight", "subGroups", "manualSubGroups"].includes(String(kind)) &&
+            typeof path === "string" &&
+            (isSameOrChildPath(path, group.path) || isSameOrChildPath(path, newPath)),
+        }),
+        parentGroupPath
+          ? queryClient.invalidateQueries({ queryKey: ["subGroups", parentGroupPath] })
+          : Promise.resolve(),
+        parentGroupPath
+          ? queryClient.invalidateQueries({ queryKey: ["manualSubGroups", parentGroupPath] })
+          : Promise.resolve(),
+        Tools.RefreshFixInspections(),
+      ]).catch((error: unknown) => {
+        Logger.capture("components/mod/character-sidebar.tsx", error);
+      });
+    },
+    [queryClient, renameGroupPath, selectedGame, t],
+  );
+
   const handleManualSubGroupChange = useCallback(
     async (group: FolderGroup, enabled: boolean) => {
       const parentGroupPath = getParentGroupPath(group.path);
@@ -422,6 +488,11 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     hideEmptyGroups,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
+    // NTE mods are toggled through their pak files, not by renaming the folder.
+    onToggleFolder:
+      selectedGameConfig && !isNteImporter(selectedGameConfig.importer)
+        ? handleToggleFolder
+        : undefined,
     onManualSubGroupChange: handleManualSubGroupChange,
     showSkeleton,
     previewCacheKey,

@@ -499,6 +499,8 @@
         "open-in-explorer": "파일 탐색기에서 열기",
         "create-folder": "새 폴더 만들기",
         "delete-folder": "삭제",
+        "enable-folder": "폴더 활성화",
+        "disable-folder": "폴더 비활성화",
         "sort": {
           "label": "폴더 정렬",
           "field": "정렬 기준",

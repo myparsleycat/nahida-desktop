@@ -78,6 +78,15 @@ export function getParentGroupPath(groupPath: string) {
     return separatorIndex < 0 ? null : groupPath.slice(0, separatorIndex);
 }
 
+export function isSameOrChildPath(path: string, parentPath: string) {
+    const rest = path.slice(parentPath.length);
+    return path.startsWith(parentPath) && (rest === "" || rest[0] === "\\" || rest[0] === "/");
+}
+
+export function replacePathPrefix(path: string, oldPath: string, newPath: string) {
+    return isSameOrChildPath(path, oldPath) ? newPath + path.slice(oldPath.length) : path;
+}
+
 export function getGameBananaKeyForImporter(
     importer: string | null | undefined,
     registry: readonly { key: string; importer: string }[],

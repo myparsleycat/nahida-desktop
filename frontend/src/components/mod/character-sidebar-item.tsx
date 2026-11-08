@@ -47,6 +47,7 @@ interface CharacterSidebarItemProps {
   onDrop?: (group: FolderGroup, paths: string[]) => void;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
+  onToggleFolder?: (group: FolderGroup) => Promise<void>;
   onManualSubGroupChange?: (group: FolderGroup, enabled: boolean) => void;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   depth?: number;
@@ -70,6 +71,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   onDrop,
   onCreateFolder,
   onDeleteFolder,
+  onToggleFolder,
   onManualSubGroupChange,
   itemRefs,
   depth = 0,
@@ -94,6 +96,9 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
   const bulkModToggle = useBulkModToggle();
+  const [isTogglingFolder, setIsTogglingFolder] = useState(false);
+  // The backend serializes these, but an action queued behind a folder rename would target the old path.
+  const isTogglePending = bulkModToggle.isPending || isTogglingFolder;
   const isGridLayout = layout === "grid";
 
   const ref = useRef<HTMLButtonElement>(null);
@@ -259,7 +264,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
       <ContextMenuContent className="w-56">
         <ContextMenuItem
-          disabled={bulkModToggle.isPending}
+          disabled={isTogglePending}
           onClick={() => bulkModToggle.enableAll(group.path)}
         >
           {bulkModToggle.isPending ? (
@@ -270,7 +275,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
           {t("page.mod.all_enabled")}
         </ContextMenuItem>
         <ContextMenuItem
-          disabled={bulkModToggle.isPending}
+          disabled={isTogglePending}
           onClick={() => bulkModToggle.disableAll(group.path)}
         >
           {bulkModToggle.isPending ? (
@@ -280,6 +285,26 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
           )}
           {t("page.mod.all_disabled")}
         </ContextMenuItem>
+        {onToggleFolder && (
+          <ContextMenuItem
+            disabled={isTogglePending}
+            onClick={() => {
+              setIsTogglingFolder(true);
+              void onToggleFolder(group).finally(() => setIsTogglingFolder(false));
+            }}
+          >
+            {isTogglingFolder ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : group.isEnabled === false ? (
+              <CircleIcon className="h-4 w-4" />
+            ) : (
+              <CircleOffIcon className="h-4 w-4" />
+            )}
+            {group.isEnabled === false
+              ? t("page.mod.character-sidebar.enable-folder")
+              : t("page.mod.character-sidebar.disable-folder")}
+          </ContextMenuItem>
+        )}
         <ContextMenuSeparator />
 
         <ContextMenuItem onClick={() => void Shell.OpenPath(group.path)}>

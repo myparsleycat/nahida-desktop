@@ -54,6 +54,7 @@ export function CharacterSidebarRow({
   hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
+  onToggleFolder,
   onManualSubGroupChange,
   showSkeleton,
   previewCacheKey,
@@ -213,6 +214,7 @@ export function CharacterSidebarRow({
                 onDrop={onItemDrop}
                 onCreateFolder={onCreateFolder}
                 onDeleteFolder={onDeleteFolder}
+                onToggleFolder={onToggleFolder}
                 onManualSubGroupChange={onManualSubGroupChange}
                 depth={row.depth}
                 previewCacheKey={previewCacheKey}

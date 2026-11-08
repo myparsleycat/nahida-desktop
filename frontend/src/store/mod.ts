@@ -1,6 +1,6 @@
 import { Mod } from "@bindings/mod";
 import { Logger } from "@renderer/lib/logger";
-import type { DownloadSource } from "@shared/mod";
+import { type DownloadSource, replacePathPrefix } from "@shared/mod";
 import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
 
@@ -86,6 +86,7 @@ interface ModState {
     toggleExpandedGroup: (path: string) => void;
     togglePersistentGroup: (path: string) => void;
     setExpandedGroup: (path: string, expanded: boolean) => void;
+    renameGroupPath: (oldPath: string, newPath: string) => void;
     setIniListExpanded: (groupPath: string, modId: string, expanded: boolean) => void;
     resetIniListExpanded: (groupPath: string) => void;
     initExpandedGroups: () => Promise<void>;
@@ -215,6 +216,44 @@ export const modStore = createStore<ModState>((set) => ({
                 next.delete(path);
             }
             return { expandedGroups: next };
+        }),
+
+    renameGroupPath: (oldPath, newPath) =>
+        set((state) => {
+            const rename = (path: string) => replacePathPrefix(path, oldPath, newPath);
+            const persistent = [...state.persistentGroups];
+            const renamedPersistent = persistent.map(rename);
+            if (renamedPersistent.some((path, index) => path !== persistent[index])) {
+                Mod.SetExpandedGroups(renamedPersistent).catch((error: unknown) => {
+                    Logger.capture("store/mod.ts", "Failed to save renamed expanded groups", error);
+                });
+            }
+
+            const selected = state.selectedGroup;
+            const selectedPath = selected && rename(selected.path);
+            const selectedGroup =
+                selected && selectedPath !== selected.path
+                    ? {
+                          ...selected,
+                          path: selectedPath ?? selected.path,
+                          isEnabled:
+                              selected.path === oldPath
+                                  ? selected.isEnabled === false
+                                  : selected.isEnabled,
+                      }
+                    : selected;
+
+            return {
+                expandedGroups: new Set([...state.expandedGroups].map(rename)),
+                persistentGroups: new Set(renamedPersistent),
+                selectedGroup,
+                iniListExpandedByGroupPath: Object.fromEntries(
+                    Object.entries(state.iniListExpandedByGroupPath).map(([path, value]) => [
+                        rename(path),
+                        value,
+                    ]),
+                ),
+            };
         }),
 
     setIniListExpanded: (groupPath, modId, expanded) =>

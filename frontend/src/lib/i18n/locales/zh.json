@@ -499,6 +499,8 @@
         "open-in-explorer": "在文件资源管理器中打开",
         "create-folder": "新建文件夹",
         "delete-folder": "删除",
+        "enable-folder": "启用文件夹",
+        "disable-folder": "禁用文件夹",
         "sort": {
           "label": "文件夹排序",
           "field": "排序依据",

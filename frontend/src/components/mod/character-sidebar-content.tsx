@@ -27,6 +27,7 @@ export interface CharacterSidebarContentProps {
   hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
+  onToggleFolder?: (group: FolderGroup) => Promise<void>;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
   showSkeleton: boolean;
   previewCacheKey: number;
@@ -79,6 +80,7 @@ interface CharacterSidebarItemWithChildrenProps {
   hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
+  onToggleFolder?: (group: FolderGroup) => Promise<void>;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
   layout: SidebarLayoutMode;
   listClassName: string;
@@ -108,6 +110,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
+  onToggleFolder,
   onManualSubGroupChange,
   previewCacheKey,
   layout,
@@ -178,6 +181,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           onDrop={onItemDrop}
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteFolder}
+          onToggleFolder={onToggleFolder}
           onManualSubGroupChange={onManualSubGroupChange}
           depth={depth}
           previewCacheKey={previewCacheKey}
@@ -208,6 +212,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             hideEmptyGroups={hideEmptyGroups}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
+            onToggleFolder={onToggleFolder}
             onManualSubGroupChange={onManualSubGroupChange}
             previewCacheKey={previewCacheKey}
             layout={layout}
@@ -238,6 +243,7 @@ export function CharacterSidebarContent({
   hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
+  onToggleFolder,
   onManualSubGroupChange,
   showSkeleton,
   previewCacheKey,
@@ -283,6 +289,7 @@ export function CharacterSidebarContent({
         hideEmptyGroups={hideEmptyGroups}
         onCreateFolder={onCreateFolder}
         onDeleteFolder={onDeleteFolder}
+        onToggleFolder={onToggleFolder}
         onManualSubGroupChange={onManualSubGroupChange}
         layout={layout}
         previewCacheKey={previewCacheKey}

@@ -37,6 +37,77 @@ func (m *Mod) Toggle(ctx context.Context, modPath string) (string, error) {
 	return m.disableWithShaders(ctx, modPath)
 }
 
+// ToggleFolder renames a folder that holds mods. Enabling installs ShaderFixes only for a folder that is a
+// mod itself: the recursive candidate search would otherwise install the shaders of every mod inside,
+// disabled ones included, under the folder. It also takes the folder's own lock, which actions on the mods
+// inside it hold.
+func (m *Mod) ToggleFolder(ctx context.Context, folderPath string) (string, error) {
+	defer m.InvalidateLibraries()
+
+	game, folderPath, err := m.ownedTarget(ctx, folderPath)
+	if err != nil {
+		return "", err
+	}
+	// A parent outside every managed root means the folder is the game's mod folder itself.
+	if _, _, err := m.ownedTarget(ctx, filepath.Dir(folderPath)); err != nil || isNTEImporter(game.Importer) {
+		return "", errors.New("FOLDER_TOGGLE_UNSUPPORTED")
+	}
+	annotate := func(err error, stage string) error {
+		return infra.AnnotateError(err, infra.Diagnostic{
+			Operation: "toggle-folder", Stage: stage, Fields: map[string]any{"folderPath": folderPath},
+		})
+	}
+
+	enabling := isDisabled(filepath.Base(folderPath))
+	if enabling {
+		release, err := m.rejectActiveDownloadAction(folderPath)
+		if err != nil {
+			return "", err
+		}
+		release()
+		// Restoring a whole folder can take minutes, so it runs before the root group is locked. The pass
+		// under the locks below only restores what a compression pass wrote in between.
+		if err := m.compression.restoreBeforeEnable(ctx, folderPath); err != nil {
+			return "", annotate(err, "pre-restore")
+		}
+	}
+
+	defer m.groups.lock(modGroupPath(*game, folderPath))()
+	defer m.groups.lock(folderPath)()
+	release, err := m.rejectActiveDownloadAction(folderPath)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if !enabling {
+		result, err := m.disableWithShaders(ctx, folderPath)
+		return result, annotate(err, "disable")
+	}
+	if hasOwnShaderFixes(folderPath) {
+		result, err := m.enableWithShaders(ctx, folderPath)
+		return result, annotate(err, "enable-with-shaders")
+	}
+	if err := m.compression.restoreBeforeEnable(ctx, folderPath); err != nil {
+		return "", annotate(err, "restore")
+	}
+	result, err := m.enable(ctx, folderPath)
+	return result, annotate(err, "enable")
+}
+
+// hasOwnShaderFixes reports a ShaderFixes folder at the folder's root, which marks the folder as a mod.
+func hasOwnShaderFixes(folderPath string) bool {
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && strings.EqualFold(entry.Name(), shaderFixesDirName) {
+			return true
+		}
+	}
+	return false
+}
+
 // Disable is an internal service boundary used by backend feature services
 // that create an enabled replacement before retiring the source mod.
 //

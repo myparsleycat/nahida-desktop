@@ -499,6 +499,8 @@
         "open-in-explorer": "Open in File Explorer",
         "create-folder": "Create New Folder",
         "delete-folder": "Delete Folder",
+        "enable-folder": "Enable Folder",
+        "disable-folder": "Disable Folder",
         "sort": {
           "label": "Sort folders",
           "field": "Sort by",

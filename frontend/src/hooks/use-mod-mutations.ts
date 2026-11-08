@@ -11,6 +11,7 @@ import type {
 } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -323,6 +324,40 @@ async function toggleOnce(
     }
 }
 
+export function showModToggleError(t: TFunction, error: unknown) {
+    const errorMessage = toErrorMessage(error);
+    if (errorMessage.includes("ALREADY_EXISTS")) {
+        const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
+        toast.error(
+            t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
+                name: folderName,
+            }),
+        );
+        return;
+    }
+
+    if (errorMessage.includes("MOD_FOLDER_LOCKED")) {
+        const processNames = errorMessage.split("MOD_FOLDER_LOCKED|")[1];
+        if (processNames) {
+            toast.warning(
+                t("page.mod.hooks.use-mod-mutations.toggle-mutation.1", {
+                    processes: processNames,
+                }),
+            );
+        } else {
+            toast.warning(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1-fallback"));
+        }
+        return;
+    }
+
+    if (errorMessage.includes("MOD_DOWNLOAD_IN_PROGRESS")) {
+        toast.warning(t("page.mod.download_action_blocked"));
+        return;
+    }
+
+    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
+}
+
 // `groupPath` is the group shown when the user asked for the toggle; a confirmation can delay the request
 // past a selection change.
 type ModToggleRequest = { mod: ModInfo; groupPath: string | undefined };
@@ -341,39 +376,7 @@ export function useModMutations() {
         toast.info(t("page.mod.hooks.use-mod-mutations.toggle-mutation.busy"));
     };
 
-    const showToggleMutationError = (error: unknown) => {
-        const errorMessage = toErrorMessage(error);
-        if (errorMessage.includes("ALREADY_EXISTS")) {
-            const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
-            toast.error(
-                t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
-                    name: folderName,
-                }),
-            );
-            return;
-        }
-
-        if (errorMessage.includes("MOD_FOLDER_LOCKED")) {
-            const processNames = errorMessage.split("MOD_FOLDER_LOCKED|")[1];
-            if (processNames) {
-                toast.warning(
-                    t("page.mod.hooks.use-mod-mutations.toggle-mutation.1", {
-                        processes: processNames,
-                    }),
-                );
-            } else {
-                toast.warning(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1-fallback"));
-            }
-            return;
-        }
-
-        if (errorMessage.includes("MOD_DOWNLOAD_IN_PROGRESS")) {
-            toast.warning(t("page.mod.download_action_blocked"));
-            return;
-        }
-
-        toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
-    };
+    const showToggleMutationError = (error: unknown) => showModToggleError(t, error);
 
     const showRenameMutationError = (error: unknown) => {
         const errorMessage = toErrorMessage(error);
