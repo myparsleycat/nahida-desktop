@@ -136,6 +136,13 @@ func (v *ModelViewer) animationTick(clock uint64) {
 		return
 	}
 	fps := v.animationFPS(clip)
+	// A frame whose meshes or position variants are still loading holds playback, so a clip that loads slower
+	// than it plays still shows its frames instead of moving on before any of them arrives.
+	if scene := v.scene; scene != nil && scene.waiting {
+		v.anim.applied = time.Now()
+		v.scheduleAnimationTick(clock, time.Duration(float64(time.Second)/fps))
+		return
+	}
 	frame, consumed, complete := advanceAnimationFrame(
 		v.anim.frame, time.Since(v.anim.applied), fps, len(clip.Frames), clip.Loop,
 	)

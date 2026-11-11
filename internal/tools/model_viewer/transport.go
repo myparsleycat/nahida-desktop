@@ -55,11 +55,14 @@ type ModelViewerBounds struct {
 }
 
 type ModelViewerMeshTransport struct {
-	ID                  string                       `json:"id"`
-	Component           string                       `json:"component"`
-	Form                string                       `json:"form,omitempty"`
-	GeometryURL         string                       `json:"geometryUrl"`
-	SourceIndicesURL    string                       `json:"sourceIndicesUrl,omitempty"`
+	ID               string `json:"id"`
+	Component        string `json:"component"`
+	Form             string `json:"form,omitempty"`
+	GeometryURL      string `json:"geometryUrl"`
+	SourceIndicesURL string `json:"sourceIndicesUrl,omitempty"`
+	// VertexCount and IndexCount size the geometry, so a viewer can plan a mesh before it reads it.
+	VertexCount         int                          `json:"vertexCount"`
+	IndexCount          int                          `json:"indexCount"`
 	Bounds              *ModelViewerBounds           `json:"bounds,omitempty"`
 	Conditions          ModelViewerDNF               `json:"conditions"`
 	TexKey              *string                      `json:"texKey"`

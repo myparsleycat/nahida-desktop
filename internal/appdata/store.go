@@ -20,10 +20,12 @@ const (
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"
 	DrivePreviewDir  = "drive-preview"
-	AgentDir         = "agent"
-	AgentSkillsDir   = AgentDir + string(filepath.Separator) + "skills"
-	ElevatedDir      = "elevated"
-	WebViewDir       = "webview"
+	// ModelViewerSpoolDir holds the mesh buffers of open model viewer sessions.
+	ModelViewerSpoolDir = "model-viewer-spool"
+	AgentDir            = "agent"
+	AgentSkillsDir      = AgentDir + string(filepath.Separator) + "skills"
+	ElevatedDir         = "elevated"
+	WebViewDir          = "webview"
 	// NotificationIcon is the image Windows shows on the app's toast notifications.
 	NotificationIcon = "notification-icon.png"
 )

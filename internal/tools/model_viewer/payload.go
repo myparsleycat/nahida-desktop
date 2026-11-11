@@ -108,6 +108,9 @@ type modelViewerPayloadOptions struct {
 	// scaling the texture into the fallback image.
 	ddsPreviewPreferredDimension uint32
 	includeAllStateVariables     bool
+	// spoolGeometry asks for mesh buffers in a spool file, for a viewer that stays open; spool is that file.
+	spoolGeometry bool
+	spool         *modelViewerSpool
 }
 
 // modelViewerEffectCardTextures returns the textures of meshes whose triangles
@@ -341,9 +344,24 @@ func writeModelViewerPayload(
 			if err := meshCtx.Err(); err != nil {
 				return "", err
 			}
-			return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
+			spool := options.spool
+			if spool == nil {
+				return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
+			}
+			offset, err := spool.append(meshCtx, data)
+			if err != nil {
+				return "", err
+			}
+			length := len(data)
+			return t.protocol.StoreMemoryLoaderWithContentType(
+				sessionID,
+				mesh.ID+suffix,
+				"application/octet-stream",
+				func(ctx context.Context) ([]byte, error) { return spool.read(ctx, offset, length) },
+			)
 		}
 		var err error
+		mesh.VertexCount, mesh.IndexCount = len(payload.Positions)/3, len(payload.Indices)
 		mesh.Bounds, err = modelViewerGeometryBounds(meshCtx, payload.Positions)
 		if err != nil {
 			return fmt.Errorf("mesh %s bounds: %w", mesh.ID, err)
@@ -412,6 +430,8 @@ func writeModelViewerPayload(
 	for meshIndex := range transport.Meshes {
 		group.Go(func() error {
 			meshErrors[meshIndex] = writeMesh(&transport.Meshes[meshIndex], meshes[meshIndex])
+			// The session now owns the mesh, so the attributes need not outlive the remaining writes.
+			meshes[meshIndex] = modelViewerMeshPayload{}
 			return meshErrors[meshIndex]
 		})
 	}

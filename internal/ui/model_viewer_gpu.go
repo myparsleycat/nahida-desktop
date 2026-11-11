@@ -72,15 +72,20 @@ type viewerTextureGPU struct {
 	outlineMask bool
 }
 
+func (m *viewerMeshGPU) release() {
+	m.vertices.Release()
+	m.uvs.Release()
+	m.extra.Release()
+	m.indices.Release()
+	*m = viewerMeshGPU{}
+}
+
 func (s *viewerGPUSet) release() {
 	if s == nil {
 		return
 	}
-	for _, mesh := range s.meshes {
-		mesh.vertices.Release()
-		mesh.uvs.Release()
-		mesh.extra.Release()
-		mesh.indices.Release()
+	for i := range s.meshes {
+		s.meshes[i].release()
 	}
 	for _, texture := range s.textures {
 		texture.view.Release()

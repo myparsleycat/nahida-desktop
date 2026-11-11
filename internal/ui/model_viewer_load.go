@@ -19,8 +19,9 @@ const viewerLoadConcurrency = 8
 
 type viewerReader func(context.Context, string) ([]byte, error)
 
-// buildViewerScene reads every mesh of transport and evaluates the initial state, including the position
-// variants it selects. It does not touch the GPU.
+// buildViewerScene reads the meshes the initial state shows and those a compute deformer reads, and evaluates
+// that state, including the position variants it selects. The other meshes stay unloaded until a state shows
+// them. It does not touch the GPU.
 func buildViewerScene(
 	ctx context.Context,
 	read viewerReader,
@@ -30,30 +31,50 @@ func buildViewerScene(
 	scene := &viewerScene{transport: transport, meshes: make([]*viewerMesh, len(transport.Meshes))}
 	scene.world, scene.minimum, scene.maximum = viewerWorld(transport)
 	averagedOutline := averagedOutlineProfiles[string(transport.MaterialProfile)]
+	deformed := map[string]bool{}
+	for _, deformer := range transport.ComputeDeformers {
+		for _, id := range deformer.MeshIDs {
+			deformed[id] = true
+		}
+	}
+	for i, info := range transport.Meshes {
+		scene.meshes[i] = newViewerStub(info, averagedOutline)
+		scene.meshes[i].pinned = deformed[info.ID]
+	}
+
+	decoded := make([]*viewerMesh, len(scene.meshes))
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(viewerLoadConcurrency)
-	for i, info := range transport.Meshes {
+	for i, mesh := range scene.meshes {
+		if !mesh.pinned && (i >= len(states) || !states[i].Visible) {
+			continue
+		}
 		group.Go(func() error {
-			mesh, err := readViewerMesh(groupCtx, read, info, averagedOutline)
-			if err != nil {
-				return fmt.Errorf("mesh %s: %w", info.ID, err)
+			var err error
+			if decoded[i], err = readViewerMesh(groupCtx, read, mesh.info, averagedOutline); err != nil {
+				return fmt.Errorf("mesh %s: %w", mesh.info.ID, err)
 			}
-			scene.meshes[i] = mesh
 			return nil
 		})
 	}
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
+	for i, mesh := range decoded {
+		if mesh != nil {
+			scene.meshes[i].fill(mesh)
+		}
+	}
+	scene.trackLoaded()
 
 	missing := scene.apply(states)
-	if len(missing) == 0 {
+	if missing.empty() {
 		return scene, nil
 	}
 	variants := make([]*viewerPositionGeometry, len(scene.meshes))
 	group, groupCtx = errgroup.WithContext(ctx)
 	group.SetLimit(viewerLoadConcurrency)
-	for i, index := range missing {
+	for i, index := range missing.variants {
 		group.Go(func() error {
 			variant, err := scene.loadVariant(groupCtx, read, i, index)
 			if err != nil {
@@ -66,7 +87,7 @@ func buildViewerScene(
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
-	for i, index := range missing {
+	for i, index := range missing.variants {
 		scene.storeVariant(i, index, variants[i])
 	}
 	scene.apply(states)
@@ -113,14 +134,31 @@ type viewerMeshUpload struct {
 	indices []uint32
 }
 
+func (m *viewerMesh) upload() viewerMeshUpload {
+	return viewerMeshUpload{current: m.current, uvs: m.uvs, extra: m.extra, indices: m.indices}
+}
+
+// viewerMeshUploads takes the uploads of a scene's meshes. An unloaded mesh, or one that dropped its arrays, gives
+// an empty upload and no GPU buffers.
 func viewerMeshUploads(scene *viewerScene) []viewerMeshUpload {
 	uploads := make([]viewerMeshUpload, len(scene.meshes))
 	for i, mesh := range scene.meshes {
-		uploads[i] = viewerMeshUpload{
-			current: mesh.current, uvs: mesh.uvs, extra: mesh.extra, indices: mesh.indices,
-		}
+		uploads[i] = mesh.upload()
 	}
 	return uploads
+}
+
+// uploadViewerMesh makes the GPU buffers of one mesh and reports the device generation they belong to.
+func uploadViewerMesh(upload viewerMeshUpload) (viewerMeshGPU, uint64, error) {
+	var buffers viewerMeshGPU
+	var generation uint64
+	err := fairy.UseDevice(func(g fairy.GPU) error {
+		generation = g.Generation
+		var err error
+		buffers, err = newViewerMeshGPU(g.Device, upload)
+		return err
+	})
+	return buffers, generation, err
 }
 
 // uploadViewerScene makes the GPU resources of a scene. Textures load through read and are released from

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -19,9 +20,11 @@ type Service struct {
 	log                    *infra.Log
 	protocol               *infra.Protocol
 	findModelViewerPreview func(string) *string
-	modelViewerMu          sync.Mutex
-	modelViewerSessions    map[string]*modelViewerSession
-	modelViewerLoads       map[*modelViewerLoad]struct{}
+	// appData holds the mesh spool; without it, viewer sessions keep mesh buffers in memory.
+	appData             *appdata.Store
+	modelViewerMu       sync.Mutex
+	modelViewerSessions map[string]*modelViewerSession
+	modelViewerLoads    map[*modelViewerLoad]struct{}
 	// modelViewerStopRelease stops the pending deferred memory release, if any.
 	modelViewerStopRelease       func() bool
 	modelViewerReleaseGeneration uint64
@@ -48,6 +51,8 @@ func NewWithOptions(opts Options) *Service {
 		},
 	}
 }
+
+func (t *Service) UseAppData(data *appdata.Store) { t.appData = data }
 
 // ReadResource returns the bytes behind a geometry, texture or position URL of a loaded transport.
 func (t *Service) ReadResource(ctx context.Context, url string) ([]byte, error) {

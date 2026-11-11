@@ -3,8 +3,11 @@ package modelviewer
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
+
+	"nahida.live/desktop/internal/infra"
 )
 
 type modelViewerSession struct {
@@ -13,6 +16,18 @@ type modelViewerSession struct {
 	cancel    context.CancelFunc
 	// drawSources maps transport mesh IDs to their INI draw call.
 	drawSources map[string]DrawSource
+	// spool holds the session's mesh buffers, or is nil when they stay in memory.
+	spool *modelViewerSpool
+}
+
+// closeSpool deletes a session's spool after its protocol entries are gone.
+func (t *Service) closeSpool(sessionID string, spool *modelViewerSpool) {
+	if err := spool.close(); err != nil {
+		_ = infra.ReportError(t.log, err, "Tools.CleanupModelViewer", infra.Diagnostic{
+			Operation: "remove-spool",
+			Fields:    map[string]any{"memorySessionId": sessionID, "path": spool.path},
+		})
+	}
 }
 
 type modelViewerLoad struct {
@@ -103,6 +118,7 @@ func (t *Service) CleanupModelViewer(_ context.Context, memorySessionID string) 
 	t.modelViewerMu.Unlock()
 	if exists {
 		t.protocol.CleanupMemorySession(memorySessionID)
+		t.closeSpool(memorySessionID, session.spool)
 	}
 	return exists, nil
 }
@@ -115,17 +131,17 @@ func (t *Service) shutdownModelViewer() error {
 		load.cancel()
 	}
 	clear(t.modelViewerLoads)
-	ids := make([]string, 0, len(t.modelViewerSessions))
-	for id := range t.modelViewerSessions {
-		if session := t.modelViewerSessions[id]; session.cancel != nil {
+	sessions := maps.Clone(t.modelViewerSessions)
+	for _, session := range sessions {
+		if session.cancel != nil {
 			session.cancel()
 		}
-		ids = append(ids, id)
 	}
 	clear(t.modelViewerSessions)
 	t.modelViewerMu.Unlock()
-	for _, id := range ids {
+	for id, session := range sessions {
 		t.protocol.CleanupMemorySession(id)
+		t.closeSpool(id, session.spool)
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ import (
 )
 
 func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
-	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{})
+	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{spoolGeometry: true})
 }
 
 func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
@@ -114,10 +114,14 @@ func (t *Service) loadModViewer(
 		return ModelViewerTransport{}, budgetErr
 	}
 	sessionID = t.protocol.CreateMemorySession()
+	if options.spoolGeometry {
+		options.spool = t.openSpool(sessionID)
+	}
 	keep := false
 	defer func() {
 		if !keep {
 			t.protocol.CleanupMemorySession(sessionID)
+			t.closeSpool(sessionID, options.spool)
 		}
 	}()
 	transport = ModelViewerTransport{
@@ -314,6 +318,7 @@ func (t *Service) loadModViewer(
 		evaluator:   evaluator,
 		cancel:      sessionCancel,
 		drawSources: prepared.drawSources,
+		spool:       options.spool,
 	}
 	t.modelViewerMu.Unlock()
 	keep = true

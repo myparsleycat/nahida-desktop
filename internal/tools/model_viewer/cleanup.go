@@ -7,15 +7,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"nahida.live/desktop/internal/appdata"
 )
 
 const legacyModelViewerTempPrefix = "nhd-model-viewer-"
 
 // CleanupStaleModelViewerDirs removes directories left by the Electron static
-// GLB viewer. The Go viewer no longer creates them, but existing installations
-// can retain old directories in the Windows temp root.
+// GLB viewer, which existing installations can retain in the Windows temp root,
+// and the mesh spools of viewer sessions a previous run did not close.
 func (t *Service) CleanupStaleModelViewerDirs(ctx context.Context) error {
-	return cleanupStaleModelViewerDirs(ctx, os.TempDir())
+	err := cleanupStaleModelViewerDirs(ctx, os.TempDir())
+	if t.appData == nil {
+		return err
+	}
+	dir, resolveErr := t.appData.Resolve(appdata.ModelViewerSpoolDir)
+	if resolveErr != nil {
+		return errors.Join(err, resolveErr)
+	}
+	return errors.Join(err, cleanupModelViewerSpools(ctx, dir))
 }
 
 func cleanupStaleModelViewerDirs(ctx context.Context, tempRoot string) error {

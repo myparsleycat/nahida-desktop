@@ -28,8 +28,95 @@ type viewerScene struct {
 	variantUse   [][2]int
 	variantBytes int
 	// wanted holds the mesh states apply was last asked to show. They differ from the meshes' own while a
-	// position variant they select is still loading.
+	// position variant they select, or a mesh they show, is still loading.
 	wanted []modelviewer.ViewerMeshState
+	// waiting is set while wanted is not shown yet.
+	waiting bool
+	// meshUse lists the loaded meshes, least recently drawn first, and meshBytes is their GPU size.
+	meshUse   []int
+	meshBytes int
+}
+
+// viewerMeshCacheBytes bounds the GPU size of the meshes a scene keeps loaded beyond the ones it shows. A mod
+// that animates by switching between many meshes, one per frame, only ever draws a few of them.
+const viewerMeshCacheBytes = 256 << 20
+
+// viewerMissing is what apply waits for: position variants by mesh index, and meshes to load.
+type viewerMissing struct {
+	variants map[int]int
+	meshes   []int
+}
+
+func (m viewerMissing) empty() bool { return len(m.variants) == 0 && len(m.meshes) == 0 }
+
+// gpuBytes is the size of the mesh's vertex and index buffers.
+func (m *viewerMesh) gpuBytes() int {
+	return m.vertexCount*(6*4+4*4+viewerVertexExtraStride) + m.info.IndexCount*4
+}
+
+// trackLoaded starts the cache with the meshes loaded so far.
+func (s *viewerScene) trackLoaded() {
+	s.meshUse, s.meshBytes = nil, 0
+	for i, mesh := range s.meshes {
+		if !mesh.unloaded {
+			s.meshUse = append(s.meshUse, i)
+			s.meshBytes += mesh.gpuBytes()
+		}
+	}
+}
+
+// storeMesh counts a newly loaded mesh and unloads the least recently drawn ones while the meshes the scene may
+// drop are over the cache size; the ones it shows, is about to show or deforms do not count. It returns the
+// meshes it unloaded, whose GPU buffers the caller releases.
+func (s *viewerScene) storeMesh(i int) []int {
+	s.meshUse = append(s.meshUse, i)
+	s.meshBytes += s.meshes[i].gpuBytes()
+	kept := func(ref int) bool {
+		mesh := s.meshes[ref]
+		return mesh.pinned || mesh.state.Visible || (ref < len(s.wanted) && s.wanted[ref].Visible)
+	}
+	held := 0
+	for _, ref := range s.meshUse {
+		if kept(ref) {
+			held += s.meshes[ref].gpuBytes()
+		}
+	}
+	var unloaded []int
+	for at := 0; s.meshBytes-held > viewerMeshCacheBytes && at < len(s.meshUse); {
+		ref := s.meshUse[at]
+		if ref == i || kept(ref) {
+			at++
+			continue
+		}
+		mesh := s.meshes[ref]
+		s.meshUse = slices.Delete(s.meshUse, at, at+1)
+		s.meshBytes -= mesh.gpuBytes()
+		mesh.unload()
+		unloaded = append(unloaded, ref)
+	}
+	return unloaded
+}
+
+// forgetMesh unloads a mesh that has no GPU buffers, so a state that shows it loads it again.
+func (s *viewerScene) forgetMesh(i int) {
+	if at := slices.Index(s.meshUse, i); at >= 0 {
+		s.meshUse = slices.Delete(s.meshUse, at, at+1)
+		s.meshBytes -= s.meshes[i].gpuBytes()
+	}
+	s.meshes[i].unload()
+}
+
+// touchMesh marks a loaded mesh as the most recently drawn.
+func (s *viewerScene) touchMesh(i int) {
+	if at := slices.Index(s.meshUse, i); at >= 0 && at != len(s.meshUse)-1 {
+		s.meshUse = append(slices.Delete(s.meshUse, at, at+1), i)
+	}
+}
+
+// waitsForMesh reports a mesh the wanted states show that is not loaded yet.
+func (s *viewerScene) waitsForMesh(i int) bool {
+	mesh := s.meshes[i]
+	return i < len(s.wanted) && s.wanted[i].Visible && mesh.unloaded && !mesh.failed
 }
 
 // viewerVariantCacheBytes bounds the position variants a scene keeps loaded, as the React viewer's position
@@ -126,6 +213,59 @@ type viewerMesh struct {
 	extraDirty bool
 	// overlay replaces the material colour, for the body shape editor; nil for mod meshes.
 	overlay *viewerOverlay
+
+	// unloaded marks a mesh whose geometry is not read yet, or was dropped from the cache; it has no GPU buffers
+	// and draws nothing. failed marks one whose geometry could not be read.
+	unloaded bool
+	failed   bool
+	// pinned keeps a compute deformer's mesh loaded, since the deformer reads its geometry.
+	pinned bool
+	// cpuDropped marks a mesh that keeps only its GPU buffers: its geometry never changes, so nothing reads the
+	// arrays it was uploaded from.
+	cpuDropped bool
+}
+
+// newViewerStub is a mesh known from its transport, before its geometry is read.
+func newViewerStub(info modelviewer.ModelViewerMeshTransport, averagedOutline bool) *viewerMesh {
+	return &viewerMesh{
+		info: info, vertexCount: info.VertexCount, variants: map[int]*viewerPositionGeometry{},
+		averagedOutline: averagedOutline, unloaded: true,
+	}
+}
+
+// fill takes the geometry decoded from the mesh's buffers, starting from the base geometry the GPU buffers are
+// made of. The state, marks and position variants of the mesh stay.
+func (m *viewerMesh) fill(decoded *viewerMesh) {
+	m.vertexCount = decoded.vertexCount
+	m.positions, m.normals, m.uvs, m.indices, m.extra = decoded.positions, decoded.normals, decoded.uvs,
+		decoded.indices, decoded.extra
+	m.tangentUsable, m.hasTangents, m.hasColors, m.hasUV1 = decoded.tangentUsable, decoded.hasTangents,
+		decoded.hasColors, decoded.hasUV1
+	m.faceForward, m.shapes = decoded.faceForward, decoded.shapes
+	m.current, m.geometryKey = decoded.current, decoded.geometryKey
+	m.computed, m.dirty, m.extraDirty = false, false, false
+	m.unloaded, m.cpuDropped = false, false
+}
+
+// unload drops the mesh's geometry. Its GPU buffers are the caller's to release.
+func (m *viewerMesh) unload() {
+	m.positions, m.normals, m.uvs, m.indices, m.extra, m.shapes, m.current = nil, nil, nil, nil, nil, nil, nil
+	m.geometryKey, m.computed, m.dirty, m.extraDirty = "", false, false, false
+	m.unloaded, m.cpuDropped = true, false
+}
+
+// static reports a mesh whose drawn geometry never changes: no shape targets, position variants or deformer.
+func (m *viewerMesh) static() bool {
+	return len(m.info.ShapeTargets) == 0 && len(m.info.PositionVariants) == 0 && !m.pinned
+}
+
+// dropCPU frees the arrays of a static mesh once its GPU buffers are made.
+func (m *viewerMesh) dropCPU() {
+	if m.unloaded || !m.static() {
+		return
+	}
+	m.positions, m.normals, m.uvs, m.indices, m.extra, m.current = nil, nil, nil, nil, nil, nil
+	m.cpuDropped = true
 }
 
 // viewerOverlay is the body shape editor's look of a mesh: a linear tint, times the vertex colours stored
@@ -386,7 +526,7 @@ func interleaveViewerGeometry(positions, normals []float32) []float32 {
 // setGeometry rebuilds current for the mesh's state, when the state changed what it shows. A position variant
 // that is not loaded leaves it as it is.
 func (m *viewerMesh) setGeometry() {
-	if m.computed {
+	if m.computed || m.unloaded || m.cpuDropped {
 		return
 	}
 	state := m.state
@@ -533,21 +673,25 @@ func (s *viewerScene) waitsFor(i, index int) bool {
 }
 
 // apply shows states and rebuilds the geometry that changed. The meshes change together, as the React viewer
-// commits a frame: while a position variant the states select is still to be loaded, the scene keeps what it
-// shows and apply returns those variants by mesh index.
-func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) map[int]int {
+// commits a frame: while a mesh the states show or a position variant they select is still to be loaded, the
+// scene keeps what it shows and apply returns what it waits for.
+func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) viewerMissing {
 	s.wanted = states
-	missing := map[int]int{}
+	missing := viewerMissing{variants: map[int]int{}}
 	for i, mesh := range s.meshes {
 		if i >= len(states) {
 			break
 		}
+		if s.waitsForMesh(i) {
+			missing.meshes = append(missing.meshes, i)
+		}
 		index := states[i].PositionVariant
 		if s.waitsFor(i, index) && mesh.variants[index] == nil && !mesh.unreadable[index] {
-			missing[i] = index
+			missing.variants[i] = index
 		}
 	}
-	if len(missing) > 0 {
+	s.waiting = !missing.empty()
+	if s.waiting {
 		return missing
 	}
 
@@ -560,6 +704,7 @@ func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) map[int]int {
 			continue
 		}
 		mesh.setGeometry()
+		s.touchMesh(i)
 		if mesh.state.PositionVariant >= 0 {
 			s.touchVariant(i, mesh.state.PositionVariant)
 		}

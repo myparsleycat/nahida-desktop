@@ -105,9 +105,12 @@ type ModelViewer struct {
 	shownDark *bool
 	// pendingVariants holds the position variants being loaded, by mesh and variant index.
 	pendingVariants map[[2]int]bool
-	// variantFailureShown is set once the scene's first unreadable position variant was shown.
-	variantFailureShown bool
-	toonAssets          viewerToonAssets
+	// pendingMeshes holds the meshes being loaded, by index, and meshLoads limits how many read at once.
+	pendingMeshes map[int]bool
+	meshLoads     chan struct{}
+	// loadFailureShown is set once the scene's first unreadable mesh or position variant was shown.
+	loadFailureShown bool
+	toonAssets       viewerToonAssets
 
 	// toasts shows the viewer's notices: the main window's toasts in the dialog, its own in a window.
 	toasts         *kit.Toaster
@@ -171,6 +174,10 @@ func (v *ModelViewer) Close() {
 		v.renderer.release()
 		return nil
 	})
+	// The driver keeps the system memory of the released mesh buffers until the device is trimmed.
+	if err := fairy.TrimDevice(); err != nil {
+		v.log.Warn(fmt.Sprintf("Model viewer could not trim the graphics device: %v", err), "ModelViewer.Close")
+	}
 }
 
 func (v *ModelViewer) releaseScene() {
@@ -267,12 +274,15 @@ func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err er
 func (v *ModelViewer) install(scene *viewerScene) {
 	v.scene = scene
 	markViewerMeshes(scene)
+	for _, mesh := range scene.meshes {
+		v.dropCPU(mesh)
+	}
 	v.state = v.defaultState()
 	v.preview, v.previewForm = nil, nil
 	v.form = ""
 	v.highlightGameTextures = false
-	v.pendingVariants = nil
-	v.variantFailureShown = false
+	v.pendingVariants, v.pendingMeshes = nil, nil
+	v.loadFailureShown = false
 	v.sourceIndices = nil
 	v.orientation = vec3{}
 	v.camera = frameOrbit(scene.minimum, scene.maximum)
@@ -334,18 +344,132 @@ func (v *ModelViewer) present() {
 		_, states = modelviewer.EvaluateViewerState(scene.transport, state, form)
 	}
 	v.revision++
-	for i, index := range scene.apply(states) {
+	missing := scene.apply(states)
+	for _, i := range missing.meshes {
+		v.loadMesh(i)
+	}
+	for i, index := range missing.variants {
 		v.loadVariant(i, index)
 	}
 	for _, upcoming := range v.upcomingAnimationStates(form) {
 		for i, state := range upcoming {
 			mesh := scene.meshes[i]
+			if state.Visible && mesh.unloaded {
+				v.loadMesh(i)
+			}
 			if state.Visible && state.PositionVariant >= 0 && mesh.variants[state.PositionVariant] == nil &&
 				mesh.geometryKey != variantGeometryKey(state.PositionVariant) {
 				v.loadVariant(i, state.PositionVariant)
 			}
 		}
 	}
+}
+
+// dropCPU frees the arrays of a static mesh once its GPU buffers are made. A tool that picks the surface reads
+// them, so a viewer with one keeps them.
+func (v *ModelViewer) dropCPU(mesh *viewerMesh) {
+	if v.tool == nil {
+		mesh.dropCPU()
+	}
+}
+
+// loadMesh reads mesh i and makes its GPU buffers, unless it is loading or could not be read before. The scene is
+// presented again once a mesh it waits to show arrives; meshes the cache then drops are released.
+func (v *ModelViewer) loadMesh(i int) {
+	scene := v.scene
+	mesh := scene.meshes[i]
+	if !mesh.unloaded || mesh.failed || v.pendingMeshes[i] {
+		return
+	}
+	if v.pendingMeshes == nil {
+		v.pendingMeshes = map[int]bool{}
+	}
+	v.pendingMeshes[i] = true
+	if v.meshLoads == nil {
+		v.meshLoads = make(chan struct{}, viewerLoadConcurrency)
+	}
+	ctx, loads, info, averagedOutline := v.ctx, v.meshLoads, mesh.info, mesh.averagedOutline
+	go func() {
+		var decoded *viewerMesh
+		var buffers viewerMeshGPU
+		var generation uint64
+		var err error
+		select {
+		case loads <- struct{}{}:
+			decoded, err = readViewerMesh(ctx, v.read, info, averagedOutline)
+			if err == nil {
+				buffers, generation, err = uploadViewerMesh(decoded.upload())
+			}
+			<-loads
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+		fairy.Go(func() {
+			if v.scene != scene {
+				releaseViewerMeshGPU(&buffers)
+				return
+			}
+			delete(v.pendingMeshes, i)
+			if err != nil {
+				if ctx.Err() == nil {
+					v.failMesh(scene, i, err)
+				}
+				return
+			}
+			// Buffers of another device, or made while the scene uploads again, would be lost; the scene asks
+			// for the mesh again once it is presented on the new buffers.
+			if scene.gpu == nil || scene.gpu.generation != generation || v.uploading {
+				releaseViewerMeshGPU(&buffers)
+				return
+			}
+			waited := scene.waitsForMesh(i)
+			scene.gpu.meshes[i] = buffers
+			mesh.fill(decoded)
+			v.dropCPU(mesh)
+			unloaded := scene.storeMesh(i)
+			if len(unloaded) > 0 {
+				_ = fairy.UseDevice(func(fairy.GPU) error {
+					for _, j := range unloaded {
+						scene.gpu.meshes[j].release()
+					}
+					return nil
+				})
+				// The driver keeps the memory of released buffers until a trim, which would let a long flipbook
+				// grow to the size of all its frames.
+				if err := fairy.TrimDevice(); err != nil {
+					v.log.Warn(fmt.Sprintf("Model viewer could not trim the graphics device: %v", err),
+						"ModelViewer.loadMesh")
+				}
+			}
+			if waited {
+				v.present()
+			}
+		})
+	}()
+}
+
+func releaseViewerMeshGPU(buffers *viewerMeshGPU) {
+	_ = fairy.UseDevice(func(fairy.GPU) error {
+		buffers.release()
+		return nil
+	})
+}
+
+// failMesh reports a mesh that could not be read and stops playback. The mesh is not read again: the states that
+// show it draw without it, and only the scene's first failure is shown.
+func (v *ModelViewer) failMesh(scene *viewerScene, i int, err error) {
+	mesh := scene.meshes[i]
+	mesh.failed = true
+	err = infra.ReportError(v.log, err, "ModelViewer.loadMesh", infra.Diagnostic{
+		Operation: "load-mesh",
+		Fields:    map[string]any{"modPath": v.path, "meshId": mesh.info.ID},
+	})
+	v.setAnimationPlaying(false)
+	if !v.loadFailureShown {
+		v.loadFailureShown = true
+		v.toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.load_error"), err.Error())
+	}
+	v.present()
 }
 
 // loadVariant reads position variant index of mesh i unless it is loading or could not be read before. The
@@ -396,8 +520,8 @@ func (v *ModelViewer) failVariant(scene *viewerScene, i, index int, err error) {
 		Fields:    map[string]any{"modPath": v.path, "meshId": mesh.info.ID, "variant": index},
 	})
 	v.setAnimationPlaying(false)
-	if !v.variantFailureShown {
-		v.variantFailureShown = true
+	if !v.loadFailureShown {
+		v.loadFailureShown = true
 		v.toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.load_error"), err.Error())
 	}
 	v.present()
@@ -415,8 +539,26 @@ func (v *ModelViewer) reupload() {
 	}
 	v.uploading = true
 	uploads := viewerMeshUploads(scene)
+	// Meshes that dropped their arrays are read again.
+	reread := map[int]modelviewer.ModelViewerMeshTransport{}
+	for i, mesh := range scene.meshes {
+		if mesh.cpuDropped {
+			reread[i] = mesh.info
+		}
+	}
 	ctx := v.ctx
 	go func() {
+		for i, info := range reread {
+			decoded, err := readViewerMesh(ctx, v.read, info, scene.meshes[i].averagedOutline)
+			if err != nil {
+				if ctx.Err() == nil {
+					v.log.Warn(fmt.Sprintf("Model viewer mesh %s could not be read again: %v", info.ID, err),
+						"ModelViewer.reupload")
+				}
+				continue
+			}
+			uploads[i] = decoded.upload()
+		}
 		set, err := uploadViewerScene(ctx, v.read, v.log, scene.transport, uploads)
 		fairy.Go(func() {
 			v.uploading = false
@@ -426,10 +568,18 @@ func (v *ModelViewer) reupload() {
 			}
 			scene.gpu.release()
 			scene.gpu = set
-			for _, mesh := range scene.meshes {
-				mesh.dirty = true
+			// A mesh loaded meanwhile has no buffers in the new set and loads again; one dropped meanwhile does
+			// not keep them.
+			for i, mesh := range scene.meshes {
+				switch {
+				case !mesh.unloaded && set.meshes[i].indexCount == 0 && mesh.info.IndexCount > 0:
+					scene.forgetMesh(i)
+				case mesh.unloaded && set.meshes[i].indexCount > 0:
+					releaseViewerMeshGPU(&set.meshes[i])
+				}
+				mesh.dirty = mesh.current != nil
 			}
-			v.revision++
+			v.present()
 		})
 	}()
 }

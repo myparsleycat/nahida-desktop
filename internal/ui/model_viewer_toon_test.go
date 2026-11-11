@@ -10,9 +10,9 @@ import (
 func TestMarkEFMIMeshesHidesOverlayShadows(t *testing.T) {
 	texture := func(key string) *string { return &key }
 	mesh := func(id string, tex *string, indices int, lo, hi [3]float64) *viewerMesh {
-		m := &viewerMesh{indices: make([]uint32, indices)}
+		m := &viewerMesh{}
 		m.info = modelviewer.ModelViewerMeshTransport{
-			ID: id, TexKey: tex, Bounds: &modelviewer.ModelViewerBounds{Min: lo, Max: hi},
+			ID: id, TexKey: tex, IndexCount: indices, Bounds: &modelviewer.ModelViewerBounds{Min: lo, Max: hi},
 		}
 		m.state.Visible = true
 		return m

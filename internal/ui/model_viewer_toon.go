@@ -327,7 +327,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 			heightOf(b.Min[2]) >= efmiBoundFaceMinHeight {
 			bound = append(bound, mesh)
 		}
-		if indices := len(mesh.indices); indices >= efmiFaceMinIndices && indices <= efmiFaceMaxIndices &&
+		if indices := mesh.info.IndexCount; indices >= efmiFaceMinIndices && indices <= efmiFaceMaxIndices &&
 			heightOf(b.Min[2]) >= efmiSizedFaceMinHeight {
 			sized = append(sized, mesh)
 		}
@@ -350,7 +350,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 		if b.Min[2] < headFloor {
 			continue
 		}
-		height, indices := b.Max[2]-b.Min[2], len(mesh.indices)
+		height, indices := b.Max[2]-b.Min[2], mesh.info.IndexCount
 		mesh.efmiHead = true
 		mesh.overlayShadow = !present(mesh.info.TexKey) && len(mesh.info.TextureVariants) == 0 &&
 			(indices <= efmiEyeShadowMaxIndices ||
