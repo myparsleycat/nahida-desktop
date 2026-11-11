@@ -22,7 +22,7 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/arch v0.30.0
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.47.0
 	golang.org/x/mod v0.42.0
 	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.25.0
