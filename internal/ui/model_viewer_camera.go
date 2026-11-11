@@ -212,13 +212,13 @@ const (
 	// the zoom speed of 1.5.
 	zoomPerNotch = 100 * 0.0015 * 1.5
 	// orbitPolePitch keeps the camera just short of the poles, where its up direction is undefined.
-	orbitPolePitch = math.Pi/2 - 0.001
-	// cameraTick is the interval the motion advances at.
-	cameraTick = 16 * time.Millisecond
+	orbitPolePitch   = math.Pi/2 - 0.001
+	cameraResumeGap  = 250 * time.Millisecond
+	cameraResumeStep = 1.0 / 30
 )
 
 // cameraMotion is the movement an orbit camera still has to make: a damped drag, a wheel zoom or a turn to an
-// axis view. Stepping it at cameraTick moves the camera as the React viewer's controls did.
+// axis view. Drag events apply a step immediately; frames advance the rest by elapsed time.
 type cameraMotion struct {
 	// yaw, pitch and shift are the rotation and the move of the target a drag asked for that the damping has
 	// not applied yet.
@@ -250,7 +250,7 @@ func (m *cameraMotion) pan(c orbitCamera, dx, dy, height float64) {
 
 // stop drops the motion that is left.
 func (m *cameraMotion) stop() {
-	m.yaw, m.pitch, m.shift, m.distance, m.turn = 0, 0, vec3{}, 0, nil
+	*m = cameraMotion{}
 }
 
 // zoom moves the zoom target of c by notches of the wheel; positive notches move away.
@@ -267,30 +267,7 @@ func (m *cameraMotion) step(c *orbitCamera, dt float64) bool {
 	frames := dt * 60
 	damped := func(factor float64) float64 { return 1 - math.Pow(1-factor, frames) }
 
-	if m.yaw != 0 || m.pitch != 0 {
-		k := damped(orbitDamping)
-		c.yaw += m.yaw * k
-		m.yaw -= m.yaw * k
-		pitch := min(max(c.pitch+m.pitch*k, -orbitPolePitch), orbitPolePitch)
-		// A drag past a pole has nowhere to go.
-		if pitch != c.pitch+m.pitch*k {
-			m.pitch = 0
-		} else {
-			m.pitch -= m.pitch * k
-		}
-		c.pitch = pitch
-		if math.Abs(m.yaw) < 1e-5 && math.Abs(m.pitch) < 1e-5 {
-			m.yaw, m.pitch = 0, 0
-		}
-	}
-	if m.shift != (vec3{}) {
-		k := damped(orbitDamping)
-		c.target = c.target.add(m.shift.scale(k))
-		m.shift = m.shift.scale(1 - k)
-		if m.shift.length() < 1e-5*max(c.radius, 1e-3) {
-			m.shift = vec3{}
-		}
-	}
+	m.stepDrag(c, damped(orbitDamping))
 	if m.turn != nil {
 		yawError := math.Mod(m.turn[0]-c.yaw+math.Pi, 2*math.Pi)
 		if yawError < 0 {
@@ -312,6 +289,36 @@ func (m *cameraMotion) step(c *orbitCamera, dt float64) bool {
 		}
 		c.distance = next
 	}
+	return m.pending()
+}
+
+// stepDrag also runs on input, without advancing a wheel zoom or axis turn an extra frame.
+func (m *cameraMotion) stepDrag(c *orbitCamera, k float64) {
+	if m.yaw != 0 || m.pitch != 0 {
+		c.yaw += m.yaw * k
+		m.yaw -= m.yaw * k
+		pitch := min(max(c.pitch+m.pitch*k, -orbitPolePitch), orbitPolePitch)
+		// A drag past a pole has nowhere to go.
+		if pitch != c.pitch+m.pitch*k {
+			m.pitch = 0
+		} else {
+			m.pitch -= m.pitch * k
+		}
+		c.pitch = pitch
+		if math.Abs(m.yaw) < 1e-5 && math.Abs(m.pitch) < 1e-5 {
+			m.yaw, m.pitch = 0, 0
+		}
+	}
+	if m.shift != (vec3{}) {
+		c.target = c.target.add(m.shift.scale(k))
+		m.shift = m.shift.scale(1 - k)
+		if m.shift.length() < 1e-5*max(c.radius, 1e-3) {
+			m.shift = vec3{}
+		}
+	}
+}
+
+func (m *cameraMotion) pending() bool {
 	return m.yaw != 0 || m.pitch != 0 || m.shift != (vec3{}) || m.turn != nil || m.distance != 0
 }
 

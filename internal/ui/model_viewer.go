@@ -163,6 +163,7 @@ func (v *ModelViewer) Close() {
 		return
 	}
 	v.closed = true
+	v.motion.stop()
 	v.cancel()
 	v.releaseScene()
 	v.toonAssets.release()
@@ -498,6 +499,14 @@ func (v *ModelViewer) drawOptions(background [4]float32) viewerDrawOptions {
 // drag orbits with the left button and pans with the others or with Shift. The camera follows with the
 // damping of the React viewer's OrbitControls.
 func (v *ModelViewer) drag(d fairy.DragEvent) {
+	v.dragAt(d, time.Now())
+}
+
+func (v *ModelViewer) dragAt(d fairy.DragEvent, now time.Time) {
+	v.advanceCamera(now)
+	if v.closed {
+		return
+	}
 	if d.Phase == fairy.DragStart {
 		v.dragStart = v.camera
 		v.dragPanning = d.Button != 0 || d.Mods&keyboard.ModShift != 0
@@ -507,44 +516,68 @@ func (v *ModelViewer) drag(d fairy.DragEvent) {
 	if d.Canceled {
 		v.camera.target, v.camera.yaw, v.camera.pitch = v.dragStart.target, v.dragStart.yaw, v.dragStart.pitch
 		v.motion.yaw, v.motion.pitch, v.motion.shift = 0, 0, vec3{}
+		if !v.motion.pending() {
+			v.motion.stop()
+		}
 		return
 	}
 
 	dx, dy := float64(d.DX-v.dragLast[0]), float64(d.DY-v.dragLast[1])
 	v.dragLast = [2]float32{d.DX, d.DY}
+	if dx == 0 && dy == 0 {
+		return
+	}
 	if v.dragPanning {
 		v.motion.pan(v.camera, dx, dy, float64(v.height))
 	} else {
 		v.motion.rotate(dx, dy, float64(v.height))
 	}
-	v.runCamera()
+	v.motion.stepDrag(&v.camera, orbitDamping)
+	v.runCamera(now)
 }
 
 // viewAlong turns the camera to the yaw and pitch of an axis view.
 func (v *ModelViewer) viewAlong(view [2]float64) {
+	now := time.Now()
+	v.advanceCamera(now)
 	v.motion.turn = &view
-	v.runCamera()
+	v.runCamera(now)
 }
 
-// runCamera steps the camera's motion until none is left.
-func (v *ModelViewer) runCamera() {
+func (v *ModelViewer) runCamera(now time.Time) {
+	if v.closed || !v.motion.pending() {
+		v.motion.stop()
+		return
+	}
 	if v.motion.running {
 		return
 	}
 	v.motion.running = true
-	v.motion.last = time.Now()
-	time.AfterFunc(cameraTick, func() { fairy.Go(v.cameraTick) })
+	v.motion.last = now
+
+	// Starting a zoom or axis turn must wake the retained surface before the camera changes.
+	v.revision++
 }
 
-func (v *ModelViewer) cameraTick() {
-	now := time.Now()
-	elapsed := now.Sub(v.motion.last).Seconds()
-	v.motion.last = now
-	if v.closed || !v.motion.step(&v.camera, elapsed) {
-		v.motion.running = false
+func (v *ModelViewer) advanceCamera(now time.Time) {
+	if v.closed {
+		v.motion.stop()
 		return
 	}
-	time.AfterFunc(cameraTick, func() { fairy.Go(v.cameraTick) })
+	if !v.motion.running || !now.After(v.motion.last) {
+		return
+	}
+	elapsed := now.Sub(v.motion.last)
+	v.motion.last = now
+	seconds := elapsed.Seconds()
+
+	// A restored window resumes smoothly instead of consuming the entire hidden interval.
+	if elapsed > cameraResumeGap {
+		seconds = cameraResumeStep
+	}
+	if !v.motion.step(&v.camera, seconds) {
+		v.motion.stop()
+	}
 }
 
 // View builds the content of a viewer window of its own.
@@ -572,6 +605,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 
 	scene := v.scene
 	v.syncFieldOfView()
+	v.advanceCamera(time.Now())
 	v.syncToonAssets(v.toonStyle())
 	opts := v.drawOptions([4]float32{background.R, background.G, background.B, 1})
 	if v.tool != nil && v.tool.overlay != nil {
@@ -590,13 +624,19 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 				Operation: "draw", Fields: map[string]any{"modPath": v.path},
 			})
 		}
-		return animated
+		if v.motion.running {
+			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
+			cx.Window().Update()
+		}
+		return v.motion.running || animated
 	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull().
 		Cursor(fairy.CursorMove).DragButtons(fairy.MouseLeft | fairy.MouseRight | fairy.MouseMiddle).
 		OnDrag(v.drag).
 		OnWheel(func(e fairy.WheelEvent) bool {
+			now := time.Now()
+			v.advanceCamera(now)
 			v.motion.zoom(v.camera, float64(e.DY))
-			v.runCamera()
+			v.runCamera(now)
 			return true
 		}).
 		OnLayout(func(w, h float32) { v.width, v.height = w, h })
