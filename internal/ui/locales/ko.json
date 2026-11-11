@@ -1610,7 +1610,8 @@
           "toggle": "토글",
           "capture_set_preview": "캡처 후 미리보기 지정",
           "save_to_ini": "INI에 저장",
-          "apply_to_game": "게임에 적용"
+          "apply_to_game": "게임에 적용",
+          "game_preview": "가리킨 값을 게임에서 미리 보기"
         },
         "dialog": {
           "overwrite_preview": {

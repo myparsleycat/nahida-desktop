@@ -16,6 +16,8 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/setting"
+	"nahida.live/desktop/internal/tools"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -106,7 +108,7 @@ func (v *ModelViewer) ineffectiveValue(variableID string, value any) (modelviewe
 
 // setToggleState replaces the toggle state and shows it.
 func (v *ModelViewer) setToggleState(state map[string]any) {
-	v.state, v.preview = state, nil
+	v.state, v.preview, v.previewVars = state, nil, nil
 	v.evaluate()
 	v.refreshIneffective()
 }
@@ -121,14 +123,68 @@ func (v *ModelViewer) setForm(form string) {
 func (v *ModelViewer) previewValue(variable modelviewer.ModelViewerVariable, value any) {
 	v.preview = maps.Clone(v.state)
 	v.preview[variable.ID] = value
+	v.previewVars = []string{variable.ID}
 	v.evaluate()
 }
 
 func (v *ModelViewer) clearPreview() {
 	if v.preview != nil {
-		v.preview = nil
+		v.preview, v.previewVars = nil, nil
 		v.evaluate()
 	}
+}
+
+// previewResolution shows the values a suggestion names without selecting them.
+func (v *ModelViewer) previewResolution(suggestion modelviewer.ModelViewerResolutionSuggestion) {
+	v.preview = v.resolutionState(suggestion)
+	v.previewVars = nil
+	for _, change := range suggestion.Changes {
+		v.previewVars = append(v.previewVars, change.VarID)
+	}
+	v.evaluate()
+}
+
+// gamePreviewEnabled reports whether the previewed values also show in the running games.
+func (v *ModelViewer) gamePreviewEnabled() bool {
+	if s := v.shell; s != nil && s.settingsLoaded(setting.KeyModelViewerGamePreview) {
+		return s.boolSetting(setting.KeyModelViewerGamePreview)
+	}
+	return true
+}
+
+// syncGamePreview sends the previewed values that differ from the selection, with those of the highlighted
+// choice, to the running games that load the mod, or has the games set back their values once nothing is
+// previewed.
+func (v *ModelViewer) syncGamePreview() {
+	if v.preview == nil || v.scene == nil || v.tools == nil || !v.gameLinked || !v.gamePreviewEnabled() {
+		if v.gamePreviewShown {
+			v.gamePreviewShown = false
+			v.gamePreview.Show(nil)
+		}
+		return
+	}
+	changed := map[string]any{}
+	for id, value := range v.preview {
+		if current, ok := v.state[id]; !ok || fmt.Sprint(current) != fmt.Sprint(value) {
+			changed[id] = value
+		}
+	}
+	for _, id := range v.previewVars {
+		if value, ok := v.preview[id]; ok {
+			changed[id] = value
+		}
+	}
+	var inis []tools.GamePreviewINI
+	for _, ini := range v.scene.transport.INIs {
+		if values := iniToggleValues(changed, ini.Prefix); len(values) > 0 {
+			inis = append(inis, tools.GamePreviewINI{Path: ini.Path, State: values})
+		}
+	}
+	if v.gamePreview == nil {
+		v.gamePreview = v.tools.NewModelViewerGamePreview()
+	}
+	v.gamePreviewShown = true
+	v.gamePreview.Show(inis)
 }
 
 // applyResolution selects the values a suggestion names, which make an ineffective value usable.
@@ -323,8 +379,7 @@ func (v *ModelViewer) listControl(t kit.Theme, variable modelviewer.ModelViewerV
 				kit.Tooltip(actionHint)).Label(T("page.tools.model_viewer.ineffective_apply")).
 				OnHover(func(in bool) {
 					if in {
-						v.preview = v.resolutionState(first)
-						v.evaluate()
+						v.previewResolution(first)
 					} else {
 						v.clearPreview()
 					}

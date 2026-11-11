@@ -1610,7 +1610,8 @@
           "reset": "重置",
           "capture_set_preview": "捕获并设为预览",
           "save_to_ini": "保存到 INI",
-          "apply_to_game": "应用到游戏"
+          "apply_to_game": "应用到游戏",
+          "game_preview": "在游戏中预览悬停的值"
         },
         "dialog": {
           "overwrite_preview": {

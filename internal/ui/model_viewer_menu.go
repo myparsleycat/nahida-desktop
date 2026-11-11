@@ -189,6 +189,11 @@ func (v *ModelViewer) menuBar() *fairy.El {
 					{Separator: true},
 					{Label: T("page.tools.model_viewer.menu.reset"), Icon: lucide.RotateCcw, OnClick: v.resetToggles},
 				}
+				gamePreview := v.gamePreviewEnabled()
+				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+					Label: T("page.tools.model_viewer.menu.game_preview"), Checkbox: true, Checked: gamePreview,
+					OnClick: func() { v.setRenderSetting(setting.KeyModelViewerGamePreview, !gamePreview) },
+				})
 				if len(v.shownOverlayMenus()) == 0 {
 					return items
 				}

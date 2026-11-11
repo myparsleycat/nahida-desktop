@@ -21,8 +21,18 @@ type fakeGameLink struct {
 	states  []gamelink.State
 	missing map[string]bool
 
-	mu   sync.Mutex
-	sent map[uint32][]gamelink.Assign
+	mu sync.Mutex
+	// values are the game's variables, which GetVars reads and SetVars changes when set.
+	values map[string]float32
+	reads  [][]string
+	sent   map[uint32][]gamelink.Assign
+	// set, when not nil, receives every SetVars after it is applied.
+	set chan []gamelink.Assign
+	// busy is how many SetVars requests the game rejects next with Error BUSY, changing nothing, and timeouts how
+	// many it queues without answering in time. disconnected fails every request as the manager does while the
+	// link is down.
+	busy, timeouts int
+	disconnected   bool
 }
 
 func TestApplyStateToGameSkipsDisabledPaths(t *testing.T) {
@@ -161,13 +171,41 @@ func TestApplyStateToGamePreservesLinkedModsNamespace(t *testing.T) {
 func (f *fakeGameLink) States() []gamelink.State { return f.states }
 
 func (f *fakeGameLink) Request(_ context.Context, pid uint32, msg gamelink.Message) (gamelink.Message, error) {
-	set := msg.(gamelink.SetVars)
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.disconnected {
+		return nil, gamelink.ErrNotConnected
+	}
+	if get, ok := msg.(gamelink.GetVars); ok {
+		f.reads = append(f.reads, get.Names)
+		reply := gamelink.VarsReply{}
+		for _, name := range get.Names {
+			reply.Values = append(
+				reply.Values,
+				gamelink.Var{Name: name, Exists: !f.missing[name], Value: f.values[name]},
+			)
+		}
+		return reply, nil
+	}
+	set := msg.(gamelink.SetVars)
+	if f.busy > 0 {
+		f.busy--
+		return nil, &gamelink.RemoteError{Code: gamelink.ErrorBusy}
+	}
 	f.sent[pid] = append(f.sent[pid], set.Vars...)
-	f.mu.Unlock()
+	if f.timeouts > 0 {
+		f.timeouts--
+		return nil, context.DeadlineExceeded
+	}
 	applied := gamelink.VarsApplied{Frame: 1}
 	for _, v := range set.Vars {
 		applied.Values = append(applied.Values, gamelink.Var{Name: v.Name, Exists: !f.missing[v.Name], Value: v.Value})
+		if f.values != nil && !f.missing[v.Name] {
+			f.values[v.Name] = v.Value
+		}
+	}
+	if f.set != nil {
+		f.set <- set.Vars
 	}
 	return applied, nil
 }

@@ -1610,7 +1610,8 @@
           "reset": "リセット",
           "capture_set_preview": "キャプチャしてプレビューに設定",
           "save_to_ini": "INI に保存",
-          "apply_to_game": "ゲームに適用"
+          "apply_to_game": "ゲームに適用",
+          "game_preview": "ホバーした値をゲームでプレビュー"
         },
         "dialog": {
           "overwrite_preview": {

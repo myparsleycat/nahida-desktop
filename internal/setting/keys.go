@@ -70,6 +70,7 @@ const (
 	KeyModelViewerToonShadows     = "modelViewer.toonShadows"
 	KeyModelViewerToonStyles      = "modelViewer.toonStyles"
 	KeyModelViewerOverlayInViewer = "modelViewer.overlayInViewer"
+	KeyModelViewerGamePreview     = "modelViewer.gamePreview"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -175,6 +176,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 	{KeyModelViewerToonStyles, ScopeModelViewer, "model_viewer_toon_styles"},
 	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
+	{KeyModelViewerGamePreview, ScopeModelViewer, "model_viewer_game_preview"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},

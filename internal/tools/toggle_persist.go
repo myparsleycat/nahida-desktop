@@ -9,6 +9,8 @@ import (
 type (
 	PersistModelViewerResult = togglepersist.PersistModelViewerResult
 	GameApplyResult          = togglepersist.GameApplyResult
+	GamePreview              = togglepersist.GamePreview
+	GamePreviewINI           = togglepersist.GamePreviewINI
 )
 
 func (t *Tools) PersistModelViewerToggleState(iniPath string, state map[string]any) (PersistModelViewerResult, error) {
@@ -29,6 +31,11 @@ func (t *Tools) ApplyModelViewerToggleStateToGame(
 // ModelViewerGameLinked reports whether a running game that loads the mod at path accepts toggle changes.
 func (t *Tools) ModelViewerGameLinked(path string) bool {
 	return t.persist.GameLinked(path)
+}
+
+// NewModelViewerGamePreview starts showing a model viewer's previewed toggle values in the running games.
+func (t *Tools) NewModelViewerGamePreview() *GamePreview {
+	return t.persist.NewGamePreview()
 }
 
 func (t *Tools) GetPersistLogs() []string {

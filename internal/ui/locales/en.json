@@ -1616,7 +1616,8 @@
           "toggle": "Toggle",
           "capture_set_preview": "Capture and set preview",
           "save_to_ini": "Save to INI",
-          "apply_to_game": "Apply to game"
+          "apply_to_game": "Apply to game",
+          "game_preview": "Preview hovered values in game"
         },
         "dialog": {
           "overwrite_preview": {

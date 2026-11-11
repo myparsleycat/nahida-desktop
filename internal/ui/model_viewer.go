@@ -125,6 +125,11 @@ type ModelViewer struct {
 	gameLinked     bool
 	gameLinkCheck  int
 	applyingToGame bool
+	// gamePreview shows the previewed values in the running games while gamePreviewShown is set. previewVars are
+	// the variables the highlighted choice sets, which the games get even when they equal the selected values.
+	gamePreview      *tools.GamePreview
+	gamePreviewShown bool
+	previewVars      []string
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -170,6 +175,9 @@ func (v *ModelViewer) Close() {
 	v.closed = true
 	v.motion.stop()
 	v.cancel()
+	if v.gamePreview != nil {
+		v.gamePreview.Close()
+	}
 	v.releaseScene()
 	v.toonAssets.release()
 	_ = fairy.UseDevice(func(fairy.GPU) error {
@@ -280,7 +288,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 		v.dropCPU(mesh)
 	}
 	v.state = v.defaultState()
-	v.preview, v.previewForm = nil, nil
+	v.preview, v.previewForm, v.previewVars = nil, nil, nil
 	v.form = ""
 	v.highlightGameTextures = false
 	v.pendingVariants, v.pendingMeshes = nil, nil
@@ -329,6 +337,7 @@ func (v *ModelViewer) evaluate() {
 	v.resolved, v.toggleStates = modelviewer.EvaluateViewerState(v.scene.transport, state, v.shownForm())
 	v.observeCompute()
 	v.present()
+	v.syncGamePreview()
 }
 
 // present applies the toggle state, under the values of the animation frame, to the scene and loads the
