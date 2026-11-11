@@ -483,10 +483,19 @@ func (l *gameBananaLogin) settle(window loginWindow, cookie string, err error) {
 	if l.cancel != nil {
 		l.cancel()
 	}
-	l.finishLocked()
+	done, call := l.done, l.call
+	if call != nil {
+		call.cookie, call.err = cookie, err
+	}
 	l.mu.Unlock()
+
+	// Close before releasing waiters so Open never returns while its window is still open. Close does not
+	// block, and the closing event it triggers sees l.window == nil and does nothing.
 	if window != nil {
 		window.Close()
+	}
+	if done != nil {
+		close(done)
 	}
 }
 
