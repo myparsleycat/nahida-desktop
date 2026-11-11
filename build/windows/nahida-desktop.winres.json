@@ -13,11 +13,11 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "3.45.0.65535"
+          "file_version": "3.46.0.65535"
         },
         "info": {
           "0000": {
-            "ProductVersion": "3.45.0",
+            "ProductVersion": "3.46.0",
             "CompanyName": "nahida.live",
             "FileDescription": "Nahida Desktop",
             "LegalCopyright": "© 2026, nahida.live",
