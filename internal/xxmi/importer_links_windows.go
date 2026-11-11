@@ -34,8 +34,6 @@ type importerFolderLink struct {
 // external launcher's ShaderFixes, becomes a real folder: the package owns ShaderFixes, so a shared one lets
 // both launchers overwrite each other's shaders and blocks auto_update.xcmd deletes. An importer that is running
 // or busy is left for the next start.
-//
-//wails:ignore
 func (x *XXMI) RepairImporterLinks(ctx context.Context) error {
 	x.mu.RLock()
 	client := x.client

@@ -19,9 +19,13 @@ const (
 	ModBisectDir     = "mod-bisect"
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"
+	DrivePreviewDir  = "drive-preview"
 	AgentDir         = "agent"
 	AgentSkillsDir   = AgentDir + string(filepath.Separator) + "skills"
 	ElevatedDir      = "elevated"
+	WebViewDir       = "webview"
+	// NotificationIcon is the image Windows shows on the app's toast notifications.
+	NotificationIcon = "notification-icon.png"
 )
 
 var ErrInvalidPath = errors.New("invalid app data path")

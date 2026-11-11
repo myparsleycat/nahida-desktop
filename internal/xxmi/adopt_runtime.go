@@ -11,7 +11,6 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-//wails:ignore
 func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {

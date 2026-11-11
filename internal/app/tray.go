@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/services/notifications"
+	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/tray"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -196,7 +196,7 @@ func (rt *runtime) observeUpdaterStatus(status infra.UpdaterStatus) {
 
 // sendUpdateCheckNotice requires rt.updateCheck.mu.
 func (rt *runtime) sendUpdateCheckNotice(status infra.UpdaterStatus, err error) {
-	if rt.notifications == nil {
+	if rt.notify == nil {
 		return
 	}
 	language := "en"
@@ -212,9 +212,7 @@ func (rt *runtime) sendUpdateCheckNotice(status infra.UpdaterStatus, err error) 
 	}
 	rt.updateCheck.lastNotice = notice
 
-	notifyErr := rt.notifications.SendNotification(notifications.NotificationOptions{
-		ID: updateCheckNotificationID, Title: title, Body: body,
-	})
+	notifyErr := rt.notify(updateCheckNotificationID, title, body)
 	if notifyErr != nil && rt.log != nil {
 		_ = infra.ReportError(rt.log, notifyErr, "updater.manualCheck", infra.Diagnostic{
 			Severity:  infra.DiagnosticWarn,
@@ -224,41 +222,57 @@ func (rt *runtime) sendUpdateCheckNotice(status infra.UpdaterStatus, err error) 
 	}
 }
 
-func newTray(app *application.App, rt *runtime, icon []byte) *application.SystemTray {
-	if app == nil || rt == nil {
-		return nil
-	}
-	tray := app.SystemTray.New()
-	if len(icon) > 0 {
-		tray.SetIcon(icon)
-	}
-	tray.SetTooltip("Nahida Desktop")
-	menu := app.Menu.New()
-	menu.Add("Check for Updates...").OnClick(func(_ *application.Context) {
-		if rt.updater == nil {
-			return
-		}
-		go rt.checkForUpdatesFromTray()
-	})
-	menu.Add("Setting").OnClick(func(_ *application.Context) {
-		if rt.window != nil {
-			rt.window.OpenSetting()
-		}
-	})
-	menu.AddSeparator()
-	menu.Add("Quit").OnClick(func(_ *application.Context) { app.Quit() })
-	tray.SetMenu(menu)
-	if rt.notifications != nil {
-		rt.notifications.OnNotificationResponse(func(result notifications.NotificationResult) {
-			if result.Error == nil && result.Response.ID == updateCheckNotificationID && rt.window != nil {
-				rt.window.Focus()
+// newTray runs on the UI thread.
+func newTray(rt *runtime, icon []byte) (*tray.Tray, error) {
+	return tray.New(tray.Options{
+		Icon:    icon,
+		Tooltip: "Nahida Desktop",
+		OnClick: rt.window.Focus,
+		// A notice is an update check result or a downloaded update, which the window shows.
+		OnNotificationClick: rt.window.Focus,
+		Menu: func() []fairy.MenuItem {
+			items := []fairy.MenuItem{
+				{Label: "Open Nahida Desktop", OnClick: rt.window.Focus},
+				{Label: "Check for Updates...", OnClick: func() { go rt.checkForUpdatesFromTray() }},
 			}
+			if status, err := rt.updater.GetStatus(context.Background()); err == nil && status.UpdateDownloaded {
+				items = append(
+					items,
+					fairy.MenuItem{Label: "Restart to Update", OnClick: func() { go rt.installUpdate() }},
+				)
+			}
+			return append(items,
+				fairy.MenuItem{Label: "Setting", OnClick: func() {
+					rt.window.Focus()
+					rt.emit("fn:navi", "/setting/gen")
+				}},
+				fairy.MenuItem{Separator: true},
+				fairy.MenuItem{Label: "Quit", OnClick: rt.quit},
+			)
+		},
+	})
+}
+
+func (rt *runtime) installUpdate() {
+	if err := rt.updater.InstallUpdate(context.Background()); err != nil {
+		_ = infra.ReportError(rt.log, err, "updater.install", infra.Diagnostic{
+			Severity:  infra.DiagnosticError,
+			Operation: "updater.install",
+			Stage:     "restart",
 		})
 	}
-	tray.OnClick(func() {
-		if rt.window != nil {
-			rt.window.Focus()
-		}
-	})
-	return tray
+}
+
+// notifyUpdateReady announces a release the updater downloaded on its own.
+func (rt *runtime) notifyUpdateReady() {
+	if rt.notify == nil {
+		return
+	}
+	language := "en"
+	if value, err := rt.setting.GetLanguage(context.Background()); err == nil {
+		language = value
+	}
+	status, _ := rt.updater.GetStatus(context.Background())
+	title, body := updateCheckNotice(language, status, nil, false)
+	_ = rt.notify(updateCheckNotificationID, title, body)
 }

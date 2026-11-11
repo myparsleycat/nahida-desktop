@@ -5,12 +5,6 @@ bin
 node_modules
 .gocache
 .gomodcache
-frontend/dist
-frontend/bindings/
-frontend/node_modules
-frontend/src/routeTree.gen.ts
-frontend/src/shared/types.gen.ts
-build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 internal/elevated/bundle/*.exe
 # Cargo build artifacts (per-machine)
 native/*/target/

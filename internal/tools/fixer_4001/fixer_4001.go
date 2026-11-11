@@ -481,6 +481,12 @@ func (t *Service) end4001Task() {
 	t.fixerMu.Unlock()
 }
 
+// IsTerminalProgressCode reports whether a progress code ends the task that reported it.
+func IsTerminalProgressCode(code string) bool {
+	return strings.Contains(code, "SUCCESS") || strings.Contains(code, "ALREADY") || strings.Contains(code, "ERR") ||
+		code == "XXMI_OBFUSCATE_BACKUP_EXISTS"
+}
+
 func (t *Service) update4001Progress(code, errorMessage string) {
 	t.fixerMu.Lock()
 	t.fixerProgress = code
@@ -760,8 +766,6 @@ func (t *Service) trackD3DBuild(ctx context.Context, id, dir string) error {
 }
 
 // CleanupStaleD3DBuilds removes only validated child directories of the fixed temp root.
-//
-//wails:ignore
 func (t *Service) CleanupStaleD3DBuilds(ctx context.Context) error {
 	client, err := t.requireClient()
 	if err != nil {

@@ -40,8 +40,6 @@ var (
 // already redacted when they are written; this pass repeats that for lines an
 // older build wrote and also removes what the write path keeps: profile folder
 // names outside the current home, the account name and the computer name.
-//
-//wails:ignore
 func AnonymizeLogText(value string) string {
 	return anonymizeLogText(value, currentHomeNeedles(), currentLogIdentities())
 }

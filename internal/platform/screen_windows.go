@@ -65,7 +65,6 @@ func NewScreen() *Screen {
 	return &Screen{windows: defaultWindowScanner(), grab: captureWindowPixels}
 }
 
-//wails:ignore
 func (s *Screen) UseDiagnostic(report func(error, string, map[string]any)) {
 	s.diagnostic = report
 }
@@ -111,8 +110,6 @@ func (s *Screen) CaptureWindow(ctx context.Context, request CaptureRequest) (Cap
 // CapturePixels returns an unencoded frame for internal high-frequency image
 // comparison. The capture remains bounded by the same timeout and pixel cap as
 // CaptureWindow.
-//
-//wails:ignore
 func (s *Screen) CapturePixels(ctx context.Context, request CaptureRequest) (PixelCapture, error) {
 	if err := ctx.Err(); err != nil {
 		return PixelCapture{}, err

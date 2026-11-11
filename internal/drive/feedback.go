@@ -56,8 +56,6 @@ func (e *FeedbackPlanError) Error() string {
 // of one NTE archive set stay on the same page, since the server bundles them
 // per folder and base name. A file the server refuses by the upload rules is
 // left out and counted; any other failure ends the run.
-//
-//wails:ignore
 func (d *Drive) UploadFeedbackMod(
 	ctx context.Context,
 	reportID string,

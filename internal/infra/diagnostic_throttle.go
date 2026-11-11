@@ -8,8 +8,6 @@ import (
 )
 
 // DiagnosticThrottle belongs to one periodic operation, not the global logger.
-//
-//wails:ignore
 type DiagnosticThrottle struct {
 	mu      sync.Mutex
 	entries map[string]diagnosticEpisode
@@ -23,16 +21,12 @@ type diagnosticEpisode struct {
 
 // Report records a changed failure immediately and repeats every five minutes.
 // A successful iteration resets the episode without emitting an extra log.
-//
-//wails:ignore
 func (t *DiagnosticThrottle) Report(log *Log, err error, where string, diagnostic Diagnostic) {
 	_ = t.ReportError(log, err, where, diagnostic)
 }
 
 // ReportError is Report for a caller that also returns the failure. The result is marked as reported
 // even when the throttle suppressed the log line, so a Wails boundary does not log it again.
-//
-//wails:ignore
 func (t *DiagnosticThrottle) ReportError(log *Log, err error, where string, diagnostic Diagnostic) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

@@ -21,6 +21,8 @@ type (
 	TouchProfilePreviewDescriptor            = touchprofile.TouchProfilePreviewDescriptor
 	TouchApplyResult                         = touchprofile.TouchApplyResult
 	TouchRollbackResult                      = touchprofile.TouchRollbackResult
+	TouchMesh                                = touchprofile.TouchMesh
+	TouchPreview                             = touchprofile.TouchPreview
 )
 
 func (t *Tools) TouchProfilePrepare(
@@ -58,6 +60,18 @@ func (t *Tools) TouchProfileGetPreviewDescriptor(
 	return t.touchProfile.TouchProfileGetPreviewDescriptor(ctx, input)
 }
 
+func (t *Tools) TouchProfileMesh(ctx context.Context, input TouchProfilePreviewInput) (TouchMesh, error) {
+	return t.touchProfile.TouchProfileMesh(ctx, input)
+}
+
+func (t *Tools) TouchProfilePreview(
+	ctx context.Context,
+	input TouchProfilePreviewInput,
+	mesh TouchMesh,
+) (TouchPreview, error) {
+	return t.touchProfile.TouchProfilePreview(ctx, input, mesh)
+}
+
 func (t *Tools) TouchProfileDiscardDraft(ctx context.Context, sessionID string) (TouchProfileOK, error) {
 	return t.touchProfile.TouchProfileDiscardDraft(ctx, sessionID)
 }
@@ -66,7 +80,6 @@ func (t *Tools) TouchProfileCloseSession(ctx context.Context, sessionID string) 
 	return t.touchProfile.TouchProfileCloseSession(ctx, sessionID)
 }
 
-//wails:ignore
 func (t *Tools) TouchProfileSessionPaths(sessionID string) ([]string, error) {
 	return t.touchProfile.TouchProfileSessionPaths(sessionID)
 }

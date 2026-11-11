@@ -24,8 +24,6 @@ func snapshotProcessNames(ctx context.Context) (map[string]bool, error) {
 // GameProcesses returns the importer of every running game process, keyed by PID. Image names come from
 // each importer's launcher settings, and extra adds importers XXMI does not own, such as NTE. It reads the
 // process snapshot instead of opening each process, which anti-cheat drivers of some games deny.
-//
-//wails:ignore
 func (x *XXMI) GameProcesses(ctx context.Context, extra map[string][]string) (map[uint32]string, error) {
 	importers, err := x.gameProcessNames(ctx)
 	if err != nil {

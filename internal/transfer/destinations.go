@@ -6,7 +6,6 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-//wails:ignore
 func (t *Transfer) IsActiveDownloadDestination(path string) bool {
 	t.destinationMu.RLock()
 	defer t.destinationMu.RUnlock()
@@ -18,8 +17,6 @@ func (t *Transfer) IsActiveDownloadDestination(path string) bool {
 // GuardDownloadDestinations takes a stable snapshot of active destination
 // conflicts and prevents transfer registration or state changes until release.
 // Callers must invoke release after the protected filesystem operations finish.
-//
-//wails:ignore
 func (t *Transfer) GuardDownloadDestinations(paths []string) (blocked []bool, release func()) {
 	if t == nil {
 		return make([]bool, len(paths)), func() {}

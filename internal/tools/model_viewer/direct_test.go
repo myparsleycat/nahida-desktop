@@ -3,7 +3,6 @@ package modelviewer
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -555,14 +554,9 @@ func TestModelViewerMemoryReleaseWaitsForIdleViewer(t *testing.T) {
 		t.Fatalf("last cleanup = removed %v, err %v, scheduled %d, releases %d", removed, err, len(pending), released)
 	}
 
-	// A load refused for a closed window registers nothing, so it must not void the release.
-	service.modelViewerClosedWindows[1] = true
-	if _, _, err := service.beginModelViewerLoad(context.Background(), 1); !errors.Is(err, context.Canceled) {
-		t.Fatalf("closed window load err = %v", err)
-	}
 	pending[0]()
 	if released != 1 {
-		t.Fatalf("released %d times after a refused load", released)
+		t.Fatalf("released %d times once idle", released)
 	}
 
 	// A load starting before a timer fires keeps the heap it is about to reuse.
@@ -570,10 +564,7 @@ func TestModelViewerMemoryReleaseWaitsForIdleViewer(t *testing.T) {
 	if _, err := service.CleanupModelViewer(context.Background(), first); err != nil || len(pending) != 2 {
 		t.Fatalf("cleanup err %v, scheduled %d", err, len(pending))
 	}
-	_, endLoad, err := service.beginModelViewerLoad(context.Background(), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, endLoad := service.beginModelViewerLoad(context.Background())
 	pending[1]()
 	if released != 1 {
 		t.Fatalf("released %d times during a load", released)

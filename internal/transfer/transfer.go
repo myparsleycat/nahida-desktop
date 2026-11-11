@@ -5,8 +5,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type entry struct {
@@ -45,13 +43,14 @@ type Transfer struct {
 	progressEmitTimer  *time.Timer
 	progressEmitGen    uint64
 	emitStopped        bool
-	app                *application.App
-	lifecycleCtx       context.Context
-	lifecycleCancel    context.CancelFunc
-	wake               chan struct{}
-	queueDone          chan struct{}
-	downloadBandwidth  *BandwidthLimiter
-	slowChunks         *SlowChunkMonitor
+	// snapshotEmit is eventEmit captured by Start: snapshots reach the renderer only after startup.
+	snapshotEmit      func(string, ...any)
+	lifecycleCtx      context.Context
+	lifecycleCancel   context.CancelFunc
+	wake              chan struct{}
+	queueDone         chan struct{}
+	downloadBandwidth *BandwidthLimiter
+	slowChunks        *SlowChunkMonitor
 }
 
 func New() *Transfer {
@@ -79,8 +78,8 @@ func NewWithOptions(opts Options) *Transfer {
 	}
 }
 
-// ServiceStartup starts the single sequential queue worker.
-func (t *Transfer) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+// Start starts the single sequential queue worker.
+func (t *Transfer) Start(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -92,7 +91,7 @@ func (t *Transfer) ServiceStartup(ctx context.Context, _ application.ServiceOpti
 	t.cancelProgressEmitLocked()
 	t.lastProgressEmit = time.Time{}
 	t.emitStopped = false
-	t.app = application.Get()
+	t.snapshotEmit = t.eventEmit
 	t.lifecycleCtx, t.lifecycleCancel = context.WithCancel(ctx)
 	workerCtx := t.lifecycleCtx
 	t.queueDone = make(chan struct{})
@@ -145,21 +144,18 @@ func (t *Transfer) ServiceShutdown() error {
 	return t.setPowerBlocked(false)
 }
 
-//wails:ignore
 func (t *Transfer) UseSettings(settings Settings) {
 	t.mu.Lock()
 	t.settings = settings
 	t.mu.Unlock()
 }
 
-//wails:ignore
 func (t *Transfer) UsePreventSuspension(fn func(bool) error) {
 	t.powerMu.Lock()
 	t.preventSuspension = fn
 	t.powerMu.Unlock()
 }
 
-//wails:ignore
 func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) (returnErr error) {
 	defer func() {
 		if returnErr != nil && t.reportFailure != nil {
@@ -190,7 +186,6 @@ func (t *Transfer) RefreshPowerSaveBlock(ctx context.Context) (returnErr error) 
 	return t.setPowerBlocked(hasActive && enabled)
 }
 
-//wails:ignore
 func (t *Transfer) SetDownloadBandwidthLimitMibps(mibps int) {
 	if mibps <= 0 {
 		t.downloadBandwidth.SetRateBPS(0)
@@ -199,7 +194,6 @@ func (t *Transfer) SetDownloadBandwidthLimitMibps(mibps int) {
 	t.downloadBandwidth.SetRateBPS(float64(mibps * mib))
 }
 
-//wails:ignore
 func (t *Transfer) ApplyBandwidthLimitsFromSettings(ctx context.Context) error {
 	t.mu.RLock()
 	settings := t.settings
@@ -215,20 +209,16 @@ func (t *Transfer) ApplyBandwidthLimitsFromSettings(ctx context.Context) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) TakeDownloadBandwidth(ctx context.Context, bytes int64, onWait func()) error {
 	return t.downloadBandwidth.Take(ctx, bytes, onWait)
 }
 
 // Take implements infra.DownloadLimiter without making the infrastructure
 // package depend on this service package.
-//
-//wails:ignore
 func (t *Transfer) Take(ctx context.Context, bytes int64, onWait func()) error {
 	return t.TakeDownloadBandwidth(ctx, bytes, onWait)
 }
 
-//wails:ignore
 func (t *Transfer) SlowChunks() *SlowChunkMonitor {
 	return t.slowChunks
 }

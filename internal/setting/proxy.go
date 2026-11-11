@@ -80,8 +80,6 @@ func (s *Setting) readProxy(ctx context.Context) (infra.ProxyConfig, error) {
 }
 
 // LoadProxySettings captures the effective policy once during runtime startup.
-//
-//wails:ignore
 func (s *Setting) LoadProxySettings(ctx context.Context) (infra.ProxyConfig, error) {
 	s.proxyMu.Lock()
 	defer s.proxyMu.Unlock()

@@ -44,7 +44,6 @@ type ClipboardText struct {
 	Text     string
 }
 
-//wails:ignore
 func (s *Shell) UseDiagnostic(report func(error, string, map[string]any)) {
 	s.diagnostic = report
 }
@@ -108,8 +107,6 @@ func (s *Shell) GetClipboardFiles() []string {
 
 // ReadClipboardText returns Unicode text together with the clipboard sequence
 // number used to reject stale hunting results.
-//
-//wails:ignore
 func (s *Shell) ReadClipboardText() (ClipboardText, error) {
 	return readClipboardText()
 }

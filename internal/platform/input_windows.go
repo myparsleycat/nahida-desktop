@@ -224,22 +224,18 @@ func NewInput() *Input {
 
 // UseElevatedInput routes requests blocked by UIPI through the optional
 // elevated helper. Passing nil disables elevated delivery.
-//
-//wails:ignore
 func (i *Input) UseElevatedInput(sender ElevatedInputSender) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.elevated = sender
 }
 
-//wails:ignore
 func (i *Input) UseElevatedHelperStatus(status func() ElevatedHelperStatus) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.helperStatus = status
 }
 
-//wails:ignore
 func (i *Input) UseDiagnostic(report func(error, string, map[string]any)) {
 	i.diagnostic = report
 }
@@ -302,8 +298,6 @@ func (i *Input) ListWindows(ctx context.Context, filter WindowFilter) ([]WindowI
 
 // ProcessAlive reports whether the process with pid is still running. Hunting
 // uses it to tell a game that hid its window from a game that exited.
-//
-//wails:ignore
 func (i *Input) ProcessAlive(pid uint32) bool {
 	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
 	if err != nil {
@@ -335,8 +329,6 @@ func (i *Input) ResolveWindow(ctx context.Context, target WindowTarget) (WindowI
 
 // AcquireForeground serializes a multi-step foreground operation and keeps
 // the target focused until the returned lease is closed.
-//
-//wails:ignore
 func (i *Input) AcquireForeground(ctx context.Context, target WindowTarget) (ForegroundController, error) {
 	if err := i.acquireFocus(ctx); err != nil {
 		return nil, err
@@ -361,8 +353,6 @@ func (i *Input) AcquireForeground(ctx context.Context, target WindowTarget) (For
 
 // ValidateKeys verifies that every chord and forbidden-key token can be
 // represented by the Windows input backend without sending input.
-//
-//wails:ignore
 func (i *Input) ValidateKeys(chords, forbidden []string) error {
 	for _, chord := range chords {
 		if _, err := parseKeyChord(chord); err != nil {

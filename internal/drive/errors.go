@@ -60,7 +60,6 @@ type DriveAPIError struct {
 	diagnosticIdentity *DriveAPIError
 }
 
-//wails:ignore
 func (e *DriveAPIError) DiagnosticSeverity() infra.DiagnosticSeverity {
 	if e == nil {
 		return infra.DiagnosticError
@@ -89,8 +88,6 @@ func (e *DriveAPIError) Error() string {
 }
 
 // DiagnosticSource retains wrapper context without altering the public cause.
-//
-//wails:ignore
 func (e *DriveAPIError) DiagnosticSource() error {
 	if e == nil {
 		return nil
@@ -99,8 +96,6 @@ func (e *DriveAPIError) DiagnosticSource() error {
 }
 
 // Is preserves matching the original domain error after diagnostic-only cloning.
-//
-//wails:ignore
 func (e *DriveAPIError) Is(target error) bool {
 	return e != nil && e.diagnosticIdentity != nil && errors.Is(e.diagnosticIdentity, target)
 }

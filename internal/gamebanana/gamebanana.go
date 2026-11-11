@@ -150,7 +150,6 @@ func NewWithOptions(opts Options) *GameBanana {
 	}
 }
 
-//wails:ignore
 func (g *GameBanana) UseClient(client *db.Client) {
 	g.mu.Lock()
 	g.client = client

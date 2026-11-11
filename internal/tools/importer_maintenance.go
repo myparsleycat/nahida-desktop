@@ -8,8 +8,6 @@ import (
 )
 
 // SuspendImporterWatchers pauses tools that keep handles or pending writes under importer folders.
-//
-//wails:ignore
 func (t *Tools) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
 	resumeInspection, err := t.fixInspection.SuspendImporterWatchers(ctx)
 	if err != nil {

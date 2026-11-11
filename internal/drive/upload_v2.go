@@ -32,7 +32,6 @@ type UploadV2Error struct {
 	status  int
 }
 
-//wails:ignore
 func (e *UploadV2Error) DiagnosticSeverity() infra.DiagnosticSeverity {
 	if e == nil {
 		return infra.DiagnosticError

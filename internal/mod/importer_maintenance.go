@@ -11,8 +11,6 @@ import (
 
 // SuspendImporterWatchers closes directory handles and drains compression before an importer is renamed.
 // The returned function must run after commit or rollback, with moves only for a committed data migration.
-//
-//wails:ignore
 func (m *Mod) SuspendImporterWatchers(ctx context.Context) (func([]xxmi.ImportedImporter) error, error) {
 	m.watchMu.Lock()
 	if err := ctx.Err(); err != nil {

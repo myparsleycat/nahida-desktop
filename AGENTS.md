@@ -5,8 +5,8 @@
 
 ## Project
 
-- This is a Windows-only desktop application built with Go, Wails v3 beta, React, and TypeScript.
-- Keep the existing UI, UX, state management, and business logic unless the requested change requires otherwise.
+- This is a Windows-only desktop application built with Go and the native UI framework Fairy (`github.com/myparsleycat/fairy`).
+- Keep the existing business logic unless the requested change requires otherwise.
 - Do not restore Linux, Android, iOS, or macOS build targets.
 - Make small, reviewable changes and keep the build and types valid after each unit.
 
@@ -14,30 +14,27 @@
 
 - Use the `golang-*` skills from `https://github.com/samber/cc-skills-golang` for Go work: style, naming, error handling, testing, concurrency, performance, and library choice.
 - `golang-how-to` is the entry point; it routes to the relevant skills and loads several together when a task spans multiple concerns.
-- This file takes precedence on conflict: project commands, pinned tools, Wails wiring, and cross-layer contracts override general skill guidance.
+- This file takes precedence on conflict: project commands, pinned tools, UI framework wiring, and cross-layer contracts override general skill guidance.
 
 ## Layout
 
-- Application and Wails service wiring live in `internal/app/runtime.go`.
+- `main.go` calls `app.Run`. `internal/app/app.go` takes the single-instance lock, boots the backend, and runs the `fairy` message loop with the tray and the main window (`internal/app/window.go`, `internal/app/tray.go`).
+- The main window shows `ui.Shell` (`internal/ui`): title bar, navigation rail, router, toasts, confirmation dialogs and theme.
+- Backend wiring lives in `internal/app/runtime.go`, which takes UI framework capabilities through `uiHost` (`internal/app/host.go`).
 - Backend features live in focused packages under `internal/` such as `auth`, `drive`, `gamebanana`, `mod`, `platform`, `setting`, `tools`, `transfer`, and `xxmi`.
 - Keep new behavior in the package that owns the feature. Do not create speculative layers or vague `util`, `common`, or `base` packages.
-- Wails-generated TypeScript bindings live in `frontend/bindings`.
-- Renderer-side Wails adapters live in `frontend/src/wails` when a small frontend abstraction over bindings or runtime events is needed.
-- The frontend is a React and TypeScript application. Do not restyle or redesign it unless asked.
+- Self-update (release check, SHA-256 verification, executable swap helper) lives in `internal/selfupdate`; `infra.Updater` owns the update state.
 
-## Wails
+## UI framework
 
-- Implement against the current Wails v3 API. Do not use Wails v2 APIs.
-- Keep the exported surface minimal: a bindable exported service method becomes a callable renderer API, and exported fields of bound models become part of the generated TypeScript. Renames and unexports are breaking changes for the frontend.
-- If documentation and the installed Wails v3 source/API disagree, follow the installed source/API.
-- Wails is a fork of `wailsapp/wails`, not vendored in this repository.
-- Fork repository: `https://github.com/myparsleycat/wails`, branch `master`.
-- Resolve the Wails source from the version selected by `go.mod` and the current Go environment. If a separate local checkout is needed, discover it from the workspace instead of assuming a machine-specific absolute path.
-- Pin the fork in `go.mod` with `replace github.com/wailsapp/wails/v3 => github.com/myparsleycat/wails/v3 <tag>`. Do not copy the fork into `third_party`.
-- Register every service in `runtime.services()` in `internal/app/runtime.go` through `newLoggedService` or `newGuardedService`, never bare `application.NewService`: the logged wrapper installs the error marshaler that writes an unreported failure to `desktop.log` once, and the guarded wrapper also makes calls wait for startup maintenance.
-- Mark exported methods of a bound service that are not renderer APIs, such as `Use*` wiring and cross-service hooks, with `//wails:ignore`.
-- Event names are a renderer contract in the form `domain:kebab-name`. Backend packages emit through the `EventEmit` function injected in their options; change the Go emitter and every `Events.On` listener together.
-- Do not put large numeric arrays or base64 blobs in bound models. Serve binary data through `infra.Protocol` memory sessions and read it with `frontend/src/wails/binary-memory.ts`; `generated-binding-contract.test.ts` enforces this.
+- The UI is built with Fairy, `github.com/myparsleycat/fairy` (Direct3D 11, DirectWrite, flexbox layout, component kit in `fairy/kit`, native dialogs in `fairy/dialog`, tray icons in `fairy/tray`). It is a published module pinned in `go.mod`; update it with `go get github.com/myparsleycat/fairy@<version>`. Read its `README.md` and `docs/README.md` before UI work.
+- Windows, trays and menus are created on the UI thread (inside `fairy.Main`, a handler, or `fairy.Do`). From other goroutines use `fairy.Go`, `fairy.Do`, or `Window.Post`.
+- Only `internal/app` and `internal/ui` import `fairy`. Feature packages receive UI capabilities as injected functions, as with `uiHost`; do not import `fairy` from them. Screens call service methods directly.
+- Backend packages emit events through the `EventEmit` function injected in their options, in the form `domain:kebab-name`. They reach the UI through `ui.Events`, which drops events without a handler and runs handlers on the UI thread; keep the names and payloads stable.
+- UI text comes from `internal/ui/locales/*.json`, in i18next format. Add new keys to all four locales. The UI font (IBM Plex Sans KR) is embedded from `internal/ui/fonts`.
+- `ui.Route` values are the former React frontend's URL paths, because the start page setting and `fn:navi` events store them. Keep them stable.
+- `ui.Deps.Ready` (the runtime's `startup.wait`) blocks until startup maintenance finishes. Screens run mod service calls and setting writes after it (`Shell.background`, `runSettingWrites`); new screens that call services during startup must do the same.
+- The single-instance ID `com.nahida.desktop` in `app.go` names the mutex the installer checks (`scripts/nsis-uninstaller.test.mjs`); keep it a string literal and change both together.
 
 ## Required Gateways
 
@@ -73,19 +70,11 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 - All access to the application database goes through `internal/db`; `db.Open` fixes the single connection and its pragmas.
 - Declare schema changes in `TableSpecs` in `internal/db/schema.go` and let `Reconcile` apply them. Rename a table or column by adding the old name to `Aliases`. Do not write ad-hoc `ALTER TABLE` statements.
 - A one-shot data migration runs from `Reconcile` and is gated by its own `SchemaKey*` entry in the schema state so it never runs twice.
-- Adding a setting touches all of these: the `Key*` constant and its `allDefinitions` row in `internal/setting/keys.go`, with storage key `{scope}_{snake_case}`, which a test enforces; its spec in `buildSpecs` in `specs.go`; and `AppSettings` in `frontend/src/shared/settings.ts`.
+- Adding a setting touches both of these: the `Key*` constant and its `allDefinitions` row in `internal/setting/keys.go`, with storage key `{scope}_{snake_case}`, which a test enforces; and its spec in `buildSpecs` in `specs.go`.
 - Settings side effects on other services go through `setting.Hooks`. The setting package does not import feature packages.
-
-### Frontend
-
-- Import with the configured aliases: `@bindings/*` for generated services and models, `@renderer/*` for `src`, and `@shared/*` for `src/shared`.
-- Log with `Logger` from `@renderer/lib/logger`, which redacts and persists to `desktop.log`. Do not use `console.*`.
-- Every user-visible string goes through `t()`. Add a new key to all four locale files in `frontend/src/lib/i18n/locales` (`en`, `ja`, `ko`, `zh`) in the same change; `en` is only the runtime fallback.
-- Read and write settings through `useSetting` and `useSettings` in `hooks/use-settings.ts` or the helpers in `lib/settings.ts`. They share the `["settings", ...]` query keys and follow the `setting:update` event; do not call `Setting.Get`, `Setting.GetMany`, or `Setting.Set` directly from components.
 
 ## Commands
 
-- Development: `task dev`
 - Windows build: `task build`
 - Windows package: `task package APP_VERSION=<version>`
 - Go tests: `task test` (runs `go test ./...`)
@@ -96,13 +85,6 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 - Go formatting preview/check: `task fmt:check -- <paths...>` (defaults to the whole repository; writes nothing)
 - VS Code Go formatter setup: `task fmt:setup` (repeat after updating the pinned lint module)
 - Vulnerability scan: `task vuln`
-- Run frontend commands from the `frontend/` directory.
-- Frontend build: `pnpm build`
-- Frontend tests: `pnpm test`
-- Frontend lint and type-aware checks: `pnpm lint -- <paths...>`
-- Frontend lint with fixes: `pnpm lint:fix -- <paths...>`
-- Frontend format: `pnpm fmt -- <paths...>`
-- Frontend format check: `pnpm fmt:check`
 - Release-script tests from the repository root: `pnpm test`
 
 Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks so the pinned tool versions are used.
@@ -110,7 +92,7 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 ### Running commands sequentially
 
 - Run `task` and `pnpm` commands strictly one at a time: one command per tool call, and wait for it to finish before starting the next. Never issue them as parallel tool calls or as background jobs alongside another command.
-- Concurrent runs race on shared state: the shell working directory, the `.task` checksum and tool cache, generated bindings, `node_modules`, and build outputs.
+- Concurrent runs race on shared state: the shell working directory, the `.task` checksum and tool cache, `node_modules`, and build outputs.
 - Parallel tool calls remain appropriate for read-only work such as reading files and searching.
 
 ### Command time limit
@@ -137,34 +119,18 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 
 ## Code Generation
 
-### Wails bindings
-
-- `frontend/bindings` is generated from registered Go services and is gitignored; CI regenerates it during validation and release builds.
-- When an exported service method, parameter, return type, or bound model changes, regenerate bindings with `task common:generate:bindings` or run `task build`, which includes binding generation.
-- A fresh clone has no bindings until one of the generation commands runs; do that before frontend work that imports `@bindings`.
-- Import backend APIs through the `@bindings` alias. Do not hand-write copies of generated service or model definitions.
-- Never edit files in `frontend/bindings` manually.
-
-### Frontend generated files
-
-- `frontend/src/routeTree.gen.ts` is generated by the TanStack Router Vite plugin and is gitignored.
-- A frontend build regenerates the route tree. Do not edit it manually.
+- `task build` generates the Windows icon, manifest and version resources with the pinned `go-winres` from `build/windows/*.winres.json`. Release versions come from `scripts/write-release-metadata.mjs`.
 
 ## Verification
 
-- Do not use `task dev` or a standalone Vite dev server as a substitute for verification.
-- Verification should be proportional to the change: run the commands for the layers that changed, but keep a successful production build as the final compile, type, and binding check for cross-layer changes.
+- Verification should be proportional to the change: run the commands for the layers that changed, but keep a successful production build as the final compile and resource check for changes that cross packages.
 - For Go-only changes, run focused package tests first (`go test <pkgs>`), then `task test` and `task lint` when the change is ready.
-- For frontend-only changes, run `pnpm fmt -- <paths...>`, `pnpm lint -- <paths...>`, the relevant Vitest tests, and `pnpm build` from `frontend/`.
-- `task test` and `task lint` cover Go code only, and `task build` adds Go compilation and binding generation on top of the frontend build. A frontend-only change therefore does not need `task test`, `task lint`, or `task build`.
-- Treat a change as cross-layer rather than frontend-only when it changes Go-exported service methods, parameters, return types, or bound models; frontend build or packaging inputs such as `vite.config.ts`, `package.json`, `pnpm-lock.yaml`, or asset paths; or the runtime contract between the renderer and the backend.
-- For changes to Wails services, bindings, application wiring, build configuration, or cross-layer behavior, run `task build` after the relevant tests and linters.
-- For `.ts`, `.tsx`, `.js`, and `.jsx` files, use the existing `pnpm lint` and `pnpm fmt` scripts from `frontend/`; do not invoke `tsc`, Oxlint, or Oxfmt directly.
+- For changes to application wiring, the UI layer, build configuration, or the installer, run `task build` after the relevant tests and linters. For release scripts, run `pnpm test` from the repository root.
 - Run `task vuln` when dependencies, networking, archive handling, process execution, or other security-sensitive code changes.
 
 ### Adding and changing tests
 
-- Do not add tests by default for every change. Add or extend tests only for a concrete behavior or failure mode that existing coverage and required checks do not adequately verify. Prioritize consequential risks such as data loss, security, rollback, cancellation, concurrency, and renderer/backend contracts. More coverage or a new function alone is not sufficient justification; presentation-only changes, mechanical renames, and trivial forwarding usually need no new tests.
+- Do not add tests by default for every change. Add or extend tests only for a concrete behavior or failure mode that existing coverage and required checks do not adequately verify. Prioritize consequential risks such as data loss, security, rollback, cancellation, concurrency, and UI/backend contracts. More coverage or a new function alone is not sufficient justification; presentation-only changes, mechanical renames, and trivial forwarding usually need no new tests.
 - For bug fixes, a regression test is not mandatory. Skip it when an existing test already reproduces the bug, or when the fixed code and the process around it are self-evident enough that a test would only restate the change. Add or extend one when the bug could plausibly recur unnoticed, such as an edge case, a subtle interaction, or a failure that existing checks did not catch. When you do add one, verify that the relevant assertion fails with the original faulty behavior and passes with the fix; compilation errors or unrelated setup failures do not count. If deterministic automated reproduction is not feasible, explain the limitation and the alternative verification performed.
 - Prefer the smallest case in an existing test that covers the risk. Avoid equivalent assertions across test layers, and keep fixtures and fakes proportional to the risk. Do not introduce production abstractions solely to support a low-value test.
 - Assert observable behavior and stable contracts rather than mirroring implementation details. Source or generated-text checks are allowed for explicit repository contracts whose runtime verification is unavailable or impractical, such as generated binding surfaces, dependency pins, or startup ordering; do not use them merely to assert that an implementation fragment exists.
@@ -187,13 +153,13 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 
 ## Error Logging
 
-- For Wails-backed user actions, log the original backend error before returning it when the renderer will show only a generic fallback message.
+- For user actions, log the original backend error before returning it when the UI will show only a generic fallback message.
 - Include enough structured context to diagnose the failure without reproduction: service/action name, user-facing entity name, relevant domain identifiers, current operation or stage, input and resolved paths, external URLs or executable paths when relevant, and rollback or cleanup state.
 - For multi-step operations, track and log the current stage and any registered rollback or cleanup state.
-- Preserve established sentinel messages or domain error codes when the frontend depends on them. This includes `CODE:detail` prefixed errors such as `XXMI_RUNTIME_CORRUPTED:` and `infra.ContractError` text.
+- Preserve established sentinel messages or domain error codes when callers depend on them. This includes `CODE:detail` prefixed errors such as `XXMI_RUNTIME_CORRUPTED:` and `infra.ContractError` text.
 - Never log secrets, session cookies, authorization headers, tokens, or unredacted sensitive user data. Pass URLs through `infra.SanitizeLogURL` before logging them.
 - Log through the injected `infra.Log`. `log/slog` and `fmt.Print*` are not routed to `desktop.log`.
-- Attach context with `infra.AnnotateError` in inner layers and emit with `infra.ReportError` at the layer that owns the operation. A reported error is marked, so the Wails and transfer boundaries do not log it again; do not log the same failure at several levels.
+- Attach context with `infra.AnnotateError` in inner layers and emit with `infra.ReportError` at the layer that owns the operation. A reported error is marked, so the UI and transfer boundaries do not log it again; do not log the same failure at several levels.
 - Cancellation by the user or by shutdown is not a failure. Check `infra.IsCancellationError` instead of logging it.
 - Use `infra.WithCause` when a domain contract hides the underlying cause from the caller but the log still needs it.
 - Use `infra.DiagnosticThrottle` for a failure that repeats in a loop and `infra.DiagnosticBatch` for many failures of one operation.
@@ -223,13 +189,13 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 
 ## Comments
 
-- These rules apply to Go and TypeScript code, including method documentation and inline comments.
+- These rules apply to Go code, including method documentation and inline comments.
 - Do not add comments to self-explanatory methods or code. Avoid restating a method name, signature, assignment, or obvious control flow in prose.
 - Add comments only when they explain non-obvious intent, constraints, surprising behavior, or a contract that the code alone does not convey. Preserve required tool directives and documentation required by project tooling.
 
 ## Blank Lines
 
-Treat a blank line as a paragraph break: one blank line ends one topic. These rules apply to Go and TypeScript code.
+Treat a blank line as a paragraph break: one blank line ends one topic. These rules apply to Go code.
 
 - Always separate top-level declarations, such as functions, types, and const blocks, with a single blank line.
 - Inside a function, insert a blank line only when the topic changes: validation, preparation, transformation, output.
@@ -262,70 +228,6 @@ func (s *service) sync(ctx context.Context, id string) error {
 ```
 
 Three paragraphs: load, fetch and filter, save.
-
-## TypeScript and React Style
-
-### General principles
-
-- Keep things in one function unless a helper is composable, reusable, isolates a complex boundary, or clearly improves the caller.
-- Avoid extracting trivial single-use helpers preemptively.
-- Avoid `try`/`catch` where promise composition or boundary-level error handling is clearer.
-- Avoid `any`; begin external or untrusted values as `unknown` and narrow them.
-- Rely on type inference when possible. Add explicit types for exported boundaries or when they materially improve clarity.
-- Prefer functional array methods such as `flatMap`, `filter`, and `map` for straightforward transformations. Use type guards when filtering so downstream inference is preserved.
-- Prefer `es-toolkit` for common TypeScript collection or object operations when it is clearer than a local implementation.
-
-### Variables and property access
-
-- Prefer `const` over `let`. Use a ternary, derived value, or early return instead of reassignment when that is clearer.
-- Inline a value used once when naming it adds no context, but retain variables that document domain meaning, aid debugging, or prevent repeated expensive work.
-- Avoid unnecessary destructuring when dot notation better preserves the object's context.
-
-```ts
-// Good
-const journal = JSON.parse(await readFile(join(dir, "journal.json"), "utf8"));
-obj.a;
-obj.b;
-const mode = enabled ? "active" : "idle";
-
-// Avoid when the intermediate names add no meaning
-const journalPath = join(dir, "journal.json");
-const { a, b } = obj;
-let mode;
-mode = enabled ? "active" : "idle";
-```
-
-### Control flow and complex logic
-
-- Prefer early returns over `else` after a terminating branch.
-- When a function has several validation branches or supporting details, keep the main function readable as the happy path and place meaningful helpers nearby, usually below the main export.
-- Do not turn simple expressions into a forest of single-use helpers.
-
-```ts
-export function loadThing(input: unknown) {
-    const config = requireConfig(input);
-    const metadata = readMetadata(input);
-    return createThing({ config, metadata });
-}
-```
-
-## Performance
-
-### High-frequency visual feedback
-
-When only an imperative visual attribute such as vertex colors or a heatmap changes frequently while the underlying data and JSX structure stay the same, use refs and imperative methods rather than React state that rerenders the component tree.
-
-- Use `useRef` for values that affect only imperative visual output, not rendered UI.
-- Expose focused methods such as `updateColors` or `updatePositions` with `useImperativeHandle` when a child owns the rendering resource.
-- Keep React state for values that affect JSX structure, text, accessibility state, or declarative component behavior.
-- Do not recompute normals, bounds, geometry, or other large derived data when only colors or another isolated attribute changed.
-- Measure before introducing a specialized imperative path, and keep it localized to the high-frequency boundary.
-
-## Formatting and linting changed frontend files
-
-- Before committing changes to `.ts`, `.tsx`, `.js`, or `.jsx` files, run both commands from `frontend/` against every changed file: first `pnpm fmt -- <paths...>`, then `pnpm lint -- <same-paths...>`.
-- Pass the changed file paths explicitly. Do not rely on the GitHub Actions auto-format workflow as a substitute for local formatting and linting.
-- Do not format or lint unrelated files.
 
 ## Git Revert
 

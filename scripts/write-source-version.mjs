@@ -5,11 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 import { parseReleaseVersion } from './release-version.mjs';
 
+const RESOURCE_FILES = {
+  appResources: 'build/windows/nahida-desktop.winres.json',
+  helperResources: 'build/windows/elevated-helper.winres.json',
+};
+
 const SOURCE_FILES = {
-  config: 'build/config.yml',
-  info: 'build/windows/info.json',
-  manifest: 'build/windows/wails.exe.manifest',
-  nsisTools: 'build/windows/nsis/wails_tools.nsh',
+  ...RESOURCE_FILES,
+  manifest: 'build/windows/nahida-desktop.exe.manifest',
   platform: 'internal/platform/shell.go',
 };
 
@@ -18,14 +21,51 @@ export async function writeSourceVersion(root, input) {
   const entries = Object.fromEntries(
     Object.entries(SOURCE_FILES).map(([name, file]) => [name, path.join(root, file)]),
   );
-  const [config, infoSource, manifest, nsisTools, platform] = await Promise.all([
-    readFile(entries.config, 'utf8'),
-    readFile(entries.info, 'utf8'),
-    readFile(entries.manifest, 'utf8'),
-    readFile(entries.nsisTools, 'utf8'),
-    readFile(entries.platform, 'utf8'),
-  ]);
-  const info = JSON.parse(infoSource);
+  const sources = Object.fromEntries(
+    await Promise.all(
+      Object.entries(entries).map(async ([name, file]) => [name, await readFile(file, 'utf8')]),
+    ),
+  );
+
+  const updated = {
+    ...Object.fromEntries(
+      Object.entries(RESOURCE_FILES).map(([name, file]) => [
+        name,
+        updateResourceVersion(sources[name], release, file),
+      ]),
+    ),
+    manifest: replaceExactlyOnce(
+      sources.manifest,
+      /(<assemblyIdentity\s+type="win32"\s+name="com\.nahida\.desktop"\s+version=")([^"]+)(")/,
+      `$1${release.numericVersion}$3`,
+      SOURCE_FILES.manifest,
+    ),
+    platform: replaceExactlyOnce(
+      sources.platform,
+      /(var AppVersion = ")[^"]+("\r?\n)/,
+      `$1${release.version}$2`,
+      SOURCE_FILES.platform,
+    ),
+  };
+
+  await Promise.all(
+    Object.entries(updated).map(([name, content]) => writeFile(entries[name], content)),
+  );
+
+  process.stdout.write(`Updated source version to ${release.version}\n`);
+  return release;
+}
+
+function updateResourceVersion(source, release, file) {
+  const config = JSON.parse(source);
+  const infos = Object.values(config.RT_VERSION ?? {}).flatMap((languages) =>
+    Object.values(languages),
+  );
+  if (infos.length !== 1) {
+    throw new Error(`Expected exactly one version field in ${file}; found ${infos.length}`);
+  }
+
+  const [info] = infos;
   info.fixed.file_version = release.numericVersion;
   if (Object.hasOwn(info.fixed, 'product_version')) {
     info.fixed.product_version = release.numericVersion;
@@ -34,45 +74,7 @@ export async function writeSourceVersion(root, input) {
   if (Object.hasOwn(info.info['0000'], 'FileVersion')) {
     info.info['0000'].FileVersion = release.version;
   }
-
-  const updated = {
-    config: replaceExactlyOnce(
-      config,
-      /^(\s*version:\s*)"[^"]+"(\s*# The application version\s*)$/m,
-      `$1"${release.version}"$2`,
-      SOURCE_FILES.config,
-    ),
-    info: `${JSON.stringify(info, null, 2)}\n`,
-    manifest: replaceExactlyOnce(
-      manifest,
-      /(<assemblyIdentity\s+type="win32"\s+name="com\.nahida\.desktop"\s+version=")([^"]+)(")/,
-      `$1${release.numericVersion}$3`,
-      SOURCE_FILES.manifest,
-    ),
-    nsisTools: replaceExactlyOnce(
-      nsisTools,
-      /(!define INFO_PRODUCTVERSION ")[^"]+("\r?\n)/,
-      `$1${release.version}$2`,
-      SOURCE_FILES.nsisTools,
-    ),
-    platform: replaceExactlyOnce(
-      platform,
-      /(var AppVersion = ")[^"]+("\r?\n)/,
-      `$1${release.version}$2`,
-      SOURCE_FILES.platform,
-    ),
-  };
-
-  await Promise.all([
-    writeFile(entries.config, updated.config),
-    writeFile(entries.info, updated.info),
-    writeFile(entries.manifest, updated.manifest),
-    writeFile(entries.nsisTools, updated.nsisTools),
-    writeFile(entries.platform, updated.platform),
-  ]);
-
-  process.stdout.write(`Updated source version to ${release.version}\n`);
-  return release;
+  return `${JSON.stringify(config, null, 2)}\n`;
 }
 
 function replaceExactlyOnce(source, pattern, replacement, file) {

@@ -41,7 +41,6 @@ func NewWithOptions(opts Options) *Service {
 	return &Service{log: opts.Log, emit: opts.EventEmit}
 }
 
-//wails:ignore
 func (t *Service) UseClient(client *db.Client) {
 	t.client = client
 }

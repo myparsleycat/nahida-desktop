@@ -9,7 +9,6 @@ import (
 
 type modelViewerSession struct {
 	modPath   string
-	windowID  uint
 	evaluator *modelViewerEvaluator
 	cancel    context.CancelFunc
 	// drawSources maps transport mesh IDs to their INI draw call.
@@ -20,64 +19,20 @@ type modelViewerLoad struct {
 	cancel context.CancelFunc
 }
 
-// beginModelViewerLoad registers a load so closing its window cancels it. It
-// fails with context.Canceled when the window has already closed.
-func (t *Service) beginModelViewerLoad(
-	ctx context.Context,
-	windowID uint,
-) (context.Context, func(), error) {
+// beginModelViewerLoad registers a load so shutdown cancels it and the deferred memory release waits for it.
+func (t *Service) beginModelViewerLoad(ctx context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	load := &modelViewerLoad{cancel: cancel}
 	t.modelViewerMu.Lock()
 	defer t.modelViewerMu.Unlock()
-	if t.modelViewerClosedWindows[windowID] {
-		cancel()
-		return nil, nil, context.Canceled
-	}
 	t.cancelModelViewerMemoryReleaseLocked()
-	if t.modelViewerLoads[windowID] == nil {
-		t.modelViewerLoads[windowID] = make(map[*modelViewerLoad]struct{})
-	}
-	t.modelViewerLoads[windowID][load] = struct{}{}
+	t.modelViewerLoads[load] = struct{}{}
 	return ctx, func() {
 		t.modelViewerMu.Lock()
-		if loads := t.modelViewerLoads[windowID]; loads != nil {
-			delete(loads, load)
-			if len(loads) == 0 {
-				delete(t.modelViewerLoads, windowID)
-			}
-		}
-		t.scheduleModelViewerMemoryReleaseLocked(fmt.Sprintf("load ended without a session, window=%d", windowID))
+		delete(t.modelViewerLoads, load)
+		t.scheduleModelViewerMemoryReleaseLocked("load ended without a session")
 		t.modelViewerMu.Unlock()
 		cancel()
-	}, nil
-}
-
-// cancelModelViewerLoadsLocked must be called with modelViewerMu held.
-func (t *Service) cancelModelViewerLoadsLocked(windowID uint) {
-	for load := range t.modelViewerLoads[windowID] {
-		load.cancel()
-	}
-	delete(t.modelViewerLoads, windowID)
-}
-
-// CleanupModelViewerWindow cancels the window's loads in flight and fences
-// loads completing after the native window closes.
-//
-//wails:ignore
-func (t *Service) CleanupModelViewerWindow(windowID uint) {
-	t.modelViewerMu.Lock()
-	t.modelViewerClosedWindows[windowID] = true
-	t.cancelModelViewerLoadsLocked(windowID)
-	var ids []string
-	for id, session := range t.modelViewerSessions {
-		if session.windowID == windowID {
-			ids = append(ids, id)
-		}
-	}
-	t.modelViewerMu.Unlock()
-	for _, id := range ids {
-		_, _ = t.CleanupModelViewer(context.Background(), id)
 	}
 }
 
@@ -156,9 +111,10 @@ func (t *Service) shutdownModelViewer() error {
 	t.modelViewerMu.Lock()
 	t.modelViewerShutdown = true
 	t.cancelModelViewerMemoryReleaseLocked()
-	for windowID := range t.modelViewerLoads {
-		t.cancelModelViewerLoadsLocked(windowID)
+	for load := range t.modelViewerLoads {
+		load.cancel()
 	}
+	clear(t.modelViewerLoads)
 	ids := make([]string, 0, len(t.modelViewerSessions))
 	for id := range t.modelViewerSessions {
 		if session := t.modelViewerSessions[id]; session.cancel != nil {

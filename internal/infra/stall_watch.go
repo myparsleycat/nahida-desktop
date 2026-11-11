@@ -28,8 +28,6 @@ var lastStallDump atomic.Int64
 // that is never released, otherwise leaves nothing in desktop.log. A stage still running after two minutes also
 // logs the stack of the goroutine that runs the stage, which names the lock or channel it waits on, and the
 // other parked goroutines in application code, among which is usually the one holding it.
-//
-//wails:ignore
 type StallWatch struct {
 	log       *Log
 	where     string
@@ -47,7 +45,6 @@ type StallWatch struct {
 	stalled    bool
 }
 
-//wails:ignore
 func NewStallWatch(log *Log, where, operation string, fields map[string]any) *StallWatch {
 	return &StallWatch{
 		log: log, where: where, operation: operation, fields: fields,
@@ -56,16 +53,12 @@ func NewStallWatch(log *Log, where, operation string, fields map[string]any) *St
 }
 
 // Stage ends the current stage and starts timing the next one on the calling goroutine.
-//
-//wails:ignore
 func (w *StallWatch) Stage(stage string) {
 	w.start(stage, true)
 }
 
 // ExternalStage is Stage for a stage that waits on the user or another program, such as a UAC prompt or a game
 // starting, and may take minutes when nothing is wrong. Its stall is logged without the goroutine dump.
-//
-//wails:ignore
 func (w *StallWatch) ExternalStage(stage string) {
 	w.start(stage, false)
 }
@@ -85,8 +78,6 @@ func (w *StallWatch) start(stage string, dump bool) {
 }
 
 // Stop ends the current stage without starting another. A later Stage starts timing again.
-//
-//wails:ignore
 func (w *StallWatch) Stop() {
 	w.mu.Lock()
 	defer w.mu.Unlock()

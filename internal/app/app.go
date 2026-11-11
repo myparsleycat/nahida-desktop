@@ -1,291 +1,297 @@
 package app
 
 import (
+	"bytes"
 	"context"
-	"embed"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime/debug"
 	"sync"
-	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/dialog"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/selfupdate"
+	"nahida.live/desktop/internal/ui"
 )
 
-func Run(assets embed.FS, icon []byte) (runErr error) {
-	rt := newRuntime()
-	defer func() {
-		runErr = errors.Join(runErr, rt.Close())
-	}()
+func Run(icon []byte) (runErr error) {
+	selfupdate.HandleHelperMode()
+	waitPendingRelaunch()
 	launches := &launchDispatcher{}
-	app := newLockedApplication(application.Options{
-		Name:        "nahida-desktop",
-		Description: "Native app for nahida.live",
-		Icon:        icon,
-		Services:    rt.services(),
-		ErrorHandler: func(err error) {
-			runtimeErrorHandler(rt.log, err)
-		},
-		PanicHandler: func(details *application.PanicDetails) {
-			runtimePanicHandler(rt.log, details, os.Exit)
-		},
-		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.nahida.desktop",
-			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				launches.Enqueue(data)
-			},
-		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-		// Closing the last window must not tear down the process. Tray and
-		// background work stay alive; WindowClosing still calls Quit when
-		// runInBackground is off.
-		Windows: windowsApplicationOptions(),
-	})
-	app.OnShutdown(rt.startup.stop)
-	// newLockedApplication waits for a relaunch parent, then application.New
-	// acquires Wails' single-instance lock. Keep all database, watcher, and
-	// cleanup startup work after it so a forwarding second instance exits
-	// without booting a second backend.
+	// The lock comes before any database, watcher or cleanup work, so a forwarding second instance exits
+	// without booting a second backend. The installer checks the mutex this ID names.
+	first, err := fairy.SingleInstance("com.nahida.desktop", launches.Enqueue)
+	if err != nil || !first {
+		return err
+	}
+
+	notices := &trayNotices{}
+	events := ui.NewEvents()
+	var window *Window
+	host := newGUIHost(func() *fairy.Window { return window.native() }, notices)
+	host.emit = events.Emit
+	rt := newRuntime(host)
+	window = rt.window
+	// Runs once, when Run returns or when the Windows session ends, whichever comes first.
+	shutdown := sync.OnceValue(rt.Close)
+	defer func() {
+		runErr = errors.Join(runErr, shutdown())
+	}()
 	in, err := livePathInput()
 	if err != nil {
 		return err
 	}
-	route := ""
-	if modelViewerArgument(os.Args, in.Cwd) == "" {
-		route = nahidaDeepLinkRoute(os.Args)
-	}
 	rt.window.SetStartHidden((shouldStartHidden(os.Args) || xxmiLaunchArgument(os.Args) != "") &&
-		route == "" && nahidaDeepLinkDownload(os.Args) == nil)
-	rt.window.SetInitialRoute(route)
-	if _, err := bootRuntime(context.Background(), rt, in, app.SetWindowsBrowserArguments); err != nil {
+		nahidaDeepLinkDownload(os.Args) == nil && nahidaDeepLinkRoute(os.Args) == "")
+	paths, err := bootRuntime(context.Background(), rt, in)
+	if err != nil {
 		return err
 	}
 	rt.logStartupMilestone("essential-ready")
-
-	if err := platform.SetAppUserModelID("com.nahida"); err != nil {
-		_ = infra.ReportError(
-			rt.log,
-			err,
-			"App:setAppUserModelID",
-			infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:setAppUserModelID", Stage: "background"},
-		)
-	}
-	if executable, err := os.Executable(); err != nil {
-		_ = infra.ReportError(
-			rt.log,
-			err,
-			"App:registerURLProtocol",
-			infra.Diagnostic{
-				Severity:  infra.DiagnosticError,
-				Operation: "App:registerURLProtocol",
-				Stage:     "background",
-			},
-		)
-	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil {
-		_ = infra.ReportError(
-			rt.log,
-			err,
-			"App:registerURLProtocol",
-			infra.Diagnostic{
-				Severity:  infra.DiagnosticError,
-				Operation: "App:registerURLProtocol",
-				Stage:     "background",
-			},
-		)
-	}
-	if err := platform.SyncInstalledVersion(); err != nil {
-		_ = infra.ReportError(
-			rt.log,
-			err,
-			"App:syncInstalledVersion",
-			infra.Diagnostic{
-				Severity:  infra.DiagnosticError,
-				Operation: "App:syncInstalledVersion",
-				Stage:     "background",
-			},
-		)
-	}
-	autostartSync := func(enabled bool) error {
-		return syncAutostart(app.Autostart, enabled)
-	}
-	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
-	rt.setting.UseHooks(
-		rt.githubTokenHooks(runtimeSettingHooks(
-			rt.log,
-			rt.transfer,
-			rt.updater,
-			rt.tools,
-			rt.window,
-			autostartSync,
-			emitAppEvent,
-			syncModelViewerMenu,
-			rt.configureElevatedHelper,
-		)),
-	)
-	if language, langErr := rt.setting.GetLanguage(context.Background()); langErr == nil {
-		syncModelViewerMenu(language)
-	} else {
-		_ = infra.ReportError(
-			rt.log,
-			langErr,
-			"App:syncModelViewerMenu",
-			infra.Diagnostic{Operation: "App:syncModelViewerMenu", Stage: "read-language"},
-		)
-	}
-	enabled, err := rt.setting.GetRunOnStartup(context.Background())
-	if err == nil {
-		err = autostartSync(enabled)
-	}
+	useCrashOutput(rt.log, filepath.Join(paths.Logs, "crash.log"))
+	startProfiler(rt.log)
+	// Handlers run on this goroutine inside fairy.Main, so a panic in the UI reaches here before the process ends.
+	defer reportPanic(rt.log)
+	rt.registerShellIntegration(icon)
+	rt.useSettingHooks()
+	font, err := ui.RegisterFonts()
 	if err != nil {
-		_ = infra.ReportError(
-			rt.log,
-			err,
-			"App:syncAutostart",
-			infra.Diagnostic{Severity: infra.DiagnosticError, Operation: "App:syncAutostart", Stage: "background"},
-		)
+		_ = infra.ReportError(rt.log, err, "App", infra.Diagnostic{Operation: "register-fonts"})
 	}
-
-	rt.window.Configure(app, rt.setting, rt.log)
-	// A cold launch that only opens a model viewer has no use for the elevated helper, so its UAC
-	// prompt waits until the main window first appears.
+	shell := ui.NewShell(ui.Deps{
+		Events:     events,
+		Settings:   rt.setting,
+		Updater:    rt.updater,
+		Auth:       rt.auth,
+		Agent:      rt.agent,
+		Mod:        rt.mod,
+		Feedback:   rt.feedback,
+		Dialog:     rt.dialog,
+		Platform:   rt.shell,
+		AppStatus:  rt.shell.GetAppStatus(),
+		FS:         rt.fs,
+		Tools:      rt.tools,
+		Transfer:   rt.transfer,
+		GameBanana: rt.gamebanana,
+		HTTP:       rt.http,
+		XXMI:       rt.xxmi,
+		ReShade:    rt.reshade,
+		Drive:      rt.drive,
+		Backup:     rt.backup,
+		ModRuntime: rt.modRuntime,
+		Input:      rt.input,
+		Log:        rt.log,
+		Restart:    func() error { return restartApp(rt.log, rt.quit) },
+		Ready:      rt.startup.wait,
+		Dev:        !in.Packaged,
+		CDNTrace:   rt.cdnTrace,
+	}, font)
+	viewers := newModelViewerWindows(shell, icon, font, rt.log, rt.modelViewerClosed)
 	startElevatedHelper := sync.OnceFunc(rt.startElevatedHelperIfEnabled)
-	var windowCreated, windowReady sync.Once
-	app.Window.OnCreate(func(window application.Window) {
-		windowCreated.Do(func() { rt.logStartupMilestone("window-created") })
-		if window.Name() == "main" {
-			startElevatedHelper()
-		}
-		window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
-			windowReady.Do(func() { rt.logStartupMilestone("window-runtime-ready") })
-		})
-		window.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
-			rt.tools.CleanupModelViewerWindow(window.ID())
-		})
+	rt.window.Configure(rt.setting, rt.log, icon, shell, font, startElevatedHelper, rt.mainWindowClosed)
+	rt.configureGameBananaLogin(icon, font, shell.Dark)
+	engine, err := selfupdate.New(selfupdate.Options{
+		GitHub:    rt.github,
+		Log:       rt.log,
+		Quit:      rt.quit,
+		HelperLog: filepath.Join(paths.Logs, "update-helper.log"),
 	})
-	viewers := newModelViewerWindows(app, rt)
-	rt.gameBananaLogin.Configure(app, rt.window, rt.log)
+	if err != nil {
+		return err
+	}
 	if err := rt.updater.Configure(infra.UpdaterOptions{
-		Engine:   app.Updater,
+		Engine:   engine,
 		Settings: rt.setting,
 		HTTP:     rt.http,
 		Log:      rt.log,
 		Emit: func(name string, data ...any) {
-			app.Event.Emit(name, data...)
+			rt.emit(name, data...)
 			if name == "updater:status-changed" && len(data) > 0 {
 				if status, ok := data[0].(infra.UpdaterStatus); ok {
 					rt.observeUpdaterStatus(status)
 				}
 			}
 		},
-		Ready:   rt.window.NotifyUpdateReady,
-		Version: platform.AppVersion,
+		Ready: rt.notifyUpdateReady,
 	}); err != nil {
 		return err
 	}
-	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+	shell.Load(context.Background())
+
+	// Windows may end the process as soon as the session-end hook returns, before Main returns.
+	fairy.OnSessionEnd(func() {
+		rt.window.SaveBounds()
+		_ = shutdown()
+	})
+	return fairy.Main(func() error {
+		if tray, err := newTray(rt, icon); err != nil {
+			_ = infra.ReportError(rt.log, err, "App", infra.Diagnostic{Operation: "tray"})
+		} else {
+			notices.use(tray)
+		}
+		if err := rt.startServices(context.Background()); err != nil {
+			return err
+		}
+		// A standalone model viewer does not need the elevated helper.
 		if modelViewerArgument(os.Args, in.Cwd) == "" {
 			startElevatedHelper()
 		}
 		rt.startup.start(rt.runStartupWork)
-		launches.Start(application.SecondInstanceData{Args: os.Args, WorkingDir: in.Cwd},
-			newLaunchHandler(
-				viewers.Open,
-				func() { newWindow(app, rt.window) },
-				rt.window.HandleArguments,
-				func(args []string) {
-					rt.dispatchDeepLinkLogin(args)
-					rt.dispatchDeepLinkDownload(args)
-				},
-				func(key string, first bool) {
-					if first {
-						newWindow(app, rt.window)
-					}
-					go func() {
-						showError := func(err error) {
-							rt.window.FocusAndNavigate("/setting/xxmi")
-							readyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-							alreadyReady, readyErr := rt.window.WaitReady(readyCtx)
-							cancel()
-							if readyErr == nil {
-								if !alreadyReady {
-									time.Sleep(250 * time.Millisecond)
-								}
-								emitAppEvent("fn:toast", err.Error())
-							}
-						}
-						if err := rt.startup.wait(context.Background()); err != nil {
-							if !errors.Is(err, context.Canceled) {
-								_ = infra.ReportError(rt.log, err, "XXMI.QuickStart", infra.Diagnostic{
-									Operation: "launch-game", Stage: "startup", Fields: map[string]any{"importer": key},
-								})
-								showError(err)
-							}
-							return
-						}
-						// A quick start has no dialog to ask about logging with, so it launches as configured.
-						if err := rt.xxmi.StartGameWithLogging(context.Background(), key); err != nil {
-							showError(err)
-							return
-						}
-						if first {
-							background, err := rt.setting.GetRunInBackground(context.Background())
-							if err == nil && !background && !rt.window.hasShown() {
-								app.Quit()
-							}
-						}
-					}()
-				},
-			))
+		launches.Start(fairy.Launch{Args: os.Args, Dir: in.Cwd}, newLaunchHandler(
+			viewers.Open,
+			rt.window.open,
+			func([]string) { rt.window.show() },
+			func(args []string) {
+				rt.dispatchDeepLinkLogin(args)
+				rt.dispatchDeepLinkDownload(args)
+				rt.dispatchDeepLinkRoute(args)
+			},
+			func(key string, first bool) { go rt.quickStart(key, first) },
+		))
+		return nil
 	})
-	newTray(app, rt, icon)
-	registerDeepLink(app, rt.window)
-
-	return app.Run()
 }
 
-func runtimeErrorHandler(log *infra.Log, err error) {
+// registerShellIntegration records the installed version, the URL protocol and the notification identity. A
+// failure leaves the app usable, so it is only logged.
+func (rt *runtime) registerShellIntegration(icon []byte) {
+	report := func(err error, operation string) {
+		_ = infra.ReportError(rt.log, err, operation, infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: operation, Stage: "background",
+		})
+	}
+	if err := platform.SetAppUserModelID(appUserModelID); err != nil {
+		report(err, "App:setAppUserModelID")
+	}
+	if err := rt.registerAppUserModelID(icon); err != nil {
+		report(err, "App:registerAppUserModelID")
+	}
+	if executable, err := os.Executable(); err != nil {
+		report(err, "App:registerURLProtocol")
+	} else if err := platform.RegisterNahidaURLProtocol(executable); err != nil {
+		report(err, "App:registerURLProtocol")
+	}
+	if err := platform.SyncInstalledVersion(); err != nil {
+		report(err, "App:syncInstalledVersion")
+	}
+}
+
+// appUserModelID names the app to the taskbar and to toast notifications.
+const appUserModelID = "com.nahida"
+
+// registerAppUserModelID lets an installed app show toasts that replace each other (tray.Tray.NotifyID). A
+// development build skips it and falls back to tray balloons.
+func (rt *runtime) registerAppUserModelID(icon []byte) error {
+	if !platform.Packaged() {
+		return nil
+	}
+	iconPath := ""
+	if len(icon) > 0 {
+		current, err := rt.appData.ReadFile(appdata.NotificationIcon)
+		if err != nil || !bytes.Equal(current, icon) {
+			if err := rt.appData.WriteFile(appdata.NotificationIcon, icon, 0o600); err != nil {
+				return err
+			}
+		}
+		path, err := rt.appData.Resolve(appdata.NotificationIcon)
+		if err != nil {
+			return err
+		}
+		iconPath = path
+	}
+	return platform.RegisterAppUserModelID(appUserModelID, "Nahida Desktop", iconPath)
+}
+
+func (rt *runtime) useSettingHooks() {
+	autostart := platform.NewAutostart(autostartIdentifier)
+	autostartSync := func(enabled bool) error { return syncAutostart(autostart, enabled) }
+	syncModelViewerMenu := modelViewerMenuSyncer(rt.log)
+	hooks := runtimeSettingHooks(
+		rt.log,
+		rt.transfer,
+		rt.updater,
+		rt.tools,
+		autostartSync,
+		rt.emit,
+		syncModelViewerMenu,
+		rt.configureElevatedHelper,
+	)
+	hooks.AfterWindowBackdropChanged = rt.window.SetBackdropEnabled
+	rt.setting.UseHooks(rt.githubTokenHooks(hooks))
+
+	if language, err := rt.setting.GetLanguage(context.Background()); err == nil {
+		syncModelViewerMenu(language)
+	} else {
+		_ = infra.ReportError(rt.log, err, "App:syncModelViewerMenu", infra.Diagnostic{
+			Operation: "App:syncModelViewerMenu", Stage: "read-language",
+		})
+	}
+	enabled, err := rt.setting.GetRunOnStartup(context.Background())
 	if err == nil {
+		err = autostartSync(enabled)
+	}
+	if err != nil {
+		_ = infra.ReportError(rt.log, err, "App:syncAutostart", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "App:syncAutostart", Stage: "background",
+		})
+	}
+}
+
+// mainWindowClosed quits unless the user keeps the app running in the background.
+func (rt *runtime) mainWindowClosed() {
+	background, err := rt.setting.GetRunInBackground(context.Background())
+	if err != nil {
+		_ = infra.ReportError(rt.log, err, "MainWindow.runInBackground", infra.Diagnostic{
+			Severity: infra.DiagnosticError, Operation: "MainWindow.runInBackground", Stage: "background",
+		})
 		return
 	}
-	_ = infra.ReportError(log, err, "Wails", infra.Diagnostic{
-		Severity:  infra.DiagnosticError,
-		Operation: "runtime",
-	})
+	if !background {
+		rt.quit()
+	}
 }
 
-func runtimePanicHandler(log *infra.Log, details *application.PanicDetails, exit func(int)) {
-	if details == nil {
+// quit ends the message loop after saving the main window's bounds. fairy.Main destroys the windows that are
+// still open without running their OnClose, so the bounds must be read on the UI thread before Quit; app calls
+// run in order, so the save precedes the quit message.
+func (rt *runtime) quit() {
+	fairy.Go(rt.window.SaveBounds)
+	fairy.Quit()
+}
+
+// quickStart launches a game for --xxmi-launch. A cold quick start that never showed the main window ends
+// the app afterwards unless it runs in the background.
+func (rt *runtime) quickStart(key string, first bool) {
+	err := rt.startup.wait(context.Background())
+	if err != nil && errors.Is(err, context.Canceled) {
 		return
 	}
-	err := details.Error
-	if err == nil {
-		err = errors.New("unknown Wails panic")
+	if err != nil {
+		_ = infra.ReportError(rt.log, err, "XXMI.QuickStart", infra.Diagnostic{
+			Operation: "launch-game", Stage: "startup", Fields: map[string]any{"importer": key},
+		})
+	} else {
+		// A quick start has no dialog to ask about logging with, so it launches as configured.
+		err = rt.xxmi.StartGameWithLogging(context.Background(), key)
 	}
-	_ = infra.ReportError(log, err, "Wails", infra.Diagnostic{
-		Severity:  infra.DiagnosticError,
-		Operation: "panic",
-		Fields: map[string]any{
-			"stackTrace": details.StackTrace,
-		},
-	})
-	if exit != nil {
-		exit(1)
+	if err != nil {
+		rt.window.Focus()
+		// The importer settings that a failed launch usually needs live on the XXMI screen.
+		rt.emit("fn:navi", string(ui.RouteXXMI))
+		dialog.Message(nil, "Nahida Desktop", err.Error(), dialog.MessageError, dialog.ButtonsOK)
+		return
 	}
-}
-
-func windowsApplicationOptions() application.WindowsOptions {
-	return application.WindowsOptions{
-		DisableQuitOnLastWindowClosed: true,
-		AdditionalBrowserArgs: []string{
-			"--enable-experimental-web-platform-features",
-			"--disable-renderer-backgrounding",
-			"--autoplay-policy=no-user-gesture-required",
-		},
+	if first {
+		background, err := rt.setting.GetRunInBackground(context.Background())
+		if err == nil && !background && !rt.window.hasShown() {
+			rt.quit()
+		}
 	}
 }
 
@@ -313,4 +319,37 @@ func livePathInput() (runtimePathInput, error) {
 		Packaged:   platform.Packaged(),
 		DBOverride: os.Getenv("NAHIDA_DB_PATH"),
 	}, nil
+}
+
+// reportPanic writes a panic on the UI thread to desktop.log with its stack, then lets it end the process.
+func reportPanic(log *infra.Log) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	err, ok := r.(error)
+	if !ok {
+		err = fmt.Errorf("%v", r)
+	}
+	_ = infra.ReportError(log, err, "App", infra.Diagnostic{
+		Severity:  infra.DiagnosticError,
+		Operation: "panic",
+		Fields:    map[string]any{"stackTrace": string(debug.Stack())},
+	})
+	panic(r)
+}
+
+// useCrashOutput keeps the runtime's report of a fatal error on any goroutine in path, which desktop.log cannot
+// receive once the process is dying.
+func useCrashOutput(log *infra.Log, path string) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err == nil {
+		err = debug.SetCrashOutput(file, debug.CrashOptions{})
+		_ = file.Close()
+	}
+	if err != nil {
+		_ = infra.ReportError(log, err, "App", infra.Diagnostic{
+			Operation: "crash-output", Fields: map[string]any{"path": path},
+		})
+	}
 }

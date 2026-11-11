@@ -3,49 +3,16 @@ package app
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
-
-func TestRuntimeErrorAndPanicHandlersLogSanitizedDetails(t *testing.T) {
-	t.Parallel()
-
-	var output bytes.Buffer
-	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
-	home, _ := os.UserHomeDir()
-	runtimeErrorHandler(log, errors.New("webview failed at "+filepath.Join(home, "private")+" token=runtime-secret"))
-	exitCode := 0
-	runtimePanicHandler(log, &application.PanicDetails{
-		Error:      errors.New("panic Bearer panic-secret"),
-		StackTrace: "frame\n" + filepath.Join(home, "source.go:10"),
-	}, func(code int) { exitCode = code })
-	if exitCode != 1 {
-		t.Fatalf("panic exit code = %d, want 1", exitCode)
-	}
-	got := output.String()
-	if strings.Count(got, " ERROR ") != 2 || !strings.Contains(got, `"operation":"runtime"`) ||
-		!strings.Contains(got, `"operation":"panic"`) {
-		t.Fatalf("handler output = %q", got)
-	}
-	for _, secret := range []string{home, "runtime-secret", "panic-secret"} {
-		if secret != "" && strings.Contains(got, secret) {
-			t.Fatalf("handler output contains %q: %q", secret, got)
-		}
-	}
-	if !strings.Contains(got, "%USERPROFILE%") || !strings.Contains(got, "stackTrace") {
-		t.Fatalf("handler output lacks sanitized stack: %q", got)
-	}
-}
 
 func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 	t.Parallel()
@@ -56,7 +23,7 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 	}
 	var got []event
 	var synced []string
-	hooks := runtimeSettingHooks(nil, nil, nil, nil, nil, nil, func(name string, data ...any) {
+	hooks := runtimeSettingHooks(nil, nil, nil, nil, nil, func(name string, data ...any) {
 		payload := any(nil)
 		if len(data) == 1 {
 			payload = data[0]
@@ -91,36 +58,13 @@ func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
 	}
 }
 
-func TestRuntimeSettingHooksApplyOpenConsoleToWindow(t *testing.T) {
-	window := NewWindow()
-	hooks := runtimeSettingHooks(nil, nil, nil, nil, window, nil, nil, nil, nil)
-
-	hooks.AfterOpenConsoleChanged(true)
-	window.mu.Lock()
-	got := window.consoleOpen
-	window.mu.Unlock()
-	if !got {
-		t.Fatal("openConsole hook did not enable the window console state")
-	}
-}
-
-func TestRuntimeRegistersMenuMakerThroughTools(t *testing.T) {
-	rt := newRuntime()
-	if len(rt.services()) != 24 {
-		t.Fatalf(
-			"services = %d, want 24 including Nahida Agent, Backup, CDN trace, Feedback, Input, ModRuntime, ReShade, and Screen",
-			len(rt.services()),
-		)
-	}
-}
-
 func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	path := filepath.Join(t.TempDir(), "data.db")
 	ctx := context.Background()
-	if err := rt.Init(ctx, path, nil); err != nil {
+	if err := rt.Init(ctx, path); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
 	defer func() { _ = rt.Close() }()
@@ -137,9 +81,9 @@ func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 func TestRuntimeInitDefersSettingHooksUntilApplicationIsReady(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	ctx := context.Background()
-	if err := rt.Init(ctx, filepath.Join(t.TempDir(), "data.db"), nil); err != nil {
+	if err := rt.Init(ctx, filepath.Join(t.TempDir(), "data.db")); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rt.Close() }()
@@ -149,7 +93,7 @@ func TestRuntimeInitDefersSettingHooksUntilApplicationIsReady(t *testing.T) {
 	}
 	var events []string
 	var languages []string
-	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, rt.window, nil,
+	rt.setting.UseHooks(runtimeSettingHooks(rt.log, rt.transfer, rt.updater, rt.tools, nil,
 		func(name string, _ ...any) { events = append(events, name) },
 		func(language string) { languages = append(languages, language) }, nil))
 	if err := rt.setting.SetLanguage(ctx, "en"); err != nil {
@@ -163,35 +107,13 @@ func TestRuntimeInitDefersSettingHooksUntilApplicationIsReady(t *testing.T) {
 	}
 }
 
-func TestRuntimeInitFailureLeavesCleanupToOwner(t *testing.T) {
-	t.Parallel()
-
-	rt := newRuntime()
-	want := errors.New("browser arguments rejected")
-	err := rt.Init(context.Background(), filepath.Join(t.TempDir(), "data.db"), func([]string) error {
-		return want
-	})
-	if !errors.Is(err, want) {
-		t.Fatalf("Init error = %v, want %v", err, want)
-	}
-	if rt.store == nil || rt.store.DB == nil {
-		t.Fatal("Init closed the store before its owner could clean up")
-	}
-	if err := rt.Close(); err != nil {
-		t.Fatalf("Close after failed Init: %v", err)
-	}
-	if rt.store.DB != nil || rt.proxyRelay != nil {
-		t.Fatal("Close left partially initialized resources active")
-	}
-}
-
 func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
 	cwd := t.TempDir()
 	var buf bytes.Buffer
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	rt.log.Configure(infra.LogOptions{Writer: &buf})
 
 	ctx := context.Background()
@@ -199,7 +121,7 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 		HomeDir:  home,
 		Cwd:      cwd,
 		Packaged: false,
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -281,12 +203,12 @@ func TestBootRuntimePackagedUsesAppDataWithoutLegacyMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	paths, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir:  home,
 		Cwd:      t.TempDir(),
 		Packaged: true,
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -311,10 +233,10 @@ func TestBootRuntimeDBOverrideWinsInDevelopment(t *testing.T) {
 
 	cwd := t.TempDir()
 	override := filepath.Join(t.TempDir(), "override.db")
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	paths, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: t.TempDir(), DBOverride: override, Cwd: cwd, Packaged: false,
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
@@ -337,11 +259,11 @@ func TestBootRuntimeFailsBeforeInjectionWhenHomeIsNotDirectory(t *testing.T) {
 	if err := os.WriteFile(home, []byte("not a directory"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	defer func() { _ = rt.Close() }()
 	_, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: home, Cwd: t.TempDir(), Packaged: false,
-	}, nil)
+	})
 	if err == nil {
 		t.Fatal("bootRuntime unexpectedly succeeded")
 	}
@@ -354,14 +276,14 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 
 	ctx := context.Background()
 	if _, err := bootRuntime(ctx, rt, runtimePathInput{
 		HomeDir:  t.TempDir(),
 		Cwd:      t.TempDir(),
 		Packaged: false,
-	}, nil); err != nil {
+	}); err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
 	defer func() { _ = rt.Close() }()
@@ -379,10 +301,10 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 func TestRuntimeInitWiresAuthTokenStore(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	path := filepath.Join(t.TempDir(), "data.db")
 	ctx := context.Background()
-	if err := rt.Init(ctx, path, nil); err != nil {
+	if err := rt.Init(ctx, path); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
 	defer func() { _ = rt.Close() }()

@@ -19,9 +19,14 @@ func TestRunAcquiresSingleInstanceBeforeBackendBoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(data)
-	lockIndex := strings.Index(source, "app := newLockedApplication(")
-	bootIndex := strings.Index(source, "bootRuntime(context.Background(), rt, in,")
+	lockIndex := strings.Index(source, "fairy.SingleInstance(")
+	bootIndex := strings.Index(source, "bootRuntime(context.Background(), rt, in)")
 	if lockIndex < 0 || bootIndex < 0 || lockIndex >= bootIndex {
-		t.Fatalf("single-instance newLockedApplication must precede bootRuntime (indices %d, %d)", lockIndex, bootIndex)
+		t.Fatalf("fairy.SingleInstance must precede bootRuntime (indices %d, %d)", lockIndex, bootIndex)
+	}
+	// A relaunched instance would otherwise find the old one holding the lock and exit.
+	waitIndex := strings.Index(source, "waitPendingRelaunch()")
+	if waitIndex < 0 || waitIndex >= lockIndex {
+		t.Fatalf("waitPendingRelaunch must precede fairy.SingleInstance (indices %d, %d)", waitIndex, lockIndex)
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/samber/lo"
-	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/modname"
@@ -76,14 +75,7 @@ func (t *Service) loadModViewer(
 	if err := ctx.Err(); err != nil {
 		return ModelViewerTransport{}, err
 	}
-	var windowID uint
-	if window, ok := ctx.Value(application.WindowKey).(application.Window); ok {
-		windowID = window.ID()
-	}
-	ctx, endLoad, beginErr := t.beginModelViewerLoad(ctx, windowID)
-	if beginErr != nil {
-		return ModelViewerTransport{}, beginErr
-	}
+	ctx, endLoad := t.beginModelViewerLoad(ctx)
 	defer endLoad()
 	requestedPath := modPath
 	var absErr error
@@ -317,13 +309,8 @@ func (t *Service) loadModViewer(
 		t.modelViewerMu.Unlock()
 		return ModelViewerTransport{}, err
 	}
-	if t.modelViewerClosedWindows[windowID] {
-		t.modelViewerMu.Unlock()
-		return ModelViewerTransport{}, context.Canceled
-	}
 	t.modelViewerSessions[sessionID] = &modelViewerSession{
 		modPath:     requestedPath,
-		windowID:    windowID,
 		evaluator:   evaluator,
 		cancel:      sessionCancel,
 		drawSources: prepared.drawSources,

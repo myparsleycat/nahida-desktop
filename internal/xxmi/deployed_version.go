@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-//wails:ignore
 func (x *XXMI) DeployedLibsVersion(ctx context.Context, importer string) (string, bool) {
 	if external, err := x.usesExternalLauncher(ctx); err != nil {
 		return "", false

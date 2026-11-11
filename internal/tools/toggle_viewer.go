@@ -31,14 +31,11 @@ func (t *Tools) ToggleViewerRunBatchDelete(ctx context.Context) (ToggleViewerBat
 	return t.toggleViewer.RunBatchDelete(ctx)
 }
 
-//wails:ignore
 func (t *Tools) ToggleViewerApplyHotkeyToArtifacts(ctx context.Context, hotkey string) error {
 	return t.toggleViewer.ApplyHotkey(ctx, hotkey)
 }
 
 // StartToggleViewerWatcher starts or stops importer watching to match the stored auto-generate setting.
-//
-//wails:ignore
 func (t *Tools) StartToggleViewerWatcher(ctx context.Context) error {
 	return t.toggleViewer.StartWatcher(ctx)
 }

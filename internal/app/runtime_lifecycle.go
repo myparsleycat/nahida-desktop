@@ -30,7 +30,6 @@ func bootRuntime(
 	ctx context.Context,
 	rt *runtime,
 	in runtimePathInput,
-	configureBrowserArguments func([]string) error,
 ) (runtimePaths, error) {
 	data, err := appdata.Locate(in.HomeDir)
 	if err != nil {
@@ -80,7 +79,7 @@ func bootRuntime(
 	if err := rt.agent.UseAppData(data); err != nil {
 		return runtimePaths{Root: data.Root()}, err
 	}
-	if err := rt.Init(ctx, paths.DB, configureBrowserArguments); err != nil {
+	if err := rt.Init(ctx, paths.DB); err != nil {
 		return paths, err
 	}
 	return paths, nil
@@ -94,7 +93,7 @@ func (rt *runtime) configureLog(paths runtimePaths, packaged bool) {
 	rt.log.Configure(opts)
 }
 
-func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArguments func([]string) error) error {
+func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	store, err := infra.OpenStore(ctx, dbPath)
 	if err != nil {
 		return err
@@ -125,7 +124,7 @@ func (rt *runtime) Init(ctx context.Context, dbPath string, configureBrowserArgu
 	}
 	s, _ := level.(string)
 	rt.log.SetLevel(s)
-	if err := rt.initProxy(ctx, configureBrowserArguments); err != nil {
+	if err := rt.initProxy(ctx); err != nil {
 		return rt.failInit(err, "proxy")
 	}
 	if err := rt.transfer.ApplyBandwidthLimitsFromSettings(ctx); err != nil {
@@ -167,7 +166,6 @@ func (rt *runtime) Close() error {
 	err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
 	err = errors.Join(err, infra.AnnotateError(rt.protocol.ServiceShutdown(), infra.Diagnostic{Stage: "protocol"}))
 	err = errors.Join(err, infra.AnnotateError(rt.transfer.ServiceShutdown(), infra.Diagnostic{Stage: "transfer"}))
-	rt.window.CloseTaskbar()
 	err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
 	err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
 	err = errors.Join(err, infra.AnnotateError(rt.xxmi.ServiceShutdown(), infra.Diagnostic{Stage: "xxmi"}))

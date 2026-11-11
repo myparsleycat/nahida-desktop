@@ -121,8 +121,6 @@ func (x *XXMI) SetD3DXOptions(ctx context.Context, importer string, values map[s
 // directly, then removes them from the configs. Saves and launches wrote most of them already; this reaches the
 // ones saved for a disabled importer or with a release that wrote them only on launch. An importer whose write
 // fails keeps its overrides for the next start.
-//
-//wails:ignore
 func (x *XXMI) MigrateD3DXOverrides(ctx context.Context) error {
 	x.mu.RLock()
 	client := x.client

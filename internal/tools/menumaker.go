@@ -80,3 +80,33 @@ func (t *Tools) MenuMakerSaveZIP(
 ) (MenuMakerWriteResult, error) {
 	return t.menuMaker.SaveZIP(ctx, req)
 }
+
+type MenuMakerIconifyIcon = menumaker.MenuMakerIconifyIcon
+
+func (t *Tools) MenuMakerSearchIconify(ctx context.Context, query string) ([]MenuMakerIconifyIcon, error) {
+	return t.menuMaker.SearchIconify(ctx, query)
+}
+
+func (t *Tools) MenuMakerIconifyCollection(ctx context.Context, prefix string) ([]MenuMakerIconifyIcon, error) {
+	return t.menuMaker.IconifyCollection(ctx, prefix)
+}
+
+type MenuMakerLegacyDraftMedia = menumaker.LegacyDraftMedia
+
+// MenuMakerLegacyDraftMedia returns the media the React menu maker kept in WebView2's IndexedDB for draft id,
+// or nil when it has none.
+func (t *Tools) MenuMakerLegacyDraftMedia(id string) (*MenuMakerLegacyDraftMedia, error) {
+	dir, err := menumaker.LegacyIndexedDBDir()
+	if err != nil {
+		return nil, err
+	}
+	drafts, err := menumaker.ReadLegacyDraftMedia(dir)
+	if err != nil {
+		return nil, err
+	}
+	media, ok := drafts[id]
+	if !ok {
+		return nil, nil
+	}
+	return &media, nil
+}

@@ -14,8 +14,6 @@ const legacyModelViewerTempPrefix = "nhd-model-viewer-"
 // CleanupStaleModelViewerDirs removes directories left by the Electron static
 // GLB viewer. The Go viewer no longer creates them, but existing installations
 // can retain old directories in the Windows temp root.
-//
-//wails:ignore
 func (t *Service) CleanupStaleModelViewerDirs(ctx context.Context) error {
 	return cleanupStaleModelViewerDirs(ctx, os.TempDir())
 }

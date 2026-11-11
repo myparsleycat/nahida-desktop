@@ -9,7 +9,6 @@
     <img alt="Version" src="https://img.shields.io/github/v/release/myparsleycat/nahida-desktop?style=flat-square" />
     <img alt="License" src="https://img.shields.io/badge/license-GNU%20GPLv3-green?style=flat-square" />
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-lightgrey?style=flat-square" />
-    <img alt="Wails" src="https://img.shields.io/badge/wails-3-DF0000?style=flat-square" />
     <img alt="Downloads" src="https://img.shields.io/github/downloads/myparsleycat/nahida-desktop/total?style=flat-square&label=Downloads" />
   </p>
 
@@ -50,22 +49,22 @@ Nahida Desktop is a Windows mod manager for games supported by the XXMI importer
 
 ### Mod Tools
 
-| Tool | Description |
-| --- | --- |
-| Model Viewer | View a mod's 3D model and save screenshots as mod previews |
-| Mod Bisect | Find the mod that causes an in-game problem by disabling mods in batches |
-| XXMI Menu Maker | Generate an in-game menu for a mod's KeySwap toggles |
-| Toggle Viewer Generator | Generate toggle-viewer files from a mod's INI toggle sections |
-| Toggle Persistence | Write toggle values saved in `d3dx_user.ini` back into the mod INI so they survive disabling or reloading the mod |
-| Texture Resizer | Resize and convert DDS textures in bulk, optionally keeping `.bak` backups of the originals |
-| 4001 Fixer | Build and apply a GIMI `d3d11.dll` that fixes the 4001 error |
-| Fix Tool Manager | Register Python or executable fix scripts and run them on a mod |
-| Wuwa Mod Fixer | Install, update, and run [Wuwa Mod Fixer](https://github.com/Moonholder/Wuwa_Mod_Fixer) from the mod manager, with rollback |
-| ZZMI Mod Fixer | Native hash fixing and remapping for Zenless Zone Zero mods, with rollback |
-| Vulkan Outline Fix | Exclude EFMI mod parts that are drawn opaque in the Vulkan outline pass |
-| Liquid Emitter | Place liquid emitters on a mod's mesh and hook them into its INI |
-| Body Shape (beta) | Adjust a mod's mesh using painted regions or bone weights |
-| Touch Profile (beta) | Convert a mod into a touch-reactive variant with configurable zones |
+| Tool                    | Description                                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Model Viewer            | View a mod's 3D model and save screenshots as mod previews                                                                  |
+| Mod Bisect              | Find the mod that causes an in-game problem by disabling mods in batches                                                    |
+| XXMI Menu Maker         | Generate an in-game menu for a mod's KeySwap toggles                                                                        |
+| Toggle Viewer Generator | Generate toggle-viewer files from a mod's INI toggle sections                                                               |
+| Toggle Persistence      | Write toggle values saved in `d3dx_user.ini` back into the mod INI so they survive disabling or reloading the mod           |
+| Texture Resizer         | Resize and convert DDS textures in bulk, optionally keeping `.bak` backups of the originals                                 |
+| 4001 Fixer              | Build and apply a GIMI `d3d11.dll` that fixes the 4001 error                                                                |
+| Fix Tool Manager        | Register Python or executable fix scripts and run them on a mod                                                             |
+| Wuwa Mod Fixer          | Install, update, and run [Wuwa Mod Fixer](https://github.com/Moonholder/Wuwa_Mod_Fixer) from the mod manager, with rollback |
+| ZZMI Mod Fixer          | Native hash fixing and remapping for Zenless Zone Zero mods, with rollback                                                  |
+| Vulkan Outline Fix      | Exclude EFMI mod parts that are drawn opaque in the Vulkan outline pass                                                     |
+| Liquid Emitter          | Place liquid emitters on a mod's mesh and hook them into its INI                                                            |
+| Body Shape (beta)       | Adjust a mod's mesh using painted regions or bone weights                                                                   |
+| Touch Profile (beta)    | Convert a mod into a touch-reactive variant with configurable zones                                                         |
 
 ### GameBanana
 
@@ -109,8 +108,6 @@ Nahida Desktop runs on 64-bit Windows only.
 Requirements:
 
 - Go (the version in `go.mod`)
-- Node.js 22
-- pnpm 11
 - [Task](https://taskfile.dev) v3
 
 ```sh
@@ -120,16 +117,16 @@ go install github.com/go-task/task/v3/cmd/task@v3.53.1
 task build
 ```
 
-`task build` installs the frontend dependencies, generates the Wails bindings, and writes `bin/nahida-desktop.exe`. The Wails v3 CLI does not need to be installed separately; the version pinned in `go.mod` runs through `go tool wails3`.
+`task build` writes `bin/nahida-desktop.exe`.
 
 Other common commands:
 
-| Command | Description |
-| --- | --- |
-| `task dev` | Run the app in development mode |
-| `task test` | Run Go tests |
-| `task lint` | Run the Go linter |
-| `pnpm test` (in `frontend/`) | Run frontend tests |
+| Command     | Description                                                |
+| ----------- | ---------------------------------------------------------- |
+| `task run`  | Build and run the app                                      |
+| `task test` | Run Go tests                                               |
+| `task lint` | Run the Go linter                                          |
+| `pnpm test` | Run release-script tests (requires Node.js 22 and pnpm 11) |
 
 See [AGENTS.md](AGENTS.md) for project conventions.
 

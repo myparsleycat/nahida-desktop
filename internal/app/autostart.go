@@ -1,15 +1,12 @@
 package app
 
-import (
-	"github.com/wailsapp/wails/v3/pkg/application"
+import "nahida.live/desktop/internal/platform"
 
-	"nahida.live/desktop/internal/platform"
-)
-
+// autostartIdentifier is the HKCU Run value name; earlier versions registered under the same name.
 const autostartIdentifier = "nahida-desktop"
 
 type autostartController interface {
-	EnableWithOptions(application.AutostartOptions) error
+	Enable(args ...string) error
 	Disable() error
 }
 
@@ -21,14 +18,8 @@ func syncAutostartState(controller autostartController, enabled, packaged, allow
 	if !packaged {
 		return nil
 	}
-	if !allowed {
-		enabled = false
-	}
-	if enabled {
-		return controller.EnableWithOptions(application.AutostartOptions{
-			Identifier: autostartIdentifier,
-			Arguments:  []string{"--hidden"},
-		})
+	if enabled && allowed {
+		return controller.Enable("--hidden")
 	}
 	return controller.Disable()
 }

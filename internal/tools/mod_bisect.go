@@ -44,8 +44,6 @@ func (t *Tools) BisectRecover(ctx context.Context, game string) (int, error) {
 }
 
 // RecoverBisects restores interrupted sessions for every configured non-NTE game.
-//
-//wails:ignore
 func (t *Tools) RecoverBisects(ctx context.Context) error {
 	return t.bisect.RecoverBisects(ctx)
 }

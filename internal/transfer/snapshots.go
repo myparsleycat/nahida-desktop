@@ -54,14 +54,11 @@ func orderSnapshots(items []orderedSnapshot) []Snapshot {
 	return out
 }
 
-//wails:ignore
 func (t *Transfer) Update(pid string, updates Updates) error {
 	return t.update(pid, updates, false)
 }
 
 // UpdateRunning prevents a late runner callback from undoing pause or cancel.
-//
-//wails:ignore
 func (t *Transfer) UpdateRunning(pid string, updates Updates) error {
 	return t.update(pid, updates, true)
 }
@@ -157,7 +154,6 @@ func updateSpeed(item *entry, now time.Time, recordSample bool) {
 	}
 }
 
-//wails:ignore
 func (t *Transfer) Get(pid string) (Record, bool) {
 	t.mu.RLock()
 	item, ok := t.entries[pid]
@@ -170,7 +166,6 @@ func (t *Transfer) Get(pid string) (Record, bool) {
 	return record, true
 }
 
-//wails:ignore
 func (t *Transfer) SetData(
 	pid string,
 	data Data,
@@ -203,7 +198,6 @@ func (t *Transfer) SetData(
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) All() []Record {
 	t.mu.RLock()
 	out := make([]Record, 0, len(t.entries))
@@ -214,7 +208,6 @@ func (t *Transfer) All() []Record {
 	return out
 }
 
-//wails:ignore
 func (t *Transfer) MarkFileCompleted(pid, fileID string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -226,7 +219,6 @@ func (t *Transfer) MarkFileCompleted(pid, fileID string) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) MarkIndexCompleted(pid string, index int) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -245,7 +237,6 @@ func (t *Transfer) MarkIndexCompleted(pid string, index int) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) IsIndexCompleted(pid string, index int) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -256,7 +247,6 @@ func (t *Transfer) IsIndexCompleted(pid string, index int) bool {
 	return item.completedIndexes[index/64]&(1<<(index%64)) != 0
 }
 
-//wails:ignore
 func (t *Transfer) CompletedFilesCount(pid string) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -267,7 +257,6 @@ func (t *Transfer) CompletedFilesCount(pid string) int {
 	return len(item.completedIDs)
 }
 
-//wails:ignore
 func (t *Transfer) MarkFileFailed(pid, message string) error {
 	t.mu.Lock()
 	item, ok := t.entries[pid]
@@ -287,7 +276,6 @@ func (t *Transfer) MarkFileFailed(pid, message string) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) IsFileCompleted(pid, fileID string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

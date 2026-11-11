@@ -55,8 +55,8 @@ func StartProxyRelay(network *ProxyNetwork, log *Log) (*ProxyRelay, error) {
 func (r *ProxyRelay) BrowserArguments() []string {
 	return []string{
 		"--proxy-server=http://" + r.listener.Addr().String(),
-		"--proxy-bypass-list=<-loopback>;http://wails.localhost:80",
-		"--host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE wails.localhost\"",
+		"--proxy-bypass-list=<-loopback>",
+		"--host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE 127.0.0.1\"",
 		"--disable-quic",
 		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
 	}

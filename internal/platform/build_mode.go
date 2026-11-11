@@ -2,7 +2,7 @@ package platform
 
 import "os"
 
-// Packaged follows the production build tag used by the Wails build tasks.
+// Packaged follows the production build tag that release builds set.
 // NAHIDA_DEV remains an explicit override for diagnostics and tests: a
 // non-empty value forces development mode, while an explicitly empty value
 // forces packaged mode.

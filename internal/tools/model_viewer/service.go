@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -15,13 +16,12 @@ type Options struct {
 }
 
 type Service struct {
-	log                      *infra.Log
-	protocol                 *infra.Protocol
-	findModelViewerPreview   func(string) *string
-	modelViewerMu            sync.Mutex
-	modelViewerSessions      map[string]*modelViewerSession
-	modelViewerClosedWindows map[uint]bool
-	modelViewerLoads         map[uint]map[*modelViewerLoad]struct{}
+	log                    *infra.Log
+	protocol               *infra.Protocol
+	findModelViewerPreview func(string) *string
+	modelViewerMu          sync.Mutex
+	modelViewerSessions    map[string]*modelViewerSession
+	modelViewerLoads       map[*modelViewerLoad]struct{}
 	// modelViewerStopRelease stops the pending deferred memory release, if any.
 	modelViewerStopRelease       func() bool
 	modelViewerReleaseGeneration uint64
@@ -37,17 +37,21 @@ func NewWithOptions(opts Options) *Service {
 		opts.Protocol = infra.NewProtocol()
 	}
 	return &Service{
-		log:                      opts.Log,
-		protocol:                 opts.Protocol,
-		findModelViewerPreview:   opts.FindModelViewerPreview,
-		modelViewerSessions:      make(map[string]*modelViewerSession),
-		modelViewerClosedWindows: make(map[uint]bool),
-		modelViewerLoads:         make(map[uint]map[*modelViewerLoad]struct{}),
-		freeOSMemory:             debug.FreeOSMemory,
+		log:                    opts.Log,
+		protocol:               opts.Protocol,
+		findModelViewerPreview: opts.FindModelViewerPreview,
+		modelViewerSessions:    make(map[string]*modelViewerSession),
+		modelViewerLoads:       make(map[*modelViewerLoad]struct{}),
+		freeOSMemory:           debug.FreeOSMemory,
 		afterFunc: func(delay time.Duration, release func()) func() bool {
 			return time.AfterFunc(delay, release).Stop
 		},
 	}
+}
+
+// ReadResource returns the bytes behind a geometry, texture or position URL of a loaded transport.
+func (t *Service) ReadResource(ctx context.Context, url string) ([]byte, error) {
+	return t.protocol.Read(ctx, url)
 }
 
 func (t *Service) Shutdown() error {

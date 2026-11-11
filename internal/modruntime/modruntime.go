@@ -205,7 +205,6 @@ func New(opts Options) *Manager {
 	return manager
 }
 
-//wails:ignore
 func (m *Manager) UseClient(client *db.Client) { m.games = client.GamePaths }
 
 // Supports reports whether the importer has any runtime. Unlike List, it does
@@ -395,8 +394,6 @@ func (m *Manager) Remove(ctx context.Context, importer, name string) (Status, er
 // launch. Nobody asked for the update, so disabled and foreign copies and an
 // install whose files the user changed are left as they are; the user updates
 // those from the runtime list.
-//
-//wails:ignore
 func (m *Manager) Refresh(ctx context.Context, importer string) error {
 	listing, err := m.List(ctx, importer)
 	if err != nil {
@@ -463,8 +460,6 @@ func (m *Manager) Refresh(ctx context.Context, importer string) error {
 // is the importer's Mods folder. With install, the runtime is enabled and
 // brought up to date first; a foreign copy then fails with ErrorForeign. fn
 // must not take a disk slot.
-//
-//wails:ignore
 func (m *Manager) Use(
 	ctx context.Context,
 	importer, modsRoot, name string,

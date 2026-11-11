@@ -15,22 +15,19 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/samber/lo"
-	wailsupdater "github.com/wailsapp/wails/v3/pkg/updater"
-	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
-
-	"nahida.live/desktop/internal/platform"
 )
 
 // An automatic check reuses release metadata younger than the check interval,
 // so a new release is seen within two intervals of the last fetch: one hour.
 const (
-	updaterRepository        = "myparsleycat/nahida-desktop"
-	updaterChecksumAsset     = "SHA256SUMS"
-	updaterCheckInterval     = 30 * time.Minute
-	releaseChannelPrerelease = "prerelease"
-	translationEndpoint      = "https://api.nahida.live/translate"
-	maxTranslationPayload    = 8 << 20
+	updaterCheckInterval    = 30 * time.Minute
+	updaterProgressInterval = 250 * time.Millisecond
+	translationEndpoint     = "https://api.nahida.live/translate"
+	maxTranslationPayload   = 8 << 20
 )
+
+// UpdateChannelPrerelease is the UpdateRelease.Channel of a GitHub pre-release.
+const UpdateChannelPrerelease = "prerelease"
 
 type UpdaterSettings interface {
 	GetAutoUpdateMode(context.Context) (string, error)
@@ -38,23 +35,31 @@ type UpdaterSettings interface {
 	GetLanguage(context.Context) (string, error)
 }
 
-type updaterEngine interface {
-	Init(wailsupdater.Config) error
-	Check(context.Context) (*wailsupdater.Release, error)
-	DownloadAndInstall(context.Context) error
-	Restart(context.Context) error
-	StopPeriodicCheck()
+type UpdateRelease struct {
+	Version string
+	// Channel is UpdateChannelPrerelease for a pre-release and empty otherwise.
+	Channel string
+	Notes   string
+}
+
+// UpdateEngine finds, stages and installs application releases for Updater.
+type UpdateEngine interface {
+	// Check returns the newest installable release above the running version, or nil when there is none.
+	Check(ctx context.Context, includePrerelease bool) (*UpdateRelease, error)
+	// DownloadAndInstall stages the release found by the last Check, reporting the bytes written so far and the
+	// total, which is 0 while unknown.
+	DownloadAndInstall(ctx context.Context, progress func(written, total int64)) error
+	// Restart replaces the running application with the staged release; the process exits on success.
+	Restart(ctx context.Context) error
 }
 
 type UpdaterOptions struct {
-	Engine   updaterEngine
+	Engine   UpdateEngine
 	Settings UpdaterSettings
 	HTTP     *Client
 	Log      *Log
 	Emit     func(name string, data ...any)
 	Ready    func()
-	Version  string
-	Provider wailsupdater.Provider
 	Interval time.Duration
 }
 
@@ -73,12 +78,16 @@ type UpdaterStatus struct {
 	ShouldPromptForUpdate bool                 `json:"shouldPromptForUpdate"`
 	IsChecking            bool                 `json:"isChecking"`
 	IsDownloading         bool                 `json:"isDownloading"`
+	DownloadWritten       int64                `json:"downloadWritten"`
+	DownloadTotal         int64                `json:"downloadTotal"`
+	// LastError is the message of the last failed download, cleared by the next check or download.
+	LastError *string `json:"lastError"`
 }
 
 type Updater struct {
 	mu sync.Mutex
 
-	engine   updaterEngine
+	engine   UpdateEngine
 	settings UpdaterSettings
 	http     *Client
 	log      *Log
@@ -97,6 +106,10 @@ type Updater struct {
 	dialogDismissed             bool
 	checking                    bool
 	downloading                 bool
+	downloadWritten             int64
+	downloadTotal               int64
+	progressSent                time.Time
+	lastError                   string
 	installing                  bool
 	recheckAfterBusy            bool
 	channelRefreshPending       bool
@@ -112,8 +125,6 @@ type Updater struct {
 func NewUpdater() *Updater { return &Updater{interval: updaterCheckInterval} }
 
 // UseGitHubRate shares the runtime's request budget and metadata cache.
-//
-//wails:ignore
 func (u *Updater) UseGitHubRate(rate *GitHubRateCoordinator) {
 	u.mu.Lock()
 	u.rate = rate
@@ -122,8 +133,6 @@ func (u *Updater) UseGitHubRate(rate *GitHubRateCoordinator) {
 
 // AttachGitHubRate binds the shared GitHub core-rate coordinator used to gate
 // CheckForUpdates, matching Electron's GitHubRateCoordinator.
-//
-//wails:ignore
 func (u *Updater) AttachGitHubRate(store githubRateStore, log *Log) {
 	if u == nil {
 		return
@@ -138,121 +147,12 @@ func (u *Updater) AttachGitHubRate(store githubRateStore, log *Log) {
 	rate.UseLog(log)
 }
 
-func githubProviderConfig(prerelease bool) githubprovider.Config {
-	return githubprovider.Config{
-		Repository:    updaterRepository,
-		ChecksumAsset: updaterChecksumAsset,
-		Prerelease:    prerelease,
-	}
-}
-
-// includePrereleaseProvider chooses the stable or pre-release GitHub source
-// on each check. Wails accepts the provider list once, and a GitHub provider
-// keeps its Prerelease flag for its lifetime.
-type includePrereleaseProvider struct {
-	stable     wailsupdater.Provider
-	prerelease wailsupdater.Provider
-	include    func(context.Context) (bool, error)
-}
-
-func newIncludePrereleaseProvider(
-	httpClient *Client,
-	include func(context.Context) (bool, error),
-	rates ...*GitHubRateCoordinator,
-) (wailsupdater.Provider, error) {
-	stable, err := newGitHubUpdateProvider(false, httpClient, rates...)
-	if err != nil {
-		return nil, err
-	}
-	prerelease, err := newGitHubUpdateProvider(true, httpClient, rates...)
-	if err != nil {
-		return nil, err
-	}
-	return &includePrereleaseProvider{stable: stable, prerelease: prerelease, include: include}, nil
-}
-
-func newGitHubUpdateProvider(
-	prerelease bool,
-	httpClient *Client,
-	rates ...*GitHubRateCoordinator,
-) (wailsupdater.Provider, error) {
-	config := githubProviderConfig(prerelease)
-	var rate *GitHubRateCoordinator
-	if len(rates) > 0 && rates[0] != nil {
-		rate = rates[0]
-	} else {
-		rate = NewGitHubRateCoordinator()
-	}
-	base := &http.Client{Timeout: 30 * time.Second}
-	if httpClient != nil {
-		base = httpClient.HTTPClient()
-	}
-	config.HTTPClient = rate.HTTPClient(base)
-	config.HTTPClient.Timeout = 30 * time.Second
-	return githubprovider.New(config)
-}
-
-func (p *includePrereleaseProvider) Name() string { return "github" }
-
-func (p *includePrereleaseProvider) Check(
-	ctx context.Context,
-	req wailsupdater.CheckRequest,
-) (*wailsupdater.Release, error) {
-	source := p.stable
-	if p.include != nil {
-		include, err := p.include(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if include {
-			source = p.prerelease
-		}
-	}
-	return source.Check(ctx, req)
-}
-
-// Download uses either GitHub provider. The asset URL is already on the release.
-func (p *includePrereleaseProvider) Download(
-	ctx context.Context,
-	rel *wailsupdater.Release,
-	dst io.Writer,
-	onProgress func(written, total int64),
-) error {
-	return p.stable.Download(ctx, rel, dst, onProgress)
-}
-
-// Configure binds the Wails v3 updater after application.New has created it.
-//
-//wails:ignore
 func (u *Updater) Configure(opts UpdaterOptions) error {
-	if u == nil || opts.Engine == nil {
+	if u == nil {
+		return errors.New("updater is nil")
+	}
+	if opts.Engine == nil {
 		return errors.New("updater engine is not configured")
-	}
-	version := strings.TrimPrefix(strings.TrimSpace(opts.Version), "v")
-	if version == "" {
-		version = platform.AppVersion
-	}
-	provider := opts.Provider
-	if provider == nil {
-		u.mu.Lock()
-		if u.rate == nil {
-			u.rate = NewGitHubRateCoordinator()
-		}
-		rate := u.rate
-		u.mu.Unlock()
-		rate.UseLog(opts.Log)
-		var err error
-		provider, err = newIncludePrereleaseProvider(opts.HTTP, u.includePrerelease, rate)
-		if err != nil {
-			return err
-		}
-	}
-	if err := opts.Engine.Init(wailsupdater.Config{
-		CurrentVersion: version,
-		Providers:      []wailsupdater.Provider{provider},
-		Window:         wailsupdater.WindowNone,
-	}); err != nil {
-		return err
 	}
 	interval := opts.Interval
 	if interval <= 0 {
@@ -354,10 +254,11 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 
 	u.mu.Lock()
 	u.checking = true
+	u.lastError = ""
 	u.mu.Unlock()
 	u.broadcastStatus(ctx)
 	checkCtx := WithGitHubRefresh(u.metadataContext(ctx, "app-update"), userInitiated)
-	release, err := engine.Check(checkCtx)
+	release, err := u.checkRelease(checkCtx, engine)
 	if err != nil {
 		u.resetCheckedRelease(ctx)
 		u.finishIncludePrereleaseChange(ctx)
@@ -394,6 +295,16 @@ func (u *Updater) CheckForUpdates(ctx context.Context, userInitiated bool) error
 	return nil
 }
 
+// checkRelease reads the pre-release setting for each check, so the engine follows a setting changed since
+// the previous one.
+func (u *Updater) checkRelease(ctx context.Context, engine UpdateEngine) (*UpdateRelease, error) {
+	include, err := u.includePrerelease(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return engine.Check(ctx, include)
+}
+
 func (u *Updater) metadataContext(ctx context.Context, operation string) context.Context {
 	u.mu.Lock()
 	interval := u.interval
@@ -424,14 +335,21 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	}
 	engine := u.engine
 	u.downloading = true
+	u.downloadWritten, u.downloadTotal, u.lastError = 0, 0, ""
 	u.mu.Unlock()
 	if engine == nil {
 		return errors.New("updater is not configured")
 	}
 	u.broadcastStatus(ctx)
-	if err := engine.DownloadAndInstall(ctx); err != nil {
+	if err := engine.DownloadAndInstall(
+		ctx,
+		func(written, total int64) { u.downloadProgress(ctx, written, total) },
+	); err != nil {
 		u.mu.Lock()
 		u.downloading = false
+		if !IsCancellationError(err) {
+			u.lastError = err.Error()
+		}
 		u.mu.Unlock()
 		u.broadcastStatus(ctx)
 		u.finishIncludePrereleaseChange(ctx)
@@ -441,7 +359,7 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	channel := u.releaseChannel
 	deferRecheck := u.recheckAfterBusy
 	u.mu.Unlock()
-	if deferRecheck && channel == releaseChannelPrerelease {
+	if deferRecheck && channel == UpdateChannelPrerelease {
 		include, err := u.includePrerelease(ctx)
 		if err != nil || !include {
 			u.mu.Lock()
@@ -468,6 +386,21 @@ func (u *Updater) DownloadUpdate(ctx context.Context) error {
 	u.notifyReady()
 	u.finishIncludePrereleaseChange(ctx)
 	return nil
+}
+
+// downloadProgress records the download's progress and announces it at most a few times a second.
+func (u *Updater) downloadProgress(ctx context.Context, written, total int64) {
+	u.mu.Lock()
+	u.downloadWritten, u.downloadTotal = written, total
+	now := time.Now()
+	send := now.Sub(u.progressSent) >= updaterProgressInterval || (total > 0 && written >= total)
+	if send {
+		u.progressSent = now
+	}
+	u.mu.Unlock()
+	if send {
+		u.broadcastStatus(ctx)
+	}
 }
 
 func (u *Updater) InstallUpdate(ctx context.Context) error {
@@ -529,6 +462,11 @@ func (u *Updater) GetStatus(ctx context.Context) (UpdaterStatus, error) {
 		ShouldPromptForUpdate: u.downloaded && !u.dialogDismissed,
 		IsChecking:            u.checking,
 		IsDownloading:         u.downloading,
+		DownloadWritten:       u.downloadWritten,
+		DownloadTotal:         u.downloadTotal,
+	}
+	if u.lastError != "" {
+		status.LastError = lo.ToPtr(u.lastError)
 	}
 	if u.releaseVersion != "" {
 		status.ReleaseVersion = lo.ToPtr(u.releaseVersion)
@@ -548,7 +486,6 @@ func (u *Updater) GetStatus(ctx context.Context) (UpdaterStatus, error) {
 	return status, nil
 }
 
-//wails:ignore
 func (u *Updater) HandleIncludePrereleaseChanged(enabled bool) {
 	if u == nil {
 		return
@@ -600,7 +537,7 @@ func (u *Updater) applyIncludePrereleaseChange(ctx context.Context, enabled bool
 		u.mu.Unlock()
 		return nil
 	}
-	if u.releaseChannel != releaseChannelPrerelease {
+	if u.releaseChannel != UpdateChannelPrerelease {
 		u.mu.Unlock()
 		return nil
 	}
@@ -650,7 +587,7 @@ func (u *Updater) refreshUpdateCandidate(ctx context.Context, userInitiated, cha
 
 	operation := lo.Ternary(channelChange, "app-update-channel", "app-update")
 	checkCtx := WithGitHubRefresh(u.metadataContext(ctx, operation), userInitiated || channelChange)
-	release, err := engine.Check(checkCtx)
+	release, err := u.checkRelease(checkCtx, engine)
 	if err != nil {
 		u.mu.Lock()
 		u.checking = false
@@ -735,7 +672,7 @@ func (u *Updater) skipPrereleaseDownload(ctx context.Context) bool {
 	deferRecheck := u.recheckAfterBusy
 	channel := u.releaseChannel
 	u.mu.Unlock()
-	if !deferRecheck || channel != releaseChannelPrerelease {
+	if !deferRecheck || channel != UpdateChannelPrerelease {
 		return false
 	}
 	include, err := u.includePrerelease(ctx)
@@ -783,7 +720,6 @@ func (u *Updater) finishIncludePrereleaseChange(ctx context.Context) {
 	}
 }
 
-//wails:ignore
 func (u *Updater) HandleAutoUpdateModeChanged(mode string) {
 	if u == nil {
 		return
@@ -808,7 +744,6 @@ func (u *Updater) HandleAutoUpdateModeChanged(mode string) {
 	}
 }
 
-//wails:ignore
 func (u *Updater) HandleLanguageChanged(_ string) {
 	if u == nil {
 		return
@@ -1074,15 +1009,12 @@ func (u *Updater) ServiceShutdown() error {
 		return nil
 	}
 	u.mu.Lock()
-	cancel, engine := u.cancel, u.engine
+	cancel := u.cancel
 	u.cancel, u.ctx = nil, nil
 	u.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
 	u.loopWG.Wait()
-	if engine != nil {
-		engine.StopPeriodicCheck()
-	}
 	return nil
 }

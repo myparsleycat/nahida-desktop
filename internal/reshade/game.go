@@ -15,8 +15,6 @@ import (
 
 // PrepareLaunch readies ReShade for one importer's game and returns the module to inject before the
 // game creates its graphics device.
-//
-//wails:ignore
 func (r *ReShade) PrepareLaunch(ctx context.Context, importer string) (string, error) {
 	module, err := r.prepareLaunch(ctx, importer)
 	if err != nil {

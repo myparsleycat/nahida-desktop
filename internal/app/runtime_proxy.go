@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"strings"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
 )
 
-func (rt *runtime) initProxy(ctx context.Context, configureBrowserArguments func([]string) error) error {
+func (rt *runtime) initProxy(ctx context.Context) error {
 	config, err := rt.setting.LoadProxySettings(ctx)
 	var network *infra.ProxyNetwork
 	if err == nil {
@@ -23,10 +25,24 @@ func (rt *runtime) initProxy(ctx context.Context, configureBrowserArguments func
 		return err
 	}
 	rt.proxyRelay = relay
-	if configureBrowserArguments == nil {
-		return nil
+	return nil
+}
+
+// configureGameBananaLogin gives the login windows the WebView2 profile folder and the proxy relay. A
+// profile folder that cannot be created leaves fairy's default folder in use.
+func (rt *runtime) configureGameBananaLogin(icon []byte, font string, dark func() bool) {
+	opts := loginWindowOptions{Icon: icon, Font: font, Dark: dark}
+	if rt.proxyRelay != nil {
+		opts.BrowserArgs = strings.Join(rt.proxyRelay.BrowserArguments(), " ")
 	}
-	args := windowsApplicationOptions().AdditionalBrowserArgs
-	args = append(args, relay.BrowserArguments()...)
-	return configureBrowserArguments(args)
+	if rt.appData != nil {
+		folder, err := rt.appData.EnsureDir(appdata.WebViewDir)
+		if err != nil {
+			_ = infra.ReportError(rt.log, err, "GameBananaLogin", infra.Diagnostic{
+				Operation: "startup", Stage: "webview-profile",
+			})
+		}
+		opts.UserDataFolder = folder
+	}
+	rt.gameBananaLogin.Configure(opts, rt.log)
 }

@@ -506,8 +506,6 @@ type DLLFeatures struct {
 const customDLLFeaturesEnv = "NHD_CUSTOM_DLL_FEATURES"
 
 // ImporterDLLFeatures reports the features of the d3d11.dll the importer's next deployment writes.
-//
-//wails:ignore
 func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFeatures, error) {
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {

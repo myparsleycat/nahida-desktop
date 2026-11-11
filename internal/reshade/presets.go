@@ -62,8 +62,6 @@ func (r *ReShade) AddPresets(ctx context.Context, sources []string) (PresetEffec
 }
 
 // LaunchPresetEffects returns the effects the importer's current preset needs and lacks.
-//
-//wails:ignore
 func (r *ReShade) LaunchPresetEffects(ctx context.Context, importer string) (PresetEffects, error) {
 	effects, err := r.launchPresetEffects(ctx, importer)
 	if err != nil {

@@ -1,0 +1,31 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": "icon.ico"
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": "elevated-helper.exe.manifest"
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "3.45.0.65535"
+        },
+        "info": {
+          "0000": {
+            "ProductVersion": "3.45.0",
+            "CompanyName": "nahida.live",
+            "FileDescription": "Nahida Desktop",
+            "LegalCopyright": "© 2026, nahida.live",
+            "ProductName": "Nahida Desktop",
+            "Comments": "Nahida Desktop"
+          }
+        }
+      }
+    }
+  }
+}

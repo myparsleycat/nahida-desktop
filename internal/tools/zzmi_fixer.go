@@ -58,7 +58,6 @@ func (t *Tools) ZZMIFixerDeleteAllBackups(ctx context.Context, targetPath string
 	return t.zzmi.ZZMIFixerDeleteAllBackups(ctx, targetPath)
 }
 
-//wails:ignore
 func (t *Tools) CleanupZZMIAbandonedStaging(ctx context.Context) error {
 	return t.zzmi.CleanupZZMIAbandonedStaging(ctx)
 }

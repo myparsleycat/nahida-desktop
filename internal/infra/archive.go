@@ -26,7 +26,6 @@ func NewArchive() *Archive {
 	return &Archive{}
 }
 
-//wails:ignore
 func (a *Archive) UseLog(log *Log) { a.log = log }
 
 func (a *Archive) IsArchive(ctx context.Context, archivePath string) bool {

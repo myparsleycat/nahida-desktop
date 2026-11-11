@@ -104,7 +104,6 @@ func (r UploadRules) MaxSizeFor(name string) (int64, bool) {
 	return 0, false
 }
 
-//wails:ignore
 func (d *Drive) UploadRules(ctx context.Context) (UploadRules, error) {
 	if d.http == nil {
 		return UploadRules{}, errDriveHTTPUnconfigured

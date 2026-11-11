@@ -1,18 +1,14 @@
 package app
 
-import (
-	"testing"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
-)
+import "testing"
 
 type fakeAutostartController struct {
-	enabled  []application.AutostartOptions
+	enabled  [][]string
 	disabled int
 }
 
-func (f *fakeAutostartController) EnableWithOptions(options application.AutostartOptions) error {
-	f.enabled = append(f.enabled, options)
+func (f *fakeAutostartController) Enable(args ...string) error {
+	f.enabled = append(f.enabled, args)
 	return nil
 }
 
@@ -26,9 +22,7 @@ func TestSyncAutostartUsesHiddenLaunchArgument(t *testing.T) {
 	if err := syncAutostartState(controller, true, true, true); err != nil {
 		t.Fatal(err)
 	}
-	if len(controller.enabled) != 1 || controller.enabled[0].Identifier != autostartIdentifier ||
-		len(controller.enabled[0].Arguments) != 1 ||
-		controller.enabled[0].Arguments[0] != "--hidden" {
+	if len(controller.enabled) != 1 || len(controller.enabled[0]) != 1 || controller.enabled[0][0] != "--hidden" {
 		t.Fatalf("enable options = %#v", controller.enabled)
 	}
 	if err := syncAutostartState(controller, false, true, true); err != nil {

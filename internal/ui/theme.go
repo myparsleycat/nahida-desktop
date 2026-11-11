@@ -1,0 +1,125 @@
+package ui
+
+import (
+	"embed"
+	"errors"
+	"io/fs"
+	"strings"
+
+	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/kit"
+
+	"nahida.live/desktop/internal/platform"
+)
+
+//go:embed fonts/*.ttf
+var fontFiles embed.FS
+
+const fontFamily = "IBM Plex Sans KR"
+
+// RegisterFonts registers the embedded UI font and returns the family to use: the system font when the
+// embedded one fails to load, together with the error.
+func RegisterFonts() (string, error) {
+	paths, err := fs.Glob(fontFiles, "fonts/*.ttf")
+	if err != nil {
+		return "", err
+	}
+	var errs []error
+	for _, path := range paths {
+		data, err := fontFiles.ReadFile(path)
+		if err == nil {
+			_, err = fairy.RegisterFont(data)
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return "", err
+	}
+	fairy.SetFontFallback(fallbackFamilies(platform.SystemLocale())...)
+	return fontFamily, nil
+}
+
+// fallbackFamilies are the fonts for characters IBM Plex Sans KR lacks, such as kana and most hanzi. The React
+// frontend listed sans-serif after it, which WebView2 resolves to Noto Sans KR on a Korean system, or Malgun
+// Gothic where Noto Sans KR is not installed; DirectWrite's own fallback picks Malgun Gothic and Microsoft
+// JhengHei instead. Other locales keep the system fallback, which follows the locale as the browser does.
+func fallbackFamilies(locale string) []string {
+	if language, _, _ := strings.Cut(locale, "-"); strings.EqualFold(language, "ko") {
+		return []string{"Noto Sans KR", "Malgun Gothic"}
+	}
+	return nil
+}
+
+// Theme returns the kit theme, whose tokens are the React frontend's shadcn/ui tokens. Background is the
+// window frame behind the title bar and navigation, Card the page area.
+func Theme(dark bool, font string) kit.Theme {
+	t := kit.Dark()
+	if !dark {
+		t = kit.Light()
+	}
+	t.Font = font
+	t.DialogTopInset = titleBarHeight
+	return t
+}
+
+func stableScrollY(view *fairy.El) *fairy.El {
+	ink := kit.T().MutedForeground
+	return view.ScrollY().PadEdges(0, 10, 0, 0).ScrollBarStyle(fairy.ScrollBarStyle{
+		Thickness: 6, Inset: 2, AlwaysVisible: true,
+		Color: ink.Alpha(0.35), DragColor: ink.Alpha(0.7),
+	})
+}
+
+// The colours below have no shadcn/ui token; they keep the values the screens were ported with.
+
+func textDisabled(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return fairy.Hex(0x737373)
+	}
+	return fairy.Hex(0xa1a1a1)
+}
+
+// hoverFill is laid over a row or button while the pointer is on it, so it shows on any fill.
+func hoverFill(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return fairy.RGBA(255, 255, 255, 0.06)
+	}
+	return fairy.RGBA(0, 0, 0, 0.05)
+}
+
+// opacity applies a CSS opacity modifier such as bg-input/30, which scales the colour's own alpha; the dark
+// Input and Border tokens are already translucent.
+func opacity(c fairy.Color, a float32) fairy.Color {
+	return c.Alpha(c.A * a)
+}
+
+// inputFill is the fill of a shadcn/ui Input: dark:bg-input/30 over a transparent light field.
+func inputFill(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return opacity(t.Input, 0.3)
+	}
+	return fairy.Transparent
+}
+
+func accentHover(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return t.Accent.Mix(fairy.Hex(0xffffff), 0.12)
+	}
+	return t.Accent.Mix(fairy.Hex(0x000000), 0.12)
+}
+
+func accentSoft(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return t.Accent.Alpha(0.2)
+	}
+	return t.Accent.Alpha(0.12)
+}
+
+func shadowColor(t *kit.Theme) fairy.Color {
+	if t.Dark {
+		return fairy.RGBA(0, 0, 0, 0.4)
+	}
+	return fairy.RGBA(0, 0, 0, 0.12)
+}

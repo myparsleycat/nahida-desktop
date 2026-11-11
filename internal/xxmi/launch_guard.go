@@ -15,7 +15,7 @@ const (
 	xxmiLaunchGuardWhere = "XXMI.launchGuard"
 
 	// The renderer localizes a launch warning by this code. Keep it in sync with the launchWarnings keys in
-	// frontend/src/lib/i18n/locales.
+	// internal/ui/locales.
 	launchWarningGimiDCRUnreadable  = "GIMI_DCR_UNREADABLE"
 	launchWarningDX12Unsupported    = "XXMI_DX12_UNSUPPORTED"
 	launchWarningLauncherNotSkipped = "XXMI_GAME_LAUNCHER_NOT_SKIPPED"
@@ -30,7 +30,7 @@ const (
 
 var (
 	// The renderer keys the launch-guard dialogs off these literals. Keep them in sync with
-	// frontend/src/hooks/use-launch-guard.tsx.
+	// internal/ui/xxmi_launch.go.
 	errGimiDCREnabled      = errors.New("GIMI_DCR_ENABLED")
 	errSmoothMotionEnabled = errors.New("NVIDIA_SMOOTH_MOTION_ENABLED")
 	// errLoggingEnabled asks before a launch with 3DMigoto logging on, which can slow the game down

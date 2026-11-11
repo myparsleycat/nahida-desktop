@@ -7,27 +7,29 @@ import (
 )
 
 type (
-	BodyShapeSessionDescriptor = bodyshape.BodyShapeSessionDescriptor
-	BodyShapeMeshInput         = bodyshape.BodyShapeMeshInput
-	BodyShapeMeshDescriptor    = bodyshape.BodyShapeMeshDescriptor
-	BodyShapeMeshSummary       = bodyshape.BodyShapeMeshSummary
-	BodyShapeChangeSummary     = bodyshape.BodyShapeChangeSummary
-	BodyShapeBeginExportInput  = bodyshape.BodyShapeBeginExportInput
-	BodyShapeExportUpload      = bodyshape.BodyShapeExportUpload
-	BodyShapeExportMeshUpload  = bodyshape.BodyShapeExportMeshUpload
-	BodyShapeExportMesh        = bodyshape.BodyShapeExportMesh
-	BodyShapeExportedMesh      = bodyshape.BodyShapeExportedMesh
-	BodyShapeCommitExportInput = bodyshape.BodyShapeCommitExportInput
-	BodyShapeOK                = bodyshape.BodyShapeOK
-	BodyShapeExportInput       = bodyshape.BodyShapeExportInput
-	BodyShapeExportResult      = bodyshape.BodyShapeExportResult
+	BodyShapeSessionDescriptor    = bodyshape.BodyShapeSessionDescriptor
+	BodyShapeMeshInput            = bodyshape.BodyShapeMeshInput
+	BodyShapeMeshDescriptor       = bodyshape.BodyShapeMeshDescriptor
+	BodyShapeMeshSummary          = bodyshape.BodyShapeMeshSummary
+	BodyShapeChangeSummary        = bodyshape.BodyShapeChangeSummary
+	BodyShapeBeginExportInput     = bodyshape.BodyShapeBeginExportInput
+	BodyShapeExportUpload         = bodyshape.BodyShapeExportUpload
+	BodyShapeExportMeshUpload     = bodyshape.BodyShapeExportMeshUpload
+	BodyShapeExportMesh           = bodyshape.BodyShapeExportMesh
+	BodyShapeExportedMesh         = bodyshape.BodyShapeExportedMesh
+	BodyShapeCommitExportInput    = bodyshape.BodyShapeCommitExportInput
+	BodyShapeOK                   = bodyshape.BodyShapeOK
+	BodyShapeExportInput          = bodyshape.BodyShapeExportInput
+	BodyShapeExportResult         = bodyshape.BodyShapeExportResult
+	BodyShapeMeshData             = bodyshape.BodyShapeMeshData
+	BodyShapeMeshPositions        = bodyshape.BodyShapeMeshPositions
+	BodyShapeCommitPositionsInput = bodyshape.BodyShapeCommitPositionsInput
 )
 
 func (t *Tools) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShapeSessionDescriptor, error) {
 	return t.bodyShape.BodyShapeLoadMod(ctx, modPath)
 }
 
-//wails:ignore
 func (t *Tools) BodyShapeExport(
 	ctx context.Context,
 	input BodyShapeExportInput,
@@ -56,7 +58,6 @@ func (t *Tools) BodyShapeCommitExport(
 	return t.bodyShape.BodyShapeCommitExport(ctx, input)
 }
 
-//wails:ignore
 func (t *Tools) BodyShapeSessionPaths(sessionID string) ([]string, error) {
 	return t.bodyShape.BodyShapeSessionPaths(sessionID)
 }
@@ -67,4 +68,15 @@ func (t *Tools) BodyShapeCloseSession(ctx context.Context, sessionID string) (Bo
 
 func (t *Tools) shutdownBodyShape() error {
 	return t.bodyShape.Shutdown()
+}
+
+func (t *Tools) BodyShapeMeshData(ctx context.Context, input BodyShapeMeshInput) (BodyShapeMeshData, error) {
+	return t.bodyShape.BodyShapeMeshData(ctx, input)
+}
+
+func (t *Tools) BodyShapeCommitPositions(
+	ctx context.Context,
+	input BodyShapeCommitPositionsInput,
+) (BodyShapeExportResult, error) {
+	return t.bodyShape.BodyShapeCommitPositions(ctx, input)
 }

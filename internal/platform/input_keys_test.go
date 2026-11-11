@@ -111,8 +111,7 @@ func TestKeyNotationCitesOnlyAcceptedTokens(t *testing.T) {
 func TestKeyTokensMatchToggleKeyNotation(t *testing.T) {
 	t.Parallel()
 
-	// Tokens the toggle-key editor can store, from
-	// frontend/src/components/mod/utils.ts and frontend/src/shared/key-formatter.ts.
+	// Tokens the toggle-key editor can store.
 	for _, token := range []string{
 		"vk_up", "vk_down", "vk_left", "vk_right", "vk_return", "vk_space", "vk_tab", "vk_escape",
 		"vk_back", "vk_delete", "vk_insert", "vk_home", "vk_end", "vk_prior", "vk_next", "vk_pause",

@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.([1-9]\d*))?$/;
 const MAX_COMPONENT = 65_535;
 const MAX_BETA = 65_534;
@@ -53,6 +55,39 @@ export function createWindowsVersionInfo(baseInfo, input) {
   info.info['0000'].FileVersion = release.version;
   info.info['0000'].ProductVersion = release.version;
   return { release, info };
+}
+
+// go-winres resolves file references relative to the config file, so a config written to another directory must
+// rewrite them. RT_VERSION is the only inline resource and receives the release version instead.
+export function createReleaseResourceConfig(config, input, { from, to }) {
+  const relocate = (value) => {
+    if (Array.isArray(value)) {
+      return value.map(relocate);
+    }
+    if (typeof value !== 'string') {
+      return value;
+    }
+    const relative = path.relative(to, path.resolve(from, value));
+    if (path.isAbsolute(relative)) {
+      throw new Error(`${to} must be on the same volume as ${from} to reference ${value}`);
+    }
+    return relative.replaceAll('\\', '/');
+  };
+
+  return Object.fromEntries(
+    Object.entries(config).map(([type, resources]) => [
+      type,
+      mapValues(resources, (languages) =>
+        mapValues(languages, (value) =>
+          type === 'RT_VERSION' ? createWindowsVersionInfo(value, input).info : relocate(value),
+        ),
+      ),
+    ]),
+  );
+}
+
+function mapValues(object, transform) {
+  return Object.fromEntries(Object.entries(object).map(([key, value]) => [key, transform(value)]));
 }
 
 export function createNSISVersionInclude(input) {

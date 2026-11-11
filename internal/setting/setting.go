@@ -72,7 +72,6 @@ func OpenWithOptions(ctx context.Context, path string, opts Options) (*Setting, 
 	return s, nil
 }
 
-//wails:ignore
 func (s *Setting) Close() error {
 	if s == nil || s.client == nil {
 		return nil
@@ -82,34 +81,26 @@ func (s *Setting) Close() error {
 	return err
 }
 
-//wails:ignore
 func (s *Setting) UseClient(client *db.Client) {
 	s.client = client
 }
 
 // UseHooks replaces afterSet hooks on an already constructed Setting.
-//
-//wails:ignore
 func (s *Setting) UseHooks(h Hooks) {
 	s.opts.Hooks = h
 }
 
 // UseLocale sets the OS locale used for the first-run language default.
-//
-//wails:ignore
 func (s *Setting) UseLocale(locale string) {
 	s.opts.Locale = locale
 }
 
-//wails:ignore
 func (s *Setting) Client() *db.Client {
 	return s.client
 }
 
 // MigrateElectronStorage preserves settings from the Electron database when
 // the Go port uses a different storage key. Existing Go values always win.
-//
-//wails:ignore
 func (s *Setting) MigrateElectronStorage(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return fmt.Errorf("setting is not bound to a database")
@@ -246,7 +237,13 @@ func (s *Setting) setStoredBounds(ctx context.Context, key string, bounds Bounds
 const rendererStatePrefix = "renderer:"
 
 func (s *Setting) GetRendererState(ctx context.Context) (map[string]string, error) {
-	rows, err := s.client.AppState.ListByPrefix(ctx, rendererStatePrefix)
+	return s.RendererStateWithPrefix(ctx, "")
+}
+
+// RendererStateWithPrefix returns the renderer-owned values whose key starts with prefix. The prefix is matched
+// with LIKE, so it must not contain _ or %.
+func (s *Setting) RendererStateWithPrefix(ctx context.Context, prefix string) (map[string]string, error) {
+	rows, err := s.client.AppState.ListByPrefix(ctx, rendererStatePrefix+prefix)
 	if err != nil {
 		return nil, settingError(err, "renderer-state", "read", "", infra.DiagnosticError)
 	}
@@ -582,8 +579,6 @@ func (s *Setting) SetCompressionThresholdMib(ctx context.Context, threshold int)
 }
 
 // SetCompressionConfig stores the method and threshold as one transition snapshot.
-//
-//wails:ignore
 func (s *Setting) SetCompressionConfig(ctx context.Context, method string, threshold int) error {
 	methodSpec, err := s.spec(KeyModCompressionMethod)
 	if err != nil {

@@ -214,8 +214,6 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 // CompleteLogin hands the code a nahida://auth link carried to the login that
 // is waiting for it. It reports false for a link no pending login asked for,
 // which covers every link another client's handshake produced.
-//
-//wails:ignore
 func (a *Auth) CompleteLogin(state, code string) bool {
 	if a == nil || state == "" || code == "" {
 		return false

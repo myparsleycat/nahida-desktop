@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -120,13 +118,11 @@ func NewWithOptions(opts Options) *Auth {
 	close(done)
 	a := &Auth{
 		mutateDone: done,
-		emit:       defaultEmit,
 	}
 	a.apply(opts)
 	return a
 }
 
-//wails:ignore
 func (a *Auth) UseClient(client *db.Client) {
 	if a == nil || client == nil {
 		return
@@ -168,13 +164,7 @@ func (a *Auth) apply(opts Options) {
 	}
 }
 
-func defaultEmit(name string, data any) {
-	if app := application.Get(); app != nil {
-		app.Event.Emit(name, data)
-	}
-}
-
-func (a *Auth) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+func (a *Auth) Start(ctx context.Context) error {
 	a.start(ctx)
 	return nil
 }

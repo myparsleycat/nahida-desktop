@@ -2,6 +2,8 @@ package infra
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +35,43 @@ func TestProtocolServesLocalFileAndRange(t *testing.T) {
 	}
 	if got := response.Header.Get("Content-Type"); got != "video/mp4" {
 		t.Fatalf("Content-Type = %q", got)
+	}
+}
+
+// Native screens read the URLs a transport carries through Read, so it must resolve every URL ServeHTTP
+// serves, including escaped buffer IDs and lazy loaders, and fail once the session is gone.
+func TestProtocolReadResolvesServedURLs(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "모드 텍스처.dds")
+	if err := os.WriteFile(path, []byte("dds"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	service := NewProtocol()
+	session := service.CreateMemorySession()
+	bufferURL, err := service.StoreMemoryBuffer(session, "Body/A #1.geometry", []byte("mesh"), "")
+	if err != nil {
+		t.Fatalf("StoreMemoryBuffer: %v", err)
+	}
+	loaderURL, err := service.StoreMemoryLoader(session, "tex:%key", func(context.Context) ([]byte, error) {
+		return []byte("loaded"), nil
+	})
+	if err != nil {
+		t.Fatalf("StoreMemoryLoader: %v", err)
+	}
+	for url, want := range map[string]string{
+		service.LocalFileURL(path, true): "dds",
+		bufferURL:                        "mesh",
+		loaderURL:                        "loaded",
+	} {
+		got, err := service.Read(context.Background(), url)
+		if err != nil || string(got) != want {
+			t.Fatalf("Read(%q) = %q, %v; want %q", url, got, err, want)
+		}
+	}
+
+	service.CleanupMemorySession(session)
+	if _, err := service.Read(context.Background(), bufferURL); !errors.Is(err, ErrProtocolNotFound) {
+		t.Fatalf("Read after cleanup error = %v", err)
 	}
 }
 

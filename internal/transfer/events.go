@@ -2,8 +2,6 @@ package transfer
 
 import (
 	"time"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func (t *Transfer) emit() {
@@ -15,15 +13,15 @@ func (t *Transfer) emit() {
 		t.mu.RUnlock()
 		return
 	}
-	app := t.app
+	emit := t.snapshotEmit
 	syncWindowProgress := t.syncWindowProgress
 	items := t.snapshotEntriesLocked()
 	t.mu.RUnlock()
-	t.dispatchSnapshots(app, syncWindowProgress, items)
+	t.dispatchSnapshots(emit, syncWindowProgress, items)
 }
 
 func (t *Transfer) dispatchSnapshots(
-	app *application.App,
+	emit func(string, ...any),
 	syncWindowProgress func(*WindowProgress),
 	items []orderedSnapshot,
 ) {
@@ -31,8 +29,8 @@ func (t *Transfer) dispatchSnapshots(
 	if syncWindowProgress != nil {
 		syncWindowProgress(CalculateWindowProgress(snapshots))
 	}
-	if app != nil {
-		app.Event.Emit(updateEventName, snapshots)
+	if emit != nil {
+		emit(updateEventName, snapshots)
 	}
 }
 
@@ -77,7 +75,7 @@ func (t *Transfer) startProgressTimerLocked(delay time.Duration) {
 }
 
 func (t *Transfer) scheduleHeartbeatLocked() {
-	if t.emitStopped || t.progressEmitTimer != nil || (t.app == nil && t.syncWindowProgress == nil) {
+	if t.emitStopped || t.progressEmitTimer != nil || (t.snapshotEmit == nil && t.syncWindowProgress == nil) {
 		return
 	}
 	for _, item := range t.entries {
@@ -116,10 +114,10 @@ func (t *Transfer) flushProgressEmit(generation uint64) {
 			updateSpeed(item, t.lastProgressEmit, false)
 		}
 	}
-	app := t.app
+	emit := t.snapshotEmit
 	syncWindowProgress := t.syncWindowProgress
 	items := t.snapshotEntriesLocked()
 	t.scheduleHeartbeatLocked()
 	t.mu.Unlock()
-	t.dispatchSnapshots(app, syncWindowProgress, items)
+	t.dispatchSnapshots(emit, syncWindowProgress, items)
 }

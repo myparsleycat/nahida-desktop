@@ -79,8 +79,6 @@ func (t *Tools) FourThousandOneFixerRestoreDiversifiedDll(
 }
 
 // CleanupStaleD3DBuilds removes only validated child directories of the fixed temp root.
-//
-//wails:ignore
 func (t *Tools) CleanupStaleD3DBuilds(ctx context.Context) error {
 	return t.fixer4001.CleanupStaleD3DBuilds(ctx)
 }

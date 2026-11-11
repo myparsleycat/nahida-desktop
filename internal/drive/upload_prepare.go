@@ -146,7 +146,6 @@ func ensureUploadSourceReadable(path string) error {
 	return nil
 }
 
-//wails:ignore
 func PrepareUpload(
 	paths []string,
 	existingNames []string,

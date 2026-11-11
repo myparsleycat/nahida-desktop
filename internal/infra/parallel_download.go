@@ -72,7 +72,6 @@ type ParallelDownloader struct {
 	probes   chan struct{}
 }
 
-//wails:ignore
 func (d *ParallelDownloader) UseLog(log *Log) { d.log = log }
 
 func (d *ParallelDownloader) reportCleanup(err error, path string) {
