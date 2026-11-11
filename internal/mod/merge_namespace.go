@@ -402,7 +402,7 @@ func resolveAgainst(base, entry string) string {
 
 func sanitizeMergeToken(name string) (string, error) {
 	token := regexp.MustCompile(`\s+`).ReplaceAllString(name, "")
-	if !safeMergeName(token) {
+	if !SafeMergeName(token) {
 		return "", errors.New("MERGE_NAME_REQUIRED")
 	}
 	return token, nil

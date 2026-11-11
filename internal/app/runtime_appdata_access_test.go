@@ -183,7 +183,7 @@ func TestBootRuntimeRestoresDeniedJunctionRoot(t *testing.T) {
 			_ = exec.Command("icacls", op.Target, "/reset").Run()
 		}
 	}}
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	defer func() { _ = rt.Close() }()
 	rt.appDataAccess = appDataAccess{
 		denied:  platform.AccessDenied,
@@ -191,7 +191,7 @@ func TestBootRuntimeRestoresDeniedJunctionRoot(t *testing.T) {
 		files:   gateway,
 	}
 
-	paths, err := bootRuntime(t.Context(), rt, runtimePathInput{HomeDir: home, Cwd: t.TempDir()}, nil)
+	paths, err := bootRuntime(t.Context(), rt, runtimePathInput{HomeDir: home, Cwd: t.TempDir()})
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}

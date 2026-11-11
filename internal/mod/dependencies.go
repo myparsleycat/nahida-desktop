@@ -211,8 +211,6 @@ func (m *Mod) installedLibraries(ctx context.Context, game GameConfig, reports .
 }
 
 // InvalidateLibraries drops the installed-library indexes after mod or importer files change.
-//
-//wails:ignore
 func (m *Mod) InvalidateLibraries() {
 	m.libraryMu.Lock()
 	m.libraryChanges++

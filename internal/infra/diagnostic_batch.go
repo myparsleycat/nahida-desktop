@@ -6,15 +6,12 @@ import (
 )
 
 // DiagnosticBatch aggregates partial failures without retaining every file.
-//
-//wails:ignore
 type DiagnosticBatch struct {
 	mu     sync.Mutex
 	count  int
 	causes []error
 }
 
-//wails:ignore
 func (b *DiagnosticBatch) Add(err error) {
 	if err == nil || IsCancellationError(err) {
 		return
@@ -27,7 +24,6 @@ func (b *DiagnosticBatch) Add(err error) {
 	}
 }
 
-//wails:ignore
 func (b *DiagnosticBatch) Report(log *Log, where, operation string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

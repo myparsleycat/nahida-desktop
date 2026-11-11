@@ -103,12 +103,12 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 	if err := os.WriteFile(disabled, []byte("restore"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	rt.http.UseTransport(startupTestTransport(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("network disabled during startup test")
 	}))
 	t.Cleanup(func() { _ = rt.Close() })
-	if err := rt.Init(context.Background(), path, nil); err != nil {
+	if err := rt.Init(context.Background(), path); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(disabled); err != nil {
@@ -135,7 +135,7 @@ func (f startupTestTransport) RoundTrip(request *http.Request) (*http.Response, 
 	return f(request)
 }
 
-func TestMaintenanceGuardWaitsForWork(t *testing.T) {
+func TestStartupWaitBlocksUntilMaintenance(t *testing.T) {
 	t.Parallel()
 	startup := newStartupWork()
 	t.Cleanup(startup.stop)
@@ -148,12 +148,11 @@ func TestMaintenanceGuardWaitsForWork(t *testing.T) {
 	})
 	<-started
 
-	guard := maintenanceGuard(startup, waitForAllMethods)
 	done := make(chan error, 1)
-	go func() { done <- guard(context.Background(), "Toggle") }()
+	go func() { done <- startup.wait(context.Background()) }()
 	select {
 	case err := <-done:
-		t.Fatalf("guard released before maintenance: %v", err)
+		t.Fatalf("wait returned before maintenance: %v", err)
 	default:
 	}
 	closeFinish(release)
@@ -165,62 +164,31 @@ func TestMaintenanceGuardWaitsForWork(t *testing.T) {
 			t.Fatal(err)
 		}
 	case <-waitCtx.Done():
-		t.Fatal("guard did not release after maintenance")
+		t.Fatal("wait did not return after maintenance")
 	}
 }
 
-func TestMaintenanceGuardPolicies(t *testing.T) {
-	t.Parallel()
-	startup := newStartupWork()
-	t.Cleanup(startup.stop)
-	for _, tc := range []struct {
-		name      string
-		predicate func(string) bool
-		method    string
-		wait      bool
-	}{
-		{"mod", waitForAllMethods, "Toggle", true},
-		{"setting-write", isSettingWrite, "SetPersistToggles", true},
-		{"setting-read", isSettingWrite, "Get", false},
-		{"shell-trash", waitForShellTrash, "Trash", true},
-		{"shell-external", waitForShellTrash, "OpenExternal", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			err := maintenanceGuard(startup, tc.predicate)(ctx, tc.method)
-			if tc.wait && !errors.Is(err, context.Canceled) {
-				t.Fatalf("guard error = %v, want cancellation", err)
-			}
-			if !tc.wait && err != nil {
-				t.Fatalf("unguarded call blocked: %v", err)
-			}
-		})
-	}
-}
-
-func TestMaintenanceGuardCancelledCallDoesNotWait(t *testing.T) {
+func TestStartupWaitReturnsOnCancel(t *testing.T) {
 	t.Parallel()
 	startup := newStartupWork()
 	t.Cleanup(startup.stop)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- maintenanceGuard(startup, waitForAllMethods)(ctx, "Toggle") }()
+	go func() { done <- startup.wait(ctx) }()
 	cancel()
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("guard error = %v", err)
+			t.Fatalf("wait error = %v", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("cancelled call remained blocked")
 	}
 }
 
-func TestMaintenanceFailureReleasesGuard(t *testing.T) {
+func TestMaintenanceFailureReleasesWaiters(t *testing.T) {
 	t.Parallel()
-	rt := newRuntime()
+	rt := newRuntime(uiHost{})
 	t.Cleanup(func() { _ = rt.Close() })
 	var output bytes.Buffer
 	rt.log.Configure(infra.LogOptions{Writer: &output, DisableFile: true})
@@ -229,7 +197,7 @@ func TestMaintenanceFailureReleasesGuard(t *testing.T) {
 			return errors.New("test maintenance failure")
 		}}})
 	})
-	if err := maintenanceGuard(rt.startup, waitForAllMethods)(context.Background(), "Toggle"); err != nil {
+	if err := rt.startup.wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "failed-step") ||

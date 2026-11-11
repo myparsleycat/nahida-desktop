@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { access, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
   createNSISVersionInclude,
+  createReleaseResourceConfig,
   createWindowsVersionInfo,
   parseReleaseVersion,
 } from './release-version.mjs';
@@ -37,6 +40,26 @@ test('writes the same SemVer and numeric version for NSIS', () => {
     '!define NAHIDA_SEMVER "3.0.0-beta.7"\n' +
       '!define NAHIDA_NUMERIC_VERSION "3.0.0.7"\n',
   );
+});
+
+test('writes release resource configs whose files resolve from the output directory', async () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const from = path.join(root, 'build/windows');
+  const to = path.join(root, 'bin');
+
+  for (const file of ['nahida-desktop.winres.json', 'elevated-helper.winres.json']) {
+    const base = JSON.parse(await readFile(path.join(from, file), 'utf8'));
+    const config = createReleaseResourceConfig(base, '3.0.0-beta.42', { from, to });
+
+    const info = config.RT_VERSION['#1']['0000'];
+    assert.equal(info.fixed.file_version, '3.0.0.42');
+    assert.equal(info.fixed.flags, 'Prerelease');
+    assert.equal(info.info['0000'].ProductVersion, '3.0.0-beta.42');
+    assert.equal(config.RT_GROUP_ICON.APP['0000'], '../build/windows/icon.ico');
+    for (const reference of [config.RT_GROUP_ICON.APP['0000'], config.RT_MANIFEST['#1']['0409']]) {
+      await access(path.resolve(to, reference));
+    }
+  }
 });
 
 test('accepts the documented beta bounds', () => {

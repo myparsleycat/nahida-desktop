@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/sys/windows"
 
 	"nahida.live/desktop/internal/appdata"
@@ -66,7 +65,7 @@ func effectServiceWithTransport(t *testing.T, transport http.RoundTripper) *ReSh
 	download := infra.NewDownload()
 	download.UseClient(client)
 	queue := transfer.New()
-	if err := queue.ServiceStartup(t.Context(), application.ServiceOptions{}); err != nil {
+	if err := queue.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = queue.ServiceShutdown() })

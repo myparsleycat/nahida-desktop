@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
@@ -21,10 +19,8 @@ const (
 	runningErrorLogInterval = time.Minute
 )
 
-// ServiceStartup starts one app-wide watcher; renderer pages only subscribe to changes.
-//
-//wails:ignore
-func (x *XXMI) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+// Start starts one app-wide watcher; renderer pages only subscribe to changes.
+func (x *XXMI) Start(ctx context.Context) error {
 	x.runningWatchMu.Lock()
 	defer x.runningWatchMu.Unlock()
 	if x.runningCancel != nil {
@@ -41,8 +37,6 @@ func (x *XXMI) ServiceStartup(ctx context.Context, _ application.ServiceOptions)
 }
 
 // ServiceShutdown joins the watcher before the settings store is closed.
-//
-//wails:ignore
 func (x *XXMI) ServiceShutdown() error {
 	x.runningWatchMu.Lock()
 	defer x.runningWatchMu.Unlock()

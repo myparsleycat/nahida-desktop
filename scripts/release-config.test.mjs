@@ -41,10 +41,9 @@ test('commits source versions without publishing to npm', () => {
   );
   assert.deepEqual(git[1], {
     assets: [
-      'build/config.yml',
-      'build/windows/info.json',
-      'build/windows/wails.exe.manifest',
-      'build/windows/nsis/wails_tools.nsh',
+      'build/windows/nahida-desktop.winres.json',
+      'build/windows/elevated-helper.winres.json',
+      'build/windows/nahida-desktop.exe.manifest',
       'internal/platform/shell.go',
     ],
     message: 'chore(release): set version ${nextRelease.version} [skip ci]',

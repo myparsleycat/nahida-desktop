@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	"golang.org/x/sync/singleflight"
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
@@ -69,6 +70,9 @@ type Drive struct {
 	mu         sync.Mutex
 	ops        map[string]*copyOperation
 	fetchRules func(context.Context) (UploadRules, any, error)
+
+	previewFlight singleflight.Group
+	previewSlots  chan struct{}
 }
 
 func New() *Drive {
@@ -123,6 +127,7 @@ func NewWithOptions(opts Options) *Drive {
 		now:              now,
 		dirRetries:       retries,
 		ops:              make(map[string]*copyOperation),
+		previewSlots:     make(chan struct{}, previewVideoSlots),
 	}
 	d.fetchRules = d.fetchUploadRules
 	return d
@@ -144,36 +149,29 @@ type PathSelector interface {
 	) (path *string, fileName *string, err error)
 }
 
-//wails:ignore
 func (d *Drive) UseHTTP(c *infra.Client) {
 	d.http = c
 }
 
-//wails:ignore
 func (d *Drive) UseFS(fs *platform.FS) {
 	d.fs = fs
 }
 
-//wails:ignore
 func (d *Drive) UseLog(log *infra.Log) {
 	d.log = log
 }
 
 // UseAppData sets where download spools live. Spools left by a previous
 // process have no transfer to resume them, so they are removed here.
-//
-//wails:ignore
 func (d *Drive) UseAppData(data *appdata.Store) {
 	d.appData = data
 	d.sweepDownloadSpools()
 }
 
-//wails:ignore
 func (d *Drive) UsePathSelector(paths PathSelector) {
 	d.paths = paths
 }
 
-//wails:ignore
 func (d *Drive) UseFixInspection(fn func([]string)) {
 	d.inspectAddedMods = fn
 }

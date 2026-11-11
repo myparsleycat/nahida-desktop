@@ -20,7 +20,7 @@ import (
 )
 
 // The renderer keys its launch error messages off these literals; keep them in sync with
-// frontend/src/hooks/use-launch-guard.tsx.
+// internal/ui/xxmi_launch.go.
 var (
 	errPlatformNotFound      = errors.New("XXMI_PLATFORM_NOT_FOUND")
 	errPlatformGameNotFound  = errors.New("XXMI_PLATFORM_GAME_NOT_FOUND")

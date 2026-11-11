@@ -33,17 +33,17 @@ func (rt *runtime) runDeepLinkDownload(ctx context.Context, download deepLinkDow
 		})
 		var redemptionErr *drive.ModTicketRedemptionError
 		if errors.As(err, &redemptionErr) {
-			emitAppEvent("fn:toast", "다운로드 티켓을 사용할 수 없습니다", map[string]any{
+			rt.emit("fn:toast", "다운로드 티켓을 사용할 수 없습니다", map[string]any{
 				"description": "웹에서 다시 다운로드를 요청해 주세요",
 			})
 			return
 		}
-		emitAppEvent("fn:toast", "다운로드를 시작하지 못했습니다", map[string]any{"description": download.Name})
+		rt.emit("fn:toast", "다운로드를 시작하지 못했습니다", map[string]any{"description": download.Name})
 	case status == "unauthorized":
-		emitAppEvent("fn:toast", "로그인이 필요합니다", map[string]any{"description": download.Name})
-		emitAppEvent("fn:navi", "/auth")
+		rt.emit("fn:toast", "로그인이 필요합니다", map[string]any{"description": download.Name})
+		rt.emit("fn:navi", "/auth")
 	case status == "canceled":
-		emitAppEvent("fn:toast", "다운로드가 취소되었습니다", map[string]any{"description": download.Name})
+		rt.emit("fn:toast", "다운로드가 취소되었습니다", map[string]any{"description": download.Name})
 	}
 }
 

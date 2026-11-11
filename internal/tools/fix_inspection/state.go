@@ -145,7 +145,6 @@ func (t *Service) carryFixInspectionDismissal(key string, dismissed *FixInspecti
 	}
 }
 
-//wails:ignore
 func (t *Service) QueueFixInspections(paths []string) {
 	targets := lo.UniqBy(
 		lo.Filter(paths, func(path string, _ int) bool { return strings.TrimSpace(path) != "" }),

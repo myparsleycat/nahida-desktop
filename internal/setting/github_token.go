@@ -106,8 +106,6 @@ func (s *Setting) SetGitHubToken(ctx context.Context, input GitHubTokenInput) (i
 }
 
 // LoadGitHubToken returns the saved token for runtime startup.
-//
-//wails:ignore
 func (s *Setting) LoadGitHubToken(ctx context.Context) (string, error) {
 	s.githubTokenMu.Lock()
 	defer s.githubTokenMu.Unlock()

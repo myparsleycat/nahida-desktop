@@ -183,22 +183,16 @@ func (m *Mod) reportMetadataCleanup(err error) {
 	})
 }
 
-//wails:ignore
 func (m *Mod) UseClient(client *db.Client) { m.client = client }
 
-//wails:ignore
 func (m *Mod) UseAppData(data *appdata.Store) { m.appData = data }
 
-//wails:ignore
 func (m *Mod) UseSettings(settings Settings) { m.settings = settings }
 
-//wails:ignore
 func (m *Mod) UseFocus(fn func()) { m.paths.focus = fn }
 
-//wails:ignore
 func (m *Mod) UseWindowReady(fn func(context.Context) (bool, error)) { m.paths.waitReady = fn }
 
-//wails:ignore
 func (m *Mod) UseFixInspection(fn func([]string)) { m.inspectAddedMods = fn }
 
 func (m *Mod) queueFixInspection(paths ...string) {
@@ -209,8 +203,6 @@ func (m *Mod) queueFixInspection(paths ...string) {
 
 // SelectDownloadPath is Electron desktop.lib.pathSelector.getSelectedPathWithModeModal
 // for Drive downloads. A nil path means the user cancelled.
-//
-//wails:ignore
 func (m *Mod) SelectDownloadPath(
 	ctx context.Context,
 	suggestedName, source string,
@@ -615,8 +607,6 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 // SyncImporterModFolders points every XXMI game at its importer's current Mods folder. A game whose importer
 // is not enabled keeps its last folder, and one whose folder another game already uses is left alone. A game
 // without an importer whose folder is an importer's Mods folder takes that importer, unless another game has it.
-//
-//wails:ignore
 func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 	client, err := m.requireClient()
 	if err != nil {
@@ -711,8 +701,6 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 
 // InvalidateImporterGames makes the next listing of every XXMI game search its folders again. An importer change,
 // such as a relinked Mods folder, can replace what the folder holds while its path stays the same.
-//
-//wails:ignore
 func (m *Mod) InvalidateImporterGames(ctx context.Context) error {
 	client, err := m.requireClient()
 	if err != nil {
@@ -1019,8 +1007,6 @@ func (m *Mod) GetMods(ctx context.Context, groupPath string) (FolderGroup, error
 
 // GetModsWithPreview is GetMods with the group's own preview, which the renderer reads from the group
 // listing instead.
-//
-//wails:ignore
 func (m *Mod) GetModsWithPreview(ctx context.Context, groupPath string) (FolderGroup, error) {
 	group, err := m.GetMods(ctx, groupPath)
 	if err != nil || group.Preview != nil {

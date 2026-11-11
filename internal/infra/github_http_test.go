@@ -13,8 +13,6 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
-
-	wailsupdater "github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 const githubTestReleases = "https://api.github.com/repos/test/project/releases"
@@ -523,34 +521,6 @@ func TestGitHubLimitSurvivesPersistenceFailure(t *testing.T) {
 	}
 	if requests.Load() != 1 {
 		t.Fatalf("requests=%d", requests.Load())
-	}
-}
-
-func TestGitHubProviderSharesTransportLimit(t *testing.T) {
-	t.Parallel()
-	rate := NewGitHubRateCoordinator()
-	t.Cleanup(rate.Close)
-	var requests atomic.Int32
-	httpClient := NewClientWithOptions(
-		ClientOptions{
-			HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-				requests.Add(1)
-				return githubTestResponse(request, 403, githubTestHeaders(0, time.Now().Add(time.Hour)), `{}`), nil
-			})},
-		},
-	)
-	provider, err := newGitHubUpdateProvider(false, httpClient, rate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = provider.Check(t.Context(), wailsupdater.CheckRequest{CurrentVersion: "1.0.0"})
-	if err == nil {
-		t.Fatal("provider ignored rate limit")
-	}
-	_, err = githubTestGet(t.Context(), rate.HTTPClient(httpClient.HTTPClient()), githubTestReleases)
-	var limited *GitHubRateError
-	if !errors.As(err, &limited) || requests.Load() != 1 {
-		t.Fatalf("shared err=%v requests=%d", err, requests.Load())
 	}
 }
 

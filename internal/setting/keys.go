@@ -1,6 +1,6 @@
 package setting
 
-// Public keys are the API contract with the frontend (frontend/src/shared/settings.ts).
+// Public keys are the contract with internal/ui and with values stored by earlier releases.
 // Storage keys follow a single convention, {scope}_{snake_case}, derived from the
 // public key. Electron keys that differ are migrated once during initialization.
 

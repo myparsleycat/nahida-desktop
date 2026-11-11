@@ -8,17 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-
 	"nahida.live/desktop/internal/infra"
 )
-
-type modelViewerOwnerWindow struct {
-	application.Window
-	id uint
-}
-
-func (w modelViewerOwnerWindow) ID() uint { return w.id }
 
 type viewerMarkerWriter struct {
 	marker string
@@ -32,35 +23,7 @@ func (w viewerMarkerWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestModelViewerWindowCleanupIsOwnedAndIdempotent(t *testing.T) {
-	protocol := infra.NewProtocol()
-	service := NewWithOptions(Options{Protocol: protocol})
-	ids := make([]string, 3)
-	for i := range ids {
-		ids[i] = protocol.CreateMemorySession()
-		service.modelViewerSessions[ids[i]] = &modelViewerSession{windowID: uint(i), modPath: `C:\SameFolder`}
-	}
-	service.CleanupModelViewerWindow(1)
-	service.CleanupModelViewerWindow(1)
-	if removed, err := service.CleanupModelViewer(context.Background(), ids[1]); err != nil || removed {
-		t.Fatalf("duplicate cleanup = %v, %v", removed, err)
-	}
-	if len(service.modelViewerSessions) != 2 || service.modelViewerSessions[ids[0]] == nil ||
-		service.modelViewerSessions[ids[2]] == nil {
-		t.Fatal("closing window released another window's payload")
-	}
-	for _, id := range []string{ids[0], ids[2]} {
-		if removed, err := service.CleanupModelViewer(context.Background(), id); err != nil || !removed {
-			t.Fatalf("cleanup %s: %v %v", id, removed, err)
-		}
-	}
-	service.CleanupModelViewerWindow(2)
-	if len(service.modelViewerSessions) != 0 {
-		t.Fatal("sessions remain")
-	}
-}
-
-func TestLoadModViewerRecordsOwnerAndPreviewAndRejectsClosedOwner(t *testing.T) {
+func TestLoadModViewerRecordsPreviewAndStopsAtShutdown(t *testing.T) {
 	dir := t.TempDir()
 	fixture := loadViewerFixture(t, dir, `[TextureOverrideBody]
 ib = ResourceBodyIB
@@ -75,38 +38,32 @@ drawindexed = 3, 0, 0
 		}
 		return &preview
 	}
-	ctx := context.WithValue(context.Background(), application.WindowKey, modelViewerOwnerWindow{id: 42})
-	result, err := fixture.service.LoadModViewer(ctx, dir)
+	result, err := fixture.service.LoadModViewer(context.Background(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.PreviewPath == nil || *result.PreviewPath != preview ||
-		fixture.service.modelViewerSessions[result.MemorySessionID].windowID != 42 {
-		t.Fatal("transport lost preview or owner")
+	if result.PreviewPath == nil || *result.PreviewPath != preview {
+		t.Fatal("transport lost its preview")
 	}
-	fixture.service.CleanupModelViewerWindow(42)
-	if fixture.service.modelViewerSessions[fixture.result.MemorySessionID] == nil {
-		t.Fatal("unowned session was released")
-	}
-	// Closing the window during discovery cancels the load before texture preparation.
+
+	// Shutdown during discovery cancels the load before texture preparation.
 	var texturesPrepared atomic.Bool
 	fixture.service.log = infra.NewLogWithOptions(infra.LogOptions{
 		Dev:         true,
 		DisableFile: true,
 		Writer:      viewerMarkerWriter{marker: "Texture preparation completed", seen: &texturesPrepared},
 	})
-	fixture.service.findModelViewerPreview = func(string) *string { fixture.service.CleanupModelViewerWindow(43); return nil }
-	closedCtx := context.WithValue(context.Background(), application.WindowKey, modelViewerOwnerWindow{id: 43})
-	if _, err := fixture.service.LoadModViewer(closedCtx, dir); !errors.Is(err, context.Canceled) {
-		t.Fatalf("late load = %v", err)
+	fixture.service.findModelViewerPreview = func(string) *string { _ = fixture.service.Shutdown(); return nil }
+	if _, err := fixture.service.LoadModViewer(context.Background(), dir); !errors.Is(err, context.Canceled) {
+		t.Fatalf("load during shutdown = %v", err)
 	}
 	if texturesPrepared.Load() {
-		t.Fatal("load kept preparing textures after its window closed")
+		t.Fatal("load kept preparing textures after shutdown")
 	}
 	if len(fixture.service.modelViewerLoads) != 0 {
 		t.Fatalf("finished loads remain registered: %v", fixture.service.modelViewerLoads)
 	}
-	if len(fixture.service.modelViewerSessions) != 1 {
-		t.Fatalf("late load registered a session: %v", fixture.service.modelViewerSessions)
+	if len(fixture.service.modelViewerSessions) != 0 {
+		t.Fatalf("sessions remain after shutdown: %v", fixture.service.modelViewerSessions)
 	}
 }

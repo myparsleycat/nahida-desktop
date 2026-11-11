@@ -7,7 +7,7 @@ import (
 
 const startupErrorTitle = "Nahida Desktop - Startup Error"
 
-// ShowStartupError displays an error before the Wails runtime is available.
+// ShowStartupError displays an error before the UI starts.
 func ShowStartupError(err error) error {
 	if err == nil {
 		return nil
@@ -15,7 +15,7 @@ func ShowStartupError(err error) error {
 	return showStartupError(startupErrorTitle, startupErrorMessage(err))
 }
 
-// ConfirmStartup asks a yes/no question before the Wails runtime is available and reports
+// ConfirmStartup asks a yes/no question before the UI starts and reports
 // whether the user chose yes.
 func ConfirmStartup(message string) (bool, error) {
 	return confirmStartup("Nahida Desktop", strings.ReplaceAll(message, "\x00", "�"))

@@ -56,9 +56,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install pinned Task
         shell: pwsh
@@ -71,10 +69,6 @@ jobs:
       - name: Install release dependencies
         shell: pwsh
         run: pnpm install --frozen-lockfile
-
-      - name: Install frontend dependencies
-        shell: pwsh
-        run: pnpm --dir frontend install --frozen-lockfile
 
       - name: Validate desktop
         uses: ./.github/actions/validate-desktop

@@ -35,10 +35,13 @@ var (
 
 type Options struct {
 	Log *infra.Log
+	// HTTP fetches Iconify icons.
+	HTTP *infra.Client
 }
 
 type MenuMaker struct {
-	log *infra.Log
+	log  *infra.Log
+	http *infra.Client
 }
 
 type textEncoding struct {
@@ -56,7 +59,7 @@ type promotion struct {
 func New() *MenuMaker { return NewWithOptions(Options{}) }
 
 func NewWithOptions(opts Options) *MenuMaker {
-	return &MenuMaker{log: opts.Log}
+	return &MenuMaker{log: opts.Log, http: opts.HTTP}
 }
 
 func (m *MenuMaker) ScanFolder(ctx context.Context, rootPath string, includeTXT bool) (MenuMakerScanResult, error) {

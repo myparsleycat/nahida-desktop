@@ -42,6 +42,11 @@ func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (ModelViewerT
 	return t.modelViewer.LoadModViewer(ctx, modPath)
 }
 
+// ReadModelViewerResource returns the bytes behind a URL of a transport LoadModViewer returned.
+func (t *Tools) ReadModelViewerResource(ctx context.Context, url string) ([]byte, error) {
+	return t.modelViewer.ReadResource(ctx, url)
+}
+
 func (t *Tools) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.modelViewer.LoadModGridPreview(ctx, modPath)
 }
@@ -62,18 +67,9 @@ func (t *Tools) GetModelViewerIneffectiveValues(
 	return t.modelViewer.GetModelViewerIneffectiveValues(ctx, sessionID, form, state)
 }
 
-// CleanupModelViewerWindow also fences loads completing after the native window closes.
-//
-//wails:ignore
-func (t *Tools) CleanupModelViewerWindow(windowID uint) {
-	t.modelViewer.CleanupModelViewerWindow(windowID)
-}
-
 // CleanupStaleModelViewerDirs removes directories left by the Electron static
 // GLB viewer. The Go viewer no longer creates them, but existing installations
 // can retain old directories in the Windows temp root.
-//
-//wails:ignore
 func (t *Tools) CleanupStaleModelViewerDirs(ctx context.Context) error {
 	return t.modelViewer.CleanupStaleModelViewerDirs(ctx)
 }

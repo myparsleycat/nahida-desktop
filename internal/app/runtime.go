@@ -3,10 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"strings"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/appdata"
@@ -53,6 +49,7 @@ type runtime struct {
 	drive             *drive.Drive
 	transfer          *transfer.Transfer
 	gamebanana        *gamebanana.GameBanana
+	gameBananaLogin   *gameBananaLogin
 	mod               *mod.Mod
 	modRuntime        *modruntime.Manager
 	xxmi              *xxmi.XXMI
@@ -66,17 +63,20 @@ type runtime struct {
 	appDataAccess     appDataAccess
 	screen            *platform.Screen
 	window            *Window
-	gameBananaLogin   *gameBananaLogin
-	notifications     *notifications.NotificationService
+	emit              func(name string, data ...any)
+	notify            func(id, title, body string) error
 	updateCheck       trayUpdateCheck
 }
 
-func newRuntime() *runtime {
+func newRuntime(host uiHost) *runtime {
+	if host.emit == nil {
+		host.emit = func(string, ...any) {}
+	}
 	log := infra.NewLogWithOptions(infra.LogOptions{Dev: !platform.Packaged()})
 	diskio.UseLog(log)
 	httpClient := infra.NewClient()
 	httpClient.UseLog(log)
-	shell := platform.NewShell(newWailsShellOptions())
+	shell := platform.NewShell(host.shell)
 	shell.UseDiagnostic(func(err error, stage string, fields map[string]any) {
 		_ = infra.ReportError(
 			log,
@@ -96,7 +96,7 @@ func newRuntime() *runtime {
 	})
 	elevatedHelper := newElevatedLifecycle(elevatedClient, func(err error, stage string) {
 		reportElevatedHelperError(log, err, stage)
-	}, emitAppEvent)
+	}, host.emit)
 	elevatedClient.UseDisconnect(elevatedHelper.publishStatus)
 	elevatedFiles := elevatedFileGateway{lifecycle: elevatedHelper, client: elevatedClient}
 	input.UseElevatedInput(elevatedClient)
@@ -130,8 +130,7 @@ func newRuntime() *runtime {
 	})
 	native := platform.NewNative()
 	window := NewWindow()
-	notifier := notifications.New()
-	eventEmit := emitAppEvent
+	eventEmit := host.emit
 	transferService := transfer.NewWithOptions(transfer.Options{
 		Log: log,
 		ReportFailure: func(err error, fields map[string]any) error {
@@ -156,7 +155,7 @@ func newRuntime() *runtime {
 	protocolService.Configure(httpClient, log)
 	githubRate := infra.NewGitHubRateCoordinator()
 	githubRate.UseLog(log)
-	githubRate.OnTokenRejected(func() { emitAppEvent("github:token-rejected") })
+	githubRate.OnTokenRejected(func() { eventEmit("github:token-rejected") })
 	githubClient := github.New(github.Options{HTTP: httpClient, Download: download, Rate: githubRate, Log: log})
 	var xxmiService *xxmi.XXMI
 	reshadeService := reshade.New(reshade.Options{
@@ -182,7 +181,7 @@ func newRuntime() *runtime {
 		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
 		ReShade:  reshadeService,
 	})
-	dialog := platform.NewDialog(newWailsDialogBackend())
+	dialog := platform.NewDialog(host.dialog)
 	login := newGameBananaLogin()
 	gameBananaService := gamebanana.NewWithOptions(gamebanana.Options{
 		HTTP:              httpClient,
@@ -228,6 +227,7 @@ func newRuntime() *runtime {
 			HTTP:   httpClient,
 			Log:    log,
 			Shell:  shell,
+			Emit:   func(name string, data any) { eventEmit(name, data) },
 		}),
 		setting: settings,
 		drive: drive.NewWithOptions(drive.Options{
@@ -241,12 +241,13 @@ func newRuntime() *runtime {
 			UploadSettings: settings,
 			EventEmit:      eventEmit,
 		}),
-		transfer:   transferService,
-		gamebanana: gameBananaService,
-		mod:        modService,
-		modRuntime: modRuntime,
-		xxmi:       xxmiService,
-		reshade:    reshadeService,
+		transfer:        transferService,
+		gamebanana:      gameBananaService,
+		gameBananaLogin: login,
+		mod:             modService,
+		modRuntime:      modRuntime,
+		xxmi:            xxmiService,
+		reshade:         reshadeService,
 		tools: tools.NewWithOptions(tools.Options{
 			FindModelViewerPreview: modService.FindModelViewerPreview,
 			Log:                    log,
@@ -264,9 +265,10 @@ func newRuntime() *runtime {
 			Runtimes:               modRuntime,
 			Elevated:               elevatedFiles,
 			Notify: func(title, body string) error {
-				return notifier.SendNotification(notifications.NotificationOptions{
-					ID: "wuwa-mod-fixer-updated", Title: title, Body: body,
-				})
+				if host.notify == nil {
+					return nil
+				}
+				return host.notify("wuwa-mod-fixer-updated", title, body)
 			},
 		}),
 		dialog:            dialog,
@@ -280,10 +282,10 @@ func newRuntime() *runtime {
 			files:   elevatedFiles,
 			locale:  platform.SystemLocale,
 		},
-		screen:          screen,
-		window:          window,
-		gameBananaLogin: login,
-		notifications:   notifier,
+		screen: screen,
+		window: window,
+		emit:   host.emit,
+		notify: host.notify,
 	}
 	rt.xxmi.UseImportersChanged(func(ctx context.Context) {
 		if err := errors.Join(rt.mod.SyncImporterModFolders(ctx), rt.mod.InvalidateImporterGames(ctx)); err != nil {
@@ -380,79 +382,13 @@ func newRuntime() *runtime {
 	return rt
 }
 
-func emitAppEvent(name string, data ...any) {
-	if app := application.Get(); app != nil {
-		app.Event.Emit(name, data...)
-	}
-}
-
-func waitForAllMethods(string) bool { return true }
-
-func waitForShellTrash(name string) bool { return name == "Trash" }
-
-func (rt *runtime) services() []application.Service {
-	return []application.Service{
-		newGuardedService(rt, "Agent", rt.agent, waitForAllMethods),
-		newLoggedService(rt, "Auth", rt.auth),
-		newGuardedService(rt, "Backup", rt.backup, waitForAllMethods),
-		newLoggedService(rt, "CDNTrace", rt.cdnTrace),
-		newLoggedService(rt, "Dialog", rt.dialog),
-		newGuardedService(rt, "Drive", rt.drive, waitForAllMethods),
-		newLoggedService(rt, "Feedback", rt.feedback),
-		newGuardedService(rt, "FS", rt.fs, waitForAllMethods),
-		newLoggedService(rt, "GameBanana", rt.gamebanana),
-		newLoggedService(rt, "Input", rt.input),
-		application.NewService(rt.log),
-		newGuardedService(rt, "Mod", rt.mod, waitForAllMethods),
-		newGuardedService(rt, "ModRuntime", rt.modRuntime, waitForAllMethods),
-		application.NewService(rt.notifications),
-		newLoggedServiceWithOptions(rt, "Protocol", rt.protocol, application.ServiceOptions{Route: "/protocol"}),
-		newGuardedService(rt, "ReShade", rt.reshade, waitForAllMethods),
-		newLoggedService(rt, "Screen", rt.screen),
-		newGuardedService(rt, "Setting", rt.setting, isSettingWrite),
-		newGuardedService(rt, "Shell", rt.shell, waitForShellTrash),
-		newGuardedService(rt, "Tools", rt.tools, waitForAllMethods),
-		newGuardedService(rt, "Transfer", rt.transfer, waitForAllMethods),
-		newLoggedService(rt, "Updater", rt.updater),
-		newLoggedService(rt, "Window", rt.window),
-		newGuardedService(rt, "XXMI", rt.xxmi, waitForAllMethods),
-	}
-}
-
-func isSettingWrite(name string) bool {
-	return strings.HasPrefix(name, "Set") || name == "AdvancedSet"
-}
-
-func newGuardedService[T any](
-	rt *runtime,
-	name string,
-	instance *T,
-	waitForMaintenance func(string) bool,
-) application.Service {
-	return newLoggedServiceWithOptions(rt, name, instance, application.ServiceOptions{
-		BeforeCall: maintenanceGuard(rt.startup, waitForMaintenance),
-	})
-}
-
-func maintenanceGuard(startup *startupWork, waitForMaintenance func(string) bool) func(context.Context, string) error {
-	return func(ctx context.Context, method string) error {
-		if !waitForMaintenance(method) {
-			return nil
+// startServices runs the Start methods of feature services. The UI host calls it once with the application
+// context, after the database is open and before any window exists.
+func (rt *runtime) startServices(ctx context.Context) error {
+	for _, start := range []func(context.Context) error{rt.auth.Start, rt.backup.Start, rt.transfer.Start, rt.xxmi.Start} {
+		if err := start(ctx); err != nil {
+			return err
 		}
-		return startup.wait(ctx)
 	}
-}
-
-func newLoggedService[T any](rt *runtime, name string, instance *T) application.Service {
-	return newLoggedServiceWithOptions(rt, name, instance, application.ServiceOptions{})
-}
-
-func newLoggedServiceWithOptions[T any](
-	rt *runtime,
-	name string,
-	instance *T,
-	options application.ServiceOptions,
-) application.Service {
-	options.MarshalError = rt.log.ServiceErrorMarshaler(name)
-	return application.NewServiceWithOptions(instance, options)
+	return nil
 }

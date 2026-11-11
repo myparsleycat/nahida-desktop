@@ -370,7 +370,6 @@ func (t *Service) TouchProfileAnalyzeComponents(
 	return result, nil
 }
 
-//wails:ignore
 func (t *Service) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (TouchDraft, error) {
 	session, err := t.lockTouchSession(draft.SessionID)
 	if err != nil {
@@ -397,7 +396,6 @@ func (t *Service) TouchProfileSaveDraft(ctx context.Context, draft TouchDraft) (
 	return next, nil
 }
 
-//wails:ignore
 func (t *Service) TouchProfileUpdateZoneSettings(
 	ctx context.Context,
 	input TouchProfileUpdateZoneSettingsInput,
@@ -623,8 +621,6 @@ func (t *Service) TouchProfileCloseSession(ctx context.Context, sessionID string
 
 // TouchProfileSessionPaths returns the mod folders that applying or regenerating the session changes:
 // the analyzed source and, once applied, the generated output and the disabled source.
-//
-//wails:ignore
 func (t *Service) TouchProfileSessionPaths(sessionID string) ([]string, error) {
 	session, err := t.lockTouchSession(sessionID)
 	if err != nil {

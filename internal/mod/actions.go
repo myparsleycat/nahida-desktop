@@ -110,8 +110,6 @@ func hasOwnShaderFixes(folderPath string) bool {
 
 // Disable is an internal service boundary used by backend feature services
 // that create an enabled replacement before retiring the source mod.
-//
-//wails:ignore
 func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
@@ -133,8 +131,6 @@ func (m *Mod) Disable(ctx context.Context, modPath string) (string, error) {
 
 // DisableUnmanaged is the internal counterpart for tools that accept an
 // explicitly selected folder outside the configured game roots.
-//
-//wails:ignore
 func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 
@@ -143,8 +139,6 @@ func (m *Mod) DisableUnmanaged(ctx context.Context, modPath string) (string, err
 }
 
 // Enable is the inverse internal boundary used by generated-mod rollback.
-//
-//wails:ignore
 func (m *Mod) Enable(ctx context.Context, modPath string) (string, error) {
 	defer m.InvalidateLibraries()
 

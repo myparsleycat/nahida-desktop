@@ -170,6 +170,78 @@ func evaluateViewerTransportInForm(payload ModelViewerTransport, state map[strin
 	return evaluated
 }
 
+// ViewerMeshState is how one mesh of a transport draws in a viewer state.
+type ViewerMeshState struct {
+	Visible        bool
+	TexKey         string
+	NormalMapKey   string
+	LightMapKey    string
+	MaterialMapKey string
+	CutoutMapKey   string
+	// PositionVariant indexes the mesh's PositionVariants, or is -1 for its base positions.
+	PositionVariant int
+	// ShapeWeights holds a weight per entry of the mesh's ShapeTargets.
+	ShapeWeights []float64
+}
+
+// EvaluateViewerState resolves state over the transport's defaults and state rules, and returns the
+// resolved state with the state of each mesh in Meshes order. An empty form selects every mesh.
+func EvaluateViewerState(
+	payload ModelViewerTransport,
+	state map[string]any,
+	form string,
+) (map[string]any, []ViewerMeshState) {
+	evaluated := evaluateViewerTransportInForm(payload, state, form)
+	meshes := make([]ViewerMeshState, len(evaluated.Meshes))
+	for index, mesh := range evaluated.Meshes {
+		variant := -1
+		if mesh.PositionVariantIndex != nil {
+			variant = *mesh.PositionVariantIndex
+		}
+		meshes[index] = ViewerMeshState{
+			Visible:         mesh.Visible,
+			TexKey:          mesh.TexKey,
+			NormalMapKey:    mesh.NormalMapKey,
+			LightMapKey:     mesh.LightMapKey,
+			MaterialMapKey:  mesh.MaterialMapKey,
+			CutoutMapKey:    mesh.CutoutMapKey,
+			PositionVariant: variant,
+			ShapeWeights:    viewerShapeWeights(payload.Meshes[index].ShapeTargets, evaluated.State),
+		}
+	}
+	return evaluated.State, meshes
+}
+
+func viewerShapeWeights(targets []ModelViewerShapeTarget, state map[string]any) []float64 {
+	if len(targets) == 0 {
+		return nil
+	}
+	weights := make([]float64, len(targets))
+	for index, target := range targets {
+		current, _ := viewerEvalLookup(state, target.Var)
+		value, ok := anyToFloat(current)
+		if !ok {
+			continue
+		}
+		switch {
+		case target.Wave != nil && viewerEvalDNFSatisfied(target.Wave.When, state):
+			weights[index] = target.Wave.Amplitude*math.Sin(value*target.Wave.AngularScale) + target.Wave.Bias
+		case target.Wave != nil:
+		case target.Divisor != 0:
+			weights[index] = value / target.Divisor
+		default:
+			weights[index] = value
+		}
+	}
+	return weights
+}
+
+// ApplyViewerVariableSelection returns state with variable set to value and the menu effects that the
+// selection triggers applied.
+func ApplyViewerVariableSelection(state map[string]any, variable ModelViewerVariable, value any) map[string]any {
+	return applyViewerVariableSelection(state, variable, value)
+}
+
 func viewerFormVisible(meshForm, selected string) bool {
 	return selected == "" || meshForm == "" || meshForm == selected || strings.HasPrefix(selected, meshForm+"::")
 }

@@ -61,7 +61,6 @@ func NewWithOptions(opts Options) *Service {
 	}
 }
 
-//wails:ignore
 func (t *Service) UseAppData(data *appdata.Store) {
 	t.appData = data
 }

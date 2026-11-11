@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func restoreRelaunchHooks() {
@@ -16,14 +14,6 @@ func restoreRelaunchHooks() {
 	currentPID = os.Getpid
 	spawnRelaunchProcess = spawnDetachedRelaunch
 	relaunchParentAlive = relaunchProcessAlive
-	currentApplication = application.Get
-	waitForPendingRelaunch = waitPendingRelaunch
-	newApplication = application.New
-	quitApplication = func(app *application.App) {
-		if app != nil {
-			app.Quit()
-		}
-	}
 }
 
 func TestRelaunchChildEnvReplacesWaitPID(t *testing.T) {
@@ -94,22 +84,18 @@ func TestWaitPendingRelaunchContinuesAfterTimeout(t *testing.T) {
 	}
 }
 
-func TestWindowRestartSpawnsThenQuits(t *testing.T) {
+func TestRestartSpawnsThenQuits(t *testing.T) {
 	t.Cleanup(restoreRelaunchHooks)
 	executablePath = func() (string, error) { return `C:\nahida-desktop.exe`, nil }
 	currentPID = func() int { return 4242 }
 	var spawnedExe string
 	var spawnedPID int
 	spawnRelaunchProcess = func(exe string, pid int) error {
-		spawnedExe = exe
-		spawnedPID = pid
+		spawnedExe, spawnedPID = exe, pid
 		return nil
 	}
 	quits := 0
-	quitApplication = func(*application.App) { quits++ }
-	window := NewWindow()
-	window.app = &application.App{}
-	if err := window.Restart(); err != nil {
+	if err := restartApp(nil, func() { quits++ }); err != nil {
 		t.Fatal(err)
 	}
 	if spawnedExe != `C:\nahida-desktop.exe` || spawnedPID != 4242 {
@@ -120,51 +106,43 @@ func TestWindowRestartSpawnsThenQuits(t *testing.T) {
 	}
 }
 
-func TestWindowRestartKeepsProcessWhenSpawnFails(t *testing.T) {
+func TestRestartKeepsProcessWhenSpawnFails(t *testing.T) {
 	t.Cleanup(restoreRelaunchHooks)
 	executablePath = func() (string, error) { return `C:\nahida-desktop.exe`, nil }
 	currentPID = func() int { return 1 }
 	spawnRelaunchProcess = func(string, int) error { return errors.New("spawn blocked") }
 	quits := 0
-	quitApplication = func(*application.App) { quits++ }
-	window := NewWindow()
-	window.app = &application.App{}
-	if err := window.Restart(); err == nil || !strings.Contains(err.Error(), "restart.failed") {
-		t.Fatalf("Restart = %v", err)
+	if err := restartApp(nil, func() { quits++ }); err == nil || !strings.Contains(err.Error(), "restart.failed") {
+		t.Fatalf("restartApp = %v", err)
 	}
 	if quits != 0 {
 		t.Fatalf("quits = %d", quits)
 	}
 }
 
-func TestWindowRestartDoesNotSpawnWithoutApp(t *testing.T) {
-	t.Cleanup(restoreRelaunchHooks)
-	spawned := 0
-	spawnRelaunchProcess = func(string, int) error {
-		spawned++
-		return nil
+func TestRelaunchProcessAliveReportsCurrentProcess(t *testing.T) {
+	if !relaunchProcessAlive(os.Getpid()) {
+		t.Fatal("current process")
 	}
-	currentApplication = func() *application.App { return nil }
-	if err := NewWindow().Restart(); err == nil {
-		t.Fatal("Restart succeeded")
-	}
-	if spawned != 0 {
-		t.Fatalf("spawned = %d", spawned)
+	if relaunchProcessAlive(0) || relaunchProcessAlive(-1) {
+		t.Fatal("invalid pid")
 	}
 }
 
-func TestRunWaitsForRelaunchBeforeSingleInstance(t *testing.T) {
-	t.Cleanup(restoreRelaunchHooks)
-	var order []string
-	waitForPendingRelaunch = func() { order = append(order, "wait") }
-	newApplication = func(application.Options) *application.App {
-		order = append(order, "new")
-		return nil
+func TestRelaunchSysProcAttrDoesNotHideWindow(t *testing.T) {
+	t.Parallel()
+	attr := relaunchSysProcAttr()
+	if attr == nil {
+		t.Fatal("nil SysProcAttr")
 	}
-	if app := newLockedApplication(application.Options{}); app != nil {
-		t.Fatal("fake application")
+	if attr.HideWindow {
+		t.Fatal("HideWindow swallows the first ShowWindow")
 	}
-	if len(order) != 2 || order[0] != "wait" || order[1] != "new" {
-		t.Fatalf("order = %#v", order)
+	if attr.CreationFlags&createNoWindow != 0 {
+		t.Fatal("CREATE_NO_WINDOW")
+	}
+	want := uint32(detachedProcess | createNewProcGroup)
+	if attr.CreationFlags&want != want {
+		t.Fatalf("CreationFlags = %#x", attr.CreationFlags)
 	}
 }

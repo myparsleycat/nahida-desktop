@@ -4,111 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	wailsupdater "github.com/wailsapp/wails/v3/pkg/updater"
-	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 
 	"nahida.live/desktop/internal/db"
 )
 
 type fakeUpdaterEngine struct {
-	cfg          wailsupdater.Config
-	release      *wailsupdater.Release
+	release      *UpdateRelease
 	checkErr     error
 	downloadErr  error
 	restartErr   error
 	downloadDone func()
 	checks       int
+	includes     []bool
 	downloads    int
 	restarts     int
-	stopped      bool
 }
 
-type githubProviderTestEngine struct {
-	fakeUpdaterEngine
-	provider wailsupdater.Provider
-}
-
-func (e *githubProviderTestEngine) Check(ctx context.Context) (*wailsupdater.Release, error) {
-	return e.provider.Check(ctx, wailsupdater.CheckRequest{CurrentVersion: "1.0.0"})
-}
-
-func TestUpdaterGitHubProviderNoReleaseAndSecondaryCooldown(t *testing.T) {
-	t.Parallel()
-	for _, secondary := range []bool{false, true} {
-		t.Run(fmt.Sprintf("secondary=%t", secondary), func(t *testing.T) {
-			t.Parallel()
-			var clock atomic.Int64
-			clock.Store(time.Now().Unix())
-			now := func() time.Time { return time.Unix(clock.Load(), 0) }
-			var requests atomic.Int32
-			httpClient := NewClientWithOptions(ClientOptions{
-				Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-					n := requests.Add(1)
-					if secondary && n == 1 {
-						return githubTestResponse(
-							request,
-							403,
-							make(http.Header),
-							`{"message":"secondary rate limit"}`,
-						), nil
-					}
-					return githubTestResponse(request, 404, make(http.Header), `{}`), nil
-				}),
-			})
-			rate := NewGitHubRateCoordinator()
-			rate.now = now
-			defer rate.Close()
-			provider, err := newGitHubUpdateProvider(false, httpClient, rate)
-			if err != nil {
-				t.Fatal(err)
-			}
-			updater := &Updater{
-				engine: &githubProviderTestEngine{provider: provider}, rate: rate,
-				settings: fakeUpdaterSettings{mode: "notify"},
-			}
-			for range 2 {
-				err := updater.CheckForUpdates(t.Context(), true)
-				if (err != nil) != secondary {
-					t.Fatalf("secondary=%t check error=%v", secondary, err)
-				}
-				status, err := updater.GetStatus(t.Context())
-				if err != nil || status.UpdateAvailable || status.UpdateDownloaded {
-					t.Fatalf("failed or empty check status=%+v err=%v", status, err)
-				}
-			}
-			if requests.Load() != 1 {
-				t.Fatalf("repeated check sent %d requests", requests.Load())
-			}
-			clock.Add(61)
-			if err := updater.CheckForUpdates(t.Context(), true); err != nil || requests.Load() != 2 {
-				t.Fatalf("cooldown recovery err=%v requests=%d", err, requests.Load())
-			}
-		})
-	}
-}
-
-func (f *fakeUpdaterEngine) Init(cfg wailsupdater.Config) error {
-	f.cfg = cfg
-	return nil
-}
-
-func (f *fakeUpdaterEngine) Check(context.Context) (*wailsupdater.Release, error) {
+func (f *fakeUpdaterEngine) Check(_ context.Context, includePrerelease bool) (*UpdateRelease, error) {
 	f.checks++
+	f.includes = append(f.includes, includePrerelease)
 	return f.release, f.checkErr
 }
 
-func (f *fakeUpdaterEngine) DownloadAndInstall(context.Context) error {
+func (f *fakeUpdaterEngine) DownloadAndInstall(context.Context, func(int64, int64)) error {
 	f.downloads++
 	if f.downloadDone != nil {
 		f.downloadDone()
@@ -120,8 +47,6 @@ func (f *fakeUpdaterEngine) Restart(context.Context) error {
 	f.restarts++
 	return f.restartErr
 }
-
-func (f *fakeUpdaterEngine) StopPeriodicCheck() { f.stopped = true }
 
 type fakeUpdaterSettings struct {
 	mode              string
@@ -138,178 +63,33 @@ func (s fakeUpdaterSettings) GetIncludePrerelease(context.Context) (bool, error)
 	return s.includePrerelease, s.includeErr
 }
 
-func TestGitHubProviderConfig(t *testing.T) {
+func TestUpdaterChecksWithIncludePrereleaseSetting(t *testing.T) {
 	t.Parallel()
-	off := githubProviderConfig(false)
-	if off.Repository != updaterRepository {
-		t.Fatalf("Repository = %q, want %q", off.Repository, updaterRepository)
-	}
-	if off.ChecksumAsset != updaterChecksumAsset {
-		t.Fatalf("ChecksumAsset = %q, want %q", off.ChecksumAsset, updaterChecksumAsset)
-	}
-	if off.Prerelease {
-		t.Fatal("Prerelease = true for the stable source")
-	}
-	if !githubProviderConfig(true).Prerelease {
-		t.Fatal("Prerelease = false for the pre-release source")
-	}
-}
-
-func TestConfigureDefaultGitHubChecksumAsset(t *testing.T) {
-	t.Parallel()
-	engine := &fakeUpdaterEngine{}
-	u := NewUpdater()
-	if err := u.Configure(UpdaterOptions{Engine: engine}); err != nil {
-		t.Fatalf("Configure: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := u.ServiceShutdown(); err != nil {
-			t.Errorf("ServiceShutdown: %v", err)
+	for _, include := range []bool{false, true} {
+		engine := &fakeUpdaterEngine{}
+		u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "notify", includePrerelease: include}}
+		if err := u.CheckForUpdates(context.Background(), true); err != nil {
+			t.Fatalf("include=%t: %v", include, err)
 		}
-	})
-	if engine.cfg.Window != wailsupdater.WindowNone {
-		t.Fatalf("Window = %#v, want WindowNone", engine.cfg.Window)
+		if !slices.Equal(engine.includes, []bool{include}) {
+			t.Fatalf("include=%t: engine checks = %v", include, engine.includes)
+		}
 	}
-	if len(engine.cfg.Providers) != 1 {
-		t.Fatalf("Providers = %d, want 1", len(engine.cfg.Providers))
-	}
-	wrapper, ok := engine.cfg.Providers[0].(*includePrereleaseProvider)
-	if !ok {
-		t.Fatalf("provider type = %T, want *includePrereleaseProvider", engine.cfg.Providers[0])
-	}
-	assertGitHubUpdateProvider(t, wrapper.stable, false)
-	assertGitHubUpdateProvider(t, wrapper.prerelease, true)
-}
 
-func assertGitHubUpdateProvider(t *testing.T, provider wailsupdater.Provider, prerelease bool) {
-	t.Helper()
-	github, ok := provider.(*githubprovider.Provider)
-	if !ok {
-		t.Fatalf("provider type = %T, want *github.Provider", provider)
-	}
-	value := reflect.ValueOf(github).Elem()
-	cfg := value.FieldByName("cfg")
-	if got := cfg.FieldByName("ChecksumAsset").String(); got != updaterChecksumAsset {
-		t.Fatalf("ChecksumAsset = %q, want %q", got, updaterChecksumAsset)
-	}
-	if got := cfg.FieldByName("Prerelease").Bool(); got != prerelease {
-		t.Fatalf("Prerelease = %v, want %v", got, prerelease)
-	}
-	client := value.FieldByName("client")
-	if client.IsNil() {
-		t.Fatal("default GitHub provider is missing an HTTP client")
-	}
-	transport := client.Elem().FieldByName("Transport")
-	if !transport.IsNil() && transport.Elem().Type() == reflect.TypeOf(unconfiguredHTTPTransport{}) {
-		t.Fatal("default GitHub provider used unconfigured transport")
-	}
-}
-
-func TestPrereleaseChannelFollowsSettingNotVersion(t *testing.T) {
-	t.Parallel()
-	for _, version := range []string{"3.0.0-beta.1", "3.0.0-rc.1", "3.0.0"} {
-		t.Run(version, func(t *testing.T) {
-			t.Parallel()
-			engine := &fakeUpdaterEngine{}
-			u := NewUpdater()
-			if err := u.Configure(UpdaterOptions{Engine: engine, Version: version}); err != nil {
-				t.Fatalf("Configure: %v", err)
-			}
-			t.Cleanup(func() {
-				if err := u.ServiceShutdown(); err != nil {
-					t.Errorf("ServiceShutdown: %v", err)
-				}
-			})
-			wrapper, ok := engine.cfg.Providers[0].(*includePrereleaseProvider)
-			if !ok {
-				t.Fatalf("provider type = %T", engine.cfg.Providers[0])
-			}
-			assertGitHubUpdateProvider(t, wrapper.stable, false)
-			assertGitHubUpdateProvider(t, wrapper.prerelease, true)
-		})
-	}
-}
-
-type recordingUpdateProvider struct {
-	checks int
-}
-
-func (p *recordingUpdateProvider) Name() string { return "recording" }
-
-func (p *recordingUpdateProvider) Check(context.Context, wailsupdater.CheckRequest) (*wailsupdater.Release, error) {
-	p.checks++
-	return &wailsupdater.Release{Version: "1.0.0"}, nil
-}
-
-func (p *recordingUpdateProvider) Download(
-	context.Context,
-	*wailsupdater.Release,
-	io.Writer,
-	func(int64, int64),
-) error {
-	return nil
-}
-
-func TestIncludePrereleaseProviderSelectsSource(t *testing.T) {
-	t.Parallel()
-	stable := &recordingUpdateProvider{}
-	prerelease := &recordingUpdateProvider{}
-	include := false
-	provider := &includePrereleaseProvider{
-		stable:     stable,
-		prerelease: prerelease,
-		include:    func(context.Context) (bool, error) { return include, nil },
-	}
-	if _, err := provider.Check(context.Background(), wailsupdater.CheckRequest{}); err != nil {
-		t.Fatalf("stable check: %v", err)
-	}
-	include = true
-	if _, err := provider.Check(context.Background(), wailsupdater.CheckRequest{}); err != nil {
-		t.Fatalf("pre-release check: %v", err)
-	}
-	if stable.checks != 1 || prerelease.checks != 1 {
-		t.Fatalf("stable checks=%d prerelease checks=%d, want 1/1", stable.checks, prerelease.checks)
-	}
 	readErr := errors.New("read setting")
-	provider.include = func(context.Context) (bool, error) { return false, readErr }
-	if _, err := provider.Check(context.Background(), wailsupdater.CheckRequest{}); !errors.Is(err, readErr) {
+	engine := &fakeUpdaterEngine{}
+	u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "notify", includeErr: readErr}}
+	if err := u.CheckForUpdates(context.Background(), true); !errors.Is(err, readErr) {
 		t.Fatalf("check error = %v, want %v", err, readErr)
 	}
-	if stable.checks != 1 || prerelease.checks != 1 {
-		t.Fatalf("failed read called a source: stable=%d prerelease=%d", stable.checks, prerelease.checks)
+	status, _ := u.GetStatus(context.Background())
+	if engine.checks != 0 || status.IsChecking {
+		t.Fatalf("failed setting read checks=%d status=%#v", engine.checks, status)
 	}
 }
-
-func TestUpdaterDefaultProviderUsesApplicationTransport(t *testing.T) {
-	var requests []string
-	httpClient := NewClientWithOptions(
-		ClientOptions{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			requests = append(requests, r.URL.String())
-			return nil, errors.New("proxy blocked test request")
-		})},
-	)
-	engine := &fakeUpdaterEngine{}
-	updater := NewUpdater()
-	if err := updater.Configure(UpdaterOptions{Engine: engine, HTTP: httpClient}); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = updater.ServiceShutdown() }()
-	provider := engine.cfg.Providers[0]
-	if _, err := provider.Check(context.Background(), wailsupdater.CheckRequest{CurrentVersion: "1.0.0"}); err == nil {
-		t.Fatal("release check bypassed transport")
-	}
-	release := &wailsupdater.Release{Metadata: map[string]any{"github.asset.url": "https://artifact.invalid/app.exe"}}
-	if err := provider.Download(context.Background(), release, io.Discard, func(int64, int64) {}); err == nil {
-		t.Fatal("download bypassed transport")
-	}
-	if len(requests) != 2 || requests[1] != "https://artifact.invalid/app.exe" {
-		t.Fatalf("requests=%v", requests)
-	}
-}
-
 func TestUpdaterNotifyFlow(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3", Notes: "Changes"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "1.2.3", Notes: "Changes"}}
 	var eventMu sync.Mutex
 	events := make([]string, 0)
 	u := &Updater{
@@ -337,7 +117,7 @@ func TestUpdaterNotifyFlow(t *testing.T) {
 		t.Fatalf("notify mode downloads = %d", engine.downloads)
 	}
 
-	engine.release = &wailsupdater.Release{Version: "1.2.4", Notes: "Changes"}
+	engine.release = &UpdateRelease{Version: "1.2.4", Notes: "Changes"}
 	if err := u.CheckForUpdates(context.Background(), true); err != nil {
 		t.Fatalf("user-initiated recheck: %v", err)
 	}
@@ -370,7 +150,7 @@ func TestUpdaterNotifyFlow(t *testing.T) {
 
 func TestUpdaterAutoModeDownloadsAvailableRelease(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "2.0.0"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "2.0.0"}}
 	u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "auto"}}
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
 		t.Fatalf("CheckForUpdates: %v", err)
@@ -384,7 +164,7 @@ func TestUpdaterAutoModeDownloadsAvailableRelease(t *testing.T) {
 func TestUpdaterAutomaticCheckNotifiesOncePerRelease(t *testing.T) {
 	t.Parallel()
 
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3", Notes: "Changes"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "1.2.3", Notes: "Changes"}}
 	notified := 0
 	u := &Updater{
 		engine:   engine,
@@ -425,7 +205,7 @@ func TestUpdaterAutomaticCheckNotifiesOncePerRelease(t *testing.T) {
 func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 	t.Parallel()
 
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "1.2.3"}}
 	notified := 0
 	u := &Updater{
 		engine:   engine,
@@ -442,7 +222,7 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 
 	// The first release stays downloaded, so the automatic check has to look
 	// past its own candidate to find the newer one.
-	engine.release = &wailsupdater.Release{Version: "1.2.4"}
+	engine.release = &UpdateRelease{Version: "1.2.4"}
 
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
 		t.Fatalf("check for the newer release: %v", err)
@@ -469,7 +249,7 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 	if err := u.InstallUpdate(context.Background()); err != nil {
 		t.Fatalf("InstallUpdate: %v", err)
 	}
-	engine.release = &wailsupdater.Release{Version: "1.2.5"}
+	engine.release = &UpdateRelease{Version: "1.2.5"}
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
 		t.Fatalf("check during install: %v", err)
 	}
@@ -482,7 +262,7 @@ func TestUpdaterNotifiesAgainForNewRelease(t *testing.T) {
 func TestUpdaterRefreshFinishingDuringInstallKeepsDownloadedRelease(t *testing.T) {
 	t.Parallel()
 
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "1.2.3"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "1.2.3"}}
 	u := &Updater{engine: engine, settings: fakeUpdaterSettings{mode: "auto"}, ctx: context.Background()}
 	if err := u.CheckForUpdates(context.Background(), false); err != nil {
 		t.Fatalf("CheckForUpdates: %v", err)
@@ -518,7 +298,7 @@ func TestUpdaterRecheckRacingWithDownloadCompletionNotifiesOnce(t *testing.T) {
 
 	var downloadReturned atomic.Bool
 	engine := &fakeUpdaterEngine{
-		release:      &wailsupdater.Release{Version: "4.0.0"},
+		release:      &UpdateRelease{Version: "4.0.0"},
 		downloadDone: func() { downloadReturned.Store(true) },
 	}
 	var (
@@ -576,7 +356,7 @@ func TestUpdaterOverlappingChecksNotifyOncePerRelease(t *testing.T) {
 		workers    = 32
 		iterations = 100
 	)
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "5.0.0"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "5.0.0"}}
 	var notified atomic.Int32
 	u := &Updater{
 		engine:   engine,
@@ -841,7 +621,7 @@ func TestCheckForUpdatesGatesOnGitHubRateLimit(t *testing.T) {
 	rate := NewGitHubRateCoordinator()
 	rate.UseAppState(client.AppState)
 
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "9.9.9"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "9.9.9"}}
 	u := &Updater{
 		engine:   engine,
 		settings: fakeUpdaterSettings{mode: "notify"},
@@ -870,7 +650,7 @@ func TestCheckForUpdatesGatesOnGitHubRateLimit(t *testing.T) {
 
 func TestDisablingPrereleaseDropsPrereleaseCandidate(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "3.0.0", Channel: "stable"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "3.0.0", Channel: "stable"}}
 	u := &Updater{
 		engine:         engine,
 		settings:       fakeUpdaterSettings{mode: "notify"},
@@ -878,7 +658,7 @@ func TestDisablingPrereleaseDropsPrereleaseCandidate(t *testing.T) {
 		available:      true,
 		downloaded:     true,
 		releaseVersion: "3.1.0-beta.2",
-		releaseChannel: releaseChannelPrerelease,
+		releaseChannel: UpdateChannelPrerelease,
 	}
 	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -897,7 +677,7 @@ func TestDisablingPrereleaseDropsPrereleaseCandidate(t *testing.T) {
 
 func TestDisablingPrereleaseKeepsStableCandidate(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "9.0.0", Channel: "stable"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "9.0.0", Channel: "stable"}}
 	u := &Updater{
 		engine:         engine,
 		settings:       fakeUpdaterSettings{mode: "notify"},
@@ -916,7 +696,7 @@ func TestDisablingPrereleaseKeepsStableCandidate(t *testing.T) {
 
 func TestDisablingPrereleaseWhileUpdatesOffClearsWithoutCheck(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "3.0.0", Channel: "stable"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "3.0.0", Channel: "stable"}}
 	u := &Updater{
 		engine:         engine,
 		settings:       fakeUpdaterSettings{mode: "off"},
@@ -924,7 +704,7 @@ func TestDisablingPrereleaseWhileUpdatesOffClearsWithoutCheck(t *testing.T) {
 		available:      true,
 		downloaded:     true,
 		releaseVersion: "3.1.0-beta.1",
-		releaseChannel: releaseChannelPrerelease,
+		releaseChannel: UpdateChannelPrerelease,
 	}
 	if err := u.applyIncludePrereleaseChange(context.Background(), false, 0); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -941,7 +721,7 @@ func TestDisablingPrereleaseWhileUpdatesOffClearsWithoutCheck(t *testing.T) {
 func TestEnablingPrereleaseRechecksAndReplacesStable(t *testing.T) {
 	t.Parallel()
 	engine := &fakeUpdaterEngine{
-		release: &wailsupdater.Release{Version: "3.1.0-beta.1", Channel: releaseChannelPrerelease, Notes: "beta"},
+		release: &UpdateRelease{Version: "3.1.0-beta.1", Channel: UpdateChannelPrerelease, Notes: "beta"},
 	}
 	u := &Updater{
 		engine:         engine,
@@ -962,14 +742,14 @@ func TestEnablingPrereleaseRechecksAndReplacesStable(t *testing.T) {
 	if status.UpdateDownloaded || status.ReleaseVersion == nil || *status.ReleaseVersion != "3.1.0-beta.1" {
 		t.Fatalf("status=%#v", status)
 	}
-	if u.releaseChannel != releaseChannelPrerelease || engine.downloads != 0 {
+	if u.releaseChannel != UpdateChannelPrerelease || engine.downloads != 0 {
 		t.Fatalf("channel=%s downloads=%d", u.releaseChannel, engine.downloads)
 	}
 }
 
 func TestEnablingPrereleaseKeepsDownloadedStableWhenUnchanged(t *testing.T) {
 	t.Parallel()
-	engine := &fakeUpdaterEngine{release: &wailsupdater.Release{Version: "3.0.0", Channel: "stable"}}
+	engine := &fakeUpdaterEngine{release: &UpdateRelease{Version: "3.0.0", Channel: "stable"}}
 	notified := 0
 	u := &Updater{
 		engine:          engine,
@@ -1000,7 +780,7 @@ func TestEnablingPrereleaseRetriesFailedRefresh(t *testing.T) {
 	t.Parallel()
 	checkErr := errors.New("temporary GitHub failure")
 	engine := &fakeUpdaterEngine{
-		release:  &wailsupdater.Release{Version: "3.1.0-beta.1", Channel: releaseChannelPrerelease},
+		release:  &UpdateRelease{Version: "3.1.0-beta.1", Channel: UpdateChannelPrerelease},
 		checkErr: checkErr,
 	}
 	u := &Updater{
@@ -1042,7 +822,7 @@ func TestEnablingPrereleaseRetriesAfterRateLimit(t *testing.T) {
 	rate := NewGitHubRateCoordinator()
 	rate.UseAppState(client.AppState)
 	engine := &fakeUpdaterEngine{
-		release: &wailsupdater.Release{Version: "3.1.0-beta.1", Channel: releaseChannelPrerelease},
+		release: &UpdateRelease{Version: "3.1.0-beta.1", Channel: UpdateChannelPrerelease},
 	}
 	u := &Updater{
 		engine:         engine,
@@ -1080,7 +860,7 @@ func TestEnablingPrereleaseRetriesAfterRateLimit(t *testing.T) {
 func TestEnablingPrereleaseWhileUpdatesOffDoesNotCheck(t *testing.T) {
 	t.Parallel()
 	engine := &fakeUpdaterEngine{
-		release: &wailsupdater.Release{Version: "9.0.0-beta.1", Channel: releaseChannelPrerelease},
+		release: &UpdateRelease{Version: "9.0.0-beta.1", Channel: UpdateChannelPrerelease},
 	}
 	u := &Updater{
 		engine:         engine,
@@ -1134,7 +914,7 @@ func TestApplyIncludePrereleaseChangeIgnoresStaleGeneration(t *testing.T) {
 				available:                   true,
 				downloaded:                  true,
 				releaseVersion:              "3.1.0-beta.2",
-				releaseChannel:              releaseChannelPrerelease,
+				releaseChannel:              UpdateChannelPrerelease,
 				checking:                    tt.busy,
 				channelRefreshPending:       !tt.enabled,
 				includePrereleaseGeneration: 2,
@@ -1155,7 +935,7 @@ func TestApplyIncludePrereleaseChangeIgnoresStaleGeneration(t *testing.T) {
 				t.Fatalf("stale callback changed status: before=%#v after=%#v", before, after)
 			}
 			if u.channelRefreshPending != !tt.enabled || u.recheckAfterBusy ||
-				u.releaseChannel != releaseChannelPrerelease {
+				u.releaseChannel != UpdateChannelPrerelease {
 				t.Fatalf(
 					"pending=%v deferred=%v channel=%s",
 					u.channelRefreshPending,
@@ -1176,7 +956,7 @@ func TestDownloadedPrereleaseIsDiscardedWhenSwitchTurnsOff(t *testing.T) {
 	releaseDownload := make(chan struct{})
 	settings := &fakeUpdaterSettings{mode: "notify", includePrerelease: true}
 	engine := &fakeUpdaterEngine{
-		release: &wailsupdater.Release{Version: "3.0.0", Channel: "stable"},
+		release: &UpdateRelease{Version: "3.0.0", Channel: "stable"},
 		downloadDone: func() {
 			close(started)
 			<-releaseDownload
@@ -1190,7 +970,7 @@ func TestDownloadedPrereleaseIsDiscardedWhenSwitchTurnsOff(t *testing.T) {
 		ctx:            context.Background(),
 		available:      true,
 		releaseVersion: "3.1.0-beta.2",
-		releaseChannel: releaseChannelPrerelease,
+		releaseChannel: UpdateChannelPrerelease,
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- u.DownloadUpdate(context.Background()) }()

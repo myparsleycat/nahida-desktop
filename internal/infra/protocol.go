@@ -53,7 +53,6 @@ func NewProtocol() *Protocol {
 	return &Protocol{sessions: make(map[string]*memoryProtocolSession)}
 }
 
-//wails:ignore
 func (p *Protocol) Configure(httpClient *Client, log *Log) {
 	p.mu.Lock()
 	p.http, p.log = httpClient, log
@@ -68,7 +67,6 @@ func (p *Protocol) LocalFileURL(path string, original bool) string {
 	return "/protocol/local?" + query.Encode()
 }
 
-//wails:ignore
 func (p *Protocol) CreateMemorySession() string {
 	id := uuid.NewString()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -83,7 +81,6 @@ func (p *Protocol) CreateMemorySession() string {
 	return id
 }
 
-//wails:ignore
 func (p *Protocol) StoreMemoryBuffer(sessionID, bufferID string, data []byte, contentType string) (string, error) {
 	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(bufferID) == "" {
 		return "", errors.New("memory session and buffer ids are required")
@@ -99,7 +96,6 @@ func (p *Protocol) StoreMemoryBuffer(sessionID, bufferID string, data []byte, co
 	return memoryProtocolURL(sessionID, bufferID), nil
 }
 
-//wails:ignore
 func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
 	if sessionID == "" || bufferID == "" {
 		return
@@ -114,8 +110,6 @@ func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
 
 // StoreMemoryLoader registers a lazy binary resource with the session's lifetime.
 // The loader owns any caching; responses keep their bytes alive even after eviction.
-//
-//wails:ignore
 func (p *Protocol) StoreMemoryLoader(
 	sessionID, bufferID string,
 	load func(context.Context) ([]byte, error),
@@ -125,8 +119,6 @@ func (p *Protocol) StoreMemoryLoader(
 
 // StoreMemoryLoaderWithContentType registers a lazy resource with the session's lifetime.
 // The loader owns any caching; responses keep their bytes alive even after eviction.
-//
-//wails:ignore
 func (p *Protocol) StoreMemoryLoaderWithContentType(
 	sessionID, bufferID, contentType string,
 	load func(context.Context) ([]byte, error),
@@ -148,7 +140,6 @@ func (p *Protocol) StoreMemoryLoaderWithContentType(
 	return memoryProtocolURL(sessionID, bufferID), nil
 }
 
-//wails:ignore
 func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes int64) (string, error) {
 	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(uploadID) == "" {
 		return "", errors.New("memory session and upload ids are required")
@@ -171,7 +162,6 @@ func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes 
 	return memoryProtocolURL(sessionID, uploadID), nil
 }
 
-//wails:ignore
 func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -187,7 +177,6 @@ func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) 
 	return upload.data, nil
 }
 
-//wails:ignore
 func (p *Protocol) CleanupMemorySession(sessionID string) {
 	if sessionID == "" {
 		return
@@ -199,6 +188,63 @@ func (p *Protocol) CleanupMemorySession(sessionID string) {
 	if session != nil {
 		session.cancel()
 	}
+}
+
+// ErrProtocolNotFound reports a protocol URL whose file, session or buffer does not exist.
+var ErrProtocolNotFound = errors.New("protocol resource not found")
+
+// Read returns what ServeHTTP would serve for a GET of rawURL, a local-file or memory URL made by this
+// Protocol, for native screens that consume the same URLs without an HTTP round trip.
+func (p *Protocol) Read(ctx context.Context, rawURL string) ([]byte, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse protocol url: %w", err)
+	}
+	route := strings.TrimPrefix(strings.TrimPrefix(parsed.Path, "/"), "protocol/")
+	switch {
+	case route == "local", route == "nahida/image-local", route == "nahida/video-local":
+		path := parsed.Query().Get("path")
+		if strings.TrimSpace(path) == "" {
+			return nil, errors.New("protocol local url has no path")
+		}
+		data, err := os.ReadFile(filepath.Clean(path))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s", ErrProtocolNotFound, path)
+		}
+		return data, err
+	case strings.HasPrefix(route, "memory/"):
+		return p.readMemory(ctx, strings.TrimPrefix(route, "memory/"))
+	}
+	return nil, fmt.Errorf("%w: %s", ErrProtocolNotFound, rawURL)
+}
+
+func (p *Protocol) readMemory(ctx context.Context, route string) ([]byte, error) {
+	sessionID, bufferID, ok := strings.Cut(route, "/")
+	if !ok {
+		return nil, fmt.Errorf("%w: memory/%s", ErrProtocolNotFound, route)
+	}
+	p.mu.RLock()
+	session := p.sessions[sessionID]
+	var entry memoryProtocolEntry
+	var exists bool
+	if session != nil {
+		entry, exists = session.buffers[bufferID]
+	}
+	p.mu.RUnlock()
+	if !exists {
+		return nil, fmt.Errorf("%w: memory/%s", ErrProtocolNotFound, route)
+	}
+	if entry.load == nil {
+		return entry.data, nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer context.AfterFunc(session.ctx, cancel)()
+	defer cancel()
+	data, err := entry.load(ctx)
+	if err == nil {
+		err = ctx.Err()
+	}
+	return data, err
 }
 
 func memoryProtocolURL(sessionID, entryID string) string {

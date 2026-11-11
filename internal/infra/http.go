@@ -220,8 +220,6 @@ func (c *Client) BackendURL() string {
 // HTTPClient exposes the configured transport to internal streaming helpers
 // that need to keep a response body open while applying their own retry and
 // progress policies.
-//
-//wails:ignore
 func (c *Client) HTTPClient() *http.Client {
 	if c == nil || c.http == nil {
 		return &http.Client{Transport: unconfiguredHTTPTransport{}}
@@ -230,8 +228,6 @@ func (c *Client) HTTPClient() *http.Client {
 }
 
 // UseTransport must run during startup, before requests or background workers.
-//
-//wails:ignore
 func (c *Client) UseTransport(transport http.RoundTripper) {
 	c.http.Transport = transport
 }
@@ -488,8 +484,6 @@ func (c *Client) Fetch(
 // Stream sends a one-shot request without buffering its body. Callers use it
 // for large multipart uploads whose readers cannot be replayed automatically.
 // The caller owns and must close the response body.
-//
-//wails:ignore
 func (c *Client) Stream(
 	ctx context.Context,
 	rawURL, method string,

@@ -94,8 +94,6 @@ func newCompressionCoordinator(owner *Mod) *compressionCoordinator {
 }
 
 // StartCompression loads the desired setting and begins continuous reconciliation.
-//
-//wails:ignore
 func (m *Mod) StartCompression(ctx context.Context) error {
 	m.watchMu.Lock()
 	defer m.watchMu.Unlock()
@@ -112,8 +110,6 @@ func (m *Mod) StartCompression(ctx context.Context) error {
 }
 
 // RefreshCompressionImporters updates watched mod folders and queues a full pass for the current selection.
-//
-//wails:ignore
 func (m *Mod) RefreshCompressionImporters(ctx context.Context) {
 	if m.compression.stopped.Load() {
 		return
@@ -127,8 +123,6 @@ func (m *Mod) RefreshCompressionImporters(ctx context.Context) {
 // WaitCompressionPass waits for the reconciliation run started by
 // StartCompression to stop before returning. Startup uses it to keep
 // file-mutating calls gated while mod files are being rewritten.
-//
-//wails:ignore
 func (m *Mod) WaitCompressionPass(ctx context.Context) error {
 	return m.compression.waitForRun(ctx)
 }

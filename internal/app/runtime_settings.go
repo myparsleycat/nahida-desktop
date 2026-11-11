@@ -18,7 +18,6 @@ func runtimeSettingHooks(
 	transfers *transfer.Transfer,
 	updater *infra.Updater,
 	toolsService *tools.Tools,
-	windowService *Window,
 	autostart func(bool) error,
 	emit func(string, ...any),
 	syncModelViewerMenu func(language string),
@@ -78,16 +77,6 @@ func runtimeSettingHooks(
 			}
 		},
 		AfterBandwidthLimitChanged: transfers.SetDownloadBandwidthLimitMibps,
-		AfterOpenConsoleChanged: func(enabled bool) {
-			if windowService != nil {
-				windowService.SetConsoleWindowEnabled(enabled)
-			}
-		},
-		AfterWindowBackdropChanged: func(enabled bool) {
-			if windowService != nil {
-				windowService.SetBackdropEnabled(enabled)
-			}
-		},
 		AfterPersistTogglesChanged: func(bool) {
 			if toolsService == nil {
 				return

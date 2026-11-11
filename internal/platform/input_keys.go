@@ -47,8 +47,7 @@ var extendedKeys = map[co.VK]struct{}{
 }
 
 // keyTokens maps the tokens stored for 3dmigoto key bindings to virtual-key
-// codes. Keep it aligned with frontend/src/components/mod/utils.ts (the
-// toggle-key editor) and frontend/src/shared/key-formatter.ts.
+// codes. Keep it aligned with the key labels in internal/ui/mod_keys.go.
 var keyTokens = buildKeyTokens()
 
 func buildKeyTokens() map[string]co.VK {

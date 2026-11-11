@@ -1,75 +1,31 @@
 ﻿Unicode true
 
 ####
-## Please note: Template replacements don't work in this file. They are provided with default defines like
-## mentioned underneath.
-## If the keyword is not defined, "wails_tools.nsh" will populate them.
-## If they are defined here, "wails_tools.nsh" will not touch them. This allows you to use this project.nsi manually
-## from outside of Wails for debugging and development of the installer.
-## 
-## For development first make a wails nsis build to populate the "wails_tools.nsh":
-## > wails build --target windows/amd64 --nsis
-## Then you can call makensis on this file with specifying the path to your binary:
-## For a AMD64 only installer:
-## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app.exe
-## For a ARM64 only installer:
-## > makensis -DARG_WAILS_ARM64_BINARY=..\..\bin\app.exe
-## For a installer with both architectures:
-## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app-amd64.exe -DARG_WAILS_ARM64_BINARY=..\..\bin\app-arm64.exe
+## Per-user installer for Nahida Desktop. Product definitions and install macros live in nahida.nsh.
+##
+## task package builds the application, prepares the WebView2 bootstrapper and runs makensis.
 ####
-## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
-####
-## !define INFO_PROJECTNAME    "my-project" # Default "nahida-desktop"
-## !define INFO_COMPANYNAME    "My Company" # Default "nahida.live"
-## !define INFO_PRODUCTNAME    "My Product Name" # Default "My Product"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
-## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "© 2026, nahida.live"
-###
-## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
-## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
-####
-## Nahida supports per-user installation only, including Explorer label updates.
-####
-## Include the wails tools
-####
-!ifndef WAILS_INSTALL_SCOPE
-    !define WAILS_INSTALL_SCOPE "user"
-!endif
-!if "${WAILS_INSTALL_SCOPE}" != "user"
-    !error "Nahida supports per-user installation only (WAILS_INSTALL_SCOPE=user)."
-!endif
-!ifndef REQUEST_EXECUTION_LEVEL
-    !define REQUEST_EXECUTION_LEVEL "user"
-!endif
-!if "${REQUEST_EXECUTION_LEVEL}" != "user"
-    !error "Nahida requires REQUEST_EXECUTION_LEVEL=user."
-!endif
-!include "wails_tools.nsh"
+!include "nahida.nsh"
 !include "..\..\..\bin\release-version.nsh"
 
-# Keep this in sync with application.SingleInstanceOptions.UniqueID. Wails
-# creates this mutex before starting backend services.
-!define APP_SINGLE_INSTANCE_MUTEX "wails-app-com.nahida.desktop-sim"
+# Keep this in sync with the fairy.SingleInstance ID in the application. Fairy
+# creates the mutex Local\nahida.fairy.<ID> before the application starts its services.
+!define APP_SINGLE_INSTANCE_MUTEX "Local\nahida.fairy.com.nahida.desktop"
 
 !define MODEL_VIEWER_KEY "Software\Classes\Directory\shell\nahida.live.ModelViewer"
-!if "${WAILS_INSTALL_SCOPE}" == "user"
-    !define MODEL_VIEWER_HIVE HKCU
-!else
-    !define MODEL_VIEWER_HIVE HKLM
-!endif
 
 !macro nahida.registerModelViewer
     SetRegView 64
-    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "" "모델 뷰어로 보기"
-    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "Icon" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\",0'
-    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}" "MultiSelectModel" "Single"
-    WriteRegStr ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}\command" "" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" --model-viewer $\"%1$\"'
+    WriteRegStr HKCU "${MODEL_VIEWER_KEY}" "" "모델 뷰어로 보기"
+    WriteRegStr HKCU "${MODEL_VIEWER_KEY}" "Icon" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\",0'
+    WriteRegStr HKCU "${MODEL_VIEWER_KEY}" "MultiSelectModel" "Single"
+    WriteRegStr HKCU "${MODEL_VIEWER_KEY}\command" "" '$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" --model-viewer $\"%1$\"'
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
 
 !macro nahida.unregisterModelViewer
     SetRegView 64
-    DeleteRegKey ${MODEL_VIEWER_HIVE} "${MODEL_VIEWER_KEY}"
+    DeleteRegKey HKCU "${MODEL_VIEWER_KEY}"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
 
@@ -111,15 +67,11 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-windows-${ARCH}-installer.exe" # Name of the installer's file.
-!if "${WAILS_INSTALL_SCOPE}" == "user"
-    InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
-!else
-    InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
-!endif
+InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
-   !insertmacro wails.checkArchitecture
+   !insertmacro nahida.checkArchitecture
 FunctionEnd
 
 Function un.onInit
@@ -140,13 +92,12 @@ Function un.onInit
 FunctionEnd
 
 Section
-    !insertmacro wails.setShellContext
+    SetShellVarContext current
 
-    !insertmacro wails.webview2runtime
-
+    !insertmacro nahida.ensureWebView2
     SetOutPath $INSTDIR
-    
-    !insertmacro wails.files
+
+    !insertmacro nahida.files
     # The elevated helper is embedded into the application binary and extracted
     # under the shared per-user app data directory at runtime, so the installer
     # no longer ships a sibling copy that in-place updates could never refresh.
@@ -157,15 +108,14 @@ Section
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
-    !insertmacro wails.associateFiles
-    !insertmacro wails.associateCustomProtocols
+    !insertmacro nahida.registerProtocol
     !insertmacro nahida.registerModelViewer
-    
-    !insertmacro wails.writeUninstaller
+
+    !insertmacro nahida.writeUninstaller
 SectionEnd
 
-Section "uninstall" 
-    !insertmacro wails.setShellContext
+Section "uninstall"
+    SetShellVarContext current
 
     # The uninstaller runs from a temporary copy. Ensure its working directory
     # is also outside $INSTDIR before removing installed files.
@@ -177,17 +127,19 @@ Section "uninstall"
     Delete "$INSTDIR\nahida-elevated-helper.exe"
     IfErrors uninstallFailed
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    # Remove the WebView2 data directory left by releases built on Wails.
+    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}"
     ClearErrors # WebView2 data cleanup is best effort and must not leak an error flag.
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
 
-    !insertmacro wails.unassociateFiles
-    !insertmacro wails.unassociateCustomProtocols
+    !insertmacro nahida.unregisterProtocol
     !insertmacro nahida.unregisterModelViewer
+    # The application registers its notification identity at startup.
+    DeleteRegKey HKCU "Software\Classes\AppUserModelId\com.nahida"
 
-    !insertmacro wails.deleteUninstaller
+    !insertmacro nahida.deleteUninstaller
     RMDir "$INSTDIR"
     Goto uninstallDone
 

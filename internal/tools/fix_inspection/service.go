@@ -53,7 +53,6 @@ func NewWithOptions(opts Options) *Service {
 	}
 }
 
-//wails:ignore
 func (t *Service) UseClient(client *db.Client) {
 	t.client = client
 }

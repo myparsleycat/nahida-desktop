@@ -18,8 +18,6 @@ const (
 )
 
 // Diagnostic describes safe, allow-listed context for one backend failure.
-//
-//wails:ignore
 type Diagnostic struct {
 	Severity  DiagnosticSeverity
 	Operation string
@@ -41,14 +39,10 @@ func (e *diagnosticError) Unwrap() error { return e.err }
 
 // DiagnosticReported is intentionally structural so packages that cannot
 // import infra (notably transfer) can still suppress duplicate fallback logs.
-//
-//wails:ignore
 func (e *diagnosticError) DiagnosticReported() bool { return e != nil && e.reported }
 
 // AnnotateError adds diagnostic context without logging yet. The final owner
 // can add more context and emit a single record.
-//
-//wails:ignore
 func AnnotateError(err error, diagnostic Diagnostic) error {
 	if err == nil {
 		return nil
@@ -58,8 +52,6 @@ func AnnotateError(err error, diagnostic Diagnostic) error {
 
 // ReportError emits one diagnostic record and marks the returned error so a
 // later Wails or transfer boundary does not emit it again.
-//
-//wails:ignore
 func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error {
 	if err == nil {
 		return nil
@@ -126,8 +118,6 @@ func ReportError(log *Log, err error, where string, diagnostic Diagnostic) error
 }
 
 // IsReportedError reports whether a domain boundary already emitted the error.
-//
-//wails:ignore
 func IsReportedError(err error) bool {
 	records, _, _ := collectDiagnosticCauses(err, Diagnostic{}, false)
 	all, _, _ := collectDiagnosticCauses(err, Diagnostic{}, true)
@@ -136,8 +126,6 @@ func IsReportedError(err error) bool {
 
 // IsCancellationError identifies normal user or shutdown cancellation, which
 // is deliberately omitted from desktop.log.
-//
-//wails:ignore
 func IsCancellationError(err error) bool {
 	if err == nil {
 		return false
@@ -169,8 +157,6 @@ func isCancellationMessage(err error) bool {
 
 // ClassifyError supplies the common WARN/ERROR fallback policy. Domain owners
 // should explicitly classify known validation and policy errors.
-//
-//wails:ignore
 func ClassifyError(err error) DiagnosticSeverity {
 	if err == nil {
 		return DiagnosticError
@@ -228,8 +214,6 @@ func isExpectedErrorMessage(message string) bool {
 // ServiceErrorMarshaler is the final diagnostic boundary for synchronous
 // Wails calls. It preserves the JSON representation of the original returned
 // error while logging an unreported failure once.
-//
-//wails:ignore
 func (l *Log) ServiceErrorMarshaler(service string) func(error) []byte {
 	return func(err error) []byte {
 		if err == nil {

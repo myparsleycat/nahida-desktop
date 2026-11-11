@@ -13,8 +13,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
@@ -303,11 +301,11 @@ func TestRunningWatchLifecycleIsIdempotentAndJoinsBeforeShutdown(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	if err := service.ServiceStartup(ctx, application.ServiceOptions{}); err != nil {
+	if err := service.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	done := service.runningDone
-	if err := service.ServiceStartup(ctx, application.ServiceOptions{}); err != nil || done != service.runningDone {
+	if err := service.Start(ctx); err != nil || done != service.runningDone {
 		t.Fatalf("duplicate startup: %v", err)
 	}
 	select {

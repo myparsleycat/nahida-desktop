@@ -8,10 +8,9 @@ import { writeSourceVersion } from './write-source-version.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const sourceFiles = [
-  'build/config.yml',
-  'build/windows/info.json',
-  'build/windows/wails.exe.manifest',
-  'build/windows/nsis/wails_tools.nsh',
+  'build/windows/nahida-desktop.winres.json',
+  'build/windows/elevated-helper.winres.json',
+  'build/windows/nahida-desktop.exe.manifest',
   'internal/platform/shell.go',
 ];
 
@@ -20,20 +19,16 @@ test('updates every tracked application version source', async (t) => {
 
   await writeSourceVersion(fixture, '3.1.0-beta.7');
 
-  const [config, infoSource, manifest, nsisTools, platform] = await Promise.all([
-    readFile(path.join(fixture, 'build/config.yml'), 'utf8'),
-    readFile(path.join(fixture, 'build/windows/info.json'), 'utf8'),
-    readFile(path.join(fixture, 'build/windows/wails.exe.manifest'), 'utf8'),
-    readFile(path.join(fixture, 'build/windows/nsis/wails_tools.nsh'), 'utf8'),
-    readFile(path.join(fixture, 'internal/platform/shell.go'), 'utf8'),
-  ]);
-  const info = JSON.parse(infoSource);
+  const [appResources, helperResources, manifest, platform] = await Promise.all(
+    sourceFiles.map((file) => readFile(path.join(fixture, file), 'utf8')),
+  );
 
-  assert.match(config, /version: "3\.1\.0-beta\.7" # The application version/);
-  assert.equal(info.fixed.file_version, '3.1.0.7');
-  assert.equal(info.info['0000'].ProductVersion, '3.1.0-beta.7');
+  for (const resources of [appResources, helperResources]) {
+    const info = JSON.parse(resources).RT_VERSION['#1']['0000'];
+    assert.equal(info.fixed.file_version, '3.1.0.7');
+    assert.equal(info.info['0000'].ProductVersion, '3.1.0-beta.7');
+  }
   assert.match(manifest, /name="com\.nahida\.desktop" version="3\.1\.0\.7"/);
-  assert.match(nsisTools, /!define INFO_PRODUCTVERSION "3\.1\.0-beta\.7"/);
   assert.match(platform, /var AppVersion = "3\.1\.0-beta\.7"/);
 });
 

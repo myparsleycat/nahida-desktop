@@ -416,8 +416,6 @@ func (i externalImporter) processName() string {
 }
 
 // EnsureLauncherClosed closes the external launcher before its DLLs are replaced.
-//
-//wails:ignore
 func (x *XXMI) EnsureLauncherClosed(ctx context.Context) error {
 	return ensureLauncherClosed(ctx, x.findProcess)
 }

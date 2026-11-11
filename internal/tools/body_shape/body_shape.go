@@ -110,6 +110,34 @@ type BodyShapeMeshDescriptor struct {
 	Bones          []modmesh.BlendBoneInfo `json:"bones"`
 }
 
+// BodyShapeMeshData is one mesh of a session as loaded, for an editor in the same process. Its slices are the
+// session's own; callers must not modify them.
+type BodyShapeMeshData struct {
+	ID          string
+	Name        string
+	VertexCount int
+	Positions   []float32
+	Indices     []uint32
+	BlendBytes  []byte
+	// BlendStride 0 means the mesh has no blend stride of its own.
+	BlendStride int
+	Bones       []modmesh.BlendBoneInfo
+}
+
+// BodyShapeMeshPositions are the edited positions of one mesh, packed xyz.
+type BodyShapeMeshPositions struct {
+	MeshID    string
+	Positions []float32
+}
+
+// BodyShapeCommitPositionsInput exports edited positions without the memory uploads of BodyShapeBeginExport.
+type BodyShapeCommitPositionsInput struct {
+	SessionID      string
+	Meshes         []BodyShapeMeshPositions
+	WriteChangeLog *bool
+	ChangeSummary  *BodyShapeChangeSummary
+}
+
 type BodyShapeBeginExportInput struct {
 	SessionID string   `json:"sessionId"`
 	MeshIDs   []string `json:"meshIds"`
@@ -235,7 +263,6 @@ func (t *Service) BodyShapeLoadMod(ctx context.Context, modPath string) (BodySha
 	return descriptor, nil
 }
 
-//wails:ignore
 func (t *Service) BodyShapeExport(
 	ctx context.Context,
 	input BodyShapeExportInput,
@@ -406,23 +433,8 @@ func (t *Service) BodyShapeBeginExport(
 	}
 	session.mu.Lock()
 	defer session.mu.Unlock()
-	if len(input.MeshIDs) == 0 {
-		return BodyShapeExportUpload{}, infra.ContractError("No body shape meshes selected for export")
-	}
-	meshes := make([]*BodyShapeMeshCandidate, 0, len(input.MeshIDs))
-	for _, id := range input.MeshIDs {
-		if lo.ContainsBy(meshes, func(mesh *BodyShapeMeshCandidate) bool { return mesh.ID == id }) {
-			return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh selected twice: %s", id))
-		}
-		mesh := findBodyShapeMesh(session.loaded.Meshes, id)
-		if mesh == nil {
-			return BodyShapeExportUpload{}, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", id))
-		}
-		meshes = append(meshes, mesh)
-	}
-	if err := checkDistinctPositionPaths(lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string {
-		return mesh.PositionPath
-	})); err != nil {
+	meshes, err := selectBodyShapeMeshes(session.loaded.Meshes, input.MeshIDs)
+	if err != nil {
 		return BodyShapeExportUpload{}, err
 	}
 	exportID := newID()
@@ -482,22 +494,123 @@ func (t *Service) BodyShapeCommitExport(
 	}
 	defer t.removeBodyShapeUploads(input.SessionID, uploads)
 
-	exportMeshes := make([]BodyShapeExportMesh, 0, len(meshes))
-	changed := false
-	for index, mesh := range meshes {
-		positions, takeErr := t.takeBodyShapeUpload(
+	positions := make([][]float32, len(meshes))
+	for index := range meshes {
+		positions[index], err = t.takeBodyShapeUpload(
 			input.SessionID,
 			bodyShapeUploadID(input.ExportID, index, "positions"),
 		)
-		if takeErr != nil {
-			return BodyShapeExportResult{}, takeErr
+		if err != nil {
+			return BodyShapeExportResult{}, err
 		}
-		changed = changed || !slices.Equal(positions, mesh.Positions)
+	}
+	return t.exportBodyShapeSession(ctx, session, meshes, positions, input.WriteChangeLog, input.ChangeSummary)
+}
+
+// BodyShapeMeshData returns a mesh of the session with its geometry and blend buffer.
+func (t *Service) BodyShapeMeshData(ctx context.Context, input BodyShapeMeshInput) (BodyShapeMeshData, error) {
+	if err := ctx.Err(); err != nil {
+		return BodyShapeMeshData{}, err
+	}
+	session, err := t.requireBodyShapeSession(input.SessionID)
+	if err != nil {
+		return BodyShapeMeshData{}, err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	mesh := findBodyShapeMesh(session.loaded.Meshes, input.MeshID)
+	if mesh == nil {
+		return BodyShapeMeshData{}, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", input.MeshID))
+	}
+	data := BodyShapeMeshData{
+		ID:          mesh.ID,
+		Name:        mesh.Name,
+		VertexCount: mesh.VertexCount,
+		Positions:   mesh.Positions,
+		Indices:     mesh.Indices,
+		BlendBytes:  mesh.BlendBytes,
+		Bones:       mesh.Bones,
+	}
+	if mesh.BlendStride != nil {
+		data.BlendStride = *mesh.BlendStride
+	}
+	return data, nil
+}
+
+// BodyShapeCommitPositions writes edited positions into a body-shaped copy of the session's mod, as
+// BodyShapeCommitExport does with uploaded ones.
+func (t *Service) BodyShapeCommitPositions(
+	ctx context.Context,
+	input BodyShapeCommitPositionsInput,
+) (BodyShapeExportResult, error) {
+	session, err := t.requireBodyShapeSession(input.SessionID)
+	if err != nil {
+		return BodyShapeExportResult{}, err
+	}
+	session.mu.Lock()
+	meshes, err := selectBodyShapeMeshes(session.loaded.Meshes, lo.Map(
+		input.Meshes, func(mesh BodyShapeMeshPositions, _ int) string { return mesh.MeshID },
+	))
+	session.mu.Unlock()
+	if err != nil {
+		return BodyShapeExportResult{}, err
+	}
+	positions := make([][]float32, len(meshes))
+	for index, mesh := range meshes {
+		positions[index] = input.Meshes[index].Positions
+		if len(positions[index]) != len(mesh.Positions) {
+			return BodyShapeExportResult{}, infra.ContractError(fmt.Sprintf(
+				"Body shape mesh %s has %d position values, want %d", mesh.ID, len(positions[index]),
+				len(mesh.Positions),
+			))
+		}
+	}
+	return t.exportBodyShapeSession(ctx, session, meshes, positions, input.WriteChangeLog, input.ChangeSummary)
+}
+
+// selectBodyShapeMeshes resolves an export's mesh selection, which must be non-empty, without repeats and
+// write distinct position files.
+func selectBodyShapeMeshes(candidates []BodyShapeMeshCandidate, ids []string) ([]*BodyShapeMeshCandidate, error) {
+	if len(ids) == 0 {
+		return nil, infra.ContractError("No body shape meshes selected for export")
+	}
+	meshes := make([]*BodyShapeMeshCandidate, 0, len(ids))
+	for _, id := range ids {
+		if lo.ContainsBy(meshes, func(mesh *BodyShapeMeshCandidate) bool { return mesh.ID == id }) {
+			return nil, infra.ContractError(fmt.Sprintf("Body shape mesh selected twice: %s", id))
+		}
+		mesh := findBodyShapeMesh(candidates, id)
+		if mesh == nil {
+			return nil, infra.ContractError(fmt.Sprintf("Body shape mesh not found: %s", id))
+		}
+		meshes = append(meshes, mesh)
+	}
+	if err := checkDistinctPositionPaths(lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string {
+		return mesh.PositionPath
+	})); err != nil {
+		return nil, err
+	}
+	return meshes, nil
+}
+
+// exportBodyShapeSession exports the meshes of a session with their new positions, in the same order.
+func (t *Service) exportBodyShapeSession(
+	ctx context.Context,
+	session *bodyShapeSession,
+	meshes []*BodyShapeMeshCandidate,
+	positions [][]float32,
+	writeChangeLog *bool,
+	summary *BodyShapeChangeSummary,
+) (BodyShapeExportResult, error) {
+	exportMeshes := make([]BodyShapeExportMesh, 0, len(meshes))
+	changed := false
+	for index, mesh := range meshes {
+		changed = changed || !slices.Equal(positions[index], mesh.Positions)
 		exportMeshes = append(exportMeshes, BodyShapeExportMesh{
 			MeshID:         mesh.ID,
 			PositionPath:   mesh.PositionPath,
 			PositionStride: mesh.PositionStride,
-			Positions:      positions,
+			Positions:      positions[index],
 			Indices:        mesh.Indices,
 			VectorPath:     mesh.VectorPath,
 			VectorLayout:   mesh.VectorLayout,
@@ -511,8 +624,8 @@ func (t *Service) BodyShapeCommitExport(
 		BodyShapeExportInput{
 			ModRoot:        session.loaded.ModRoot,
 			Meshes:         exportMeshes,
-			WriteChangeLog: input.WriteChangeLog,
-			ChangeSummary:  input.ChangeSummary,
+			WriteChangeLog: writeChangeLog,
+			ChangeSummary:  summary,
 		},
 	)
 }
@@ -545,8 +658,6 @@ func checkDistinctPositionPaths(paths []string) error {
 }
 
 // BodyShapeSessionPaths returns the mod folder a commit of the session copies and disables.
-//
-//wails:ignore
 func (t *Service) BodyShapeSessionPaths(sessionID string) ([]string, error) {
 	session, err := t.requireBodyShapeSession(sessionID)
 	if err != nil {

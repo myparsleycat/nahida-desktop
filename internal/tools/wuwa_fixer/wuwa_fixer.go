@@ -415,8 +415,6 @@ func (t *Service) WuwaFixerCleanBackups(ctx context.Context, modPath string) err
 }
 
 // StartWuwaAutoUpdateCheck starts the Electron-compatible hourly background check.
-//
-//wails:ignore
 func (t *Service) StartWuwaAutoUpdateCheck() {
 	t.wuwaMu.Lock()
 	if t.wuwaAutoCancel != nil {

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/drive"
@@ -187,16 +186,14 @@ func New(opts Options) *Backup {
 }
 
 // UseClient binds the local database.
-//
-//wails:ignore
 func (b *Backup) UseClient(client *db.Client) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.client = client
 }
 
-// ServiceStartup starts the scheduler.
-func (b *Backup) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+// Start starts the scheduler.
+func (b *Backup) Start(ctx context.Context) error {
 	b.mu.Lock()
 	if b.stop != nil {
 		b.mu.Unlock()

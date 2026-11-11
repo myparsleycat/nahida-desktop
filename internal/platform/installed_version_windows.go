@@ -13,7 +13,7 @@ import (
 // version baked into the installer. The in-app updater swaps the binary in
 // place without re-running the installer, so the value drifts behind the
 // running version until this sync repairs it. Keep the path in sync with
-// UNINST_KEY_NAME in build/windows/nsis/wails_tools.nsh
+// UNINST_KEY_NAME in build/windows/nsis/nahida.nsh
 // (INFO_COMPANYNAME + INFO_PRODUCTNAME).
 const uninstallDisplayVersionKeyPath = `Software\Microsoft\Windows\CurrentVersion\Uninstall\nahida.liveNahida Desktop`
 

@@ -60,7 +60,6 @@ type FS struct {
 	diagnostic func(error, string, map[string]any)
 }
 
-//wails:ignore
 func (f *FS) UseDiagnostic(report func(error, string, map[string]any)) { f.diagnostic = report }
 
 func (f *FS) reportAccess(err error, path, stage string) {
@@ -285,8 +284,6 @@ func inaccessibleFileWriteAccess(processes []ProcessInfo) FileWriteAccessResult 
 }
 
 // IsLockedPathError matches Electron FS.isLockedPathError.
-//
-//wails:ignore
 func (f *FS) IsLockedPathError(err error, pathStr string) LockedPathError {
 	empty := LockedPathError{Processes: []ProcessInfo{}}
 	if err == nil || !isLockCandidate(err) {

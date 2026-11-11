@@ -48,8 +48,6 @@ reviews:
     - "!**/.gocache/**"
     - "!**/.gomodcache/**"
     - "!bin/**"
-    - "!frontend/bindings/**"
-    - "!frontend/src/routeTree.gen.ts"
     - "!**/*.gen.ts"
     - "!**/*.lock"
     - "!**/pnpm-lock.yaml"
@@ -62,7 +60,7 @@ reviews:
         Prioritize actionable issues with a concrete impact on correctness, security, data integrity, reliability, performance, or maintainability.
         Do not comment on formatting, naming preferences, subjective style, minor simplifications, harmless redundancy, or other nitpicks.
         Avoid feedback already enforced by gofmt, golangci-lint, oxfmt, or oxlint. Only raise a maintainability concern when it creates meaningful risk or makes the changed code substantially harder to understand or modify.
-        This is a Windows-only Wails v3 desktop application with a Go backend and a React/TypeScript frontend. Do not suggest Electron APIs or restoring Linux, macOS, Android, or iOS support.
+        This is a Windows-only Go desktop application with a native UI built on github.com/myparsleycat/fairy. Do not suggest Electron APIs or restoring Linux, macOS, Android, or iOS support.
         Preserve the existing UI, UX, state management, and package ownership unless a change explicitly requires otherwise.
 
     - path: "**/*.go"
@@ -119,46 +117,10 @@ reviews:
         Treat INI, PE, DDS, mesh, archive, and rule inputs as untrusted binary or text formats. Check offsets, lengths, alignment, integer conversions, allocation limits, decompression limits, path traversal, deterministic output, and preservation of unknown-but-valid data.
         Multi-file generators and fixers need source-change detection, atomic writes, explicit cleanup, and rollback that reports both the primary and rollback failures.
 
-    - path: "frontend/src/**/*.{ts,tsx}"
-      instructions: |
-        React and renderer review priorities:
-        - Check hook dependencies, stale closures, cleanup of listeners and timers, accessibility, loading/error/empty states, and user-visible text localization.
-        - Keep React state for values that affect rendered UI. For high-frequency visual-only updates, prefer refs and imperative methods to avoid expensive component and Three.js rerenders.
-        - Flag unsafe HTML, untrusted external URLs, unsafe local-file handling, and assumptions that renderer input or backend output is trusted.
-        - Backend calls must use generated imports through the @bindings alias. Do not suggest hand-written copies of generated services or models.
-        - For @wailsio/runtime events, check exact event names and payload shapes, deterministic subscription cleanup, duplicate listeners, and behavior across remounts or window reloads.
-        - Preserve TanStack Router, Zustand, React Query, and existing Wails adapter boundaries unless the change requires an architectural change.
-
-    - path: "frontend/src/wails/**/*.{ts,tsx}"
-      instructions: |
-        Treat this directory as the renderer-side Wails boundary. Keep adapters narrow and typed, preserve unavailable-runtime behavior used by tests or browser contexts, and check event/listener teardown, file-drop validation, window identity, and backend error propagation.
-        Do not introduce Electron contextBridge, ipcRenderer, preload, or channel abstractions.
-
-    - path: "frontend/src/port/**/*.{ts,tsx}"
-      instructions: |
-        Review bootstrap and port abstractions for correct Wails availability detection, initialization order, listener cleanup, and behavior when native capabilities are unavailable. Keep backend-specific details behind the existing boundary.
-
-    - path: "frontend/src/components/tools/{body-shape,model-viewer}/**/*.{ts,tsx}"
-      instructions: |
-        Review Three.js and worker-heavy rendering for transferred-buffer ownership, message generation/request ordering, stale responses, worker termination, object URL and GPU resource disposal, render-loop cleanup, and bounded CPU/GPU memory.
-        Validate binary lengths, strides, indices, frame ranges, numeric finiteness, and malformed model inputs before allocating or mutating geometry. Preserve the localized imperative update paths used for high-frequency visual feedback; do not request broad React state updates that rerender the scene.
-
-    - path: "frontend/src/shared/{body-shape,mod-viewer}/**/*.{ts,tsx}"
-      instructions: |
-        Treat parsers, geometry transforms, animation evaluation, and transport models as binary-data boundaries. Check bounds and overflow before typed-array access or allocation, preserve buffer ownership, and verify format-specific coordinate, stride, topology, and animation invariants with focused tests.
-
-    - path: "frontend/src/{components/tools/menu-maker,shared/menu-maker}/**/*.{ts,tsx}"
-      instructions: |
-        Review menu-maker parsing, draft state, media handling, and generation for untrusted input validation, object URL cleanup, deterministic output, source-hash conflict detection, and consistency with the backend apply/rollback contract.
-
     - path: "**/*.{ts,tsx,mts,cts,mjs,cjs,js,jsx}"
       instructions: |
         Focus on bugs and material risks involving type safety, resource cleanup, concurrency, cancellation, error propagation, and boundary validation.
         Do not report style-only deviations such as destructuring choices, loop versus array-method preferences, variable inlining, helper extraction, or equivalent utility choices unless they cause a concrete defect or significant maintenance risk.
-
-    - path: "frontend/patches/**/*.patch"
-      instructions: |
-        These patches intentionally modify the pinned Wails runtime dependency. Check that each patch still applies to the exact frontend package version, remains narrowly scoped, preserves upstream behavior outside the documented fix, and stays synchronized with package.json and pnpm lockfile changes.
 
     - path: "**/*_test.go"
       instructions: |

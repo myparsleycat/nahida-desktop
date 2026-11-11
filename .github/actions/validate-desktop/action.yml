@@ -1,5 +1,5 @@
 name: Validate desktop
-description: Runs the Go, frontend, generated-binding, and release-script gates
+description: Runs the Go build, test, and lint gates and the release-script tests
 
 runs:
   using: composite
@@ -10,8 +10,6 @@ runs:
         go mod tidy
         git diff --exit-code -- go.mod go.sum
 
-    # Runs first because it generates the Wails bindings and frontend/dist that the Go and frontend gates below
-    # need; generating them separately would repeat both.
     - name: Build Windows application
       shell: pwsh
       run: task build ARCH=amd64
@@ -24,18 +22,6 @@ runs:
       shell: pwsh
       run: task lint
 
-    - name: Test release version mapping
+    - name: Test release scripts
       shell: pwsh
-      run: pnpm test
-
-    - name: Lint and type-check frontend
-      shell: pwsh
-      working-directory: frontend
-      run: |
-        pnpm lint
-        pnpm typecheck
-
-    - name: Test frontend
-      shell: pwsh
-      working-directory: frontend
       run: pnpm test

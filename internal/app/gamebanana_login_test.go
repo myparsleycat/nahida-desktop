@@ -10,15 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/myparsleycat/fairy"
 
 	"nahida.live/desktop/internal/gamebanana"
 )
 
 type fakeLoginWindow struct {
 	mu                 sync.Mutex
-	cookies            []application.WebviewCookie
+	cookies            []fairy.Cookie
 	getErr             error
 	deleteErr          error
 	gets               atomic.Int32
@@ -29,9 +28,10 @@ type fakeLoginWindow struct {
 	closed             atomic.Bool
 	focuses            atomic.Int32
 	shows              atomic.Int32
-	listeners          map[events.WindowEventType][]func(*application.WindowEvent)
+	navigated          []func()
+	closing            []func()
+	failed             []func(error)
 	getDelay           time.Duration
-	rejectEmptyDelete  bool
 	cookieScopeURI     string
 	suppressCloseEvent bool
 	autoReady          bool
@@ -39,12 +39,8 @@ type fakeLoginWindow struct {
 	runHook            func()
 }
 
-func newFakeLoginWindow(cookies ...application.WebviewCookie) *fakeLoginWindow {
-	return &fakeLoginWindow{
-		cookies:   append([]application.WebviewCookie(nil), cookies...),
-		listeners: make(map[events.WindowEventType][]func(*application.WindowEvent)),
-		autoReady: true,
-	}
+func newFakeLoginWindow(cookies ...fairy.Cookie) *fakeLoginWindow {
+	return &fakeLoginWindow{cookies: append([]fairy.Cookie(nil), cookies...), autoReady: true}
 }
 
 func (w *fakeLoginWindow) Run() {
@@ -52,7 +48,7 @@ func (w *fakeLoginWindow) Run() {
 		w.runHook()
 	}
 	if w.autoReady {
-		w.emit(events.Windows.WebViewNavigationCompleted)
+		w.navigate()
 	}
 }
 
@@ -69,23 +65,17 @@ func (w *fakeLoginWindow) WaitClosed(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (w *fakeLoginWindow) Show() application.Window {
-	w.shows.Add(1)
-	return nil
-}
+func (w *fakeLoginWindow) Show() { w.shows.Add(1) }
 
 func (w *fakeLoginWindow) Focus() { w.focuses.Add(1) }
 
 func (w *fakeLoginWindow) Close() {
-	if w.closed.CompareAndSwap(false, true) {
-		if w.suppressCloseEvent {
-			return
-		}
-		w.emit(events.Common.WindowClosing)
+	if w.closed.CompareAndSwap(false, true) && !w.suppressCloseEvent {
+		w.close()
 	}
 }
 
-func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]application.WebviewCookie, error) {
+func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]fairy.Cookie, error) {
 	current := w.inFlight.Add(1)
 	for {
 		prev := w.maxFlight.Load()
@@ -117,7 +107,7 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]applica
 	if w.cookieScopeURI != "" && uri != w.cookieScopeURI {
 		return nil, nil
 	}
-	return append([]application.WebviewCookie(nil), w.cookies...), nil
+	return append([]fairy.Cookie(nil), w.cookies...), nil
 }
 
 func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...string) error {
@@ -129,53 +119,77 @@ func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...
 	if w.cookieScopeURI != "" && uri != w.cookieScopeURI {
 		return nil
 	}
-	if len(names) == 0 {
-		if w.rejectEmptyDelete {
-			return errors.New("The parameter is incorrect")
-		}
-		w.deleted = append(w.deleted, "*")
-		w.cookies = nil
-		return nil
-	}
 	w.deleted = append(w.deleted, names...)
-	kept := w.cookies[:0]
-	remove := map[string]struct{}{}
-	for _, name := range names {
-		remove[name] = struct{}{}
-	}
-	for _, cookie := range w.cookies {
-		if _, ok := remove[cookie.Name]; !ok {
-			kept = append(kept, cookie)
-		}
-	}
-	w.cookies = kept
+	w.cookies = slices.DeleteFunc(
+		w.cookies,
+		func(cookie fairy.Cookie) bool { return slices.Contains(names, cookie.Name) },
+	)
 	return nil
 }
 
-func (w *fakeLoginWindow) OnWindowEvent(
-	eventType events.WindowEventType,
-	callback func(*application.WindowEvent),
-) func() {
+func (w *fakeLoginWindow) OnNavigated(f func()) func() {
 	w.mu.Lock()
-	w.listeners[eventType] = append(w.listeners[eventType], callback)
+	w.navigated = append(w.navigated, f)
 	w.mu.Unlock()
 	return func() {}
 }
 
-func (w *fakeLoginWindow) emit(eventType events.WindowEventType) {
+func (w *fakeLoginWindow) OnClosing(f func()) func() {
 	w.mu.Lock()
-	listeners := append([]func(*application.WindowEvent){}, w.listeners[eventType]...)
+	w.closing = append(w.closing, f)
 	w.mu.Unlock()
-	for _, listener := range listeners {
-		listener(&application.WindowEvent{})
+	return func() {}
+}
+
+func (w *fakeLoginWindow) OnFailed(f func(error)) func() {
+	w.mu.Lock()
+	w.failed = append(w.failed, f)
+	w.mu.Unlock()
+	return func() {}
+}
+
+func (w *fakeLoginWindow) navigate() {
+	w.mu.Lock()
+	listeners := slices.Clone(w.navigated)
+	w.mu.Unlock()
+	for _, f := range listeners {
+		f()
 	}
 }
 
-func (w *fakeLoginWindow) setCookies(cookies ...application.WebviewCookie) {
+func (w *fakeLoginWindow) close() {
 	w.mu.Lock()
-	w.cookies = append([]application.WebviewCookie(nil), cookies...)
+	listeners := slices.Clone(w.closing)
+	w.mu.Unlock()
+	for _, f := range listeners {
+		f()
+	}
+}
+
+func (w *fakeLoginWindow) fail(err error) {
+	w.mu.Lock()
+	listeners := slices.Clone(w.failed)
+	w.mu.Unlock()
+	for _, f := range listeners {
+		f(err)
+	}
+}
+
+func (w *fakeLoginWindow) setCookies(cookies ...fairy.Cookie) {
+	w.mu.Lock()
+	w.cookies = append([]fairy.Cookie(nil), cookies...)
 	w.mu.Unlock()
 }
+
+func (w *fakeLoginWindow) deletedNames() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.deleted)
+}
+
+func rejectCandidate(context.Context, string) (bool, error) { return false, nil }
+
+func acceptCandidate(context.Context, string) (bool, error) { return true, nil }
 
 func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 	win := newFakeLoginWindow()
@@ -190,9 +204,7 @@ func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 	}
 	ownerDone := make(chan error, 1)
 	go func() {
-		_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			return false, nil
-		})
+		_, err := login.Open(context.Background(), rejectCandidate)
 		ownerDone <- err
 	}()
 	select {
@@ -202,11 +214,8 @@ func TestGameBananaLoginWaiterCancelDoesNotCloseWindow(t *testing.T) {
 	}
 	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, waitErr := login.Open(waitCtx, func(context.Context, string) (bool, error) {
-		return false, nil
-	})
-	if !errors.Is(waitErr, context.DeadlineExceeded) {
-		t.Fatalf("waiter err = %v", waitErr)
+	if _, err := login.Open(waitCtx, rejectCandidate); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiter err = %v", err)
 	}
 	if win.closed.Load() {
 		t.Fatal("waiter cancel closed the shared login window")
@@ -224,21 +233,11 @@ func TestGameBananaLoginReusesExistingWindow(t *testing.T) {
 	win := newFakeLoginWindow()
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
-	started := make(chan struct{})
-	go func() {
-		close(started)
-		_, _ = login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			return false, nil
-		})
-	}()
-	<-started
+	go func() { _, _ = login.Open(context.Background(), rejectCandidate) }()
 	time.Sleep(150 * time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err := login.Open(ctx, func(context.Context, string) (bool, error) {
-		return false, nil
-	})
-	if !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := login.Open(ctx, rejectCandidate); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
 	if win.focuses.Load() == 0 || win.shows.Load() == 0 {
@@ -254,21 +253,14 @@ func TestGameBananaLoginWaitsForNavigationBeforeCookiePoll(t *testing.T) {
 	login.factory = func() (loginWindow, error) { return win, nil }
 	done := make(chan error, 1)
 	go func() {
-		_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			return false, nil
-		})
+		_, err := login.Open(context.Background(), rejectCandidate)
 		done <- err
 	}()
 	time.Sleep(20 * time.Millisecond)
-	if win.focuses.Load() != 0 || win.shows.Load() != 0 || win.gets.Load() != 0 {
-		t.Fatalf(
-			"before navigation: shows=%d focuses=%d gets=%d",
-			win.shows.Load(),
-			win.focuses.Load(),
-			win.gets.Load(),
-		)
+	if win.gets.Load() != 0 {
+		t.Fatalf("cookies read before navigation: %d", win.gets.Load())
 	}
-	win.emit(events.Windows.WebViewNavigationCompleted)
+	win.navigate()
 	deadline := time.After(time.Second)
 	for win.gets.Load() == 0 {
 		select {
@@ -278,9 +270,6 @@ func TestGameBananaLoginWaitsForNavigationBeforeCookiePoll(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	if win.focuses.Load() != 0 {
-		t.Fatalf("focuses = %d", win.focuses.Load())
-	}
 	login.Close()
 	if err := <-done; !errors.Is(err, gamebanana.ErrAuthFailed) {
 		t.Fatalf("err = %v", err)
@@ -288,65 +277,45 @@ func TestGameBananaLoginWaitsForNavigationBeforeCookiePoll(t *testing.T) {
 }
 
 func TestGameBananaLoginPollsDoNotOverlap(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "keep", Value: "x"})
+	win := newFakeLoginWindow(fairy.Cookie{Name: "keep", Value: "x"})
 	win.getDelay = 80 * time.Millisecond
 	login := newGameBananaLogin()
 	login.pollWait = 10 * time.Millisecond
 	login.factory = func() (loginWindow, error) { return win, nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	_, _ = login.Open(ctx, func(context.Context, string) (bool, error) {
-		return false, nil
-	})
+	_, _ = login.Open(ctx, rejectCandidate)
 	if win.maxFlight.Load() > 1 {
 		t.Fatalf("overlapping polls: %d", win.maxFlight.Load())
 	}
 }
 
-func TestGameBananaLoginDoesNotRevalidateSameCandidate(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "same"})
+func TestGameBananaLoginDeletesInvalidCandidateOnceAndStaysOpen(t *testing.T) {
+	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "bad"})
 	var validates atomic.Int32
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) { return win, nil }
-	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-	defer cancel()
-	_, _ = login.Open(ctx, func(context.Context, string) (bool, error) {
-		validates.Add(1)
-		return false, nil
-	})
-	if validates.Load() != 1 {
-		t.Fatalf("validates = %d", validates.Load())
-	}
-}
-
-func TestGameBananaLoginDeletesInvalidCandidateAndStaysOpen(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "bad"})
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
 	defer cancel()
-	go func() {
-		time.Sleep(450 * time.Millisecond)
-		login.Close()
-	}()
 	_, err := login.Open(ctx, func(context.Context, string) (bool, error) {
+		validates.Add(1)
 		return false, nil
 	})
-	if !errors.Is(err, gamebanana.ErrAuthFailed) && !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
-	win.mu.Lock()
-	deleted := append([]string(nil), win.deleted...)
-	win.mu.Unlock()
-	if !slices.Equal(deleted, []string{"rmc"}) {
+	if validates.Load() != 1 {
+		t.Fatalf("validates = %d", validates.Load())
+	}
+	if deleted := win.deletedNames(); !slices.Equal(deleted, []string{"rmc"}) {
 		t.Fatalf("deleted = %v", deleted)
 	}
 }
 
 func TestGameBananaLoginTriesAllRMCCandidatesBeforeDeleting(t *testing.T) {
 	win := newFakeLoginWindow(
-		application.WebviewCookie{Name: "rmc", Value: "stale", Domain: ".gamebanana.com", Path: "/members"},
-		application.WebviewCookie{Name: "rmc", Value: "valid", Domain: ".gamebanana.com", Path: "/"},
+		fairy.Cookie{Name: "rmc", Value: "stale", Domain: ".gamebanana.com", Path: "/members"},
+		fairy.Cookie{Name: "rmc", Value: "valid", Domain: ".gamebanana.com", Path: "/", HTTPOnly: true},
 	)
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
@@ -358,146 +327,32 @@ func TestGameBananaLoginTriesAllRMCCandidatesBeforeDeleting(t *testing.T) {
 	if err != nil || cookie != "rmc=valid" {
 		t.Fatalf("cookie=%q err=%v", cookie, err)
 	}
-	if len(candidates) != 2 || candidates[0] != "rmc=stale" || candidates[1] != "rmc=valid" {
+	if !slices.Equal(candidates, []string{"rmc=stale", "rmc=valid"}) {
 		t.Fatalf("candidates = %v", candidates)
 	}
-	win.mu.Lock()
-	defer win.mu.Unlock()
-	if len(win.deleted) != 0 {
-		t.Fatalf("deleted = %v", win.deleted)
+	if deleted := win.deletedNames(); len(deleted) != 0 {
+		t.Fatalf("deleted = %v", deleted)
+	}
+	if !win.closed.Load() {
+		t.Fatal("window stayed open after success")
 	}
 }
 
-func TestGameBananaLoginAcceptsHTTPOnlyRMC(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "hidden", HTTPOnly: true})
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) { return win, nil }
-	cookie, err := login.Open(context.Background(), func(_ context.Context, candidate string) (bool, error) {
-		if candidate != "rmc=hidden" {
-			t.Fatalf("candidate = %q", candidate)
-		}
-		return true, nil
-	})
-	if err != nil || cookie != "rmc=hidden" {
-		t.Fatalf("cookie=%q err=%v", cookie, err)
-	}
-}
-
-func TestGameBananaLoginClosesAfterValidCandidateCallbackReturns(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "good"})
-	returned := make(chan struct{})
-	closedAfter := make(chan bool, 1)
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) { return win, nil }
-	go func() {
-		cookie, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			time.Sleep(30 * time.Millisecond)
-			close(returned)
-			return true, nil
-		})
-		if err != nil || cookie != "rmc=good" {
-			t.Errorf("cookie=%q err=%v", cookie, err)
-		}
-	}()
-	<-returned
-	deadline := time.After(time.Second)
-	for {
-		if win.closed.Load() {
-			closedAfter <- true
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("window did not close after success")
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
-}
-
-func TestGameBananaLoginUserCloseIsCancelled(t *testing.T) {
+func TestGameBananaLoginUserCloseIsCancelledAndLateCookieIgnored(t *testing.T) {
 	win := newFakeLoginWindow()
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			return false, nil
-		})
+		_, err := login.Open(context.Background(), acceptCandidate)
 		errCh <- err
 	}()
 	time.Sleep(20 * time.Millisecond)
-	win.emit(events.Common.WindowClosing)
-	err := <-errCh
-	if err == nil || err.Error() != "GAMEBANANA_LOGIN_CANCELLED" {
+	win.close()
+	if err := <-errCh; !errors.Is(err, gamebanana.ErrLoginCancelled) {
 		t.Fatalf("err = %v", err)
 	}
-}
-
-func TestGameBananaLoginProgrammaticCloseIsNotCancel(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "good"})
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) { return win, nil }
-	cookie, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-		return true, nil
-	})
-	if err != nil || cookie != "rmc=good" {
-		t.Fatalf("cookie=%q err=%v", cookie, err)
-	}
-}
-
-func TestGameBananaLoginDoesNotReuseSettledResultWithoutCloseEvent(t *testing.T) {
-	first := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "first"})
-	first.suppressCloseEvent = true
-	second := newFakeLoginWindow()
-	windows := []loginWindow{first, second}
-	var created atomic.Int32
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) {
-		return windows[int(created.Add(1))-1], nil
-	}
-	cookie, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-		return true, nil
-	})
-	if err != nil || cookie != "rmc=first" {
-		t.Fatalf("cookie=%q err=%v", cookie, err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	defer cancel()
-	var secondValidates atomic.Int32
-	_, err = login.Open(ctx, func(context.Context, string) (bool, error) {
-		secondValidates.Add(1)
-		return true, nil
-	})
-	login.Close()
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v", err)
-	}
-	if created.Load() != 2 {
-		t.Fatalf("created = %d", created.Load())
-	}
-	if secondValidates.Load() != 0 {
-		t.Fatalf("second validates = %d", secondValidates.Load())
-	}
-}
-
-func TestGameBananaLoginLateCallbackIgnored(t *testing.T) {
-	win := newFakeLoginWindow()
-	login := newGameBananaLogin()
-	login.factory = func() (loginWindow, error) { return win, nil }
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-			return false, nil
-		})
-		errCh <- err
-	}()
-	time.Sleep(20 * time.Millisecond)
-	win.emit(events.Common.WindowClosing)
-	if err := <-errCh; err == nil || err.Error() != "GAMEBANANA_LOGIN_CANCELLED" {
-		t.Fatalf("err = %v", err)
-	}
-	win.setCookies(application.WebviewCookie{Name: "rmc", Value: "late"})
+	win.setCookies(fairy.Cookie{Name: "rmc", Value: "late"})
 	time.Sleep(400 * time.Millisecond)
 	login.mu.Lock()
 	result := login.result
@@ -507,33 +362,98 @@ func TestGameBananaLoginLateCallbackIgnored(t *testing.T) {
 	}
 }
 
-func TestGameBananaLoginErrorsDoNotIncludeCookieValues(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "super-secret"})
+func TestGameBananaLoginWebViewFailureIsUnsupported(t *testing.T) {
+	win := newFakeLoginWindow()
+	win.autoReady = false
+	win.runHook = func() { go win.fail(errLoginWebViewUnavailable) }
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
-	_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-		return false, errors.New("GAMEBANANA_AUTH_FAILED")
-	})
-	if err == nil {
-		t.Fatal("expected error")
+	_, err := login.Open(context.Background(), acceptCandidate)
+	if !errors.Is(err, gamebanana.ErrAutoLoginUnsupported) || err.Error() != "GAMEBANANA_AUTO_LOGIN_UNSUPPORTED" {
+		t.Fatalf("err = %v", err)
 	}
-	if strings.Contains(err.Error(), "super-secret") {
-		t.Fatalf("error leaked cookie: %v", err)
+	if !win.closed.Load() {
+		t.Fatal("failed login window stayed open")
+	}
+}
+
+func TestGameBananaLoginDoesNotReuseSettledResultWithoutCloseEvent(t *testing.T) {
+	first := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "first"})
+	first.suppressCloseEvent = true
+	second := newFakeLoginWindow()
+	windows := []loginWindow{first, second}
+	var created atomic.Int32
+	login := newGameBananaLogin()
+	login.factory = func() (loginWindow, error) { return windows[int(created.Add(1))-1], nil }
+	if cookie, err := login.Open(context.Background(), acceptCandidate); err != nil || cookie != "rmc=first" {
+		t.Fatalf("cookie=%q err=%v", cookie, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	_, err := login.Open(ctx, acceptCandidate)
+	login.Close()
+	if !errors.Is(err, context.DeadlineExceeded) || created.Load() != 2 {
+		t.Fatalf("err=%v created=%d", err, created.Load())
+	}
+}
+
+func TestGameBananaOldWindowCannotCloseNewLogin(t *testing.T) {
+	first := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "first"})
+	second := newFakeLoginWindow()
+	second.autoReady = false
+	login := newGameBananaLogin()
+	login.factory = func() (loginWindow, error) { return first, nil }
+	if _, err := login.Open(context.Background(), acceptCandidate); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	second.runHook = func() { close(started) }
+	login.factory = func() (loginWindow, error) { return second, nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := login.Open(ctx, nil); done <- err }()
+	<-started
+	first.close()
+	first.navigate()
+	login.mu.Lock()
+	closed := login.closed
+	login.mu.Unlock()
+	if closed || second.closed.Load() {
+		t.Fatal("old event closed new login")
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled login returned %v", err)
+	}
+}
+
+func TestGameBananaLoginDeadlineClosesWindow(t *testing.T) {
+	win := newFakeLoginWindow()
+	win.autoReady = false
+	login := newGameBananaLogin()
+	login.factory = func() (loginWindow, error) { return win, nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if _, err := login.Open(ctx, nil); !errors.Is(err, context.DeadlineExceeded) || !win.closed.Load() {
+		t.Fatalf("deadline left window alive: %v", err)
+	}
+	win.navigate()
+	time.Sleep(2 * gameBananaReadyWait)
+	if win.gets.Load() != 0 {
+		t.Fatal("late navigation started polling")
 	}
 }
 
 func TestGameBananaLoginPreparesSharedProfileBeforeCreatingWindow(t *testing.T) {
-	logoutWindow := newFakeLoginWindow(
-		application.WebviewCookie{Name: "rmc", Value: "stale"},
-		application.WebviewCookie{Name: "PHPSESSID", Value: "session"},
-	)
-	logoutWindow.cookieScopeURI = gameBananaLoginURL
+	logout := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "stale"}, fairy.Cookie{Name: "PHPSESSID", Value: "s"})
+	logout.cookieScopeURI = gameBananaLoginURL
 	win := newFakeLoginWindow()
 	var stages []string
 	login := newGameBananaLogin()
 	login.logoutFactory = func() (loginWindow, error) {
 		stages = append(stages, "logout")
-		return logoutWindow, nil
+		return logout, nil
 	}
 	login.factory = func() (loginWindow, error) {
 		stages = append(stages, "create")
@@ -547,95 +467,56 @@ func TestGameBananaLoginPreparesSharedProfileBeforeCreatingWindow(t *testing.T) 
 		return true, nil
 	})
 	login.Close()
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) || validates.Load() != 0 {
+		t.Fatalf("err=%v validates=%d", err, validates.Load())
 	}
-	if validates.Load() != 0 {
-		t.Fatalf("validates = %d", validates.Load())
-	}
-	logoutWindow.mu.Lock()
-	deleted := append([]string(nil), logoutWindow.deleted...)
-	remaining := append([]application.WebviewCookie(nil), logoutWindow.cookies...)
-	logoutWindow.mu.Unlock()
-	if !slices.Equal(deleted, []string{"rmc", "sess", "PHPSESSID"}) {
+	if deleted := logout.deletedNames(); !slices.Equal(deleted, []string{"rmc", "sess", "PHPSESSID"}) {
 		t.Fatalf("deleted = %v", deleted)
 	}
-	if len(remaining) != 0 {
-		t.Fatalf("remaining = %v", remaining)
-	}
-	if !slices.Equal(stages, []string{"logout", "create"}) {
-		t.Fatalf("stages = %v", stages)
-	}
-}
-
-func TestGameBananaLoginDoesNotCreateWindowWhenSharedSessionLogoutFails(t *testing.T) {
-	logoutErr := errors.New("logout window failed")
-	var created atomic.Int32
-	login := newGameBananaLogin()
-	login.logoutFactory = func() (loginWindow, error) { return nil, logoutErr }
-	login.factory = func() (loginWindow, error) {
-		created.Add(1)
-		return newFakeLoginWindow(), nil
-	}
-	_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
-		return true, nil
-	})
-	if !errors.Is(err, gamebanana.ErrLoginInitFailed) {
-		t.Fatalf("err = %v", err)
-	}
-	if created.Load() != 0 {
-		t.Fatalf("created = %d", created.Load())
-	}
-}
-
-func TestGameBananaLoginClearCookiesEnumeratesCookieNames(t *testing.T) {
-	win := newFakeLoginWindow()
-	win.setCookies(
-		application.WebviewCookie{Name: "rmc", Value: "old"},
-		application.WebviewCookie{Name: "PHPSESSID", Value: "session"},
-		application.WebviewCookie{Name: "rmc", Value: "duplicate-name"},
-	)
-	win.rejectEmptyDelete = true
-	win.cookieScopeURI = gameBananaLoginURL
-	login := newGameBananaLogin()
-	login.logoutFactory = func() (loginWindow, error) { return win, nil }
-	if err := login.ClearCookies(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	win.mu.Lock()
-	deleted := append([]string(nil), win.deleted...)
-	remaining := append([]application.WebviewCookie(nil), win.cookies...)
-	win.mu.Unlock()
-	if !slices.Equal(deleted, []string{"rmc", "sess", "PHPSESSID"}) {
-		t.Fatalf("deleted = %v", deleted)
-	}
-	if len(remaining) != 0 {
-		t.Fatalf("remaining = %v", remaining)
+	if !logout.closed.Load() || !slices.Equal(stages, []string{"logout", "create"}) {
+		t.Fatalf("logout closed=%v stages=%v", logout.closed.Load(), stages)
 	}
 }
 
 func TestGameBananaLoginClearCookiesWaitsForLogoutNavigation(t *testing.T) {
-	win := newFakeLoginWindow(application.WebviewCookie{Name: "rmc", Value: "old"})
+	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "old"}, fairy.Cookie{Name: "rmc", Value: "dup"})
 	win.autoReady = false
 	login := newGameBananaLogin()
 	login.logoutFactory = func() (loginWindow, error) { return win, nil }
 	done := make(chan error, 1)
 	go func() { done <- login.ClearCookies(context.Background()) }()
 	time.Sleep(20 * time.Millisecond)
-	win.mu.Lock()
-	deletedBeforeNavigation := append([]string(nil), win.deleted...)
-	win.mu.Unlock()
-	if len(deletedBeforeNavigation) != 0 {
-		t.Fatalf("deleted before navigation = %v", deletedBeforeNavigation)
+	if deleted := win.deletedNames(); len(deleted) != 0 {
+		t.Fatalf("deleted before navigation = %v", deleted)
 	}
-	win.emit(events.Windows.WebViewNavigationCompleted)
+	win.navigate()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	win.mu.Lock()
-	deleted := append([]string(nil), win.deleted...)
-	win.mu.Unlock()
-	if !slices.Equal(deleted, []string{"rmc", "sess"}) {
+	if deleted := win.deletedNames(); !slices.Equal(deleted, []string{"rmc", "sess"}) {
 		t.Fatalf("deleted = %v", deleted)
+	}
+}
+
+func TestGameBananaLoginClearCookiesWithoutWebView2Succeeds(t *testing.T) {
+	win := newFakeLoginWindow()
+	win.autoReady = false
+	win.runHook = func() { go win.fail(errLoginWebViewUnavailable) }
+	login := newGameBananaLogin()
+	login.logoutFactory = func() (loginWindow, error) { return win, nil }
+	if err := login.ClearCookies(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGameBananaLoginErrorsDoNotIncludeCookieValues(t *testing.T) {
+	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "super-secret"})
+	login := newGameBananaLogin()
+	login.factory = func() (loginWindow, error) { return win, nil }
+	_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {
+		return false, errors.New("GAMEBANANA_AUTH_FAILED")
+	})
+	if err == nil || strings.Contains(err.Error(), "super-secret") {
+		t.Fatalf("err = %v", err)
 	}
 }

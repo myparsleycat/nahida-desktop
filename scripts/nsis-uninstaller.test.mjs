@@ -1,19 +1,27 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const project = await readFile(
   new URL('../build/windows/nsis/project.nsi', import.meta.url),
   'utf8',
 );
-const app = await readFile(new URL('../internal/app/app.go', import.meta.url), 'utf8');
-
-test('keeps the NSIS running-app mutex in sync with the Wails single-instance ID', () => {
-  const uniqueID = app.match(/UniqueID:\s*"([^"]+)"/)?.[1];
+test('keeps the NSIS running-app mutex in sync with the fairy single-instance ID', async () => {
+  const appDirectory = new URL('../internal/app/', import.meta.url);
+  const sources = await Promise.all([
+    readFile(new URL('../main.go', import.meta.url), 'utf8'),
+    ...(await readdir(appDirectory))
+      .filter((file) => file.endsWith('.go') && !file.endsWith('_test.go'))
+      .map((file) => readFile(new URL(file, appDirectory), 'utf8')),
+  ]);
+  const ids = sources.flatMap((source) =>
+    [...source.matchAll(/fairy\.SingleInstance\(\s*"([^"]+)"/g)].map((match) => match[1]),
+  );
   const mutex = project.match(/!define APP_SINGLE_INSTANCE_MUTEX "([^"]+)"/)?.[1];
 
-  assert.ok(uniqueID, 'Wails single-instance UniqueID is missing');
-  assert.equal(mutex, `wails-app-${uniqueID}-sim`);
+  assert.equal(ids.length, 1, 'expected one fairy.SingleInstance call with a literal ID');
+  // Fairy names the mutex Local\nahida.fairy.<ID>.
+  assert.equal(mutex, `Local\\nahida.fairy.${ids[0]}`);
 });
 
 test('blocks uninstall while the app mutex is held', () => {
@@ -43,7 +51,7 @@ test('preserves uninstall registration when executable removal fails', () => {
   const clearErrors = section.indexOf('ClearErrors');
   const removeExecutable = section.indexOf('Delete "$INSTDIR\\${PRODUCT_EXECUTABLE}"');
   const checkErrors = section.indexOf('IfErrors uninstallFailed');
-  const deleteRegistration = section.indexOf('!insertmacro wails.deleteUninstaller');
+  const deleteRegistration = section.indexOf('!insertmacro nahida.deleteUninstaller');
   const failure = section.indexOf('uninstallFailed:');
 
   assert.ok(clearErrors >= 0 && clearErrors < removeExecutable);

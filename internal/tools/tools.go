@@ -176,7 +176,7 @@ func NewWithOptions(opts Options) *Tools {
 			FS:       opts.FS,
 			Runtimes: opts.Runtimes,
 		}),
-		menuMaker:   menumaker.NewWithOptions(menumaker.Options{Log: opts.Log}),
+		menuMaker:   menumaker.NewWithOptions(menumaker.Options{Log: opts.Log, HTTP: opts.HTTP}),
 		modelViewer: modelViewer,
 		texture: texture.NewWithOptions(texture.Options{
 			Log:       opts.Log,
@@ -216,7 +216,6 @@ func NewWithOptions(opts Options) *Tools {
 	}
 }
 
-//wails:ignore
 func (t *Tools) UseClient(client *db.Client) {
 	if t.githubRate != nil && client != nil {
 		t.githubRate.UseAppState(client.AppState)
@@ -233,7 +232,6 @@ func (t *Tools) UseClient(client *db.Client) {
 	t.zzmi.UseClient(client)
 }
 
-//wails:ignore
 func (t *Tools) UseAppData(data *appdata.Store) {
 	t.bisect.UseAppData(data)
 	t.fixer4001.UseAppData(data)
@@ -243,7 +241,6 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 	t.zzmi.UseAppData(data)
 }
 
-//wails:ignore
 func (t *Tools) ServiceShutdown() error {
 	return errors.Join(
 		t.shutdownFixTool(),

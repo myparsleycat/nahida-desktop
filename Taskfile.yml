@@ -3,12 +3,9 @@ version: '3'
 vars:
   APP_NAME: "nahida-desktop"
   BIN_DIR: "bin"
-  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "pnpm"}}'
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-  # Target OS for build/package/run. Windows only. Defaults to the host OS,
-  # and is overridden by `go tool wails3 build GOOS=...` (or the GOOS env var) for
-  # cross-compilation. The tasks below dispatch to the matching platform
-  # Taskfile via this variable.
+  # Target OS for build/package/run. Windows only. Defaults to the host OS and can be overridden with GOOS=... on the
+  # task command line or the GOOS environment variable. The tasks below dispatch to the matching platform Taskfile via
+  # this variable.
   GOOS: '{{.GOOS | default OS}}'
 
 # internal/xxmi refuses to compile without nodynamic, which keeps github.com/gen2brain/avif from loading
@@ -17,7 +14,6 @@ env:
   GOFLAGS: -tags=nodynamic
 
 includes:
-  common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml
 
 tasks:
@@ -51,17 +47,13 @@ tasks:
           ARCH: '{{.ARCH | default "amd64"}}'
 
   run:
-    summary: Runs the application
+    summary: Builds and runs the application
     preconditions:
       - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
         msg: "This app runs on Windows only (got GOOS={{.GOOS}})."
     cmds:
       - task: "{{.GOOS}}:run"
 
-  dev:
-    summary: Runs the application in development mode
-    cmds:
-      - go tool wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
   test:
     summary: Runs Go tests

@@ -63,8 +63,6 @@ func backupAPIError(edenErr *edenError) error {
 
 // BackupJSON calls a backup route with a JSON body and decodes the answer into
 // out, which may be nil.
-//
-//wails:ignore
 func (d *Drive) BackupJSON(ctx context.Context, method, route string, body, out any) error {
 	decoded, edenErr, err := d.doJSON(ctx, method, route, nil, body)
 	if err != nil {
@@ -95,8 +93,6 @@ type BackupRules struct {
 
 // BackupRules asks the server for its upload rules afresh, so a run sees rules
 // that changed while the app was open.
-//
-//wails:ignore
 func (d *Drive) BackupRules(ctx context.Context) (BackupRules, error) {
 	rules, decoded, err := d.fetchRules(ctx)
 	if err != nil {
@@ -161,8 +157,6 @@ type BackupDeletedFile struct {
 // commit tells which content is still missing. The files the server refused
 // are answered too, whether the plan or the upload refused them, also beside
 // an error that stops the run.
-//
-//wails:ignore
 func (d *Drive) UploadBackupFiles(
 	ctx context.Context,
 	snapshotID string,
@@ -346,8 +340,6 @@ type BackupDownload struct {
 
 // DownloadBackupFile writes one file of a snapshot to destination. A CDN
 // failure is retried once through a presigned URL.
-//
-//wails:ignore
 func (d *Drive) DownloadBackupFile(
 	ctx context.Context,
 	snapshotID string,

@@ -176,8 +176,6 @@ func (d *Dialog) ResolveDirectoryConflict(opts DirectoryConflictOptions) (Direct
 
 // UseDirectoryConflictResolver replaces the native resolver for tests and
 // embedders.
-//
-//wails:ignore
 func (d *Dialog) UseDirectoryConflictResolver(fn func(DirectoryConflictOptions) (DirectoryConflictChoice, error)) {
 	if fn != nil {
 		d.directoryConflict = fn

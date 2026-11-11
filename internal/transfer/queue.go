@@ -141,7 +141,6 @@ func (t *Transfer) Clear() error {
 	return t.RefreshPowerSaveBlock(context.Background())
 }
 
-//wails:ignore
 func (t *Transfer) Create(params CreateParams) (Record, error) {
 	if params.PID == "" {
 		return Record{}, errors.New("transfer pid is required")
@@ -232,8 +231,6 @@ func (t *Transfer) Create(params CreateParams) (Record, error) {
 // AttachCancel connects a transfer entry to work managed outside the queue.
 // It is used by server-side Drive imports so Transfer.Cancel stops the active
 // HTTP stream through the same cancellation path as other transfers.
-//
-//wails:ignore
 func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 	if cancel == nil {
 		return errors.New("transfer cancel function is required")
@@ -253,8 +250,6 @@ func (t *Transfer) AttachCancel(pid string, cancel context.CancelFunc) error {
 }
 
 // ClearCancel detaches externally managed work after it finishes.
-//
-//wails:ignore
 func (t *Transfer) ClearCancel(pid string) {
 	t.destinationMu.Lock()
 	t.mu.Lock()
@@ -292,7 +287,6 @@ func (t *Transfer) movesToTransferPage(ctx context.Context) bool {
 	return move
 }
 
-//wails:ignore
 func (t *Transfer) RegisterRunner(pid string, runner Runner) error {
 	if runner == nil {
 		return errors.New("transfer runner is required")
@@ -310,7 +304,6 @@ func (t *Transfer) RegisterRunner(pid string, runner Runner) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) ProcessQueue(ctx context.Context) error {
 	for {
 		pid, runner, runCtx, ok := t.next(ctx)
@@ -426,7 +419,6 @@ func isNormalRunnerCancellation(err error) bool {
 		message == "CUSTOM_DOWNLOAD_CANCELED" || strings.HasPrefix(message, "CUSTOM_DOWNLOAD_CANCELED:")
 }
 
-//wails:ignore
 func (t *Transfer) RestartData(pid string) (any, bool) {
 	t.mu.RLock()
 	item, ok := t.entries[pid]
@@ -439,7 +431,6 @@ func (t *Transfer) RestartData(pid string) (any, bool) {
 	return data, true
 }
 
-//wails:ignore
 func (t *Transfer) ManualStart(pid string) error {
 	t.mu.RLock()
 	item, ok := t.entries[pid]
@@ -515,7 +506,6 @@ func (t *Transfer) ManualStart(pid string) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) ResetStartTime(pid string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -528,7 +518,6 @@ func (t *Transfer) ResetStartTime(pid string) error {
 	return nil
 }
 
-//wails:ignore
 func (t *Transfer) ResetTransfer(pid string) error {
 	t.mu.Lock()
 	item, ok := t.entries[pid]

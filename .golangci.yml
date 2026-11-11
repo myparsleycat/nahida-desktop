@@ -44,7 +44,6 @@ linters:
     generated: lax
     paths:
       - ^build/
-      - ^frontend/
       - builtin$
       - examples$
     rules:
@@ -74,6 +73,5 @@ formatters:
     generated: lax
     paths:
       - ^build/
-      - ^frontend/
       - builtin$
       - examples$

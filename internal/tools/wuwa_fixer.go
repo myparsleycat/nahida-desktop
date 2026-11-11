@@ -52,7 +52,6 @@ func (t *Tools) WuwaFixerCleanBackups(ctx context.Context, modPath string) error
 	return t.wuwa.WuwaFixerCleanBackups(ctx, modPath)
 }
 
-//wails:ignore
 func (t *Tools) StartWuwaAutoUpdateCheck() {
 	t.wuwa.StartWuwaAutoUpdateCheck()
 }

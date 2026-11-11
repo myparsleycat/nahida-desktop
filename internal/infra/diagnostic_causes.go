@@ -10,8 +10,6 @@ import (
 
 // WithCause preserves the returned error and its JSON while retaining a cause
 // that an existing domain contract deliberately hides from callers.
-//
-//wails:ignore
 func WithCause(err, cause error) error {
 	if err == nil || cause == nil {
 		return err
@@ -151,8 +149,6 @@ func limitDiagnosticText(value string, limit int) string {
 
 // HTTPDiagnostic captures response metadata without consuming the body or
 // collecting request credentials, query strings, or arbitrary headers.
-//
-//wails:ignore
 func HTTPDiagnostic(method, endpoint, stage string, response *http.Response) Diagnostic {
 	fields := map[string]any{"method": method, "endpoint": SanitizeLogURL(endpoint)}
 	if response != nil {

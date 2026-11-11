@@ -100,8 +100,6 @@ func NewLogWithOptions(opts LogOptions) *Log {
 }
 
 // Configure updates dest/writer without resetting the current level.
-//
-//wails:ignore
 func (l *Log) Configure(opts LogOptions) {
 	if l == nil {
 		return
@@ -144,7 +142,6 @@ func (l *Log) applyOptions(opts LogOptions) {
 	}
 }
 
-//wails:ignore
 func (l *Log) Close() error {
 	if l == nil {
 		return nil
@@ -169,8 +166,6 @@ func (l *Log) closeFileLocked() error {
 
 // SetLevel updates the current level. Empty and unknown values become "warn"
 // so a corrupted setting cannot silence every log entry.
-//
-//wails:ignore
 func (l *Log) SetLevel(level string) {
 	if l == nil {
 		return
@@ -184,8 +179,6 @@ func (l *Log) SetLevel(level string) {
 }
 
 // Level returns the current filter level.
-//
-//wails:ignore
 func (l *Log) Level() string {
 	if l == nil {
 		return defaultLogLevel
@@ -345,22 +338,16 @@ func (l *Log) openDestLocked() error {
 	return nil
 }
 
-//wails:ignore
 func (l *Log) Info(msg any, where string) { l.Log("info", msg, where) }
 
-//wails:ignore
 func (l *Log) Debug(msg any, where string) { l.Log("debug", msg, where) }
 
-//wails:ignore
 func (l *Log) Warn(msg any, where string) { l.Log("warn", msg, where) }
 
-//wails:ignore
 func (l *Log) Error(msg any, where string) { l.Log("error", msg, where) }
 
-//wails:ignore
 func (l *Log) Trace(msg any, where string) { l.Log("trace", msg, where) }
 
-//wails:ignore
 func (l *Log) Fatal(msg any, where string) { l.Log("fatal", msg, where) }
 
 // DesktopLogPath is the packaged file sink under a Logs directory.
@@ -445,8 +432,6 @@ func redactLogURLs(value string) string {
 
 // SanitizeLogURL removes credentials, query parameters, and fragments from a
 // URL before it is placed in diagnostic context.
-//
-//wails:ignore
 func SanitizeLogURL(value string) string {
 	parsed, err := url.Parse(value)
 	if err != nil {

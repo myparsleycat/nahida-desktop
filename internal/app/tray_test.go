@@ -6,8 +6,6 @@ import (
 	"testing"
 	"testing/synctest"
 
-	wailsupdater "github.com/wailsapp/wails/v3/pkg/updater"
-
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -25,7 +23,7 @@ func TestTrayUpdateCheckConcurrentClicksPreserveProgress(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
 				started, finish, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-				engine := &trayUpdaterEngine{check: func() (*wailsupdater.Release, error) {
+				engine := &trayUpdaterEngine{check: func() (*infra.UpdateRelease, error) {
 					close(started)
 					<-finish
 					return nil, outcome.err
@@ -55,7 +53,7 @@ func TestTrayUpdateCheckConcurrentClicksPreserveProgress(t *testing.T) {
 				}
 
 				calls := 0
-				engine.check = func() (*wailsupdater.Release, error) {
+				engine.check = func() (*infra.UpdateRelease, error) {
 					calls++
 					return nil, nil
 				}
@@ -69,18 +67,16 @@ func TestTrayUpdateCheckConcurrentClicksPreserveProgress(t *testing.T) {
 }
 
 type trayUpdaterEngine struct {
-	check func() (*wailsupdater.Release, error)
+	check func() (*infra.UpdateRelease, error)
 }
 
-func (*trayUpdaterEngine) Init(wailsupdater.Config) error { return nil }
+func (e *trayUpdaterEngine) Check(context.Context, bool) (*infra.UpdateRelease, error) {
+	return e.check()
+}
 
-func (e *trayUpdaterEngine) Check(context.Context) (*wailsupdater.Release, error) { return e.check() }
-
-func (*trayUpdaterEngine) DownloadAndInstall(context.Context) error { return nil }
+func (*trayUpdaterEngine) DownloadAndInstall(context.Context, func(int64, int64)) error { return nil }
 
 func (*trayUpdaterEngine) Restart(context.Context) error { return nil }
-
-func (*trayUpdaterEngine) StopPeriodicCheck() {}
 
 type trayUpdaterSettings struct{}
 

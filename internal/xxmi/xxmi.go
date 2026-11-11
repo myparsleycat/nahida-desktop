@@ -228,7 +228,6 @@ func NewWithOptions(opts Options) *XXMI {
 	return x
 }
 
-//wails:ignore
 func (x *XXMI) UseClient(client *db.Client) {
 	x.mu.Lock()
 	x.client = client
@@ -237,8 +236,6 @@ func (x *XXMI) UseClient(client *db.Client) {
 
 // UseImportersChanged registers a backend consumer of changes to the enabled importers or their folders.
 // Changes made during importer maintenance are not reported, because resuming restarts the consumers.
-//
-//wails:ignore
 func (x *XXMI) UseImportersChanged(changed func(context.Context)) {
 	x.mu.Lock()
 	x.importersChanged = changed
@@ -257,8 +254,6 @@ func (x *XXMI) notifyImportersChanged(ctx context.Context) {
 
 // UseDLLChanged registers a backend consumer of changes to where an importer's d3d11.dll comes from: its own
 // provider or custom DLL, or the shared selections it follows.
-//
-//wails:ignore
 func (x *XXMI) UseDLLChanged(changed func(ctx context.Context, importer string)) {
 	x.mu.Lock()
 	x.dllChanged = changed
@@ -279,8 +274,6 @@ func (x *XXMI) notifyDLLChanged(ctx context.Context, importers ...string) {
 }
 
 // UseModRuntimeUpdate registers what updates an importer's outdated mod runtimes before a launch loads its mods.
-//
-//wails:ignore
 func (x *XXMI) UseModRuntimeUpdate(update func(ctx context.Context, importer string) error) {
 	x.mu.Lock()
 	x.modRuntimeUpdate = update
@@ -288,8 +281,6 @@ func (x *XXMI) UseModRuntimeUpdate(update func(ctx context.Context, importer str
 }
 
 // UseImporterMaintenance registers the backend pause/resume boundary for importer filesystem changes.
-//
-//wails:ignore
 func (x *XXMI) UseImporterMaintenance(begin func(context.Context) (func([]ImportedImporter) error, error)) {
 	x.mu.Lock()
 	x.importerMaintenance = begin
@@ -374,8 +365,6 @@ func (x *XXMI) GetEnabledImporters(ctx context.Context) ([]EnabledImporter, erro
 }
 
 // ResolveHuntingRuntime returns the active importer's game and INI metadata.
-//
-//wails:ignore
 func (x *XXMI) ResolveHuntingRuntime(ctx context.Context, importerKey string) (HuntingRuntime, error) {
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {

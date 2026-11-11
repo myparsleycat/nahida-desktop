@@ -104,14 +104,12 @@ func NewDownload() *Download {
 	return &Download{client: NewClient()}
 }
 
-//wails:ignore
 func (d *Download) UseClient(client *Client) {
 	if client != nil {
 		d.client = client
 	}
 }
 
-//wails:ignore
 func (d *Download) UseLimiter(limiter DownloadLimiter) {
 	d.limiter = limiter
 }

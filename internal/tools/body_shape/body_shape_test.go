@@ -380,6 +380,43 @@ func TestBodyShapeBinaryUploadCommitExportsAllSelectedPositions(t *testing.T) {
 	}
 }
 
+func TestBodyShapeCommitPositionsExportsMeshData(t *testing.T) {
+	ctx := context.Background()
+	service, disabler, loaded := loadBodyShapeTestMod(
+		t,
+		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n",
+	)
+	id := loaded.Meshes[0].ID
+	data, err := service.BodyShapeMeshData(ctx, BodyShapeMeshInput{SessionID: loaded.SessionID, MeshID: id})
+	if err != nil || data.VertexCount != 2 || !reflect.DeepEqual(data.Positions, []float32{0, 0, 0, 1, 0, 0}) {
+		t.Fatalf("mesh data = %#v, %v", data, err)
+	}
+
+	short := BodyShapeCommitPositionsInput{
+		SessionID: loaded.SessionID,
+		Meshes:    []BodyShapeMeshPositions{{MeshID: id, Positions: []float32{0, 0, 0}}},
+	}
+	if _, err := service.BodyShapeCommitPositions(ctx, short); err == nil || disabler.called != "" {
+		t.Fatalf("commit of a short position list = %v, disabled %q", err, disabler.called)
+	}
+
+	want := []float32{0, 0, 0, 2, 0, 0}
+	result, err := service.BodyShapeCommitPositions(ctx, BodyShapeCommitPositionsInput{
+		SessionID: loaded.SessionID,
+		Meshes:    []BodyShapeMeshPositions{{MeshID: id, Positions: want}},
+	})
+	if err != nil || result.ModRoot == nil {
+		t.Fatalf("commit = %#v, %v", result, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(*result.ModRoot, "Meshes", "Body.buf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if positions, err := modmesh.ExtractPositions(raw, 12); err != nil || !reflect.DeepEqual(positions, want) {
+		t.Fatalf("positions = %#v, %v", positions, err)
+	}
+}
+
 func TestBodyShapeCommitRejectsUnchangedPositions(t *testing.T) {
 	ctx := context.Background()
 	service, disabler, loaded := loadBodyShapeTestMod(

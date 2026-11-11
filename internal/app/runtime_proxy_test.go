@@ -22,17 +22,16 @@ func TestProxyStartupBlocksDamagedSettingsAndFreezesArguments(t *testing.T) {
 	if err := settings.Client().Settings.Upsert(ctx, "network_proxy", &damaged); err != nil {
 		t.Fatal(err)
 	}
-	var args []string
 	client := infra.NewClient()
 	rt := &runtime{setting: settings, http: client}
-	if err := rt.initProxy(ctx, func(value []string) error { args = value; return nil }); err != nil {
+	if err := rt.initProxy(ctx); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rt.proxyRelay.Close() }()
 	if _, ok := client.HTTPClient().Transport.(infra.BlockedProxyTransport); !ok {
 		t.Fatal("damaged configuration permits external traffic")
 	}
-	joined := strings.Join(args, " ")
+	joined := strings.Join(rt.proxyRelay.BrowserArguments(), " ")
 	if !strings.Contains(joined, "--proxy-server=http://127.0.0.1:") || strings.Contains(joined, "direct://") {
 		t.Fatal("WebView not fail closed")
 	}
@@ -67,7 +66,7 @@ func TestProxyStartupKeepsSharedClientIdentity(t *testing.T) {
 	client := infra.NewClient()
 	retained := client.HTTPClient()
 	rt := &runtime{setting: settings, http: client}
-	if err := rt.initProxy(ctx, nil); err != nil {
+	if err := rt.initProxy(ctx); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rt.proxyRelay.Close() }()
@@ -86,17 +85,16 @@ func TestProxyStartupDisabledUsesSystemProxyAndIgnoresEnvironment(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer func() { _ = settings.Close() }()
-	var args []string
 	client := infra.NewClient()
 	rt := &runtime{setting: settings, http: client}
-	if err := rt.initProxy(ctx, func(value []string) error { args = value; return nil }); err != nil {
+	if err := rt.initProxy(ctx); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rt.proxyRelay.Close() }()
 	if rt.proxyRelay == nil {
 		t.Fatal("disabled proxy skipped the relay")
 	}
-	joined := strings.Join(args, " ")
+	joined := strings.Join(rt.proxyRelay.BrowserArguments(), " ")
 	if !strings.Contains(joined, "--proxy-server=http://127.0.0.1:") {
 		t.Fatal("WebView is not using the shared system proxy resolver")
 	}

@@ -48,8 +48,6 @@ type DrawSource struct {
 }
 
 // DrawSource returns the draw behind meshID of a loaded viewer session.
-//
-//wails:ignore
 func (t *Service) DrawSource(sessionID, meshID string) (DrawSource, bool) {
 	t.modelViewerMu.Lock()
 	defer t.modelViewerMu.Unlock()

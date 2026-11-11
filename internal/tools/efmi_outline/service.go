@@ -67,7 +67,6 @@ func NewWithOptions(opts Options) *Service {
 	return &Service{log: opts.Log, games: opts.GamePaths}
 }
 
-//wails:ignore
 func (s *Service) UseClient(client *db.Client) {
 	if client != nil {
 		s.games = client.GamePaths

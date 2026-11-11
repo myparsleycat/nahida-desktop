@@ -68,14 +68,12 @@ func New(opts Options) *ReShade {
 	}
 }
 
-//wails:ignore
 func (r *ReShade) UseClient(client *db.Client) {
 	r.mu.Lock()
 	r.client = client
 	r.mu.Unlock()
 }
 
-//wails:ignore
 func (r *ReShade) UseAppData(data *appdata.Store) {
 	r.mu.Lock()
 	r.appData = data

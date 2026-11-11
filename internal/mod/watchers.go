@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/watcher"
 )
@@ -125,10 +123,6 @@ func (m *Mod) replaceWatcher(game bool, next *managedWatcher) error {
 func (m *Mod) emitEvent(name string, data ...any) {
 	if m.emit != nil {
 		m.emit(name, data...)
-		return
-	}
-	if app := application.Get(); app != nil {
-		app.Event.Emit(name, data...)
 	}
 }
 

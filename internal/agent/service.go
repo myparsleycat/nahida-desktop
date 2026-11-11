@@ -179,7 +179,6 @@ func New(options Options) *Service {
 	}
 }
 
-//wails:ignore
 func (s *Service) UseClient(ctx context.Context, client *db.Client) error {
 	if client == nil {
 		return errors.New("agent database is unavailable")
@@ -262,7 +261,6 @@ func (s *Service) repairInterruptedApprovals(ctx context.Context, client *db.Cli
 	return nil
 }
 
-//wails:ignore
 func (s *Service) UseAppData(store *appdata.Store) error {
 	if store == nil {
 		return errors.New("agent app data is unavailable")

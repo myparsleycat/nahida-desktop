@@ -5,9 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
-
 	"nahida.live/desktop/internal/drive"
 )
 
@@ -199,6 +196,16 @@ func nahidaDeepLinkDownload(args []string) *deepLinkDownload {
 	return nil
 }
 
+// dispatchDeepLinkRoute shows the window on the screen a nahida://gamebanana link names.
+func (rt *runtime) dispatchDeepLinkRoute(args []string) {
+	route := nahidaDeepLinkRoute(args)
+	if route == "" {
+		return
+	}
+	rt.window.show()
+	rt.emit("fn:navi", route)
+}
+
 func nahidaDeepLinkRoute(args []string) string {
 	for _, arg := range args {
 		if route := parseNahidaDeepLink(arg); route != "" {
@@ -206,18 +213,4 @@ func nahidaDeepLinkRoute(args []string) string {
 		}
 	}
 	return ""
-}
-
-func registerDeepLink(app *application.App, window *Window) {
-	if app == nil || window == nil {
-		return
-	}
-	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) {
-		if event == nil || event.Context() == nil {
-			return
-		}
-		if route := parseNahidaDeepLink(event.Context().URL()); route != "" {
-			window.FocusAndNavigate(route)
-		}
-	})
 }

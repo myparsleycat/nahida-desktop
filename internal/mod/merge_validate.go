@@ -18,7 +18,7 @@ const (
 func (m *Mod) validateMergeRequest(ctx context.Context, request MergeModsRequest) error {
 	if !filepath.IsAbs(request.GroupPath) ||
 		(request.Placement != "in_place" && request.Placement != "new_folder") ||
-		(strings.TrimSpace(request.PackName) != "" && !safeMergeName(request.PackName)) ||
+		(strings.TrimSpace(request.PackName) != "" && !SafeMergeName(request.PackName)) ||
 		request.Root.Kind != "group" {
 		return &mergeValidationError{message: invalidMergeRequestMessage}
 	}
@@ -101,7 +101,7 @@ func validateMergeNode(
 		return nil
 	}
 	if node.Kind != "group" || strings.TrimSpace(node.ID) == "" ||
-		(node.Engine != "classic" && node.Engine != "namespace") || !safeMergeName(node.Name) ||
+		(node.Engine != "classic" && node.Engine != "namespace") || !SafeMergeName(node.Name) ||
 		strings.TrimSpace(node.ForwardKey) == "" || strings.ContainsAny(node.ForwardKey, "\r\n") ||
 		strings.ContainsAny(node.BackKey, "\r\n") ||
 		(node.Engine == "namespace" && strings.TrimSpace(node.BackKey) == "") || len(node.Children) == 0 {
@@ -142,7 +142,7 @@ func mergeOwnedPathError(err error) error {
 	return err
 }
 
-func safeMergeName(name string) bool {
+func SafeMergeName(name string) bool {
 	trimmed := strings.TrimSpace(name)
 	return trimmed != "" && trimmed != "." && trimmed != ".." &&
 		!strings.ContainsRune(name, 0) && !strings.ContainsAny(name, "[]=\r\n;\"'$<>:/\\|?*")
