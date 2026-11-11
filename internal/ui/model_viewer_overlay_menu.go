@@ -7,13 +7,13 @@ import (
 	"image/png"
 	"math"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/keyboard"
 	"github.com/myparsleycat/fairy/kit"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -110,17 +110,29 @@ func (v *ModelViewer) resetOverlayMenuPlacement() {
 	}
 }
 
-// viewerImage loads the picture at source, a file path or a URL of the viewer's session. It returns nil while
-// the picture loads and when it cannot be read.
+// viewerImage loads the picture at source, a file path or a protocol URL of the viewer's session. It returns nil
+// while the picture loads and when it cannot be read.
 func (v *ModelViewer) viewerImage(source string, flipX, flipY bool) *fairy.Image {
 	if source == "" {
 		return nil
 	}
+	report := func(err error, stage string) {
+		v.imageFailures.Report(v.log, err, "ModelViewer.viewerImage", infra.Diagnostic{
+			Operation: "load-image", Stage: stage, Fields: map[string]any{"path": source, "modPath": v.path},
+		})
+	}
 	read := func() ([]byte, error) {
-		if strings.Contains(source, "://") {
-			return v.read(v.ctx, source)
+		var data []byte
+		var err error
+		if infra.IsProtocolURL(source) {
+			data, err = v.read(v.ctx, source)
+		} else {
+			data, err = os.ReadFile(source)
 		}
-		return os.ReadFile(source)
+		if err != nil {
+			report(err, "read")
+		}
+		return data, err
 	}
 	// The session in the key reads a file again when the mod is opened again, since its art may have changed.
 	key := "model-viewer:" + v.scene.transport.MemorySessionID + ":" + source
@@ -132,7 +144,11 @@ func (v *ModelViewer) viewerImage(source string, flipX, flipY bool) *fairy.Image
 		if err != nil {
 			return nil, err
 		}
-		return flipViewerImage(data, flipX, flipY)
+		flipped, err := flipViewerImage(data, flipX, flipY)
+		if err != nil {
+			report(err, "flip")
+		}
+		return flipped, err
 	})
 }
 

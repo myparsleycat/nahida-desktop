@@ -251,6 +251,12 @@ func memoryProtocolURL(sessionID, entryID string) string {
 	return "/protocol/memory/" + url.PathEscape(sessionID) + "/" + url.PathEscape(entryID)
 }
 
+// IsProtocolURL reports whether raw is a local-file or memory URL made by a Protocol, which Read serves, as
+// opposed to a plain file path.
+func IsProtocolURL(raw string) bool {
+	return strings.HasPrefix(raw, "/protocol/")
+}
+
 func (p *Protocol) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	path := strings.TrimPrefix(request.URL.Path, "/")
 	path = strings.TrimPrefix(path, "protocol/")

@@ -39,7 +39,8 @@ func TestProtocolServesLocalFileAndRange(t *testing.T) {
 }
 
 // Native screens read the URLs a transport carries through Read, so it must resolve every URL ServeHTTP
-// serves, including escaped buffer IDs and lazy loaders, and fail once the session is gone.
+// serves, including escaped buffer IDs and lazy loaders, and fail once the session is gone. Screens that also
+// receive plain file paths tell them apart with IsProtocolURL, which must accept every URL made here.
 func TestProtocolReadResolvesServedURLs(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "모드 텍스처.dds")
@@ -63,10 +64,16 @@ func TestProtocolReadResolvesServedURLs(t *testing.T) {
 		bufferURL:                        "mesh",
 		loaderURL:                        "loaded",
 	} {
+		if !IsProtocolURL(url) {
+			t.Fatalf("IsProtocolURL(%q) = false", url)
+		}
 		got, err := service.Read(context.Background(), url)
 		if err != nil || string(got) != want {
 			t.Fatalf("Read(%q) = %q, %v; want %q", url, got, err, want)
 		}
+	}
+	if IsProtocolURL(path) {
+		t.Fatalf("IsProtocolURL(%q) = true for a file path", path)
 	}
 
 	service.CleanupMemorySession(session)

@@ -74,11 +74,13 @@ type ModelViewer struct {
 	// surfaceSize is the device-pixel size of the last draw, which a preview capture renders at.
 	surfaceSize [2]int
 	// revision counts scene changes the camera does not show, for the surface's Retain version.
-	revision    uint64
-	uploading   bool
-	drawErr     string
-	dragStart   orbitCamera
-	dragPanning bool
+	revision  uint64
+	uploading bool
+	drawErr   string
+	// imageFailures logs each menu or toggle picture that cannot be read once, not on every request for it.
+	imageFailures infra.DiagnosticThrottle
+	dragStart     orbitCamera
+	dragPanning   bool
 	// dragLast is the movement of the drag already handed to motion.
 	dragLast [2]float32
 	motion   cameraMotion
