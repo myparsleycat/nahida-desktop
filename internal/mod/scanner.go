@@ -400,7 +400,7 @@ func parseINI(path string, reports ...func(error)) IniResult {
 		values = map[string]string{}
 	}
 	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 4*1024), 1024*1024)
 	first := true
 	for scanner.Scan() {
 		line := scanner.Text()
