@@ -319,7 +319,7 @@ func loadBodyShapeTestMod(t *testing.T, ini string) (*Service, *bodyShapeTestDis
 	return service, disabler, loaded
 }
 
-func TestBodyShapeBinaryUploadCommitExportsAllSelectedPositions(t *testing.T) {
+func TestBodyShapeCommitPositionsExportsAllSelectedMeshes(t *testing.T) {
 	ctx := context.Background()
 	service, disabler, loaded := loadBodyShapeTestMod(t,
 		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n\n"+
@@ -327,34 +327,17 @@ func TestBodyShapeBinaryUploadCommitExportsAllSelectedPositions(t *testing.T) {
 	if len(loaded.Meshes) != 2 {
 		t.Fatalf("meshes = %#v", loaded.Meshes)
 	}
-	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{
-		SessionID: loaded.SessionID,
-		MeshIDs:   []string{loaded.Meshes[0].ID, loaded.Meshes[1].ID},
-	})
-	if err != nil || len(upload.Meshes) != 2 {
-		t.Fatalf("begin = %#v, %v", upload, err)
-	}
 	changed := map[string][]float32{
 		loaded.Meshes[0].ID: {0, 0, 0, 2, 0, 0},
 		loaded.Meshes[1].ID: {0, 3, 0},
 	}
-	for _, mesh := range upload.Meshes {
-		request := httptest.NewRequest(
-			http.MethodPut,
-			mesh.PositionsUploadURL,
-			strings.NewReader(string(modmesh.Float32Bytes(changed[mesh.MeshID]))),
-		)
-		request.Header.Set("Content-Type", "application/octet-stream")
-		recorder := httptest.NewRecorder()
-		service.protocol.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusNoContent {
-			t.Fatalf("upload %s = %d %s", mesh.MeshID, recorder.Code, recorder.Body.String())
-		}
-	}
-	result, err := service.BodyShapeCommitExport(
-		ctx,
-		BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID},
-	)
+	result, err := service.BodyShapeCommitPositions(ctx, BodyShapeCommitPositionsInput{
+		SessionID: loaded.SessionID,
+		Meshes: []BodyShapeMeshPositions{
+			{MeshID: loaded.Meshes[0].ID, Positions: changed[loaded.Meshes[0].ID]},
+			{MeshID: loaded.Meshes[1].ID, Positions: changed[loaded.Meshes[1].ID]},
+		},
+	})
 	if err != nil || result.ModRoot == nil || len(result.Meshes) != 2 {
 		t.Fatalf("commit = %#v, %v", result, err)
 	}
@@ -423,29 +406,10 @@ func TestBodyShapeCommitRejectsUnchangedPositions(t *testing.T) {
 		t,
 		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n",
 	)
-	upload, err := service.BodyShapeBeginExport(ctx, BodyShapeBeginExportInput{
+	_, err := service.BodyShapeCommitPositions(ctx, BodyShapeCommitPositionsInput{
 		SessionID: loaded.SessionID,
-		MeshIDs:   []string{loaded.Meshes[0].ID},
+		Meshes:    []BodyShapeMeshPositions{{MeshID: loaded.Meshes[0].ID, Positions: []float32{0, 0, 0, 1, 0, 0}}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest(
-		http.MethodPut,
-		upload.Meshes[0].PositionsUploadURL,
-		strings.NewReader(string(modmesh.Float32Bytes([]float32{0, 0, 0, 1, 0, 0}))),
-	)
-	request.Header.Set("Content-Type", "application/octet-stream")
-	recorder := httptest.NewRecorder()
-	service.protocol.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("upload = %d %s", recorder.Code, recorder.Body.String())
-	}
-
-	_, err = service.BodyShapeCommitExport(
-		ctx,
-		BodyShapeCommitExportInput{SessionID: loaded.SessionID, ExportID: upload.ExportID},
-	)
 	if err == nil {
 		t.Fatal("commit accepted unchanged positions")
 	}
@@ -606,7 +570,7 @@ func TestExportRotatesSnorm8VectorBuffer(t *testing.T) {
 	}
 }
 
-func TestBodyShapeBeginExportRejectsInvalidSelections(t *testing.T) {
+func TestBodyShapeCommitPositionsRejectsInvalidSelections(t *testing.T) {
 	service, _, loaded := loadBodyShapeTestMod(t,
 		"[ResourceBodyPosition]\nstride = 12\nfilename = Meshes/Body.buf\n\n"+
 			"[ResourceBodyAliasPosition]\nstride = 12\nfilename = Meshes/Body.buf\n")
@@ -624,12 +588,16 @@ func TestBodyShapeBeginExportRejectsInvalidSelections(t *testing.T) {
 		"unknown":   {body, "missing"},
 		"same file": {body, alias},
 	} {
-		upload, err := service.BodyShapeBeginExport(
+		meshes := make([]BodyShapeMeshPositions, len(ids))
+		for index, id := range ids {
+			meshes[index] = BodyShapeMeshPositions{MeshID: id, Positions: []float32{0, 0, 0, 2, 0, 0}}
+		}
+		result, err := service.BodyShapeCommitPositions(
 			context.Background(),
-			BodyShapeBeginExportInput{SessionID: loaded.SessionID, MeshIDs: ids},
+			BodyShapeCommitPositionsInput{SessionID: loaded.SessionID, Meshes: meshes},
 		)
 		if err == nil {
-			t.Fatalf("%s: begin = %#v, want error", name, upload)
+			t.Fatalf("%s: commit = %#v, want error", name, result)
 		}
 	}
 }

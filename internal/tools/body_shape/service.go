@@ -4,8 +4,6 @@ package bodyshape
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"sync"
 
 	"nahida.live/desktop/internal/infra"
@@ -58,10 +56,4 @@ func (t *Service) logError(err error, where string) {
 			Severity: infra.DiagnosticError, Operation: where, Stage: "background",
 		})
 	}
-}
-
-func newID() string {
-	data := make([]byte, 16)
-	rand.Read(data)
-	return base64.RawURLEncoding.EncodeToString(data)
 }

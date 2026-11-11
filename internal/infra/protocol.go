@@ -26,21 +26,11 @@ type memoryProtocolEntry struct {
 	load        func(context.Context) ([]byte, error)
 }
 
-type memoryUploadEntry struct {
-	expected  int64
-	data      []byte
-	uploading bool
-	ready     bool
-}
-
 type memoryProtocolSession struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	buffers map[string]memoryProtocolEntry
-	uploads map[string]*memoryUploadEntry
 }
-
-const maxMemoryUploadBytes int64 = 512 << 20
 
 type Protocol struct {
 	mu       sync.RWMutex
@@ -75,7 +65,6 @@ func (p *Protocol) CreateMemorySession() string {
 		ctx:     ctx,
 		cancel:  cancel,
 		buffers: make(map[string]memoryProtocolEntry),
-		uploads: make(map[string]*memoryUploadEntry),
 	}
 	p.mu.Unlock()
 	return id
@@ -103,7 +92,6 @@ func (p *Protocol) RemoveMemoryBuffer(sessionID, bufferID string) {
 	p.mu.Lock()
 	if session := p.sessions[sessionID]; session != nil {
 		delete(session.buffers, bufferID)
-		delete(session.uploads, bufferID)
 	}
 	p.mu.Unlock()
 }
@@ -138,43 +126,6 @@ func (p *Protocol) StoreMemoryLoaderWithContentType(
 	}
 	session.buffers[bufferID] = memoryProtocolEntry{load: load, contentType: contentType}
 	return memoryProtocolURL(sessionID, bufferID), nil
-}
-
-func (p *Protocol) CreateMemoryUpload(sessionID, uploadID string, expectedBytes int64) (string, error) {
-	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(uploadID) == "" {
-		return "", errors.New("memory session and upload ids are required")
-	}
-	if expectedBytes < 0 || expectedBytes > maxMemoryUploadBytes {
-		return "", fmt.Errorf("memory upload size must be between 0 and %d bytes", maxMemoryUploadBytes)
-	}
-	p.mu.Lock()
-	session := p.sessions[sessionID]
-	if session == nil {
-		p.mu.Unlock()
-		return "", fmt.Errorf("missing memory session: %s", sessionID)
-	}
-	if _, exists := session.uploads[uploadID]; exists {
-		p.mu.Unlock()
-		return "", fmt.Errorf("memory upload already exists: %s", uploadID)
-	}
-	session.uploads[uploadID] = &memoryUploadEntry{expected: expectedBytes}
-	p.mu.Unlock()
-	return memoryProtocolURL(sessionID, uploadID), nil
-}
-
-func (p *Protocol) TakeMemoryUpload(sessionID, uploadID string) ([]byte, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	session := p.sessions[sessionID]
-	if session == nil {
-		return nil, fmt.Errorf("missing memory session: %s", sessionID)
-	}
-	upload := session.uploads[uploadID]
-	if upload == nil || !upload.ready {
-		return nil, fmt.Errorf("memory upload is not ready: %s", uploadID)
-	}
-	delete(session.uploads, uploadID)
-	return upload.data, nil
 }
 
 func (p *Protocol) CleanupMemorySession(sessionID string) {
@@ -315,12 +266,8 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 		http.Error(w, "invalid memory buffer path", http.StatusBadRequest)
 		return
 	}
-	if request.Method == http.MethodPut {
-		p.serveMemoryUpload(w, request, sessionID, bufferID)
-		return
-	}
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
-		w.Header().Set("Allow", "GET, HEAD, PUT")
+		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -377,102 +324,6 @@ func (p *Protocol) serveMemory(w http.ResponseWriter, request *http.Request, rou
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, request, bufferID, time.Time{}, bytes.NewReader(entry.data))
-}
-
-func (p *Protocol) serveMemoryUpload(w http.ResponseWriter, request *http.Request, sessionID, uploadID string) {
-	if normalizeContentType(request.Header.Get("Content-Type")) != "application/octet-stream" {
-		http.Error(w, "content type must be application/octet-stream", http.StatusUnsupportedMediaType)
-		return
-	}
-	p.mu.Lock()
-	session := p.sessions[sessionID]
-	if session == nil {
-		p.mu.Unlock()
-		http.NotFound(w, request)
-		return
-	}
-	upload := session.uploads[uploadID]
-	if upload == nil {
-		p.mu.Unlock()
-		http.NotFound(w, request)
-		return
-	}
-	if upload.uploading || upload.ready {
-		p.mu.Unlock()
-		http.Error(w, "memory upload already used", http.StatusConflict)
-		return
-	}
-	received := int64(len(upload.data))
-	remaining := upload.expected - received
-	// WebView2 often omits Content-Length on intercepted PUT bodies, and the
-	// frontend splits large buffers into chunks under the ~2MB delivery cap.
-	// Reject only a declared length that cannot fit in the remaining slot.
-	if request.ContentLength > remaining {
-		delete(session.uploads, uploadID)
-		expected := upload.expected
-		contentLength := request.ContentLength
-		p.mu.Unlock()
-		p.reportProtocolFailure(
-			errors.New("memory upload content length exceeds remaining slot"),
-			request,
-			"validate-memory-upload-length",
-			map[string]any{"expectedBytes": expected, "receivedBytes": received, "contentLength": contentLength},
-		)
-		http.Error(w, "content length does not match upload slot", http.StatusBadRequest)
-		return
-	}
-	upload.uploading = true
-	expected := upload.expected
-	if upload.data == nil && expected > 0 {
-		upload.data = make([]byte, 0, expected)
-	}
-	// The uploading flag keeps other requests off the slot, and the data is
-	// taken only once ready, so the body is read into it outside the lock.
-	slot := upload.data[received:expected]
-	p.mu.Unlock()
-
-	chunk, err := io.ReadFull(request.Body, slot)
-	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-		err = nil
-	}
-	overflow := 0
-	if err == nil && chunk == len(slot) {
-		var probe [1]byte
-		overflow, err = io.ReadFull(request.Body, probe[:])
-		if errors.Is(err, io.EOF) {
-			err = nil
-		}
-	}
-	if err != nil || overflow > 0 {
-		failure := err
-		if failure == nil {
-			failure = errors.New("memory upload length mismatch")
-		}
-		p.reportProtocolFailure(
-			failure,
-			request,
-			"read-memory-upload",
-			map[string]any{"expectedBytes": expected, "receivedBytes": received, "chunkBytes": chunk + overflow},
-		)
-		p.mu.Lock()
-		if current := p.sessions[sessionID]; current != nil && current.uploads[uploadID] == upload {
-			delete(current.uploads, uploadID)
-		}
-		p.mu.Unlock()
-		http.Error(w, "upload body length does not match upload slot", http.StatusBadRequest)
-		return
-	}
-	p.mu.Lock()
-	current := p.sessions[sessionID]
-	if current == nil || current.uploads[uploadID] != upload {
-		p.mu.Unlock()
-		http.NotFound(w, request)
-		return
-	}
-	upload.data = upload.data[:received+int64(chunk)]
-	upload.uploading, upload.ready = false, int64(len(upload.data)) == expected
-	p.mu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (p *Protocol) serveWebImage(w http.ResponseWriter, request *http.Request) {

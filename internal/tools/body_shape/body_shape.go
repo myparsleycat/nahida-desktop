@@ -130,7 +130,6 @@ type BodyShapeMeshPositions struct {
 	Positions []float32
 }
 
-// BodyShapeCommitPositionsInput exports edited positions without the memory uploads of BodyShapeBeginExport.
 type BodyShapeCommitPositionsInput struct {
 	SessionID      string
 	Meshes         []BodyShapeMeshPositions
@@ -138,41 +137,14 @@ type BodyShapeCommitPositionsInput struct {
 	ChangeSummary  *BodyShapeChangeSummary
 }
 
-type BodyShapeBeginExportInput struct {
-	SessionID string   `json:"sessionId"`
-	MeshIDs   []string `json:"meshIds"`
-}
-
-type BodyShapeExportMeshUpload struct {
-	MeshID             string `json:"meshId"`
-	PositionsUploadURL string `json:"positionsUploadUrl"`
-}
-
-type BodyShapeExportUpload struct {
-	ExportID string                      `json:"exportId"`
-	Meshes   []BodyShapeExportMeshUpload `json:"meshes"`
-}
-
 type BodyShapeOK struct {
 	OK bool `json:"ok"`
-}
-
-type BodyShapeCommitExportInput struct {
-	SessionID      string                  `json:"sessionId"`
-	ExportID       string                  `json:"exportId"`
-	WriteChangeLog *bool                   `json:"writeChangeLog,omitempty"`
-	ChangeSummary  *BodyShapeChangeSummary `json:"changeSummary,omitempty"`
-}
-
-type bodyShapeExportSlot struct {
-	meshIDs []string
 }
 
 type bodyShapeSession struct {
 	mu          sync.Mutex
 	loaded      BodyShapeLoadResult
 	descriptors map[string]BodyShapeMeshDescriptor
-	exports     map[string]bodyShapeExportSlot
 }
 
 type BodyShapeChangeSummary struct {
@@ -233,7 +205,6 @@ func (t *Service) BodyShapeLoadMod(ctx context.Context, modPath string) (BodySha
 	session := &bodyShapeSession{
 		loaded:      loaded,
 		descriptors: make(map[string]BodyShapeMeshDescriptor),
-		exports:     make(map[string]bodyShapeExportSlot),
 	}
 	t.bodyShapeMu.Lock()
 	t.bodyShapeSessions[sessionID] = session
@@ -420,93 +391,6 @@ func (t *Service) BodyShapeGetMesh(ctx context.Context, input BodyShapeMeshInput
 	return descriptor, nil
 }
 
-func (t *Service) BodyShapeBeginExport(
-	ctx context.Context,
-	input BodyShapeBeginExportInput,
-) (BodyShapeExportUpload, error) {
-	if err := ctx.Err(); err != nil {
-		return BodyShapeExportUpload{}, err
-	}
-	session, err := t.requireBodyShapeSession(input.SessionID)
-	if err != nil {
-		return BodyShapeExportUpload{}, err
-	}
-	session.mu.Lock()
-	defer session.mu.Unlock()
-	meshes, err := selectBodyShapeMeshes(session.loaded.Meshes, input.MeshIDs)
-	if err != nil {
-		return BodyShapeExportUpload{}, err
-	}
-	exportID := newID()
-
-	result := BodyShapeExportUpload{ExportID: exportID, Meshes: make([]BodyShapeExportMeshUpload, 0, len(meshes))}
-	created := make([]string, 0, len(meshes)*2)
-	createUpload := func(id string, size int64) (string, error) {
-		url, uploadErr := t.protocol.CreateMemoryUpload(input.SessionID, id, size)
-		if uploadErr == nil {
-			created = append(created, id)
-		}
-		return url, uploadErr
-	}
-	for index, mesh := range meshes {
-		positionsURL, uploadErr := createUpload(
-			bodyShapeUploadID(exportID, index, "positions"),
-			int64(len(mesh.Positions))*4,
-		)
-		if uploadErr != nil {
-			t.removeBodyShapeUploads(input.SessionID, created)
-			return BodyShapeExportUpload{}, uploadErr
-		}
-		result.Meshes = append(
-			result.Meshes,
-			BodyShapeExportMeshUpload{MeshID: mesh.ID, PositionsUploadURL: positionsURL},
-		)
-	}
-	session.exports[exportID] = bodyShapeExportSlot{
-		meshIDs: lo.Map(meshes, func(mesh *BodyShapeMeshCandidate, _ int) string { return mesh.ID }),
-	}
-	return result, nil
-}
-
-func (t *Service) BodyShapeCommitExport(
-	ctx context.Context,
-	input BodyShapeCommitExportInput,
-) (BodyShapeExportResult, error) {
-	session, err := t.requireBodyShapeSession(input.SessionID)
-	if err != nil {
-		return BodyShapeExportResult{}, err
-	}
-	session.mu.Lock()
-	slot, exists := session.exports[input.ExportID]
-	if exists {
-		delete(session.exports, input.ExportID)
-	}
-	meshes := lo.Map(slot.meshIDs, func(id string, _ int) *BodyShapeMeshCandidate {
-		return findBodyShapeMesh(session.loaded.Meshes, id)
-	})
-	session.mu.Unlock()
-	if !exists || len(meshes) == 0 || lo.Contains(meshes, nil) {
-		return BodyShapeExportResult{}, infra.ContractError("Body shape export slot not found")
-	}
-	uploads := make([]string, 0, len(meshes))
-	for index := range meshes {
-		uploads = append(uploads, bodyShapeUploadID(input.ExportID, index, "positions"))
-	}
-	defer t.removeBodyShapeUploads(input.SessionID, uploads)
-
-	positions := make([][]float32, len(meshes))
-	for index := range meshes {
-		positions[index], err = t.takeBodyShapeUpload(
-			input.SessionID,
-			bodyShapeUploadID(input.ExportID, index, "positions"),
-		)
-		if err != nil {
-			return BodyShapeExportResult{}, err
-		}
-	}
-	return t.exportBodyShapeSession(ctx, session, meshes, positions, input.WriteChangeLog, input.ChangeSummary)
-}
-
 // BodyShapeMeshData returns a mesh of the session with its geometry and blend buffer.
 func (t *Service) BodyShapeMeshData(ctx context.Context, input BodyShapeMeshInput) (BodyShapeMeshData, error) {
 	if err := ctx.Err(); err != nil {
@@ -537,8 +421,7 @@ func (t *Service) BodyShapeMeshData(ctx context.Context, input BodyShapeMeshInpu
 	return data, nil
 }
 
-// BodyShapeCommitPositions writes edited positions into a body-shaped copy of the session's mod, as
-// BodyShapeCommitExport does with uploaded ones.
+// BodyShapeCommitPositions writes edited positions into a body-shaped copy of the session's mod.
 func (t *Service) BodyShapeCommitPositions(
 	ctx context.Context,
 	input BodyShapeCommitPositionsInput,
@@ -630,24 +513,6 @@ func (t *Service) exportBodyShapeSession(
 	)
 }
 
-func bodyShapeUploadID(exportID string, index int, kind string) string {
-	return fmt.Sprintf("export:%s:%d:%s", exportID, index, kind)
-}
-
-func (t *Service) takeBodyShapeUpload(sessionID, id string) ([]float32, error) {
-	raw, err := t.protocol.TakeMemoryUpload(sessionID, id)
-	if err != nil {
-		return nil, err
-	}
-	return modmesh.DecodeFloat32Bytes(raw)
-}
-
-func (t *Service) removeBodyShapeUploads(sessionID string, ids []string) {
-	for _, id := range ids {
-		t.protocol.RemoveMemoryBuffer(sessionID, id)
-	}
-}
-
 func checkDistinctPositionPaths(paths []string) error {
 	for index, path := range paths {
 		if lo.ContainsBy(paths[:index], func(previous string) bool { return platform.SamePathFold(previous, path) }) {
@@ -655,15 +520,6 @@ func checkDistinctPositionPaths(paths []string) error {
 		}
 	}
 	return nil
-}
-
-// BodyShapeSessionPaths returns the mod folder a commit of the session copies and disables.
-func (t *Service) BodyShapeSessionPaths(sessionID string) ([]string, error) {
-	session, err := t.requireBodyShapeSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return []string{session.loaded.ModRoot}, nil
 }
 
 func (t *Service) BodyShapeCloseSession(_ context.Context, sessionID string) (BodyShapeOK, error) {

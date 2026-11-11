@@ -420,37 +420,6 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 		}))
 	registry.add(idAction("tools.body_shape_close", "Close a body-shape session.", "sessionId", RiskWrite,
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.BodyShapeCloseSession(ctx, id) }))
-	registry.add(simpleAction("tools.body_shape_begin_export", "Prepare a body-shape export upload.", "tools",
-		RiskWrite, objectSchema(map[string]any{
-			"sessionId": stringSchema(), "meshIds": stringArraySchema(),
-		}, "sessionId", "meshIds"),
-		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
-			var input tools.BodyShapeBeginExportInput
-			if err := decodeActionArguments(raw, &input); err != nil {
-				return nil, err
-			}
-			return deps.Tools.BodyShapeBeginExport(ctx, input)
-		}))
-	bodyShapeCommit := simpleAction(
-		"tools.body_shape_commit_export", "Commit uploaded body-shape changes to mod files.",
-		"tools", RiskConfirm, objectSchema(map[string]any{
-			"sessionId": stringSchema(), "exportId": stringSchema(),
-			"writeChangeLog": map[string]any{}, "changeSummary": map[string]any{"type": "object"},
-		}, "sessionId", "exportId"),
-		func(ctx context.Context, actionCtx actionContext, raw json.RawMessage) (any, error) {
-			var input tools.BodyShapeCommitExportInput
-			if err := decodeActionArguments(raw, &input); err != nil {
-				return nil, err
-			}
-			if _, err := checkSessionPaths(actionCtx, raw, deps.Tools.BodyShapeSessionPaths); err != nil {
-				return nil, err
-			}
-			return deps.Tools.BodyShapeCommitExport(ctx, input)
-		})
-	bodyShapeCommit.describe = sessionDescription(
-		bodyShapeCommit.definition.Description, deps.Tools.BodyShapeSessionPaths,
-	)
-	registry.add(bodyShapeCommit)
 	registry.add(idAction("tools.model_viewer_cleanup", "Close a model-viewer session.", "sessionId", RiskWrite,
 		func(ctx context.Context, id string) (any, error) { return deps.Tools.CleanupModelViewer(ctx, id) }))
 	registry.add(simpleAction("tools.model_viewer_ineffective_values", "Inspect ineffective model-viewer values.",

@@ -12,14 +12,8 @@ type (
 	BodyShapeMeshDescriptor       = bodyshape.BodyShapeMeshDescriptor
 	BodyShapeMeshSummary          = bodyshape.BodyShapeMeshSummary
 	BodyShapeChangeSummary        = bodyshape.BodyShapeChangeSummary
-	BodyShapeBeginExportInput     = bodyshape.BodyShapeBeginExportInput
-	BodyShapeExportUpload         = bodyshape.BodyShapeExportUpload
-	BodyShapeExportMeshUpload     = bodyshape.BodyShapeExportMeshUpload
-	BodyShapeExportMesh           = bodyshape.BodyShapeExportMesh
 	BodyShapeExportedMesh         = bodyshape.BodyShapeExportedMesh
-	BodyShapeCommitExportInput    = bodyshape.BodyShapeCommitExportInput
 	BodyShapeOK                   = bodyshape.BodyShapeOK
-	BodyShapeExportInput          = bodyshape.BodyShapeExportInput
 	BodyShapeExportResult         = bodyshape.BodyShapeExportResult
 	BodyShapeMeshData             = bodyshape.BodyShapeMeshData
 	BodyShapeMeshPositions        = bodyshape.BodyShapeMeshPositions
@@ -30,36 +24,11 @@ func (t *Tools) BodyShapeLoadMod(ctx context.Context, modPath string) (BodyShape
 	return t.bodyShape.BodyShapeLoadMod(ctx, modPath)
 }
 
-func (t *Tools) BodyShapeExport(
-	ctx context.Context,
-	input BodyShapeExportInput,
-) (BodyShapeExportResult, error) {
-	return t.bodyShape.BodyShapeExport(ctx, input)
-}
-
 func (t *Tools) BodyShapeGetMesh(
 	ctx context.Context,
 	input BodyShapeMeshInput,
 ) (BodyShapeMeshDescriptor, error) {
 	return t.bodyShape.BodyShapeGetMesh(ctx, input)
-}
-
-func (t *Tools) BodyShapeBeginExport(
-	ctx context.Context,
-	input BodyShapeBeginExportInput,
-) (BodyShapeExportUpload, error) {
-	return t.bodyShape.BodyShapeBeginExport(ctx, input)
-}
-
-func (t *Tools) BodyShapeCommitExport(
-	ctx context.Context,
-	input BodyShapeCommitExportInput,
-) (BodyShapeExportResult, error) {
-	return t.bodyShape.BodyShapeCommitExport(ctx, input)
-}
-
-func (t *Tools) BodyShapeSessionPaths(sessionID string) ([]string, error) {
-	return t.bodyShape.BodyShapeSessionPaths(sessionID)
 }
 
 func (t *Tools) BodyShapeCloseSession(ctx context.Context, sessionID string) (BodyShapeOK, error) {
