@@ -115,6 +115,11 @@ type ModelViewer struct {
 	previewPath    string
 	savingPreview  bool
 	confirmPreview bool
+	// gameLinked is set while a running game that loads the mod takes toggle changes through the desktop
+	// channel; applyingToGame while those changes are being sent.
+	gameLinked     bool
+	gameLinkCheck  int
+	applyingToGame bool
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -135,6 +140,7 @@ func (s *Shell) NewModelViewer(path string) *ModelViewer {
 		sideWidth:   viewerSideWidth,
 		toasts:      &s.toasts,
 	}
+	v.refreshGameLinked()
 	v.load()
 	return v
 }

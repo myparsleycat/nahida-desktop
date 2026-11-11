@@ -95,6 +95,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 		{"compression", rt.runCompressionMaintenance},
 		{"persist-watcher", rt.tools.StartPersistWatcher},
 		{"toggle-viewer-watcher", rt.tools.StartToggleViewerWatcher},
+		{"game-link", rt.startGameLink},
 	})
 	if ctx.Err() != nil {
 		return
@@ -166,4 +167,9 @@ func (rt *runtime) runStartupStep(ctx context.Context, step startupStep) {
 	} else {
 		rt.log.Info(fields, "Startup")
 	}
+}
+
+func (rt *runtime) startGameLink(ctx context.Context) error {
+	rt.gameLink.Start(ctx)
+	return nil
 }

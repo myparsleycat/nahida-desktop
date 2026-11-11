@@ -878,6 +878,28 @@ func TestLogLevelReachesINI(t *testing.T) {
 	}
 }
 
+func TestDesktopChannelFollowsDLLSupport(t *testing.T) {
+	t.Parallel()
+	spec, _ := lookupLibsProvider(defaultLibsProvider)
+	for version, want := range map[string]bool{"1.2.2-nhd.29": false, "1.2.2-nhd.30": true, "1.2.3-nhd.1": true} {
+		manifest := runtimeManifest{Provider: spec.overlayPackage + "@" + version}
+		if got := deployedDesktopChannel(manifest); got != want {
+			t.Errorf("deployedDesktopChannel(%s) = %v, want %v", version, got, want)
+		}
+	}
+
+	served, _ := importerINIInput{key: "GIMI", support: migotoSupport{desktopChannel: true}}.render(nil)
+	if !strings.Contains(string(served.Bytes()), "channel = 1") {
+		t.Fatalf("INI is missing the desktop channel: %s", served.Bytes())
+	}
+
+	// A DLL without the channel warns about the option, so a switch to one takes it out.
+	unserved, _ := importerINIInput{key: "GIMI"}.render([]byte("[Desktop]\nchannel = 1\n"))
+	if data := string(unserved.Bytes()); strings.Contains(data, "channel") {
+		t.Fatalf("INI kept the desktop channel: %s", data)
+	}
+}
+
 func TestGameLaunchSelectsStartMethodAndCommand(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -1,0 +1,1 @@
+{"type": "VarsApplied", "requestId": 3, "message": {"frame": 9001, "values": [{"name": "$\\Mods\\Foo\\foo.ini\\enabled", "exists": true, "value": 0.5}]}}

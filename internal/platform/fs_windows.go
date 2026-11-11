@@ -123,6 +123,29 @@ func AccessDenied(path string) bool {
 	return false
 }
 
+// LongPath expands 8.3 names while retaining junction and symbolic link path components.
+func LongPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	name, err := windows.UTF16PtrFromString(absolute)
+	if err != nil {
+		return "", err
+	}
+	buffer := make([]uint16, windows.MAX_PATH)
+	for {
+		length, err := windows.GetLongPathName(name, &buffer[0], uint32(len(buffer)))
+		if err != nil {
+			return "", &os.PathError{Op: "expand", Path: path, Err: err}
+		}
+		if int(length) < len(buffer) {
+			return windows.UTF16ToString(buffer[:length]), nil
+		}
+		buffer = make([]uint16, length+1)
+	}
+}
+
 // FinalPath returns the path Windows resolves an existing file or directory to, following every
 // junction and symbolic link on the way. filepath.EvalSymlinks leaves junctions in place, so it
 // cannot tell where a write below one really lands.

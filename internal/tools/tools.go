@@ -65,6 +65,8 @@ type Options struct {
 	Elevated elevated.FileGateway
 	// Runtimes installs the global mods the tools depend on; nil gives each tool its own.
 	Runtimes *modruntime.Manager
+	// GameLink reaches the running games through the desktop channel; nil leaves toggle changes to the INIs.
+	GameLink togglepersist.Link
 }
 
 // ModRuntimes lists the global mods the tools install through modruntime.
@@ -189,6 +191,7 @@ func NewWithOptions(opts Options) *Tools {
 			EventEmit: opts.EventEmit,
 			Settings:  opts.Settings,
 			XXMI:      opts.XXMI,
+			Link:      opts.GameLink,
 		}),
 		toggleViewer: toggleviewer.NewWithOptions(toggleviewer.Options{
 			Log:       opts.Log,

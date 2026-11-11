@@ -275,7 +275,8 @@ func (v *ModelViewer) resetToggles() {
 	v.setToggleState(v.defaultState())
 }
 
-// saveTogglesToINI writes the current toggle values into each INI's persist variables.
+// saveTogglesToINI writes the current toggle values into each INI's persist variables, and sets them in the
+// running games that load the mod, so the game shows the values the INI now starts with.
 func (v *ModelViewer) saveTogglesToINI() {
 	scene := v.scene
 	if scene == nil || v.tools == nil || v.shell == nil {
@@ -284,15 +285,12 @@ func (v *ModelViewer) saveTogglesToINI() {
 	state := maps.Clone(v.state)
 	inis := scene.transport.INIs
 	toasts := v.toasts
-	v.shell.background(func(context.Context) {
+	v.shell.background(func(ctx context.Context) {
 		var updated, repaired bool
+		var applied, missing int
+		var gameErr error
 		for _, ini := range inis {
-			values := map[string]any{}
-			for id, value := range state {
-				if name, ok := strings.CutPrefix(id, ini.Prefix); ok {
-					values[name] = value
-				}
-			}
+			values := iniToggleValues(state, ini.Prefix)
 			result, err := v.tools.PersistModelViewerToggleState(ini.Path, values)
 			if err != nil {
 				err = infra.ReportError(v.log, err, "ModelViewer.saveTogglesToINI", infra.Diagnostic{
@@ -303,18 +301,120 @@ func (v *ModelViewer) saveTogglesToINI() {
 			}
 			updated = updated || len(result.UpdatedVariables) > 0
 			repaired = repaired || len(result.RepairedVariables) > 0
+
+			if gameErr != nil {
+				continue
+			}
+			game, err := v.tools.ApplyModelViewerToggleStateToGame(ctx, ini.Path, values, true)
+			if err != nil {
+				gameErr = infra.ReportError(v.log, err, "ModelViewer.saveTogglesToINI", infra.Diagnostic{
+					Operation: "apply-to-game", Fields: map[string]any{"modPath": v.path, "iniPath": ini.Path},
+				})
+				continue
+			}
+			applied += len(game.Applied)
+			missing += len(game.Missing)
+		}
+
+		body := ""
+		switch {
+		case missing > 0:
+			body = T("page.tools.model_viewer.toast.apply_to_game_missing")
+		case applied > 0:
+			body = T("page.tools.model_viewer.toast.save_to_ini_game_applied")
 		}
 		switch {
 		case updated && repaired:
-			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.save_to_ini_success_repaired"), "")
+			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.save_to_ini_success_repaired"), body)
 		case updated:
-			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.save_to_ini_success"), "")
+			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.save_to_ini_success"), body)
 		case repaired:
-			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.save_to_ini_repaired"), "")
+			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.save_to_ini_repaired"), body)
+		// The INI already held these values; only the game differed.
+		case missing > 0:
+			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.apply_to_game_missing"), "")
+		case applied > 0:
+			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.apply_to_game_success"), "")
 		default:
 			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.save_to_ini_no_changes"), "")
 		}
+		if gameErr != nil {
+			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.apply_to_game_error"), gameErr.Error())
+		}
 	})
+}
+
+// applyTogglesToGame sets every variable of the current toggle state in the running games that load the mod,
+// without changing the INI files.
+func (v *ModelViewer) applyTogglesToGame() {
+	scene := v.scene
+	if scene == nil || v.tools == nil || v.shell == nil || v.applyingToGame {
+		return
+	}
+	state := maps.Clone(v.state)
+	inis := scene.transport.INIs
+	toasts := v.toasts
+	v.applyingToGame = true
+	v.shell.background(func(ctx context.Context) {
+		defer fairy.Go(func() { v.applyingToGame = false })
+		var games, applied, missing int
+		for _, ini := range inis {
+			result, err := v.tools.ApplyModelViewerToggleStateToGame(
+				ctx,
+				ini.Path,
+				iniToggleValues(state, ini.Prefix),
+				false,
+			)
+			if err != nil {
+				err = infra.ReportError(v.log, err, "ModelViewer.applyTogglesToGame", infra.Diagnostic{
+					Operation: "apply-to-game", Fields: map[string]any{"modPath": v.path, "iniPath": ini.Path},
+				})
+				toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.apply_to_game_error"), err.Error())
+				return
+			}
+			games = max(games, result.Games)
+			applied += len(result.Applied)
+			missing += len(result.Missing)
+		}
+		switch {
+		case games == 0:
+			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.apply_to_game_not_connected"), "")
+		case missing > 0 || applied == 0:
+			toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.apply_to_game_missing"), "")
+		default:
+			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.apply_to_game_success"), "")
+		}
+	})
+}
+
+// refreshGameLinked rechecks whether a running game takes the mod's toggle changes. Call it on the UI thread; the
+// check resolves paths on disk, so it runs in the background and only the latest one sets gameLinked.
+func (v *ModelViewer) refreshGameLinked() {
+	if v.tools == nil || v.shell == nil {
+		return
+	}
+	v.gameLinkCheck++
+	check := v.gameLinkCheck
+	v.shell.background(func(context.Context) {
+		linked := v.tools.ModelViewerGameLinked(v.path)
+		fairy.Go(func() {
+			if v.gameLinkCheck == check {
+				v.gameLinked = linked
+			}
+		})
+	})
+}
+
+// iniToggleValues picks the values of the variables one INI declares from the viewer state, by their declared
+// names.
+func iniToggleValues(state map[string]any, prefix string) map[string]any {
+	values := map[string]any{}
+	for id, value := range state {
+		if name, ok := strings.CutPrefix(id, prefix); ok {
+			values[name] = value
+		}
+	}
+	return values
 }
 
 func (v *ModelViewer) requestPreviewCapture() {

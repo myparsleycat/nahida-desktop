@@ -233,6 +233,12 @@ func (v *ModelViewer) toggleControls(
 	const pad = 16
 	inner := width - 2*pad
 	panel := fairy.Col().Gap(12).Pad(pad)
+	if v.gameLinked {
+		panel.Child(fairy.Row(
+			kit.Button(T("page.tools.model_viewer.menu.apply_to_game"), v.applyTogglesToGame, kit.Outline, kit.Small,
+				kit.Icon(lucide.Gamepad2), kit.Disabled(v.applyingToGame), kit.Loading(v.applyingToGame)),
+		).Justify(fairy.JustifyEnd))
+	}
 	if !v.overlayInViewer() {
 		for _, index := range v.shownOverlayMenus() {
 			menuWidth := min(inner, float32(v.scene.transport.OverlayMenus[index].Width))

@@ -1609,7 +1609,8 @@
           "rotate": "旋转",
           "reset": "重置",
           "capture_set_preview": "捕获并设为预览",
-          "save_to_ini": "保存到 INI"
+          "save_to_ini": "保存到 INI",
+          "apply_to_game": "应用到游戏"
         },
         "dialog": {
           "overwrite_preview": {
@@ -1624,6 +1625,11 @@
           "save_to_ini_repaired": "已修复 INI 中拼写错误的 persist 声明，未保存开关值",
           "save_to_ini_success_repaired": "已将开关值保存到 INI，并修复了拼写错误的 persist 声明",
           "save_to_ini_error": "保存到 INI 失败",
+          "save_to_ini_game_applied": "已同时应用到正在运行的游戏",
+          "apply_to_game_success": "已将当前开关状态应用到正在运行的游戏",
+          "apply_to_game_missing": "游戏中未找到部分开关变量。请确认模组已加载，或在游戏中重新加载 INI",
+          "apply_to_game_not_connected": "游戏未连接",
+          "apply_to_game_error": "无法将开关值应用到游戏",
           "overlay_in_viewer_save_error": "保存覆盖层显示设置失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",

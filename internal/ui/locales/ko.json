@@ -1609,7 +1609,8 @@
           "reset": "초기화",
           "toggle": "토글",
           "capture_set_preview": "캡처 후 미리보기 지정",
-          "save_to_ini": "INI에 저장"
+          "save_to_ini": "INI에 저장",
+          "apply_to_game": "게임에 적용"
         },
         "dialog": {
           "overwrite_preview": {
@@ -1624,6 +1625,11 @@
           "save_to_ini_repaired": "INI의 잘못된 persist 선언을 수정했습니다. 저장된 토글 값은 없습니다.",
           "save_to_ini_success_repaired": "토글 값을 INI에 저장하고 잘못된 persist 선언을 수정했습니다.",
           "save_to_ini_error": "INI 저장에 실패했습니다.",
+          "save_to_ini_game_applied": "실행 중인 게임에도 적용했습니다.",
+          "apply_to_game_success": "현재 토글 상태를 실행 중인 게임에 적용했습니다.",
+          "apply_to_game_missing": "게임에서 일부 토글 변수를 찾지 못했습니다. 모드가 로드되어 있는지 확인하거나 게임에서 INI를 다시 불러오세요.",
+          "apply_to_game_not_connected": "게임이 연결되어 있지 않습니다.",
+          "apply_to_game_error": "게임에 토글 값을 적용하지 못했습니다.",
           "overlay_in_viewer_save_error": "오버레이 표시 설정을 저장하지 못했습니다.",
           "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
           "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다.",

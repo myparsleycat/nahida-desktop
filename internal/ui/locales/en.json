@@ -1615,7 +1615,8 @@
           "reset": "Reset",
           "toggle": "Toggle",
           "capture_set_preview": "Capture and set preview",
-          "save_to_ini": "Save to INI"
+          "save_to_ini": "Save to INI",
+          "apply_to_game": "Apply to game"
         },
         "dialog": {
           "overwrite_preview": {
@@ -1630,6 +1631,11 @@
           "save_to_ini_repaired": "Fixed misspelled persist declarations in the INI. No toggle values were saved",
           "save_to_ini_success_repaired": "Saved toggle values to the INI and fixed misspelled persist declarations",
           "save_to_ini_error": "Failed to save toggle values to INI",
+          "save_to_ini_game_applied": "Also applied to the running game",
+          "apply_to_game_success": "Applied the current toggle values to the running game",
+          "apply_to_game_missing": "Some toggle variables were not found in the game. Check that the mod is loaded, or reload the INI files in game",
+          "apply_to_game_not_connected": "The game is not connected",
+          "apply_to_game_error": "Failed to apply toggle values to the game",
           "overlay_in_viewer_save_error": "Failed to save the overlay display setting",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
           "capture_preview_error": "Failed to save the current viewer capture as preview.png",

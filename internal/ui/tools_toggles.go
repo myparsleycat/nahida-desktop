@@ -6,6 +6,7 @@ import (
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/kit"
 
+	"nahida.live/desktop/internal/gamelink"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
@@ -34,6 +35,14 @@ type toggleViewerTool struct {
 
 func (s *Shell) registerToolEvents(on func(string, func([]any))) {
 	tl := &s.tools
+	on(gamelink.EventState, func([]any) {
+		if v := s.mods.viewer; v != nil {
+			v.refreshGameLinked()
+		}
+		if lt := s.tools.liquidDialog; lt != nil && lt.viewer != nil {
+			lt.viewer.refreshGameLinked()
+		}
+	})
 	on(persistLogsEvent, func(data []any) {
 		if logs, ok := first(data).([]string); ok {
 			tl.persist.logs.set(logs)

@@ -12,6 +12,8 @@ type Options struct {
 	EventEmit func(string, ...any)
 	Settings  any
 	XXMI      *xxmi.XXMI
+	// Link reaches the running games; nil leaves toggle changes to the INI files.
+	Link Link
 }
 
 type Service struct {
@@ -19,6 +21,7 @@ type Service struct {
 	emit      func(string, ...any)
 	settings  any
 	xxmi      *xxmi.XXMI
+	link      Link
 	persistMu sync.Mutex
 	watchMu   sync.Mutex
 	persist   *persistEngine
@@ -32,6 +35,7 @@ func NewWithOptions(opts Options) *Service {
 		emit:     opts.EventEmit,
 		settings: opts.Settings,
 		xxmi:     opts.XXMI,
+		link:     opts.Link,
 		persist:  newPersistEngine(),
 	}
 	t.persist.emit = func(logs []string) { t.emitEvent("setting:xxmi:persistLogs", logs) }
