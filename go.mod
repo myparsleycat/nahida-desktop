@@ -3,7 +3,7 @@ module nahida.live/desktop
 go 1.27.4
 
 require (
-	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/go-winio v0.6.4
 	github.com/anthropics/anthropic-sdk-go v1.73.0
 	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/coder/websocket v1.8.15
