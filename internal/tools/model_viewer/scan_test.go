@@ -1109,12 +1109,22 @@ format = DXGI_FORMAT_R32_UINT`
 		}
 	}
 	sections := parseModINI(iniText)
-	meshes, err := buildModelViewerDirectScannedMeshes(iniPath, sections, collectModelViewerDefaultVariables(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
+	cache := newModelViewerBufferCache(context.Background())
+	meshes, err := buildModelViewerDirectScannedMeshesPrepared(
+		iniPath, dir, sections, collectModelViewerDefaultVariables(sections), resources, cache, nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(meshes) != 2 {
 		t.Fatalf("meshes = %#v", meshes)
+	}
+	// Frame-swap mods bind one buffer set per frame; holding every frame's source data until the load ends
+	// doubled the load's peak memory.
+	if len(cache.files) != 0 || len(cache.indices) != 0 || len(cache.pairs) != 0 {
+		t.Fatalf("buffers outlived their draws: files=%d indices=%d pairs=%d",
+			len(cache.files), len(cache.indices), len(cache.pairs))
 	}
 	xs := []float32{meshes[0].geometry.Position[0], meshes[1].geometry.Position[0]}
 	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +19,9 @@ import (
 )
 
 func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
+	// The load leaves a heap sized for its peak and the spool now holds the meshes; return the pages now
+	// instead of waiting for the background scavenger. Grid previews skip this because they load in batches.
+	defer debug.FreeOSMemory()
 	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{spoolGeometry: true})
 }
 

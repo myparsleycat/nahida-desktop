@@ -257,13 +257,9 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			}
 		}
 		ibPath := filepath.Join(modDir, filepath.FromSlash(ib.Filename))
-		raw, readErr := cache.read(ibPath)
-		if readErr != nil {
-			continue
-		}
 		ibFormat := lo.CoalesceOrEmpty(ib.Format, layout.IndexFormat)
-		indices, decodeErr := cache.decodeIndices(ibPath, ibFormat, raw)
-		if decodeErr != nil {
+		indices, readErr, decodeErr := cache.indexBuffer(ibPath, ibFormat)
+		if readErr != nil || decodeErr != nil {
 			continue
 		}
 		var ibDraws []legacyPreparedDraw

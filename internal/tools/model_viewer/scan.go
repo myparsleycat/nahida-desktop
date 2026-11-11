@@ -499,7 +499,16 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	}
 	geometryIndexes := make(map[geometryIndexKey]int)
 	geometries := make(map[modelViewerDrawGeometryKey]*modelViewerGeometry)
-	for _, draw := range draws {
+	releaseAfter := modelViewerDrawBufferLastUses(modDir, draws, resourceMap)
+	// The draws release the buffers they were the last to read at the start of the next one, which also covers
+	// the draws the loop skips.
+	if len(releaseAfter) > 0 {
+		defer func() { cache.release(releaseAfter[len(releaseAfter)-1]...) }()
+	}
+	for drawIndex, draw := range draws {
+		if drawIndex > 0 {
+			cache.release(releaseAfter[drawIndex-1]...)
+		}
 		record := draw.record
 		source := resolveModelViewerDrawVertexSource(
 			modDir,
@@ -573,13 +582,12 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		if !ibOK {
 			continue
 		}
-		ibRaw, err := cache.read(ibPath)
-		if err != nil {
-			continue
+		indices, readErr, decodeErr := cache.indexBuffer(ibPath, ib.Format)
+		if decodeErr != nil {
+			return nil, decodeErr
 		}
-		indices, err := cache.decodeIndices(ibPath, ib.Format, ibRaw)
-		if err != nil {
-			return nil, err
+		if readErr != nil {
+			continue
 		}
 		end := len(indices)
 		if !record.auto {
@@ -767,6 +775,36 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		timing.NormalizeMs += time.Since(stageStartedAt).Milliseconds()
 	}
 	return output, nil
+}
+
+// modelViewerDrawBufferLastUses lists, for each draw, the buffer files no later draw binds, so the build can
+// drop them from the cache once that draw is extracted.
+func modelViewerDrawBufferLastUses(
+	modDir string,
+	draws []modelViewerResolvedDraw,
+	resourceMap map[string]modelViewerResource,
+) [][]string {
+	lastUse := make(map[string]int)
+	paths := make(map[string]string)
+	for drawIndex, draw := range draws {
+		for _, name := range []string{draw.state.ib, draw.state.vb0, draw.state.vb1, draw.state.vb2} {
+			resource, ok := resourceMap[modelViewerNormalizeKey(name)]
+			if !ok || resource.Filename == "" {
+				continue
+			}
+			path, ok := resolveModelViewerModBufferPath(modDir, resource.Filename)
+			if !ok {
+				continue
+			}
+			key := strings.ToLower(path)
+			lastUse[key], paths[key] = drawIndex, path
+		}
+	}
+	releaseAfter := make([][]string, len(draws))
+	for key, drawIndex := range lastUse {
+		releaseAfter[drawIndex] = append(releaseAfter[drawIndex], paths[key])
+	}
+	return releaseAfter
 }
 
 func collectModelViewerGlobalBuffers(

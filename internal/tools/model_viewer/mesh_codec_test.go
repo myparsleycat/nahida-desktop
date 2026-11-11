@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -35,6 +36,50 @@ func TestModelViewerMeshBytesMatchesFrontendFixture(t *testing.T) {
 	}
 	if got := hex.EncodeToString(modelViewerMeshBytes(payload)); got != strings.TrimSpace(string(fixture)) {
 		t.Fatalf("mesh wire format changed: %s", got)
+	}
+}
+
+// The spool receives meshes in fixed chunks; values split across chunk boundaries must arrive intact.
+func TestModelViewerMeshBytesSurviveChunkBoundaries(t *testing.T) {
+	vertices := modelViewerEncodeChunkBytes/12 + 7
+	payload := modelViewerMeshPayload{
+		Positions: make([]float32, vertices*3),
+		Normals:   make([]float32, vertices*3),
+		UVs:       make([]float32, vertices*2),
+		Colors:    make([]uint8, vertices*4),
+		Indices:   make([]uint32, vertices*3+1),
+	}
+	for index := range payload.Positions {
+		payload.Positions[index] = float32(index) * .5
+		payload.Normals[index] = -float32(index)
+	}
+	for index := range payload.UVs {
+		payload.UVs[index] = float32(index) / 3
+	}
+	for index := range payload.Colors {
+		payload.Colors[index] = uint8(index * 7)
+	}
+	for index := range payload.Indices {
+		payload.Indices[index] = uint32(index * 3)
+	}
+
+	var want bytes.Buffer
+	want.WriteString("MVG3")
+	counts := []uint32{
+		uint32(len(payload.Positions)), uint32(len(payload.Normals)), 0, uint32(len(payload.UVs)), 0,
+		uint32(len(payload.Colors)), uint32(len(payload.Indices)),
+	}
+	for _, values := range []any{counts, payload.Positions, payload.Normals, payload.UVs, payload.Colors, payload.Indices} {
+		if err := binary.Write(&want, binary.LittleEndian, values); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got bytes.Buffer
+	if err := writeModelViewerMeshBytes(&got, payload); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got.Bytes(), want.Bytes()) || got.Len() != modelViewerMeshByteLength(payload) {
+		t.Fatalf("encoded %d bytes, want %d matching the reference", got.Len(), want.Len())
 	}
 }
 

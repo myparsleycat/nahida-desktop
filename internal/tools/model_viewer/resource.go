@@ -435,11 +435,13 @@ type modelViewerGeometryPending struct {
 }
 
 type modelViewerPairedBuffers struct {
-	combined []byte
-	stride   int
-	uvOffset int
-	uvFormat string
-	hasFrame bool
+	// posKey and tcKey are the cache keys of the source files, so release can drop the pair with them.
+	posKey, tcKey string
+	combined      []byte
+	stride        int
+	uvOffset      int
+	uvFormat      string
+	hasFrame      bool
 }
 
 func newModelViewerBufferCache(ctx context.Context) *modelViewerBufferCache {
@@ -462,6 +464,34 @@ func (c *modelViewerBufferCache) releaseGeometryScratch() {
 	clear(c.fmts)
 	clear(c.interleaved)
 	c.mu.Unlock()
+}
+
+// release drops the cached bytes, decoded indices, and paired buffers of files no remaining draw reads, so a
+// mod with many per-frame buffers does not hold every frame's source data until the load ends. A later read
+// of a released file reads it again.
+func (c *modelViewerBufferCache) release(paths ...string) {
+	if len(paths) == 0 {
+		return
+	}
+	keys := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		keys[strings.ToLower(path)] = true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key := range keys {
+		delete(c.files, key)
+	}
+	for key := range c.indices {
+		if path, _, ok := strings.Cut(key, "|"); ok && keys[path] {
+			delete(c.indices, key)
+		}
+	}
+	for key, entry := range c.pairs {
+		if keys[entry.posKey] || keys[entry.tcKey] {
+			delete(c.pairs, key)
+		}
+	}
 }
 
 func (c *modelViewerBufferCache) releaseAll() {
@@ -589,24 +619,38 @@ func (c *modelViewerBufferCache) readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// decodeIndices caches the decoded index buffer per file+format so draws that
-// share an IB do not re-decode it. The returned slice must stay read-only.
-func (c *modelViewerBufferCache) decodeIndices(path, format string, raw []byte) ([]uint32, error) {
-	key := strings.ToLower(path) + "|" + strings.ToUpper(format)
+func modelViewerIndicesKey(path, format string) string {
+	return strings.ToLower(path) + "|" + strings.ToUpper(format)
+}
+
+// indexBuffer returns the decoded indices of an IB file, cached per file+format
+// so draws that share an IB do not re-decode it. The raw bytes stay out of the
+// file cache: R32 indices decode to a copy of the same size, so caching both
+// would hold every IB twice. readErr reports a file that could not be read and
+// decodeErr one whose contents do not match the format. The returned slice
+// must stay read-only.
+func (c *modelViewerBufferCache) indexBuffer(path, format string) (indices []uint32, readErr, decodeErr error) {
+	key := modelViewerIndicesKey(path, format)
 	c.mu.Lock()
 	if decoded, ok := c.indices[key]; ok {
 		c.mu.Unlock()
-		return decoded, nil
+		return decoded, nil, nil
 	}
+	raw, cached := c.files[strings.ToLower(path)]
 	c.mu.Unlock()
+	if !cached {
+		if raw, readErr = c.readFile(path); readErr != nil {
+			return nil, readErr, nil
+		}
+	}
 	decoded, err := modelViewerDecodeIndices(raw, format)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	c.mu.Lock()
 	c.indices[key] = decoded
 	c.mu.Unlock()
-	return decoded, nil
+	return decoded, nil, nil
 }
 
 // paired interleaves a draw's position and texcoord buffers. Replayed
@@ -671,6 +715,8 @@ func (c *modelViewerBufferCache) paired(
 	}
 	uvOffset, uvFormat := detectModelViewerUVBest(combined, stride, posStride, tcStride)
 	entry := modelViewerPairedBuffers{
+		posKey:   strings.ToLower(posSource),
+		tcKey:    strings.ToLower(tcPath),
 		combined: combined,
 		stride:   stride,
 		uvOffset: uvOffset,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -53,24 +54,53 @@ func (t *Service) openSpool(sessionID string) *modelViewerSpool {
 	return nil
 }
 
-func (s *modelViewerSpool) append(ctx context.Context, data []byte) (int64, error) {
+// appendStream stores the length bytes that write produces, so a caller can encode straight into the spool
+// instead of building the whole buffer first. Each call reserves its own range and writes it under the read
+// lock, so meshes encode in parallel; a range whose write fails or comes up short is never handed out.
+func (s *modelViewerSpool) appendStream(ctx context.Context, length int, write func(io.Writer) error) (int64, error) {
+	s.mu.Lock()
+	if s.file == nil {
+		s.mu.Unlock()
+		return 0, errModelViewerSpoolClosed
+	}
+	offset := s.size
+	s.size += int64(length)
+	s.mu.Unlock()
+
 	release, err := diskio.Acquire(ctx, s.path)
 	if err != nil {
 		return 0, err
 	}
 	defer release()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.file == nil {
 		return 0, errModelViewerSpoolClosed
 	}
-	offset := s.size
-	if _, err := s.file.WriteAt(data, offset); err != nil {
+	out := &modelViewerRangeWriter{w: io.NewOffsetWriter(s.file, offset), limit: int64(length)}
+	if err := write(out); err != nil {
 		return 0, fmt.Errorf("write model viewer spool: %w", err)
 	}
-	s.size += int64(len(data))
+	if out.n != out.limit {
+		return 0, fmt.Errorf("write model viewer spool: wrote %d bytes, want %d", out.n, length)
+	}
 	return offset, nil
+}
+
+// modelViewerRangeWriter keeps a write inside its reserved range, which the next mesh's range follows directly.
+type modelViewerRangeWriter struct {
+	w        io.Writer
+	n, limit int64
+}
+
+func (r *modelViewerRangeWriter) Write(data []byte) (int, error) {
+	if r.n+int64(len(data)) > r.limit {
+		return 0, fmt.Errorf("write exceeds the reserved %d bytes", r.limit)
+	}
+	n, err := r.w.Write(data)
+	r.n += int64(n)
+	return n, err
 }
 
 func (s *modelViewerSpool) read(ctx context.Context, offset int64, length int) ([]byte, error) {

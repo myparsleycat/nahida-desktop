@@ -1,9 +1,11 @@
 package modelviewer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"runtime"
 	"sort"
@@ -340,19 +342,24 @@ func writeModelViewerPayload(
 		if err := meshCtx.Err(); err != nil {
 			return err
 		}
-		write := func(suffix string, data []byte) (string, error) {
+		// write encodes straight into the spool, so a mesh never exists twice in memory; without a spool the
+		// session keeps the encoded bytes.
+		write := func(suffix string, length int, encode func(io.Writer) error) (string, error) {
 			if err := meshCtx.Err(); err != nil {
 				return "", err
 			}
 			spool := options.spool
 			if spool == nil {
-				return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data, "application/octet-stream")
+				data := bytes.NewBuffer(make([]byte, 0, length))
+				if err := encode(data); err != nil {
+					return "", err
+				}
+				return t.protocol.StoreMemoryBuffer(sessionID, mesh.ID+suffix, data.Bytes(), "application/octet-stream")
 			}
-			offset, err := spool.append(meshCtx, data)
+			offset, err := spool.appendStream(meshCtx, length, encode)
 			if err != nil {
 				return "", err
 			}
-			length := len(data)
 			return t.protocol.StoreMemoryLoaderWithContentType(
 				sessionID,
 				mesh.ID+suffix,
@@ -372,12 +379,23 @@ func writeModelViewerPayload(
 				return fmt.Errorf("mesh %s normals: %w", mesh.ID, err)
 			}
 		}
-		mesh.GeometryURL, err = write(".geometry", modelViewerMeshBytes(payload))
+		mesh.GeometryURL, err = write(
+			".geometry",
+			modelViewerMeshByteLength(payload),
+			func(w io.Writer) error { return writeModelViewerMeshBytes(w, payload) },
+		)
 		if err != nil {
 			return err
 		}
+		float32s := func(values []float32) (int, func(io.Writer) error) {
+			return len(values) * 4, func(w io.Writer) error { return writeModelViewerFloat32s(w, values) }
+		}
 		if !modelViewerSourceIndicesAreIdentity(payload.SourceIndices) {
-			mesh.SourceIndicesURL, err = write(".source-idx", modelViewerUint32Bytes(payload.SourceIndices))
+			mesh.SourceIndicesURL, err = write(
+				".source-idx",
+				len(payload.SourceIndices)*4,
+				func(w io.Writer) error { return writeModelViewerUint32s(w, payload.SourceIndices) },
+			)
 			if err != nil {
 				return err
 			}
@@ -388,20 +406,16 @@ func writeModelViewerPayload(
 		}
 		for targetIndex := range mesh.ShapeTargets {
 			target := &mesh.ShapeTargets[targetIndex]
-			target.PositionsURL, err = write(
-				fmt.Sprintf(".shape.%d", targetIndex),
-				modelViewerFloat32Bytes(payload.ShapePositions[targetIndex]),
-			)
+			length, encode := float32s(payload.ShapePositions[targetIndex])
+			target.PositionsURL, err = write(fmt.Sprintf(".shape.%d", targetIndex), length, encode)
 			if err != nil {
 				return err
 			}
 			if target.Mode != modelViewerMidpointPairMode {
 				continue
 			}
-			target.LowPositionsURL, err = write(
-				fmt.Sprintf(".shape.%d.low", targetIndex),
-				modelViewerFloat32Bytes(payload.ShapeLowPositions[targetIndex]),
-			)
+			length, encode = float32s(payload.ShapeLowPositions[targetIndex])
+			target.LowPositionsURL, err = write(fmt.Sprintf(".shape.%d.low", targetIndex), length, encode)
 			if err != nil {
 				return err
 			}
