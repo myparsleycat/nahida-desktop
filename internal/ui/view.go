@@ -86,7 +86,7 @@ func showWindowDialog(cx *fairy.Cx, key string, panel *fairy.El, onClose func())
 func (s *Shell) titleBar() *fairy.El {
 	t := kit.T()
 	bar := fairy.Row().Key("ui.titlebar").WFull().H(titleBarHeight).Shrink(0).PadEdges(0, 0, 0, 8).Gap(6).
-		Align(fairy.Center).DragRegion()
+		Align(fairy.Center).DragRegion().WindowChrome()
 	if s.backendDown() {
 		bar.Child(fairy.Row(
 			fairy.Icon(lucide.ServerOff).Size(12, 12),
@@ -95,11 +95,11 @@ func (s *Shell) titleBar() *fairy.El {
 			FontSize(11).Medium().Color(t.MutedForeground).Tooltip(T("titlebar.server_inactive_tooltip")))
 	}
 	if badges := s.activityBadges(); badges != nil {
-		bar.Child(badges)
+		bar.Child(badges.WindowChromeExclude())
 	}
 	bar.Child(fairy.Spacer())
 	if action := s.updateAction(); action != nil {
-		bar.Child(action.MarginEdges(0, 8, 0, 0))
+		bar.Child(action.MarginEdges(0, 8, 0, 0).WindowChromeExclude())
 	}
 	// The window buttons are drawn by windowControls in an overlay; the title bar keeps their place.
 	return bar.Child(fairy.Box().W(3 * windowButtonWidth).HFull().Shrink(0))
@@ -132,7 +132,7 @@ func (s *Shell) windowControls(w *fairy.Window) *fairy.El {
 		maximizeButton,
 		control(lucide.X, 14, T("titlebar.controls.close"), w.Close).
 			HoverFill(closeHover).HoverColor(fairy.Hex(0xffffff)),
-	).H(titleBarHeight)
+	).H(titleBarHeight).WindowChrome()
 }
 
 func (s *Shell) backendDown() bool {
