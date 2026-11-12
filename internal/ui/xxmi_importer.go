@@ -65,10 +65,12 @@ type importerPage struct {
 	modFolder       query[xxmi.ImporterModFolder]
 	modFolderTarget *string
 	d3dxOptions     query[[]xxmi.D3DXOption]
-	d3dxSearch      string
-	d3dxStatus      string
-	d3dxSection     string
-	verification    query[*xxmi.PackageVerification]
+	// d3dxFailure keeps the failed read on screen while Retry reads the options again.
+	d3dxFailure  error
+	d3dxSearch   string
+	d3dxStatus   string
+	d3dxSection  string
+	verification query[*xxmi.PackageVerification]
 }
 
 type packageInstall struct {
@@ -503,7 +505,7 @@ func (s *Shell) importerGeneralTab(ic *importerContext) []*fairy.El {
 			c.ImporterFolder, func(value string) { ic.set(func(c *xxmi.ImporterConfig) { c.ImporterFolder = value }) }),
 		s.modFolderField(ic),
 		gameFolder,
-		settingRow(T(prefix+"mode"), T(prefix+"modeDescription"), xxmiButtonGroup(string(c.Mode), []kit.Item{
+		settingRow(T(prefix+"mode"), T(prefix+"modeDescription"), xxmiButtonGroup(string(c.Mode), "", []kit.Item{
 			{Value: string(xxmi.RuntimeXXMI), Label: "XXMI"},
 			{Value: string(xxmi.RuntimeLegacy), Label: "3DMigoto"},
 		}, func(value string) { ic.set(func(c *xxmi.ImporterConfig) { c.Mode = xxmi.RuntimeMode(value) }) }, kit.SizeDefault)).
@@ -1299,13 +1301,24 @@ func (s *Shell) importerD3DXTab(ic *importerContext) []*fairy.El {
 	options := fetch(s, &p.d3dxOptions, func(ctx context.Context) ([]xxmi.D3DXOption, error) {
 		return s.deps.XXMI.GetD3DXOptions(ctx, key)
 	})
+	failure := options.err
+	if !options.loading {
+		p.d3dxFailure = nil
+	} else if failure == nil {
+		failure = p.d3dxFailure
+	}
 	switch {
-	case !options.loaded && options.err != nil:
+	case !options.loaded && failure != nil:
+		retry := func() {
+			p.d3dxFailure = options.err
+			p.d3dxOptions.invalidate()
+		}
 		return []*fairy.El{fairy.Row(
 			fairy.Col(fairy.Text(T(prefix+"loadFailed")).FontSize(14).LineHeight(20).Color(t.Destructive),
-				fairy.Text(options.err.Error()).FontSize(12).LineHeight(16).Color(t.MutedForeground).Wrap()).
+				fairy.Text(failure.Error()).FontSize(12).LineHeight(16).Color(t.MutedForeground).Wrap()).
 				Gap(2).Grow(1).MinW(0),
-			kit.Button(T("page.setting.xxmi.dllVersionRetry"), p.d3dxOptions.invalidate, kit.Outline, kit.Small),
+			kit.Button(T("page.setting.xxmi.dllVersionRetry"), retry, kit.Outline, kit.Small,
+				kit.Loading(options.loading)),
 		).Gap(16).Align(fairy.Center).PadXY(4, 0)}
 	case !options.loaded:
 		return nil
@@ -1428,8 +1441,15 @@ func (s *Shell) importerToolsTab(ic *importerContext) []*fairy.El {
 	key := ic.key
 	const prefix = "page.setting.xxmi.builtin."
 
+	previewID, applyID := "optimize:"+key+":preview", "optimize:"+key+":apply"
 	optimize := func(dryRun bool) {
-		id := "optimize:" + key
+		if x.busy[previewID] || x.busy[applyID] {
+			return
+		}
+		id := applyID
+		if dryRun {
+			id = previewID
+		}
 		resetCache := c.IniOptimizer.ResetCache
 		var report optimizer.Report
 		s.xxmiAction(id, func(ctx context.Context) error {
@@ -1446,7 +1466,8 @@ func (s *Shell) importerToolsTab(ic *importerContext) []*fairy.El {
 			s.toasts.Show(kit.ToastSuccess, T(prefix+"optimized", "count", len(report.Changes)), "")
 		}, nil)
 	}
-	busy := x.busy["optimize:"+key]
+	previewing, applying := x.busy[previewID], x.busy[applyID]
+	busy := previewing || applying
 	optimizer := []*fairy.El{
 		toggleRow(T(prefix+"optimizeAtLaunch"), T(prefix+"optimizeAtLaunchDescription"), c.IniOptimizer.Enabled,
 			func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { c.IniOptimizer.Enabled = on }) }, false),
@@ -1454,9 +1475,10 @@ func (s *Shell) importerToolsTab(ic *importerContext) []*fairy.El {
 			c.IniOptimizer.ResetCache,
 			func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { c.IniOptimizer.ResetCache = on }) }, false),
 		fairy.Row(
-			kit.Button(T(prefix+"previewOptimization"), func() { optimize(true) }, kit.Outline, kit.Loading(busy)),
+			kit.Button(T(prefix+"previewOptimization"), func() { optimize(true) }, kit.Outline,
+				kit.Disabled(busy), kit.Loading(previewing)),
 			kit.Button(T(prefix+"applyOptimization"), func() { optimize(false) },
-				kit.Disabled(busy || p.optimization == nil || len(p.optimization.Changes) == 0)),
+				kit.Disabled(busy || p.optimization == nil || len(p.optimization.Changes) == 0), kit.Loading(applying)),
 		).Gap(8).PadXY(0, 8),
 	}
 	if report := p.optimization; report != nil {

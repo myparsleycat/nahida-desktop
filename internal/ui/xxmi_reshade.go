@@ -18,6 +18,8 @@ import (
 const (
 	effectsAvailable = "available"
 	effectsInstalled = "installed"
+	// effectsBatch cannot be a package ID, which is a download URL.
+	effectsBatch = "*"
 )
 
 type reshadePage struct {
@@ -28,12 +30,14 @@ type reshadePage struct {
 	wantedVersion  *string
 	settingVersion bool
 
-	selected      []string
-	effectsBusy   bool
-	category      string
-	search        string
-	presetEffects *reshade.PresetEffects
-	presetBusy    bool
+	selected []string
+	// effectsRunning is the effect package change in progress: effectsBatch for the selected packages, or the ID of
+	// the one package removed from its row.
+	effectsRunning string
+	category       string
+	search         string
+	presetEffects  *reshade.PresetEffects
+	presetBusy     bool
 }
 
 func (s *Shell) reshadeSettingsPage() *fairy.El {
@@ -297,15 +301,16 @@ func (s *Shell) effectPackagesSection() *fairy.El {
 		}
 	}
 
-	run := func(ids []string, action func(context.Context) error) {
-		if r.effectsBusy {
+	busy := r.effectsRunning != ""
+	run := func(source string, ids []string, action func(context.Context) error) {
+		if r.effectsRunning != "" {
 			return
 		}
-		r.effectsBusy = true
+		r.effectsRunning = source
 		s.background(func(ctx context.Context) {
 			err := action(ctx)
 			fairy.Go(func() {
-				r.effectsBusy = false
+				r.effectsRunning = ""
 				if err != nil {
 					s.xxmiFail(err, "reshade-effects", map[string]any{"packages": ids}, "")
 				}
@@ -329,8 +334,9 @@ func (s *Shell) effectPackagesSection() *fairy.El {
 	var actions *fairy.El
 	if category == effectsInstalled {
 		ids := picked
-		actions = kit.Button(T(prefix+"removeSelected", "count", len(picked)), func() { run(ids, remove(ids)) },
-			kit.Outline, kit.Small, kit.Icon(lucide.Trash), kit.Disabled(r.effectsBusy || len(picked) == 0))
+		actions = kit.Button(T(prefix+"removeSelected", "count", len(picked)),
+			func() { run(effectsBatch, ids, remove(ids)) }, kit.Outline, kit.Small, kit.Icon(lucide.Trash),
+			kit.Disabled(busy || len(picked) == 0), kit.Loading(r.effectsRunning == effectsBatch))
 	} else {
 		ids := picked
 		actions = fairy.Row(
@@ -341,14 +347,14 @@ func (s *Shell) effectPackagesSection() *fairy.El {
 						r.selected = append(r.selected, pkg.ID)
 					}
 				}
-			}, kit.Outline, kit.Small, kit.Disabled(r.effectsBusy)),
+			}, kit.Outline, kit.Small, kit.Disabled(busy)),
 			kit.Button(T(prefix+"installSelected", "count", len(picked)), func() {
-				run(ids, func(ctx context.Context) error {
+				run(effectsBatch, ids, func(ctx context.Context) error {
 					_, err := s.deps.ReShade.InstallEffectPackages(ctx, ids)
 					return err
 				})
-			}, kit.Small, kit.Icon(lucide.Download), kit.Disabled(r.effectsBusy || len(picked) == 0),
-				kit.Loading(r.effectsBusy)),
+			}, kit.Small, kit.Icon(lucide.Download), kit.Disabled(busy || len(picked) == 0),
+				kit.Loading(r.effectsRunning == effectsBatch)),
 		).Gap(8)
 	}
 
@@ -373,7 +379,7 @@ func (s *Shell) effectPackagesSection() *fairy.El {
 			} else {
 				r.selected = slices.DeleteFunc(r.selected, func(id string) bool { return id == pkg.ID })
 			}
-		}, func() { run([]string{pkg.ID}, remove([]string{pkg.ID})) }))
+		}, func() { run(pkg.ID, []string{pkg.ID}, remove([]string{pkg.ID})) }))
 	}
 	if matched == 0 {
 		list.Child(fairy.Text(T(prefix+"effectsNoMatch")).FontSize(12).LineHeight(16).
@@ -396,7 +402,8 @@ func (s *Shell) effectPackageItem(pkg reshade.EffectPackage, checked bool, onCha
 ) *fairy.El {
 	t := kit.T()
 	const prefix = "page.setting.xxmi.builtin.reshade."
-	busy := s.xxmi.reshade.effectsBusy
+	running := s.xxmi.reshade.effectsRunning
+	busy := running != ""
 	title := fairy.Row(fairy.Text(pkg.Name).FontSize(14).LineHeight(20).Medium()).Wrap().Gap(6).Align(fairy.Center)
 	if !pkg.Supported {
 		title.Child(kit.Badge(T(prefix+"effectUnsupported"), kit.Outline))
@@ -416,7 +423,7 @@ func (s *Shell) effectPackageItem(pkg reshade.EffectPackage, checked bool, onCha
 	if pkg.Installed {
 		label := T(prefix+"removeEffect", "name", pkg.Name)
 		row.Child(kit.IconButton(lucide.Trash, onRemove, kit.Ghost, kit.Disabled(busy),
-			kit.Tooltip(label)).Label(label))
+			kit.Loading(running == pkg.ID), kit.Tooltip(label)).Label(label))
 	}
 	return row
 }

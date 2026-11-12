@@ -46,7 +46,7 @@ func (s *Shell) gameSelector() *fairy.El {
 	if len(m.games) > 0 {
 		launch := T("page.mod.game-selector.launch_game")
 		gameRow.Child(kit.IconButton(lucide.Play, s.playGame, kit.Outline, kit.Disabled(m.game == ""),
-			kit.Tooltip(launch)).Label(launch))
+			kit.Loading(s.gameStarting()), kit.Tooltip(launch)).Label(launch))
 	}
 	editGame := kit.RowAction(lucide.Pencil, T("page.mod.dialog.edit-game.title"), func(name string) {
 		for _, game := range m.games {

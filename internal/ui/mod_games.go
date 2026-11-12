@@ -681,13 +681,18 @@ func (s *Shell) playGame() {
 			s.mods.nteLaunch = &nteLaunchDraft{game: game.Game}
 			return
 		}
+		if s.mods.nteStarting {
+			return
+		}
+		s.mods.nteStarting = true
 		name := game.Game
 		s.background(func(ctx context.Context) {
 			err := s.deps.Mod.StartNteLauncher(ctx, name)
-			if err == nil {
-				return
-			}
 			fairy.Go(func() {
+				s.mods.nteStarting = false
+				if err == nil {
+					return
+				}
 				if strings.Contains(err.Error(), "NTE_LAUNCHER_PATH_NOT_FOUND") {
 					s.toasts.Show(
 						kit.ToastError,
@@ -714,6 +719,17 @@ func (s *Shell) playGame() {
 		return
 	}
 	s.startImporter(*game.Importer)
+}
+
+func (s *Shell) gameStarting() bool {
+	game := s.gameConfig()
+	if game == nil {
+		return false
+	}
+	if importer := importerOf(*game); importer != nteImporter {
+		return s.xxmi.guard.starting[importer]
+	}
+	return s.mods.nteStarting
 }
 
 func (s *Shell) showNteLaunchError(err error, game string) {

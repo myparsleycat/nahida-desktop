@@ -72,9 +72,11 @@ type launchGuard struct {
 	starting map[string]bool
 
 	// importer names the launch a blocker dialog holds; the dialog is closed while it is empty.
-	importer     string
-	dialog       string
-	confirming   bool
+	importer   string
+	dialog     string
+	confirming bool
+	// keeping marks a confirmation that keeps the wounded effect instead of applying the dialog's fix.
+	keeping      bool
 	runtimeError string
 	gameFolder   string
 	resourceTier string
@@ -280,7 +282,7 @@ func (s *Shell) launchFailed(key string, err error) {
 
 func (g *launchGuard) closeDialog() {
 	g.generation++
-	g.confirming = false
+	g.confirming, g.keeping = false, false
 	g.importer, g.runtimeError, g.gameFolder = "", "", ""
 	g.resourceTier = "HD"
 	g.detected = nil
@@ -408,7 +410,7 @@ func (s *Shell) keepWoundedFX() {
 	importer, keepLogging, ignoreSmoothMotion := g.importer, g.keepLogging, g.ignoreSmoothMotion
 	g.generation++
 	generation := g.generation
-	g.confirming = true
+	g.confirming, g.keeping = true, true
 	s.background(func(ctx context.Context) {
 		config, err := s.deps.XXMI.GetImporterConfig(ctx, importer)
 		if err == nil && config.WWMI == nil {
@@ -422,7 +424,7 @@ func (s *Shell) keepWoundedFX() {
 			if g.generation != generation {
 				return
 			}
-			g.confirming = false
+			g.confirming, g.keeping = false, false
 			if err != nil {
 				s.xxmiFail(err, "launch-guard.keep-wounded", map[string]any{"importer": importer}, "")
 				return
@@ -751,14 +753,20 @@ func (s *Shell) blockerDialog(cx *fairy.Cx) {
 		for i := range items {
 			items[i].Disabled = g.confirming
 		}
-		body = xxmiButtonGroup(g.resourceTier, items, func(value string) { g.resourceTier = value }, kit.SizeDefault).
+		body = xxmiButtonGroup(
+			g.resourceTier,
+			"",
+			items,
+			func(value string) { g.resourceTier = value },
+			kit.SizeDefault,
+		).
 			AlignSelf(fairy.Start)
 	}
 
 	var actions []*fairy.El
 	if dialog == dialogWWMIWounded {
 		actions = append(actions, kit.Button(T("page.mod.dialog.wwmi-wounded.keep"), s.keepWoundedFX, kit.Outline,
-			kit.Disabled(g.confirming)))
+			kit.Disabled(g.confirming), kit.Loading(g.keeping)))
 	} else {
 		actions = append(actions, kit.Button(T("g.cancel"), g.closeDialog, kit.Outline, kit.Disabled(g.confirming)))
 	}
@@ -776,8 +784,8 @@ func (s *Shell) blockerDialog(cx *fairy.Cx) {
 			s.launch(importer, keep, true)
 		}, kit.Outline, kit.Disabled(g.confirming)))
 	}
-	actions = append(actions, kit.Button(confirm, s.confirmBlocker, kit.Loading(g.confirming),
-		kit.Disabled(dialog == dialogGameFolder && strings.TrimSpace(g.gameFolder) == "")))
+	actions = append(actions, kit.Button(confirm, s.confirmBlocker, kit.Loading(g.confirming && !g.keeping),
+		kit.Disabled(g.keeping || dialog == dialogGameFolder && strings.TrimSpace(g.gameFolder) == "")))
 
 	width := float32(0)
 	if dialog == dialogSmoothMotion || dialog == dialogLaunchBlockers {

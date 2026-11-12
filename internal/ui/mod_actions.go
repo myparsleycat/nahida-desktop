@@ -36,7 +36,7 @@ const (
 func (s *Shell) openPath(path string) {
 	go func() {
 		if err := s.deps.Platform.OpenPath(path); err != nil {
-			s.toasts.Show(kit.ToastError, err.Error(), "")
+			fairy.Go(func() { s.toasts.Show(kit.ToastError, err.Error(), "") })
 		}
 	}()
 }

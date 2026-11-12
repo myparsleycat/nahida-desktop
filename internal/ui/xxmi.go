@@ -637,8 +637,15 @@ func (s *Shell) xxmiHeader() *fairy.El {
 			mode = string(xxmi.LauncherExternal)
 		}
 	}
-	busy := x.busy["set-launcher-mode"]
-	toggle := xxmiButtonGroup(mode, []kit.Item{
+	const busyPrefix = "set-launcher-mode:"
+	switching := ""
+	for _, value := range []xxmi.LauncherMode{xxmi.LauncherBuiltin, xxmi.LauncherExternal} {
+		if x.busy[busyPrefix+string(value)] {
+			switching = string(value)
+		}
+	}
+	busy := switching != ""
+	toggle := xxmiButtonGroup(mode, switching, []kit.Item{
 		{Value: string(xxmi.LauncherBuiltin), Label: T("page.setting.xxmi.launcherMode.builtin"),
 			Disabled: !q.loaded || mode == string(xxmi.LauncherBuiltin) || busy},
 		{
@@ -647,17 +654,18 @@ func (s *Shell) xxmiHeader() *fairy.El {
 			Disabled: !q.loaded || mode == string(xxmi.LauncherExternal) || busy,
 		},
 	}, func(value string) {
-		if !q.loaded || value == mode {
+		if !q.loaded || value == mode || busy {
 			return
 		}
-		s.xxmiAction("set-launcher-mode", func(ctx context.Context) error {
+		s.xxmiAction(busyPrefix+value, func(ctx context.Context) error {
 			return s.deps.XXMI.SetLauncherMode(ctx, xxmi.LauncherMode(value))
 		}, x.refresh, nil)
 	}, kit.SizeXS)
 	return header.Child(toggle.Label(T("page.setting.xxmi.launcherMode.title")))
 }
 
-func xxmiButtonGroup(value string, items []kit.Item, onChange func(string), size kit.Size) *fairy.El {
+// xxmiButtonGroup shows items as joined buttons with value checked; the item named by loading shows a spinner.
+func xxmiButtonGroup(value, loading string, items []kit.Item, onChange func(string), size kit.Size) *fairy.El {
 	t := kit.T()
 	group := fairy.Row().Role(fairy.RoleGroup).Shrink(0)
 	scale := kit.Option(nil)
@@ -670,7 +678,8 @@ func xxmiButtonGroup(value string, items []kit.Item, onChange func(string), size
 		if active {
 			variant = kit.Default
 		}
-		button := kit.Button(item.Label, func() { onChange(item.Value) }, variant, scale, kit.Disabled(item.Disabled)).
+		button := kit.Button(item.Label, func() { onChange(item.Value) }, variant, scale, kit.Disabled(item.Disabled),
+			kit.Loading(loading != "" && item.Value == loading)).
 			Key(item.Value).Checked(active).Radius(0)
 		if i == 0 {
 			button.Radii(t.RadiusLg(), 0, 0, t.RadiusLg())

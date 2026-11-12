@@ -150,7 +150,8 @@ func (s *Shell) diagnosticsSection(key string, running, launchDisabled bool) *fa
 	if armed {
 		actions.Child(
 			kit.Button(T(prefix+"launch"), func() { s.startImporter(key) }, kit.Outline, kit.Small,
-				kit.Icon(lucide.Play), kit.Disabled(running || launchDisabled)),
+				kit.Icon(lucide.Play), kit.Disabled(running || launchDisabled),
+				kit.Loading(s.xxmi.guard.starting[key])),
 			kit.Button(T(prefix+"collect"), openReport, kit.Small, kit.Disabled(running)),
 			kit.Button(T(prefix+"changeOptions"), openStart, kit.Outline, kit.Small),
 		)

@@ -113,6 +113,7 @@ type modScreen struct {
 	downloadAsk *downloadAsk
 	gameDraft   *gameDraft
 	nteLaunch   *nteLaunchDraft
+	nteStarting bool
 	// nteProgress is the last NTE bootstrap progress event, which adding or editing an NTE game shows.
 	nteProgress *mod.NteBootstrapProgress
 	urlDownload *urlDownloadDraft

@@ -53,11 +53,28 @@ func modRuntimeMessage(err error) string {
 	return T(key, "detail", match[2])
 }
 
-func (s *Shell) runModRuntime(importer string, runtime modruntime.Status, success string,
+// modRuntimeOps are the actions on one runtime. Each has its own busy id so the spinner shows on the button that
+// started it, and any of them running blocks the others.
+var modRuntimeOps = []string{"install", "disable", "remove", "save"}
+
+func modRuntimeBusyID(importer, name, op string) string {
+	return "mod-runtime:" + importer + ":" + name + ":" + op
+}
+
+func (s *Shell) modRuntimeBusy(importer, name string) bool {
+	return slices.ContainsFunc(modRuntimeOps, func(op string) bool {
+		return s.xxmi.busy[modRuntimeBusyID(importer, name, op)]
+	})
+}
+
+func (s *Shell) runModRuntime(importer string, runtime modruntime.Status, op, success string,
 	action func(ctx context.Context, importer, name string) (modruntime.Status, error), done func(),
 ) {
+	if s.modRuntimeBusy(importer, runtime.Name) {
+		return
+	}
 	listing := keyed(s.xxmi.modRuntimes, importer)
-	s.xxmiAction("mod-runtime:"+importer+":"+runtime.Name, func(ctx context.Context) error {
+	s.xxmiAction(modRuntimeBusyID(importer, runtime.Name, op), func(ctx context.Context) error {
 		_, err := action(ctx, importer, runtime.Name)
 		// Installing or removing a runtime adds or drops a mod in the library.
 		fairy.Go(func() {
@@ -122,7 +139,8 @@ func (s *Shell) modRuntimesTab(ic *importerContext) []*fairy.El {
 func (s *Shell) modRuntimeRow(importer string, hasMods bool, runtime modruntime.Status) *fairy.El {
 	t := kit.T()
 	p := &s.xxmi.importer.runtimes
-	busy := s.xxmi.busy["mod-runtime:"+importer+":"+runtime.Name]
+	busy := s.modRuntimeBusy(importer, runtime.Name)
+	acting := func(op string) bool { return s.xxmi.busy[modRuntimeBusyID(importer, runtime.Name, op)] }
 	const prefix = "page.setting.xxmi.modRuntimes."
 	state := runtime.State
 
@@ -163,13 +181,13 @@ func (s *Shell) modRuntimeRow(importer string, hasMods bool, runtime modruntime.
 		actions := fairy.Row().Wrap().Gap(8).RowGap(8)
 		if state != "current" && state != "foreign" {
 			actions.Child(kit.Button(T(prefix+"action."+state), func() {
-				s.runModRuntime(importer, runtime, prefix+"done."+state, s.deps.ModRuntime.Install, nil)
-			}, kit.Small, kit.Loading(busy)))
+				s.runModRuntime(importer, runtime, "install", prefix+"done."+state, s.deps.ModRuntime.Install, nil)
+			}, kit.Small, kit.Disabled(busy), kit.Loading(acting("install"))))
 		}
 		if slices.Contains(enabledRuntimeStates, state) {
 			actions.Child(kit.Button(T(prefix+"disable"), func() {
-				s.runModRuntime(importer, runtime, prefix+"disabled", s.deps.ModRuntime.Disable, nil)
-			}, kit.Outline, kit.Small, kit.Disabled(busy)))
+				s.runModRuntime(importer, runtime, "disable", prefix+"disabled", s.deps.ModRuntime.Disable, nil)
+			}, kit.Outline, kit.Small, kit.Disabled(busy), kit.Loading(acting("disable"))))
 		}
 		if state != "missing" {
 			path := runtime.Path
@@ -178,12 +196,12 @@ func (s *Shell) modRuntimeRow(importer string, hasMods bool, runtime modruntime.
 		}
 		if state != "missing" && state != "foreign" {
 			actions.Child(kit.Button(T(prefix+"remove"), func() { p.removing = &runtime }, kit.Destructive, kit.Small,
-				kit.Disabled(busy)))
+				kit.Disabled(busy), kit.Loading(acting("remove"))))
 		}
 		row.Child(actions)
 	}
 	if hasMods && slices.Contains(installedRuntimeStates, state) && len(runtime.Settings) > 0 {
-		row.Child(s.modRuntimeSettings(importer, runtime, busy))
+		row.Child(s.modRuntimeSettings(importer, runtime, busy, acting("save")))
 	}
 	return row
 }
@@ -197,7 +215,7 @@ func runtimeSettingValues(settings []modruntime.SettingValue, value func(modrunt
 	return values
 }
 
-func (s *Shell) modRuntimeSettings(importer string, runtime modruntime.Status, busy bool) *fairy.El {
+func (s *Shell) modRuntimeSettings(importer string, runtime modruntime.Status, busy, saving bool) *fairy.El {
 	t := kit.T()
 	p := &s.xxmi.importer.runtimes
 	const prefix = "page.setting.xxmi.modRuntimes.settings."
@@ -295,7 +313,7 @@ func (s *Shell) modRuntimeSettings(importer string, runtime modruntime.Status, b
 		}, kit.Ghost, kit.Small, kit.Disabled(maps.Equal(values, defaults))),
 		kit.Button(T(prefix+"save"), func() {
 			submitted := maps.Clone(values)
-			s.runModRuntime(importer, runtime, prefix+"saved",
+			s.runModRuntime(importer, runtime, "save", prefix+"saved",
 				func(ctx context.Context, importer, name string) (modruntime.Status, error) {
 					return s.deps.ModRuntime.SetSettings(ctx, importer, name, submitted)
 				}, func() {
@@ -304,7 +322,7 @@ func (s *Shell) modRuntimeSettings(importer string, runtime modruntime.Status, b
 						delete(p.drafts, runtime.Name)
 					}
 				})
-		}, kit.Small, kit.Disabled(!dirty || busy), kit.Loading(busy)),
+		}, kit.Small, kit.Disabled(!dirty || busy), kit.Loading(saving)),
 	).Gap(8).PadEdges(8, 0, 0, 0))
 	return box
 }
@@ -410,7 +428,7 @@ func (s *Shell) modRuntimeDialogs(cx *fairy.Cx, importer string) {
 				kit.Button(T("g.cancel"), dismiss, kit.Outline),
 				kit.Button(T(prefix+"remove"), func() {
 					p.removing = nil
-					s.runModRuntime(importer, *runtime, prefix+"removed", s.deps.ModRuntime.Remove, nil)
+					s.runModRuntime(importer, *runtime, "remove", prefix+"removed", s.deps.ModRuntime.Remove, nil)
 				}, kit.Destructive),
 			},
 			OnClose: dismiss,

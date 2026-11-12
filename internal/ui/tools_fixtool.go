@@ -25,6 +25,9 @@ type fixToolManager struct {
 	scripts query[[]db.ScriptBasicRow]
 	presets query[[]db.ScriptPresetWithScripts]
 	search  string
+	// deleting holds the scripts and presets whose deletion was sent. A deleted one stays listed until the list is
+	// read again, so its entry is kept rather than cleared when the call returns.
+	deleting map[string]bool
 
 	picked     []db.ScriptBasicRow
 	presetName string
@@ -111,9 +114,9 @@ func (s *Shell) fixPresetList() *fairy.El {
 		list.Child(fairy.Row(
 			fairy.Text(name).FontSize(14).Medium().Ellipsis().Grow(1).MinW(0).TooltipWhenTruncated(),
 			kit.IconButton(lucide.Trash, func() {
-				s.deleteFixItem("fix-tool.delete-preset", map[string]any{"preset": name}, &f.presets,
+				s.deleteFixItem("fix-tool.delete-preset", "preset:"+id, map[string]any{"preset": name}, &f.presets,
 					func(ctx context.Context) error { return s.deps.Tools.DeletePreset(ctx, id) })
-			}, kit.Destructive, kit.Label(T("g.delete"))),
+			}, kit.Destructive, kit.Loading(f.deleting["preset:"+id]), kit.Label(T("g.delete"))),
 		).Key("tools.fix.preset." + id).Gap(8).Align(fairy.Center).Pad(12).Radius(6).HoverFill(hoverFill(t)).
 			Animate(motion.Fast))
 	}
@@ -125,11 +128,19 @@ func (s *Shell) fixPresetList() *fairy.El {
 
 // deleteFixItem runs a delete and reads the list it changed again.
 func (s *Shell) deleteFixItem(
-	operation string,
+	operation, key string,
 	fields map[string]any,
 	list interface{ invalidate() },
 	del func(context.Context) error,
 ) {
+	f := &s.tools.fixTool
+	if f.deleting[key] {
+		return
+	}
+	if f.deleting == nil {
+		f.deleting = map[string]bool{}
+	}
+	f.deleting[key] = true
 	s.background(func(ctx context.Context) {
 		err := del(ctx)
 		if err != nil {
@@ -138,6 +149,7 @@ func (s *Shell) deleteFixItem(
 		fairy.Go(func() {
 			list.invalidate()
 			if err != nil {
+				delete(f.deleting, key)
 				s.toasts.Show(kit.ToastError, err.Error(), "")
 			}
 		})
@@ -172,9 +184,9 @@ func (s *Shell) fixScriptList(cx *fairy.Cx) *fairy.El {
 			kit.IconButton(lucide.Plus, func() { f.picked = append(f.picked, script) }, kit.Outline,
 				kit.Label(T(prefix+"add"))),
 			kit.IconButton(lucide.Trash, func() {
-				s.deleteFixItem("fix-tool.delete-script", map[string]any{"script": script.Name}, &f.scripts,
-					func(ctx context.Context) error { return s.deps.Tools.DeleteScript(ctx, script.ID) })
-			}, kit.Destructive, kit.Label(T("g.delete"))),
+				s.deleteFixItem("fix-tool.delete-script", "script:"+script.ID, map[string]any{"script": script.Name},
+					&f.scripts, func(ctx context.Context) error { return s.deps.Tools.DeleteScript(ctx, script.ID) })
+			}, kit.Destructive, kit.Loading(f.deleting["script:"+script.ID]), kit.Label(T("g.delete"))),
 		).Key("tools.fix.script." + script.ID).Gap(8).Align(fairy.Center).Pad(12).Radius(6).HoverFill(hoverFill(t)).
 			Animate(motion.Fast))
 	}
