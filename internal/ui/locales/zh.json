@@ -2420,6 +2420,8 @@
           "titlebarActivityBadgeClickNavigateDescription": "开启后点击徽章可打开相关页面。关闭后可用徽章拖动窗口。",
           "windowBackdrop": "Mica 背景效果",
           "windowBackdropDescription": "为窗口背景使用 Windows Mica 效果。更改后窗口会重新打开。",
+          "backdropBlur": "模糊效果",
+          "backdropBlurDescription": "对菜单、对话框、通知和浮层后面的内容进行模糊处理。界面卡顿时请关闭。",
           "checkUpdate": "检查更新",
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
@@ -2561,13 +2563,6 @@
             "fixedCardWidthDescription": "保持卡片宽度固定，只改变可容纳的列数。范围：240 到 640。",
             "fixedColumnCount": "固定列数",
             "fixedColumnCountDescription": "在可能的情况下始终使用此列数。范围：1 到 8。"
-          }
-        },
-        "performance": {
-          "title": "性能",
-          "backdrop-blur": {
-            "title": "使用模糊效果",
-            "description": "浏览模组时出现性能问题，请禁用此选项。"
           }
         }
       },

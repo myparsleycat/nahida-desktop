@@ -173,7 +173,7 @@ func (v *ModelViewer) Title() string {
 // Colors returns the window colours of the current theme.
 func (v *ModelViewer) Colors() (dark bool, background, text fairy.Color) {
 	dark = v.dark()
-	t := Theme(dark, v.font)
+	t := Theme(dark, v.shell.blur, v.font)
 	return dark, t.Background, t.Foreground
 }
 
@@ -754,7 +754,7 @@ func (v *ModelViewer) advanceCamera(now time.Time) {
 // View builds the content of a viewer window of its own.
 func (v *ModelViewer) View(cx *fairy.Cx) *fairy.El {
 	dark := v.dark()
-	t := Theme(dark, v.font)
+	t := Theme(dark, v.shell.blur, v.font)
 	// The viewer window keeps the system title bar, so dialogs centre on the whole window.
 	t.DialogTopInset = 0
 	if v.shownDark == nil || *v.shownDark != dark {
@@ -841,9 +841,9 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	switch {
 	case v.loading:
 		viewport.Child(
-			fairy.Col(kit.Spinner(32), fairy.Text(T("page.tools.model_viewer.loading")).FontSize(14).
+			frosted(fairy.Col(kit.Spinner(32), fairy.Text(T("page.tools.model_viewer.loading")).FontSize(14).
 				LineHeight(20).Color(t.MutedForeground)).
-				Absolute().Inset(0).Center().Gap(12).Radius(6).Fill(t.Muted.Alpha(0.7)).PassThrough(),
+				Absolute().Inset(0).Center().Gap(12).Radius(6).Fill(t.Muted.Alpha(0.7)).PassThrough(), 4),
 		)
 	case v.loadErr != "":
 		viewport.Child(fairy.Col(

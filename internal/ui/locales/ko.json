@@ -2420,6 +2420,8 @@
           "titlebarActivityBadgeClickNavigateDescription": "켜면 배지를 클릭해 관련 화면으로 이동합니다. 끄면 배지를 잡고 창을 드래그할 수 있습니다.",
           "windowBackdrop": "Mica 배경 효과",
           "windowBackdropDescription": "창 배경에 Windows Mica 효과를 사용합니다. 변경하면 창이 다시 열립니다.",
+          "backdropBlur": "블러 효과",
+          "backdropBlurDescription": "메뉴, 대화상자, 알림, 오버레이 뒤의 내용을 흐리게 표시합니다. 화면이 느리면 끄세요.",
           "checkUpdate": "업데이트 확인",
           "runInBackground": "백그라운드 실행",
           "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
@@ -2561,13 +2563,6 @@
             "fixedCardWidthDescription": "카드 너비를 고정하고 들어갈 수 있는 열 개수만 변경합니다. 범위: 240~640.",
             "fixedColumnCount": "고정 열 개수",
             "fixedColumnCountDescription": "가능한 경우 항상 이 개수의 열을 사용합니다. 범위: 1~8."
-          }
-        },
-        "performance": {
-          "title": "성능",
-          "backdrop-blur": {
-            "title": "블러 사용",
-            "description": "모드 탐색 시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
           }
         }
       },

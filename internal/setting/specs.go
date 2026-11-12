@@ -204,6 +204,7 @@ func buildSpecs() map[string]spec {
 				return nil
 			},
 		},
+		KeyGeneralBackdropBlur: boolSpec(definitionsByKey[KeyGeneralBackdropBlur], true),
 
 		KeyModArchiveExtractPathMode: enumSpec(
 			definitionsByKey[KeyModArchiveExtractPathMode],

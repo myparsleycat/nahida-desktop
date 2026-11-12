@@ -593,8 +593,9 @@ func (s *Shell) modPreview(info mod.ModInfo, hovered bool) *fairy.El {
 	// dependency line moves down inside the rising box by the same amount, so it holds still.
 	stat := fairy.Col(fairy.Text(formatSize(int64(info.Size)) + " · " + formatModTime(info.Mtime, true)).Ellipsis()).
 		Clip().Opacity(0).Animate(modDetailsMotion)
-	details := fairy.Col(stat).Absolute().Left(0).Bottom(0).PadXY(8, 4).Gap(2).Radius(4).Clip().
-		Fill(t.Background.Alpha(0.7)).FontSize(12).Color(t.MutedForeground).PassThrough()
+	// The React card's badges were bg-background/35 over backdrop-blur; without the blur the box stays legible at 0.7.
+	details := glass(fairy.Col(stat).Absolute().Left(0).Bottom(0).PadXY(8, 4).Gap(2).Radius(4).Clip().
+		FontSize(12).Color(t.MutedForeground).PassThrough(), t.Background.Alpha(0.35), t.Background.Alpha(0.7), 8)
 	switch {
 	case len(info.Dependencies) == 0:
 		details.Right(0).Opacity(0).Animate(motion.Fast)

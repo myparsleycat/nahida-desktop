@@ -745,7 +745,7 @@ func (s *Shell) modPageKey(k keyboard.KeyEvent) bool {
 // folderDropHint covers a sidebar folder while files dragged over it would be added to it.
 func folderDropHint(name string) *fairy.El {
 	t := kit.T()
-	return fairy.Box(fairy.Text(T("page.mod.character-sidebar.add-to-character", "name", name)).FontSize(14).LineHeight(20).
+	hint := fairy.Box(fairy.Text(T("page.mod.character-sidebar.add-to-character", "name", name)).FontSize(14).LineHeight(20).
 		Bold().Ellipsis()).
 		Absolute().
 		Inset(0).
@@ -754,8 +754,8 @@ func folderDropHint(name string) *fairy.El {
 		Border(2, t.Primary).
 		BorderDashed().
 		Fill(t.Background.Alpha(0.8)).
-		BackdropBlur(8).
 		PassThrough()
+	return frosted(hint, 4)
 }
 
 func (s *Shell) modDropHint(name string) *fairy.El {
@@ -765,12 +765,12 @@ func (s *Shell) modDropHint(name string) *fairy.El {
 // dropOverlay covers a file list while dragged files would be added to it.
 func dropOverlay(title, description string) *fairy.El {
 	t := kit.T()
-	return fairy.Col(
+	overlay := fairy.Col(
 		fairy.Text(title).FontSize(24).LineHeight(32).Bold().TextAlign(fairy.TextCenter),
 		fairy.Text(description).FontSize(14).LineHeight(20).Color(t.MutedForeground).TextAlign(fairy.TextCenter).
 			MarginEdges(8, 0, 0, 0),
-	).Absolute().Inset(0).Center().Border(2, t.Primary).BorderDashed().Fill(t.Background.Alpha(0.8)).
-		BackdropBlur(8).PassThrough()
+	).Absolute().Inset(0).Center().Border(2, t.Primary).BorderDashed().Fill(t.Background.Alpha(0.8)).PassThrough()
+	return frosted(overlay, 4)
 }
 
 func modListingKey(groupPath, modPath string) string { return groupPath + "\x00" + modPath }

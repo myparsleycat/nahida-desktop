@@ -539,9 +539,11 @@ func (s *Shell) showDriveImport(cx *fairy.Cx, v *driveView) {
 	viewWidth, viewHeight := cx.Size()
 	width = max(min(width, viewWidth-32), 1)
 	height := max(min(720, viewHeight-titleBarHeight-32), 1)
-	panel := fairy.Col(head, body).W(width).MaxH(height).Radius(t.RadiusXl()).Fill(t.Card).Border(1, t.Border).
+	panel := fairy.Col(head, body).W(width).MaxH(height).Radius(t.RadiusXl()).Border(1, t.Border).
 		Clip().Shadow(0, 20, 50, 0, shadowColor(t)).Role(fairy.RoleDialog).Label(T("page.drive.import.title")).
 		Enter(fairy.SlideY(12)).OnClick(func() {})
+	// The React import overlay was bg-background/80 over backdrop-blur-lg.
+	glass(panel, t.Background.Alpha(0.8), t.Card, 16)
 	cx.Overlay(fairy.Box(panel).Key("drive.import").WFull().HFull().Center().
 		PadEdges(16+titleBarHeight, 16, 16, 16).Fill(t.Scrim).Enter(fairy.Fade()), closeOverlay)
 }

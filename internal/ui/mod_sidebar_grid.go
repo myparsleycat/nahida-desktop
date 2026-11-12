@@ -136,8 +136,8 @@ func (s *Shell) folderCellView(row folderRow, size float32) *fairy.El {
 		preview.Opacity(0.5)
 	}
 	badge := func(text string) *fairy.El {
-		return fairy.Text(text).FontSize(11).Ellipsis().PadXY(6, 2).Radius(4).Fill(t.Background.Alpha(0.85)).
-			Color(t.MutedForeground).Shadow(0, 1, 2, 0, shadowColor(t))
+		return frosted(fairy.Text(text).FontSize(11).Ellipsis().PadXY(6, 2).Radius(4).Fill(t.Background.Alpha(0.85)).
+			Color(t.MutedForeground).Shadow(0, 1, 2, 0, shadowColor(t)), 4)
 	}
 	square := fairy.Box(preview).Size(size-8, size-8).Radius(8).Fill(t.Muted).Clip()
 	if row.depth == 0 && row.parentName != "" {

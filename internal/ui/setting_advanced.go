@@ -134,9 +134,9 @@ func (s *Shell) advancedRow(row setting.AdvancedRow, viewHeight float32) *fairy.
 				OnClick(func() { adv.shown = key })
 		}
 		if adv.shown == key {
-			text.Popover(fairy.Col(fairy.Text(value).FontSize(14).LineHeight(20)).
+			text.Popover(t.Surface(fairy.Col(fairy.Text(value).FontSize(14).LineHeight(20)), t.Popover).
 				W(320).MaxH(viewHeight*0.6).ScrollY().Pad(10).Radius(t.RadiusLg()).
-				Fill(t.Popover).Ring(1, t.Foreground.Alpha(0.1)).Color(t.PopoverForeground),
+				Ring(1, t.Foreground.Alpha(0.1)).Color(t.PopoverForeground),
 				fairy.PopoverOptions{Align: fairy.AlignStart, OnDismiss: func() { adv.shown = "" }})
 		}
 		valueCell = text

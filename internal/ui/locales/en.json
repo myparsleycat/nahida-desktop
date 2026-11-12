@@ -2426,6 +2426,8 @@
           "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
           "windowBackdrop": "Mica backdrop",
           "windowBackdropDescription": "Use the Windows Mica effect for the window background. Changing this reopens the window.",
+          "backdropBlur": "Blur effect",
+          "backdropBlurDescription": "Blur the content behind menus, dialogs, toasts and overlays. Turn this off if the interface is slow.",
           "checkUpdate": "Check for updates",
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
@@ -2567,13 +2569,6 @@
             "fixedCardWidthDescription": "Keeps card width fixed and only changes how many columns fit. Range: 240 to 640.",
             "fixedColumnCount": "Fixed column count",
             "fixedColumnCountDescription": "Always use this many columns when possible. Range: 1 to 8."
-          }
-        },
-        "performance": {
-          "title": "Performance",
-          "backdrop-blur": {
-            "title": "Use Blur",
-            "description": "Disable this option if performance issues occur while exploring mods"
           }
         }
       },

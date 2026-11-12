@@ -319,6 +319,6 @@ func modDownloadOverlay(snapshot *transfer.Snapshot, row bool) *fairy.El {
 		).Gap(12).Align(fairy.Center).Justify(fairy.JustifyBetween).FontSize(14).Medium(),
 		bar,
 	).WFull().MaxW(width).Gap(gap)
-	return fairy.Box(body).Absolute().Inset(0).Center().PadXY(16, 0).Fill(t.Muted.Alpha(0.88)).
-		Cursor(fairy.CursorWait).Role(fairy.RoleProgressBar).Label(T("page.mod.download_overlay." + status))
+	return frosted(fairy.Box(body).Absolute().Inset(0).Center().PadXY(16, 0).Fill(t.Muted.Alpha(0.88)).
+		Cursor(fairy.CursorWait).Role(fairy.RoleProgressBar).Label(T("page.mod.download_overlay."+status)), 2)
 }

@@ -53,7 +53,7 @@ func (s *Shell) noteDeviceGeneration() {
 // View builds the main window.
 func (s *Shell) View(cx *fairy.Cx) *fairy.El {
 	dark := s.Dark()
-	t := Theme(dark, s.font)
+	t := Theme(dark, s.blur, s.font)
 	if dark != s.dark {
 		s.dark = dark
 		cx.Window().SetColors(dark, t.Background, t.Foreground)

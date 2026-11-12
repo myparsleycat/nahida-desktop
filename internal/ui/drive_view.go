@@ -567,8 +567,9 @@ func (s *Shell) driveClipboardBar(folder string) *fairy.El {
 		kit.Button(T("g.cancel"), func() { s.drive.clipboard = driveClipboard{} }, kit.Ghost, kit.XS),
 		kit.Button(T("page.drive.context_menu.paste"), func() { s.pasteDrive(folder) }, kit.XS,
 			kit.Disabled(folder == shareRootID || s.drive.pasting), kit.Loading(s.drive.pasting)),
-	).WFull().MaxW(640).PadXY(12, 6).Gap(12).Align(fairy.Center).Radius(t.RadiusMd()).Fill(t.Popover).
+	).WFull().MaxW(640).PadXY(12, 6).Gap(12).Align(fairy.Center).Radius(t.RadiusMd()).
 		Border(1, t.Border).Shadow(0, 4, 12, 0, shadowColor(t))
+	t.Surface(bar, t.Popover)
 	return fairy.Row(bar).Absolute().Left(0).Right(0).Bottom(0).Justify(fairy.JustifyCenter).PadEdges(8, 16, 16, 16).
 		PassThrough()
 }

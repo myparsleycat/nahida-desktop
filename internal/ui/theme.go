@@ -53,15 +53,35 @@ func fallbackFamilies(locale string) []string {
 }
 
 // Theme returns the kit theme, whose tokens are the React frontend's shadcn/ui tokens. Background is the
-// window frame behind the title bar and navigation, Card the page area.
-func Theme(dark bool, font string) kit.Theme {
+// window frame behind the title bar and navigation, Card the page area. With blur, popups are bg-popover/50
+// over backdrop-blur-lg, as before the Mica backdrop; dialog scrims stay unblurred so only the dialog blurs.
+func Theme(dark, blur bool, font string) kit.Theme {
 	t := kit.Dark()
 	if !dark {
 		t = kit.Light()
 	}
 	t.Font = font
 	t.DialogTopInset = titleBarHeight
+	if blur {
+		t.SurfaceBlur, t.SurfaceAlpha = 16, 0.5
+	}
 	return t
+}
+
+// frosted adds a backdrop blur of px to e while the blur setting is on.
+func frosted(e *fairy.El, px float32) *fairy.El {
+	if kit.T().SurfaceBlur > 0 {
+		e.BackdropBlur(px)
+	}
+	return e
+}
+
+// glass fills e with on over a backdrop blur of px while the blur setting is on, and with off otherwise.
+func glass(e *fairy.El, on, off fairy.Color, px float32) *fairy.El {
+	if kit.T().SurfaceBlur > 0 {
+		return e.Fill(on).BackdropBlur(px)
+	}
+	return e.Fill(off)
 }
 
 func stableScrollY(view *fairy.El) *fairy.El {

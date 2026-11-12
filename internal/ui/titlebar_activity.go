@@ -686,6 +686,8 @@ func (s *Shell) activityPanel(id string, p *activityPopover) *fairy.El {
 		}
 		panel.Child(footer)
 	}
-	return panel.W(320).Pad(12).Gap(10).Radius(12).Fill(t.Card).Border(1, t.Border).
+	// The React badges opened a PopoverContent, which was glass before the Mica backdrop.
+	glass(panel, opacity(t.Popover, t.SurfaceAlpha), t.Card, t.SurfaceBlur)
+	return panel.W(320).Pad(12).Gap(10).Radius(12).Border(1, t.Border).
 		Shadow(0, 8, 24, 0, shadowColor(t)).Label(p.title)
 }

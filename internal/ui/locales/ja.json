@@ -2420,6 +2420,8 @@
           "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
           "windowBackdrop": "Mica 背景効果",
           "windowBackdropDescription": "ウィンドウの背景に Windows の Mica 効果を使用します。変更するとウィンドウが開き直されます。",
+          "backdropBlur": "ぼかし効果",
+          "backdropBlurDescription": "メニュー、ダイアログ、通知、オーバーレイの背後をぼかして表示します。表示が重い場合はオフにしてください。",
           "checkUpdate": "更新確認",
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
@@ -2561,13 +2563,6 @@
             "fixedCardWidthDescription": "カード幅を固定し、収まる列数だけを変更します。範囲: 240〜640。",
             "fixedColumnCount": "固定列数",
             "fixedColumnCountDescription": "可能な場合は常にこの列数を使用します。範囲: 1〜8。"
-          }
-        },
-        "performance": {
-          "title": "パフォーマンス",
-          "backdrop-blur": {
-            "title": "ブラー使用",
-            "description": "MOD を探索する際にパフォーマンス問題が発生する場合は、このオプションを無効にしてください。"
           }
         }
       },

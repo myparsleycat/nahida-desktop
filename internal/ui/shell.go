@@ -87,6 +87,7 @@ type Shell struct {
 	confirmSeq  int
 	themeChoice string
 	dark        bool
+	blur        bool // the backdrop blur setting
 
 	updater       infra.UpdaterStatus
 	updateOffered bool
@@ -133,7 +134,7 @@ type Shell struct {
 // NewShell subscribes to the backend events the shell shows. font is the family from RegisterFonts.
 func NewShell(deps Deps, font string) *Shell {
 	s := &Shell{
-		deps: deps, font: font, router: NewRouter(RouteMod), themeChoice: setting.ThemeSystem,
+		deps: deps, font: font, router: NewRouter(RouteMod), themeChoice: setting.ThemeSystem, blur: true,
 		progress: map[string]kit.ToastID{}, activity: newActivityState(),
 	}
 	s.settings = newSettingsScreen()
@@ -245,6 +246,11 @@ func (s *Shell) Load(ctx context.Context) {
 		s.themeChoice = theme
 	} else {
 		s.report(err, "read-theme")
+	}
+	if value, err := s.deps.Settings.Get(ctx, setting.KeyGeneralBackdropBlur); err == nil {
+		s.setBlur(value)
+	} else {
+		s.report(err, "read-backdrop-blur")
 	}
 	if value, err := s.deps.Settings.Get(ctx, setting.KeyGeneralDefaultStartPage); err == nil {
 		if route, ok := RouteOf(asString(value)); ok {
@@ -516,7 +522,7 @@ func (s *Shell) Dark() bool {
 // WindowColors returns the colours the main window opens with.
 func (s *Shell) WindowColors() (dark bool, background, text fairy.Color) {
 	s.dark = s.Dark()
-	t := Theme(s.dark, s.font)
+	t := Theme(s.dark, s.blur, s.font)
 	return s.dark, t.Background, t.Foreground
 }
 

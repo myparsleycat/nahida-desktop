@@ -25,6 +25,7 @@ var generalSettingKeys = []string{
 	setting.KeyGeneralLogLevel,
 	setting.KeyGeneralElevatedHelperEnabled,
 	setting.KeyGeneralWindowBackdrop,
+	setting.KeyGeneralBackdropBlur,
 	setting.KeyGeneralTheme,
 }
 
@@ -70,7 +71,11 @@ func (s *Shell) generalSettings() *fairy.El {
 			T("page.setting.gen.application.windowBackdropDescription"),
 		))
 	}
-	application = append(application, s.generalSelects())
+	application = append(application,
+		s.settingSwitch(setting.KeyGeneralBackdropBlur, T("page.setting.gen.application.backdropBlur"),
+			T("page.setting.gen.application.backdropBlurDescription")),
+		s.generalSelects(),
+	)
 
 	return settingsBody(
 		settingsGroup(T("page.setting.gen.application.title"), application...),

@@ -112,7 +112,7 @@ func (w *guiLoginWindow) Run() {
 			OnError:        w.fail,
 		})
 		dark := w.opts.Dark != nil && w.opts.Dark()
-		theme := ui.Theme(dark, w.opts.Font)
+		theme := ui.Theme(dark, false, w.opts.Font)
 		title, width, height := ui.T("page.gamebanana.auth.sign_in"), float32(540), float32(760)
 		if w.logout {
 			title, width, height = ui.T("page.gamebanana.logout"), 320, 120

@@ -231,6 +231,9 @@ func (s *Shell) settingChanged(key string, value any) {
 			s.themeChoice = theme
 		}
 	}
+	if key == setting.KeyGeneralBackdropBlur {
+		s.setBlur(value)
+	}
 	if _, ok := s.settings.values[key]; ok {
 		s.settings.values[key] = value
 	}
@@ -252,15 +255,25 @@ func (s *Shell) reloadSettings() {
 		ctx := context.Background()
 		theme, themeErr := s.deps.Settings.GetTheme(ctx)
 		lang, langErr := s.deps.Settings.GetLanguage(ctx)
+		blur, blurErr := s.deps.Settings.Get(ctx, setting.KeyGeneralBackdropBlur)
 		fairy.Go(func() {
 			if themeErr == nil {
 				s.themeChoice = theme
+			}
+			if blurErr == nil {
+				s.setBlur(blur)
 			}
 			if langErr == nil {
 				s.setLanguage(lang)
 			}
 		})
 	}()
+}
+
+func (s *Shell) setBlur(value any) {
+	if on, ok := value.(bool); ok {
+		s.blur = on
+	}
 }
 
 func (s *Shell) boolSetting(key string) bool {

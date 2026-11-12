@@ -345,7 +345,8 @@ func (v *ModelViewer) fpsControl(t kit.Theme, clip *modelviewer.ModelViewerAnima
 			FontSize(12).
 			LineHeight(16).
 			Color(t.MutedForeground),
-	).Gap(8).Pad(10).W(176).Radius(t.RadiusLg()).Fill(t.Popover).Color(t.PopoverForeground).
+	).Gap(8).Pad(10).W(176).Radius(t.RadiusLg()).Color(t.PopoverForeground).
 		Border(1, t.Border).Shadow(0, 8, 24, 0, shadowColor(&t))
+	t.Surface(panel, t.Popover)
 	return trigger.Popover(panel, fairy.PopoverOptions{Align: fairy.AlignStart, Gap: 6, OnDismiss: closePopover})
 }

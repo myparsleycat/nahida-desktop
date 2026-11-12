@@ -333,9 +333,10 @@ func (s *Shell) importerSettingsPage(key string) *fairy.El {
 		notice := fairy.Row(
 			fairy.Text(T(prefix+"unsavedChanges")).FontSize(12).LineHeight(16).Grow(1),
 			kit.Button(T(prefix+"discard"), p.discard, kit.Ghost, kit.XS, kit.Disabled(p.saving)),
-		).PadXY(12, 6).Gap(12).Align(fairy.Center).Radius(6).Fill(t.Popover).Color(t.PopoverForeground).
+		).PadXY(12, 6).Gap(12).Align(fairy.Center).Radius(6).Color(t.PopoverForeground).
 			Border(1, t.Border).Shadow(0, 4, 6, -1, fairy.RGBA(0, 0, 0, 0.1)).
 			Shadow(0, 2, 4, -2, fairy.RGBA(0, 0, 0, 0.1))
+		t.Surface(notice, t.Popover)
 		bodyHost.Child(
 			fairy.Col(fairy.Col(notice).WFull().MaxW(672).PadXY(16, 0)).Left(0).Right(xxmiScrollGutter).Bottom(16).
 				Align(fairy.Center),
