@@ -1,0 +1,27 @@
+# Configuration for `task dev`, which rebuilds and restarts the development build when a source or embedded asset
+# changes. Run it through the task so the Windows resources exist before the first build.
+root = "."
+tmp_dir = ".task/dev"
+
+[build]
+# Also rebuilds the elevated helper, which the application embeds and must match.
+cmd = 'task windows:dev:build'
+entrypoint = [".task/dev/nahida-desktop.exe"]
+include_ext = ["go", "hlsl", "ini", "json", "md", "png", "ttf", "webp", "zst"]
+include_file = ["go.mod", "go.sum"]
+# air skips dot-directories on its own. Entries are compared with Windows relative paths, so they use backslashes.
+exclude_dir = [
+    "bin",
+    "build",
+    "docs",
+    "node_modules",
+    "scripts",
+    "tools",
+    'internal\elevated\bundle',
+]
+exclude_regex = ['_test\.go$', '[\\/]testdata[\\/]']
+delay = 300
+stop_on_error = true
+
+[misc]
+clean_on_exit = true

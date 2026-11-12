@@ -6,6 +6,8 @@ node_modules
 .gocache
 .gomodcache
 internal/elevated/bundle/*.exe
+# Windows resources go-winres generates for each build
+*.syso
 # Cargo build artifacts (per-machine)
 native/*/target/
 

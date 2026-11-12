@@ -76,6 +76,7 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 ## Commands
 
 - Windows build: `task build`
+- Development run with rebuild and restart on changes: `task dev` (air, configured in `.air.toml`). It shares the single-instance lock with an installed copy, so close that first. Each restart force-kills the app, so its shutdown path does not run; check shutdown behavior with `task run`. It runs until stopped and is exempt from the time limit below; an agent that starts it must kill its whole process tree before running any other `task` command.
 - Windows package: `task package APP_VERSION=<version>`
 - Go tests: `task test` (runs `go test ./...`)
 - Go commands run outside `task` need `-tags nodynamic`; `internal/xxmi` fails to compile without it so `github.com/gen2brain/avif` never loads `libavif.dll` at startup. The Taskfile sets it through `GOFLAGS`.
@@ -170,6 +171,7 @@ Do not run `golangci-lint` or `govulncheck` from `PATH`; use the project tasks s
 - Do not add a `tools.go` pin file.
 - Keep `golangci-lint` in `golangci-lint.mod`, not `go.mod`.
 - Keep `govulncheck` in `govulncheck.mod`, not `go.mod`.
+- Keep `air` in `air.mod`, not `go.mod`.
 - Tests use the standard `testing` package. `testify` is not a dependency; do not add it.
 - A `//nolint` directive must name the specific linter and give an explanation; `nolintlint` rejects anything else.
 

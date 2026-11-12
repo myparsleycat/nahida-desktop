@@ -144,3 +144,32 @@ tasks:
     cmds:
       - task: build
       - '{{.BIN_DIR}}/{{.APP_NAME}}.exe'
+
+  dev:
+    summary: Runs the development build under air, which rebuilds and restarts it when sources change
+    desc: |
+      The Windows resources are generated once at startup; air (.air.toml) runs dev:build on each change. Windows
+      locks a running executable, so air force-stops the app with TASKKILL before each build: the app's shutdown
+      path (window bounds, transfer and watcher cleanup) does not run on those restarts.
+    cmds:
+      - defer: powershell -NoProfile -Command "Remove-Item -LiteralPath './nahida_desktop_windows_{{.ARCH | default "amd64"}}.syso' -ErrorAction SilentlyContinue"
+      - task: generate:syso
+        vars:
+          ARCH: '{{.ARCH | default "amd64"}}'
+      - go tool -modfile="./air.mod" air
+    env:
+      GOOS: windows
+      CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
+      GOARCH: '{{.ARCH | default "amd64"}}'
+
+  dev:build:
+    summary: Builds the elevated helper and the development application that task dev runs
+    cmds:
+      - task: build:elevated-helper
+        vars:
+          ARCH: '{{.ARCH | default "amd64"}}'
+      - go build -tags nodynamic -buildvcs=false -o .task/dev/nahida-desktop.exe .
+    env:
+      GOOS: windows
+      CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
+      GOARCH: '{{.ARCH | default "amd64"}}'

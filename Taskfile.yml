@@ -54,6 +54,13 @@ tasks:
     cmds:
       - task: "{{.GOOS}}:run"
 
+  dev:
+    summary: Runs the development build and rebuilds and restarts it when sources change
+    preconditions:
+      - sh: '{{if eq .GOOS "windows"}}true{{else}}false{{end}}'
+        msg: "This app runs on Windows only (got GOOS={{.GOOS}})."
+    cmds:
+      - task: "{{.GOOS}}:dev"
 
   test:
     summary: Runs Go tests
