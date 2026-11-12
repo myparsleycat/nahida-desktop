@@ -494,7 +494,7 @@ func (s *Shell) textureProcessDialog(cx *fairy.Cx, w *textureWorkspace, key stri
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title:       T(prefix + "dialog.title"),
 		Description: description,
-		Body:        fairy.Col(body).MaxH(520).ScrollY().PadEdges(0, 12, 0, 0),
+		Body:        body,
 		Width:       600,
 		Actions: []*fairy.El{
 			kit.Button(T("g.cancel"), closeDialog, kit.Outline, kit.Disabled(d.running)),

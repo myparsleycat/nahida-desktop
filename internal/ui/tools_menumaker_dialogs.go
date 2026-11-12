@@ -217,7 +217,7 @@ func (s *Shell) menuMakerDraftsDialog(cx *fairy.Cx) {
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title: T(prefix + "drafts"), Width: 672, Key: "menu-maker.drafts",
 		OnClose: func() { m.draftsOpen = false },
-		Body:    fairy.Col(list).MaxH(480).ScrollY(),
+		Body:    list,
 		Actions: actions,
 	})
 }

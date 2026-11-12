@@ -654,7 +654,7 @@ func (s *Shell) importDialog(cx *fairy.Cx, path string) {
 	ready := preview.current && !preview.loading
 	canImport := ready && (mode != xxmi.ImportVersionPinned || canPin)
 
-	body := fairy.Col().Gap(16).MaxH(480).ScrollY()
+	body := fairy.Col().Gap(16)
 	switch {
 	case preview.loading:
 		body.Child(
@@ -784,6 +784,7 @@ func (s *Shell) importDialog(cx *fairy.Cx, path string) {
 		Title:           T(prefix + "import"),
 		Description:     T(prefix+"importUserDataDescription", "root", root),
 		Body:            body,
+		BodyKey:         "xxmi.import." + itoa(step),
 		Width:           512,
 		Actions:         actions,
 		OnClose:         dismiss,

@@ -186,7 +186,7 @@ func (s *Shell) transferPage(cx *fairy.Cx) *fairy.El {
 	if ts.errorText != nil {
 		kit.ShowDialog(cx, kit.DialogProps{
 			Title:   T("page.transfer.item.failed"),
-			Body:    fairy.Col(fairy.Text(*ts.errorText).LineHeight(20)).MaxH(320).ScrollY(),
+			Body:    fairy.Text(*ts.errorText).LineHeight(20),
 			Actions: []*fairy.El{kit.Button(T("g.close"), func() { ts.errorText = nil }, kit.Outline)},
 			OnClose: func() { ts.errorText = nil },
 			Key:     "transfer.error",

@@ -427,7 +427,7 @@ func (s *Shell) diagnosticsReportDialog(cx *fairy.Cx, key string, r *diagnostics
 	}
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title: T(prefix + "reportTitle"), Description: T(prefix + "reportDescription"),
-		Body: fairy.Col(body).MaxH(560).ScrollY(), Width: 576,
+		Body: body, Width: 576,
 		Actions: []*fairy.El{cancel, kit.Button(submitLabel, send, kit.Loading(sending),
 			kit.Disabled(sending || rules == nil || bundle == nil || strings.TrimSpace(r.body) == "" ||
 				problem != ""))},
