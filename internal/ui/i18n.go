@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/LoperLee/golang-hangul-toolkit/hangul"
 	"github.com/myparsleycat/fairy/i18n"
 	"github.com/myparsleycat/fairy/kit"
 )
@@ -21,6 +22,7 @@ var catalog = loadCatalog()
 
 func loadCatalog() *i18n.Catalog {
 	c := i18n.New("en")
+	c.Format("josa", formatJosa)
 	for _, lang := range languages {
 		data, err := localeFiles.ReadFile("locales/" + lang + ".json")
 		if err == nil {
@@ -31,6 +33,36 @@ func loadCatalog() *i18n.Catalog {
 		}
 	}
 	return c
+}
+
+func formatJosa(value any, _ string, opts map[string]string) string {
+	word := fmt.Sprint(value)
+	pair := opts["pair"]
+	// GetJosa indexes the last character, so empty values must not reach it.
+	if word == "" || pair == "" {
+		return word
+	}
+
+	var particle hangul.Josa
+	switch pair {
+	case "은/는":
+		particle = hangul.EUN_NEUN
+	case "이/가":
+		particle = hangul.I_GA
+	case "을/를":
+		particle = hangul.EUL_REUL
+	case "과/와", "와/과":
+		particle = hangul.GWA_WA
+	case "이다/다":
+		particle = hangul.IDA_DA
+	case "으로/로":
+		particle = hangul.EURO_RO
+	case "률/율":
+		particle = hangul.RYUL_YUL
+	default:
+		return i18n.Josa(word, pair)
+	}
+	return hangul.GetJosa(word, particle)
 }
 
 // T returns the message for key in the current language; args are name/value pairs.
