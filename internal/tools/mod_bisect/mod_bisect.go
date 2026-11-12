@@ -15,6 +15,7 @@ import (
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -192,10 +193,19 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		}
 	}
 
+	if err := t.writeSessionMarker(ctx, game, config.ModFolderPath); err != nil {
+		guardErr := t.stopD3dxGuardLocked(game)
+		t.bisect = nil
+		return BisectSnapshot{}, errors.Join(err, guardErr)
+	}
+
 	batchSize := chooseBisectBatchSize(len(candidates))
 	batch := slices.Clone(candidates[:batchSize])
 	if err := disableINIs(batch); err != nil {
 		rollbackErr := enableINIs(batch)
+		if rollbackErr == nil {
+			t.clearSessionMarker(ctx, game)
+		}
 		guardErr := t.stopD3dxGuardLocked(game)
 		t.bisect = nil
 		return BisectSnapshot{}, infra.WithCause(
@@ -272,6 +282,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 		if err := enableINIs(toRestore); err != nil {
 			return BisectSnapshot{}, err
 		}
+		t.clearSessionMarker(ctx, session.game)
 		if err := t.stopD3dxGuardLocked(session.game); err != nil {
 			t.logError(err, "ModBisect:d3dxFinalRestore")
 		}
@@ -353,6 +364,7 @@ func (t *Service) BisectFinalize(ctx context.Context, keepDisabled []string) (Bi
 			return BisectSnapshot{}, err
 		}
 	}
+	t.clearSessionMarker(ctx, session.game)
 	if err := t.stopD3dxGuardLocked(session.game); err != nil {
 		t.logError(err, "ModBisect:d3dxFinalRestore")
 	}
@@ -404,7 +416,8 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 	return t.recoverINIs(ctx, paths), ctx.Err()
 }
 
-// RecoverBisects restores interrupted sessions for every configured non-NTE game.
+// RecoverBisects restores interrupted sessions. It walks only the mod folders of sessions that left a marker,
+// plus every configured non-NTE game once, for orphans left by builds that did not write markers.
 func (t *Service) RecoverBisects(ctx context.Context) error {
 	if err := t.beginBisectRecovery(); err != nil {
 		return err
@@ -415,25 +428,71 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	games, err := client.GamePaths.List(ctx)
+	rows, err := client.GamePaths.List(ctx)
 	if err != nil {
 		return err
 	}
-	for _, game := range games {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+	games := make([]db.GamePathRow, 0, len(rows))
+	for _, game := range rows {
 		if game.ModFolderPath == "" || game.Importer != nil && *game.Importer == "NTE" {
 			continue
 		}
+		games = append(games, game)
 		if err := t.recoverD3dxBackupLocked(ctx, game); err != nil {
 			t.logError(err, "ModBisect:d3dxRecover")
 		}
-		orphans, err := listBisectOrphans(ctx, game.ModFolderPath)
-		if err != nil {
-			return err
+	}
+
+	legacyDone, err := client.AppState.GetValue(ctx, legacyScanDoneKey)
+	if err != nil {
+		return err
+	}
+	if legacyDone == nil {
+		complete := true
+		for _, game := range games {
+			orphans, err := listBisectOrphans(ctx, game.ModFolderPath)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// One unreadable folder must not hold back the other games, the markers or the done key, or
+			// every launch would repeat this walk.
+			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					t.logError(err, "ModBisect:recover")
+				}
+				continue
+			}
+			complete = t.recoverINIs(ctx, orphans) == len(orphans) && complete
 		}
-		t.recoverINIs(ctx, orphans)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if complete {
+			if err := client.AppState.Upsert(ctx, legacyScanDoneKey, "1", appStateTimestamp()); err != nil {
+				return err
+			}
+		}
+	}
+
+	markers, err := t.sessionMarkers(ctx)
+	if err != nil {
+		return err
+	}
+	for _, marker := range markers {
+		orphans, err := listBisectOrphans(ctx, marker.ModRootPath)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// A missing root keeps its marker: it may be an unplugged drive that still holds renamed INIs.
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				t.logError(err, "ModBisect:recover")
+			}
+			continue
+		}
+		if t.recoverINIs(ctx, orphans) == len(orphans) && ctx.Err() == nil {
+			t.clearSessionMarker(ctx, marker.game)
+		}
 	}
 	return ctx.Err()
 }
@@ -497,6 +556,7 @@ func (t *Service) cancelBisectLocked() error {
 	if err := enableINIs(disabledBisectSet(session)); err != nil {
 		return err
 	}
+	t.clearSessionMarker(context.Background(), session.game)
 	if err := t.stopD3dxGuardLocked(session.game); err != nil {
 		t.logError(err, "ModBisect:d3dxFinalRestore")
 	}
@@ -778,10 +838,16 @@ func keepBisectINIDisabled(originalPath, style string) error {
 }
 
 func listBisectOrphans(ctx context.Context, root string) ([]string, error) {
+	release, err := diskio.AcquireDir(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	var paths []string
 	// The trailing separator makes the walk enter a Mods folder that is itself a junction.
 	root = strings.TrimRight(root, `\/`) + string(filepath.Separator)
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

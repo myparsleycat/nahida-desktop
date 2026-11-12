@@ -116,6 +116,7 @@ func TestBisectFindsAndKeepsCulpritDisabled(t *testing.T) {
 	if idle.Status != BisectIdle || service.BisectGetState() != nil {
 		t.Fatalf("idle snapshot/state = %#v / %#v", idle, service.BisectGetState())
 	}
+	assertNoSessionMarker(t, service)
 	kept := filepath.Join(filepath.Dir(paths[0]), "DISABLED_"+filepath.Base(paths[0]))
 	if _, err := os.Stat(kept); err != nil {
 		t.Fatalf("culprit was not kept disabled: %v", err)
@@ -186,6 +187,7 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 			t.Fatalf("cancel did not restore %s: %v", path, err)
 		}
 	}
+	assertNoSessionMarker(t, service)
 
 	orphan := bisectDisabledPath(paths[0])
 	if err := os.Rename(paths[0], orphan); err != nil {
