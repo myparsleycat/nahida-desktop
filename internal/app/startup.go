@@ -15,6 +15,8 @@ type startupWork struct {
 	cancel       context.CancelFunc
 	once         sync.Once
 	done         chan struct{}
+	libraryOnce  sync.Once
+	libraryReady chan struct{}
 	launched     time.Time
 	prefetchDone <-chan struct{}
 }
@@ -27,10 +29,11 @@ type startupStep struct {
 func newStartupWork() *startupWork {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &startupWork{
-		ctx:      ctx,
-		cancel:   cancel,
-		done:     make(chan struct{}),
-		launched: time.Now(),
+		ctx:          ctx,
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		libraryReady: make(chan struct{}),
+		launched:     time.Now(),
 	}
 }
 
@@ -38,6 +41,7 @@ func (s *startupWork) start(work func(context.Context)) {
 	s.once.Do(func() {
 		go func() {
 			defer close(s.done)
+			defer s.signalLibrary()
 			if s.ctx.Err() == nil {
 				work(s.ctx)
 			}
@@ -52,7 +56,10 @@ func (s *startupWork) stop() {
 	s.cancel()
 
 	// Also finish a runtime that failed before ApplicationStarted.
-	s.once.Do(func() { close(s.done) })
+	s.once.Do(func() {
+		s.signalLibrary()
+		close(s.done)
+	})
 	<-s.done
 	if s.prefetchDone != nil {
 		<-s.prefetchDone
@@ -73,6 +80,26 @@ func (s *startupWork) wait(ctx context.Context) error {
 	}
 }
 
+func (s *startupWork) signalLibrary() {
+	s.libraryOnce.Do(func() { close(s.libraryReady) })
+}
+
+// waitLibrary is wait for read-only loads: it returns once importer Mods links are repaired, while the
+// remaining maintenance may still rewrite mod files.
+func (s *startupWork) waitLibrary(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case <-s.libraryReady:
+		return errors.Join(ctx.Err(), s.ctx.Err())
+	}
+}
+
 func (rt *runtime) logStartupMilestone(stage string) {
 	fields := map[string]any{"stage": stage, "sinceLaunchMs": time.Since(rt.startup.launched).Milliseconds()}
 	if time.Since(rt.startup.launched) >= time.Second {
@@ -83,13 +110,16 @@ func (rt *runtime) logStartupMilestone(stage string) {
 }
 
 func (rt *runtime) runStartupWork(ctx context.Context) {
+	// Mod listings read through the importer Mods links, so they may start once those are repaired.
+	rt.runStartupStep(ctx, startupStep{"importer-links", rt.xxmi.RepairImporterLinks})
+	rt.startup.signalLibrary()
+
 	rt.runStartupStepsParallel(ctx, []startupStep{
 		{"zzmi-staging", rt.tools.CleanupZZMIAbandonedStaging},
 		{"model-viewer-temp", rt.tools.CleanupStaleModelViewerDirs},
 		{"d3d-builds", rt.tools.CleanupStaleD3DBuilds},
 	})
 	rt.runStartupSteps(ctx, []startupStep{
-		{"importer-links", rt.xxmi.RepairImporterLinks},
 		{"d3dx-overrides", rt.xxmi.MigrateD3DXOverrides},
 		{"bisect-recovery", rt.tools.RecoverBisects},
 		{"compression", rt.runCompressionMaintenance},

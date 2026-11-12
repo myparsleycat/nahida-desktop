@@ -139,7 +139,7 @@ func (s *Shell) loadFixLists() {
 		return
 	}
 	r.listsLoading = true
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		scripts, err := s.deps.Tools.GetScripts(ctx)
 		if err != nil {
 			s.modError(err, "read-fix-scripts", nil)

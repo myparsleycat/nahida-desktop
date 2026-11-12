@@ -210,10 +210,24 @@ func (s *Shell) registerModEvents(on func(string, func([]any))) {
 // background runs work once startup maintenance is done, as the Wails service guard made every Mod call
 // wait. Work does not run when the application shuts down first.
 func (s *Shell) background(work func(ctx context.Context)) {
+	s.runAfter(s.deps.Ready, work)
+}
+
+// backgroundRead is background for read-only loads, which may run once importer Mods links are repaired.
+// File and setting writes must stay behind background, which waits for all startup maintenance.
+func (s *Shell) backgroundRead(work func(ctx context.Context)) {
+	ready := s.deps.LibraryReady
+	if ready == nil {
+		ready = s.deps.Ready
+	}
+	s.runAfter(ready, work)
+}
+
+func (s *Shell) runAfter(ready func(context.Context) error, work func(ctx context.Context)) {
 	go func() {
 		ctx := context.Background()
-		if s.deps.Ready != nil {
-			if err := s.deps.Ready(ctx); err != nil {
+		if ready != nil {
+			if err := ready(ctx); err != nil {
 				return
 			}
 		}
@@ -233,7 +247,7 @@ func (s *Shell) startMods() {
 	}
 	m.started = true
 	s.loadFixLists()
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		expanded, err := s.deps.Mod.GetExpandedGroups(ctx)
 		if err != nil {
 			s.modError(err, "read-expanded-groups", nil)
@@ -252,7 +266,7 @@ func (s *Shell) startMods() {
 // was focused last, then the last selected one, then the first.
 func (s *Shell) loadGames(restore bool) {
 	m := &s.mods
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		games, err := s.deps.Mod.GetGames(ctx)
 		if err != nil {
 			s.modError(err, "read-games", nil)
@@ -375,7 +389,7 @@ func (s *Shell) loadCharacters() {
 	m.charactersSeq++
 	seq, game := m.charactersSeq, m.game
 	m.charactersBusy = true
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		groups, err := s.deps.Mod.GetCharacters(ctx, game, nil)
 		if err != nil {
 			s.modError(err, "read-characters", map[string]any{"game": game})
@@ -411,7 +425,7 @@ func (s *Shell) dropMissingSelection() {
 func (s *Shell) loadPresets() {
 	m := &s.mods
 	game := m.game
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		presets, err := s.deps.Mod.GetPresets(ctx, game)
 		if err != nil {
 			s.modError(err, "read-presets", map[string]any{"game": game})
@@ -428,7 +442,7 @@ func (s *Shell) loadPresets() {
 func (s *Shell) loadClassifications() {
 	m := &s.mods
 	game := m.game
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		classifications, err := s.deps.Mod.GetClassifications(ctx, game)
 		if err != nil {
 			s.modError(err, "read-classifications", map[string]any{"game": game})
@@ -464,7 +478,7 @@ func (s *Shell) loadSubGroups(path string, manual bool) {
 	}
 	loading[path] = true
 	game := m.game
-	s.background(func(ctx context.Context) {
+	s.backgroundRead(func(ctx context.Context) {
 		var groups []mod.FolderGroup
 		var err error
 		if manual {

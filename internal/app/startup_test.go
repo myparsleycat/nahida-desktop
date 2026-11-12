@@ -168,6 +168,44 @@ func TestStartupWaitBlocksUntilMaintenance(t *testing.T) {
 	}
 }
 
+func TestStartupLibraryReadyPrecedesMaintenance(t *testing.T) {
+	t.Parallel()
+	startup := newStartupWork()
+	release := make(chan struct{})
+	t.Cleanup(func() { closeFinish(release); startup.stop() })
+	startup.start(func(context.Context) {
+		startup.signalLibrary()
+		<-release
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := startup.waitLibrary(ctx); err != nil {
+		t.Fatalf("library readiness waited for later maintenance: %v", err)
+	}
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer waitCancel()
+	if err := startup.wait(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wait returned while maintenance still ran: %v", err)
+	}
+}
+
+func TestStartupStopReleasesLibraryWaiters(t *testing.T) {
+	t.Parallel()
+	startup := newStartupWork()
+	done := make(chan error, 1)
+	go func() { done <- startup.waitLibrary(context.Background()) }()
+	startup.stop()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waitLibrary error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("abandoned startup left a library waiter blocked")
+	}
+}
+
 func TestStartupWaitReturnsOnCancel(t *testing.T) {
 	t.Parallel()
 	startup := newStartupWork()

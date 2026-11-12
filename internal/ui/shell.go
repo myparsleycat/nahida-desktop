@@ -59,6 +59,8 @@ type Deps struct {
 	// Ready waits for startup maintenance, which every Mod call and the recycle bin wait for, as the Wails
 	// service guard made them.
 	Ready func(context.Context) error
+	// LibraryReady waits only until importer Mods links are repaired, which read-only mod loads need.
+	LibraryReady func(context.Context) error
 	// Dev shows the development screen.
 	Dev bool
 	// CDNTrace reads Cloudflare's trace for the development screen.
