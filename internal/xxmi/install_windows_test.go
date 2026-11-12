@@ -632,7 +632,7 @@ func TestImporterInstallTransactionRestoresDeniedFolder(t *testing.T) {
 			if !slices.EqualFunc(requests, want, func(a, b []string) bool {
 				return slices.EqualFunc(a, b, platform.SamePathFold)
 			}) {
-				t.Fatalf("access requests = %v, want %v", requests, want)
+				t.Fatalf("access requests = %v, want %v (commit: %v)", requests, want, err)
 			}
 			switch outcome {
 			case "declined":
