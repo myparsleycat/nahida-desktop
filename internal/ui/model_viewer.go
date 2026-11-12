@@ -123,8 +123,10 @@ type ModelViewer struct {
 	confirmPreview bool
 	// gameLinked is set while a running game that loads the mod takes toggle changes through the desktop
 	// channel; applyingToGame while those changes are being sent.
-	gameLinked     bool
-	gameLinkCheck  int
+	gameLinked    bool
+	gameLinkCheck int
+	// importer is the importer of the game whose mods the viewer was opened from.
+	importer       string
 	applyingToGame bool
 	// gamePreview shows the previewed values in the running games while gamePreviewShown is set. previewVars are
 	// the variables the highlighted choice sets, which the games get even when they equal the selected values.
@@ -155,6 +157,7 @@ func (s *Shell) NewModelViewer(path string) *ModelViewer {
 		doubleSided: true,
 		sideWidth:   viewerSideWidth,
 		toasts:      &s.toasts,
+		importer:    s.currentImporter(),
 	}
 	v.refreshGameLinked()
 	v.loadTogglePresets()

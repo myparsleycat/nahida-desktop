@@ -929,6 +929,37 @@ func (x *XXMI) migotoDLLUsed(ctx context.Context, cfg ImporterConfig) (bool, err
 	return false, nil
 }
 
+// builtInDLLConfig returns the importer's config and, when the built-in launcher would not load its XXMI d3d11.dll,
+// the reason: diagnosticsExternalLauncher, diagnosticsNotConfigured, diagnosticsRuntime or diagnosticsDLLBypassed.
+// Features served by that DLL are unavailable for any of them.
+func (x *XXMI) builtInDLLConfig(ctx context.Context, key string) (ImporterConfig, string, error) {
+	external, err := x.usesExternalLauncher(ctx)
+	if err != nil {
+		return ImporterConfig{}, "", err
+	}
+	if external {
+		return ImporterConfig{}, diagnosticsExternalLauncher, nil
+	}
+	cfg, err := x.GetImporterConfig(ctx, key)
+	if err != nil {
+		return cfg, "", err
+	}
+	switch {
+	case !cfg.Enabled:
+		return cfg, diagnosticsNotConfigured, nil
+	case cfg.Mode != RuntimeXXMI:
+		return cfg, diagnosticsRuntime, nil
+	}
+	used, err := x.migotoDLLUsed(ctx, cfg)
+	if err != nil {
+		return cfg, "", err
+	}
+	if !used {
+		return cfg, diagnosticsDLLBypassed, nil
+	}
+	return cfg, "", nil
+}
+
 func verifiedLaunchFile(path string) (inject.VerifiedFile, error) {
 	file, err := os.Open(path)
 	if err != nil {

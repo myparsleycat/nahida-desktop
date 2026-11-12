@@ -1008,6 +1008,7 @@
       "toggle-presets": {
         "menu": "トグルプリセット",
         "manage": "プリセットを管理…",
+        "requires-desktop-channel": "内蔵ランチャーと myparsleycat ライブラリが必要です",
         "loading": "読み込み中…",
         "title": "トグルプリセット",
         "stored-in": "保存先",

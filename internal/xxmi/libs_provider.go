@@ -516,6 +516,10 @@ func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFea
 	if err != nil {
 		return DLLFeatures{}, err
 	}
+	return x.importerDLLFeatures(ctx, cfg)
+}
+
+func (x *XXMI) importerDLLFeatures(ctx context.Context, cfg ImporterConfig) (DLLFeatures, error) {
 	support := x.dllFeatureSupport(ctx, cfg, func(libsProviderSpec) bool { return true })
 	if support.reason == dllFeatureCustomDLL {
 		return customDLLFeatures(os.Getenv(customDLLFeaturesEnv)), nil
@@ -541,6 +545,17 @@ func (x *XXMI) ImporterDLLFeatures(ctx context.Context, importer string) (DLLFea
 	features.ShaderSamplerSlots = providerFeatureAt(spec, version, spec.shaderSamplerSlotsSince)
 	features.DesktopChannel = providerFeatureAt(spec, version, spec.desktopChannelSince)
 	return features, nil
+}
+
+// DesktopChannelSupported reports whether a game of the importer started by the built-in launcher loads a d3d11.dll
+// that serves the desktop channel of internal/gamelink.
+func (x *XXMI) DesktopChannelSupported(ctx context.Context, importer string) (bool, error) {
+	cfg, reason, err := x.builtInDLLConfig(ctx, strings.ToUpper(strings.TrimSpace(importer)))
+	if err != nil || reason != "" {
+		return false, err
+	}
+	features, err := x.importerDLLFeatures(ctx, cfg)
+	return features.DesktopChannel, err
 }
 
 func providerFeatureAt(spec libsProviderSpec, version, since string) bool {

@@ -1008,6 +1008,7 @@
       "toggle-presets": {
         "menu": "토글 프리셋",
         "manage": "프리셋 관리…",
+        "requires-desktop-channel": "내장 런처와 myparsleycat 라이브러리가 필요합니다",
         "loading": "불러오는 중…",
         "title": "토글 프리셋",
         "stored-in": "저장 위치",

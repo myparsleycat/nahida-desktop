@@ -1011,6 +1011,7 @@
       "toggle-presets": {
         "menu": "Toggle presets",
         "manage": "Manage presets…",
+        "requires-desktop-channel": "Requires the built-in launcher and the myparsleycat libraries",
         "loading": "Loading…",
         "title": "Toggle presets",
         "stored-in": "Storage",

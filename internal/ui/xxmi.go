@@ -155,6 +155,8 @@ type xxmiScreen struct {
 	diagnostics   map[string]*query[*xxmi.DiagnosticsSession]
 	diagSupport   map[string]*query[xxmi.DiagnosticsSupport]
 	modRuntimes   map[string]*query[modruntime.Listing]
+	// desktopChannel is whether an importer's games serve the desktop channel the toggle tools use, by importer.
+	desktopChannel map[string]*query[bool]
 
 	reshadeStatus   query[reshade.Status]
 	reshadeVersions query[[]string]
@@ -184,6 +186,7 @@ func newXXMIScreen() xxmiScreen {
 		diagnostics:    map[string]*query[*xxmi.DiagnosticsSession]{},
 		diagSupport:    map[string]*query[xxmi.DiagnosticsSupport]{},
 		modRuntimes:    map[string]*query[modruntime.Listing]{},
+		desktopChannel: map[string]*query[bool]{},
 		busy:           map[string]bool{},
 		launchWarned:   map[string]bool{},
 		launchFailures: map[string][]string{},
@@ -208,6 +211,7 @@ func (x *xxmiScreen) refresh() {
 	invalidateAll(x.diagnostics)
 	invalidateAll(x.diagSupport)
 	invalidateAll(x.importPreview)
+	invalidateAll(x.desktopChannel)
 }
 
 func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
@@ -216,6 +220,8 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 		if updates, ok := first(data).([]xxmi.UpdateStatus); ok {
 			x.updates.set(updates)
 		}
+		// A new libraries release can change the DLL the next launch deploys.
+		invalidateAll(x.desktopChannel)
 	})
 	on("xxmi:diagnostics-changed", func(data []any) {
 		payload, _ := first(data).(map[string]any)

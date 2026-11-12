@@ -96,6 +96,9 @@ func (s *Shell) togglePresetsDialog(cx *fairy.Cx) {
 	}
 
 	t := kit.T()
+	supported, known := s.desktopChannel(s.currentImporter())
+	// A game linked now serves the channel even when the next launch would deploy a DLL without it.
+	allowed := supported || d.linked
 	header := fairy.Row(
 		fairy.Text(T(togglePresetsPrefix+"stored-in")).FontSize(14).LineHeight(20).Color(t.MutedForeground).Grow(1),
 		kit.Select("mod.toggle-presets.store-select", d.list.Store, togglePresetStoreItems(false), func(store string) {
@@ -115,7 +118,7 @@ func (s *Shell) togglePresetsDialog(cx *fairy.Cx) {
 				kit.Placeholder(T(togglePresetsPrefix+"name-placeholder")), kit.Label(T("g.name")),
 				kit.Disabled(d.busy)).AutoFocus().OnSubmit(save).Grow(1).MinW(0),
 			kit.Button(T(togglePresetsPrefix+"save-current"), func() { save("") }, kit.Icon(lucide.BookmarkPlus),
-				kit.Disabled(d.busy || strings.TrimSpace(d.name) == "")),
+				kit.Disabled(d.busy || !allowed || strings.TrimSpace(d.name) == "")),
 		).Gap(8),
 		fairy.Row(
 			fairy.Icon(captureIcon).Size(14, 14).Color(t.MutedForeground).Shrink(0),
@@ -123,17 +126,25 @@ func (s *Shell) togglePresetsDialog(cx *fairy.Cx) {
 		).Gap(6).Align(fairy.Center),
 	).Gap(8)
 
+	body := fairy.Col().Gap(12)
+	if known && !allowed {
+		body.Child(fairy.Row(
+			fairy.Icon(lucide.Info).Size(14, 14).Color(t.MutedForeground).Shrink(0),
+			fairy.Text(T(togglePresetsPrefix+"requires-desktop-channel")).FontSize(13).LineHeight(18).
+				Color(t.MutedForeground).Wrap().Grow(1).MinW(0),
+		).Gap(6).Align(fairy.Center))
+	}
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title:       T(togglePresetsPrefix + "title"),
 		Description: d.mod.Name,
-		Body:        fairy.Col(header, create, kit.Separator(), s.togglePresetList(d)).Gap(12),
+		Body:        body.Child(header, create, kit.Separator(), s.togglePresetList(d, allowed)),
 		Width:       480,
 		OnClose:     close,
 		Key:         "mod.toggle-presets",
 	})
 }
 
-func (s *Shell) togglePresetList(d *togglePresetsDialog) *fairy.El {
+func (s *Shell) togglePresetList(d *togglePresetsDialog, allowed bool) *fairy.El {
 	t := kit.T()
 	if !d.loaded {
 		return fairy.Row(kit.Spinner(16)).Justify(fairy.JustifyCenter).Pad(16)
@@ -171,7 +182,7 @@ func (s *Shell) togglePresetList(d *togglePresetsDialog) *fairy.El {
 				func() { s.applyTogglePreset(d.mod.Path, preset, &d.busy) },
 				kit.Outline,
 				kit.Small,
-				kit.Disabled(d.busy),
+				kit.Disabled(d.busy || !allowed),
 			),
 			kit.IconButton(lucide.Pencil, func() { d.renamingID, d.renameName = preset.ID, preset.Name }, kit.Ghost,
 				kit.Small, kit.Disabled(d.busy), kit.Tooltip(T("g.rename"))).Label(T("g.rename")),
@@ -362,7 +373,11 @@ func (s *Shell) togglePresetCardMenu(info mod.ModInfo) *fairy.El {
 }
 
 func (s *Shell) togglePresetCardItems(info mod.ModInfo, menu *togglePresetMenu) []kit.MenuItem {
+	supported, known := s.desktopChannel(s.currentImporter())
 	var items []kit.MenuItem
+	if known && !supported {
+		items = append(items, desktopChannelNote(), kit.MenuItem{Separator: true})
+	}
 	switch {
 	case menu == nil || !menu.loaded:
 		items = append(items, kit.MenuItem{Label: T(togglePresetsPrefix + "loading"), Loading: true, Disabled: true})
@@ -371,7 +386,7 @@ func (s *Shell) togglePresetCardItems(info mod.ModInfo, menu *togglePresetMenu) 
 	default:
 		for _, preset := range menu.presets {
 			items = append(items, kit.MenuItem{
-				Label: preset.Name, Icon: lucide.Bookmark, Disabled: menu.applying,
+				Label: preset.Name, Icon: lucide.Bookmark, Disabled: menu.applying || !supported,
 				OnClick: func() { s.applyTogglePreset(info.Path, preset, &menu.applying) },
 			})
 		}
@@ -380,6 +395,29 @@ func (s *Shell) togglePresetCardItems(info mod.ModInfo, menu *togglePresetMenu) 
 		Label: T(togglePresetsPrefix + "manage"), Icon: lucide.Settings2,
 		OnClick: func() { s.openTogglePresets(info) },
 	})
+}
+
+// desktopChannel reports whether the games of importer serve the desktop channel the toggle presets and the game
+// preview use. known is false until that has been read.
+func (s *Shell) desktopChannel(importer string) (supported, known bool) {
+	if s.deps.XXMI == nil || importer == noImporter || importer == nteImporter {
+		return false, true
+	}
+	q := fetch(s, keyed(s.xxmi.desktopChannel, importer), func(ctx context.Context) (bool, error) {
+		return s.deps.XXMI.DesktopChannelSupported(ctx, importer)
+	})
+	return q.loaded && q.value && q.err == nil, q.loaded || q.err != nil
+}
+
+func (s *Shell) currentImporter() string {
+	if game := s.gameConfig(); game != nil {
+		return importerOf(*game)
+	}
+	return noImporter
+}
+
+func desktopChannelNote() kit.MenuItem {
+	return kit.MenuItem{Label: T(togglePresetsPrefix + "requires-desktop-channel"), Icon: lucide.Info, Disabled: true}
 }
 
 func (s *Shell) loadTogglePresetMenu(path string, menu *togglePresetMenu) {

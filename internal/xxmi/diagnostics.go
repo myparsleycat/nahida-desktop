@@ -148,33 +148,13 @@ func (x *XXMI) DiagnosticsSupport(ctx context.Context, importer string) (Diagnos
 }
 
 func (x *XXMI) diagnosticsSupport(ctx context.Context, key string) (DiagnosticsSupport, ImporterConfig, error) {
-	external, err := x.usesExternalLauncher(ctx)
-	if err != nil {
-		return DiagnosticsSupport{}, ImporterConfig{}, err
-	}
-	if external {
-		return DiagnosticsSupport{Reason: diagnosticsExternalLauncher}, ImporterConfig{}, nil
-	}
-	cfg, err := x.GetImporterConfig(ctx, key)
-	if err != nil {
-		return DiagnosticsSupport{}, cfg, err
-	}
-	switch {
-	case !cfg.Enabled:
-		return DiagnosticsSupport{Reason: diagnosticsNotConfigured}, cfg, nil
-	case cfg.Mode != RuntimeXXMI:
-		return DiagnosticsSupport{Reason: diagnosticsRuntime}, cfg, nil
-	}
-	used, err := x.migotoDLLUsed(ctx, cfg)
-	if err != nil {
-		return DiagnosticsSupport{}, cfg, err
-	}
-	if !used {
-		return DiagnosticsSupport{Reason: diagnosticsDLLBypassed}, cfg, nil
+	cfg, reason, err := x.builtInDLLConfig(ctx, key)
+	if err != nil || reason != "" {
+		return DiagnosticsSupport{Reason: reason}, cfg, err
 	}
 	support := x.dllFeatureSupport(ctx, cfg, func(spec libsProviderSpec) bool { return spec.diagnostics })
 	if !support.supported {
-		reason := diagnosticsProvider
+		reason = diagnosticsProvider
 		switch support.reason {
 		case dllFeatureCustomDLL:
 			reason = diagnosticsCustomDLL

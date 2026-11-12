@@ -1008,6 +1008,7 @@
       "toggle-presets": {
         "menu": "切换状态预设",
         "manage": "管理预设…",
+        "requires-desktop-channel": "需要内置启动器和 myparsleycat 库",
         "loading": "正在加载…",
         "title": "切换状态预设",
         "stored-in": "存储位置",

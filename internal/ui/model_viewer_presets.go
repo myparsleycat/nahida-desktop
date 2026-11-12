@@ -49,19 +49,36 @@ func (v *ModelViewer) togglePresetMenuItems() []kit.MenuItem {
 			presets = append(presets, kit.MenuItem{Label: preset.Name, OnClick: func() { v.applyTogglePreset(preset) }})
 		}
 	}
-	return []kit.MenuItem{
+	supported, known := v.desktopChannel()
+	var items []kit.MenuItem
+	if known && !supported {
+		items = append(items, desktopChannelNote())
+	}
+	return append(items, []kit.MenuItem{
 		{
 			Label: T("page.tools.model_viewer.menu.save_as_preset"), Icon: lucide.BookmarkPlus,
-			Disabled: v.scene == nil,
+			Disabled: v.scene == nil || !supported,
 			OnClick: func() {
 				v.presetDraft = &viewerPresetDraft{storePick: mod.TogglePresetStoreMetadata}
 			},
 		},
 		{
 			Label: T("page.tools.model_viewer.menu.apply_preset"), Icon: lucide.Bookmark,
-			Disabled: v.scene == nil || v.applyingPreset, Submenu: presets,
+			Disabled: v.scene == nil || v.applyingPreset || !supported, Submenu: presets,
 		},
+	}...)
+}
+
+// desktopChannel reports whether the games of the viewer's importer serve the desktop channel. A game linked now
+// serves it even when the next launch would deploy a DLL without it. known is false until that has been read.
+func (v *ModelViewer) desktopChannel() (supported, known bool) {
+	switch {
+	case v.gameLinked:
+		return true, true
+	case v.shell == nil:
+		return false, false
 	}
+	return v.shell.desktopChannel(v.importer)
 }
 
 func (v *ModelViewer) togglePresetDialogs(cx *fairy.Cx) {
