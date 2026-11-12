@@ -15,9 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
-	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -440,106 +438,23 @@ func HashUploadFiles(
 	concurrency int,
 	onProgress func(int),
 ) ([]FinalUploadFile, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	if concurrency > len(files) {
-		concurrency = len(files)
-	}
-	if len(files) == 0 {
-		return []FinalUploadFile{}, nil
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	out := make([]FinalUploadFile, len(files))
-	jobs := make(chan int)
-	var workers sync.WaitGroup
 	completed := 0
-	var callbackMu sync.Mutex
-	var errorMu sync.Mutex
-	var firstErr error
-	setError := func(err error) {
-		errorMu.Lock()
-		if firstErr == nil {
-			firstErr = err
-			cancel()
-		}
-		errorMu.Unlock()
-	}
-	workers.Add(concurrency)
-	for range concurrency {
-		go func() {
-			defer workers.Done()
-			for index := range jobs {
-				hash, err := hashUploadFile(ctx, files[index].FullPath)
-				if err != nil {
-					setError(fmt.Errorf("failed to hash %s: %w", files[index].Name, err))
-					return
-				}
-				out[index] = FinalUploadFile{UploadFile: files[index], SHA256: hash}
-				callbackMu.Lock()
-				completed++
-				if onProgress != nil {
-					onProgress(completed)
-				}
-				callbackMu.Unlock()
+	entries, err := hashUploadFiles(ctx, files, concurrency, uploadHashOptions{
+		onFile: func(_ UploadFile, _ uploadHashEntry) {
+			completed++
+			if onProgress != nil {
+				onProgress(completed)
 			}
-		}()
-	}
-sendLoop:
-	for index := range files {
-		select {
-		case <-ctx.Done():
-			break sendLoop
-		case jobs <- index:
-		}
-	}
-	close(jobs)
-	workers.Wait()
-	errorMu.Lock()
-	err := firstErr
-	errorMu.Unlock()
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	out := make([]FinalUploadFile, len(files))
+	for index, entry := range entries {
+		out[index] = FinalUploadFile{UploadFile: files[index], SHA256: entry.SHA256}
 	}
 	return out, nil
-}
-
-type contextReader struct {
-	ctx    context.Context
-	reader io.Reader
-}
-
-func (r contextReader) Read(buffer []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
-	}
-	return r.reader.Read(buffer)
-}
-
-func hashUploadFile(ctx context.Context, path string) (string, error) {
-	release, err := diskio.Acquire(ctx, filepath.FromSlash(path))
-	if err != nil {
-		return "", err
-	}
-	defer release()
-
-	file, err := os.Open(filepath.FromSlash(path))
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = file.Close() }()
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, contextReader{ctx: ctx, reader: file}); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func childNames(item any) map[string]struct{} {

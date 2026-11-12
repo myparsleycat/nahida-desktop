@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"os"
@@ -309,7 +310,7 @@ func (d *Drive) StartUpload(ctx context.Context, params StartUploadParams) (resu
 
 type uploadRunnerState struct {
 	mu     sync.Mutex
-	hashes map[string]string
+	hashes map[string]uploadHashEntry
 }
 
 func (d *Drive) runUpload(
@@ -320,6 +321,9 @@ func (d *Drive) runUpload(
 	rules UploadRules,
 	state *uploadRunnerState,
 ) (returnErr error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	preparation := restart.Preparation
 	var uploadedBytes int64
 	uploadedFiles := 0
@@ -336,7 +340,7 @@ func (d *Drive) runUpload(
 		pendingFiles = append(pendingFiles, file)
 	}
 	status := transfer.StatusPreparing
-	if err := transfers.Update(
+	if err := transfers.UpdateRunning(
 		pid,
 		transfer.Updates{
 			Status:           &status,
@@ -367,10 +371,66 @@ func (d *Drive) runUpload(
 			})
 		}
 	}()
-	parentFiles, restoredNZST, restoreErr := restoreUploadSources(ctx, pendingFiles, &tempDir)
+	progress := uploadPreparationProgress{
+		ctx: ctx, now: d.now,
+		publish: func(value transfer.PreparationProgress) {
+			_ = transfers.UpdateRunning(pid, transfer.Updates{PreparationProgress: &value})
+		},
+		value: transfer.PreparationProgress{TotalFiles: len(pendingFiles)},
+	}
+	for _, file := range pendingFiles {
+		progress.value.TotalBytes += file.Size
+	}
+	progress.report(true)
+	parentFiles, hashes, restoreErr := restoreUploadSources(ctx, pendingFiles, &tempDir, progress.add)
 	if restoreErr != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return d.failUploadTransfer(transfers, pid, "restore-sources", restoreErr)
 	}
+
+	state.mu.Lock()
+	cached := maps.Clone(state.hashes)
+	if state.hashes == nil {
+		state.hashes = make(map[string]uploadHashEntry)
+	}
+	state.mu.Unlock()
+	ordinary := make([]UploadFile, 0, len(pendingFiles))
+	for _, file := range pendingFiles {
+		if !isUploadNZST(file.FullPath) {
+			ordinary = append(ordinary, file)
+		}
+	}
+	entries, hashErr := hashUploadFiles(ctx, ordinary, uploadHashConcurrency(), uploadHashOptions{
+		cache: cached, verifySource: true,
+		onBytes: func(n int64) { progress.add(n, false) },
+		onInvalid: func(file UploadFile) {
+			state.mu.Lock()
+			delete(state.hashes, file.FID)
+			state.mu.Unlock()
+		},
+		onFile: func(file UploadFile, entry uploadHashEntry) {
+			state.mu.Lock()
+			state.hashes[file.FID] = entry
+			state.mu.Unlock()
+			progress.add(0, true)
+		},
+	})
+	if hashErr != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return d.failUploadTransfer(transfers, pid, "hash", hashErr)
+	}
+	for index, file := range ordinary {
+		hashes[file.FID] = entries[index]
+	}
+	progress.report(true)
+	if err := transfers.UpdateRunning(pid, transfer.Updates{ClearPreparationProgress: true}); err != nil {
+		return d.reportUploadFailure(transfers, pid, "prepare", err)
+	}
+
 	created := []CreatedUploadDirectory{}
 	var err error
 	if len(parentFiles) > 0 && len(preparation.Directories) > 0 {
@@ -382,26 +442,6 @@ func (d *Drive) runUpload(
 	parentIDs := make(map[string]string, len(created))
 	for _, directory := range created {
 		parentIDs[directory.Path] = directory.ID
-	}
-
-	state.mu.Lock()
-	hashes := state.hashes
-	state.mu.Unlock()
-	if restoredNZST || len(hashes) != len(parentFiles) {
-		hashed, hashErr := HashUploadFiles(ctx, parentFiles, uploadHashConcurrency(), func(count int) {
-			count += uploadedFiles
-			_ = transfers.Update(pid, transfer.Updates{TransferredFiles: &count})
-		})
-		if hashErr != nil {
-			return d.failUploadTransfer(transfers, pid, "hash", hashErr)
-		}
-		hashes = make(map[string]string, len(hashed))
-		for _, file := range hashed {
-			hashes[file.FID] = file.SHA256
-		}
-		state.mu.Lock()
-		state.hashes = hashes
-		state.mu.Unlock()
 	}
 	incomplete := make([]FinalUploadFile, len(parentFiles))
 	for index, file := range parentFiles {
@@ -418,7 +458,7 @@ func (d *Drive) runUpload(
 				)
 			}
 		}
-		sha256 := hashes[file.FID]
+		sha256 := hashes[file.FID].SHA256
 		if sha256 == "" {
 			return d.failUploadTransfer(transfers, pid, "hash", fmt.Errorf("hash missing for file %s", file.Name))
 		}
@@ -426,7 +466,7 @@ func (d *Drive) runUpload(
 	}
 
 	progressStatus := transfer.StatusProgress
-	if err := transfers.Update(
+	if err := transfers.UpdateRunning(
 		pid,
 		transfer.Updates{Status: &progressStatus, TransferredSize: &uploadedBytes, TransferredFiles: &uploadedFiles},
 	); err != nil {
@@ -442,6 +482,9 @@ func (d *Drive) runUpload(
 			incomplete,
 			rules,
 			func(progress UploadPlanProgress) {
+				if ctx.Err() != nil {
+					return
+				}
 				if progress.Phase != "" {
 					stage = "plan/" + string(progress.Phase)
 				}
@@ -449,13 +492,16 @@ func (d *Drive) runUpload(
 				if progress.Total > 0 {
 					percentage = float64(progress.Processed) / float64(progress.Total) * 100
 				}
-				_ = transfers.Update(pid, transfer.Updates{PlanPhase: &progress.Phase, PlanProgress: &percentage})
+				_ = transfers.UpdateRunning(
+					pid,
+					transfer.Updates{PlanPhase: &progress.Phase, PlanProgress: &percentage},
+				)
 			},
 		)
 		if planErr != nil {
 			return d.failUploadTransfer(transfers, pid, stage, planErr)
 		}
-		_ = transfers.Update(pid, transfer.Updates{ClearPlanPhase: true, ClearPlanProgress: true})
+		_ = transfers.UpdateRunning(pid, transfer.Updates{ClearPlanPhase: true, ClearPlanProgress: true})
 		_, executeErr := d.executeUploadPlanWithRecovery(
 			ctx,
 			restart.Params.DestID,
@@ -467,18 +513,25 @@ func (d *Drive) runUpload(
 				state.mu.Lock()
 				defer state.mu.Unlock()
 				if progress.Phase != "" {
-					_ = transfers.Update(pid, transfer.Updates{UploadPhase: &progress.Phase})
+					if ctx.Err() == nil {
+						_ = transfers.UpdateRunning(pid, transfer.Updates{UploadPhase: &progress.Phase})
+					}
 					return
 				}
 				uploadedBytes += progress.Bytes
 				sentFiles += progress.SentFiles
+				// A file the server confirmed stays completed even after a pause, so
+				// the resumed run does not upload it again.
 				if progress.FileID != "" && !transfers.IsFileCompleted(pid, progress.FileID) {
 					if transfers.MarkFileCompleted(pid, progress.FileID) == nil {
 						uploadedFiles++
 					}
 				}
+				if ctx.Err() != nil {
+					return
+				}
 				shownFiles := uploadedFiles + sentFiles
-				_ = transfers.Update(
+				_ = transfers.UpdateRunning(
 					pid,
 					transfer.Updates{TransferredSize: &uploadedBytes, TransferredFiles: &shownFiles},
 				)
@@ -488,10 +541,13 @@ func (d *Drive) runUpload(
 			return d.failUploadTransfer(transfers, pid, "execute", executeErr)
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	completed := transfer.StatusCompleted
 	total := preparation.TotalSize
 	hundred := 100.0
-	if err := transfers.Update(pid, transfer.Updates{
+	if err := transfers.UpdateRunning(pid, transfer.Updates{
 		Status:            &completed,
 		TransferredSize:   &total,
 		TransferredFiles:  lo.ToPtr(len(preparation.Files)),
@@ -529,7 +585,7 @@ func uploadHashConcurrency() int {
 }
 
 func (d *Drive) failUploadTransfer(transfers *transfer.Transfer, pid, stage string, failure error) error {
-	if errors.Is(failure, context.Canceled) {
+	if infra.IsCancellationError(failure) {
 		return failure
 	}
 	status := transfer.StatusError
@@ -538,8 +594,13 @@ func (d *Drive) failUploadTransfer(transfers *transfer.Transfer, pid, stage stri
 	var uploadErr *UploadV2Error
 	if errors.As(failure, &uploadErr) {
 		code = uploadErr.Code
+		// The UI's translated message names the changed file through this field.
+		var sourceErr *uploadSourceError
+		if code == "upload_source_changed" && errors.As(failure, &sourceErr) {
+			message = sourceErr.File.Name
+		}
 	}
-	updateErr := transfers.Update(pid, transfer.Updates{
+	updateErr := transfers.UpdateRunning(pid, transfer.Updates{
 		Status:            &status,
 		Error:             &message,
 		ErrorCode:         &code,

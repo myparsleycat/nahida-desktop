@@ -388,7 +388,10 @@ func TestUploadNZSTResumeSkipsDeletedCompletedSources(t *testing.T) {
 				defer server.Close()
 				drive := uploadServiceTestDrive(server, transfers)
 				state := &uploadRunnerState{
-					hashes: map[string]string{prep.Files[0].FID: "cached-done", prep.Files[1].FID: "cached-pending"},
+					hashes: map[string]uploadHashEntry{
+						prep.Files[0].FID: {SHA256: "cached-done"},
+						prep.Files[1].FID: {SHA256: "cached-pending"},
+					},
 				}
 				if err := transfers.RegisterRunner(
 					prep.PID,

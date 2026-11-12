@@ -30,7 +30,7 @@ func (t *Transfer) Cancel(pid string) error {
 	if item.cancel != nil {
 		item.cancel()
 	}
-	item.record.Status = StatusCanceled
+	setStatus(&item.record.Snapshot, StatusCanceled)
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
 	t.destinationMu.Unlock()
@@ -56,7 +56,7 @@ func (t *Transfer) Pause(pid string) error {
 		t.destinationMu.Unlock()
 		return nil
 	}
-	item.record.Status = StatusPaused
+	setStatus(&item.record.Snapshot, StatusPaused)
 	if item.cancel != nil {
 		item.cancel()
 	}
@@ -357,7 +357,7 @@ func (t *Transfer) finishRun(pid string, runErr error) {
 	interrupted := item.record.Status == StatusPaused || item.record.Status == StatusCanceled ||
 		item.record.Status == StatusPending && errors.Is(runErr, context.Canceled)
 	if !interrupted && runErr != nil && !isTerminal(item.record.Status) {
-		item.record.Status = StatusError
+		setStatus(&item.record.Snapshot, StatusError)
 		item.record.Error = runErr.Error()
 	}
 	snapshot := item.record.Snapshot
@@ -484,7 +484,7 @@ func (t *Transfer) ManualStart(pid string) error {
 		item.record.QueueGroupID = &id
 	}
 	if item.record.Status != StatusPreparing {
-		item.record.Status = StatusPending
+		setStatus(&item.record.Snapshot, StatusPending)
 	}
 	for _, other := range t.entries {
 		if other != item {
@@ -496,6 +496,7 @@ func (t *Transfer) ManualStart(pid string) error {
 	item.record.Error = ""
 	item.record.ErrorCode = ""
 	item.record.UploadPhase = ""
+	item.record.PreparationProgress = nil
 	shouldEmit := t.scheduleEmitLocked(true, t.now())
 	t.mu.Unlock()
 	t.destinationMu.Unlock()
@@ -535,6 +536,7 @@ func (t *Transfer) ResetTransfer(pid string) error {
 	item.record.Error = ""
 	item.record.ErrorCode = ""
 	item.record.UploadPhase = ""
+	item.record.PreparationProgress = nil
 	item.samples = nil
 	item.completedIDs = make(map[string]struct{})
 	item.completedIndexes = nil

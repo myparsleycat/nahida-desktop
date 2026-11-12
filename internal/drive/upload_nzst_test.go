@@ -201,17 +201,13 @@ func TestRestoreUploadNZSTPreservesSourcesAndUsesUniqueTemporaryFiles(t *testing
 			_ = os.RemoveAll(tempDir)
 		}
 	}()
-	files, restored, err := restoreUploadSources(t.Context(), prepared.Files, &tempDir)
-	if err != nil || !restored || len(files) != 2 || files[0].FullPath == files[1].FullPath {
+	files, hashes, err := restoreUploadSources(t.Context(), prepared.Files, &tempDir, nil)
+	if err != nil || len(hashes) != 2 || len(files) != 2 || files[0].FullPath == files[1].FullPath {
 		t.Fatalf("restore = %+v, %v", files, err)
 	}
-	hashed, err := HashUploadFiles(t.Context(), files, 2, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for index, file := range hashed {
+	for index, file := range files {
 		content := []byte(filepath.Base(filepath.Dir(prepared.Files[index].FullPath)))
-		if file.SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) || file.Name != "file.ini" ||
+		if hashes[file.FID].SHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) || file.Name != "file.ini" ||
 			file.FID != prepared.Files[index].FID {
 			t.Fatalf("hashed = %+v", file)
 		}
@@ -228,12 +224,12 @@ func TestRestoreUploadNZSTPreservesSourcesAndUsesUniqueTemporaryFiles(t *testing
 		}
 	}
 	writeUploadNZST(t, prepared.Files[0].FullPath, []byte("changed size"))
-	if _, _, err := restoreUploadSources(t.Context(), prepared.Files, &tempDir); err == nil {
+	if _, _, err := restoreUploadSources(t.Context(), prepared.Files, &tempDir, nil); err == nil {
 		t.Fatal("changed source size accepted")
 	}
 	badTemp := filepath.Join(root, "not-a-directory")
 	writeUploadFile(t, badTemp, "file")
-	if _, _, err := restoreUploadSources(t.Context(), prepared.Files, &badTemp); err == nil {
+	if _, _, err := restoreUploadSources(t.Context(), prepared.Files, &badTemp, nil); err == nil {
 		t.Fatal("invalid temp directory accepted")
 	}
 }

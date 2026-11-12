@@ -233,6 +233,7 @@
         "paused": "已暂停",
         "queued": "排队中",
         "preparing": "准备中",
+        "reading_files": "正在读取文件 ({{processed}}/{{total}})",
         "discovering": "正在清点文件（{{count}} 个）",
         "upload_activity": {
           "preparing": "正在读取和压缩文件",
@@ -246,6 +247,7 @@
           "processing": "正在处理文件"
         },
         "error": {
+          "upload_source_changed": "源文件“{{name}}”已更改。请重新选择文件并开始新的上传。",
           "invalid_nte_mod_file": "这不是有效的 NTE 模组文件。",
           "nte_client_upgrade_required": "请更新桌面应用后再上传 NTE 模组。",
           "nte_bundle_incomplete": "NTE 模组所需文件尚未全部上传。",

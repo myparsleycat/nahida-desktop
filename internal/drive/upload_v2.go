@@ -40,7 +40,7 @@ func (e *UploadV2Error) DiagnosticSeverity() infra.DiagnosticSeverity {
 		return infra.DiagnosticWarn
 	}
 	code := strings.ToLower(e.Code)
-	if strings.HasPrefix(code, "http_4") ||
+	if code == "upload_source_changed" || strings.HasPrefix(code, "http_4") ||
 		strings.Contains(code, "validation") || strings.Contains(code, "permission") ||
 		strings.Contains(code, "policy") || strings.Contains(code, "unsupported") ||
 		strings.Contains(code, "conflict") || strings.Contains(code, "too_large") ||

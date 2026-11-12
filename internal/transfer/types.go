@@ -106,32 +106,50 @@ type Data struct {
 	Dirs  []Directory    `json:"dirs"`
 }
 
+type PreparationProgress struct {
+	ProcessedBytes int64 `json:"processedBytes"`
+	TotalBytes     int64 `json:"totalBytes"`
+	ProcessedFiles int   `json:"processedFiles"`
+	TotalFiles     int   `json:"totalFiles"`
+}
+
+func (p PreparationProgress) Percent() float64 {
+	if p.TotalBytes > 0 {
+		return clamp(float64(p.ProcessedBytes)/float64(p.TotalBytes)*100, 0, 100)
+	}
+	if p.TotalFiles > 0 {
+		return clamp(float64(p.ProcessedFiles)/float64(p.TotalFiles)*100, 0, 100)
+	}
+	return 100
+}
+
 // Snapshot is the renderer-safe transfer shape. The payload Data and runner
 // state are deliberately absent, matching Electron's getDisplayTransfers.
 type Snapshot struct {
-	PID                string              `json:"pid"`
-	Type               string              `json:"type"`
-	QueueGroupID       *uint64             `json:"queueGroupId,omitempty"`
-	CurrentID          string              `json:"currentId,omitempty"`
-	Status             Status              `json:"status"`
-	TotalSize          int64               `json:"totalSize"`
-	TransferredSize    int64               `json:"transferedSize"`
-	Progress           float64             `json:"progress"`
-	Speed              float64             `json:"speed"`
-	ETA                float64             `json:"eta"`
-	StartTime          int64               `json:"startTime"`
-	Name               string              `json:"name"`
-	TotalFiles         int                 `json:"totalFiles"`
-	TransferredFiles   int                 `json:"transferedFiles"`
-	FailedFiles        int                 `json:"failedFiles"`
-	Path               string              `json:"path,omitempty"`
-	DestinationPaths   []string            `json:"destinationPaths,omitempty"`
-	DestinationTargets []DestinationTarget `json:"destinationTargets,omitempty"`
-	Error              string              `json:"error,omitempty"`
-	ErrorCode          string              `json:"errorCode,omitempty"`
-	PlanPhase          *PlanPhase          `json:"planPhase,omitempty"`
-	PlanProgress       *float64            `json:"planProgress,omitempty"`
-	UploadPhase        UploadPhase         `json:"uploadPhase,omitempty"`
+	PID                 string               `json:"pid"`
+	Type                string               `json:"type"`
+	QueueGroupID        *uint64              `json:"queueGroupId,omitempty"`
+	CurrentID           string               `json:"currentId,omitempty"`
+	Status              Status               `json:"status"`
+	TotalSize           int64                `json:"totalSize"`
+	TransferredSize     int64                `json:"transferedSize"`
+	Progress            float64              `json:"progress"`
+	Speed               float64              `json:"speed"`
+	ETA                 float64              `json:"eta"`
+	StartTime           int64                `json:"startTime"`
+	Name                string               `json:"name"`
+	TotalFiles          int                  `json:"totalFiles"`
+	TransferredFiles    int                  `json:"transferedFiles"`
+	FailedFiles         int                  `json:"failedFiles"`
+	Path                string               `json:"path,omitempty"`
+	DestinationPaths    []string             `json:"destinationPaths,omitempty"`
+	DestinationTargets  []DestinationTarget  `json:"destinationTargets,omitempty"`
+	Error               string               `json:"error,omitempty"`
+	ErrorCode           string               `json:"errorCode,omitempty"`
+	PlanPhase           *PlanPhase           `json:"planPhase,omitempty"`
+	PlanProgress        *float64             `json:"planProgress,omitempty"`
+	UploadPhase         UploadPhase          `json:"uploadPhase,omitempty"`
+	PreparationProgress *PreparationProgress `json:"preparationProgress,omitempty"`
 }
 
 type Record struct {
@@ -182,26 +200,28 @@ type Options struct {
 }
 
 type Updates struct {
-	Status             *Status
-	Name               *string
-	CurrentID          *string
-	TotalSize          *int64
-	TotalFiles         *int
-	TransferredSize    *int64
-	Progress           *float64
-	TransferredFiles   *int
-	FailedFiles        *int
-	Path               *string
-	DestinationPaths   []string
-	DestinationTargets []DestinationTarget
-	Error              *string
-	ErrorCode          *string
-	PlanPhase          *PlanPhase
-	PlanProgress       *float64
-	UploadPhase        *UploadPhase
-	ClearCurrentID     bool
-	ClearError         bool
-	ClearErrorCode     bool
-	ClearPlanPhase     bool
-	ClearPlanProgress  bool
+	Status                   *Status
+	Name                     *string
+	CurrentID                *string
+	TotalSize                *int64
+	TotalFiles               *int
+	TransferredSize          *int64
+	Progress                 *float64
+	TransferredFiles         *int
+	FailedFiles              *int
+	Path                     *string
+	DestinationPaths         []string
+	DestinationTargets       []DestinationTarget
+	Error                    *string
+	ErrorCode                *string
+	PlanPhase                *PlanPhase
+	PlanProgress             *float64
+	UploadPhase              *UploadPhase
+	PreparationProgress      *PreparationProgress
+	ClearCurrentID           bool
+	ClearError               bool
+	ClearErrorCode           bool
+	ClearPlanPhase           bool
+	ClearPlanProgress        bool
+	ClearPreparationProgress bool
 }

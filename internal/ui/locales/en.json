@@ -233,6 +233,7 @@
         "paused": "Paused",
         "queued": "Queued",
         "preparing": "Preparing",
+        "reading_files": "Reading files ({{processed}}/{{total}})",
         "discovering": "Listing files ({{count}})",
         "upload_activity": {
           "preparing": "Reading and compressing files",
@@ -246,6 +247,7 @@
           "processing": "Processing files"
         },
         "error": {
+          "upload_source_changed": "Source file \"{{name}}\" has changed. Select the files again to start a new upload.",
           "invalid_nte_mod_file": "This is not a valid NTE mod file.",
           "nte_client_upgrade_required": "Update the desktop app to upload NTE mods.",
           "nte_bundle_incomplete": "Not all required NTE mod files were uploaded.",

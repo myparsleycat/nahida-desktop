@@ -3,6 +3,7 @@ package drive
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -140,7 +141,8 @@ func TestCreateDirsPostsParentBeforeChildrenAndChunksSiblings(t *testing.T) {
 	if requests[1].ParentID != rootID || len(requests[1].Dirs) != directoryCreateBatchSize {
 		t.Fatalf("first child request = parent %s, %d dirs", requests[1].ParentID, len(requests[1].Dirs))
 	}
-	if requests[2].ParentID != rootID || len(requests[2].Dirs) != 1 || requests[2].Dirs[0].Path != requests[2].Dirs[0].Name {
+	if requests[2].ParentID != rootID || len(requests[2].Dirs) != 1 ||
+		requests[2].Dirs[0].Path != requests[2].Dirs[0].Name {
 		t.Fatalf("second child request = %+v", requests[2])
 	}
 	for _, request := range requests {
@@ -330,6 +332,100 @@ func uploadServiceTestDrive(server *httptest.Server, transfers *transfer.Transfe
 		Transfer: transfers,
 		Sleep:    func(context.Context, time.Duration) error { return nil },
 	})
+}
+
+func TestUploadRetryRehashesChangedSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mod.ini")
+	writeUploadFile(t, path, "before")
+	prep, err := PrepareUpload([]string{path}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transfers := transfer.New()
+	t.Cleanup(func() { _ = transfers.ServiceShutdown() })
+	if _, err := transfers.Create(transfer.CreateParams{
+		PID: prep.PID, Type: "upload", InitialStatus: transfer.StatusPending,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var hashes []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/akasha/v2/sse/drive/files:plan" {
+			http.NotFound(w, request)
+			return
+		}
+		var body struct {
+			Files []struct{ ClientID, SHA256 string }
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil || len(body.Files) != 1 {
+			t.Errorf("plan = %+v, %v", body, err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		hashes = append(hashes, body.Files[0].SHA256)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if len(hashes) == 1 {
+			_, _ = io.WriteString(w, "event: error\ndata: {\"code\":\"test_stop\"}\n\n")
+			return
+		}
+		_, _ = fmt.Fprintf(w,
+			"event: complete\ndata: {\"items\":[{\"clientId\":%q,\"status\":\"exists\"}],\"uploads\":[]}\n\n",
+			body.Files[0].ClientID,
+		)
+	}))
+	defer server.Close()
+	drive := uploadServiceTestDrive(server, transfers)
+	state := &uploadRunnerState{}
+	restart := &uploadRestartData{Params: StartUploadParams{DestID: "dest"}, Preparation: prep, RequestID: "retry"}
+	if err := drive.runUpload(t.Context(), transfers, prep.PID, restart, testUploadRules(), state); err == nil {
+		t.Fatal("first plan unexpectedly succeeded")
+	}
+	writeUploadFile(t, path, "after!")
+	modified := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, modified, modified); err != nil {
+		t.Fatal(err)
+	}
+	if err := drive.runUpload(t.Context(), transfers, prep.PID, restart, testUploadRules(), state); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(hashes) != 2 || hashes[1] != fmt.Sprintf("%x", sha256.Sum256([]byte("after!"))) {
+		t.Fatalf("retry hashes = %v; want current source hash", hashes)
+	}
+}
+
+func TestUploadSourceSizeChangeStopsBeforePlan(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "mod.ini")
+	writeUploadFile(t, path, "before")
+	prep, err := PrepareUpload([]string{path}, nil, UploadConflictSuffix, testUploadRules(), nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeUploadFile(t, path, "changed size")
+	transfers := transfer.New()
+	t.Cleanup(func() { _ = transfers.ServiceShutdown() })
+	if _, err := transfers.Create(transfer.CreateParams{
+		PID: prep.PID, Type: "upload", InitialStatus: transfer.StatusPending,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	drive := NewWithOptions(Options{Transfer: transfers})
+	err = drive.runUpload(t.Context(), transfers, prep.PID, &uploadRestartData{
+		Params: StartUploadParams{DestID: "dest"}, Preparation: prep,
+	}, testUploadRules(), &uploadRunnerState{})
+	var changed *UploadV2Error
+	if !errors.As(err, &changed) || changed.Code != "upload_source_changed" {
+		t.Fatalf("size change reached an unconfigured plan client: %v", err)
+	}
+	record, _ := transfers.Get(prep.PID)
+	if record.ErrorCode != "upload_source_changed" || record.Error != "mod.ini" || record.PreparationProgress != nil {
+		t.Fatalf("changed source record = %+v", record)
+	}
 }
 
 func uploadPlanClientID(raw []byte) string {

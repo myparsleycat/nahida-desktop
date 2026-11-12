@@ -287,9 +287,18 @@ func (t *Transfer) IsFileCompleted(pid, fileID string) bool {
 	return ok
 }
 
+// setStatus is the only writer of Snapshot.Status, so preparation progress
+// never outlives the preparing state.
+func setStatus(record *Snapshot, status Status) {
+	record.Status = status
+	if status != StatusPreparing {
+		record.PreparationProgress = nil
+	}
+}
+
 func applyUpdates(record *Snapshot, updates Updates) {
 	if updates.Status != nil {
-		record.Status = *updates.Status
+		setStatus(record, *updates.Status)
 		if record.Status != StatusProgress {
 			record.UploadPhase = ""
 		}
@@ -351,6 +360,17 @@ func applyUpdates(record *Snapshot, updates Updates) {
 	}
 	if updates.UploadPhase != nil && record.Status == StatusProgress {
 		record.UploadPhase = *updates.UploadPhase
+	}
+	if updates.PreparationProgress != nil && record.Status == StatusPreparing && record.Type == "upload" {
+		progress := *updates.PreparationProgress
+		progress.TotalBytes = max(0, progress.TotalBytes)
+		progress.ProcessedBytes = min(max(0, progress.ProcessedBytes), progress.TotalBytes)
+		progress.TotalFiles = max(0, progress.TotalFiles)
+		progress.ProcessedFiles = min(max(0, progress.ProcessedFiles), progress.TotalFiles)
+		record.PreparationProgress = &progress
+	}
+	if updates.ClearPreparationProgress {
+		record.PreparationProgress = nil
 	}
 	if updates.ClearCurrentID {
 		record.CurrentID = ""
@@ -540,6 +560,10 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 	if snapshot.PlanProgress != nil {
 		progress := *snapshot.PlanProgress
 		snapshot.PlanProgress = &progress
+	}
+	if snapshot.PreparationProgress != nil {
+		progress := *snapshot.PreparationProgress
+		snapshot.PreparationProgress = &progress
 	}
 	return snapshot
 }

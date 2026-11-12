@@ -26,6 +26,89 @@ func TestLateRunnerUpdatePreservesInterruption(t *testing.T) {
 	}
 }
 
+func TestPreparationProgressIsSeparateCopiedAndCleared(t *testing.T) {
+	t.Parallel()
+	for _, action := range []string{"pause", "cancel", "reset", "progress", "error", "finish", "manual"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+			service := New()
+			service.emitStopped = true
+			t.Cleanup(func() { _ = service.ServiceShutdown() })
+			if _, err := service.Create(CreateParams{
+				PID: "hash", Type: "upload", InitialStatus: StatusPreparing,
+				Data: Data{Files: []DownloadFile{{ID: "file", Size: 100}}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			preparation := PreparationProgress{ProcessedBytes: 50, TotalBytes: 100, ProcessedFiles: 0, TotalFiles: 1}
+			if err := service.UpdateRunning("hash", Updates{PreparationProgress: &preparation}); err != nil {
+				t.Fatal(err)
+			}
+			preparation.ProcessedBytes = 99
+			snapshot, _ := service.Get("hash")
+			if snapshot.PreparationProgress == nil || snapshot.PreparationProgress.Percent() != 50 ||
+				snapshot.TransferredSize != 0 || snapshot.TransferredFiles != 0 || snapshot.Progress != 0 || snapshot.Speed != 0 {
+				t.Fatalf("hash affected transfer metrics: %+v", snapshot)
+			}
+			snapshot.PreparationProgress.ProcessedBytes = 90
+			if current, _ := service.Get("hash"); current.PreparationProgress.ProcessedBytes != 50 {
+				t.Fatal("snapshot retained shared preparation state")
+			}
+			var err error
+			switch action {
+			case "pause":
+				err = service.Pause("hash")
+			case "cancel":
+				err = service.Cancel("hash")
+			case "reset":
+				err = service.ResetTransfer("hash")
+			case "progress", "error":
+				status := StatusProgress
+				if action == "error" {
+					status = StatusError
+				}
+				err = service.UpdateRunning("hash", Updates{Status: &status})
+			case "finish":
+				service.finishRun("hash", errors.New("read failed"))
+			case "manual":
+				err = service.RegisterRunner("hash", func(context.Context, *Transfer, string) error { return nil })
+				if err == nil {
+					err = service.ManualStart("hash")
+				}
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current, _ := service.Get("hash"); current.PreparationProgress != nil {
+				t.Fatalf("%s retained preparation progress: %+v", action, current.PreparationProgress)
+			}
+			if action == "pause" || action == "cancel" {
+				if err := service.UpdateRunning(
+					"hash",
+					Updates{PreparationProgress: &preparation},
+				); !errors.Is(
+					err,
+					context.Canceled,
+				) {
+					t.Fatalf("late progress accepted after %s: %v", action, err)
+				}
+			}
+		})
+	}
+}
+
+func TestPreparationProgressUsesFilesForEmptySources(t *testing.T) {
+	t.Parallel()
+	progress := PreparationProgress{ProcessedFiles: 1, TotalFiles: 2}
+	if progress.Percent() != 50 {
+		t.Fatalf("empty file progress = %v", progress.Percent())
+	}
+	progress.ProcessedFiles++
+	if progress.Percent() != 100 {
+		t.Fatalf("empty file completion = %v", progress.Percent())
+	}
+}
+
 func TestResumeBeforeCanceledRunnerReturns(t *testing.T) {
 	t.Parallel()
 	service := New()

@@ -233,6 +233,7 @@
         "paused": "一時停止",
         "queued": "待機中",
         "preparing": "準備中",
+        "reading_files": "ファイルを読み込み中 ({{processed}}/{{total}})",
         "discovering": "項目を確認中（{{count}}件）",
         "upload_activity": {
           "preparing": "ファイルを読み込み・圧縮中",
@@ -246,6 +247,7 @@
           "processing": "ファイルを処理中"
         },
         "error": {
+          "upload_source_changed": "元のファイル「{{name}}」が変更されました。ファイルを再選択して、新しいアップロードを開始してください。",
           "invalid_nte_mod_file": "有効なNTE MODファイルではありません。",
           "nte_client_upgrade_required": "NTE MODをアップロードするにはデスクトップアプリを更新してください。",
           "nte_bundle_incomplete": "NTE MODに必要なファイルがすべてアップロードされていません。",

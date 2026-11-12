@@ -42,6 +42,7 @@ var transferFilterStatuses = []string{
 // errorCodes whose transfer cannot succeed by retrying it.
 var transferFinalErrors = []string{
 	"invalid_nte_mod_file", "nte_client_upgrade_required", "upload_file_too_large", "nte_bundle_too_large",
+	"upload_source_changed",
 }
 
 type transferScreen struct {
@@ -386,6 +387,7 @@ func (s *Shell) transferRow(item transfer.Snapshot) *fairy.El {
 	status := transferStatus(item)
 	active := status == transferUploading || status == transferDownloading
 	planning := status == transferUploading && item.PlanPhase != nil
+	preparing := status == transferPreparing && item.Type == "upload" && item.PreparationProgress != nil
 	finalizing := active && item.Progress >= 100
 	activity := ""
 	if status == transferUploading && !planning && !finalizing &&
@@ -393,6 +395,9 @@ func (s *Shell) transferRow(item transfer.Snapshot) *fairy.El {
 		activity = string(item.UploadPhase)
 	}
 	progress := item.Progress
+	if preparing {
+		progress = item.PreparationProgress.Percent()
+	}
 	if planning {
 		progress = 0
 		if item.PlanProgress != nil {
@@ -402,6 +407,9 @@ func (s *Shell) transferRow(item transfer.Snapshot) *fairy.El {
 
 	statusText := T("page.transfer.item." + status)
 	switch {
+	case preparing:
+		statusText = T("page.transfer.item.reading_files",
+			"processed", item.PreparationProgress.ProcessedFiles, "total", item.PreparationProgress.TotalFiles)
 	case planning:
 		statusText = T("page.transfer.item.planning." + string(*item.PlanPhase))
 	case finalizing:
@@ -483,6 +491,9 @@ func (s *Shell) transferRow(item transfer.Snapshot) *fairy.El {
 func (s *Shell) transferError(item transfer.Snapshot) string {
 	if item.ErrorCode != "" {
 		if key := "page.transfer.item.error." + item.ErrorCode; catalog.Has(key) {
+			if item.ErrorCode == "upload_source_changed" {
+				return T(key, "name", item.Error)
+			}
 			return T(key)
 		}
 		if item.Error == "" {
@@ -513,7 +524,7 @@ func (s *Shell) transferActions(item transfer.Snapshot, status string) *fairy.El
 	switch status {
 	case transferPaused, transferQueued:
 		row.Child(button(lucide.Play, T("page.transfer.item.action.resume"), resume))
-	case transferUploading, transferDownloading:
+	case transferUploading, transferDownloading, transferPreparing:
 		row.Child(button(lucide.Pause, T("page.transfer.item.action.pause"), pause))
 	}
 	if failed && canRetry {

@@ -2,6 +2,8 @@ package drive
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -42,11 +45,20 @@ func copyUploadNZST(ctx context.Context, path string, output io.Writer, limit in
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	release, err := diskio.Acquire(ctx, filepath.FromSlash(path))
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	source, err := os.Open(filepath.FromSlash(path))
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = source.Close() }()
+	return decodeUploadNZST(ctx, source, output, limit)
+}
+
+func decodeUploadNZST(ctx context.Context, source *os.File, output io.Writer, limit int64) (int64, error) {
 	info, err := source.Stat()
 	if err != nil {
 		return 0, err
@@ -61,12 +73,19 @@ func copyUploadNZST(ctx context.Context, path string, output io.Writer, limit in
 			return 0, err
 		}
 	}
+	reusable := false
+	defer func() {
+		if !reusable {
+			decoder.Close()
+		}
+	}()
 	if err := decoder.Reset(source); err != nil {
 		return 0, err
 	}
 	written, err := io.Copy(output, io.LimitReader(&uploadNZSTReader{ctx: ctx, reader: decoder}, limit+1))
 	if err == nil && written <= limit {
 		_ = decoder.Reset(nil)
+		reusable = true
 		uploadNZSTDecoders.Put(decoder)
 	}
 	return written, err
@@ -113,38 +132,99 @@ func (d *Drive) reportUploadSourceFailure(destinationID, stage string, err error
 
 // The caller owns cleanup even on failure. Restart data must retain source
 // paths; only this execution's copy may point at temporary decoded files.
-func restoreUploadSources(ctx context.Context, files []UploadFile, tempDir *string) ([]UploadFile, bool, error) {
-	restored := make([]UploadFile, len(files))
-	copy(restored, files)
-	hasNZST := false
+func restoreUploadSources(
+	ctx context.Context,
+	files []UploadFile,
+	tempDir *string,
+	onProgress func(int64, bool),
+) ([]UploadFile, map[string]uploadHashEntry, error) {
+	restored := append([]UploadFile{}, files...)
+	hashes := make(map[string]uploadHashEntry)
 	for index, file := range files {
 		if !isUploadNZST(file.FullPath) {
 			continue
 		}
-		hasNZST = true
 		if err := ctx.Err(); err != nil {
-			return nil, hasNZST, err
+			return nil, nil, err
 		}
 		if *tempDir == "" {
 			directory, err := os.MkdirTemp("", "nahida-drive-upload-*")
 			if err != nil {
-				return nil, hasNZST, &uploadSourceError{File: file, Err: err}
+				return nil, nil, &uploadSourceError{File: file, Err: err}
 			}
 			*tempDir = directory
 		}
 		temp, err := os.CreateTemp(*tempDir, "source-*")
 		if err != nil {
-			return nil, hasNZST, &uploadSourceError{File: file, TempPath: *tempDir, Err: err}
+			return nil, nil, &uploadSourceError{File: file, TempPath: *tempDir, Err: err}
 		}
-		size, copyErr := copyUploadNZST(ctx, file.FullPath, temp, min(file.Size, uploadNZSTMaxSize))
+		entry, restoreErr := restoreUploadFile(ctx, file, temp, onProgress)
 		closeErr := temp.Close()
-		if copyErr == nil && size != file.Size {
-			copyErr = fmt.Errorf("restored size changed: got %d, expected %d", size, file.Size)
-		}
-		if err := errors.Join(copyErr, closeErr); err != nil {
-			return nil, hasNZST, &uploadSourceError{File: file, TempPath: temp.Name(), Err: err}
+		if err := errors.Join(restoreErr, closeErr); err != nil {
+			return nil, nil, &uploadSourceError{File: file, TempPath: temp.Name(), Err: err}
 		}
 		restored[index].FullPath = filepath.ToSlash(temp.Name())
+		hashes[file.FID] = entry
+		if onProgress != nil {
+			onProgress(0, true)
+		}
 	}
-	return restored, hasNZST, nil
+	return restored, hashes, nil
+}
+
+func restoreUploadFile(
+	ctx context.Context,
+	file UploadFile,
+	temp *os.File,
+	onProgress func(int64, bool),
+) (uploadHashEntry, error) {
+	release, err := diskio.Acquire(ctx, filepath.FromSlash(file.FullPath), temp.Name())
+	if err != nil {
+		return uploadHashEntry{}, err
+	}
+	defer release()
+	source, err := os.Open(filepath.FromSlash(file.FullPath))
+	if err != nil {
+		return uploadHashEntry{}, fmt.Errorf("%w: %w", ErrBackupSourceRead, err)
+	}
+	defer func() { _ = source.Close() }()
+	before, err := source.Stat()
+	if err != nil {
+		return uploadHashEntry{}, err
+	}
+	hasher := sha256.New()
+	writer := uploadRestoreWriter{writer: io.MultiWriter(temp, hasher), onProgress: onProgress}
+	size, copyErr := decodeUploadNZST(ctx, source, writer, min(file.Size, uploadNZSTMaxSize))
+	if copyErr != nil {
+		return uploadHashEntry{}, copyErr
+	}
+	after, err := source.Stat()
+	if err != nil {
+		return uploadHashEntry{}, err
+	}
+	if !sameUploadSource(before, after) {
+		return uploadHashEntry{}, uploadSourceChanged(file, "restore-source", before, after)
+	}
+	if size != file.Size {
+		return uploadHashEntry{}, infra.AnnotateError(uploadSourceChanged(file, "restore-size", nil, nil),
+			infra.Diagnostic{Fields: map[string]any{"observedSize": size}})
+	}
+	info, err := temp.Stat()
+	if err != nil {
+		return uploadHashEntry{}, err
+	}
+	return uploadHashEntry{SHA256: hex.EncodeToString(hasher.Sum(nil)), Path: temp.Name(), Info: info}, nil
+}
+
+type uploadRestoreWriter struct {
+	writer     io.Writer
+	onProgress func(int64, bool)
+}
+
+func (w uploadRestoreWriter) Write(data []byte) (int, error) {
+	n, err := w.writer.Write(data)
+	if n > 0 && w.onProgress != nil {
+		w.onProgress(int64(n), false)
+	}
+	return n, err
 }
