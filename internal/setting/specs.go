@@ -296,6 +296,8 @@ func buildSpecs() map[string]spec {
 			64,
 		),
 		KeyModCompressionEnabled: boolSpec(definitionsByKey[KeyModCompressionEnabled], false),
+		// An empty store means the user has not chosen where toggle presets live yet.
+		KeyModTogglePresetStore: enumSpec(definitionsByKey[KeyModTogglePresetStore], "", togglePresetStores),
 
 		KeyToolsTouchProfileLlmProtocol: {
 			def: definitionsByKey[KeyToolsTouchProfileLlmProtocol],

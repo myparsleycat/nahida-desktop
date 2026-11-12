@@ -700,8 +700,7 @@ func modPreviewSource(file string, mtime float64) (string, func() ([]byte, error
 
 func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {
 	t := kit.T()
-	list := fairy.Col().W(modIniWidth).Shrink(0).HFull().ScrollY().Gap(8).Pad(6).Radius(4).
-		Fill(t.Background.Alpha(0.1)).FontSize(13)
+	list := fairy.Col().Grow(1).MinH(0).ScrollY().Gap(8)
 	groupFill, groupShadow, badgeBorder := fairy.RGBA(
 		255,
 		255,
@@ -754,7 +753,13 @@ func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {
 			groups,
 		).Gap(4))
 	}
-	return list
+
+	panel := fairy.Col().W(modIniWidth).Shrink(0).HFull().Gap(8).Pad(6).Radius(4).Fill(t.Background.Alpha(0.1)).
+		FontSize(13)
+	if s.deps.Tools != nil {
+		panel.Child(s.togglePresetCardMenu(info))
+	}
+	return panel.Child(list)
 }
 
 // modKeyTrigger shows one key binding of a toggle section, or placeholder when it is unset, and opens the key

@@ -39,6 +39,7 @@ func (s *Shell) registerToolEvents(on func(string, func([]any))) {
 		if v := s.mods.viewer; v != nil {
 			v.refreshGameLinked()
 		}
+		s.refreshTogglePresetsLinked()
 		if lt := s.tools.liquidDialog; lt != nil && lt.viewer != nil {
 			lt.viewer.refreshGameLinked()
 		}

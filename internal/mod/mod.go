@@ -126,6 +126,9 @@ type Mod struct {
 	libraryMu            sync.Mutex
 	libraryIndexes       map[string]libraryIndex
 	libraryChanges       uint64
+	toggleState          ToggleState
+	// togglePresetMu serializes toggle preset changes, including a move to another store.
+	togglePresetMu sync.Mutex
 }
 
 func New() *Mod { return NewWithOptions(Options{}) }

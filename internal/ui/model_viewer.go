@@ -15,6 +15,7 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools"
@@ -130,6 +131,11 @@ type ModelViewer struct {
 	gamePreview      *tools.GamePreview
 	gamePreviewShown bool
 	previewVars      []string
+	// togglePresets are the mod's toggle presets for the Toggle menu, presetDraft the open save dialog, and
+	// applyingPreset set while a preset is being applied.
+	togglePresets  []mod.TogglePreset
+	presetDraft    *viewerPresetDraft
+	applyingPreset bool
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -151,6 +157,7 @@ func (s *Shell) NewModelViewer(path string) *ModelViewer {
 		toasts:      &s.toasts,
 	}
 	v.refreshGameLinked()
+	v.loadTogglePresets()
 	v.load()
 	return v
 }

@@ -1005,6 +1005,62 @@
           }
         }
       },
+      "toggle-presets": {
+        "menu": "トグルプリセット",
+        "manage": "プリセットを管理…",
+        "loading": "読み込み中…",
+        "title": "トグルプリセット",
+        "stored-in": "保存先",
+        "capture-game": "実行中のゲームから値を読み取ります。",
+        "capture-ini": "INI ファイルと d3dx_user.ini から値を読み取ります。",
+        "name-placeholder": "プリセット名",
+        "save-current": "現在の値を保存",
+        "empty": "プリセットがありません",
+        "delete-title": "プリセットを削除",
+        "delete-description": "「{{name}}」は完全に削除されます。",
+        "store": {
+          "metadata": "MOD フォルダー (nhd.json)",
+          "database": "アプリのデータベース",
+          "unset": "未選択",
+          "metadata-description": "MOD フォルダーの nhd.json に保存します。フォルダーの名前変更や移動後もプリセットは維持され、フォルダーの共有時にはプリセットも一緒に共有されます。",
+          "database-description": "アプリのデータベースに保存します。MOD フォルダーは変更しません。MOD フォルダーの名前を変更したり、フォルダーを移動したりすると、プリセットを見つけられなくなります。"
+        },
+        "store-chooser": {
+          "title": "トグルプリセットの保存先",
+          "description": "トグルプリセットの保存先を選択してください。後から設定で変更できます。"
+        },
+        "source": {
+          "game": "ゲーム",
+          "ini": "INI ファイル",
+          "mixed": "ゲームと INI ファイル",
+          "viewer": "モデルビューアー"
+        },
+        "migrate": {
+          "title": "トグルプリセットの保存先を変更",
+          "description": "すべてのトグルプリセットを {{from}} から {{to}} に移動します。",
+          "confirm": "移動",
+          "failed": "{{count}} 個の MOD のプリセットを移動できませんでした。保存先は変更されていません",
+          "done": "{{mods}} 個の MOD のプリセット {{moved}} 個を移動しました",
+          "warnings": "名前を変更したプリセット: {{renamed}} 個、フォルダーが見つからない MOD: {{orphaned}} 個、一致するフォルダーが複数ある MOD: {{ambiguous}} 個、以前の保存先からプリセットを削除できなかった MOD: {{leftover}} 個"
+        },
+        "toast": {
+          "saved": "プリセットを保存しました",
+          "saved-from": "取得元: {{source}}",
+          "applied": "プリセットを適用しました",
+          "applied-game": "INI ファイルに書き込み、実行中のゲームに適用しました",
+          "applied-files": "INI ファイルに書き込みました",
+          "no-changes": "INI ファイルには既に同じ値があります",
+          "missing-in-game": "ゲーム内で一部の変数が見つかりませんでした。MOD が読み込まれているか確認するか、ゲーム内で INI を再読み込みしてください",
+          "skipped": "INI ファイルまたは persist 変数の宣言が見つからないため、{{count}} 件の項目をスキップしました",
+          "unlinked-game": "アプリが実行中のゲームに接続されていません。ゲーム終了時に以前の値が保存される可能性があるため、ゲームを終了してからプリセットを再度適用してください",
+          "game-error": "ゲームへのプリセットの適用に失敗しました",
+          "duplicate-name": "同じ名前のプリセットが既に存在します",
+          "invalid-name": "プリセット名を入力してください",
+          "no-variables": "この MOD には persist 変数がありません",
+          "not-found": "プリセットが存在しません",
+          "failed": "トグルプリセットの操作に失敗しました"
+        }
+      },
       "empty_selection": "サイドバーからグループまたはキャラクターフォルダーを選択してください。",
       "no-preview": "プレビューなし",
       "previous-preview": "前のプレビュー画像",
@@ -1610,10 +1666,16 @@
           "reset": "リセット",
           "capture_set_preview": "キャプチャしてプレビューに設定",
           "save_to_ini": "INI に保存",
+          "save_as_preset": "プリセットとして保存",
+          "apply_preset": "プリセットを適用",
+          "no_presets": "プリセットなし",
           "apply_to_game": "ゲームに適用",
           "game_preview": "ホバーした値をゲームでプレビュー"
         },
         "dialog": {
+          "save_preset": {
+            "title": "プリセットとして保存"
+          },
           "overwrite_preview": {
             "title": "プレビューを置き換え",
             "description": "\"{{name}}\" には既にプレビューがあります。現在のビューアーのキャプチャで置き換えますか？",
@@ -2459,6 +2521,8 @@
           },
           "searchModPreview": "サブフォルダーからMODプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダーにプレビュー画像がない場合、MOD フォルダー内からプレビュー画像を検索します。",
+          "togglePresetStore": "トグルプリセットの保存先",
+          "togglePresetStoreDescription": "トグルプリセットの保存先です。変更すると既存のプリセットを移動します。",
           "autoInspectFix": "MODに必要な修正を自動検査",
           "autoInspectFixDescription": "新しくダウンロードまたは追加したMODをバックグラウンドで検査し、修正が推奨される場合に通知します。",
           "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",

@@ -186,9 +186,12 @@ func (v *ModelViewer) menuBar() *fairy.El {
 						Icon:    lucide.Save,
 						OnClick: v.saveTogglesToINI,
 					},
+				}
+				items = append(items, v.togglePresetMenuItems()...)
+				items = append(items, []kit.MenuItem{
 					{Separator: true},
 					{Label: T("page.tools.model_viewer.menu.reset"), Icon: lucide.RotateCcw, OnClick: v.resetToggles},
-				}
+				}...)
 				gamePreview := v.gamePreviewEnabled()
 				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
 					Label: T("page.tools.model_viewer.menu.game_preview"), Checkbox: true, Checked: gamePreview,
@@ -435,6 +438,7 @@ func (v *ModelViewer) requestPreviewCapture() {
 
 // dialogs shows the viewer's confirmations. Call it after the overlay that holds the viewer, so they show above it.
 func (v *ModelViewer) dialogs(cx *fairy.Cx) {
+	v.togglePresetDialogs(cx)
 	if !v.confirmPreview {
 		return
 	}

@@ -74,6 +74,7 @@ var (
 	sidebarLayoutModes        = []string{"row", "grid"}
 	disabledPrefixStyles      = []string{"space", "underscore"}
 	modCompressionMethods     = []string{"zstd", "xpress4k"}
+	togglePresetStores        = []string{TogglePresetStoreMetadata, TogglePresetStoreDatabase}
 	downloadSources           = []string{"gamebanana", "nahidaLive", "hui", "drive"}
 	driveNameSortPolicies     = []string{"natural_ignore_spacing", "natural"}
 	touchProfileLlmProtocols  = []string{"openai-response", "openai-compatible", "anthropic"}

@@ -611,6 +611,21 @@ func (s *Setting) SetCompressionEnabled(ctx context.Context, enabled bool) error
 	return s.Set(ctx, KeyModCompressionEnabled, enabled)
 }
 
+const (
+	TogglePresetStoreMetadata = "metadata"
+	TogglePresetStoreDatabase = "database"
+)
+
+// GetTogglePresetStore returns where toggle presets are stored, or "" before the user chooses.
+func (s *Setting) GetTogglePresetStore(ctx context.Context) (string, error) {
+	return s.getString(ctx, KeyModTogglePresetStore)
+}
+
+// SetTogglePresetStore records the store only. Moving presets between stores is the caller's job.
+func (s *Setting) SetTogglePresetStore(ctx context.Context, store string) error {
+	return s.Set(ctx, KeyModTogglePresetStore, store)
+}
+
 func (s *Setting) GetDownloadConcurrency(ctx context.Context) (int, error) {
 	return s.getInt(ctx, KeyTransferDownloadConcurrency)
 }

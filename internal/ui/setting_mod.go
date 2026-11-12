@@ -30,6 +30,7 @@ var modSettingKeys = []string{
 	setting.KeyModGridResponsiveBaseWidth,
 	setting.KeyModGridFixedCardWidth,
 	setting.KeyModGridFixedColumnCount,
+	setting.KeyModTogglePresetStore,
 }
 
 // downloadSources are the sources a download target can be resolved for, in the order the React screen used.
@@ -78,11 +79,23 @@ func (s *Shell) modSettings(windowWidth float32) *fairy.El {
 					kit.Label(T(management+"disabledPrefixStyle")))),
 			s.settingSwitch(setting.KeyModSearchModPreview, T(management+"searchModPreview"),
 				T(management+"searchModPreviewDescription")),
+			s.togglePresetStoreSetting(),
 			s.downloadTargetSettings(windowWidth),
 		),
 		settingsGroup(T("page.setting.mod.layout.title"), s.modLayoutSettings()...),
 		s.compressionSettings(),
 	)
+}
+
+// togglePresetStoreSetting changes the toggle preset store through the mod service, which moves the presets,
+// instead of writing the setting directly.
+func (s *Shell) togglePresetStoreSetting() *fairy.El {
+	const management = "page.setting.mod.mod_management."
+	current := s.stringSetting(setting.KeyModTogglePresetStore)
+	return settingRow(T(management+"togglePresetStore"), T(management+"togglePresetStoreDescription"),
+		kit.Select("settings."+setting.KeyModTogglePresetStore, current, togglePresetStoreItems(false),
+			func(store string) { s.changeTogglePresetStore(current, store, nil) },
+			kit.Placeholder(togglePresetStoreLabel("")), kit.Label(T(management+"togglePresetStore"))).W(220))
 }
 
 func (s *Shell) downloadTargetSettings(windowWidth float32) *fairy.El {

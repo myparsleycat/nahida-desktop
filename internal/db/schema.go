@@ -1,6 +1,6 @@
 package db
 
-const AppSchemaVersion = 10
+const AppSchemaVersion = 11
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
@@ -160,6 +160,32 @@ var TableSpecs = []TableSpec{
 				Columns:    []string{"preset_id"},
 				RefTable:   "mod_presets",
 				RefColumns: []string{"id"},
+				OnDelete:   FKCascade,
+				OnUpdate:   FKNoAction,
+			},
+		},
+	},
+	{
+		Name: "mod_toggle_presets",
+		Columns: []ColumnSpec{
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "game", Type: TypeText, NotNull: true},
+			{Name: "mod_key", Type: TypeText, NotNull: true},
+			{Name: "mod_name", Type: TypeText, NotNull: true},
+			{Name: "name", Type: TypeText, NotNull: true},
+			{Name: "source", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "inis", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("'{}'")},
+			{Name: "created_at", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+			{Name: "updated_at", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
+		},
+		Indexes: []IndexSpec{
+			{Name: "mod_toggle_presets_mod_name_idx", Columns: []string{"game", "mod_key", "name"}, Unique: true},
+		},
+		ForeignKeys: []ForeignKeySpec{
+			{
+				Columns:    []string{"game"},
+				RefTable:   "game_paths",
+				RefColumns: []string{"game"},
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
 			},
@@ -469,6 +495,20 @@ type ModPresetItemRow struct {
 	FolderName        string
 	IsEnabled         bool
 	ItemOrder         int64
+}
+
+// ModTogglePresetRow is a named set of persist variable values for one mod. INIs is the JSON object that maps
+// a mod-relative INI path to variable names and their values.
+type ModTogglePresetRow struct {
+	ID        string
+	Game      string
+	ModKey    string
+	ModName   string
+	Name      string
+	Source    string
+	INIs      string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type ModClassificationRow struct {

@@ -40,6 +40,7 @@ const (
 	KeyModCompressionMethod                = "mod.compressionMethod"
 	KeyModCompressionThresholdMib          = "mod.compressionThresholdMib"
 	KeyModCompressionEnabled               = "mod.compressionEnabled"
+	KeyModTogglePresetStore                = "mod.togglePresetStore"
 
 	KeyToolsTouchProfileLlmProtocol     = "tools.touchProfileLlmProtocol"
 	KeyToolsTouchProfileLlmEndpoint     = "tools.touchProfileLlmEndpoint"
@@ -146,6 +147,7 @@ var allDefinitions = []Definition{
 	{KeyModCompressionMethod, ScopeMod, "mod_compression_method"},
 	{KeyModCompressionThresholdMib, ScopeMod, "mod_compression_threshold_mib"},
 	{KeyModCompressionEnabled, ScopeMod, "mod_compression_enabled"},
+	{KeyModTogglePresetStore, ScopeMod, "mod_toggle_preset_store"},
 
 	{KeyToolsTouchProfileLlmProtocol, ScopeTools, "tools_touch_profile_llm_protocol"},
 	{KeyToolsTouchProfileLlmEndpoint, ScopeTools, "tools_touch_profile_llm_endpoint"},

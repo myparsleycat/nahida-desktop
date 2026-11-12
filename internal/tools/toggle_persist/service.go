@@ -25,6 +25,8 @@ type Service struct {
 	persistMu sync.Mutex
 	watchMu   sync.Mutex
 	persist   *persistEngine
+
+	liveReadFailures infra.DiagnosticThrottle
 }
 
 func New() *Service { return NewWithOptions(Options{}) }

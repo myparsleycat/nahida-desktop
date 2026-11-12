@@ -385,6 +385,7 @@ func newRuntime(host uiHost) *runtime {
 	rt.drive.UsePathSelector(rt.mod)
 	rt.mod.UseFixInspection(rt.tools.QueueFixInspections)
 	rt.drive.UseFixInspection(rt.tools.QueueFixInspections)
+	rt.mod.UseToggleState(rt.tools)
 	return rt
 }
 

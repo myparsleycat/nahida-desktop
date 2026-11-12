@@ -109,11 +109,15 @@ type modScreen struct {
 	pasteDraft  *pasteDraft
 	openPreset  *mod.Preset
 	presetDraft *presetDraft
-	extractAsks []extractAsk
-	downloadAsk *downloadAsk
-	gameDraft   *gameDraft
-	nteLaunch   *nteLaunchDraft
-	nteStarting bool
+	// togglePresets is the toggle preset dialog open on one mod.
+	togglePresets *togglePresetsDialog
+	// togglePresetMenus holds the toggle preset menus of the mod cards that were opened, by mod path.
+	togglePresetMenus map[string]*togglePresetMenu
+	extractAsks       []extractAsk
+	downloadAsk       *downloadAsk
+	gameDraft         *gameDraft
+	nteLaunch         *nteLaunchDraft
+	nteStarting       bool
 	// nteProgress is the last NTE bootstrap progress event, which adding or editing an NTE game shows.
 	nteProgress *mod.NteBootstrapProgress
 	urlDownload *urlDownloadDraft
@@ -142,23 +146,24 @@ type modScreen struct {
 
 func newModScreen() modScreen {
 	return modScreen{
-		subGroups:        map[string][]mod.FolderGroup{},
-		manualGroups:     map[string][]mod.FolderGroup{},
-		loadingSub:       map[string]bool{},
-		loadingManual:    map[string]bool{},
-		expanded:         map[string]bool{},
-		persistent:       map[string]bool{},
-		collapsed:        map[string]bool{},
-		iniShut:          map[string]bool{},
-		toggling:         map[string]string{},
-		exclusive:        map[string]bool{},
-		busyPaths:        map[string]bool{},
-		pendingEnable:    map[string]bool{},
-		stepping:         map[string]bool{},
-		mergeSelected:    map[string]bool{},
-		downloadResolved: map[string]bool{},
-		folderSort:       "name",
-		sortType:         "name",
+		subGroups:         map[string][]mod.FolderGroup{},
+		manualGroups:      map[string][]mod.FolderGroup{},
+		loadingSub:        map[string]bool{},
+		loadingManual:     map[string]bool{},
+		expanded:          map[string]bool{},
+		persistent:        map[string]bool{},
+		collapsed:         map[string]bool{},
+		iniShut:           map[string]bool{},
+		togglePresetMenus: map[string]*togglePresetMenu{},
+		toggling:          map[string]string{},
+		exclusive:         map[string]bool{},
+		busyPaths:         map[string]bool{},
+		pendingEnable:     map[string]bool{},
+		stepping:          map[string]bool{},
+		mergeSelected:     map[string]bool{},
+		downloadResolved:  map[string]bool{},
+		folderSort:        "name",
+		sortType:          "name",
 	}
 }
 

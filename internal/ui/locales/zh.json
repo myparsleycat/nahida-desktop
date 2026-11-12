@@ -1005,6 +1005,62 @@
           }
         }
       },
+      "toggle-presets": {
+        "menu": "切换状态预设",
+        "manage": "管理预设…",
+        "loading": "正在加载…",
+        "title": "切换状态预设",
+        "stored-in": "存储位置",
+        "capture-game": "从正在运行的游戏读取值。",
+        "capture-ini": "从 INI 文件和 d3dx_user.ini 读取值。",
+        "name-placeholder": "预设名称",
+        "save-current": "保存当前值",
+        "empty": "没有预设",
+        "delete-title": "删除预设",
+        "delete-description": "「{{name}}」将被永久删除。",
+        "store": {
+          "metadata": "模组文件夹 (nhd.json)",
+          "database": "应用数据库",
+          "unset": "未选择",
+          "metadata-description": "保存在模组文件夹的 nhd.json 中。重命名或移动文件夹后预设仍会保留，共享文件夹时也会一并共享预设。",
+          "database-description": "保存在应用数据库中。不会更改模组文件夹。重命名或移动模组文件夹后将找不到预设。"
+        },
+        "store-chooser": {
+          "title": "切换状态预设的存储位置",
+          "description": "选择切换状态预设的存储位置。之后可以在设置中更改。"
+        },
+        "source": {
+          "game": "游戏",
+          "ini": "INI 文件",
+          "mixed": "游戏和 INI 文件",
+          "viewer": "模型查看器"
+        },
+        "migrate": {
+          "title": "更改切换状态预设的存储位置",
+          "description": "将所有切换状态预设从{{from}}移动到{{to}}。",
+          "confirm": "移动",
+          "failed": "无法移动 {{count}} 个模组的预设。存储位置未更改",
+          "done": "已移动 {{mods}} 个模组的 {{moved}} 个预设",
+          "warnings": "已重命名的预设：{{renamed}} 个，找不到文件夹的模组：{{orphaned}} 个，匹配到多个文件夹的模组：{{ambiguous}} 个，未能从原存储位置删除预设的模组：{{leftover}} 个"
+        },
+        "toast": {
+          "saved": "预设已保存",
+          "saved-from": "来源: {{source}}",
+          "applied": "预设已应用",
+          "applied-game": "已写入 INI 文件并应用到正在运行的游戏",
+          "applied-files": "已写入 INI 文件",
+          "no-changes": "INI 文件中已是这些值",
+          "missing-in-game": "游戏中未找到部分变量。请确认模组已加载，或在游戏中重新加载 INI",
+          "skipped": "由于找不到 INI 文件或 persist 变量声明，已跳过 {{count}} 个条目",
+          "unlinked-game": "应用未连接到正在运行的游戏。游戏退出时可能会重新保存之前的值，请在关闭游戏后再次应用预设",
+          "game-error": "无法将预设应用到游戏",
+          "duplicate-name": "已存在同名预设",
+          "invalid-name": "请输入预设名称",
+          "no-variables": "此模组没有 persist 变量",
+          "not-found": "预设已不存在",
+          "failed": "切换状态预设操作失败"
+        }
+      },
       "empty_selection": "请从侧边栏选择群组或角色文件夹。",
       "no-preview": "无预览",
       "previous-preview": "上一张预览图片",
@@ -1610,10 +1666,16 @@
           "reset": "重置",
           "capture_set_preview": "捕获并设为预览",
           "save_to_ini": "保存到 INI",
+          "save_as_preset": "保存为预设",
+          "apply_preset": "应用预设",
+          "no_presets": "没有预设",
           "apply_to_game": "应用到游戏",
           "game_preview": "在游戏中预览悬停的值"
         },
         "dialog": {
+          "save_preset": {
+            "title": "保存为预设"
+          },
           "overwrite_preview": {
             "title": "替换预览",
             "description": "\"{{name}}\" 已有预览。要用当前查看器截图替换它吗？",
@@ -2459,6 +2521,8 @@
           },
           "searchModPreview": "在子文件夹中搜索模组预览",
           "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。",
+          "togglePresetStore": "切换状态预设的存储位置",
+          "togglePresetStoreDescription": "切换状态预设的存储位置。更改后会移动现有预设。",
           "autoInspectFix": "自动检查模组是否需要修复",
           "autoInspectFixDescription": "在后台检查新下载或添加的模组，并在建议修复时发出通知。",
           "autoResolveDownloadTarget": "自动选择下载目标文件夹",

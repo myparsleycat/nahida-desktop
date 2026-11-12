@@ -1008,6 +1008,62 @@
           }
         }
       },
+      "toggle-presets": {
+        "menu": "Toggle presets",
+        "manage": "Manage presets…",
+        "loading": "Loading…",
+        "title": "Toggle presets",
+        "stored-in": "Storage",
+        "capture-game": "Values are read from the running game.",
+        "capture-ini": "Values are read from the INI files and d3dx_user.ini.",
+        "name-placeholder": "Preset name",
+        "save-current": "Save current values",
+        "empty": "No presets",
+        "delete-title": "Delete preset",
+        "delete-description": "\"{{name}}\" will be deleted permanently.",
+        "store": {
+          "metadata": "Mod folder (nhd.json)",
+          "database": "App database",
+          "unset": "Not selected",
+          "metadata-description": "Stored in nhd.json in the mod folder. Presets stay with the folder when it is renamed or moved, and are shared along with it.",
+          "database-description": "Stored in the app database. Mod folders are not changed. Presets cannot be found after the mod folder is renamed or moved."
+        },
+        "store-chooser": {
+          "title": "Toggle preset storage",
+          "description": "Select where toggle presets are stored. You can change this later in Settings."
+        },
+        "source": {
+          "game": "Game",
+          "ini": "INI files",
+          "mixed": "Game and INI files",
+          "viewer": "Model Viewer"
+        },
+        "migrate": {
+          "title": "Change toggle preset storage",
+          "description": "All toggle presets are moved from {{from}} to {{to}}.",
+          "confirm": "Move",
+          "failed": "Failed to move presets. Affected mods: {{count}}. The storage location was not changed.",
+          "done": "Presets moved: {{moved}} · Mods: {{mods}}",
+          "warnings": "Renamed presets: {{renamed}}, mods with missing folders: {{orphaned}}, mods with multiple matching folders: {{ambiguous}}, mods whose presets could not be deleted from the previous storage location: {{leftover}}"
+        },
+        "toast": {
+          "saved": "Preset saved",
+          "saved-from": "Source: {{source}}",
+          "applied": "Preset applied",
+          "applied-game": "Written to the INI files and applied to the running game",
+          "applied-files": "Written to the INI files",
+          "no-changes": "The INI files already have these values",
+          "missing-in-game": "Some variables were not found in the game. Check that the mod is loaded, or reload the INI files in game",
+          "skipped": "Skipped entries: {{count}}. The INI files or persist variable declarations could not be found",
+          "unlinked-game": "The app is not connected to the running game. The game may save its previous values when it exits. Apply the preset again after closing the game",
+          "game-error": "Failed to apply the preset to the game",
+          "duplicate-name": "A preset with this name already exists",
+          "invalid-name": "Enter a preset name",
+          "no-variables": "This mod has no persist variables",
+          "not-found": "The preset no longer exists",
+          "failed": "Toggle preset operation failed"
+        }
+      },
       "empty_selection": "Please select a group or character folder from the sidebar.",
       "no-preview": "No Preview",
       "previous-preview": "Previous preview image",
@@ -1616,10 +1672,16 @@
           "toggle": "Toggle",
           "capture_set_preview": "Capture and set preview",
           "save_to_ini": "Save to INI",
+          "save_as_preset": "Save as preset",
+          "apply_preset": "Apply preset",
+          "no_presets": "No presets",
           "apply_to_game": "Apply to game",
           "game_preview": "Preview hovered values in game"
         },
         "dialog": {
+          "save_preset": {
+            "title": "Save as preset"
+          },
           "overwrite_preview": {
             "title": "Replace preview",
             "description": "\"{{name}}\" already has a preview. Continue to replace it with the current viewer capture?",
@@ -2465,6 +2527,8 @@
           },
           "searchModPreview": "Search Preview in Subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
+          "togglePresetStore": "Toggle preset storage",
+          "togglePresetStoreDescription": "Where toggle presets are stored. Changing it moves the existing presets.",
           "autoInspectFix": "Automatically inspect mods for required fixes",
           "autoInspectFixDescription": "Inspects newly downloaded or added mods in the background and notifies you if a fix is recommended.",
           "autoResolveDownloadTarget": "Automatically select download target folder",

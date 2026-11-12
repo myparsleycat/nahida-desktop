@@ -406,16 +406,24 @@ func (s *Shell) modMenuItems(info mod.ModInfo) []kit.MenuItem {
 	)
 }
 
-// modToolItems lists the tools that work on one mod.
+// modToolItems lists the tools that work on one mod. It carries toggle presets for the list view and a collapsed
+// INI list, which hide the card's preset button.
 func (s *Shell) modToolItems(info mod.ModInfo, nte bool) []kit.MenuItem {
 	if nte || s.deps.Tools == nil {
 		return nil
 	}
 	opening := s.modelViewerOpening(info.Path)
-	return append([]kit.MenuItem{{
+	items := append([]kit.MenuItem{{
 		Label: T("page.tools.model_viewer.title"), Icon: lucide.Box, Loading: opening, Disabled: opening,
 		OnClick: func() { s.openModelViewer(info.Path) },
 	}}, s.modFileToolItems(info)...)
+	if len(info.Inis) > 0 {
+		items = append(items, kit.MenuItem{
+			Label: T(togglePresetsPrefix + "menu"), Icon: lucide.SlidersHorizontal,
+			OnClick: func() { s.openTogglePresets(info) },
+		})
+	}
+	return items
 }
 
 // modFileToolItems lists the tools that work on one mod's files, which the context menu and the card's tools
@@ -908,6 +916,7 @@ func (s *Shell) showModDialogs(cx *fairy.Cx) {
 	s.pasteDialog(cx)
 	s.presetDialog(cx)
 	s.presetDraftDialog(cx)
+	s.togglePresetsDialog(cx)
 	s.classificationDialog(cx)
 	s.extractDialog(cx)
 	s.gameDialog(cx)
