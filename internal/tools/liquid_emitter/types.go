@@ -13,7 +13,7 @@ import (
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "43"
+	runtimeVersion    = "45"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
