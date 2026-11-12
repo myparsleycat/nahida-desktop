@@ -113,6 +113,10 @@ type Shell struct {
 	// modVideos and driveVideos play the preview videos of the mod and drive screens.
 	modVideos   previewVideos
 	driveVideos previewVideos
+	// previewImageFailures keeps the cache keys of mod preview images that failed to load, so each is logged once.
+	previewImageFailures map[string]bool
+	// deviceGen is the graphics device generation the last build saw, for logging a recreated device.
+	deviceGen uint64
 	// paths are the download location prompts waiting for an answer, oldest first.
 	paths []pathPrompt
 	// download is the mod manager download the user is choosing a folder for.

@@ -35,6 +35,21 @@ func (s *Shell) Closed() {
 	s.drive.videos.cancelAll()
 }
 
+// noteDeviceGeneration logs when fairy replaced a lost graphics device. Images and textures are uploaded again on
+// the new device, which fairy itself does not log unless the new device is a software one.
+func (s *Shell) noteDeviceGeneration() {
+	gen := fairy.DeviceGeneration()
+	if gen == 0 || gen == s.deviceGen {
+		return
+	}
+	if s.deviceGen != 0 {
+		s.deps.Log.Warn(map[string]any{
+			"operation": "graphics-device", "stage": "recreated", "generation": gen, "previousGeneration": s.deviceGen,
+		}, "Fairy")
+	}
+	s.deviceGen = gen
+}
+
 // View builds the main window.
 func (s *Shell) View(cx *fairy.Cx) *fairy.El {
 	dark := s.Dark()
@@ -49,6 +64,7 @@ func (s *Shell) View(cx *fairy.Cx) *fairy.El {
 	s.modVideos.sweep()
 	s.driveVideos.sweep()
 	s.drive.videos.sweep()
+	s.noteDeviceGeneration()
 
 	body := fairy.Row().WFull().Grow(1).MinH(0)
 	// The sign-in screen stands alone, as the React root left the sidebar out on /auth.

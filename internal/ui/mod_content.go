@@ -18,6 +18,7 @@ import (
 	"github.com/myparsleycat/fairy/svg"
 
 	"nahida.live/desktop/internal/agent"
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/mod/appliedtool"
 	"nahida.live/desktop/internal/platform"
@@ -83,16 +84,12 @@ func (s *Shell) previewThumb(path *string, version any, size, radius float32, fa
 		return fallback
 	}
 	file := *path
-	img := fairy.Images.Sized(
-		fmt.Sprint("mod:", file, ":", version),
-		size,
-		size,
-		fairy.FitCover,
-		func() ([]byte, error) {
-			return os.ReadFile(file)
-		},
-	)
+	key := fmt.Sprint("mod:", file, ":", version)
+	img := fairy.Images.Sized(key, size, size, fairy.FitCover, func() ([]byte, error) {
+		return os.ReadFile(file)
+	})
 	if img == nil {
+		_ = s.previewImageErr(key, file, size, size, fairy.FitCover)
 		return fallback
 	}
 	return fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitCover).Radius(radius)
@@ -686,7 +683,7 @@ func (s *Shell) previewImage(info mod.ModInfo, fallback *fairy.El) *fairy.El {
 	key, read := modPreviewSource(*info.Preview, info.Mtime)
 	img := fairy.Images.Sized(key, modPreviewMaxWidth, modCardHeight, fairy.FitContain, read)
 	if img == nil {
-		if fairy.Images.SizedErr(key, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
+		if s.previewImageErr(key, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
 			return fallback
 		}
 		return fairy.Spinner().Size(20, 20)
@@ -696,6 +693,28 @@ func (s *Shell) previewImage(info mod.ModInfo, fallback *fairy.El) *fairy.El {
 
 func modPreviewSource(file string, mtime float64) (string, func() ([]byte, error)) {
 	return fmt.Sprint("mod:", file, ":", mtime), func() ([]byte, error) { return os.ReadFile(file) }
+}
+
+// maxPreviewImageFailures bounds the logged keys kept; past it the set starts over and may log a key again.
+const maxPreviewImageFailures = 1024
+
+// previewImageErr returns the error of the failed fairy.Images.Sized load with these arguments and logs it the
+// first time it is seen. The cards only show a placeholder for it, so the log is the only trace of the cause.
+func (s *Shell) previewImageErr(key, path string, w, h float32, fit fairy.Fit) error {
+	err := fairy.Images.SizedErr(key, w, h, fit)
+	if err == nil || s.previewImageFailures[key] {
+		return err
+	}
+	if s.previewImageFailures == nil || len(s.previewImageFailures) >= maxPreviewImageFailures {
+		s.previewImageFailures = map[string]bool{}
+	}
+	s.previewImageFailures[key] = true
+	_ = infra.ReportError(s.deps.Log, err, "Mod.preview", infra.Diagnostic{
+		Severity:  infra.DiagnosticWarn,
+		Operation: "preview.image",
+		Fields:    map[string]any{"path": path, "width": w, "height": h, "deviceGeneration": fairy.DeviceGeneration()},
+	})
+	return err
 }
 
 func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {

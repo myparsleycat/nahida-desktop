@@ -283,7 +283,7 @@ func (s *Shell) modLightboxDialog(cx *fairy.Cx) {
 		switch {
 		case img != nil:
 			content = fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitContain).Label(info.Name)
-		case fairy.Images.SizedErr(key, windowW*0.8, windowH*0.8, fairy.FitContain) != nil:
+		case s.previewImageErr(key, file, windowW*0.8, windowH*0.8, fairy.FitContain) != nil:
 			content = fairy.Icon(lucide.ImageOff).Size(48, 48).Color(white)
 		default:
 			content = fairy.Spinner().Size(28, 28).Color(white)

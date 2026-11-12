@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 
 	"github.com/myparsleycat/fairy"
@@ -55,6 +57,7 @@ func Run(icon []byte) (runErr error) {
 	}
 	rt.logStartupMilestone("essential-ready")
 	useCrashOutput(rt.log, filepath.Join(paths.Logs, "crash.log"))
+	useStdLogOutput(rt.log)
 	startProfiler(rt.log)
 	// Handlers run on this goroutine inside fairy.Main, so a panic in the UI reaches here before the process ends.
 	defer reportPanic(rt.log)
@@ -338,6 +341,21 @@ func reportPanic(log *infra.Log) {
 		Fields:    map[string]any{"stackTrace": string(debug.Stack())},
 	})
 	panic(r)
+}
+
+// stdLogWriter passes lines of the standard log package to the application log.
+type stdLogWriter struct{ log *infra.Log }
+
+func (w stdLogWriter) Write(p []byte) (int, error) {
+	w.log.Warn(strings.TrimRight(string(p), "\r\n"), "StdLog")
+	return len(p), nil
+}
+
+// useStdLogOutput sends the standard log package to desktop.log. fairy reports renderer, device and image upload
+// failures only through it, and a windowsgui process has no console to show them.
+func useStdLogOutput(l *infra.Log) {
+	log.SetFlags(0)
+	log.SetOutput(stdLogWriter{log: l})
 }
 
 // useCrashOutput keeps the runtime's report of a fatal error on any goroutine in path, which desktop.log cannot
