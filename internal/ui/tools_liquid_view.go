@@ -162,7 +162,7 @@ func (lt *liquidTool) inspector() *fairy.El {
 	header := fairy.Row(
 		fairy.Text(T(liquidPrefix+"title")).FontSize(14).LineHeight(20).Medium().Grow(1).MinW(0).Ellipsis(),
 		kit.Button(T(liquidPrefix+"pick.toggle"), func() { lt.picking = !lt.picking }, pickVariant, kit.Small,
-			kit.Icon(lucideIcon("crosshair")), kit.IconInline, kit.Disabled(!lt.editable())),
+			kit.Icon(lucide.Crosshair), kit.IconInline, kit.Disabled(!lt.editable())),
 	).Gap(8).Align(fairy.Center).PadXY(16, 12)
 
 	sections := []*fairy.El{header}
@@ -333,7 +333,7 @@ func (lt *liquidTool) emitterSection() *fairy.El {
 		icon(lucide.Plus, "selection.new", !editable || busy || lt.atLimit() || (adding && anchor == nil),
 			func() { lt.selectEmitter(nil, nil) }),
 		icon(lucide.Undo2, "history.undo", !editable || lt.history.index == 0, func() { lt.step(-1) }),
-		icon(lucideIcon("redo-2"), "history.redo", !editable || lt.history.index >= len(lt.history.entries)-1,
+		icon(lucide.Redo2, "history.redo", !editable || lt.history.index >= len(lt.history.entries)-1,
 			func() { lt.step(1) }),
 	).Gap(2).Align(fairy.Center)
 	if len(emitters) > 0 {

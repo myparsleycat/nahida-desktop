@@ -22,11 +22,6 @@ const (
 	menuMakerINILineGuess = 20
 )
 
-// lucideIcon draws an icon of the full Lucide catalog, which has icons fairy's generated set leaves out.
-func lucideIcon(name string) *svg.Vector {
-	return menuMakerIconVector(menuMakerIcon{Kind: "lucide", Name: name})
-}
-
 func menuMakerUIColor(hex string, alpha int) fairy.Color {
 	c := menuMakerColor(hex, alpha)
 	return fairy.RGBA(c.R, c.G, c.B, float32(c.A)/255)
@@ -139,16 +134,16 @@ func (s *Shell) menuMakerHeader() *fairy.El {
 	}
 	header.Child(
 		menuMakerButtonGroup(true,
-			button(T(prefix+"choose_file"), lucideIcon("file-code"), s.menuMakerChooseFile, m.busy),
+			button(T(prefix+"choose_file"), lucide.FileCode, s.menuMakerChooseFile, m.busy),
 			button(T(prefix+"choose_folder"), lucide.FolderOpen, s.menuMakerChooseFolder, m.busy),
 		),
 		menuMakerButtonGroup(true,
-			button(T(prefix+"drafts"), lucideIcon("history"), func() { m.draftsOpen = true }, false),
+			button(T(prefix+"drafts"), lucide.History, func() { m.draftsOpen = true }, false),
 			button(T(prefix+"compare"), lucide.RefreshCw, func() { m.compareOpen = true }, empty),
 		),
 		menuMakerButtonGroup(true,
 			button("INI", lucide.Save, func() { s.menuMakerSave(false) }, empty || m.busy),
-			button("ZIP", lucideIcon("archive"), func() { s.menuMakerSave(true) }, empty || m.busy),
+			button("ZIP", lucide.Archive, func() { s.menuMakerSave(true) }, empty || m.busy),
 		),
 		kit.Button(T(prefix+"apply"), s.menuMakerApply, kit.Small, kit.Icon(lucide.Upload), kit.Loading(m.busy),
 			kit.Disabled(empty || m.busy || !m.sourceAvailable)),
@@ -511,7 +506,7 @@ func (s *Shell) menuMakerSidePanel(twoColumns bool) *fairy.El {
 	const prefix = "page.tools.menu_maker."
 	tabs := fairy.Row(menuMakerPanelButtons(m.sidePanel, []kit.Item{
 		{Value: "editor", Label: T(prefix + "editor"), Icon: lucide.Pencil},
-		{Value: "ini", Label: T(prefix + "ini_preview"), Icon: lucideIcon("file-code")},
+		{Value: "ini", Label: T(prefix + "ini_preview"), Icon: lucide.FileCode},
 	}, func(value string) {
 		m.sidePanel = value
 		if m.narrowPanel == "editor" || m.narrowPanel == "ini" {
@@ -562,10 +557,10 @@ func (s *Shell) menuMakerSlotEditor(twoColumns bool) *fairy.El {
 			{Value: "allKeys", Label: T(prefix + "merge_all_keys")},
 		}, func(v string) { m.mergeMode = v }, kit.Small, kit.Disabled(empty)).Label(T(prefix+"merge")),
 		menuMakerButtonGroup(true, kit.Button(T(prefix+"merge"), s.menuMakerMerge, kit.Outline, kit.Small,
-			kit.Icon(lucideIcon("merge")), kit.Disabled(len(m.selected) < 2)),
+			kit.Icon(lucide.Merge), kit.Disabled(len(m.selected) < 2)),
 			kit.Button(T(prefix+"skip"), func() {
 				s.menuMakerMapSelected(func(slot *menuMakerSlot) { slot.Skip = true })
-			}, kit.Outline, kit.Small, kit.Icon(lucideIcon("ban")), kit.Disabled(none)),
+			}, kit.Outline, kit.Small, kit.Icon(lucide.Ban), kit.Disabled(none)),
 			kit.Button(T(prefix+"reset"), func() {
 				s.menuMakerMapSelected(func(slot *menuMakerSlot) {
 					slot.Skip = false
@@ -580,7 +575,7 @@ func (s *Shell) menuMakerSlotEditor(twoColumns bool) *fairy.El {
 				s.menuMakerMapSelected(func(slot *menuMakerSlot) {
 					slot.Icon, slot.image = suggestMenuMakerIcon(slot.MenuMakerSlot), nil
 				})
-			}, kit.Outline, kit.Small, kit.Icon(lucideIcon("wand-sparkles")), kit.Disabled(none))),
+			}, kit.Outline, kit.Small, kit.Icon(lucide.WandSparkles), kit.Disabled(none))),
 	).Wrap().Gap(8).RowGap(8).Align(fairy.Center)
 
 	body := fairy.Col(toolbar).Gap(12).Pad(12)

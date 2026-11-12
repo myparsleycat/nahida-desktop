@@ -523,7 +523,7 @@ func (e *bodyShapeEditor) selectionButtons() *fairy.El {
 	return fairy.Col(
 		fairy.Row(
 			button("undo_selection", lucide.Undo2, e.undo, !e.history.CanUndo()),
-			button("redo_selection", lucideIcon("redo-2"), e.redo, !e.history.CanRedo()),
+			button("redo_selection", lucide.Redo2, e.redo, !e.history.CanRedo()),
 		).Gap(8),
 		fairy.Row(
 			button("grow_selection", lucide.Maximize2, edit((*sculpt.LoadedMesh).GrowSelection), noAdjacency),

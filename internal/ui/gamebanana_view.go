@@ -23,18 +23,6 @@ const (
 	gbScrollbarRoom float32 = 10
 )
 
-// Icons the generated Lucide set lacks, from lucide (ISC licence).
-const gbIconHead = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
-	`stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`
-
-var (
-	gbLogOutIcon = svg.Lazy(gbIconHead +
-		`<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>`)
-	gbKeyIcon = svg.Lazy(gbIconHead + `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 ` +
-		`1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 ` +
-		`0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>`)
-)
-
 func (s *Shell) gameBananaPage(cx *fairy.Cx) *fairy.El {
 	t := kit.T()
 	g := &s.gameBanana
@@ -218,7 +206,7 @@ func (s *Shell) gbToolbar() *fairy.El {
 	if status := g.session.data; status != nil && status.Authenticated {
 		right.Child(fairy.Text(status.Username).FontSize(12).LineHeight(16).Ellipsis().MaxW(160).H(32).PadXY(10, 0).
 			Center().Medium().Fill(t.Muted).BorderEdges(1, 1, 1, 0, t.Border))
-		right.Child(kit.Button("", func() { g.logoutConfirm = true }, kit.Outline, kit.Icon(gbLogOutIcon),
+		right.Child(kit.Button("", func() { g.logoutConfirm = true }, kit.Outline, kit.Icon(lucide.LogOut),
 			kit.Loading(g.loggingOut), kit.Disabled(g.loggingOut), kit.Tooltip(T("page.gamebanana.logout"))).
 			Label(T("page.gamebanana.logout")).Radii(0, t.RadiusLg(), t.RadiusLg(), 0).
 			BorderEdges(1, 1, 1, 0, groupBorder))
@@ -227,7 +215,7 @@ func (s *Shell) gbToolbar() *fairy.El {
 			kit.Icon(lucide.LogIn), kit.Loading(g.signingIn), kit.Disabled(g.signingIn),
 			kit.Tooltip(T("page.gamebanana.auth.guest_notice"))).Radius(0).
 			BorderEdges(1, 1, 1, 0, groupBorder))
-		right.Child(kit.Button("", s.gbOpenManualRMC, kit.Outline, kit.Icon(gbKeyIcon),
+		right.Child(kit.Button("", s.gbOpenManualRMC, kit.Outline, kit.Icon(lucide.KeyRound),
 			kit.Tooltip(T("page.gamebanana.auth.manual_rmc.button"))).
 			Label(T("page.gamebanana.auth.manual_rmc.button")).
 			Radii(0, t.RadiusLg(), t.RadiusLg(), 0).BorderEdges(1, 1, 1, 0, groupBorder))

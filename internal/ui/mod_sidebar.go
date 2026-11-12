@@ -393,7 +393,7 @@ func (s *Shell) folderMenu() *fairy.El {
 		})
 	}
 	classificationItems = append(classificationItems, kit.MenuItem{Separator: true}, kit.MenuItem{
-		Label: T("page.mod.character-sidebar.classification.manage"), Icon: lucideIcon("settings-2"),
+		Label: T("page.mod.character-sidebar.classification.manage"), Icon: lucide.Settings2,
 		Disabled: m.game == "", OnClick: s.openClassificationEditor,
 	})
 	items := []kit.MenuItem{

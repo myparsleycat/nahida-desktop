@@ -433,7 +433,7 @@ func (s *Shell) modFileToolItems(info mod.ModInfo) []kit.MenuItem {
 			OnClick: func() { s.openTextureResize(info) },
 		},
 		{
-			Label: T("page.tools.menu_maker.title"), Icon: lucideIcon("panels-top-left"),
+			Label: T("page.tools.menu_maker.title"), Icon: lucide.PanelsTopLeft,
 			OnClick: func() { s.openMenuMaker(info.Path, info.Name) },
 		},
 		{
@@ -458,7 +458,7 @@ func (s *Shell) modFileToolItems(info mod.ModInfo) []kit.MenuItem {
 		})
 	}
 	return append(items, kit.MenuItem{
-		Label: T("page.mod.context-menu.find-conflict"), Icon: lucideIcon("swords"),
+		Label: T("page.mod.context-menu.find-conflict"), Icon: lucide.Swords,
 		OnClick: func() { s.openConflictFinder(info) },
 	})
 }

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -13,88 +12,50 @@ import (
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/icons/lucide"
+	lucidecatalog "github.com/myparsleycat/fairy/icons/lucide/catalog"
 	"github.com/myparsleycat/fairy/kit"
 	"github.com/myparsleycat/fairy/svg"
 
 	"nahida.live/desktop/internal/tools/menumaker"
 )
 
-// icons.txt lists every lucide-react 1.64.0 icon as "name<TAB>svg body", or "alias<TAB>@name" for a renamed
-// icon, so that names stored by the React frontend keep resolving.
-//
-//go:embed assets/lucide/icons.txt
-var lucideCatalogText string
-
 const (
-	lucideHead = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
-		`stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`
 	menuMakerDefaultColor = "#ff4fb3"
 	lucideSearchLimit     = 80
 	iconifyCachedLimit    = 128
-	maxMenuMakerVectors   = 4096
+	maxIconifyVectors     = 4096
 )
 
-type lucideCatalog struct {
-	names  []string
-	bodies map[string]string
-}
-
-var lucideIcons = sync.OnceValue(func() lucideCatalog {
-	catalog := lucideCatalog{bodies: map[string]string{}}
-	aliases := map[string]string{}
-	for line := range strings.Lines(lucideCatalogText) {
-		name, body, ok := strings.Cut(strings.TrimRight(line, "\r\n"), "\t")
-		if !ok {
-			continue
-		}
-		catalog.names = append(catalog.names, name)
-		if target, alias := strings.CutPrefix(body, "@"); alias {
-			aliases[name] = target
-		} else {
-			catalog.bodies[name] = body
-		}
-	}
-	for alias, target := range aliases {
-		catalog.bodies[alias] = catalog.bodies[target]
-	}
-	return catalog
-})
-
-var menuMakerVectors = struct {
+var iconifyVectors = struct {
 	sync.Mutex
-	byKey map[string]*svg.Vector
-}{byKey: map[string]*svg.Vector{}}
+	bySVG map[string]*svg.Vector
+}{bySVG: map[string]*svg.Vector{}}
 
 // menuMakerIconVector returns the drawing of a Lucide or Iconify icon, or nil for an upload or an unknown name.
+// Lucide names stored by the React frontend include former names, which the catalog still resolves.
 // Asset rendering calls it off the UI thread.
 func menuMakerIconVector(icon menuMakerIcon) *svg.Vector {
-	var key, src string
 	switch icon.Kind {
 	case "lucide":
-		body, ok := lucideIcons().bodies[icon.Name]
-		if !ok {
-			return nil
-		}
-		key, src = "lucide:"+icon.Name, lucideHead+body+"</svg>"
+		return lucidecatalog.Lookup(icon.Name)
 	case "iconify":
 		if icon.SVG == "" {
 			return nil
 		}
-		key, src = "iconify:"+icon.SVG, icon.SVG
 	default:
 		return nil
 	}
 
-	menuMakerVectors.Lock()
-	defer menuMakerVectors.Unlock()
-	if v, ok := menuMakerVectors.byKey[key]; ok {
+	iconifyVectors.Lock()
+	defer iconifyVectors.Unlock()
+	if v, ok := iconifyVectors.bySVG[icon.SVG]; ok {
 		return v
 	}
-	if len(menuMakerVectors.byKey) >= maxMenuMakerVectors {
-		clear(menuMakerVectors.byKey)
+	if len(iconifyVectors.bySVG) >= maxIconifyVectors {
+		clear(iconifyVectors.bySVG)
 	}
-	v := svg.Lazy(src)
-	menuMakerVectors.byKey[key] = v
+	v := svg.Lazy(icon.SVG)
+	iconifyVectors.bySVG[icon.SVG] = v
 	return v
 }
 
@@ -160,7 +121,7 @@ func matchesWords(name string, words []string) bool {
 func searchLucideIcons(query string) []menuMakerIconResult {
 	words := searchWords(query)
 	var out []menuMakerIconResult
-	for _, name := range lucideIcons().names {
+	for name := range lucidecatalog.Names() {
 		if len(out) == lucideSearchLimit {
 			break
 		}
