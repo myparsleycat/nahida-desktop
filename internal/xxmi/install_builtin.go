@@ -148,13 +148,12 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if err := os.MkdirAll(filepath.Dir(cfg.ImporterFolder), 0o700); err != nil {
 		return err
 	}
-	transaction, err := beginImporterInstallTransaction(ctx, cfg.ImporterFolder, "", spec.key)
+	restoreAccess, releaseAccess := x.importerAccessRestorer(lease)
+	defer releaseAccess()
+	transaction, err := beginImporterInstallTransaction(ctx, cfg.ImporterFolder, "", spec.key, restoreAccess)
 	if err != nil {
 		return err
 	}
-	var releaseAccess func()
-	transaction.restoreAccess, releaseAccess = x.importerAccessRestorer(lease)
-	defer releaseAccess()
 	// The watch names cleanup stages apart from the failed one, which stays in stage for the error report.
 	defer func() {
 		watch.Stage("cleanup-transaction")

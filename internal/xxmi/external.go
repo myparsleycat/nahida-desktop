@@ -634,13 +634,12 @@ func (x *XXMI) installExternalImporterPackage(
 	defer x.externalConfigMu.Unlock()
 
 	stage = "recover-installation"
-	transaction, err := beginImporterInstallTransaction(ctx, importerFolder, configPath, spec.key)
+	restoreAccess, releaseAccess := x.importerAccessRestorer(nil)
+	defer releaseAccess()
+	transaction, err := beginImporterInstallTransaction(ctx, importerFolder, configPath, spec.key, restoreAccess)
 	if err != nil {
 		return err
 	}
-	var releaseAccess func()
-	transaction.restoreAccess, releaseAccess = x.importerAccessRestorer(nil)
-	defer releaseAccess()
 	defer func() { x.reportCleanup(transaction.Close(), "InstallImporterPackage") }()
 	config, _, err := parseAndValidateConfig(transaction.configRaw)
 	if err != nil {

@@ -210,7 +210,7 @@ func TestImporterInstallTransactionRecoversInterruptedConfigFailure(t *testing.T
 		t.Fatal(err)
 	}
 
-	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, configPath, "GIMI")
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, configPath, "GIMI", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestImporterInstallTransactionRecoversInterruptedConfigFailure(t *testing.T
 		t.Fatal(err)
 	}
 
-	recovered, err := beginImporterInstallTransaction(context.Background(), importerRoot, configPath, "GIMI")
+	recovered, err := beginImporterInstallTransaction(context.Background(), importerRoot, configPath, "GIMI", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestImporterInstallTransactionWithoutExternalConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(importerRoot, "marker.txt"), []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI")
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestImporterInstallTransactionRollbackRestoresMods(t *testing.T) {
 	}
 
 	transaction, err := beginImporterInstallTransaction(
-		context.Background(), importerRoot, filepath.Join(root, xxmiConfigName), "GIMI",
+		context.Background(), importerRoot, filepath.Join(root, xxmiConfigName), "GIMI", nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -473,7 +473,7 @@ func TestResolveUserFileFollowsLinkedFile(t *testing.T) {
 // commitTestImporterInstall runs a full install transaction without an external config.
 func commitTestImporterInstall(t *testing.T, importerRoot string, mutate func(*installRoot)) {
 	t.Helper()
-	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI")
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,11 +519,16 @@ func TestImporterInstallTransactionReportsFolderInUse(t *testing.T) {
 	}
 	defer func() { _ = held.Close() }()
 
-	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI")
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = transaction.Close() }()
+	restoreRequested := false
+	transaction.restoreAccess = func(context.Context, []string) error {
+		restoreRequested = true
+		return nil
+	}
 	stage, err := transaction.prepare(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -536,10 +541,225 @@ func TestImporterInstallTransactionReportsFolderInUse(t *testing.T) {
 		!strings.Contains(err.Error(), "XXMI_IMPORTER_FOLDER_IN_USE") {
 		t.Fatalf("commit over an open importer folder = %v", err)
 	}
+	if restoreRequested {
+		t.Fatal("an importer folder in use asked to restore its access")
+	}
 	if err := transaction.rollback(); err != nil {
 		t.Fatal(err)
 	}
 	assertFile(t, heldPath, "old")
+}
+
+func TestImporterInstallTransactionRestoresDeniedFolder(t *testing.T) {
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, outcome := range []string{"restored", "declined", "cancelled"} {
+		t.Run(outcome, func(t *testing.T) {
+			root := t.TempDir()
+			importerRoot := filepath.Join(root, "GIMI")
+			mods := filepath.Join(importerRoot, "Mods")
+			files := []string{filepath.Join(mods, "Mod", "mod.ini"), filepath.Join(importerRoot, "Core", "core.ini")}
+			for _, path := range files {
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The importer folder and its Mods folder deny this account DELETE, as on a drive carried over from
+			// another Windows installation. Neither parent grants delete-child: the importer folder's parent
+			// denies it, and the importer folder grants only Modify, like a folder inheriting a drive's defaults,
+			// so Mods stays denied after the importer folder is restored.
+			sid := "*" + current.Uid
+			commands := [][]string{
+				{importerRoot, "/inheritance:r", "/grant", sid + ":(OI)(CI)(M)"},
+				{importerRoot, "/deny", sid + ":(DE)"},
+				{mods, "/deny", sid + ":(DE)"},
+				{root, "/deny", sid + ":(DC)"},
+			}
+			for _, args := range commands {
+				if output, err := exec.Command("icacls", args...).CombinedOutput(); err != nil {
+					t.Skipf("filesystem cannot deny deletion: %v (%s)", err, output)
+				}
+				t.Cleanup(func() { _ = exec.Command("icacls", args[0], "/remove:d", sid).Run() })
+			}
+			if err := os.Rename(importerRoot, importerRoot+".probe"); err == nil {
+				_ = os.Rename(importerRoot+".probe", importerRoot)
+				t.Skip("filesystem does not enforce the delete denial")
+			}
+
+			transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = transaction.Close() }()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var requests [][]string
+			transaction.restoreAccess = func(ctx context.Context, paths []string) error {
+				requests = append(requests, paths)
+				switch outcome {
+				case "declined":
+					return errors.New("consent declined")
+				case "cancelled":
+					cancel()
+					return ctx.Err()
+				}
+				for _, path := range paths {
+					if output, err := exec.Command("icacls", path, "/remove:d", "*"+current.Uid).
+						CombinedOutput(); err != nil {
+						return fmt.Errorf("%w (%s)", err, output)
+					}
+				}
+				return nil
+			}
+			stage, err := transaction.prepare(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := stage.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			_, _, err = transaction.commit(ctx, nil)
+			want := [][]string{{importerRoot}, {filepath.Join(root, transaction.backupName, "Mods")}}
+			if outcome != "restored" {
+				want = want[:1]
+			}
+			if !slices.EqualFunc(requests, want, func(a, b []string) bool {
+				return slices.EqualFunc(a, b, platform.SamePathFold)
+			}) {
+				t.Fatalf("access requests = %v, want %v", requests, want)
+			}
+			switch outcome {
+			case "declined":
+				if want := "XXMI_IMPORTER_FOLDER_ACCESS_DENIED: " + importerRoot; err == nil ||
+					!strings.EqualFold(err.Error(), want) {
+					t.Fatalf("commit with access left denied = %v, want %q", err, want)
+				}
+			case "cancelled":
+				if !infra.IsCancellationError(err) || strings.Contains(err.Error(), "ACCESS_DENIED") {
+					t.Fatalf("commit cancelled during the restore = %v, want a cancellation", err)
+				}
+			default:
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := transaction.finish(); err != nil {
+					t.Fatal(err)
+				}
+				for _, path := range files {
+					assertFile(t, path, "old")
+				}
+				return
+			}
+			if err := transaction.rollback(); err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range files {
+				assertFile(t, path, "old")
+			}
+		})
+	}
+}
+
+// A replaced tree whose files keep permissions this account cannot delete with must not leave a committed
+// journal behind that fails every later installation.
+func TestImporterInstallTransactionRemovesUndeletableBackup(t *testing.T) {
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	t.Cleanup(func() { _ = exec.Command("icacls", root, "/reset", "/T", "/C", "/Q").Run() })
+	importerRoot := filepath.Join(root, "GIMI")
+	core := filepath.Join(importerRoot, "Core")
+	coreFile := filepath.Join(core, "core.ini")
+	if err := os.MkdirAll(core, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(coreFile, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Core grants Modify, which lacks delete-child, and its file denies DELETE.
+	sid := "*" + current.Uid
+	for _, args := range [][]string{
+		{core, "/inheritance:r", "/grant", sid + ":(OI)(CI)(M)"},
+		{coreFile, "/deny", sid + ":(DE)"},
+	} {
+		if output, err := exec.Command("icacls", args...).CombinedOutput(); err != nil {
+			t.Skipf("filesystem cannot deny deletion: %v (%s)", err, output)
+		}
+	}
+	if err := os.Remove(coreFile); err == nil {
+		t.Skip("filesystem does not enforce the delete denial")
+	}
+
+	transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "GIMI", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage, err := transaction.prepare(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := transaction.commit(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := transaction.finish(); err == nil {
+		t.Fatal("finish removed a backup this account cannot delete")
+	}
+	_ = transaction.Close()
+	backupFile := filepath.Join(root, transaction.backupName, "Core", "core.ini")
+
+	var requests [][]string
+	begin := func(accept bool) error {
+		recovered, err := beginImporterInstallTransaction(
+			context.Background(), importerRoot, "", "GIMI",
+			func(_ context.Context, paths []string) error {
+				requests = append(requests, paths)
+				if !accept {
+					return errors.New("consent declined")
+				}
+				for _, path := range paths {
+					if output, err := exec.Command("icacls", path, "/reset").CombinedOutput(); err != nil {
+						return fmt.Errorf("%w (%s)", err, output)
+					}
+				}
+				return nil
+			},
+		)
+		if err == nil {
+			_ = recovered.Close()
+		}
+		return err
+	}
+	if err := begin(false); err == nil ||
+		!strings.Contains(
+			strings.ToLower(err.Error()),
+			strings.ToLower("XXMI_IMPORTER_FOLDER_ACCESS_DENIED: "+backupFile),
+		) {
+		t.Fatalf("recovery with access left denied = %v, want the denied backup file named", err)
+	}
+	if err := begin(true); err != nil {
+		t.Fatalf("recovery with access restored = %v", err)
+	}
+	want := [][]string{{backupFile}, {backupFile}}
+	if !slices.EqualFunc(requests, want, func(a, b []string) bool {
+		return slices.EqualFunc(a, b, platform.SamePathFold)
+	}) {
+		t.Fatalf("access requests = %v, want %v", requests, want)
+	}
+	if _, err := os.Lstat(filepath.Join(root, transaction.backupName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("backup after recovery: %v", err)
+	}
+	assertFile(t, coreFile, "old")
 }
 
 func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
@@ -574,7 +794,7 @@ func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
 				t.Skip("filesystem does not enforce the read denial")
 			}
 
-			transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "ZZMI")
+			transaction, err := beginImporterInstallTransaction(context.Background(), importerRoot, "", "ZZMI", nil)
 			if err != nil {
 				t.Fatal(err)
 			}

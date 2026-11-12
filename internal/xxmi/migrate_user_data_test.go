@@ -44,7 +44,7 @@ func TestImportExternalLauncherSuspendsWatchersUntilCommitOrRollback(t *testing.
 			service.installImporter = func(
 				ctx context.Context, _ importerPackageSpec, cfg ImporterConfig, _ InstallImporterPackageInput,
 			) error {
-				transaction, err := beginImporterInstallTransaction(ctx, cfg.ImporterFolder, "", "GIMI")
+				transaction, err := beginImporterInstallTransaction(ctx, cfg.ImporterFolder, "", "GIMI", nil)
 				if err != nil {
 					return err
 				}

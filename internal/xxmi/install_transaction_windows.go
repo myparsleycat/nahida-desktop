@@ -60,6 +60,7 @@ func beginImporterInstallTransaction(
 	importerFolder string,
 	configPath string,
 	importerKey string,
+	restoreAccess func(context.Context, []string) error,
 ) (*importerInstallTransaction, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -109,6 +110,8 @@ func beginImporterInstallTransaction(
 		journalName:  prefix + ".json",
 		configBackup: prefix + ".config-backup",
 		configName:   filepath.Base(configAbsolute),
+		// Recovery may have to remove a replaced tree this account cannot delete.
+		restoreAccess: restoreAccess,
 	}
 	if err := transaction.recoverInterrupted(); err != nil {
 		_ = transaction.Close()
@@ -392,7 +395,11 @@ func (t *importerInstallTransaction) movePreserved(ctx context.Context) error {
 			}
 		}
 
-		if err := t.parent.root.Rename(from, to); err != nil {
+		// The backup goes back to the live name on rollback, so an error names the entry there.
+		reported := filepath.Join(t.parent.path, t.liveName, name)
+		if err := t.renameRestoringAccess(ctx, from, reported, func() error {
+			return t.parent.root.Rename(from, to)
+		}); err != nil {
 			return fmt.Errorf("move preserved %s: %w", name, err)
 		}
 	}
@@ -443,15 +450,8 @@ func (t *importerInstallTransaction) commit(
 	}
 
 	if t.hadLive {
-		currentLive, err := t.parent.childInfo(t.liveName)
-		if err != nil {
+		if err := t.backUpLive(ctx); err != nil {
 			return nil, parsedConfig{}, err
-		}
-		if !os.SameFile(t.liveIdentity, currentLive) {
-			return nil, parsedConfig{}, errors.New("importer folder identity changed before replacement")
-		}
-		if err := t.parent.renameChild(t.liveName, t.backupName); err != nil {
-			return nil, parsedConfig{}, importerFolderInUseError(err)
 		}
 	}
 	if err := t.writeJournal(context.Background(), installStateTreeBackedUp); err != nil {
@@ -494,6 +494,79 @@ func (t *importerInstallTransaction) commit(
 	return loaded, parsed, nil
 }
 
+func (t *importerInstallTransaction) backUpLive(ctx context.Context) error {
+	return t.renameRestoringAccess(ctx, t.liveName, filepath.Join(t.parent.path, t.liveName), func() error {
+		currentLive, err := t.parent.childInfo(t.liveName)
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(t.liveIdentity, currentLive) {
+			return errors.New("importer folder identity changed before replacement")
+		}
+		return t.parent.renameChild(t.liveName, t.backupName)
+	})
+}
+
+// renameRestoringAccess runs rename, which moves the entry at relative below the parent. A rename refused by
+// the entry's own permissions rather than by a file open below it has them restored once and runs again; the
+// restore is skipped for a link, which it refuses. Errors name the entry as reported.
+func (t *importerInstallTransaction) renameRestoringAccess(
+	ctx context.Context, relative, reported string, rename func() error,
+) error {
+	err := rename()
+	if err == nil {
+		return nil
+	}
+	path := filepath.Join(t.parent.path, relative)
+	if info, statErr := t.parent.root.Lstat(relative); statErr != nil || isInstallReparsePoint(info) ||
+		!errors.Is(err, windows.ERROR_ACCESS_DENIED) || !deleteAccessDenied(path) {
+		return importerFolderInUseError(err)
+	}
+
+	if t.restoreAccess == nil {
+		return importerFolderAccessDeniedError(reported, err)
+	}
+	if restoreErr := t.restoreAccess(ctx, []string{path}); restoreErr != nil {
+		if ctx.Err() != nil || infra.IsCancellationError(restoreErr) {
+			return cmp.Or(ctx.Err(), restoreErr)
+		}
+		return infra.WithCause(importerFolderAccessDeniedError(reported, err), restoreErr)
+	}
+
+	// Restored permissions inherit from the parent, which may itself still refuse the rename.
+	err = rename()
+	if err != nil && errors.Is(err, windows.ERROR_ACCESS_DENIED) && deleteAccessDenied(path) {
+		return importerFolderAccessDeniedError(reported, err)
+	}
+	return importerFolderInUseError(err)
+}
+
+// deleteAccessDenied reports whether the folder's permissions refuse this account DELETE. Opening for DELETE
+// is checked against the folder and its parent only, so unlike a rename it still succeeds while a file below
+// the folder is open.
+func deleteAccessDenied(path string) bool {
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return false
+	}
+	handle, err := windows.CreateFile(
+		name, windows.DELETE,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0,
+	)
+	if err != nil {
+		return errors.Is(err, windows.ERROR_ACCESS_DENIED)
+	}
+	_ = windows.CloseHandle(handle)
+	return false
+}
+
+// importerFolderAccessDeniedError names an importer folder this account may not move, once restoring its
+// permissions failed or was declined.
+func importerFolderAccessDeniedError(path string, err error) error {
+	return infra.WithCause(fmt.Errorf("XXMI_IMPORTER_FOLDER_ACCESS_DENIED: %s", path), err)
+}
+
 // importerFolderInUseError names a denied importer folder swap. Windows refuses to rename a directory while any
 // file below it is open and reports that as an access error, which otherwise reads like a permission problem.
 func importerFolderInUseError(err error) error {
@@ -511,12 +584,86 @@ func (t *importerInstallTransaction) rollback() error {
 func (t *importerInstallTransaction) finish() error {
 	var result error
 	for _, name := range []string{t.backupName, t.stageName, t.configBackup} {
-		result = errors.Join(result, t.parent.removeAll(name))
+		result = errors.Join(result, t.removeRestoringAccess(context.Background(), name))
 	}
 	if result != nil {
 		return result
 	}
 	return t.parent.removeAll(t.journalName)
+}
+
+// removeRestoringAccess removes the parent's child name. Entries left behind because this account may not
+// delete them, such as a replaced tree whose files kept another account's permissions, have their access
+// restored and the removal runs again. A restore can expose entries that inherited delete access from a
+// folder it changed, so rounds repeat until no new denied entry is found.
+func (t *importerInstallTransaction) removeRestoringAccess(ctx context.Context, name string) error {
+	err := t.parent.removeAll(name)
+	if err == nil || t.restoreAccess == nil || !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+
+	restored := map[string]bool{}
+	for {
+		denied, scanErr := undeletableInstallEntries(ctx, filepath.Join(t.parent.path, name))
+		if scanErr != nil {
+			return infra.WithCause(err, scanErr)
+		}
+		denied = slices.DeleteFunc(denied, func(path string) bool { return restored[path] })
+		if len(denied) == 0 {
+			return importerFolderInUseError(err)
+		}
+		if restoreErr := t.restoreAccess(ctx, denied); restoreErr != nil {
+			if ctx.Err() != nil || infra.IsCancellationError(restoreErr) {
+				return cmp.Or(ctx.Err(), restoreErr)
+			}
+			return infra.WithCause(importerFolderAccessDeniedError(denied[0], err), restoreErr)
+		}
+		for _, path := range denied {
+			restored[path] = true
+		}
+		if err = t.parent.removeAll(name); err == nil || !errors.Is(err, fs.ErrPermission) {
+			return err
+		}
+	}
+}
+
+// undeletableInstallEntries lists, parents first, the entries at and below root that this account may not
+// delete and the folders it may not list. Links are left out: removal deletes the link, not its target.
+func undeletableInstallEntries(ctx context.Context, root string) ([]string, error) {
+	var denied []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			if entry == nil || !errors.Is(walkErr, fs.ErrPermission) {
+				return walkErr
+			}
+			// A folder that cannot be listed is reported again after its own visit.
+			if !slices.Contains(denied, path) {
+				denied = append(denied, path)
+			}
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if isInstallReparsePoint(info) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if deleteAccessDenied(path) {
+			denied = append(denied, path)
+		}
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return denied, nil
+	}
+	return denied, err
 }
 
 func (t *importerInstallTransaction) recoverInterrupted() error {
