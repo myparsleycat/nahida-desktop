@@ -78,7 +78,7 @@ func (s *Shell) View(cx *fairy.Cx) *fairy.El {
 	if cx.Window().Backdrop() == fairy.BackdropNone {
 		root.Fill(t.Background)
 	}
-	s.offerUpdate()
+	s.offerUpdateOnRouteChange()
 	s.showPathPrompt(cx)
 	s.showConfirm(cx)
 	cx.Overlay(s.toasts.View(), nil)

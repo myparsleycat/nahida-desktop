@@ -88,9 +88,14 @@ type Shell struct {
 	themeChoice string
 	dark        bool
 
-	updater        infra.UpdaterStatus
-	updateOffered  bool
-	updateBusy     bool
+	updater       infra.UpdaterStatus
+	updateOffered bool
+	// updateDismissing holds the prompt after Later until a status without it arrives, so a status read before
+	// the dismissal reached the backend does not offer the update again.
+	updateDismissing bool
+	updateBusy       bool
+	// offeredRoute is the route the update offer last saw, so leaving the sign-in screen offers a held update.
+	offeredRoute   Route
 	transfer       *transfer.WindowProgress
 	backend        infra.BackendStatus
 	session        *auth.Session
@@ -467,6 +472,9 @@ func (s *Shell) setSession(session *auth.Session, hasToken bool) {
 func (s *Shell) setUpdater(status infra.UpdaterStatus) {
 	s.updater = status
 	s.observeUpdateCheck(status)
+	if !status.ShouldPromptForUpdate {
+		s.updateDismissing = false
+	}
 	if !status.UpdateDownloaded {
 		s.updateOffered = false
 		return
@@ -474,11 +482,21 @@ func (s *Shell) setUpdater(status infra.UpdaterStatus) {
 	s.offerUpdate()
 }
 
+// offerUpdateOnRouteChange offers a held update once the sign-in screen is left. View calls it every frame
+// because the router has no change notification.
+func (s *Shell) offerUpdateOnRouteChange() {
+	if route := s.router.Current(); route != s.offeredRoute {
+		s.offeredRoute = route
+		s.offerUpdate()
+	}
+}
+
 // offerUpdate asks about a downloaded update the backend wants prompted. The sign-in screen holds it until the
 // user leaves, as the React root rendered the update dialog outside /auth only.
 func (s *Shell) offerUpdate() {
 	status := s.updater
-	if status.UpdateDownloaded && status.ShouldPromptForUpdate && !s.updateOffered && s.router.Current() != RouteAuth {
+	if status.UpdateDownloaded && status.ShouldPromptForUpdate && !s.updateOffered && !s.updateDismissing &&
+		s.router.Current() != RouteAuth {
 		s.promptUpdate()
 	}
 }

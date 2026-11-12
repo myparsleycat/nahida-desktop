@@ -165,7 +165,7 @@ func (s *Shell) promptUpdate() {
 		},
 		OnResult: func(confirmed bool) {
 			if !confirmed {
-				s.updateOffered = false
+				s.updateOffered, s.updateDismissing = false, true
 				go s.deps.Updater.DismissUpdateDialog()
 			}
 		},
