@@ -617,9 +617,10 @@ func (s *Shell) wuwaOptionsDialog(cx *fairy.Cx, w *wuwaFixer, close func()) {
 		body.Child(s.wuwaOptions(w))
 	}
 	kit.ShowDialog(cx, kit.DialogProps{
-		Title: T(wuwaPrefix + "options.title"),
-		Body:  body,
-		Width: 576,
+		Title:   T(wuwaPrefix + "options.title"),
+		Body:    body,
+		BodyKey: "mod.wuwa-options." + w.tab,
+		Width:   576,
 		Actions: []*fairy.El{
 			kit.Button(T("g.cancel"), close, kit.Outline),
 			kit.Button(T(wuwaPrefix+"options.run"), func() { s.runWuwaFixer(w) },
@@ -706,7 +707,7 @@ func (s *Shell) wuwaOptions(w *wuwaFixer) *fairy.El {
 				o.AeroFix = "1"
 			}
 		}, aeroExtra...),
-	).Gap(12).MaxH(440).ScrollY()
+	).Gap(12)
 }
 
 func (s *Shell) wuwaRollback(w *wuwaFixer) *fairy.El {
@@ -746,7 +747,7 @@ func (s *Shell) wuwaRollback(w *wuwaFixer) *fairy.El {
 		HoverFill(t.Muted.Alpha(0.5)).HoverColor(t.Foreground).Animate(motion.Fast).Cursor(fairy.CursorPointer).
 		Role(fairy.RoleButton).
 		Label(T(p + "advanced")).Expanded(w.advanced).OnClick(func() { w.advanced = !w.advanced })
-	col := fairy.Col(head, fairy.Col(list).MaxH(360).ScrollY(), kit.Separator(), advancedLabel).Gap(12)
+	col := fairy.Col(head, list, kit.Separator(), advancedLabel).Gap(12)
 	if w.advanced {
 		col.Child(s.wuwaAdvanced(w))
 	}
@@ -1142,6 +1143,7 @@ func (s *Shell) zzmiDialogs(cx *fairy.Cx) {
 		TitleLead:   fairy.ImageEl(modFixerImage("zzmi", 28)).Fit(fairy.FitContain).Size(28, 28).Radius(4),
 		Description: r.modPath,
 		Body:        body,
+		BodyKey:     "mod.zzmi-fixer." + z.tab,
 		Width:       720,
 		OnClose:     func() { r.zzmi = nil },
 		Key:         "mod.zzmi-fixer",
@@ -1217,7 +1219,7 @@ func (s *Shell) zzmiRollback(z *zzmiFixer) *fairy.El {
 			entries,
 		).Gap(12).Pad(12).Radius(8).Fill(t.Muted.Alpha(0.5)))
 	}
-	return fairy.Col(head, fairy.Col(list).H(380).ScrollY()).Gap(12)
+	return fairy.Col(head, list).Gap(12)
 }
 
 func formatSessionTime(value string) string {

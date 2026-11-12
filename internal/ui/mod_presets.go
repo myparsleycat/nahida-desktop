@@ -109,18 +109,16 @@ func (s *Shell) presetDialog(cx *fairy.Cx) {
 			m.openPreset = nil
 		}
 	}
-	footer := fairy.Row(
-		kit.Button(T("g.delete"), func() { s.deletePreset(*preset) }, kit.Destructive, kit.Disabled(m.presetBusy)).
-			AutoFocus(),
-		fairy.Row(
+	kit.ShowDialog(cx, kit.DialogProps{
+		Title: preset.Name,
+		Body:  body,
+		LeadingActions: []*fairy.El{
+			kit.Button(T("g.delete"), func() { s.deletePreset(*preset) }, kit.Destructive, kit.Disabled(m.presetBusy)),
+		},
+		Actions: []*fairy.El{
 			kit.Button(T("g.cancel"), close, kit.Outline),
 			kit.Button(T("g.apply"), func() { s.applyPreset(*preset) }, kit.Disabled(preset.IsLegacy || m.presetBusy)),
-		).Gap(8),
-	).Justify(fairy.JustifyBetween).Gap(8).Pad(16).MarginEdges(0, -16, -16, -16).
-		BorderEdges(1, 0, 0, 0, t.Border).Fill(t.Muted.Alpha(0.5)).Radii(0, 0, t.RadiusXl(), t.RadiusXl())
-	kit.ShowDialog(cx, kit.DialogProps{
-		Title:   preset.Name,
-		Body:    fairy.Col(body, footer).Gap(16),
+		},
 		OnClose: close,
 		Key:     "mod.preset",
 	})
