@@ -55,15 +55,24 @@ func fallbackFamilies(locale string) []string {
 // Theme returns the kit theme, whose tokens are the React frontend's shadcn/ui tokens. Background is the
 // window frame behind the title bar and navigation, Card the page area. With blur, popups are bg-popover/50
 // over backdrop-blur-lg, as before the Mica backdrop; dialog scrims stay unblurred so only the dialog blurs.
+// The light theme uses bg-popover/75 over a bg-black/20 scrim instead: a half-white dialog over the default
+// scrim turns mid-grey, where muted text loses contrast and input borders show lighter than the panel.
 func Theme(dark, blur bool, font string) kit.Theme {
 	t := kit.Dark()
 	if !dark {
 		t = kit.Light()
+		// Translucent black matches #e5e5e5 on white but stays darker than a tinted or blurred surface, where the
+		// opaque token reads as a white outline; the dark theme's borders are translucent white for the same reason.
+		t.Border, t.Input = fairy.RGBA(0, 0, 0, 0.1), fairy.RGBA(0, 0, 0, 0.1)
 	}
 	t.Font = font
 	t.DialogTopInset = titleBarHeight
 	if blur {
 		t.SurfaceBlur, t.SurfaceAlpha = 16, 0.5
+		if !dark {
+			t.SurfaceAlpha = 0.75
+			t.Scrim = fairy.RGBA(0, 0, 0, 0.2)
+		}
 	}
 	return t
 }
