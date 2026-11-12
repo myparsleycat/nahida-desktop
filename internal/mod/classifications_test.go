@@ -220,7 +220,7 @@ func TestCharacterClassificationFollowsRenamedFolder(t *testing.T) {
 	if len(got["Diluc Ragnvindr"]) != 1 || got["Diluc Ragnvindr"][element.ID] != pyro || got["Furina"] != nil {
 		t.Fatalf("classifications after clear = %#v", got)
 	}
-	if raw, err := metadata.Read(furina); err != nil || string(raw) != `{"preview":"cover.png"}` {
+	if raw, err := metadata.Read(furina); err != nil || string(raw) != "{\n  \"preview\": \"cover.png\"\n}" {
 		t.Fatalf("metadata after clear = %s, err = %v", raw, err)
 	}
 }

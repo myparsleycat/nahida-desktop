@@ -107,12 +107,16 @@ func TestSetDefaultPreviewPreservesMetadataAndRejectsInvalidPaths(t *testing.T) 
 	if err := metadata.Initialize(modPath, original); err != nil {
 		t.Fatal(err)
 	}
+	initialized, err := metadata.Read(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, path := range []string{texture, other, filepath.Join(modPath, "missing.jpg")} {
 		if err := service.SetDefaultPreview(ctx, modPath, path); err == nil {
 			t.Fatalf("accepted invalid image %s", path)
 		}
 	}
-	if raw, err := metadata.Read(modPath); err != nil || string(raw) != string(original) {
+	if raw, err := metadata.Read(modPath); err != nil || string(raw) != string(initialized) {
 		t.Fatalf("metadata after rejected selection = %s, %v", raw, err)
 	}
 	if err := service.SetDefaultPreview(ctx, modPath, cover); err != nil {
@@ -127,7 +131,7 @@ func TestSetDefaultPreviewPreservesMetadataAndRejectsInvalidPaths(t *testing.T) 
 		t.Fatal(err)
 	}
 	if string(fields["id"]) != `"download"` || string(fields["number"]) != `1234567890123456789` ||
-		string(fields["nested"]) != `{"keep":true}` {
+		string(fields["nested"]) != "{\n    \"keep\": true\n  }" {
 		t.Fatalf("lost metadata fields: %s", raw)
 	}
 	if err := metadata.Write(modPath, []byte("{")); err == nil {

@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,8 +32,9 @@ type backup struct {
 // Initialize creates nhd.json only if it does not already exist.
 // The caller supplies the complete JSON contents.
 func Initialize(modPath string, data []byte) error {
-	if !json.Valid(data) {
-		return errors.New("invalid mod metadata JSON")
+	data, err := indent(data)
+	if err != nil {
+		return err
 	}
 	release, err := reserve(modPath)
 	if err != nil {
@@ -162,14 +164,17 @@ func UpdateBatch(dirs []string, change func(string, []byte) ([]byte, bool, error
 // writeBatch runs with every affected directory reserved by the caller.
 func writeBatch(entries []WriteEntry, reports ...func(error)) error {
 	dirs := make([]string, 0, len(entries))
+	contents := make([][]byte, 0, len(entries))
 	for _, entry := range entries {
-		if !json.Valid(entry.Data) {
-			return errors.New("invalid mod metadata JSON")
+		data, err := indent(entry.Data)
+		if err != nil {
+			return err
 		}
 		if err := requireDirectory(entry.Dir); err != nil {
 			return err
 		}
 		dirs = append(dirs, entry.Dir)
+		contents = append(contents, data)
 	}
 
 	backups, err := backupFiles(dirs)
@@ -184,7 +189,7 @@ func writeBatch(entries []WriteEntry, reports ...func(error)) error {
 			err = os.Chmod(file.metadataPath, 0o644)
 		}
 		if err == nil {
-			err = platform.WriteFileAtomic(file.metadataPath, entries[i].Data, 0o644, reports...)
+			err = platform.WriteFileAtomic(file.metadataPath, contents[i], 0o644, reports...)
 		}
 		if err == nil {
 			err = hideFile(file.metadataPath)
@@ -209,6 +214,15 @@ func writeBatch(entries []WriteEntry, reports ...func(error)) error {
 		}
 	}
 	return nil
+}
+
+// indent reformats bytes rather than re-encoding a decoded value, so key order and number precision survive.
+func indent(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, bytes.TrimSpace(data), "", "  "); err != nil {
+		return nil, fmt.Errorf("invalid mod metadata JSON: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 func requireDirectory(dir string) error {

@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -20,9 +21,18 @@ func TestInitialize(t *testing.T) {
 		t.Fatalf("initialize existing metadata = %v, want os.ErrExist", err)
 	}
 	raw, err := Read(dir)
-	if err != nil || string(raw) != string(original) {
+	want := "{\n  \"id\": \"first\",\n  \"feature\": {\n    \"enabled\": true\n  }\n}"
+	if err != nil || string(raw) != want {
 		t.Fatalf("read initialized metadata = %q, %v", raw, err)
 	}
+}
+
+func compactJSON(raw []byte) string {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return string(raw)
+	}
+	return buf.String()
 }
 
 func TestReadMissing(t *testing.T) {
@@ -41,7 +51,7 @@ func TestWriteReplacesContents(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, err := Read(dir)
-	if err != nil || string(raw) != string(updated) {
+	if err != nil || compactJSON(raw) != compactJSON(updated) {
 		t.Fatalf("read written metadata = %q, %v", raw, err)
 	}
 	if matches, err := filepath.Glob(filepath.Join(dir, "nhd.json.backup-*")); err != nil || len(matches) != 0 {
@@ -62,7 +72,7 @@ func TestWriteReplacesReadOnlyFile(t *testing.T) {
 		t.Fatalf("write read-only metadata: %v", err)
 	}
 	raw, err := Read(dir)
-	if err != nil || string(raw) != string(updated) {
+	if err != nil || compactJSON(raw) != compactJSON(updated) {
 		t.Fatalf("read written metadata = %q, %v", raw, err)
 	}
 }
@@ -77,7 +87,7 @@ func TestWriteRejectsInvalidJSONWithoutChangingFile(t *testing.T) {
 		t.Fatal("invalid JSON was accepted")
 	}
 	raw, err := Read(dir)
-	if err != nil || string(raw) != string(original) {
+	if err != nil || compactJSON(raw) != string(original) {
 		t.Fatalf("metadata after failed write = %q, %v", raw, err)
 	}
 }
@@ -114,7 +124,7 @@ func TestUpdateSerializesReadModifyWrite(t *testing.T) {
 		}
 	}
 	raw, err := Read(dir)
-	if err != nil || string(raw) != `{"count":20}` {
+	if err != nil || compactJSON(raw) != `{"count":20}` {
 		t.Fatalf("updated metadata = %q, %v", raw, err)
 	}
 }
@@ -129,7 +139,7 @@ func TestUpdateLeavesFileUnchangedOnCallbackError(t *testing.T) {
 	if err := Update(dir, func([]byte) ([]byte, error) { return nil, failure }); !errors.Is(err, failure) {
 		t.Fatalf("update error = %v", err)
 	}
-	if raw, err := Read(dir); err != nil || string(raw) != string(original) {
+	if raw, err := Read(dir); err != nil || compactJSON(raw) != string(original) {
 		t.Fatalf("metadata after failed update = %q, %v", raw, err)
 	}
 }
@@ -221,7 +231,7 @@ func TestUpdateBatchSkipsMissingAndUnchangedFiles(t *testing.T) {
 		t.Fatalf("callbacks = %d, want 2", called)
 	}
 	for dir, want := range map[string]string{first: `{"id":"old"}`, second: `{"id":"new"}`} {
-		if raw, err := Read(dir); err != nil || string(raw) != want {
+		if raw, err := Read(dir); err != nil || compactJSON(raw) != want {
 			t.Fatalf("metadata in %s = %s, %v", dir, raw, err)
 		}
 	}
@@ -249,7 +259,7 @@ func TestUpdateBatchCallbackErrorLeavesAllFilesUnchanged(t *testing.T) {
 		t.Fatalf("batch update error = %v, want %v", err, failure)
 	}
 	for _, dir := range []string{first, second} {
-		if raw, err := Read(dir); err != nil || string(raw) != `{"id":"old"}` {
+		if raw, err := Read(dir); err != nil || compactJSON(raw) != `{"id":"old"}` {
 			t.Fatalf("metadata after failed batch in %s = %s, %v", dir, raw, err)
 		}
 	}
@@ -267,7 +277,7 @@ func TestWriteBatchCleanupFailureDoesNotReportCommitFailure(t *testing.T) {
 	if err := Write(dir, []byte(`{"id":"new"}`)); err != nil {
 		t.Fatalf("committed write reported failure: %v", err)
 	}
-	if raw, err := Read(dir); err != nil || string(raw) != `{"id":"new"}` {
+	if raw, err := Read(dir); err != nil || compactJSON(raw) != `{"id":"new"}` {
 		t.Fatalf("metadata after cleanup failure = %s, %v", raw, err)
 	}
 	if matches, err := filepath.Glob(filepath.Join(dir, "nhd.json.backup-*")); err != nil || len(matches) != 1 {

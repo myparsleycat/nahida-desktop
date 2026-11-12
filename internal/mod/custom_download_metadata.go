@@ -29,11 +29,11 @@ func writeDownloadMetadataToPaths[T any](paths []string, report func(error), mak
 
 	entries := make([]metadata.WriteEntry, 0, len(dirs))
 	for _, dir := range dirs {
-		raw, err := json.MarshalIndent(makeDocument(), "", "  ")
+		raw, err := json.Marshal(makeDocument())
 		if err != nil {
 			return err
 		}
-		entries = append(entries, metadata.WriteEntry{Dir: dir, Data: append(raw, '\n')})
+		entries = append(entries, metadata.WriteEntry{Dir: dir, Data: raw})
 	}
 	return metadata.WriteBatch(entries, report)
 }

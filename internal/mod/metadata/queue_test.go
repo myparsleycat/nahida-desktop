@@ -51,13 +51,13 @@ func TestOperationsQueueInOrderAndReleasePath(t *testing.T) {
 	if err := <-updated; err != nil {
 		t.Fatal(err)
 	}
-	if raw, err := <-read, <-readErr; err != nil || string(raw) != `{"step":"updated"}` {
+	if raw, err := <-read, <-readErr; err != nil || compactJSON(raw) != `{"step":"updated"}` {
 		t.Fatalf("queued read = %q, %v", raw, err)
 	}
 	if err := <-written; err != nil {
 		t.Fatal(err)
 	}
-	if raw, err := Read(dir); err != nil || string(raw) != `{"step":"final"}` {
+	if raw, err := Read(dir); err != nil || compactJSON(raw) != `{"step":"final"}` {
 		t.Fatalf("final metadata = %q, %v", raw, err)
 	}
 	key, err := queueKey(dir)
@@ -111,7 +111,7 @@ func TestReadWaitsForBatchWrite(t *testing.T) {
 	if err := <-written; err != nil {
 		t.Fatal(err)
 	}
-	if raw, err := <-read, <-readErr; err != nil || string(raw) != `{"step":"final"}` {
+	if raw, err := <-read, <-readErr; err != nil || compactJSON(raw) != `{"step":"final"}` {
 		t.Fatalf("read after batch write = %q, %v", raw, err)
 	}
 }
@@ -192,7 +192,7 @@ func TestIndependentDirectoriesDoNotWait(t *testing.T) {
 			return
 		}
 		raw, err := Read(second)
-		if err == nil && string(raw) != `{"step":"final"}` {
+		if err == nil && compactJSON(raw) != `{"step":"final"}` {
 			err = errors.New("read returned stale metadata")
 		}
 		done <- err
