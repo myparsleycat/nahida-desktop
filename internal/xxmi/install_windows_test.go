@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/windows"
+
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
@@ -573,9 +575,11 @@ func TestImporterInstallTransactionRestoresDeniedFolder(t *testing.T) {
 			// another Windows installation. Neither parent grants delete-child: the importer folder's parent
 			// denies it, and the importer folder grants only Modify, like a folder inheriting a drive's defaults,
 			// so Mods stays denied after the importer folder is restored.
+			if err := grantOnlyModify(importerRoot, current.Uid); err != nil {
+				t.Skipf("filesystem cannot deny deletion: %v", err)
+			}
 			sid := "*" + current.Uid
 			commands := [][]string{
-				{importerRoot, "/inheritance:r", "/grant", sid + ":(OI)(CI)(M)"},
 				{importerRoot, "/deny", sid + ":(DE)"},
 				{mods, "/deny", sid + ":(DE)"},
 				{root, "/deny", sid + ":(DC)"},
@@ -685,14 +689,11 @@ func TestImporterInstallTransactionRemovesUndeletableBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Core grants Modify, which lacks delete-child, and its file denies DELETE.
-	sid := "*" + current.Uid
-	for _, args := range [][]string{
-		{core, "/inheritance:r", "/grant", sid + ":(OI)(CI)(M)"},
-		{coreFile, "/deny", sid + ":(DE)"},
-	} {
-		if output, err := exec.Command("icacls", args...).CombinedOutput(); err != nil {
-			t.Skipf("filesystem cannot deny deletion: %v (%s)", err, output)
-		}
+	if err := grantOnlyModify(core, current.Uid); err != nil {
+		t.Skipf("filesystem cannot deny deletion: %v", err)
+	}
+	if output, err := exec.Command("icacls", coreFile, "/deny", "*"+current.Uid+":(DE)").CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot deny deletion: %v (%s)", err, output)
 	}
 	if err := os.Remove(coreFile); err == nil {
 		t.Skip("filesystem does not enforce the delete denial")
@@ -760,6 +761,25 @@ func TestImporterInstallTransactionRemovesUndeletableBackup(t *testing.T) {
 		t.Fatalf("backup after recovery: %v", err)
 	}
 	assertFile(t, coreFile, "old")
+}
+
+// grantOnlyModify replaces the folder's permissions with a protected list that grants sid Modify, which lacks
+// delete-child, inherited by its contents. icacls /inheritance:r keeps explicit entries, such as the token's
+// default DACL that a folder receives below a parent without inheritable entries, and one granting delete-child
+// lets the entries the test denies DELETE be moved or removed anyway.
+func grantOnlyModify(path, sid string) error {
+	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;OICI;0x1301bf;;;" + sid + ")")
+	if err != nil {
+		return err
+	}
+	dacl, _, err := descriptor.DACL()
+	if err != nil {
+		return err
+	}
+	return windows.SetNamedSecurityInfo(
+		path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
+		nil, nil, dacl, nil,
+	)
 }
 
 func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
