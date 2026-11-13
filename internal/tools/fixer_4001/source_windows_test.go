@@ -47,7 +47,14 @@ func TestCheckoutD3DSourcePreservesSelectedTagMetadata(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			project := filepath.Join(t.TempDir(), "XXMI source with spaces")
-			if err := checkoutD3DSource(context.Background(), sourceTestGit(t), source, tc.tag, project); err != nil {
+			if err := checkoutD3DSource(
+				context.Background(),
+				sourceTestGit(t),
+				"",
+				source,
+				tc.tag,
+				project,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if got := runSourceTestGit(t, project, "config", "--get", "remote.origin.url"); got != source {
@@ -89,7 +96,7 @@ func TestCheckoutD3DSourcePreservesSelectedTagMetadata(t *testing.T) {
 	t.Run("branch is not a release tag", func(t *testing.T) {
 		t.Parallel()
 		project := filepath.Join(t.TempDir(), "source")
-		err := checkoutD3DSource(context.Background(), sourceTestGit(t), source, "v9.9.9", project)
+		err := checkoutD3DSource(context.Background(), sourceTestGit(t), "", source, "v9.9.9", project)
 		if err == nil || !strings.Contains(err.Error(), "fetch-tag") {
 			t.Fatalf("missing tag error = %v", err)
 		}
@@ -105,7 +112,7 @@ func TestCheckoutD3DSourceRejectsInvalidTagsBeforeFetching(t *testing.T) {
 		t.Run(tag, func(t *testing.T) {
 			t.Parallel()
 			project := filepath.Join(t.TempDir(), "source")
-			err := checkoutD3DSource(context.Background(), sourceTestGit(t), "unused-remote", tag, project)
+			err := checkoutD3DSource(context.Background(), sourceTestGit(t), "", "unused-remote", tag, project)
 			if err == nil || !strings.Contains(err.Error(), "validate-tag") {
 				t.Fatalf("invalid tag error = %v", err)
 			}
@@ -123,6 +130,7 @@ func TestCheckoutD3DSourceHonorsCancellation(t *testing.T) {
 	err := checkoutD3DSource(
 		ctx,
 		sourceTestGit(t),
+		"",
 		"unused-remote",
 		"v1.2.0",
 		filepath.Join(t.TempDir(), "source"),

@@ -25,6 +25,9 @@ func (rt *runtime) initProxy(ctx context.Context) error {
 		return err
 	}
 	rt.proxyRelay = relay
+	if rt.tools != nil {
+		rt.tools.UseProxyURL(relay.URL())
+	}
 	return nil
 }
 

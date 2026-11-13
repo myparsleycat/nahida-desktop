@@ -52,9 +52,14 @@ func StartProxyRelay(network *ProxyNetwork, log *Log) (*ProxyRelay, error) {
 	return r, nil
 }
 
+// URL is the relay's loopback HTTP proxy address for child processes.
+func (r *ProxyRelay) URL() string {
+	return "http://" + r.listener.Addr().String()
+}
+
 func (r *ProxyRelay) BrowserArguments() []string {
 	return []string{
-		"--proxy-server=http://" + r.listener.Addr().String(),
+		"--proxy-server=" + r.URL(),
 		"--proxy-bypass-list=<-loopback>",
 		"--host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE 127.0.0.1\"",
 		"--disable-quic",

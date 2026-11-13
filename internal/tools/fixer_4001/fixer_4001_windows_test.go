@@ -183,3 +183,13 @@ func TestElevatedFileOperationsKeepErrorCodes(t *testing.T) {
 		t.Fatal("an unreadable source started the helper")
 	}
 }
+
+func TestWithoutProxyVariablesKeepsGitOnTheRelay(t *testing.T) {
+	environ := []string{
+		"PATH=C:/Windows", "https_proxy=http://bypass:1", "HTTP_PROXY=http://bypass:2",
+		"All_Proxy=socks5://bypass:3", "NO_PROXY=github.com", "PROXYLESS=keep",
+	}
+	if got := withoutProxyVariables(environ); !slices.Equal(got, []string{"PATH=C:/Windows", "PROXYLESS=keep"}) {
+		t.Fatalf("environment = %q", got)
+	}
+}

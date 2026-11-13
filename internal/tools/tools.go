@@ -235,6 +235,11 @@ func (t *Tools) UseClient(client *db.Client) {
 	t.zzmi.UseClient(client)
 }
 
+// UseProxyURL gives the tools that start network processes of their own the app's local proxy relay.
+func (t *Tools) UseProxyURL(url string) {
+	t.fixer4001.UseProxyURL(url)
+}
+
 func (t *Tools) UseAppData(data *appdata.Store) {
 	t.bisect.UseAppData(data)
 	t.fixer4001.UseAppData(data)

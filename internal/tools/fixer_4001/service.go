@@ -51,6 +51,8 @@ type Service struct {
 	elevated      elevated.FileGateway
 	client        *db.Client
 	appData       *appdata.Store
+	// proxyURL is the app's local proxy relay that git fetches through.
+	proxyURL string
 
 	fixerMu       sync.Mutex
 	fixerTask     *string
@@ -86,6 +88,10 @@ func (t *Service) UseClient(client *db.Client) {
 
 func (t *Service) UseAppData(data *appdata.Store) {
 	t.appData = data
+}
+
+func (t *Service) UseProxyURL(url string) {
+	t.proxyURL = url
 }
 
 func (t *Service) requireClient() (*db.Client, error) {

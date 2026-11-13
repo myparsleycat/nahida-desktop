@@ -616,6 +616,7 @@ func (t *Service) prepareD3DSource(ctx context.Context, gitPath, tempDir, provid
 	if err := checkoutD3DSource(
 		ctx,
 		gitPath,
+		t.proxyURL,
 		"https://github.com/"+repo.String()+".git",
 		strings.TrimSpace(version),
 		projectPath,
