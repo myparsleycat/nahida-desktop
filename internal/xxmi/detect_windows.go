@@ -157,17 +157,6 @@ func validateGameFolder(
 		if !fileExists(filepath.Join(path, "Client", "Binaries", "Win64", "Client-Win64-Shipping.exe")) {
 			return GameFolderCandidate{}, errors.New("WWMI game folder is missing Client-Win64-Shipping.exe")
 		}
-		for parent := filepath.Dir(path); parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
-			if strings.EqualFold(filepath.Base(parent), "steamapps") {
-				if !strings.EqualFold(filepath.Base(filepath.Dir(path)), "common") ||
-					!strings.EqualFold(filepath.Base(filepath.Dir(filepath.Dir(path))), "steamapps") {
-					return GameFolderCandidate{}, errors.New(
-						"WWMI Steam game folder must be directly inside steamapps/common",
-					)
-				}
-				break
-			}
-		}
 	}
 	executable := configuredGameExecutable(path, spec.gameExeNames)
 	info, err := os.Stat(executable)
