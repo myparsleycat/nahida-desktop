@@ -24,6 +24,7 @@ func TestBuiltinStateFeedsExistingConsumers(t *testing.T) {
 	}
 	root := t.TempDir()
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	if err := service.SetRoot(ctx, root); err != nil {
@@ -126,15 +127,6 @@ func TestBuiltinConsumersIgnoreUnimportedExternalLauncher(t *testing.T) {
 }
 
 func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("USERPROFILE", home)
-	cacheRoot, err := xxmiCacheRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", "abcdef123456"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -145,6 +137,10 @@ func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	cacheRoot := useTestAppData(t, service)
+	if err := os.MkdirAll(filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", "abcdef123456"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	if err := service.EnableImporter(ctx, "GIMI", filepath.Join(t.TempDir(), "GIMI")); err != nil {
@@ -157,7 +153,6 @@ func TestOverviewKeepsSettingsAvailableForDamagedCache(t *testing.T) {
 }
 
 func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -173,6 +168,7 @@ func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -189,7 +185,6 @@ func TestOverviewKeepsConfigurationWhenEveryImporterIsDisabled(t *testing.T) {
 }
 
 func TestOverviewKeepsBuiltinRootWhenExternalLauncherIsFound(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -205,12 +200,9 @@ func TestOverviewKeepsBuiltinRootWhenExternalLauncherIsFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	cacheRoot := useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
-	cacheRoot, err := xxmiCacheRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
 	overview, err := service.GetOverview(ctx)
 	if err != nil || overview.Root != cacheRoot {
 		t.Fatalf("default root with external launcher = %+v, err = %v", overview, err)

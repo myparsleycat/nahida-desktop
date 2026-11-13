@@ -50,6 +50,7 @@ func TestSkipVersionPreservesPinnedImporter(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
@@ -95,6 +96,7 @@ func TestCheckUpdatesHonorsHourlyThrottleAndForce(t *testing.T) {
 	}
 	useSignedSharedProvider(t, client)
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -154,6 +156,7 @@ func TestCheckUpdatesRateLimitPreservesAutomaticStateAndFailsManualCheck(t *test
 				})},
 			})
 			x := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
+			useTestAppData(t, x)
 			x.UseClient(client)
 			useBuiltinLauncher(t, x)
 			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -221,6 +224,7 @@ func TestCheckUpdatesReusesReleaseFetchTime(t *testing.T) {
 		return github.New(github.Options{HTTP: httpClient, Rate: rate})
 	}
 	x := NewWithOptions(Options{GitHub: newGitHubClient()})
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -291,6 +295,7 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 		t.Fatal(err)
 	}
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -337,7 +342,6 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 }
 
 func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -348,6 +352,7 @@ func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -360,7 +365,7 @@ func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {
 	if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +407,6 @@ func TestCheckUpdatesResolvesXXMILibrariesWithoutDeployedSource(t *testing.T) {
 		{"deployed source", &runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.7.6"}, "1.7.6", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("USERPROFILE", t.TempDir())
 			ctx := context.Background()
 			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 			if err != nil {
@@ -414,6 +418,7 @@ func TestCheckUpdatesResolvesXXMILibrariesWithoutDeployedSource(t *testing.T) {
 			}
 			useSignedSharedProvider(t, client)
 			x := New()
+			useTestAppData(t, x)
 			x.UseClient(client)
 			useBuiltinLauncher(t, x)
 			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -427,7 +432,7 @@ func TestCheckUpdatesResolvesXXMILibrariesWithoutDeployedSource(t *testing.T) {
 			}
 
 			// An unsigned cache folder must not count as installed libraries.
-			cacheRoot, err := xxmiCacheRoot()
+			cacheRoot, err := x.cacheRoot()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -493,7 +498,6 @@ func TestCheckUpdatesFollowsSharedAndImporterXXMILibrariesSelection(t *testing.T
 		{"own version with notice at latest", "", VersionPin{Pinned: "1.7.7", Notify: true}, "1.7.7", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("USERPROFILE", t.TempDir())
 			ctx := context.Background()
 			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 			if err != nil {
@@ -505,6 +509,7 @@ func TestCheckUpdatesFollowsSharedAndImporterXXMILibrariesSelection(t *testing.T
 			}
 			useSignedSharedProvider(t, client)
 			x := New()
+			useTestAppData(t, x)
 			x.UseClient(client)
 			useBuiltinLauncher(t, x)
 			if tc.shared != "" {
@@ -561,6 +566,7 @@ func TestAutoUpdateLeavesNotifyingXXMILibrariesPinInPlace(t *testing.T) {
 	}
 	useSignedSharedProvider(t, client)
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -593,7 +599,9 @@ func TestAutoUpdateLeavesNotifyingXXMILibrariesPinInPlace(t *testing.T) {
 
 func TestSelectedLegacyInjectorVersionNormalizesPin(t *testing.T) {
 	t.Parallel()
-	if got := selectedLegacyInjectorVersion("v1.7.6"); got != "1.7.6" {
+	service := New()
+	useTestAppData(t, service)
+	if got := service.selectedLegacyInjectorVersion("v1.7.6"); got != "1.7.6" {
 		t.Fatalf("selected legacy injector version = %q", got)
 	}
 }
@@ -628,11 +636,8 @@ func TestCachedLibsVersionClearsInstalledUpdateBeforeDeployment(t *testing.T) {
 }
 
 func TestNewestCachedPackageVersionUsesVersionOrder(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
-	root, err := xxmiCacheRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := New()
+	root := useTestAppData(t, service)
 	for _, pkg := range []string{"xxmi-libs", "gi-fps-unlocker"} {
 		parent := filepath.Join(root, "packages", pkg)
 		for _, version := range []string{"1.7.6", "1.7.5", "1.7.7.tmp-abcd"} {
@@ -640,7 +645,7 @@ func TestNewestCachedPackageVersionUsesVersionOrder(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if got := newestCachedPackageVersion(pkg); got != "1.7.6" {
+		if got := service.newestCachedPackageVersion(pkg); got != "1.7.6" {
 			t.Fatalf("%s newest cached version = %q", pkg, got)
 		}
 	}
@@ -664,6 +669,7 @@ func TestAutoUpdateUsesEnabledDefaultBeforeSettingsPageOpens(t *testing.T) {
 			checks++
 		}
 	}})
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -713,6 +719,7 @@ func TestLaunchUpdatesAsksOnlyForInstallablePackagesWhenNotifying(t *testing.T) 
 	}
 	useSignedSharedProvider(t, client)
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	useBuiltinLauncher(t, x)
 	for key, pin := range map[string]VersionPin{
@@ -769,6 +776,7 @@ func TestAutoUpdateLeavesPinnedPackagesUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := New()
+	useTestAppData(t, x)
 	x.UseClient(client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {

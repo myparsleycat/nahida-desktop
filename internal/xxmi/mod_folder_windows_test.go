@@ -24,6 +24,7 @@ func newModFolderTestService(t *testing.T) (*XXMI, string) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	service.processSnapshot = func(context.Context) (map[string]bool, error) { return map[string]bool{}, nil }
 	useBuiltinLauncher(t, service)

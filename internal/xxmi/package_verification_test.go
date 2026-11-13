@@ -48,6 +48,7 @@ func TestImporterPackageVerificationOnlyReportsCurrentInstalledVersion(t *testin
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)

@@ -57,8 +57,7 @@ func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 
 func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("USERPROFILE", home)
+	data, cacheRoot := newTestAppData(t)
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -106,10 +105,6 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 		if err := os.WriteFile(file, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
-	}
-	cacheRoot, err := xxmiCacheRoot()
-	if err != nil {
-		t.Fatal(err)
 	}
 	legacy := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", cfg.LegacyRuntime)
 	if err := os.MkdirAll(legacy, 0o700); err != nil {
@@ -181,6 +176,7 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 			}
 		}
 	}})
+	service.UseAppData(data)
 	service.UseClient(client)
 	service.launchSettings = &fakeLaunch{}
 	service.findProcess = noGameProcess

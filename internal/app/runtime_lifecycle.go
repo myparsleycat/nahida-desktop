@@ -72,6 +72,8 @@ func bootRuntime(
 	}
 
 	rt.appData = data
+	rt.setting.UseAppData(data)
+	rt.xxmi.UseAppData(data)
 	rt.mod.UseAppData(data)
 	rt.drive.UseAppData(data)
 	rt.tools.UseAppData(data)

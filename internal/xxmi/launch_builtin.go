@@ -302,7 +302,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 			if !ok || !semver.IsValid("v"+version) {
 				return errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
 			}
-			cacheRoot, err := xxmiCacheRoot()
+			cacheRoot, err := x.cacheRoot()
 			if err != nil {
 				return err
 			}
@@ -336,7 +336,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 			if !ok || len(id) != 12 || strings.Trim(id, "0123456789abcdef") != "" {
 				return errors.New("XXMI_RUNTIME_CORRUPTED: invalid legacy source")
 			}
-			cacheRoot, err := xxmiCacheRoot()
+			cacheRoot, err := x.cacheRoot()
 			if err != nil {
 				return err
 			}
@@ -694,7 +694,7 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.StartArgs = append([]string{renderer}, spec.StartArgs...)
 	}
 	if usesFPSUnlocker(cfg) {
-		folder, err := fpsUnlockerFolder()
+		folder, err := x.fpsUnlockerFolder()
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
@@ -729,7 +729,7 @@ func (x *XXMI) builtinLaunchSpec(
 		if version == deployed.Source || version == "" {
 			return inject.LaunchSpec{}, errors.New("XXMI_RUNTIME_CORRUPTED: invalid library source")
 		}
-		cacheRoot, err := xxmiCacheRoot()
+		cacheRoot, err := x.cacheRoot()
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}
@@ -792,7 +792,7 @@ func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec
 	if err != nil {
 		return err
 	}
-	version := selectedLegacyInjectorVersion(pin)
+	version := x.selectedLegacyInjectorVersion(pin)
 	if version == "" {
 		// Nothing is cached until a launch deploys the XXMI runtime, which this one does not.
 		version, err = x.resolveLibsVersion(ctx, cfg)
@@ -800,7 +800,7 @@ func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec
 			return err
 		}
 	}
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}

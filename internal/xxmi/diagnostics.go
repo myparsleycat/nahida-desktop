@@ -232,7 +232,7 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 	// over on the new one, whose own values it has not read.
 	if record != nil && !record.targets(cfg.ImporterFolder) {
 		stage = "restore-moved-ini"
-		err := restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
+		err := x.restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -256,7 +256,7 @@ func (x *XXMI) StartDiagnostics(ctx context.Context, importer string, options Di
 	// session whose end restores the values the file had.
 	stage = "write-ini"
 	iniSupport := migotoINISupport(cfg, "")
-	err = writeImporterINI(ctx, key, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
+	err = x.writeImporterINI(ctx, key, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
 		doc := parseINI(data)
 		// A session stored before an option was restored has not read that option's value yet, which the
 		// session has not set either.
@@ -327,7 +327,7 @@ func (x *XXMI) EndDiagnostics(ctx context.Context, importer string) (returnErr e
 			return err
 		}
 		// An importer folder that is gone has no options left to take out.
-		if err := restoreDiagnosticsINI(ctx, key, record.config(cfg), *record); err != nil &&
+		if err := x.restoreDiagnosticsINI(ctx, key, record.config(cfg), *record); err != nil &&
 			!errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -515,7 +515,7 @@ func (x *XXMI) endMovedDiagnostics(ctx context.Context, key string, cfg Importer
 	if record == nil || record.State != DiagnosticsArmed || record.targets(cfg.ImporterFolder) {
 		return nil
 	}
-	err = restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
+	err = x.restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -637,7 +637,7 @@ func (x *XXMI) removeDiagnosticsBundle(record *diagnosticsRecord) {
 	if record.Bundle == nil || record.Bundle.Path == "" {
 		return
 	}
-	folder, err := diagnosticsFolder()
+	folder, err := x.diagnosticsFolder()
 	if err != nil || !platform.SameOrChildPath(folder, record.Bundle.Path) ||
 		platform.SamePathFold(folder, record.Bundle.Path) {
 		return
@@ -645,8 +645,8 @@ func (x *XXMI) removeDiagnosticsBundle(record *diagnosticsRecord) {
 	x.reportCleanup(os.Remove(record.Bundle.Path), "remove-diagnostics-bundle")
 }
 
-func diagnosticsFolder() (string, error) {
-	root, err := xxmiCacheRoot()
+func (x *XXMI) diagnosticsFolder() (string, error) {
+	root, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}
@@ -719,8 +719,13 @@ func restoreDiagnosticsOption(doc *iniDocument, section, option string, restore 
 
 // restoreDiagnosticsINI puts back the values the file had before the session, then the options the
 // importer settings decide, which also returns the log level to the setting.
-func restoreDiagnosticsINI(ctx context.Context, key string, cfg ImporterConfig, record diagnosticsRecord) error {
+func (x *XXMI) restoreDiagnosticsINI(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	record diagnosticsRecord,
+) error {
 	in := newImporterINIInput(key, cfg)
 	in.restore = record.Restore
-	return in.write(ctx)
+	return x.writeImporterINIInput(ctx, in)
 }

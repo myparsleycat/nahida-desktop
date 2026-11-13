@@ -43,7 +43,7 @@ type ImporterIconChange struct {
 
 // GetImporterIcons returns the icon of every importer, sorted by key.
 func (x *XXMI) GetImporterIcons(ctx context.Context) ([]ImporterIcon, error) {
-	dir, err := shortcutIconRoot()
+	dir, err := x.shortcutIconRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (x *XXMI) changeImporterIcon(
 	if err != nil {
 		return ImporterIconChange{}, err
 	}
-	dir, err := shortcutIconRoot()
+	dir, err := x.shortcutIconRoot()
 	if err != nil {
 		return ImporterIconChange{}, err
 	}

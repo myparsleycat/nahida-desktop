@@ -81,6 +81,7 @@ func TestPinnedVersionsSurviveReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
@@ -159,6 +160,7 @@ func TestImporterConfigIsStoredUnderCanonicalKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	cfg, err := DefaultImporterConfig("EFMI", t.TempDir())
 	if err != nil {
@@ -190,6 +192,7 @@ func TestModeChangeRejectsLaunchInProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	cfg, err := DefaultImporterConfig("EFMI", t.TempDir())

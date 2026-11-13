@@ -12,13 +12,15 @@ func TestPackageCacheRejectsDotVersions(t *testing.T) {
 	for _, version := range []string{".", "..", "v.."} {
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
-			if err := New().EnsureLibsVersion(context.Background(), version); err == nil {
+			service := New()
+			useTestAppData(t, service)
+			if err := service.EnsureLibsVersion(context.Background(), version); err == nil {
 				t.Fatal("XXMI libraries accepted a dot version")
 			}
-			if err := New().EnsureFPSUnlockerVersion(context.Background(), version); err == nil {
+			if err := service.EnsureFPSUnlockerVersion(context.Background(), version); err == nil {
 				t.Fatal("GI FPS Unlocker accepted a dot version")
 			}
-			if err := importExternalLibs(t.TempDir(), version); err == nil {
+			if err := service.importExternalLibs(t.TempDir(), version); err == nil {
 				t.Fatal("external XXMI libraries accepted a dot version")
 			}
 		})

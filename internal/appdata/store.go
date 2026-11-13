@@ -16,6 +16,7 @@ const (
 	DatabaseFile     = "data.db"
 	LogsDir          = "logs"
 	ToolsDir         = "tools"
+	XXMIDir          = "xxmi"
 	ModBisectDir     = "mod-bisect"
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"

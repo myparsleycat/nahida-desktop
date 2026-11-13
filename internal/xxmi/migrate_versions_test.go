@@ -117,7 +117,6 @@ func TestSelectImportVersionPreservesConfirmedVersions(t *testing.T) {
 func TestImportExternalLauncherAppliesConfirmedVersionPolicy(t *testing.T) {
 	for _, mode := range []ImportVersionMode{ImportVersionLatest, ImportVersionPinned} {
 		t.Run(string(mode), func(t *testing.T) {
-			t.Setenv("USERPROFILE", t.TempDir())
 			ctx, client, service, external := newImportTest(t)
 			writeImportSourceFiles(t, filepath.Join(external, "GIMI"))
 			config, _, err := readAndValidateConfig(filepath.Join(external, xxmiConfigName))
@@ -139,7 +138,7 @@ func TestImportExternalLauncherAppliesConfirmedVersionPolicy(t *testing.T) {
 				if path != external || installed != "1.7.6" || selected != wantLibs {
 					t.Fatalf("library preparation = %q, %q, %q", path, installed, selected)
 				}
-				cacheRoot, err := xxmiCacheRoot()
+				cacheRoot, err := service.cacheRoot()
 				if err != nil {
 					return err
 				}

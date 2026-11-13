@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -182,12 +181,8 @@ type ImporterConfig struct {
 	EFMI            *EFMIOptions `json:"efmi,omitempty"`
 }
 
-func xxmiCacheRoot() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, appdata.RootDirName, "xxmi"), nil
+func (x *XXMI) cacheRoot() (string, error) {
+	return x.appData.Load().Resolve(appdata.XXMIDir)
 }
 
 func (x *XXMI) SetRoot(ctx context.Context, path string) error {
@@ -341,7 +336,7 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 		rootPath = *root
 	}
 	if rootPath == "" {
-		rootPath, err = xxmiCacheRoot()
+		rootPath, err = x.cacheRoot()
 		if err != nil {
 			return ImporterConfig{}, err
 		}

@@ -93,7 +93,7 @@ func (x *XXMI) SetD3DXOptions(ctx context.Context, importer string, values map[s
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err == nil {
 		stage = "write-ini"
-		err = writeImporterINI(ctx, importer, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
+		err = x.writeImporterINI(ctx, importer, cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
 			doc := parseINI(data)
 			for _, optionKey := range slices.Sorted(maps.Keys(values)) {
 				section, key, _ := splitD3DXOptionKey(optionKey)
@@ -276,7 +276,7 @@ func (x *XXMI) pendingProviderINI(ctx context.Context, cfg ImporterConfig) (prov
 	if err != nil {
 		return nil, ""
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return nil, ""
 	}

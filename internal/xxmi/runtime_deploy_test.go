@@ -531,6 +531,7 @@ func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.
 	}
 	useSignedSharedProvider(t, client)
 	x := NewWithOptions(Options{})
+	useTestAppData(t, x)
 	x.UseClient(client)
 	folder := t.TempDir()
 	cfg, err := DefaultImporterConfig("GIMI", folder)

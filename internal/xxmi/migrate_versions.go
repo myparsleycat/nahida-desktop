@@ -164,7 +164,7 @@ func selectImportVersion(input ImportExternalLauncherInput, pkg, installed strin
 
 func (x *XXMI) cacheImportLibraries(ctx context.Context, path, installed, selected string) error {
 	if installed != "" && selected == installed {
-		if err := importExternalLibs(path, installed); err != nil {
+		if err := x.importExternalLibs(path, installed); err != nil {
 			return err
 		}
 	}

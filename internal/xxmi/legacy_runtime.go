@@ -46,17 +46,17 @@ func (x *XXMI) UpdateLegacyRuntime(ctx context.Context) (string, error) {
 	); err != nil {
 		return "", fmt.Errorf("download legacy runtime: %w", err)
 	}
-	return importLegacyRuntimeZip(ctx, zipPath, legacyRuntimeURL)
+	return x.importLegacyRuntimeZip(ctx, zipPath, legacyRuntimeURL)
 }
 
 func (x *XXMI) ImportLegacyRuntimeZip(ctx context.Context, zipPath string) (string, error) {
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
 
-	return importLegacyRuntimeZip(ctx, zipPath, "")
+	return x.importLegacyRuntimeZip(ctx, zipPath, "")
 }
 
-func importLegacyRuntimeZip(ctx context.Context, zipPath, sourceURL string) (string, error) {
+func (x *XXMI) importLegacyRuntimeZip(ctx context.Context, zipPath, sourceURL string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -77,7 +77,7 @@ func importLegacyRuntimeZip(ctx context.Context, zipPath, sourceURL string) (str
 		return "", err
 	}
 	zipHash := hex.EncodeToString(hasher.Sum(nil))
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}

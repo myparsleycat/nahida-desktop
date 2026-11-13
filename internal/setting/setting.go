@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
@@ -29,6 +30,7 @@ type Setting struct {
 	// githubTokenMu keeps the stored token and the applied token in step.
 	githubTokenMu sync.Mutex
 	client        *db.Client
+	appData       *appdata.Store
 	opts          Options
 	specs         map[string]spec
 }
@@ -85,6 +87,10 @@ func (s *Setting) UseClient(client *db.Client) {
 	s.client = client
 }
 
+func (s *Setting) UseAppData(data *appdata.Store) {
+	s.appData = data
+}
+
 // UseHooks replaces afterSet hooks on an already constructed Setting.
 func (s *Setting) UseHooks(h Hooks) {
 	s.opts.Hooks = h
@@ -134,7 +140,11 @@ func (s *Setting) Get(ctx context.Context, key string) (any, error) {
 		return nil, settingError(err, "get", "read", key, infra.DiagnosticError)
 	}
 	if row == nil || row.Value == nil {
-		fallback := sp.resolved(s, sp.getDefault(s))
+		def := sp.getDefault(s)
+		if _, ok := def.(unavailableDefault); ok {
+			return sp.resolved(s, nil), nil
+		}
+		fallback := sp.resolved(s, def)
 		stored := sp.stored(s, fallback)
 		if err := s.client.Settings.Upsert(ctx, sp.def.StorageKey, &stored); err != nil {
 			return nil, settingError(err, "get", "seed-default", key, infra.DiagnosticError)

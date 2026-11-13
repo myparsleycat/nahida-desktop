@@ -13,7 +13,6 @@ import (
 )
 
 func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	folder := t.TempDir()
 	path := filepath.Join(folder, "d3dx.ini")
 	original := "; my note\n[Rendering]\ntexture_hash = 1\nold_only = 4\n"
@@ -25,6 +24,7 @@ func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+	useTestAppData(t, service)
 	cfg := ImporterConfig{ImporterFolder: folder, Mode: RuntimeXXMI,
 		Migoto: MigotoOptions{LogLevel: "Disabled", ToggleInput: "VK_F8"}}
 	provider := []byte("; template\n[Rendering]\n; doc\ntexture_hash = 0\nfresh = 1\n" +
@@ -42,7 +42,7 @@ func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 	}
 	backups := func() []string {
 		t.Helper()
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -62,7 +62,7 @@ func TestUpdateLaunchINIRebuildsFromProviderINI(t *testing.T) {
 		if data, err := os.ReadFile(path); err != nil || string(data) != original {
 			t.Fatalf("failed write changed the original INI: %q, err = %v", data, err)
 		}
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -427,7 +427,6 @@ func TestINIOptionDropsTrailingComment(t *testing.T) {
 }
 
 func TestUpdateLaunchINIRestoresImporterPackageInclude(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	// The provider ships one d3dx.ini for every importer, without the include that loads the package. The reported
 	// file had the provider's [Include] word for word.
 	provider := "; head\n[Include]\n; include notes\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n" +
@@ -454,6 +453,7 @@ func TestUpdateLaunchINIRestoresImporterPackageInclude(t *testing.T) {
 				}
 			}
 			service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+			useTestAppData(t, service)
 			cfg := ImporterConfig{
 				ImporterFolder: folder,
 				Mode:           RuntimeXXMI,

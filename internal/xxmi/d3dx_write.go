@@ -110,8 +110,8 @@ func (in importerINIInput) render(data []byte) (doc *iniDocument, lost bool) {
 	return doc, lost
 }
 
-func (in importerINIInput) write(ctx context.Context) error {
-	return writeImporterINI(ctx, in.key, in.cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
+func (x *XXMI) writeImporterINIInput(ctx context.Context, in importerINIInput) error {
+	return x.writeImporterINI(ctx, in.key, in.cfg.ImporterFolder, func(data []byte) (*iniDocument, bool, error) {
 		doc, lost := in.render(data)
 		return doc, lost, nil
 	})
@@ -276,7 +276,7 @@ func (x *XXMI) updateLaunchINI(
 	if len(providerINI) > 0 {
 		in.base = x.readINIBase(key, cfg.ImporterFolder)
 	}
-	if err := in.write(ctx); err != nil {
+	if err := x.writeImporterINIInput(ctx, in); err != nil {
 		return err
 	}
 
@@ -400,10 +400,15 @@ func releaseINIBaseOptions(ctx context.Context, folder string, values map[string
 // file follows a save before the next launch. Rebuilding from the provider's d3dx.ini and the [Loader] options
 // are left to the launch, which also deploys the libraries they depend on. The options of a logging session,
 // when there is one, stay on top of the settings.
-func writeSettingsINI(ctx context.Context, key string, cfg ImporterConfig, diagnostics *diagnosticsRecord) error {
+func (x *XXMI) writeSettingsINI(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	diagnostics *diagnosticsRecord,
+) error {
 	in := newImporterINIInput(key, cfg)
 	in.diagnostics = diagnostics
-	err := in.write(ctx)
+	err := x.writeImporterINIInput(ctx, in)
 	// An importer folder or d3dx.ini that is not there yet gets the settings from the next launch.
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -438,7 +443,7 @@ func (x *XXMI) syncSettingsINI(ctx context.Context, key, action string) {
 		diagnostics, err = x.armedDiagnostics(ctx, key, cfg.ImporterFolder)
 		if err == nil {
 			stage = "write-ini"
-			err = writeSettingsINI(ctx, key, cfg, diagnostics)
+			err = x.writeSettingsINI(ctx, key, cfg, diagnostics)
 		}
 	}
 	if err == nil || infra.IsCancellationError(err) {
@@ -483,7 +488,7 @@ func readImporterINI(folder string) ([]byte, error) {
 
 // writeImporterINI replaces the importer's d3dx.ini with what render makes of it, and writes nothing when that
 // is the same file. A file that loses lines is backed up first, and the backup is removed when the write fails.
-func writeImporterINI(
+func (x *XXMI) writeImporterINI(
 	ctx context.Context,
 	key, folder string,
 	render func(data []byte) (doc *iniDocument, lost bool, err error),
@@ -509,7 +514,7 @@ func writeImporterINI(
 
 	var backupFolder string
 	if lost {
-		backupFolder, err = backupImporterINI(key, data)
+		backupFolder, err = x.backupImporterINI(key, data)
 		if err != nil {
 			return fmt.Errorf("back up d3dx.ini: %w", err)
 		}
@@ -524,8 +529,8 @@ func writeImporterINI(
 }
 
 // backupImporterINI keeps a d3dx.ini that is about to be replaced or lose lines.
-func backupImporterINI(key string, data []byte) (string, error) {
-	root, err := xxmiCacheRoot()
+func (x *XXMI) backupImporterINI(key string, data []byte) (string, error) {
+	root, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}

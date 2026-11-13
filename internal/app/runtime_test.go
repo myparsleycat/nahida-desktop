@@ -12,6 +12,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 func TestRuntimeSettingHooksEmitLanguageAndSettingUpdate(t *testing.T) {
@@ -157,6 +158,21 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	}
 	if rt.log.Level() != "warn" {
 		t.Fatalf("logger level = %q, want warn", rt.log.Level())
+	}
+
+	// Both services must resolve the XXMI cache under the booted app data root.
+	wantXXMI := filepath.Join(paths.Root, appdata.XXMIDir)
+	if err := rt.setting.Client().Settings.Delete(ctx, "xxmi_root"); err != nil {
+		t.Fatalf("delete xxmi_root: %v", err)
+	}
+	if err := rt.xxmi.SetLauncherMode(ctx, xxmi.LauncherBuiltin); err != nil {
+		t.Fatalf("SetLauncherMode: %v", err)
+	}
+	if xxmiRoot, err := rt.xxmi.GetXXMIPath(ctx); err != nil || xxmiRoot == nil || *xxmiRoot != wantXXMI {
+		t.Fatalf("xxmi path = %v, %v; want %q", xxmiRoot, err, wantXXMI)
+	}
+	if got, err := rt.setting.Get(ctx, setting.KeyXXMIRoot); err != nil || got != wantXXMI {
+		t.Fatalf("Get xxmiRoot = %#v, %v; want %q", got, err, wantXXMI)
 	}
 
 	// Re-attach dest after boot so we can assert filtering without a live app data file.

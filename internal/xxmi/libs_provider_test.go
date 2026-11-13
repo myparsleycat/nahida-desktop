@@ -60,7 +60,6 @@ func newProviderTestService(
 	releases []providerTestRelease,
 ) (service *XXMI, client *db.Client, downloads *atomic.Int32) {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("APPDATA", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
@@ -140,6 +139,7 @@ func newProviderTestService(
 		// An unconfigured overview looks for an external launcher, which would walk every drive of the host.
 		SearchRoots: func() ([]string, error) { return nil, nil },
 	})
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	return service, client, downloads
@@ -153,9 +153,9 @@ func useSignedSharedProvider(t *testing.T, client *db.Client) {
 	}
 }
 
-func providerTestCache(t *testing.T, version string) string {
+func providerTestCache(t *testing.T, service *XXMI, version string) string {
 	t.Helper()
-	root, err := xxmiCacheRoot()
+	root, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,11 +180,11 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
 		t.Fatal(err)
 	}
-	cached := filepath.Join(providerTestCache(t, "0.2.0"), customDLLName)
+	cached := filepath.Join(providerTestCache(t, service, "0.2.0"), customDLLName)
 	if data, err := os.ReadFile(cached); err != nil || !bytes.Equal(data, latest) {
 		t.Fatalf("cached DLL has %d bytes, err = %v", len(data), err)
 	}
-	if _, err := os.Stat(providerTestCache(t, "0.1.0")); !os.IsNotExist(err) {
+	if _, err := os.Stat(providerTestCache(t, service, "0.1.0")); !os.IsNotExist(err) {
 		t.Fatalf("older release was cached: %v", err)
 	}
 	overview, err = service.GetOverview(ctx)
@@ -211,7 +211,7 @@ func TestSetSharedLibsProviderCachesLatestVerifiedDLL(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, cached, forged)
-	writeTestFile(t, filepath.Join(providerTestCache(t, "0.2.0"), providerDLLMetadata), metadata)
+	writeTestFile(t, filepath.Join(providerTestCache(t, service, "0.2.0"), providerDLLMetadata), metadata)
 	if err := service.EnsureLibsProvider(ctx, "myparsleycat", ""); err != nil || downloads.Load() != 3 {
 		t.Fatalf("forged entry downloaded %d times, err = %v", downloads.Load(), err)
 	}
@@ -372,7 +372,7 @@ func TestSetSharedLibsProviderRejectsUnverifiableReleases(t *testing.T) {
 			if stored, err := client.Settings.GetValue(ctx, sharedLibsProviderKey); err != nil || stored != nil {
 				t.Fatalf("rejected provider was selected: %v, err = %v", stored, err)
 			}
-			if _, err := os.Stat(providerTestCache(t, "0.2.0")); !os.IsNotExist(err) {
+			if _, err := os.Stat(providerTestCache(t, service, "0.2.0")); !os.IsNotExist(err) {
 				t.Fatalf("rejected release was cached: %v", err)
 			}
 		})
@@ -444,7 +444,7 @@ func TestProviderInstallRefetchesReleaseListedBeforeItsAssets(t *testing.T) {
 	if err := service.SetSharedLibsProvider(ctx, "myparsleycat"); err != nil {
 		t.Fatalf("install after the assets were uploaded: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(providerTestCache(t, "0.2.0"), "d3d11.dll")); err != nil {
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, service, "0.2.0"), "d3d11.dll")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -959,7 +959,7 @@ func TestProviderReleasePinsSignedLibraries(t *testing.T) {
 	if got := selectProvider("1.2.2", "myparsleycat"); got != "1.2.2-nhd.2" {
 		t.Fatalf("shared version under the fork = %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(providerTestCache(t, "1.2.2-nhd.2"), customDLLName)); err != nil {
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, service, "1.2.2-nhd.2"), customDLLName)); err != nil {
 		t.Fatalf("pinned fork release was not cached: %v", err)
 	}
 	if got := selectProvider("1.2.0-nhd.1", signedLibsProvider); got != "1.2.0" {
@@ -1029,7 +1029,7 @@ func TestPruneLibsCacheKeepsProviderSignedLibraries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	root, err := xxmiCacheRoot()
+	root, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1091,7 +1091,7 @@ func TestSharedProviderSelectionMovesImporterPins(t *testing.T) {
 	if got := pin("SRMI"); got != (VersionPin{Follow: "latest"}) {
 		t.Fatalf("pin without a fork release = %+v", got)
 	}
-	if _, err := os.Stat(filepath.Join(providerTestCache(t, "1.2.2-nhd.2"), customDLLName)); err != nil {
+	if _, err := os.Stat(filepath.Join(providerTestCache(t, service, "1.2.2-nhd.2"), customDLLName)); err != nil {
 		t.Fatalf("moved pin's fork release was not cached: %v", err)
 	}
 
@@ -1168,7 +1168,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 	source := providerTestPackage + "@0.2.0"
 	cachedINI := func(t *testing.T, service *XXMI) ([]byte, error) {
 		t.Helper()
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1195,7 +1195,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 		// A rewritten file could make the DLL load anything, so it is not merged.
 		writeTestFile(
 			t,
-			filepath.Join(providerTestCache(t, "0.2.0"), providerININame),
+			filepath.Join(providerTestCache(t, service, "0.2.0"), providerININame),
 			[]byte("[System]\nproxy_d3d11 = evil.dll\n"),
 		)
 		if got, err := cachedINI(t, service); err == nil {
@@ -1205,7 +1205,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 		// The next deployment fetches a rewritten or missing file again instead of leaving its options out.
 		for _, damage := range []func() error{
 			func() error { return nil },
-			func() error { return os.Remove(filepath.Join(providerTestCache(t, "0.2.0"), providerININame)) },
+			func() error { return os.Remove(filepath.Join(providerTestCache(t, service, "0.2.0"), providerININame)) },
 		} {
 			if err := damage(); err != nil {
 				t.Fatal(err)
@@ -1246,7 +1246,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
 			t.Fatal(err)
 		}
-		folder := providerTestCache(t, "0.2.0")
+		folder := providerTestCache(t, service, "0.2.0")
 		metadata, err := json.Marshal(providerDLLSource{Version: "0.2.0", SHA256: hashBytes(image)})
 		if err != nil {
 			t.Fatal(err)
@@ -1280,7 +1280,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 		if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {
 			t.Fatal(err)
 		}
-		folder := providerTestCache(t, "0.2.0")
+		folder := providerTestCache(t, service, "0.2.0")
 		metadata, err := json.Marshal(providerDLLSource{
 			Version:  "0.2.0",
 			SHA256:   hashBytes(image),
@@ -1321,7 +1321,7 @@ func TestProviderINIIsCachedWithVerifiedDLL(t *testing.T) {
 			if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err == nil {
 				t.Fatalf("%s: release was cached", name)
 			}
-			if _, err := os.Stat(providerTestCache(t, "0.2.0")); !os.IsNotExist(err) {
+			if _, err := os.Stat(providerTestCache(t, service, "0.2.0")); !os.IsNotExist(err) {
 				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
 			}
 		}
@@ -1348,7 +1348,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		}
 
 		// The game loads the library, so a rewritten one is fetched again instead of deployed.
-		cached := filepath.Join(providerTestCache(t, version), "dxcompiler.dll")
+		cached := filepath.Join(providerTestCache(t, service, version), "dxcompiler.dll")
 		writeTestFile(t, cached, testCustomDLLImage("evil"))
 		provider, err = service.providerRuntimeDLL(ctx, cfg)
 		if err != nil || !bytes.Equal(provider.companions["dxcompiler.dll"], dxc) {
@@ -1361,7 +1361,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
 			t.Fatal(err)
 		}
-		folder := providerTestCache(t, version)
+		folder := providerTestCache(t, service, version)
 		metadata, err := json.Marshal(providerDLLSource{
 			Version: version, SHA256: hashBytes(image), Searched: []string{providerININame},
 		})
@@ -1388,7 +1388,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 	// metadata that build wrote.
 	seedEntry := func(t *testing.T, service *XXMI, version string, iniChecked bool) {
 		t.Helper()
-		folder := providerTestCache(t, version)
+		folder := providerTestCache(t, service, version)
 		metadata, err := json.Marshal(map[string]any{
 			"version": version, "sha256": hashBytes(image), "iniChecked": iniChecked,
 		})
@@ -1452,7 +1452,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeTestFile(t, filepath.Join(providerTestCache(t, version), providerDLLMetadata), metadata)
+		writeTestFile(t, filepath.Join(providerTestCache(t, service, version), providerDLLMetadata), metadata)
 
 		// The libraries that build verified stay as cached. Only the dependency manifest it never looked for is
 		// searched for, and this release ships none.
@@ -1476,7 +1476,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 
 		// A build that did not read the manifest cached the libraries it knew of and nothing else, at a time the
 		// release did not ship dxil.dll yet.
-		folder := providerTestCache(t, version)
+		folder := providerTestCache(t, service, version)
 		metadata, err := json.Marshal(providerDLLSource{
 			Version:  version,
 			SHA256:   hashBytes(image),
@@ -1521,7 +1521,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		if err := service.ensureProviderDLL(ctx, spec, version); err != nil || downloads.Load() != before+1 {
 			t.Fatalf("refresh downloaded %d files, want dxil.dll alone, err = %v", downloads.Load()-before, err)
 		}
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1536,7 +1536,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		// the two libraries it knew of.
 		legacyEntry := func(t *testing.T, service *XXMI) {
 			t.Helper()
-			folder := providerTestCache(t, version)
+			folder := providerTestCache(t, service, version)
 			metadata, err := json.Marshal(map[string]any{
 				"version": version, "sha256": hashBytes(image), "iniChecked": true, "companionsChecked": true,
 			})
@@ -1560,7 +1560,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 		if err := service.ensureProviderDLL(ctx, spec, version); err != nil {
 			t.Fatalf("unreachable manifest blocked a complete entry: %v", err)
 		}
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1606,7 +1606,7 @@ func TestProviderCompanionsAreCachedWithVerifiedDLL(t *testing.T) {
 			if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
 				t.Fatalf("%s: release was cached", name)
 			}
-			if _, err := os.Stat(providerTestCache(t, version)); !os.IsNotExist(err) {
+			if _, err := os.Stat(providerTestCache(t, service, version)); !os.IsNotExist(err) {
 				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
 			}
 		}
@@ -1705,7 +1705,7 @@ func TestProviderDependencyManifestDecidesDeployedLibraries(t *testing.T) {
 	}
 	cachedCompanions := func(t *testing.T, service *XXMI, version string) map[string][]byte {
 		t.Helper()
-		root, err := xxmiCacheRoot()
+		root, err := service.cacheRoot()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1789,7 +1789,7 @@ func TestProviderDependencyManifestDecidesDeployedLibraries(t *testing.T) {
 			if err := service.ensureProviderDLL(ctx, spec, version); err == nil {
 				t.Fatalf("%s: release was cached", name)
 			}
-			if _, err := os.Stat(providerTestCache(t, version)); !os.IsNotExist(err) {
+			if _, err := os.Stat(providerTestCache(t, service, version)); !os.IsNotExist(err) {
 				t.Fatalf("%s: rejected release left a cache entry: %v", name, err)
 			}
 		}

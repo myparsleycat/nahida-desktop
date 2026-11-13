@@ -537,6 +537,7 @@ func TestLaunchRequiresImporterPackageWhenFollowingLatest(t *testing.T) {
 	writeLegacyLaunchFixture(t, cfg.ImporterFolder, false)
 
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(newXXMITestClient(t))
 	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	settings := fakeLaunch{dcr: true}
@@ -617,6 +618,7 @@ func TestLaunchWithoutGameFolder(t *testing.T) {
 					}
 				}
 				service := New()
+				useTestAppData(t, service)
 				service.UseClient(client)
 				service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 				settings := state.settings

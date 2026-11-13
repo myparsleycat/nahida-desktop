@@ -26,10 +26,33 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
+
+// newTestAppData opens a temporary app data root and returns it with its XXMI cache root.
+func newTestAppData(t *testing.T) (*appdata.Store, string) {
+	t.Helper()
+	data, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := data.Resolve(appdata.XXMIDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data, root
+}
+
+// useTestAppData points service at a temporary app data root and returns its XXMI cache root.
+func useTestAppData(t *testing.T, service *XXMI) string {
+	t.Helper()
+	data, root := newTestAppData(t)
+	service.UseAppData(data)
+	return root
+}
 
 func newXXMITestClient(t *testing.T) *db.Client {
 	t.Helper()

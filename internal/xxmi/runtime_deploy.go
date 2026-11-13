@@ -77,7 +77,7 @@ func (x *XXMI) DeployRuntime(ctx context.Context, key string) ([]string, error) 
 // deployRuntime copies the selected runtime into the importer folder.
 // repair backs up a corrupt manifest and rebuilds it from the verified cache.
 func (x *XXMI) deployRuntime(ctx context.Context, key string, cfg ImporterConfig, repair bool) ([]string, error) {
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -194,12 +194,12 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, "xxmi-libs")
 		if err == nil && len(releases) > 0 {
-			return selectLibsVersion(releases[0].Version, "", deployed, verifiedCachedLibsVersion), nil
+			return selectLibsVersion(releases[0].Version, "", deployed, x.verifiedCachedLibsVersion), nil
 		}
 		if deployed != "" {
 			return deployed, nil
 		}
-		if cached := newestCachedPackageVersion("xxmi-libs"); cached != "" {
+		if cached := x.newestCachedPackageVersion("xxmi-libs"); cached != "" {
 			return cached, nil
 		}
 		if err != nil {
@@ -211,7 +211,7 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg.SkippedVersion != nil {
 		skipped = normalizeVersion(*pkg.SkippedVersion)
 	}
-	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, verifiedCachedLibsVersion), nil
+	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, x.verifiedCachedLibsVersion), nil
 }
 
 func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {
@@ -231,8 +231,8 @@ func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(stri
 	return latest
 }
 
-func verifiedCachedLibsVersion(version string) bool {
-	root, err := xxmiCacheRoot()
+func (x *XXMI) verifiedCachedLibsVersion(version string) bool {
+	root, err := x.cacheRoot()
 	return err == nil && verifyXXMILibsCache(filepath.Join(root, "packages", "xxmi-libs", version), version) == nil
 }
 

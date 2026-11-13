@@ -463,6 +463,7 @@ func newImportTest(t *testing.T) (context.Context, *db.Client, *XXMI, string) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.findProcess = func(context.Context, string) (int, error) { return 0, nil }
 	service.UseClient(client)
 	return ctx, client, service, external

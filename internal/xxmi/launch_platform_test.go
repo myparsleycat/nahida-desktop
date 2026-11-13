@@ -319,7 +319,6 @@ func TestLaunchWithURIWaitsForTheHelper(t *testing.T) {
 }
 
 func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 
 	// The importer folder sits inside the Epic Games install, and nothing is installed in it.
@@ -354,6 +353,7 @@ func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
 			stages = append(stages, data[0].(map[string]any)["stage"].(string))
 		}
 	}})
+	useTestAppData(t, service)
 	client := newXXMITestClient(t)
 	service.UseClient(client)
 	disabled := "false"

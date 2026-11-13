@@ -56,7 +56,7 @@ func (x *XXMI) ImportCustomDLL(ctx context.Context, path string) (dll CustomDLL,
 			},
 		})
 	}()
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return CustomDLL{}, err
 	}
@@ -130,7 +130,7 @@ func (x *XXMI) requireCustomDLL(id string) error {
 	if !isHashID(id) {
 		return fmt.Errorf("invalid custom DLL %q", id)
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (x *XXMI) pruneCustomDLLsLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/xxmi"
@@ -930,6 +931,11 @@ func TestExternalImporterEnableRefreshesCompression(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := xxmi.New()
+	data, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.UseAppData(data)
 	service.UseClient(settings.Client())
 	if err := service.SetExternalImporterEnabled(ctx, "GIMI", false); err != nil {
 		t.Fatal(err)

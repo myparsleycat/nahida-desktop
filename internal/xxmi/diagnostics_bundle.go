@@ -163,7 +163,7 @@ func (x *XXMI) CollectDiagnostics(
 	}
 
 	stage = "write-bundle"
-	folder, err := diagnosticsFolder()
+	folder, err := x.diagnosticsFolder()
 	if err != nil {
 		return bundle, err
 	}
@@ -176,7 +176,7 @@ func (x *XXMI) CollectDiagnostics(
 	// The options come out as soon as the logs are safe, so a report that is never sent does not leave the
 	// game logging.
 	stage = "restore-ini"
-	if err := restoreDiagnosticsINI(ctx, key, cfg, *record); err != nil {
+	if err := x.restoreDiagnosticsINI(ctx, key, cfg, *record); err != nil {
 		x.reportCleanup(os.Remove(bundle.Path), "collect-diagnostics-rollback")
 		return bundle, err
 	}

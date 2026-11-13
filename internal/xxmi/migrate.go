@@ -170,7 +170,7 @@ func (x *XXMI) ImportExternalLauncher(
 		return nil, err
 	}
 	if root == "" {
-		if root, err = xxmiCacheRoot(); err != nil {
+		if root, err = x.cacheRoot(); err != nil {
 			return nil, err
 		}
 	}
@@ -336,7 +336,7 @@ func (x *XXMI) ImportExternalLauncher(
 		}
 	}
 	if fileExists(filepath.Join(path, "Resources", "Packages", "GI-FPS-Unlocker", "Manifest.json")) {
-		if err := importExternalFPSUnlocker(path); err != nil {
+		if err := x.importExternalFPSUnlocker(path); err != nil {
 			return nil, fmt.Errorf("import GI FPS Unlocker: %w", err)
 		}
 	}
@@ -405,7 +405,7 @@ func (x *XXMI) ImportExternalLauncher(
 		}
 		if selectedLibs != "" {
 			stage = "deploy-runtime-" + plan.spec.key
-			cacheRoot, err := xxmiCacheRoot()
+			cacheRoot, err := x.cacheRoot()
 			if err != nil {
 				return nil, err
 			}
@@ -628,12 +628,12 @@ func fileExists(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-func importExternalLibs(externalRoot, version string) error {
+func (x *XXMI) importExternalLibs(externalRoot, version string) error {
 	version = normalizeVersion(strings.TrimSpace(version))
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid external XXMI libraries version")
 	}
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}

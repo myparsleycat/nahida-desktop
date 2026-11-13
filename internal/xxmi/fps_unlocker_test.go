@@ -106,6 +106,8 @@ func TestReadFPSUnlockerConfigRecoversNULFilledConfig(t *testing.T) {
 
 func TestImportExternalFPSUnlockerRejectsDotVersion(t *testing.T) {
 	t.Parallel()
+	service := New()
+	useTestAppData(t, service)
 	external := t.TempDir()
 	source := filepath.Join(external, "Resources", "Packages", "GI-FPS-Unlocker")
 	if err := os.MkdirAll(source, 0o700); err != nil {
@@ -114,7 +116,7 @@ func TestImportExternalFPSUnlockerRejectsDotVersion(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "Manifest.json"), []byte(`{"version":".."}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := importExternalFPSUnlocker(external); err == nil {
+	if err := service.importExternalFPSUnlocker(external); err == nil {
 		t.Fatal("external GI FPS Unlocker accepted a dot version")
 	}
 }

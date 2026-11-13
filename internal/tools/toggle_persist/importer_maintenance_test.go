@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -26,6 +27,11 @@ func TestSuspendImporterWatcherCancelsOldWritesAndRestartsOnFinalConfig(t *testi
 		t.Fatal(err)
 	}
 	importers := xxmi.New()
+	data, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	importers.UseAppData(data)
 	importers.UseClient(client)
 	if err := importers.SetLauncherMode(ctx, xxmi.LauncherBuiltin); err != nil {
 		t.Fatal(err)

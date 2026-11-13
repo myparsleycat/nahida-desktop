@@ -42,7 +42,7 @@ func (x *XXMI) optimizeMods(
 	}
 	patterns := iniOptimizerExclusions(data)
 
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return optimizer.Report{}, err
 	}

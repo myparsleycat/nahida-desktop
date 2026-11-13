@@ -439,7 +439,7 @@ func (x *XXMI) providerRuntimeDLL(ctx context.Context, cfg ImporterConfig) (*pro
 	if err := x.ensureProviderDLL(ctx, spec, version); err != nil {
 		return nil, err
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +676,7 @@ func (x *XXMI) resolveProviderDLLVersion(
 		}
 		return version, nil
 	}
-	deployed := providerDLLBaseVersion(importerFolder, spec)
+	deployed := x.providerDLLBaseVersion(importerFolder, spec)
 	cacheVerified := func(version string) bool { return x.verifiedProviderDLL(ctx, spec, version) }
 	pkg, err := client.XXMIPackages.Get(ctx, spec.overlayPackage)
 	if err != nil {
@@ -748,7 +748,7 @@ func (x *XXMI) ensureProviderDLLLocked(
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return fmt.Errorf("invalid %s version", spec.overlayPackage)
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}
@@ -1509,7 +1509,7 @@ func readProviderDLL(root string, spec libsProviderSpec, version string) (provid
 }
 
 func (x *XXMI) verifiedProviderDLL(ctx context.Context, spec libsProviderSpec, version string) bool {
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return false
 	}
@@ -1554,9 +1554,9 @@ func deployedProviderVersion(folder string, spec libsProviderSpec) string {
 // providerDLLBaseVersion returns the provider release an importer already has: the deployed one, or for an
 // importer that has not deployed this provider yet the newest cached one. A skipped or not yet downloaded
 // update is then held back for a first deployment as well.
-func providerDLLBaseVersion(folder string, spec libsProviderSpec) string {
+func (x *XXMI) providerDLLBaseVersion(folder string, spec libsProviderSpec) string {
 	if deployed := deployedProviderVersion(folder, spec); deployed != "" {
 		return deployed
 	}
-	return newestCachedPackageVersion(spec.overlayPackage)
+	return x.newestCachedPackageVersion(spec.overlayPackage)
 }

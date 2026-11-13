@@ -29,6 +29,7 @@ func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
@@ -97,6 +98,7 @@ func TestRestoreOfficialDLLRejectsUnmanagedImporters(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)

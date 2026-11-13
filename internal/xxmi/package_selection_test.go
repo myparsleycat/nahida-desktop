@@ -48,6 +48,7 @@ func TestSaveAndLaunchRejectUninstalledPackagePin(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())

@@ -278,10 +278,10 @@ func TestDeployRuntimeReplacesCustomDLLWithoutUnsafeMode(t *testing.T) {
 }
 
 func TestCustomDLLSelectionAndPruning(t *testing.T) {
-	// The package cache lives under the user profile, so the service is pointed at a disposable one.
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	service := New()
+	useTestAppData(t, service)
+	useTestAppData(t, service)
 	client := newXXMITestClient(t)
 	service.UseClient(client)
 	service.findProcess = noGameProcess
@@ -394,7 +394,7 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 	if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 		t.Fatal(err)
 	}
-	root, err := xxmiCacheRoot()
+	root, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +404,9 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 	}
 
 	// A fresh service represents the next app session: unused imports can now be pruned.
+	data := service.appData.Load()
 	service = New()
+	service.UseAppData(data)
 	service.UseClient(client)
 	if err := service.SetSharedCustomDLL(ctx, ""); err != nil {
 		t.Fatal(err)
@@ -422,9 +424,9 @@ func TestCustomDLLSelectionAndPruning(t *testing.T) {
 func TestCustomDLLOverlappingSelectionsPreserveImports(t *testing.T) {
 	for _, selection := range []string{"shared", "importer"} {
 		t.Run(selection, func(t *testing.T) {
-			t.Setenv("USERPROFILE", t.TempDir())
 			ctx := context.Background()
 			service := New()
+			useTestAppData(t, service)
 			service.UseClient(newXXMITestClient(t))
 			cfg, err := service.GetImporterConfig(ctx, "GIMI")
 			if err != nil {
@@ -475,7 +477,7 @@ func TestCustomDLLOverlappingSelectionsPreserveImports(t *testing.T) {
 					secondErr,
 				)
 			}
-			root, err := xxmiCacheRoot()
+			root, err := service.cacheRoot()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -491,10 +493,11 @@ func TestCustomDLLOverlappingSelectionsPreserveImports(t *testing.T) {
 func TestCustomDLLSelectionChangeBacksUpPrunedDLL(t *testing.T) {
 	for _, selection := range []string{"replace", "clear"} {
 		t.Run(selection, func(t *testing.T) {
-			t.Setenv("USERPROFILE", t.TempDir())
 			ctx := context.Background()
 			client := newXXMITestClient(t)
 			service := New()
+			useTestAppData(t, service)
+			useTestAppData(t, service)
 			service.UseClient(client)
 			folder := filepath.Join(t.TempDir(), "GIMI")
 			writeTestFile(t, filepath.Join(folder, "d3dx.ini"), []byte("[Loader]"))
@@ -519,7 +522,7 @@ func TestCustomDLLSelectionChangeBacksUpPrunedDLL(t *testing.T) {
 			if err := service.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
 				t.Fatal(err)
 			}
-			root, err := xxmiCacheRoot()
+			root, err := service.cacheRoot()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -534,7 +537,9 @@ func TestCustomDLLSelectionChangeBacksUpPrunedDLL(t *testing.T) {
 			}
 
 			// In a later session, changing the selection prunes the previous DLL before deployment.
+			data := service.appData.Load()
 			service = New()
+			service.UseAppData(data)
 			service.UseClient(client)
 			cfg.CustomDLL = ""
 			var custom *customRuntimeDLL

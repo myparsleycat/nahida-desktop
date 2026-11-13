@@ -3,14 +3,16 @@ package setting
 import (
 	"context"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/appdata"
 )
+
+// unavailableDefault is returned by a default that depends on a service not injected yet.
+// Get then returns the zero value without seeding it, so the real default is stored later.
+type unavailableDefault struct{}
 
 type spec struct {
 	def        Definition
@@ -606,12 +608,12 @@ func buildSpecs() map[string]spec {
 		},
 		KeyXXMIRoot: {
 			def: definitionsByKey[KeyXXMIRoot],
-			getDefault: func(*Setting) any {
-				home, err := os.UserHomeDir()
+			getDefault: func(s *Setting) any {
+				root, err := s.appData.Resolve(appdata.XXMIDir)
 				if err != nil {
-					return ""
+					return unavailableDefault{}
 				}
-				return filepath.Join(home, appdata.RootDirName, "xxmi")
+				return root
 			},
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },

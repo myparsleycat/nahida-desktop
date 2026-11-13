@@ -11,7 +11,6 @@ import (
 )
 
 func TestListCachedLibsSeparatesSelectedVersionFromDeployedReferences(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -22,6 +21,7 @@ func TestListCachedLibsSeparatesSelectedVersionFromDeployedReferences(t *testing
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
@@ -41,7 +41,7 @@ func TestListCachedLibsSeparatesSelectedVersionFromDeployedReferences(t *testing
 	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, runtimeManifestName), manifest, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	root, err := xxmiCacheRoot()
+	root, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,6 @@ func TestListCachedLibsSeparatesSelectedVersionFromDeployedReferences(t *testing
 }
 
 func TestPruneLibsCachePreservesLegacyImportersPinnedXXMIVersion(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -83,6 +82,7 @@ func TestPruneLibsCachePreservesLegacyImportersPinnedXXMIVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	for _, pin := range []struct {
 		key     string
@@ -102,7 +102,7 @@ func TestPruneLibsCachePreservesLegacyImportersPinnedXXMIVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	root, err := xxmiCacheRoot()
+	root, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,6 @@ func TestPruneLibsCachePreservesLegacyImportersPinnedXXMIVersion(t *testing.T) {
 }
 
 func TestLibsCacheReferencesLegacyExtraDLLInjector(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -135,6 +134,7 @@ func TestLibsCacheReferencesLegacyExtraDLLInjector(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
 	if err != nil {
@@ -154,7 +154,6 @@ func TestLibsCacheReferencesLegacyExtraDLLInjector(t *testing.T) {
 }
 
 func TestListCachedLibsUsesVersionOrder(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -164,16 +163,13 @@ func TestListCachedLibsUsesVersionOrder(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	root, err := xxmiCacheRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := New()
+	root := useTestAppData(t, service)
 	for _, version := range []string{"1.7.9", "1.7.10", "1.7.10-rc.1"} {
 		if err := os.MkdirAll(filepath.Join(root, "packages", "xxmi-libs", version), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	service := New()
 	service.UseClient(client)
 	versions, err := service.ListCachedLibs(ctx)
 	if err != nil {

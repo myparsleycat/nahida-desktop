@@ -966,6 +966,7 @@ func TestSaveImporterConfigRejectsLauncherRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	launcherRoot := t.TempDir()

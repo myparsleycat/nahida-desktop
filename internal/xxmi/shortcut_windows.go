@@ -65,7 +65,7 @@ func (x *XXMI) CreateShortcut(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir, err := shortcutIconRoot()
+	dir, err := x.shortcutIconRoot()
 	if err != nil {
 		return "", err
 	}
@@ -114,8 +114,8 @@ func (x *XXMI) resolveShortcutIcon(ctx context.Context, dir, key string) (string
 	return path, nil
 }
 
-func shortcutIconRoot() (string, error) {
-	cacheRoot, err := xxmiCacheRoot()
+func (x *XXMI) shortcutIconRoot() (string, error) {
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}
@@ -190,7 +190,7 @@ func (x *XXMI) restoreDefaultShortcutIcons(ctx context.Context, keys []string) e
 	if len(keys) == 0 {
 		return nil
 	}
-	dir, err := shortcutIconRoot()
+	dir, err := x.shortcutIconRoot()
 	if err != nil {
 		return err
 	}

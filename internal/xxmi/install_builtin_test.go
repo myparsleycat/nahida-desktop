@@ -19,7 +19,6 @@ import (
 )
 
 func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -74,6 +73,7 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	download := infra.NewDownload()
 	download.UseClient(infraClient)
 	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")
@@ -135,7 +135,7 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	}
 	assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(importerFolder, "d3dx.ini"), "user ini")
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := service.cacheRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,6 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 }
 
 func TestInstallBuiltinImporterKeepsLinkedUserData(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
 	if err != nil {
@@ -231,6 +230,7 @@ func TestInstallBuiltinImporterKeepsLinkedUserData(t *testing.T) {
 	download := infra.NewDownload()
 	download.UseClient(infraClient)
 	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
+	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")

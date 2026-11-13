@@ -89,12 +89,12 @@ func TestDetectExternalLauncherScansDrivesOnce(t *testing.T) {
 
 func TestUnconfiguredBuiltinOverviewDoesNotScanDrives(t *testing.T) {
 	t.Setenv("APPDATA", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
 	scans := 0
 	service := NewWithOptions(Options{SearchRoots: func() ([]string, error) {
 		scans++
 		return nil, nil
 	}})
+	useTestAppData(t, service)
 	service.UseClient(newXXMITestClient(t))
 	useBuiltinLauncher(t, service)
 

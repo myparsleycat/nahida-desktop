@@ -187,7 +187,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 		return err
 	}
 	if iniBackup != nil {
-		if _, err := backupImporterINI(spec.key, iniBackup); err != nil {
+		if _, err := x.backupImporterINI(spec.key, iniBackup); err != nil {
 			_ = stageRoot.Close()
 			return err
 		}

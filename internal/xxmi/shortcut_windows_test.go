@@ -478,11 +478,11 @@ func loadShortcutLink(t *testing.T, releaser *win.OleReleaser, path string) *win
 }
 
 func TestGetImporterIconsFallsBackForDamagedIcon(t *testing.T) {
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(newXXMITestClient(t))
-	dir, err := shortcutIconRoot()
+	dir, err := service.shortcutIconRoot()
 	if err != nil {
 		t.Fatal(err)
 	}

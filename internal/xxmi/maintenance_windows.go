@@ -132,7 +132,7 @@ func (x *XXMI) RepairImporterPackage(ctx context.Context, key string) (returnErr
 }
 
 func (x *XXMI) repairLegacyCache(ctx context.Context, cfg ImporterConfig) (ImporterConfig, []string, error) {
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return cfg, nil, err
 	}
@@ -191,7 +191,7 @@ func (x *XXMI) repairLibsCache(ctx context.Context, version string) ([]string, e
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return nil, errors.New("invalid XXMI libraries version")
 	}
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return nil, err
 	}

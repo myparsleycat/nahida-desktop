@@ -24,6 +24,7 @@ func TestDeployedLibsVersionUsesImporterManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := New()
+	useTestAppData(t, service)
 	service.UseClient(client)
 	service.findProcess = noGameProcess
 	useBuiltinLauncher(t, service)

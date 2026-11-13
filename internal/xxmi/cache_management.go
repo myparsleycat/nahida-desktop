@@ -107,7 +107,7 @@ func (x *XXMI) PruneLibsCache(ctx context.Context) ([]string, error) {
 }
 
 func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]CachedLibs, error) {
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return "", nil, err
 	}
@@ -173,9 +173,9 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 			}
 		}
 		if selected == "" && cfg.Mode == RuntimeXXMI {
-			selected = cachedLibsVersion(latest, skipped, deployedVersion, verifiedCachedLibsVersion)
+			selected = cachedLibsVersion(latest, skipped, deployedVersion, x.verifiedCachedLibsVersion)
 		} else if selected == "" && legacyUsesXXMIInjector(cfg) {
-			selected = newestCachedPackageVersion("xxmi-libs")
+			selected = x.newestCachedPackageVersion("xxmi-libs")
 		}
 		if selected != "" {
 			reference := referenced[selected]
@@ -190,7 +190,7 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 }
 
 func (x *XXMI) GetLegacyRuntimes(ctx context.Context) ([]LegacyRuntimeInfo, error) {
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return nil, err
 	}

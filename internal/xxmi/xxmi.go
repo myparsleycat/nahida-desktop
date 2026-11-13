@@ -10,8 +10,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
@@ -146,6 +148,8 @@ type XXMI struct {
 	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
 	importedCustomDLLs map[string]bool
 
+	// appData is atomic so cache path lookups never take x.mu.
+	appData     atomic.Pointer[appdata.Store]
 	client      *db.Client
 	log         *infra.Log
 	github      *github.Client
@@ -227,6 +231,10 @@ func NewWithOptions(opts Options) *XXMI {
 	x.openLaunchURI = openShellURI
 	x.gryphlinkFolders = installedGryphlinkFolders
 	return x
+}
+
+func (x *XXMI) UseAppData(data *appdata.Store) {
+	x.appData.Store(data)
 }
 
 func (x *XXMI) UseClient(client *db.Client) {
@@ -315,7 +323,7 @@ func (x *XXMI) GetXXMIPath(ctx context.Context) (*string, error) {
 	if root != nil && *root != "" {
 		return root, nil
 	}
-	fallback, err := xxmiCacheRoot()
+	fallback, err := x.cacheRoot()
 	return &fallback, err
 }
 

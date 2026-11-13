@@ -112,7 +112,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 		rootPath = *root
 	}
 	if rootPath == "" {
-		rootPath, err = xxmiCacheRoot()
+		rootPath, err = x.cacheRoot()
 		if err != nil {
 			return Overview{}, err
 		}
@@ -171,7 +171,7 @@ func (x *XXMI) GetOverview(ctx context.Context) (Overview, error) {
 	if sharedCustomDLL != nil {
 		overview.SharedCustomDLL = strings.TrimSpace(*sharedCustomDLL)
 	}
-	cacheRoot, err := xxmiCacheRoot()
+	cacheRoot, err := x.cacheRoot()
 	if err != nil {
 		return Overview{}, err
 	}
@@ -265,7 +265,7 @@ func (x *XXMI) ResetBuiltinRuntime(ctx context.Context) (returnErr error) {
 		if err != nil {
 			return err
 		}
-		err = restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
+		err = x.restoreDiagnosticsINI(ctx, key, record.config(cfg), *record)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

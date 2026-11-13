@@ -29,9 +29,9 @@ func newImporterDiagnosticsTestService(
 	edit func(*ImporterConfig),
 ) (*XXMI, ImporterConfig) {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
 	ctx := context.Background()
 	service := NewWithOptions(Options{Elevated: stubLaunchHelper{}})
+	useTestAppData(t, service)
 	service.UseClient(newXXMITestClient(t))
 	service.processSnapshot = func(context.Context) (map[string]bool, error) { return map[string]bool{}, nil }
 	service.crashEvents = func(context.Context, time.Time, []string) (string, int, error) { return "", 0, nil }

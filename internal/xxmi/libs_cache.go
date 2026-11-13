@@ -36,7 +36,7 @@ func (x *XXMI) ensureLibsVersionLocked(ctx context.Context, version string) erro
 	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
 		return errors.New("invalid XXMI libraries version")
 	}
-	root, err := xxmiCacheRoot()
+	root, err := x.cacheRoot()
 	if err != nil {
 		return err
 	}

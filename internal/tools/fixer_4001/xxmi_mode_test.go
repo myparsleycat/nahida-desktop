@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/xxmi"
 )
@@ -24,6 +25,11 @@ func TestEnsureXXMIModeRejectsUnmanagedBuiltinImporters(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := xxmi.New()
+	appData, err := appdata.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.UseAppData(appData)
 	runtime.UseClient(client)
 	if err := runtime.SetLauncherMode(ctx, xxmi.LauncherBuiltin); err != nil {
 		t.Fatal(err)

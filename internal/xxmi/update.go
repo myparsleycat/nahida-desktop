@@ -151,7 +151,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 				libs.Installed, _ = deployedLibsVersion(cfg.ImporterFolder)
 				if pin == "" {
 					libs.Installed = cachedLibsVersion(
-						libs.LatestVersion, libs.SkippedVersion, libs.Installed, verifiedCachedLibsVersion,
+						libs.LatestVersion, libs.SkippedVersion, libs.Installed, x.verifiedCachedLibsVersion,
 					)
 				}
 			}
@@ -159,7 +159,10 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			// A runtime not deployed since migration, or an adopted custom DLL whose manifest has no source,
 			// reports no version; the next launch deploys the selected cached libraries without downloading.
 			if libs.Installed == "" && (cfg.Mode == RuntimeXXMI || legacyUsesXXMIInjector(cfg)) {
-				if version := selectedLegacyInjectorVersion(pin); version != "" && verifiedCachedLibsVersion(version) {
+				if version := x.selectedLegacyInjectorVersion(
+					pin,
+				); version != "" &&
+					x.verifiedCachedLibsVersion(version) {
 					libs.Installed = version
 				}
 			}
@@ -180,7 +183,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			dll.Shared = cfg.LibsProvider == ""
 			if pin == "" {
 				dll.Installed = cachedLibsVersion(
-					dll.LatestVersion, dll.SkippedVersion, providerDLLBaseVersion(cfg.ImporterFolder, provider),
+					dll.LatestVersion, dll.SkippedVersion, x.providerDLLBaseVersion(cfg.ImporterFolder, provider),
 					func(version string) bool { return x.verifiedProviderDLL(ctx, provider, version) },
 				)
 			} else if version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder); err == nil {
@@ -191,7 +194,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		}
 		if row.Key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
 			fps := updateStatus(row.Key, "gi-fps-unlocker", states["gi-fps-unlocker"])
-			fps.Installed = newestCachedPackageVersion("gi-fps-unlocker")
+			fps.Installed = x.newestCachedPackageVersion("gi-fps-unlocker")
 			fps.Available = updateAvailable(fps.LatestVersion, fps.Installed, fps.SkippedVersion)
 			statuses = append(statuses, fps)
 		}
@@ -233,8 +236,8 @@ func cachedLibsVersion(latest, skipped, deployed string, cacheVerified func(stri
 	return ""
 }
 
-func newestCachedPackageVersion(pkg string) string {
-	root, err := xxmiCacheRoot()
+func (x *XXMI) newestCachedPackageVersion(pkg string) string {
+	root, err := x.cacheRoot()
 	if err != nil {
 		return ""
 	}
@@ -255,11 +258,11 @@ func newestCachedPackageVersion(pkg string) string {
 	return latest
 }
 
-func selectedLegacyInjectorVersion(pin string) string {
+func (x *XXMI) selectedLegacyInjectorVersion(pin string) string {
 	if version := signedLibsVersion(pin); version != "" {
 		return version
 	}
-	return newestCachedPackageVersion("xxmi-libs")
+	return x.newestCachedPackageVersion("xxmi-libs")
 }
 
 func updateAvailable(latest, installed, skipped string) bool {
