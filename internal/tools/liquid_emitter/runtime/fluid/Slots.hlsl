@@ -7,7 +7,7 @@
 // Includers declare IniParams first.
 #ifndef LIQUID_SLOTS
 #define LIQUID_SLOTS
-static const uint SLOT_ROWS=16;
+static const uint SLOT_ROWS=18;
 // xyz the character root that slot particles are stored relative to; w is 1
 // while the slot is assigned. A freed slot drops its particles that frame.
 static const uint SLOT_ROOT=9;
@@ -27,7 +27,7 @@ static const uint SLOT_TINT=13;
 // roughness of the liquid, each 0 to 1; zero keeps the runtime's clear,
 // mirror-like liquid.
 static const uint SLOT_NOZZLE=14;
-static const uint NOZZLE_SPRAY=0,NOZZLE_JET=1,NOZZLE_OOZE=2;
+static const uint NOZZLE_SPRAY=0,NOZZLE_JET=1,NOZZLE_OOZE=2,NOZZLE_YOGURT=3;
 // x counts the characters the slot was handed to, so state kept for a slot
 // across frames (EmitterState.hlsl, StreamMeta) never carries over to the
 // next one. A cleared runtime starts every slot at zero again, along with
@@ -52,10 +52,20 @@ float slotForce(uint s){
 // The nozzle setting the slot emits with: the emitter's force over the former
 // default level 3 (1.69), within the former levels' .28 to 3.94.
 float slotDrive(uint s){return clamp(1.69*slotForce(s),.28,3.94);}
-uint slotNozzle(uint s){return (uint)clamp(round(slots[s*SLOT_ROWS+SLOT_NOZZLE].x),0,2);}
+uint slotNozzle(uint s){return (uint)clamp(round(slots[s*SLOT_ROWS+SLOT_NOZZLE].x),0,3);}
 float slotScattering(uint s){return saturate(slots[s*SLOT_ROWS+SLOT_NOZZLE].y);}
 float slotRoughness(uint s){return saturate(slots[s*SLOT_ROWS+SLOT_NOZZLE].z);}
+bool slotRebound(uint s){return !slotLive(s);}
+bool slotYogurtMode(uint s){return slotNozzle(s)==NOZZLE_YOGURT;}
+bool slotEmitterOn(uint s){return slotLive(s)&&slotSeen(s);}
 uint slotGeneration(uint s){return (uint)slots[s*SLOT_ROWS+SLOT_GENERATION].x;}
+bool slotAdvanced(uint s){return slots[s*SLOT_ROWS+16].x>.5;}
+float slotInterval(uint s){return slotAdvanced(s)?slots[s*SLOT_ROWS+16].y:1;}
+float slotWidth(uint s){return slotAdvanced(s)?slots[s*SLOT_ROWS+16].z:1;}
+float slotSprayAngle(uint s){return slots[s*SLOT_ROWS+16].w;}
+float slotSprayRatio(uint s){return slots[s*SLOT_ROWS+17].x;}
+bool slotRandomSpeed(uint s){return slots[s*SLOT_ROWS+17].y>.5;}
+float slotTransparency(uint s){return slotAdvanced(s)?slots[s*SLOT_ROWS+17].z:1;}
 // The emitter's flow over the runtime's. Zero, as in a profile from before
 // the setting, means 1.
 float slotAmount(uint s){
@@ -66,10 +76,11 @@ float slotAmount(uint s){
 // square root of the amount. The particles cannot draw a stream thinner than
 // at amount .1; less flow than that leaves the outlet there and breaks into
 // drops instead, through fewer births (FluidSolver.hlsl).
-float slotOutlet(uint s){return sqrt(max(slotAmount(s),.1));}
+float slotEmissionStrength(uint s){return slotAmount(s);}
+float slotOutlet(uint s){return slotAdvanced(s)?slotWidth(s):sqrt(max(slotAmount(s),.1));}
 // The drawn radius of the slot's stream particles: thinner with less flow,
 // while more flow adds particles rather than widening them.
-float slotThread(uint s){return min(slotOutlet(s),1);}
+float slotThread(uint s){return slotAdvanced(s)?slotWidth(s):min(slotOutlet(s),1);}
 // The character's viscosity over the runtime's water-like liquid; zero, as in
 // a profile from before the setting, means 1. Every effect derived from it
 // keeps its former constant at 1.
@@ -97,4 +108,5 @@ float4 slotLiquid(uint s){
 // owner: velocityAlive.w is 1+slot while alive and 0 once dead.
 float splashAliveTag(uint s){return 1+s;}
 uint splashSlot(float aliveTag){return (uint)clamp(round(aliveTag)-1,0,SLOT_COUNT-1);}
+float slotEmissionInterval(uint s){return slotInterval(s);}
 #endif

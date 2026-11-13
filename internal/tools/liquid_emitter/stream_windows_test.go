@@ -12,7 +12,7 @@ import (
 // Pool layout of ParticleConfig.hlsl and Slots.hlsl.
 const (
 	slotCount, primaryPerSlot, primaryCount  = 8, 1024, 8192
-	slotRows, slotRootRow, slotGenerationRow = 16, 9, 15
+	slotRows, slotRootRow, slotGenerationRow = 18, 9, 15
 	particleFloats                           = 16
 	linkRows, linkNone, linkBroken           = 2, 0xffffffff, 0xfffffffe
 )

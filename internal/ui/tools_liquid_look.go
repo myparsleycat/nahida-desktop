@@ -45,7 +45,7 @@ func liquidMaterialOf(look liquidemitter.Look) string {
 
 func liquidFollowsRuntime(look liquidemitter.Look) bool {
 	return look.Force == 1 && look.Amount == 1 && !look.CustomColor && look.Viscosity == 1 &&
-		liquidNozzleOf(look) == liquidemitter.NozzleSpray && liquidMaterialOf(look) == "clear"
+		liquidNozzleOf(look) == liquidemitter.NozzleSpray && liquidMaterialOf(look) == "clear" && !look.Emission.Enabled
 }
 
 func liquidRound(value float64, digits int) float64 {
@@ -93,10 +93,15 @@ func (lt *liquidTool) lookSection() *fairy.El {
 				}, locked, func(value string) { update(func(l *liquidemitter.Look) { l.Nozzle = value }) }),
 				liquidHint(T(liquidPrefix+"look.nozzle."+nozzle+"_hint")),
 			).Gap(6),
-			fairy.Col(liquidRange(T(liquidPrefix+"look.force"), fmt.Sprintf("×%.2f", look.Force), look.Force,
-				liquidMinForce, liquidMaxForce, 0.05, locked, func(value float64) {
-					update(func(l *liquidemitter.Look) { l.Force = liquidRound(value, 2) })
-				}), hint("force")).Gap(4),
+			func() *fairy.El {
+				if nozzle == liquidemitter.NozzleYogurt {
+					return nil
+				}
+				return fairy.Col(liquidRange(T(liquidPrefix+"look.force"), fmt.Sprintf("×%.2f", look.Force), look.Force,
+					liquidMinForce, liquidMaxForce, 0.05, locked, func(value float64) {
+						update(func(l *liquidemitter.Look) { l.Force = liquidRound(value, 2) })
+					}), hint("force")).Gap(4)
+			}(),
 			fairy.Col(liquidRange(T(liquidPrefix+"look.amount"), fmt.Sprintf("×%.2f", look.Amount),
 				math.Log10(look.Amount), liquidMinAmountLog, liquidMaxAmountLog, 0.01, locked, func(value float64) {
 					update(func(l *liquidemitter.Look) { l.Amount = liquidRound(math.Pow(10, value), 2) })
@@ -112,6 +117,10 @@ func (lt *liquidTool) lookSection() *fairy.El {
 				}),
 		).Gap(12)
 
+		body.Child(lt.emissionSection(look, locked, update))
+		if current := lt.current(); current != nil && !current.SurfaceTracked {
+			body.Child(liquidHint(T(liquidPrefix + "look.surface_required")))
+		}
 		if look.CustomColor {
 			tint := fairy.Color{
 				R: float32(clamp01(look.Tint[0])), G: float32(clamp01(look.Tint[1])), B: float32(clamp01(look.Tint[2])),
@@ -131,13 +140,25 @@ func (lt *liquidTool) lookSection() *fairy.El {
 				fairy.Row(fairy.Text(T(liquidPrefix+"look.tint")).FontSize(14).LineHeight(20).Grow(1).MinW(0), picker.W(64).Shrink(0)).
 					Gap(8).
 					Align(fairy.Center),
-				fairy.Col(liquidRange(T(liquidPrefix+"look.absorption"), fmt.Sprintf("%g mm", look.AbsorptionMM),
-					look.AbsorptionMM, 2, 60, 1, locked, func(value float64) {
-						update(func(l *liquidemitter.Look) { l.AbsorptionMM = value })
-					}), liquidHint(T(liquidPrefix+"look.absorption_hint"))).Gap(4),
+				func() *fairy.El {
+					if nozzle == liquidemitter.NozzleYogurt {
+						return nil
+					}
+					return fairy.Col(liquidRange(T(liquidPrefix+"look.absorption"), fmt.Sprintf("%g mm", look.AbsorptionMM),
+						look.AbsorptionMM, 2, 60, 1, locked, func(value float64) {
+							update(func(l *liquidemitter.Look) { l.AbsorptionMM = value })
+						}), liquidHint(T(liquidPrefix+"look.absorption_hint"))).
+						Gap(4)
+				}(),
 			)
 		}
 
+		if nozzle == liquidemitter.NozzleYogurt {
+			return body.Child(
+				kit.Button(T(liquidPrefix+"look.reset"), func() { update(resetLiquidLook) }, kit.Outline, kit.Small, kit.Disabled(locked)).
+					WFull(),
+			)
+		}
 		materialTitle := fairy.Row(fairy.Text(T(liquidPrefix + "look.material.title")).FontSize(14).LineHeight(20).Medium().Grow(1)).
 			Align(fairy.Center)
 		if material == "" {
@@ -165,14 +186,16 @@ func (lt *liquidTool) lookSection() *fairy.El {
 					update(func(l *liquidemitter.Look) { l.Roughness = liquidRound(value/100, 2) })
 				}), liquidHint(T(liquidPrefix+"look.material.roughness_hint"))).Gap(4),
 			kit.Button(T(liquidPrefix+"look.reset"), func() {
-				update(func(l *liquidemitter.Look) {
-					tint, absorption := l.Tint, l.AbsorptionMM
-					*l = liquidRuntimeLook
-					l.Tint, l.AbsorptionMM = tint, absorption
-				})
+				update(resetLiquidLook)
 			}, kit.Outline, kit.Small, kit.Disabled(locked || runtimeLook)).WFull(),
 		)
 	})
+}
+
+func resetLiquidLook(look *liquidemitter.Look) {
+	tint, absorption := look.Tint, look.AbsorptionMM
+	*look = liquidRuntimeLook
+	look.Tint, look.AbsorptionMM = tint, absorption
 }
 
 func clamp01(value float64) float64 {

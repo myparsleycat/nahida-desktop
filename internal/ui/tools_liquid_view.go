@@ -600,7 +600,8 @@ func (lt *liquidTool) footer() *fairy.El {
 	busy := lt.busy != ""
 	mode := lt.applyMode()
 	// A new mod and an emitter whose hook went missing are worth applying unchanged.
-	applicable := lt.unsaved() || mode == liquidemitter.ApplyNewMod || current != nil && !current.Hooked
+	applicable := lt.unsaved() || mode == liquidemitter.ApplyNewMod ||
+		current != nil && (!current.Hooked || !current.SurfaceTracked)
 	row := fairy.Row().Gap(8)
 	if current != nil {
 		pid := current.PID

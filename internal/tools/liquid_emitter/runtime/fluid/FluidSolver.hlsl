@@ -119,7 +119,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  // This same rule covers first activation, reactivation, and teleport recovery.
  // An oozing outlet emits no stream (Splash.hlsl); a switch to it lets the
  // stream already out finish its life.
- bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot) && nozzleKind!=NOZZLE_OOZE;
+ bool emitting=IniParams[237].x>.5 && pulse[3].w>.5 && slotSeen(slot) && nozzleKind!=NOZZLE_OOZE && nozzleKind!=NOZZLE_YOGURT;
  float drive=slotDrive(slot);
  bool initialized=p.densityBirth.w>.5;
  bool birth=emitting && age>=0 && age<DT;
@@ -132,8 +132,9 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  // allocated splash pool is untouched.
  float sheetDemand=max(saturate((drive-1.69)/2.25),saturate((pulse[2].x-1)/.85));
  float amount=slotAmount(slot);
- float births=amount<.1?amount/.1:max(amount,1);
- float share=saturate(.5*births*(1+saturate(sheetDemand/.05)));
+ float births=slotAdvanced(slot)?amount:(amount<.1?amount/.1:max(amount,1));
+ births/=slotInterval(slot);
+ float share=slotAdvanced(slot)?saturate(.5*births):saturate(.5*births*(1+saturate(sheetDemand/.05)));
  // A fast jet spreads its births over a longer path, so it keeps both banks
  // and thins out into drops only below amount .1.
  if(jet)share=saturate(births);
@@ -223,8 +224,16 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
   }
   if(jet && !tailEmission)branchTag=BRANCH_JET;
   float3 direction=normalize(axis+right*sideSlope+slitLong*longSlope);
+  if(slotAdvanced(slot)&&!jet&&!tailEmission){
+   float polar=hash1(i*19+t*23)*slotSprayAngle(slot)*PI/360;
+   bool dispersed=hash1(i*31+t*11)<slotSprayRatio(slot);
+   direction=dispersed?axis*cos(polar)+(right*cos(azimuth)+slitLong*sin(azimuth))*sin(polar):axis;
+   if(slotRandomSpeed(slot))nozzle.speed*=.75+.5*hash1(i*37+t*29);
+   branchTag=BRANCH_SCATTER;minimumFlow=false;nozzle.sheetAmount=0;frozenMode=-1;
+   birthSheetFrame[i]=float4(slitLong,-1);
+  }
   float3 launch=direction*nozzle.speed;
-  if(branchTag==BRANCH_SCATTER){
+  if(branchTag==BRANCH_SCATTER && !slotAdvanced(slot)){
    // A wide independent ballistic cloud needs lateral speed, not just a
    // larger angle on a very slow normalized outlet vector.
    uint scatterSeed=asuint(t)^(i*747796405u+2891336453u);
@@ -255,7 +264,7 @@ void main(uint3 dispatch:SV_DispatchThreadID,uint lane:SV_GroupIndex){
    p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
   }
   // Thin only the fully dispersed birth events, not the coherent/pulse core.
-  if(branchTag==BRANCH_SCATTER && ((i+(uint)floor(t/.48))&1u)!=0){
+  if(branchTag==BRANCH_SCATTER && !slotAdvanced(slot) && ((i+(uint)floor(t/.48))&1u)!=0){
    p.velocityAlive.w=0;p.positionAge.w=age;target[i]=p;return;
   }
   // Geometric incident ray: the virtual sheet reaches its broadest section

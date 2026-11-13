@@ -16,7 +16,7 @@ static const uint CANDIDATE_ROWS=9;
 // up, then the mod's look (force, custom color, absorption depth, amount), its
 // tint and viscosity, and its nozzle kind, scattering and roughness, which
 // LoadProfilesJSON.hlsl writes and AssignSlots copies.
-static const uint PROFILE_ROWS=6;
+static const uint PROFILE_ROWS=8;
 static const uint AIRBORNE_SPLASH_COUNT=2048;
 static const uint PUDDLE_COUNT=4096;
 static const uint SPLASH_COUNT=AIRBORNE_SPLASH_COUNT+PUDDLE_COUNT;

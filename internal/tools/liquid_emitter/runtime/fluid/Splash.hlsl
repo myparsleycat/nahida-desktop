@@ -29,6 +29,8 @@ RWStructuredBuffer<float4> contactHistory:register(u2);
 #include "Merge.hlsl"
 #include "Diagnostics.hlsl"
 #ifdef SPLASH_UPDATE
+#define BODY_BINDING_REGISTER u7
+#include "../bodymesh/Attachment.hlsl"
 RWBuffer<uint> diagnostics:register(u1);
 #else
 // Per airborne slot, the drop it would merge with (SplashMerge.hlsl).
@@ -269,7 +271,24 @@ void main(uint3 id:SV_DispatchThreadID){
    bool puddle=floorPuddle(p.densityBirth.w),trail=trailSegment(p.densityBirth.w);
    bool attached=p.predictedLambda.w>.5;
    float3 velocity=p.velocityAlive.xyz,to=from;
-   if(puddle){
+   uint bodyMesh=8;float3 bodyNormal=p.predictedLambda.xyz,bodyFrom=from;
+   bool bodyContact=!puddle&&bodyReuse(i,owner,p.densityBirth.y,trail?TRAIL_LIFT:radius,bodyFrom,bodyNormal,bodyMesh);
+   if(bodyContact){
+    if(!trail){if(p.predictedLambda.w<.5)p.positionAge.w=0;p.densityBirth.w=4;}
+    float3 carried=bodyFrom-from;h.trail.xyz+=carried;from=bodyFrom;
+    float3 displacement=0;
+    if(!trail)advanceAdhesion(velocity,bodyNormal,dt,slotViscosity(owner),velocity,displacement);
+    bool boundary;float3 followed,normal;
+    if(bodyFollowDetailed(i,bodyMesh,from+displacement,trail?TRAIL_LIFT:radius,followed,normal,boundary)){
+     to=followed;velocity-=normal*dot(velocity,normal);attached=true;
+     p.predictedLambda=float4(normal,4);
+     h.plane=float4(to-normal*(radius+.0001),contactTime);h.normal=float4(normal,0);h.trail.w=0;
+     if(!trail)leaveTrail(p,h,to,normal,radius);
+    }else{to=from;attached=false;p.predictedLambda=0;}
+   }else if(p.predictedLambda.w==4){
+    attached=false;p.predictedLambda=0;bodyBindings[i*3]=0;
+    velocity+=float3(0,-9.81,0)*dt;to=from+velocity*dt;
+   }else if(puddle){
     float3 oldNormal=p.predictedLambda.xyz,displacement;
     float oldHeight=puddleHalfHeight(radius,p.densityBirth.x);
     // A grown puddle soaks away back toward one drop (Puddle.hlsl), so its
@@ -531,7 +550,7 @@ void main(uint3 id:SV_DispatchThreadID){
    uint kind=slotNozzle(s),sprayCount=0;
    if(kind==NOZZLE_OOZE){
     if(slotLive(s))sprayCount=oozeRequests(s);
-   }else if(kind==NOZZLE_SPRAY&&spraying&&slotSeen(s)){
+   }else if(kind==NOZZLE_SPRAY&&!slotAdvanced(s)&&spraying&&slotSeen(s)){
     float lowRate=120*peripheralSpray(.5*(1-smoothstep(.28,1.69,1.1275)),slotDrive(s))*pulseSuppression*slotAmount(s);
     sprayCount=sprayPulseCount(s,pulseCount,lowJitter)+(uint)clamp(floor(dt*lowRate+lowJitter),0,8);
    }

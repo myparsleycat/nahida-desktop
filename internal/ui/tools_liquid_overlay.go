@@ -51,7 +51,8 @@ func (lt *liquidTool) overlay() *viewerOverlayDraw {
 			look = lt.savedLook()
 		}
 		var trajectory *liquidemitter.Look
-		if lt.showTrajectory && look != nil && look.Nozzle != liquidemitter.NozzleOoze {
+		if lt.showTrajectory && look != nil && look.Nozzle != liquidemitter.NozzleOoze &&
+			look.Nozzle != liquidemitter.NozzleYogurt {
 			trajectory = look
 		}
 		lt.marker(draw, *anchor, overlayColor(liquidAnchorColor), trajectory)
@@ -84,6 +85,22 @@ func (lt *liquidTool) marker(draw *viewerOverlayDraw, anchor liquidAnchor, color
 		return
 	}
 
+	if look.Emission.Enabled {
+		width := look.Emission.Width
+		draw.triangles = overlayCone(draw.triangles, frame, .002*width, .002*width, 0, .01, 16, color)
+		if look.Nozzle == liquidemitter.NozzleSpray && look.Emission.SprayRatio > 0 {
+			half := look.Emission.SprayAngle * math.Pi / 360
+			for i := range 8 {
+				angle := float64(i) * math.Pi / 4
+				direction := frameDirection(anchor.direction, lt.down(), half, angle)
+				draw.lines = overlayPolyline(
+					draw.lines,
+					[]vec3{origin, origin.add(direction.scale(.12 * scale))},
+					color,
+				)
+			}
+		}
+	}
 	path := liquidFlowTrajectory(anchor.point.scale(unit), anchor.offset.scale(unit), anchor.direction, lt.down(),
 		look.Force, look.Nozzle == liquidemitter.NozzleJet)
 	toModel := func(p vec3) vec3 { return p.scale(scale).add(shift) }
@@ -118,4 +135,17 @@ func (lt *liquidTool) surfaceMeshes(meshID string) []string {
 		}
 	}
 	return ids
+}
+
+func frameDirection(direction, down vec3, polar, azimuth float64) vec3 {
+	axis := liquidNormalize(direction)
+	_, side, across := liquidFrame(down)
+	if math.Abs(axis.dot(side)) > .9 {
+		side = across
+	}
+	x := liquidNormalize(axis.cross(side))
+	y := liquidNormalize(axis.cross(x))
+	return axis.scale(math.Cos(polar)).
+		add(x.scale(math.Sin(polar) * math.Cos(azimuth))).
+		add(y.scale(math.Sin(polar) * math.Sin(azimuth)))
 }

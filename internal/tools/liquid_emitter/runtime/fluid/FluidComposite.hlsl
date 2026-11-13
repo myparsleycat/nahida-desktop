@@ -13,7 +13,7 @@ Texture2D<float4> sceneLighting:register(t104);
 StructuredBuffer<float4> fluidAmbient:register(t105);
 // Scattering and roughness under the weight in fluidColor's alpha
 // (FluidSurface.hlsl); unsmoothed.
-Texture2D<float2> fluidMaterial:register(t107);
+Texture2D<float4> fluidMaterial:register(t107);
 struct ScreenVarying{float4 position:SV_Position;};
 // Share of the offset lookup in the reflection a missed puddle ray keeps.
 static const float REFLECTION_MISS_LOCAL=.3;
@@ -186,17 +186,17 @@ float4 main(ScreenVarying i):SV_Target{
  float mixedDepth=fluidAbsorptionDepth.Load(int3(pixel,0));
  float depthMeters=max(look.w,.001);
  float3 absorb=-log(max(saturate(look.rgb),.02))/depthMeters;
- float2 material=0;
+ float3 material=0;
  if(mixed.a>0&&all(isfinite(mixed))&&isfinite(mixedDepth)){
   absorb=max(mixed.rgb/mixed.a,0);
   depthMeters=max(mixedDepth/mixed.a/1000,.001);
-  float2 weighted=fluidMaterial.Load(int3(pixel,0));
+  float3 weighted=fluidMaterial.Load(int3(pixel,0)).xyz;
   if(all(isfinite(weighted)))material=saturate(weighted/mixed.a);
  }
  uint view=debugView();
  [branch]if(view>=DEBUG_OOZE&&view<=DEBUG_OPTICS){
   // The particle passes wrote their debug colors where absorption goes.
-  float3 shown=view==DEBUG_OPTICS?float3(saturate(thickness/.01),material):(mixed.a>0?saturate(mixed.rgb/mixed.a):0);
+  float3 shown=view==DEBUG_OPTICS?float3(saturate(thickness/.01),material.xy):(mixed.a>0?saturate(mixed.rgb/mixed.a):0);
   return float4(shown,smoothstep(0,.0004,thickness));
  }
  float scattering=SCATTERING_PER_METER*material.x*material.x,roughness=material.y;
@@ -294,6 +294,8 @@ float4 main(ScreenVarying i):SV_Target{
  // puddle's thickness is the sum of soft discs, which a threshold turns
  // into one film with an irregular edge, and lone drops into small dots.
  float alpha=lerp(lerp(1-exp(-thickness/.0006),smoothstep(.00015,.0005,thickness),puddle),smoothstep(.00005,FILM_SHOWN,thickness),surfaceFilm);
+ color=lerp(color,tint,material.z);
+ alpha=lerp(alpha,1,material.z);
  return float4(color,alpha);
 }
 #endif

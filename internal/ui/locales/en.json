@@ -2099,7 +2099,9 @@
             "jet": "Narrow jet",
             "jet_hint": "Produces a narrow, straight jet without mist or fan-shaped spread.",
             "ooze": "Ooze",
-            "ooze_hint": "Liquid collects at the outlet, stretches into droplets, then detaches and flows along the body. Airborne trajectory preview is unavailable."
+            "ooze_hint": "Liquid collects at the outlet, stretches into droplets, then detaches and flows along the body. Airborne trajectory preview is unavailable.",
+            "yogurt": "Viscous flow",
+            "yogurt_hint": "Liquid flows over the mesh, gathers and drips. Force and pulses do not apply."
           },
           "hints": {
             "spray": {
@@ -2116,6 +2118,10 @@
               "force": "Controls droplet size and detachment force. Higher values produce smaller droplets that detach with more force.",
               "amount": "Controls how quickly liquid collects at the outlet. Higher values increase droplet frequency.",
               "viscosity": "Controls droplet stretching, detachment, and runoff. Higher values slow the flow and stretch droplets farther before detachment."
+            },
+            "yogurt": {
+              "amount": "Controls the supply of viscous liquid.",
+              "viscosity": "Higher values slow surface flow and droplet stretching."
             }
           },
           "custom_color": "Use custom color",
@@ -2142,7 +2148,19 @@
             "runtime": "Runtime settings",
             "custom": "Custom",
             "unsaved": "Unsaved"
-          }
+          },
+          "emission": {
+            "title": "Emission details",
+            "enabled": "Use emission details",
+            "hint": "Adjust emission interval and width separately. Transparency 0% is opaque; 100% uses the default material appearance.",
+            "interval": "Emission interval",
+            "width": "Liquid width",
+            "transparency": "Transparency",
+            "angle": "Spray angle",
+            "ratio": "Spray ratio",
+            "random_speed": "Random particle speed"
+          },
+          "surface_required": "Apply the attachment again to prepare mesh surface tracking."
         },
         "error": {
           "unsupported_game": "This tool does not support mods for this game yet.",
@@ -2165,7 +2183,8 @@
           "invalid_look": "The liquid settings are out of range.",
           "no_emitters": "Apply an emitter before setting its liquid.",
           "emitter_limit": "A mod can have up to {{detail}} emitters. Remove one first.",
-          "emitter_not_found": "This emitter no longer exists. Close and reopen the tool."
+          "emitter_not_found": "This emitter no longer exists. Close and reopen the tool.",
+          "surface_unavailable": "Mesh surface tracking data could not be prepared. Reload the model and apply the attachment again. {{detail}}"
         },
         "apply_new": "Add emitter",
         "slots": {

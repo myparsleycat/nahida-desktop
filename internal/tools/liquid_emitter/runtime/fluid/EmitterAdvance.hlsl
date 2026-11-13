@@ -22,7 +22,7 @@ void main(uint3 id:SV_DispatchThreadID){
  o.flowing=o.live&&IniParams[237].x>.5&&pulse[3].w>.5&&slotSeen(s);
  o.kind=slotNozzle(s);o.generation=slotGeneration(s);
  o.shift=frameState[s*4].w>.5?frameState[s*4].xyz-slotRoot(s):0;
- o.amount=slotAmount(s);o.force=slotForce(s);o.viscosity=slotViscosity(s);o.pulse=pulse[2].x;
+ o.amount=slotAmount(s)/slotInterval(s);o.force=slotForce(s);o.viscosity=slotViscosity(s);o.pulse=pulse[2].x;
  o.outlet=slotAnchor(s,3).xyz-collisionRoot(s);o.up=slotAnchor(s,1).xyz;
  float3 surfacePoint,surfaceNormal;
  o.surface=o.live&&slotSeen(s)&&screenSurface(s,o.outlet,surfacePoint,surfaceNormal)

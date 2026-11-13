@@ -2,13 +2,15 @@ package modelviewer
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"strconv"
 	"strings"
 )
 
 type modelViewerStreamOutput struct {
-	data   []byte
-	stride int
+	data         []byte
+	stride       int
+	surfaceFiles map[string][32]byte
 }
 
 // Ordered three-valued logic: false < unknown < true. min/max implement AND/OR.
@@ -195,6 +197,11 @@ func collectModelViewerStreamOutputs(
 				}
 				allocated += int64(count) * int64(input.Stride)
 				stream.stride = input.Stride
+				if stream.surfaceFiles == nil {
+					stream.surfaceFiles = make(map[string][32]byte)
+				}
+				path, _ := resolveModelViewerModBufferPath(modDir, input.Filename)
+				stream.surfaceFiles[path] = sha256.Sum256(data)
 				stream.data = append(stream.data, data[start*input.Stride:(start+count)*input.Stride]...)
 			}
 		}

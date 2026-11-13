@@ -3,12 +3,15 @@
 package liquidemitter
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sync"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -68,9 +71,9 @@ var shaderStages = map[string]struct{ target, macro string }{
 	"ds": {"ds_5_0", "DOMAIN_SHADER"},
 }
 
-// compileShader compiles the file at path for stage with the extra macros and
+// compileShaderUncached compiles the file at path for stage with the extra macros and
 // returns its bytecode, or the compiler's messages as the error.
-func compileShader(path, stage string, defines ...string) ([]byte, error) {
+func compileShaderUncached(path, stage string, defines ...string) ([]byte, error) {
 	if err := procD3DCompileFromFile.Find(); err != nil {
 		return nil, fmt.Errorf("system shader compiler unavailable: %w", err)
 	}
@@ -613,4 +616,58 @@ func (b *shaderBundle) compile(path, stage string, defines ...string) []byte {
 	}
 	b.compiled[key] = code
 	return code
+}
+
+var shaderCompileCache sync.Map
+var shaderIncludePattern = regexp.MustCompile(`(?m)^\s*#include\s+"([^"]+)"`)
+
+type shaderCompileResult struct {
+	once sync.Once
+	code []byte
+	err  error
+}
+
+func compileShader(name, stage string, defines ...string) ([]byte, error) {
+	digest := sha256.New()
+	_, _ = fmt.Fprintf(digest, "%s:%v", stage, defines)
+	seen := map[string]bool{}
+	var hashSource func(string) error
+	hashSource = func(file string) error {
+		file = filepath.Clean(file)
+		if seen[file] {
+			return nil
+		}
+		seen[file] = true
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(filepath.Dir(name), file)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(digest, "%s:%d:", relative, len(raw))
+		_, _ = digest.Write(raw)
+		for _, match := range shaderIncludePattern.FindAllSubmatch(raw, -1) {
+			included := filepath.Join(filepath.Dir(file), string(match[1]))
+			if _, err := os.Stat(included); os.IsNotExist(err) {
+				included = filepath.Join(filepath.Dir(name), string(match[1]))
+			}
+			if err := hashSource(included); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := hashSource(name); err != nil {
+		return nil, err
+	}
+	key := fmt.Sprintf("%x", digest.Sum(nil))
+	cached, _ := shaderCompileCache.LoadOrStore(key, &shaderCompileResult{})
+	result := cached.(*shaderCompileResult)
+	result.once.Do(func() { result.code, result.err = compileShaderUncached(name, stage, defines...) })
+	if result.err != nil {
+		shaderCompileCache.Delete(key)
+	}
+	return result.code, result.err
 }

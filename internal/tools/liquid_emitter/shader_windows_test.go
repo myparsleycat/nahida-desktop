@@ -5,8 +5,10 @@ package liquidemitter
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"math"
+	"os"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -116,7 +118,7 @@ func TestRuntimeShadersCompile(t *testing.T) {
 }
 
 // loadProfiles runs the runtime's GPU profile loader on a profile file and
-// returns the profile rows it wrote, PROFILE_ROWS (6) per id.
+// returns the profile rows it wrote, PROFILE_ROWS (8) per id.
 func loadProfiles(t *testing.T, bundle *shaderBundle, document []byte) []float32 {
 	t.Helper()
 	d := newWARPDevice(t)
@@ -126,7 +128,7 @@ func loadProfiles(t *testing.T, bundle *shaderBundle, document []byte) []float32
 		bytes[index] = uint32(value)
 	}
 	const ids = 16
-	profiles := d.structured(make([]float32, ids*6*4), 16)
+	profiles := d.structured(make([]float32, ids*8*4), 16)
 	offsets := d.structured(make([]float32, ids*4), 16)
 	d.dispatch(loader, bindings{
 		srv: map[int]unsafe.Pointer{0: d.uints(bytes).srv},
@@ -148,6 +150,11 @@ func TestProfileLoaderReadsEveryRecordLength(t *testing.T) {
 		Nozzle: NozzleOoze, Scattering: .35, Roughness: .2,
 	}
 	written := append(base(6), lookRecord(&look)...)
+	extended := look
+	extended.Nozzle = NozzleYogurt
+	extended.Emission = DefaultEmissionSettings()
+	expanded := append(base(7), lookRecord(&extended)...)
+
 	legacy := [][]float64{
 		base(0),
 		append(base(1), 1, 1, .1, .2, .3, .04),
@@ -156,6 +163,7 @@ func TestProfileLoaderReadsEveryRecordLength(t *testing.T) {
 		append(base(4), 1.5, 0, .1, .2, .3, .04, 0, 3, .7),
 		append(base(5), 1.5, 0, .1, .2, .3, .04, 0, 3, .7, 1),
 		written,
+		expanded,
 	}
 	document := func(records [][]float64) []byte {
 		data, err := json.Marshal(records)
@@ -166,7 +174,7 @@ func TestProfileLoaderReadsEveryRecordLength(t *testing.T) {
 	}
 
 	rows := loadProfiles(t, bundle, document(legacy))
-	row := func(id, k int) []float32 { return rows[(id*6+k)*4 : (id*6+k+1)*4] }
+	row := func(id, k int) []float32 { return rows[(id*8+k)*4 : (id*8+k+1)*4] }
 	for id, want := range map[int][3][]float32{
 		0: {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
 		// Before runtime 24 the first look number and the width are dropped.
@@ -176,6 +184,7 @@ func TestProfileLoaderReadsEveryRecordLength(t *testing.T) {
 		4: {{1.5, 0, .04, .7}, {.1, .2, .3, 3}, {0, 0, 0, 0}},
 		5: {{1.5, 0, .04, .7}, {.1, .2, .3, 3}, {1, 0, 0, 0}},
 		6: {{2, 1, .03, .5}, {.2, .4, 1, 4}, {2, .35, .2, 0}},
+		7: {{2, 1, .03, .5}, {.2, .4, 1, 4}, {3, .35, .2, 0}},
 	} {
 		if got := row(id, 0); !slices.Equal(got, []float32{1, .2, .3, .5}) {
 			t.Errorf("record %d profile row = %v", id, got)
@@ -187,15 +196,47 @@ func TestProfileLoaderReadsEveryRecordLength(t *testing.T) {
 		}
 	}
 
+	if !closeFloats(row(7, 6), []float32{1, 1, 1, 20}) || !closeFloats(row(7, 7), []float32{1, 1, 1, 0}) {
+		t.Fatal("extended emission settings lost on the GPU")
+	}
+	invalid := slices.Clone(expanded)
+	invalid[29] = .4
 	for name, records := range map[string][][]float64{
-		"partial material":   {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, .5)},
-		"scattering above 1": {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, 1.5, 0)},
-		"negative roughness": {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, 0, -.1)},
+		"invalid emission interval": {base(0), invalid},
+		"partial material":          {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, .5)},
+		"scattering above 1":        {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, 1.5, 0)},
+		"negative roughness":        {base(0), append(base(1), 1, 0, .1, .2, .3, .04, 0, 1, 1, 0, 0, -.1)},
 	} {
 		for index, value := range loadProfiles(t, bundle, document(records)) {
 			if value != 0 {
 				t.Fatalf("%s: loader wrote %v at %d of a file it must reject", name, value, index)
 			}
+		}
+	}
+}
+
+func TestShaderCompilerReloadsChangedIncludes(t *testing.T) {
+	bundle := newShaderBundle(t, "wwmi")
+	file := bundle.harness("CompileCacheFixture.hlsl", `
+#include "CompileCacheValue.hlsl"
+RWStructuredBuffer<float4> result:register(u0);
+[numthreads(1,1,1)]
+void main(){result[0]=VALUE;}
+`)
+	d := newWARPDevice(t)
+	for _, value := range []int{1, 2} {
+		if err := os.WriteFile(filepath.Join(bundle.root, "fluid", "CompileCacheValue.hlsl"),
+			fmt.Appendf(nil, "#define VALUE %d\n", value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, err := compileShader(file, "cs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := d.structured(make([]float32, 4), 16)
+		d.dispatch(d.shader("cs", code), bindings{uav: map[int]unsafe.Pointer{0: result.uav}}, [3]int{1, 1, 1})
+		if got := d.readFloats(result)[0]; got != float32(value) {
+			t.Fatalf("shader still uses include value %v, want %d", got, value)
 		}
 	}
 }

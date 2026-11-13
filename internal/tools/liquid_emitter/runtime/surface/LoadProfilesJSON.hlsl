@@ -10,7 +10,7 @@
 // amount, and runtime 27 the scattering and roughness after it, which come as
 // a pair or not at all.
 #include "../fluid/ParticleConfig.hlsl"
-static const uint RECORD_BASE=16,RECORD_LOOK=22,RECORD_WIDTH=23,RECORD_VISCOSITY=24,RECORD_AMOUNT=25,RECORD_NOZZLE=26,RECORD_MATERIAL=28;
+static const uint RECORD_BASE=16,RECORD_LOOK=22,RECORD_WIDTH=23,RECORD_VISCOSITY=24,RECORD_AMOUNT=25,RECORD_NOZZLE=26,RECORD_MATERIAL=28,RECORD_EXTENDED=36;
 Buffer<uint> jsonBytes:register(t0);
 RWStructuredBuffer<float4> profiles:register(u0);
 RWStructuredBuffer<float4> offsets:register(u1);
@@ -47,18 +47,19 @@ bool records(uint p,uint size,bool writeRows){
  [loop]for(uint record=0;record<4096;record++){
   spaces(p,size);if(at(p,size)==93)return true;
   if(!take(p,size,91))return false;
-  float v[RECORD_MATERIAL];
-  [unroll]for(uint d=RECORD_BASE;d<RECORD_MATERIAL;d++)v[d]=0;
+  float v[RECORD_EXTENDED];
+  [unroll]for(uint d=RECORD_BASE;d<RECORD_EXTENDED;d++)v[d]=0;
   uint count=0;
-  [loop]while(count<RECORD_MATERIAL){
+  [loop]while(count<RECORD_EXTENDED){
    if(!number(p,size,v[count]))return false;
    count++;
    if(!take(p,size,44))break;
   }
-  if((count!=RECORD_BASE&&count!=RECORD_LOOK&&count!=RECORD_WIDTH&&count!=RECORD_VISCOSITY&&count!=RECORD_AMOUNT&&count!=RECORD_NOZZLE&&count!=RECORD_MATERIAL)||!take(p,size,93))return false;
+  if((count!=RECORD_BASE&&count!=RECORD_LOOK&&count!=RECORD_WIDTH&&count!=RECORD_VISCOSITY&&count!=RECORD_AMOUNT&&count!=RECORD_NOZZLE&&count!=RECORD_MATERIAL&&count!=RECORD_EXTENDED)||!take(p,size,93))return false;
   if(count<RECORD_AMOUNT){v[16]=0;v[24]=0;}
-  v[25]=clamp(floor(v[25]),0,2);
+  if(v[25]<0||v[25]>3||v[25]!=floor(v[25]))return false;
   if(any(float2(v[26],v[27])<0)||any(float2(v[26],v[27])>1))return false;
+  if(count==RECORD_EXTENDED&&(v[28]!=1||v[29]<.5||v[29]>5||v[30]<.1||v[30]>2||v[31]<0||v[31]>200||v[32]<0||v[32]>1||(v[33]!=0&&v[33]!=1)||v[34]<0||v[34]>1||v[35]!=0))return false;
   if(v[0]<0||v[0]>=4096||v[0]!=floor(v[0]))return false;
   uint id=(uint)v[0],row=id*PROFILE_ROWS;if(row+PROFILE_ROWS>capacity||id>=offsetCapacity)return false;
   if(any(abs(float3(v[13],v[14],v[15]))>.25))return false;
@@ -70,6 +71,8 @@ bool records(uint p,uint size,bool writeRows){
    profiles[row+3]=float4(v[16],v[17],v[21],v[24]);
    profiles[row+4]=float4(v[18],v[19],v[20],v[23]);
    profiles[row+5]=float4(v[25],v[26],v[27],0);
+   profiles[row+6]=float4(v[28],v[29],v[30],v[31]);
+   profiles[row+7]=float4(v[32],v[33],v[34],0);
    offsets[id]=float4(v[13],v[14],v[15],0);
   }
   spaces(p,size);if(at(p,size)==93)return true;if(!take(p,size,44))return false;

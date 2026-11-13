@@ -90,7 +90,9 @@ func (s *Service) UseClient(client *db.Client) {
 }
 
 type scope struct {
-	root, modsRoot string
+	surface                 *surfaceMesh
+	bodyIndex, bodyTopology []byte
+	root, modsRoot          string
 	// importer names the game whose Mods folder holds root.
 	importer string
 	game     game
@@ -138,6 +140,19 @@ func (s *Service) Apply(ctx context.Context, input ApplyInput) (Inspection, erro
 			return Inspection{}, err
 		}
 		sc.fields["ini"], sc.fields["section"] = source.INIPath, source.Section
+		if viewer, ok := s.viewer.(bodyGeometry); ok {
+			geometry, err := viewer.SurfaceGeometry(ctx, input.ViewerSessionID, input.MeshID)
+			if err != nil {
+				return Inspection{}, err
+			}
+			sc.surface, sc.bodyIndex, sc.bodyTopology, err = buildBody(geometry)
+			if err != nil && !errors.Is(err, infra.ContractError(ErrorSurfaceUnavailable+":capacity")) {
+				return Inspection{}, err
+			}
+		}
+		if input.Look != nil && input.Look.Nozzle == NozzleYogurt && sc.surface == nil {
+			return Inspection{}, infra.ContractError(ErrorSurfaceUnavailable)
+		}
 
 		switch input.Mode {
 		case "", ApplyInPlace:
@@ -369,12 +384,13 @@ func (s *Service) inspection(sc *scope, rt runtimeState) (Inspection, error) {
 			look = *emitter.Look
 		}
 		inspection.Emitters = append(inspection.Emitters, Emitter{
-			PID:     emitter.PID,
-			INIPath: emitter.INIPath,
-			Section: emitter.Section,
-			Hooked:  hooked,
-			Anchor:  emitter.Anchor,
-			Look:    look,
+			SurfaceTracked: emitter.Surface != nil,
+			PID:            emitter.PID,
+			INIPath:        emitter.INIPath,
+			Section:        emitter.Section,
+			Hooked:         hooked,
+			Anchor:         emitter.Anchor,
+			Look:           look,
 		})
 	}
 
@@ -451,6 +467,9 @@ func (s *Service) apply(
 		}
 	} else if len(doc.Emitters) >= maxEmitters {
 		return infra.ContractError(fmt.Sprintf("%s:%d", ErrorEmitterLimit, maxEmitters))
+	}
+	if look != nil && look.Nozzle == NozzleYogurt && sc.surface == nil {
+		return infra.ContractError(ErrorSurfaceUnavailable)
 	}
 	original, err := os.ReadFile(source.INIPath)
 	if err != nil {
@@ -577,7 +596,24 @@ func (s *Service) apply(
 	if err != nil {
 		return err
 	}
+	var surface *surfaceMesh
+	if sc.surface != nil {
+		copy := *sc.surface
+		copy.Identity = strings.ToLower(
+			fmt.Sprintf(
+				"%s:%s:%s:%d:%d:%d",
+				iniRel,
+				source.Section,
+				source.IB,
+				source.StartIndex,
+				source.IndexCount,
+				source.BaseVertex,
+			),
+		)
+		surface = &copy
+	}
 	emitters = append(emitters, profileEmitter{
+		Surface:    surface,
 		PID:        pid,
 		INIPath:    iniRel,
 		Section:    source.Section,
@@ -603,6 +639,19 @@ func (s *Service) apply(
 	profileChanges, err := s.profileChanges(layout, index, key, doc)
 	if err != nil {
 		return err
+	}
+	if sc.surface != nil {
+		for _, suffix := range []string{".ib", ".topology"} {
+			if err := validateBodyPath(layout.root, bodyPath(layout, sc.surface.Key, suffix)); err != nil {
+				return err
+			}
+		}
+		profileChanges = append(
+			[]fileChange{
+				{path: bodyPath(layout, sc.surface.Key, ".ib"), data: sc.bodyIndex},
+				{path: bodyPath(layout, sc.surface.Key, ".topology"), data: sc.bodyTopology},
+			},
+			profileChanges...)
 	}
 	changes = append(append(backups, changes...), profileChanges...)
 	marker, err := markerChange(sc.root, key, sc.origin, false)
@@ -640,6 +689,9 @@ func (s *Service) setLook(sc *scope, layout runtimeLayout, pid int, look Look) e
 	index, err := readIndex(layout, sc.modsRoot)
 	if err != nil {
 		return err
+	}
+	if look.Nozzle == NozzleYogurt && doc.Emitters[at].Surface == nil {
+		return infra.ContractError(ErrorSurfaceUnavailable)
 	}
 	doc.Emitters[at].Look, doc.ModPath = &look, sc.root
 	sc.fields["pid"], sc.fields["look"], sc.applied = pid, look, &pid
@@ -1009,6 +1061,11 @@ func (s *Service) profileChanges(
 		}
 		changes = append(changes, fileChange{path: layout.profilePath(key), data: encoded})
 	}
+	body, err := bodyChanges(layout, index, key, doc)
+	if err != nil {
+		return nil, err
+	}
+	changes = append(changes, body...)
 	encoded, err := encodeJSON(index)
 	if err != nil {
 		return nil, err

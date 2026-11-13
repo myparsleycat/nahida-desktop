@@ -316,6 +316,21 @@ func (m *Manager) installAt(root, modsRoot string, sel selection) error {
 	if err != nil {
 		return err
 	}
+	physicalRoot, err := platform.PhysicalPath(root)
+	if err != nil {
+		return err
+	}
+	for name := range writes {
+		for _, candidate := range []string{name, filepath.Dir(name)} {
+			physical, err := platform.PhysicalPath(candidate)
+			if err != nil {
+				return err
+			}
+			if !platform.SameOrChildPath(physicalRoot, physical) {
+				return fmt.Errorf("runtime write %q resolves outside %q", name, root)
+			}
+		}
+	}
 	if previous == nil || !slices.Equal(previous.PendingShaders, shaders) {
 		progress := manifest{Name: spec.Name}
 		if previous != nil {
@@ -408,7 +423,7 @@ func installPlan(
 		}
 		slices.Sort(stale)
 	}
-	shaders = staleShaders(files, changed)
+	shaders = AffectedShaders(files, changed)
 
 	for name, seed := range spec.Seed {
 		target := filepath.Join(root, filepath.FromSlash(name))
@@ -424,12 +439,12 @@ func installPlan(
 	return writes, stale, shaders, nil
 }
 
-// staleShaders returns the HLSL files among files and changed, by slash path,
+// AffectedShaders returns the HLSL files among files and changed, by slash path,
 // that changed or include one that did at any depth. 3DMigoto keeps a compiled
 // custom shader in a .bin beside its source and uses it while the source is
 // not newer, so a change to an included file alone leaves the cache stale.
 // changed holds lowercase slash paths.
-func staleShaders(files map[string][]byte, changed map[string]bool) []string {
+func AffectedShaders(files map[string][]byte, changed map[string]bool) []string {
 	isShader := func(name string) bool { return strings.EqualFold(path.Ext(name), ".hlsl") }
 	affected := maps.Clone(changed)
 	for grew := true; grew; {
@@ -463,18 +478,32 @@ func staleShaders(files map[string][]byte, changed map[string]bool) []string {
 // it deletes only what physically lies below root, so a junction inside the
 // folder cannot lead it to another folder's files.
 func removeShaderCache(root, name string) error {
+	caches, err := ShaderCachePaths(root, name)
+	if err != nil {
+		return err
+	}
+	for _, cache := range caches {
+		if err := os.Remove(cache); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func ShaderCachePaths(root, name string) ([]string, error) {
+	var caches []string
 	source, ok := installedPath(root, name)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	physicalRoot := physicalPath(root)
 	dir, prefix := filepath.Dir(source), strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))+"."
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, entry := range entries {
 		base := entry.Name()
@@ -488,16 +517,14 @@ func removeShaderCache(root, name string) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if platform.SamePathFold(physicalRoot, physical) || !platform.SameOrChildPath(physicalRoot, physical) {
 			continue
 		}
-		if err := os.Remove(cache); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
+		caches = append(caches, cache)
 	}
-	return nil
+	return caches, nil
 }
 
 // variantFiles reads the files the variant installs, by slash path: the base

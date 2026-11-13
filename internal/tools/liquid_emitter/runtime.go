@@ -46,6 +46,8 @@ func runtimeSpec(g game) modruntime.Spec {
 	if err != nil {
 		panic(err)
 	}
+	delete(files, "bodymesh/Generated.ini")
+	delete(files, "bodymesh/Dimensions.hlsl")
 	return modruntime.Spec{
 		Name:      runtimeName,
 		Version:   runtimeVersion,
@@ -60,7 +62,10 @@ func runtimeSpec(g game) modruntime.Spec {
 			Requires: func(caps modruntime.Capabilities) bool { return caps.ShaderSamplerSlots },
 			Dir:      runtimeEnhancedDir,
 		}},
-		Seed:     map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader},
+		Seed: map[string]func(string, string) ([]byte, error){profileLoaderFile: seedLoader,
+			"bodymesh/Generated.ini":   seedBody("bodymesh/Generated.ini"),
+			"bodymesh/Dimensions.hlsl": seedBody("bodymesh/Dimensions.hlsl"),
+			"bodymesh/model-map.buf":   seedBody("bodymesh/model-map.buf")},
 		Settings: runtimeSettings(),
 	}
 }
@@ -145,7 +150,7 @@ func runtimeSettings() []modruntime.Setting {
 // runtimeFiles lays the adapter in games/<dir> over the core runtime. Its
 // files install next to the core's and may not replace one, and the
 // templates its Probe.game.ini defines fill in the core Probe.ini.
-func runtimeFiles(dir string) (fs.FS, error) {
+func runtimeFiles(dir string) (fstest.MapFS, error) {
 	gameDir := path.Join(runtimeGamesDir, dir)
 	files := fstest.MapFS{}
 	probe := template.New(probeFile)
@@ -220,4 +225,24 @@ func physicalPath(path string) string {
 		return resolved
 	}
 	return filepath.Clean(path)
+}
+
+func seedBody(name string) func(string, string) ([]byte, error) {
+	return func(root, modsRoot string) ([]byte, error) {
+		layout := runtimeLayout{root: root}
+		index, err := readIndex(layout, modsRoot)
+		if err != nil {
+			return nil, err
+		}
+		changes, err := bodyChanges(layout, index, "", profileDocument{})
+		if err != nil {
+			return nil, err
+		}
+		for _, change := range changes {
+			if platform.SamePathFold(change.path, filepath.Join(root, filepath.FromSlash(name))) {
+				return change.data, nil
+			}
+		}
+		return nil, fmt.Errorf("missing body seed %s", name)
+	}
 }

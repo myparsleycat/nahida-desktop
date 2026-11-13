@@ -90,6 +90,8 @@ void main(uint3 tid:SV_DispatchThreadID){
    slots[base+SLOT_LOOK]=known?profiles[row+3]:0;
    slots[base+SLOT_TINT]=known?profiles[row+4]:0;
    slots[base+SLOT_NOZZLE]=known?profiles[row+5]:0;
+   slots[base+16]=known?profiles[row+6]:0;
+   slots[base+17]=known?profiles[row+7]:0;
    // A new character must not inherit the motion or nozzle of the last one,
    // nor the slot's outlet or stream state (Slots.hlsl SLOT_GENERATION).
    if(!assigned){

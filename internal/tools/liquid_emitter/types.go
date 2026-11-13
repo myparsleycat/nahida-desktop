@@ -13,7 +13,7 @@ import (
 const (
 	// runtimeVersion moves with any change under runtime/ or games/, so existing
 	// installs read as outdated and are updated.
-	runtimeVersion    = "45"
+	runtimeVersion    = "46"
 	runtimeNamespace  = "LiquidGravityProbe"
 	runtimeName       = "LiquidGravityProbe"
 	profilesDir       = "Profiles"
@@ -23,7 +23,7 @@ const (
 	// The loader reads every .ini below Mods, so the backup must not end in .ini.
 	backupSuffix = ".nhd-liquid-orig"
 
-	// SurfaceProfiles holds 24576 float4 rows, PROFILE_ROWS (6) per profile.
+	// SurfaceProfiles holds 32768 float4 rows, PROFILE_ROWS (8) per profile.
 	maxProfiles = 4096
 	// LoadProfilesJSON rejects a whole profile file when any offset axis exceeds 25 cm.
 	maxOffsetMeters = 0.25
@@ -69,10 +69,33 @@ const (
 // The nozzle kinds of a Look. Each gives Force, Amount and Viscosity their own
 // meaning; Look documents them.
 const (
-	NozzleSpray = "spray"
-	NozzleJet   = "jet"
-	NozzleOoze  = "ooze"
+	NozzleSpray  = "spray"
+	NozzleJet    = "jet"
+	NozzleOoze   = "ooze"
+	NozzleYogurt = "yogurt"
 )
+
+type EmissionSettings struct {
+	Enabled      bool    `json:"enabled"`
+	Interval     float64 `json:"interval"`
+	Width        float64 `json:"width"`
+	SprayAngle   float64 `json:"sprayAngle"`
+	SprayRatio   float64 `json:"sprayRatio"`
+	RandomSpeed  bool    `json:"randomSpeed"`
+	Transparency float64 `json:"transparency"`
+}
+
+func DefaultEmissionSettings() EmissionSettings {
+	return EmissionSettings{
+		Enabled:      true,
+		Interval:     1,
+		Width:        1,
+		SprayAngle:   20,
+		SprayRatio:   1,
+		RandomSpeed:  true,
+		Transparency: 1,
+	}
+}
 
 // ApplyInPlace hooks the mod's own INI and keeps a backup next to it.
 // ApplyNewMod copies the mod to a new folder, disables the original and
@@ -97,9 +120,10 @@ type EmitterAnchor struct {
 }
 
 type Emitter struct {
-	PID     int    `json:"pid"`
-	INIPath string `json:"iniPath"`
-	Section string `json:"section"`
+	SurfaceTracked bool   `json:"surfaceTracked"`
+	PID            int    `json:"pid"`
+	INIPath        string `json:"iniPath"`
+	Section        string `json:"section"`
 	// Hooked is false when the INI no longer carries this emitter's hook.
 	Hooked bool          `json:"hooked"`
 	Anchor EmitterAnchor `json:"anchor"`
@@ -109,6 +133,7 @@ type Emitter struct {
 // Look is the liquid of one emitter, applied over the runtime's global
 // settings.
 type Look struct {
+	Emission EmissionSettings `json:"emission"`
 	// Force scales the nozzle pressure, which sets how fast and how widely the
 	// liquid sprays; 1 is the runtime's former default strength level. A
 	// profile saved before the setting reads as 1.
@@ -127,7 +152,7 @@ type Look struct {
 	// Viscosity scales how thick the liquid is over the runtime's water-like
 	// one; 1 keeps the runtime's. A profile saved before the setting reads as 1.
 	Viscosity float64 `json:"viscosity"`
-	// Nozzle is NozzleSpray, NozzleJet or NozzleOoze; a profile saved before
+	// Nozzle is NozzleSpray, NozzleJet, NozzleOoze or NozzleYogurt; a profile saved before
 	// the setting reads as NozzleSpray, the runtime's former nozzle, for which
 	// the fields above mean what they say. A jet shoots a thin straight stream
 	// whose speed Force sets. Ooze emits no stream: the liquid gathers at the

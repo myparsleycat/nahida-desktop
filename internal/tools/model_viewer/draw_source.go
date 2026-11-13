@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -44,7 +45,9 @@ type DrawSource struct {
 	sourceFaces  []uint32
 	// carrierRows is how far BaseVertex reaches past the viewer's Position rows,
 	// when the draw indexes a merged buffer holding them further along.
-	carrierRows int
+	carrierRows  int
+	surfaceRead  func(context.Context) ([]byte, error)
+	surfaceFiles map[string][32]byte
 }
 
 // DrawSource returns the draw behind meshID of a loaded viewer session.
@@ -225,3 +228,5 @@ func (d DrawSource) TriangleVertices(face int) ([3]uint32, error) {
 	}
 	return vertices, nil
 }
+
+func (d DrawSource) SourceVertexOffset() int { return d.BaseVertex - d.carrierRows }

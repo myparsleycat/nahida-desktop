@@ -1,0 +1,5 @@
+#define BODY_FACES 1
+#define BODY_LEAVES 2
+#define BODY_STRIDE 14
+#define BODY_TEX_WIDTH 384
+#define BODY_TEX_HEIGHT 1

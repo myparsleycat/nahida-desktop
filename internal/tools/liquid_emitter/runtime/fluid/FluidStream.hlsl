@@ -32,7 +32,7 @@ struct Varying{
  nointerpolation float4 endAxis:TEXCOORD4;
  nointerpolation float4 liquid:TEXCOORD5;
  nointerpolation uint tag:TEXCOORD6;
- nointerpolation float3 materialFade:TEXCOORD7;
+ nointerpolation float4 materialFade:TEXCOORD7;
  // The shape (SHAPE_*), a link's frusta, and 1 for a cap at its start and
  // 2 at its end.
  nointerpolation uint3 shape:TEXCOORD8;
@@ -68,7 +68,7 @@ Varying main(uint id:SV_VertexID){
   center=(p0+p1+c0+c1)*.25;
   bound=max(max(distance(center,p0),distance(center,p1)),max(distance(center,c0),distance(center,c1)))+max(here.w,there.w);
   o.tag=owner;
-  o.materialFade.z=1;
+  o.materialFade.w=1;
   if(view==DEBUG_FLOW)o.liquid.rgb=debugHue(owner*31+(uint)emitters[owner*EMITTER_ROWS+EMITTER_FLOW].y);
  }else{
   owner=i-PRIMARY_COUNT;
@@ -90,7 +90,7 @@ Varying main(uint id:SV_VertexID){
   center=o.start.xyz;
   bound=max(radius*max(stretch,1/flatten),distance(o.start.xyz,o.end.xyz)+front.w)*1.1;
   o.tag=owner|(attached?TAG_FILM:0);
-  o.materialFade.z=ooze.w;
+  o.materialFade.w=ooze.w;
   if(view==DEBUG_OOZE)o.liquid.rgb=(uint)ooze.y==OOZE_GROW?float3(.1,.9,.1):((uint)ooze.y==OOZE_STRETCH?float3(1,.9,0):float3(1,.1,.1));
   else if(view==DEBUG_CONTACT)o.liquid.rgb=attached?float3(.1,.9,.1):.35;
  }
@@ -105,12 +105,12 @@ Varying main(uint id:SV_VertexID){
  o.ndc=o.position.xy;
  float4 liquid=slotLiquid(owner);
  o.liquid=float4(debugColors()?(any(o.liquid.rgb>0)?o.liquid.rgb:.35):liquid.rgb,liquid.w);
- o.materialFade.xy=float2(slotScattering(owner),slotRoughness(owner));
+ o.materialFade.xyz=float3(slotScattering(owner),slotRoughness(owner),1-slotTransparency(owner));
  return o;
 }
 #endif
 #ifdef PIXEL_SHADER
-struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;float2 material:SV_Target4;};
+struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;float3 material:SV_Target4;};
 Surface main(Varying i){
  // Screen derivatives only hold before any pixel is clipped.
  float2 dims=2/max(abs(float2(ddx(i.ndc.x),ddy(i.ndc.y))),1e-9);
@@ -145,11 +145,11 @@ Surface main(Varying i){
  if(sceneInFront(screenUV(projected),projected))clip(-1);
  Surface o;
  o.depth=encodeFluidDepth(projected.w,i.tag);
- o.thickness=total*scale*i.materialFade.z;
+ o.thickness=total*scale*i.materialFade.w;
  float weight=o.thickness+COLOR_WEIGHT_FLOOR;
  o.color=float4(i.liquid.rgb*weight,weight);
  o.absorptionDepth=i.liquid.w*1000*weight;
- o.material=i.materialFade.xy*weight;
+ o.material=i.materialFade.xyz*weight;
  return o;
 }
 #endif

@@ -209,13 +209,14 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		draw    modelViewerDrawInstruction
 	}
 	type legacyPreparedIB struct {
-		ib       modelViewerIbResource
-		ibPath   string
-		ibFormat string
-		group    *modelViewerBufferGroup
-		layout   modelViewerFmtLayout
-		indices  []uint32
-		draws    []legacyPreparedDraw
+		ib           modelViewerIbResource
+		ibPath       string
+		ibFormat     string
+		group        *modelViewerBufferGroup
+		layout       modelViewerFmtLayout
+		indices      []uint32
+		surfaceFiles map[string][32]byte
+		draws        []legacyPreparedDraw
 	}
 	var prepared []legacyPreparedIB
 	drawTotal := 0
@@ -262,6 +263,14 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		if readErr != nil || decodeErr != nil {
 			continue
 		}
+		positionFiles := group.SourceFiles
+		if len(positionFiles) > 1 {
+			positionFiles = positionFiles[:1]
+		}
+		surfaceFiles, sourceErr := cache.surfaceSourceFiles(modDir, ibPath, ibFormat, positionFiles...)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
 		var ibDraws []legacyPreparedDraw
 		for _, binding := range draws {
 			if modelViewerNormalizeKey(binding.IBResourceName) == modelViewerNormalizeKey(ib.Name) {
@@ -285,13 +294,14 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 		prepared = append(
 			prepared,
 			legacyPreparedIB{
-				ib:       ib,
-				ibPath:   ibPath,
-				ibFormat: ibFormat,
-				group:    group,
-				layout:   layout,
-				indices:  indices,
-				draws:    ibDraws,
+				ib:           ib,
+				ibPath:       ibPath,
+				ibFormat:     ibFormat,
+				group:        group,
+				layout:       layout,
+				indices:      indices,
+				surfaceFiles: surfaceFiles,
+				draws:        ibDraws,
 			},
 		)
 	}
@@ -352,6 +362,7 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			if err != nil || geometry == nil {
 				return geometry, err
 			}
+			geometry.surfaceFiles = task.entry.surfaceFiles
 			for _, coords := range [][]float32{geometry.Texcoord0, geometry.Texcoord1} {
 				for offset := 1; offset < len(coords); offset += 2 {
 					coords[offset] = 1 - coords[offset]

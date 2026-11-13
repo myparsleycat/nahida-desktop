@@ -64,7 +64,7 @@ struct Varying{
  // midpoint. Disc: xyz the phases of its edge lobes, w 1 plus their depth.
  nointerpolation float4 normalScale:TEXCOORD7;
  // The owner's scattering and roughness (Slots.hlsl).
- nointerpolation float2 material:TEXCOORD8;
+ nointerpolation float3 material:TEXCOORD8;
 };
 // Keeps the color weight of a covered pixel above what half floats flush to
 // zero, however thin the film there.
@@ -172,7 +172,7 @@ Varying main(uint id:SV_VertexID){
  o.ndc=o.position.xy;o.center=center;o.axisScale=axisScale;o.normalScale=normalScale;o.radiusFade=float2(radius,fade);
  o.mode=valid?(trail?MODE_CAPSULE:(puddle?MODE_DISC:MODE_ELLIPSOID)):MODE_NONE;
  o.liquid=slotLiquid(owner);
- o.material=float2(slotScattering(owner),slotRoughness(owner));
+ o.material=float3(slotScattering(owner),slotRoughness(owner),1-slotTransparency(owner));
  uint view=debugView();
  if(view==DEBUG_OOZE)o.liquid.rgb=.35;
  else if(view==DEBUG_FLOW)o.liquid.rgb=primary?(coherentGuide(renderGuides[poolIndex].longLane.w)?float3(1,.5,0):float3(1,0,0)):.35;
@@ -188,12 +188,12 @@ Varying main(uint id:SV_VertexID){
 }
 #endif
 #ifdef PIXEL_SHADER
-struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;float2 material:SV_Target4;};
+struct Surface{float depth:SV_Target0;float thickness:SV_Target1;float4 color:SV_Target2;float absorptionDepth:SV_Target3;float3 material:SV_Target4;};
 // Scales v along a unit axis, or leaves it for a zero axis. The two axes of
 // one particle are orthogonal, so the scalings commute.
 float3 scaleAlong(float3 v,float4 axisScale){return v+axisScale.xyz*(dot(v,axisScale.xyz)*(1/axisScale.w-1));}
 // Millimeters keep a thin film's weighted depth clear of half-float flushing.
-void weighLiquid(inout Surface o,float4 liquid,float2 material){
+void weighLiquid(inout Surface o,float4 liquid,float3 material){
  float weight=o.thickness+COLOR_WEIGHT_FLOOR;
  o.color=float4(liquid.rgb*weight,weight);
  o.absorptionDepth=liquid.w*1000*weight;

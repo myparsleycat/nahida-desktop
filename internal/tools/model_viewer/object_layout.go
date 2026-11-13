@@ -367,6 +367,7 @@ type modelViewerDrawVertexSource struct {
 	// that stream for caching, because it has no buffer file of its own.
 	positionData []byte
 	streamKey    string
+	streamFiles  map[string][32]byte
 	// carrierStart is where the position rows begin in a merged vertex buffer.
 	carrierStart int
 }

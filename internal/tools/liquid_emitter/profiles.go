@@ -29,6 +29,7 @@ type profileIndex struct {
 }
 
 type profileEmitter struct {
+	Surface    *surfaceMesh  `json:"surface,omitempty"`
 	PID        int           `json:"pid"`
 	INIPath    string        `json:"ini_path"`
 	Section    string        `json:"section"`
@@ -85,6 +86,10 @@ func defaultLook() Look {
 }
 
 func validLook(look Look) bool {
+	if e := look.Emission; e.Enabled &&
+		(!(e.Interval >= .5 && e.Interval <= 5) || !(e.Width >= .1 && e.Width <= 2) || !(e.SprayAngle >= 0 && e.SprayAngle <= 200) || !(e.SprayRatio >= 0 && e.SprayRatio <= 1) || !(e.Transparency >= 0 && e.Transparency <= 1)) {
+		return false
+	}
 	if !(look.Force >= minForce && look.Force <= maxForce) {
 		return false
 	}
@@ -112,7 +117,7 @@ func validLook(look Look) bool {
 // nozzleCode is the number Slots.hlsl slotNozzle reads for a nozzle kind, or
 // -1 for an unknown one.
 func nozzleCode(nozzle string) int {
-	return slices.Index([]string{NozzleSpray, NozzleJet, NozzleOoze}, nozzle)
+	return slices.Index([]string{NozzleSpray, NozzleJet, NozzleOoze, NozzleYogurt}, nozzle)
 }
 
 // lookRecord is the tail LoadProfilesJSON reads after an emitter's 16 numbers:
@@ -123,7 +128,8 @@ func nozzleCode(nozzle string) int {
 // emitter without its own look writes no tail, and the runtime then applies
 // its global settings.
 func lookRecord(look *Look) []float64 {
-	material := look != nil && (look.Scattering != 0 || look.Roughness != 0)
+	extended := look != nil && look.Emission.Enabled
+	material := look != nil && (look.Scattering != 0 || look.Roughness != 0 || extended)
 	if look == nil || look.Force == 1 && look.Amount == 1 && !look.CustomColor && look.Viscosity == 1 &&
 		look.Nozzle == NozzleSpray && !material {
 		return nil
@@ -143,6 +149,14 @@ func lookRecord(look *Look) []float64 {
 	}
 	if material {
 		record = append(record, look.Scattering, look.Roughness)
+	}
+	if extended {
+		e := look.Emission
+		random := 0.0
+		if e.RandomSpeed {
+			random = 1
+		}
+		record = append(record, 1, e.Interval, e.Width, e.SprayAngle, e.SprayRatio, random, e.Transparency, 0)
 	}
 	return record
 }

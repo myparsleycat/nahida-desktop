@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -531,6 +532,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 						position:     modelViewerResource{Name: draw.state.vb0, Stride: stream.stride},
 						positionData: stream.data,
 						streamKey:    iniPath + "|" + resource,
+						streamFiles:  stream.surfaceFiles,
 					}
 				}
 			}
@@ -657,6 +659,11 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			if geometry == nil {
 				continue
 			}
+			geometry.surfaceFiles, geometryErr = cache.surfaceSourceFiles(modDir, ibPath, ib.Format, position.Filename)
+			if geometryErr != nil {
+				return nil, geometryErr
+			}
+			maps.Copy(geometry.surfaceFiles, source.streamFiles)
 			if source.kind == modelViewerDrawVertexPacked {
 				normalizeModelViewerPackedObjectNormals(geometry.Normal)
 			}

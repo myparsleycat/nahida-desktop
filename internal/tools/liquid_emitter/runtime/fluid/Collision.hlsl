@@ -1,5 +1,6 @@
 #include "../camera/Camera.hlsl"
 Texture2D<float> collisionDepth:register(t106);
+#include "../bodymesh/Contact.hlsl"
 // Particles of slot s are stored relative to that slot's character root.
 float3 collisionRoot(uint s){return slotRoot(s);}
 float3 depthPoint(uint s,int2 pixel,uint2 dimensions){
@@ -11,6 +12,7 @@ float3 depthPoint(uint s,int2 pixel,uint2 dimensions){
  return rel+(camera[7].xyz-collisionRoot(s));
 }
 bool screenSurface(uint s,float3 p,out float3 surfacePoint,out float3 normal){
+ if(bodySurfaceContact(s,p,p,0,false,surfacePoint,normal))return true;
  surfacePoint=0;normal=float3(0,1,0);uint w,h;collisionDepth.GetDimensions(w,h);if(w<3||h<3)return false;
  float3 world=p+collisionRoot(s);float4 c=world.x*camera[16]+world.y*camera[17]+world.z*camera[18]+camera[19];
  if(c.w<=.05||!all(isfinite(c)))return false;
@@ -38,6 +40,8 @@ static const float SWEPT_MAX_SPEED = .5;
 bool collideFluid(uint slot,float3 from,float3 to,float3 velocity,float radius,out float3 contactPoint,out float3 normal){
  contactPoint=to;normal=float3(0,1,0);
  float3 emitter=currentEmitterRelative(slot);
+ if((dot(from-emitter,from-emitter)>=EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS||dot(to-emitter,to-emitter)>=EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS)
+  &&bodySurfaceContact(slot,from,to,radius,true,contactPoint,normal))return true;
  [loop]for(uint k=1;k<=4;k++){
   float3 p=lerp(from,to,float(k)/4),s=0,n=float3(0,1,0);
   if(dot(p-emitter,p-emitter)<EMITTER_EXCLUSION_RADIUS*EMITTER_EXCLUSION_RADIUS)continue;

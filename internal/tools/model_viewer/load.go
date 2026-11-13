@@ -293,6 +293,17 @@ func (t *Service) loadModViewer(
 	)
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
+	if options.spoolGeometry {
+		if err := prepareSurfaceSnapshots(
+			ctx,
+			prepared.drawSources,
+			transport.Meshes,
+			meshPayloads,
+			options.spool,
+		); err != nil {
+			return ModelViewerTransport{}, err
+		}
+	}
 	stage = "write-payload"
 	if writeErr := writeModelViewerPayload(
 		ctx,

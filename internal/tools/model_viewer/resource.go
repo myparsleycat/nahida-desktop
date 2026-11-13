@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -415,6 +416,7 @@ type modelViewerBufferCache struct {
 	geometryPending map[string]*modelViewerGeometryPending
 	filesPending    map[string]*modelViewerFilePending
 	files           map[string][]byte
+	sourceHashes    map[string][32]byte
 	indices         map[string][]uint32
 	geometries      map[string]*modelViewerGeometry
 	pairs           map[string]modelViewerPairedBuffers
@@ -446,13 +448,14 @@ type modelViewerPairedBuffers struct {
 
 func newModelViewerBufferCache(ctx context.Context) *modelViewerBufferCache {
 	return &modelViewerBufferCache{
-		ctx:         ctx,
-		files:       make(map[string][]byte),
-		indices:     make(map[string][]uint32),
-		geometries:  make(map[string]*modelViewerGeometry),
-		pairs:       make(map[string]modelViewerPairedBuffers),
-		fmts:        make(map[string]modelViewerFmtCacheEntry),
-		interleaved: make(map[string]modelViewerInterleavedBuffers),
+		ctx:          ctx,
+		files:        make(map[string][]byte),
+		sourceHashes: make(map[string][32]byte),
+		indices:      make(map[string][]uint32),
+		geometries:   make(map[string]*modelViewerGeometry),
+		pairs:        make(map[string]modelViewerPairedBuffers),
+		fmts:         make(map[string]modelViewerFmtCacheEntry),
+		interleaved:  make(map[string]modelViewerInterleavedBuffers),
 	}
 }
 
@@ -481,10 +484,12 @@ func (c *modelViewerBufferCache) release(paths ...string) {
 	defer c.mu.Unlock()
 	for key := range keys {
 		delete(c.files, key)
+		delete(c.sourceHashes, key)
 	}
 	for key := range c.indices {
 		if path, _, ok := strings.Cut(key, "|"); ok && keys[path] {
 			delete(c.indices, key)
+			delete(c.sourceHashes, key)
 		}
 	}
 	for key, entry := range c.pairs {
@@ -498,6 +503,7 @@ func (c *modelViewerBufferCache) releaseAll() {
 	c.releaseGeometryScratch()
 	c.mu.Lock()
 	clear(c.files)
+	clear(c.sourceHashes)
 	c.mu.Unlock()
 }
 
@@ -599,9 +605,14 @@ func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
 	c.filesPending[key] = pending
 	c.mu.Unlock()
 	data, err := c.readFile(path)
+	var digest [32]byte
+	if err == nil {
+		digest = sha256.Sum256(data)
+	}
 	c.mu.Lock()
 	if err == nil {
 		c.files[key] = data
+		c.sourceHashes[key] = digest
 	}
 	pending.data, pending.err = data, err
 	delete(c.filesPending, key)
@@ -647,8 +658,10 @@ func (c *modelViewerBufferCache) indexBuffer(path, format string) (indices []uin
 	if err != nil {
 		return nil, nil, err
 	}
+	digest := sha256.Sum256(raw)
 	c.mu.Lock()
 	c.indices[key] = decoded
+	c.sourceHashes[key] = digest
 	c.mu.Unlock()
 	return decoded, nil, nil
 }

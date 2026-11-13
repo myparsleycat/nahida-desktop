@@ -11,6 +11,7 @@ RWStructuredBuffer<float4> candidates:register(u0);
 RWStructuredBuffer<float4> stats:register(u1);
 [numthreads(1,1,1)]
 void main(uint3 tid:SV_DispatchThreadID){
+ stats[9]=0;
  stats[0].x+=1;
  float4 rootRow=instance[(uint)IniParams[242].w];
  stats[1]=rootRow;
@@ -64,6 +65,7 @@ void main(uint3 tid:SV_DispatchThreadID){
  float3 localOffset=modelOffsets[id].xyz;
  p+=right*localOffset.x+up*localOffset.y+forward*localOffset.z;
  stats[8]=float4(p,1);
+ stats[9]=float4(slot,id,1,0);
  uint base=1+slot*CANDIDATE_ROWS;
  candidates[base]=float4(right,0);candidates[base+1]=float4(up,0);candidates[base+2]=float4(forward,0);
  candidates[base+3]=float4(p,1);candidates[base+4]=float4(profile.x,id,area,1);

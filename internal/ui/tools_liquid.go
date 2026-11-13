@@ -38,10 +38,15 @@ var (
 	liquidEditableStates = map[string]bool{
 		modruntime.StateCurrent: true, modruntime.StateOutdated: true, modruntime.StateModified: true,
 	}
-	liquidErrorPattern  = regexp.MustCompile(`LIQUID_([A-Z_]+)(?::([^\n]*))?`)
-	liquidDefaultDown   = vec3{0, 0, -1}
-	liquidRuntimeLook   = liquidemitter.Look{Force: 1, Amount: 1, Viscosity: 1, Nozzle: liquidemitter.NozzleSpray}
-	liquidNozzles       = []string{liquidemitter.NozzleSpray, liquidemitter.NozzleJet, liquidemitter.NozzleOoze}
+	liquidErrorPattern = regexp.MustCompile(`LIQUID_([A-Z_]+)(?::([^\n]*))?`)
+	liquidDefaultDown  = vec3{0, 0, -1}
+	liquidRuntimeLook  = liquidemitter.Look{Force: 1, Amount: 1, Viscosity: 1, Nozzle: liquidemitter.NozzleSpray}
+	liquidNozzles      = []string{
+		liquidemitter.NozzleSpray,
+		liquidemitter.NozzleJet,
+		liquidemitter.NozzleOoze,
+		liquidemitter.NozzleYogurt,
+	}
 	liquidMaterialNames = []string{"clear", "translucent", "cloudy"}
 	// A preset is not stored: it only sets the scattering and roughness.
 	liquidMaterials = map[string][2]float64{"clear": {0, 0}, "translucent": {0.35, 0.2}, "cloudy": {0.85, 0.35}}
@@ -542,7 +547,8 @@ func liquidAnchorFromEmitter(emitter liquidemitter.Emitter) *liquidAnchor {
 func (lt *liquidTool) handleApply() {
 	current := lt.current()
 	draft := lt.draftLook()
-	if current != nil && current.Hooked && draft != nil && lt.lookDirty() && !lt.anchorDirty() &&
+	if current != nil && current.Hooked && current.SurfaceTracked && draft != nil && lt.lookDirty() &&
+		!lt.anchorDirty() &&
 		lt.applyMode() == liquidemitter.ApplyInPlace {
 		requested, look := current.PID, *draft
 		lt.run("set-look", func(ctx context.Context, t *tools.Tools) (tools.LiquidEmitterInspection, error) {

@@ -55,6 +55,7 @@ type modelViewerGeometry struct {
 	VertexCount   int
 	SourceIndices []uint32
 	sourceFaces   []uint32
+	surfaceFiles  map[string][32]byte
 }
 
 // modelViewerGeometryOptions selects which optional attributes the extractor
