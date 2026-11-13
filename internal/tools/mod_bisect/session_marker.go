@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -17,17 +18,28 @@ const (
 	legacyScanDoneKey = "mod_bisect_marker_scan_done"
 )
 
+// sessionMarker records the mod folder of a session and, relative to it with forward slashes, every INI the
+// session may rename. Markers from older builds have no Paths.
 type sessionMarker struct {
 	game        string
-	ModRootPath string `json:"modRootPath"`
+	ModRootPath string   `json:"modRootPath"`
+	Paths       []string `json:"paths,omitempty"`
 }
 
-func (t *Service) writeSessionMarker(ctx context.Context, game, modRootPath string) error {
+func (t *Service) writeSessionMarker(ctx context.Context, game, modRootPath string, candidates []string) error {
 	client, err := t.requireClient()
 	if err != nil {
 		return err
 	}
-	raw, err := json.Marshal(sessionMarker{ModRootPath: modRootPath})
+	paths := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		relative, err := filepath.Rel(modRootPath, candidate)
+		if err != nil {
+			return err
+		}
+		paths = append(paths, filepath.ToSlash(relative))
+	}
+	raw, err := json.Marshal(sessionMarker{ModRootPath: modRootPath, Paths: paths})
 	if err != nil {
 		return err
 	}

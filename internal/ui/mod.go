@@ -133,6 +133,8 @@ type modScreen struct {
 
 	conflict *conflictDraft
 	bisect   *tools.BisectSnapshot
+	// bisectBusy is set while a bisect action runs, on whichever screen started it.
+	bisectBusy bool
 	// texture is the texture resizer open on one mod.
 	texture *textureWorkspace
 	fix     fixRunner
@@ -196,7 +198,7 @@ func (s *Shell) registerModEvents(on func(string, func([]any))) {
 	s.registerFixEvents(on)
 	on("tools:bisectState", func(data []any) {
 		if snapshot, ok := first(data).(tools.BisectSnapshot); ok {
-			s.mods.bisect = &snapshot
+			s.setBisect(&snapshot)
 		}
 	})
 	on("mod:archiveExtractPromptDismissed", func(data []any) {

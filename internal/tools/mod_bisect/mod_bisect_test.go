@@ -94,14 +94,14 @@ func TestBisectFindsAndKeepsCulpritDisabled(t *testing.T) {
 		}
 	}
 
-	second, err := service.BisectRespond(ctx, true)
+	second, err := service.BisectRespond(ctx, service.BisectGetState().Version, true)
 	if err != nil {
 		t.Fatalf("first respond: %v", err)
 	}
 	if second.Round != 2 || len(second.CurrentBatch) != 1 {
 		t.Fatalf("second snapshot = %#v", second)
 	}
-	done, err := service.BisectRespond(ctx, true)
+	done, err := service.BisectRespond(ctx, service.BisectGetState().Version, true)
 	if err != nil {
 		t.Fatalf("second respond: %v", err)
 	}
@@ -109,11 +109,11 @@ func TestBisectFindsAndKeepsCulpritDisabled(t *testing.T) {
 		t.Fatalf("done snapshot = %#v", done)
 	}
 
-	idle, err := service.BisectFinalize(ctx, []string{*done.FinalBadPath})
+	idle, err := service.BisectFinalize(ctx, service.BisectGetState().Version, []string{*done.FinalBadPath})
 	if err != nil {
 		t.Fatalf("BisectFinalize: %v", err)
 	}
-	if idle.Status != BisectIdle || service.BisectGetState() != nil {
+	if idle.Status != BisectIdle || service.BisectGetState().Active {
 		t.Fatalf("idle snapshot/state = %#v / %#v", idle, service.BisectGetState())
 	}
 	assertNoSessionMarker(t, service)
@@ -140,7 +140,7 @@ func TestBisectFinalizeAcceptsExistingKeepDisabledTarget(t *testing.T) {
 	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
 		t.Fatalf("BisectStart: %v", err)
 	}
-	done, err := service.BisectRespond(ctx, true)
+	done, err := service.BisectRespond(ctx, service.BisectGetState().Version, true)
 	if err != nil {
 		t.Fatalf("BisectRespond: %v", err)
 	}
@@ -154,11 +154,11 @@ func TestBisectFinalizeAcceptsExistingKeepDisabledTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	idle, err := service.BisectFinalize(ctx, []string{*done.FinalBadPath})
+	idle, err := service.BisectFinalize(ctx, service.BisectGetState().Version, []string{*done.FinalBadPath})
 	if err != nil {
 		t.Fatalf("BisectFinalize: %v", err)
 	}
-	if idle.Status != BisectIdle || service.BisectGetState() != nil {
+	if idle.Status != BisectIdle || service.BisectGetState().Active {
 		t.Fatalf("idle snapshot/state = %#v / %#v", idle, service.BisectGetState())
 	}
 	contents, err := os.ReadFile(target)
@@ -167,6 +167,48 @@ func TestBisectFinalizeAcceptsExistingKeepDisabledTarget(t *testing.T) {
 	}
 	if string(contents) != existing {
 		t.Fatalf("existing target was overwritten: %q", contents)
+	}
+	numbered := filepath.Join(filepath.Dir(*done.FinalBadPath), "DISABLED_mod.ini (2)")
+	if contents, err := os.ReadFile(numbered); err != nil || string(contents) != "[TextureOverride]\n" {
+		t.Fatalf("culprit not kept under a numbered name: %q, %v", contents, err)
+	}
+	if _, err := os.Stat(bisectDisabledPath(*done.FinalBadPath)); !os.IsNotExist(err) {
+		t.Fatalf("culprit left with the bisect suffix: %v", err)
+	}
+}
+
+func TestBisectRespondRollsBackPartialSwitch(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	writeBisectINIs(t, root, 4)
+	service, _, _ := newBisectTestService(t, root)
+
+	first, err := service.BisectStart(ctx, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An open handle without delete sharing blocks renaming the second batch file back.
+	locked, err := os.Open(bisectDisabledPath(first.CurrentBatch[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = locked.Close() })
+
+	if _, err := service.BisectRespond(ctx, first.Version, false); err == nil {
+		t.Fatal("respond succeeded with a locked batch file")
+	}
+	for _, path := range first.CurrentBatch {
+		if _, err := os.Stat(bisectDisabledPath(path)); err != nil {
+			t.Fatalf("batch file not disabled after the failed switch: %s: %v", path, err)
+		}
+	}
+	state := service.BisectGetState()
+	if state.Round != 1 || state.Error != nil || len(state.CurrentBatch) != 2 {
+		t.Fatalf("state after the failed switch = %#v", state)
+	}
+	_ = locked.Close()
+	if _, err := service.BisectCancel(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -201,15 +243,34 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 		t.Fatalf("orphan not restored: %v", err)
 	}
 
-	if err := os.WriteFile(orphan, []byte("stale"), 0o600); err != nil {
+	original, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(orphan, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	recovered, err = service.BisectRecover(ctx, "test")
 	if err != nil || recovered != 1 {
-		t.Fatalf("stale BisectRecover = %d, %v", recovered, err)
+		t.Fatalf("duplicate BisectRecover = %d, %v", recovered, err)
 	}
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
-		t.Fatalf("stale disabled duplicate remains: %v", err)
+		t.Fatalf("identical disabled duplicate remains: %v", err)
+	}
+
+	// A different file now holds the original name: both must survive and the conflict is reported.
+	if err := os.WriteFile(orphan, []byte("disabled by bisect"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err = service.BisectRecover(ctx, "test")
+	if recovered != 0 || err == nil || !strings.Contains(err.Error(), bisectRecoverConflict+":1") {
+		t.Fatalf("conflicting BisectRecover = %d, %v", recovered, err)
+	}
+	if content, err := os.ReadFile(orphan); err != nil || string(content) != "disabled by bisect" {
+		t.Fatalf("conflicting disabled INI = %q, %v", content, err)
+	}
+	if content, err := os.ReadFile(paths[0]); err != nil || string(content) != string(original) {
+		t.Fatalf("file holding the original name = %q, %v", content, err)
 	}
 }
 
@@ -270,7 +331,12 @@ func TestBisectRestartCompletedSessionBroadcastsCancelLifecycle(t *testing.T) {
 	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
 		t.Fatal(err)
 	}
-	if done, err := service.BisectRespond(ctx, true); err != nil || done.Status != BisectDone {
+	if done, err := service.BisectRespond(
+		ctx,
+		service.BisectGetState().Version,
+		true,
+	); err != nil ||
+		done.Status != BisectDone {
 		t.Fatalf("done = %#v, %v", done, err)
 	}
 	before := len(*events)
@@ -307,7 +373,11 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 		err.Error() != "A bisect session is already running. Cancel it first." {
 		t.Fatalf("already running error = %v", err)
 	}
-	if _, err := service.BisectUndoLastRound(ctx); err == nil || err.Error() != "Nothing to undo." {
+	if _, err := service.BisectUndoLastRound(
+		ctx,
+		service.BisectGetState().Version,
+	); err == nil ||
+		err.Error() != "Nothing to undo." {
 		t.Fatalf("undo error = %v", err)
 	}
 	if _, err := service.BisectRecover(
@@ -317,14 +387,33 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 		err.Error() != "Cannot recover while a bisect session is active." {
 		t.Fatalf("recover error = %v", err)
 	}
-	if done, err := service.BisectRespond(ctx, true); err != nil || done.Status != BisectDone {
+	stale := service.BisectGetState().Version - 1
+	if _, err := service.BisectRespond(ctx, stale, true); err == nil || err.Error() != bisectStateChanged {
+		t.Fatalf("stale respond error = %v", err)
+	}
+	if done, err := service.BisectRespond(
+		ctx,
+		service.BisectGetState().Version,
+		true,
+	); err != nil ||
+		done.Status != BisectDone {
 		t.Fatalf("done = %#v, %v", done, err)
 	}
-	if _, err := service.BisectRespond(ctx, true); err == nil || err.Error() != "No active batch to respond to." {
+	if _, err := service.BisectRespond(
+		ctx,
+		service.BisectGetState().Version,
+		true,
+	); err == nil ||
+		err.Error() != "No active batch to respond to." {
 		t.Fatalf("respond error = %v", err)
 	}
 	_, _ = service.BisectCancel(ctx)
-	if _, err := service.BisectRespond(ctx, true); err == nil || err.Error() != "No active bisect session." {
+	if _, err := service.BisectRespond(
+		ctx,
+		service.BisectGetState().Version,
+		true,
+	); err == nil ||
+		err.Error() != "No active bisect session." {
 		t.Fatalf("session error = %v", err)
 	}
 	if _, err := service.requireBisectGame(ctx, "missing"); err == nil || err.Error() != "Game not found: missing" {

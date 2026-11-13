@@ -42,6 +42,43 @@ func TestBisectWorksInLinkedModsFolder(t *testing.T) {
 	}
 }
 
+func TestRecoverBisectsRestoresINIBehindNestedJunction(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	mods, elsewhere := filepath.Join(base, "Mods"), filepath.Join(base, "Elsewhere")
+	for _, dir := range []string{mods, elsewhere} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", filepath.Join(mods, "Linked"), elsewhere).
+		CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(elsewhere, "mod.ini"), []byte("[Constants]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	crashed, client, _ := newBisectTestService(t, mods)
+	if err := client.AppState.Upsert(ctx, legacyScanDoneKey, "1", appStateTimestamp()); err != nil {
+		t.Fatal(err)
+	}
+	started, err := crashed.BisectStart(ctx, "test", nil)
+	linked := filepath.Join(mods, "Linked", "mod.ini")
+	if err != nil || len(started.CurrentBatch) != 1 || started.CurrentBatch[0] != linked {
+		t.Fatalf("started = %#v, %v", started, err)
+	}
+
+	next := NewWithOptions(Options{})
+	next.UseClient(client)
+	if err := next.RecoverBisects(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(linked); err != nil {
+		t.Fatalf("INI behind the junction not restored: %v", err)
+	}
+	assertNoSessionMarker(t, next)
+}
+
 func TestResolveBisectExcludeAcceptsModLinkedIn(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()

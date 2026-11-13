@@ -19,6 +19,14 @@ var (
 	errBisectExcludeDuplicate = errors.New("bisect exclude path is listed twice")
 )
 
+// bisectRecoverConflicts reads how many disabled INIs recovery kept because their original name was taken.
+func bisectRecoverConflicts(err error) int {
+	if conflict, ok := errors.AsType[*tools.BisectRecoverConflictError](err); ok {
+		return conflict.Conflicts
+	}
+	return 0
+}
+
 // bisectExclude is a row of the exclude list. committed is the validated path relative to the importer, set once
 // the backend accepted the row; failed is the text that last failed, so it is not validated again until edited.
 type bisectExclude struct {
@@ -33,7 +41,6 @@ type bisectTool struct {
 	game       string
 	excludes   []*bisectExclude
 	nextID     int
-	busy       bool
 	recovering bool
 	// stateRead is set once the backend's bisect state was read for this screen.
 	stateRead bool
@@ -53,8 +60,12 @@ func (b *bisectTool) removeExclude(row *bisectExclude) {
 	}
 }
 
+// bisectGame is the game of the running session, else the game the user picked.
 func (s *Shell) bisectGame() string {
 	b := &s.tools.bisect
+	if snapshot := s.mods.bisect; bisectHasSession(snapshot) && snapshot.Game != "" {
+		return snapshot.Game
+	}
 	if b.game != "" {
 		return b.game
 	}
@@ -75,11 +86,7 @@ func (s *Shell) bisectToolPage() *fairy.El {
 		b.stateRead = true
 		s.background(func(context.Context) {
 			snapshot := s.deps.Tools.BisectGetState()
-			fairy.Go(func() {
-				if s.mods.bisect == nil {
-					s.mods.bisect = snapshot
-				}
-			})
+			fairy.Go(func() { s.setBisect(snapshot) })
 		})
 	}
 
@@ -89,11 +96,11 @@ func (s *Shell) bisectToolPage() *fairy.El {
 		status = snapshot.Status
 	}
 	game := s.bisectGame()
-	active := status == "scanning" || status == "round"
-	busy := b.busy || b.recovering
-	canStart := game != "" && !active && status != "reverting"
-	canCancel := snapshot != nil && status != "idle" && status != "done" && status != "cancelled"
-	canRecover := game != "" && (status == "idle" || status == "cancelled")
+	hasSession := bisectHasSession(snapshot)
+	busy := s.mods.bisectBusy || b.recovering
+	canStart := game != "" && !hasSession && status != "reverting"
+	canRecover := game != "" && !hasSession && status != "reverting"
+	locked := hasSession || busy
 
 	var games []kit.Item
 	for _, g := range s.mods.games {
@@ -113,14 +120,14 @@ func (s *Shell) bisectToolPage() *fairy.El {
 		if value != game {
 			b.game, b.excludes = value, nil
 		}
-	}, kit.Placeholder(placeholder), kit.Disabled(active || busy || len(games) == 0)).MinW(224)
+	}, kit.Placeholder(placeholder), kit.Disabled(locked || len(games) == 0)).MinW(224)
 
 	controls := fairy.Row(
 		gameSelect,
 		kit.Button(T(prefix+"start"), s.startBisect, kit.Disabled(!canStart || busy)),
 		kit.Button(T(prefix+"cancel"), func() {
-			s.runBisect(&b.busy, map[string]any{"game": game}, "bisect-cancel", s.deps.Tools.BisectCancel, nil)
-		}, kit.Destructive, kit.Disabled(!canCancel || busy)),
+			s.runBisect(map[string]any{"game": game}, "bisect-cancel", s.deps.Tools.BisectCancel, nil)
+		}, kit.Destructive, kit.Disabled(!hasSession || busy)),
 		kit.Button(T(prefix+"recover_disabled"), s.recoverBisect, kit.Secondary,
 			kit.Disabled(!canRecover || busy), kit.Tooltip(T(prefix+"recover_disabled_hint"))),
 		fairy.Text(T(prefix+"status."+string(status))).Font(monoFont).FontSize(12).LineHeight(16).
@@ -131,34 +138,52 @@ func (s *Shell) bisectToolPage() *fairy.El {
 	if s.settingsLoaded(setting.KeyGeneralBisectPreserveD3dx) {
 		preserve = s.boolSetting(setting.KeyGeneralBisectPreserveD3dx)
 	}
+	excludes := s.bisectExcludeList(game, locked || game == "")
+	if hasSession {
+		excludes = bisectSessionExcludes(snapshot.ExcludePaths)
+	}
 	content := fairy.Col(
 		controls,
-		s.bisectExcludeList(game, active || busy || game == ""),
+		excludes,
 		settingRow(T(prefix+"preserve_d3dx"), T(prefix+"preserve_d3dx_description"),
 			kit.Switch(preserve, func(on bool) { s.setSetting(setting.KeyGeneralBisectPreserveD3dx, on) },
-				kit.Disabled(active || busy)).Label(T(prefix+"preserve_d3dx"))).Pad(0),
+				kit.Disabled(locked)).Label(T(prefix+"preserve_d3dx"))).Pad(0),
 	).Gap(12).PadEdges(4, 14, 4, 30).BorderEdges(0, 0, 0, 1, t.Foreground.Alpha(0.2))
-	if snapshot != nil && snapshot.Error != nil && status != "done" {
-		content.Child(
-			fairy.Text(*snapshot.Error).FontSize(12).LineHeight(16).Color(t.Destructive).Wrap().Pad(8).Radius(6).
-				Fill(t.Destructive.Alpha(0.1)),
-		)
-	}
 	section := fairy.Col(fairy.Col(
 		fairy.Text(T(prefix+"title")).FontSize(14).LineHeight(20).Medium().Color(t.MutedForeground),
 		fairy.Text(T(prefix+"description")).FontSize(12).LineHeight(16).Color(t.MutedForeground).Wrap(),
 	).Gap(2).PadEdges(0, 4, 8, 4), content).Gap(4)
 
 	page := toolPage(section)
-	if card := s.bisectStatusCard(&b.busy, map[string]any{"game": game}, snapshot); card != nil {
+	if card := s.bisectStatusCard(map[string]any{"game": game}, snapshot); card != nil {
 		page.Child(card)
 	}
 	return page
 }
 
+func bisectExcludeSection(rows *fairy.El) *fairy.El {
+	t := kit.T()
+	const prefix = "page.tools.mod_bisect."
+	return fairy.Col(
+		fairy.Col(
+			fairy.Text(T(prefix+"exclude_paths")).FontSize(14).Medium(),
+			fairy.Text(T(prefix+"exclude_paths_description")).FontSize(12).Color(t.MutedForeground).Wrap(),
+		).Gap(2),
+		rows,
+	).Gap(8)
+}
+
+// bisectSessionExcludes shows the exclude paths of the running session, which may belong to another screen.
+func bisectSessionExcludes(paths []string) *fairy.El {
+	rows := fairy.Col().Gap(6)
+	for _, path := range paths {
+		rows.Child(kit.TextField(path, nil, kit.Label(T("page.tools.mod_bisect.exclude_paths")), kit.Disabled(true)))
+	}
+	return bisectExcludeSection(rows)
+}
+
 func (s *Shell) bisectExcludeList(game string, disabled bool) *fairy.El {
 	b := &s.tools.bisect
-	t := kit.T()
 	const prefix = "page.tools.mod_bisect."
 	rows := fairy.Col().Gap(6)
 	for _, row := range b.excludes {
@@ -175,13 +200,7 @@ func (s *Shell) bisectExcludeList(game string, disabled bool) *fairy.El {
 	}
 	rows.Child(kit.Button(T(prefix+"exclude_paths_add"), b.addExclude, kit.Outline, kit.Small,
 		kit.Icon(lucide.Plus), kit.Disabled(disabled)).AlignSelf(fairy.Start))
-	return fairy.Col(
-		fairy.Col(
-			fairy.Text(T(prefix+"exclude_paths")).FontSize(14).Medium(),
-			fairy.Text(T(prefix+"exclude_paths_description")).FontSize(12).Color(t.MutedForeground).Wrap(),
-		).Gap(2),
-		rows,
-	).Gap(8)
+	return bisectExcludeSection(rows)
 }
 
 // commitBisectExclude validates an edited exclude row and replaces its text with the path the backend resolved.
@@ -256,7 +275,7 @@ func (s *Shell) startBisect() {
 		})
 	}
 	fields := map[string]any{"game": game}
-	s.runBisect(&b.busy, fields, "bisect-start", func(ctx context.Context) (tools.BisectSnapshot, error) {
+	s.runBisect(fields, "bisect-start", func(ctx context.Context) (tools.BisectSnapshot, error) {
 		var paths []string
 		resolved := map[*bisectExclude]string{}
 		for _, p := range rows {
@@ -312,13 +331,17 @@ func (s *Shell) recoverBisect() {
 	b.recovering = true
 	s.background(func(ctx context.Context) {
 		count, err := s.deps.Tools.BisectRecover(ctx, game)
-		if err != nil {
+		conflicts := bisectRecoverConflicts(err)
+		if err != nil && conflicts == 0 {
 			err = s.toolError(err, "bisect-recover", map[string]any{"game": game})
 		}
 		fairy.Go(func() {
 			b.recovering = false
 			const prefix = "page.tools.mod_bisect."
 			switch {
+			case conflicts > 0:
+				s.toasts.Show(kit.ToastWarning,
+					T(prefix+"recover_disabled_conflict", "count", count, "conflicts", conflicts), "")
 			case err != nil:
 				s.toasts.Show(kit.ToastError, err.Error(), "")
 			case count > 0:

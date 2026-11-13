@@ -38,6 +38,7 @@ type Service struct {
 
 	bisectMu         sync.Mutex
 	bisect           *bisectSession
+	bisectVersion    uint64
 	bisectRecovering bool
 	d3dx             *d3dxGuard
 }

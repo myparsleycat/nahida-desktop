@@ -46,7 +46,7 @@ func TestCancelledBisectRecoveryLeavesOrphansForNextLaunch(t *testing.T) {
 	if _, err := listBisectOrphans(ctx, root); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled directory walk = %v", err)
 	}
-	if restored := service.recoverINIs(ctx, []string{original}); restored != 0 {
+	if restored, _ := service.recoverINIs(ctx, []string{original}); restored != 0 {
 		t.Fatal("cancelled recovery changed files")
 	}
 	if _, err := os.Stat(disabled); err != nil {
@@ -95,7 +95,7 @@ func TestRecoverBisectsSurvivesMissingModFolder(t *testing.T) {
 	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "gone", ModFolderPath: missing}); err != nil {
 		t.Fatal(err)
 	}
-	if err := crashed.writeSessionMarker(ctx, "gone", missing); err != nil {
+	if err := crashed.writeSessionMarker(ctx, "gone", missing, nil); err != nil {
 		t.Fatal(err)
 	}
 	started, err := crashed.BisectStart(ctx, "test", nil)

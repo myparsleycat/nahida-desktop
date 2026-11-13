@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -20,7 +21,6 @@ import (
 type conflictDraft struct {
 	mod  mod.ModInfo
 	game string
-	busy bool
 }
 
 func (d *conflictDraft) fields() map[string]any {
@@ -35,24 +35,38 @@ func (s *Shell) openConflictFinder(info mod.ModInfo) {
 	}
 	s.background(func(context.Context) {
 		snapshot := s.deps.Tools.BisectGetState()
-		fairy.Go(func() { m.bisect = snapshot })
+		fairy.Go(func() { s.setBisect(snapshot) })
 	})
 }
 
+// setBisect shows snapshot unless the shown state is newer. Events, action results and state reads can arrive out
+// of order.
+func (s *Shell) setBisect(snapshot *tools.BisectSnapshot) {
+	m := &s.mods
+	if snapshot == nil || m.bisect != nil && snapshot.Version < m.bisect.Version {
+		return
+	}
+	m.bisect = snapshot
+}
+
+// bisectHasSession reports whether the backend holds a bisect session, including a finished one not finalized yet.
+func bisectHasSession(snapshot *tools.BisectSnapshot) bool {
+	return snapshot != nil && snapshot.Active
+}
+
 // runBisect runs one bisect action and shows the snapshot it returns. A failed action reads the state again,
-// since it may have changed meanwhile.
+// since it may have changed meanwhile. One action runs at a time across the tools page and the conflict finder.
 func (s *Shell) runBisect(
-	busy *bool,
 	fields map[string]any,
 	operation string,
 	action func(context.Context) (tools.BisectSnapshot, error),
 	failed func(error),
 ) {
 	m := &s.mods
-	if *busy || s.deps.Tools == nil {
+	if m.bisectBusy || s.deps.Tools == nil {
 		return
 	}
-	*busy = true
+	m.bisectBusy = true
 	s.background(func(ctx context.Context) {
 		snapshot, err := action(ctx)
 		var current *tools.BisectSnapshot
@@ -60,18 +74,26 @@ func (s *Shell) runBisect(
 			current = s.deps.Tools.BisectGetState()
 		}
 		fairy.Go(func() {
-			*busy = false
+			m.bisectBusy = false
 			if err == nil {
-				m.bisect = &snapshot
+				s.setBisect(&snapshot)
 				return
 			}
-			m.bisect = current
+			s.setBisect(current)
 			if failed != nil {
 				failed(err)
 				return
 			}
+			if errors.Is(err, tools.ErrBisectStateChanged) {
+				s.toasts.Show(kit.ToastWarning, T("page.tools.mod_bisect.state_changed"), "")
+				return
+			}
 			s.modError(err, operation, fields)
-			s.toasts.Show(kit.ToastError, err.Error(), "")
+			message := err.Error()
+			if errors.Is(err, tools.ErrBisectOutOfSync) {
+				message = T("page.tools.mod_bisect.out_of_sync")
+			}
+			s.toasts.Show(kit.ToastError, message, "")
 		})
 	})
 }
@@ -100,14 +122,13 @@ func (s *Shell) conflictDialog(cx *fairy.Cx) {
 	if snapshot != nil {
 		status = snapshot.Status
 	}
-	sessionActive := status == "scanning" || status == "round" || status == "reverting"
-	unfinalized := status == "done" && snapshot.FinalBadPath != nil
-	canStart := d.game != "" && d.mod.IsEnabled && !sessionActive && !unfinalized
-	canCancel := snapshot != nil && status != "idle" && status != "done" && status != "cancelled"
+	hasSession := bisectHasSession(snapshot)
+	busy := m.bisectBusy
+	canStart := d.game != "" && d.mod.IsEnabled && !hasSession && status != "reverting"
 	const prefix = "page.mod.dialog.find-conflict."
 
 	description := T(prefix+"description", "name", d.mod.Name)
-	if sessionActive || unfinalized {
+	if hasSession {
 		description = T(prefix + "session-active")
 	}
 	body := fairy.Col().Gap(16)
@@ -117,7 +138,7 @@ func (s *Shell) conflictDialog(cx *fairy.Cx) {
 	}
 	start := func() {
 		modPath := d.mod.Path
-		s.runBisect(&d.busy, d.fields(), "bisect-start", func(ctx context.Context) (tools.BisectSnapshot, error) {
+		s.runBisect(d.fields(), "bisect-start", func(ctx context.Context) (tools.BisectSnapshot, error) {
 			return s.deps.Tools.BisectStart(ctx, d.game, []string{modPath})
 		}, func(err error) {
 			if isExcludeValidationMessage(err.Error()) {
@@ -128,14 +149,14 @@ func (s *Shell) conflictDialog(cx *fairy.Cx) {
 			s.toasts.Show(kit.ToastError, err.Error(), "")
 		})
 	}
-	cancel := func() { s.runBisect(&d.busy, d.fields(), "bisect-cancel", s.deps.Tools.BisectCancel, nil) }
+	cancel := func() { s.runBisect(d.fields(), "bisect-cancel", s.deps.Tools.BisectCancel, nil) }
 	body.Child(fairy.Row(
-		kit.Button(T("page.tools.mod_bisect.start"), start, kit.Disabled(!canStart || d.busy)),
-		kit.Button(T("page.tools.mod_bisect.cancel"), cancel, kit.Destructive, kit.Disabled(!canCancel || d.busy)),
+		kit.Button(T("page.tools.mod_bisect.start"), start, kit.Disabled(!canStart || busy)),
+		kit.Button(T("page.tools.mod_bisect.cancel"), cancel, kit.Destructive, kit.Disabled(!hasSession || busy)),
 		fairy.Text(T("page.tools.mod_bisect.status."+string(status))).Font(monoFont).FontSize(12).
 			Color(bisectStatusColor(status)),
 	).Gap(8).Wrap().Align(fairy.Center))
-	if card := s.bisectStatusCard(&d.busy, d.fields(), snapshot); card != nil {
+	if card := s.bisectStatusCard(d.fields(), snapshot); card != nil {
 		body.Child(card)
 	}
 
@@ -172,12 +193,19 @@ func bisectRelative(root *string, path string) string {
 	return strings.TrimLeft(path[len(strings.TrimRight(*root, `\/`)):], `\/`)
 }
 
-func (s *Shell) bisectStatusCard(busy *bool, fields map[string]any, snapshot *tools.BisectSnapshot) *fairy.El {
+func (s *Shell) bisectStatusCard(fields map[string]any, snapshot *tools.BisectSnapshot) *fairy.El {
 	if snapshot == nil {
 		return nil
 	}
 	t := kit.T()
 	const prefix = "page.tools.mod_bisect."
+	busy := s.mods.bisectBusy
+	version := snapshot.Version
+	outOfSync := snapshot.OutOfSync
+	outOfSyncNote := func() *fairy.El {
+		return fairy.Text(T(prefix + "out_of_sync")).FontSize(12).LineHeight(16).Color(t.Destructive).Wrap().Pad(8).
+			Radius(6).Fill(t.Destructive.Alpha(0.1))
+	}
 	note := func(key string) *fairy.El {
 		return fairy.Text(T(prefix + key)).FontSize(14).Color(t.MutedForeground).Wrap()
 	}
@@ -200,26 +228,32 @@ func (s *Shell) bisectStatusCard(busy *bool, fields map[string]any, snapshot *to
 			batch.Child(fairy.Text(bisectRelative(snapshot.ModRootPath, path)).Wrap())
 		}
 		respond := func(fixed bool) {
-			s.runBisect(busy, fields, "bisect-respond", func(ctx context.Context) (tools.BisectSnapshot, error) {
-				return s.deps.Tools.BisectRespond(ctx, fixed)
+			s.runBisect(fields, "bisect-respond", func(ctx context.Context) (tools.BisectSnapshot, error) {
+				return s.deps.Tools.BisectRespond(ctx, version, fixed)
 			}, nil)
 		}
+		undo := func() {
+			s.runBisect(fields, "bisect-undo", func(ctx context.Context) (tools.BisectSnapshot, error) {
+				return s.deps.Tools.BisectUndoLastRound(ctx, version)
+			}, nil)
+		}
+		answerDisabled := busy || outOfSync
+		children := []*fairy.El{hints, fairy.Col(batch).H(224).ScrollY().Pad(8).Radius(6).Fill(t.Muted.Alpha(0.5))}
+		if outOfSync {
+			children = append(children, outOfSyncNote())
+		}
+		children = append(children, fairy.Row(
+			kit.Button(T(prefix+"undo"), undo, kit.Outline,
+				kit.Disabled(answerDisabled || snapshot.UndoStackDepth == 0)),
+			kit.Button(T(prefix+"still_broken"), func() { respond(false) }, kit.Destructive,
+				kit.Disabled(answerDisabled)),
+			kit.Button(T(prefix+"problem_fixed"), func() { respond(true) }, kit.Disabled(answerDisabled)),
+		).Gap(8).Wrap())
 		return section(
 			T(prefix+"round_title", "round", snapshot.Round, "batchSize", snapshot.BatchSize, "remaining",
 				len(snapshot.Candidates)),
 			T(prefix+"round_description"),
-			hints,
-			fairy.Col(batch).H(224).ScrollY().Pad(8).Radius(6).Fill(t.Muted.Alpha(0.5)),
-			fairy.Row(
-				kit.Button(
-					T(prefix+"undo"),
-					func() { s.runBisect(busy, fields, "bisect-undo", s.deps.Tools.BisectUndoLastRound, nil) },
-					kit.Outline,
-					kit.Disabled(*busy || snapshot.UndoStackDepth == 0),
-				),
-				kit.Button(T(prefix+"still_broken"), func() { respond(false) }, kit.Destructive, kit.Disabled(*busy)),
-				kit.Button(T(prefix+"problem_fixed"), func() { respond(true) }, kit.Disabled(*busy)),
-			).Gap(8).Wrap(),
+			children...,
 		)
 	case status == "scanning":
 		return note("scanning")
@@ -231,21 +265,27 @@ func (s *Shell) bisectStatusCard(busy *bool, fields map[string]any, snapshot *to
 			disabled = "DISABLED_"
 		}
 		finalize := func(keep []string) {
-			s.runBisect(busy, fields, "bisect-finalize", func(ctx context.Context) (tools.BisectSnapshot, error) {
-				return s.deps.Tools.BisectFinalize(ctx, keep)
+			s.runBisect(fields, "bisect-finalize", func(ctx context.Context) (tools.BisectSnapshot, error) {
+				return s.deps.Tools.BisectFinalize(ctx, version, keep)
 			}, nil)
 		}
+		children := []*fairy.El{
+			fairy.Text(T(prefix+"keep_disabled_hint", "from", base, "to", disabled+base)).FontSize(12).
+				Color(t.MutedForeground).Wrap(),
+			fairy.Text(T(prefix + "new_bisect_hint")).FontSize(12).Color(t.MutedForeground).Wrap(),
+		}
+		if outOfSync {
+			children = append(children, outOfSyncNote())
+		}
+		children = append(children, fairy.Row(
+			kit.Button(T(prefix+"keep_disabled"), func() { finalize([]string{bad}) }, kit.Outline,
+				kit.Disabled(busy)),
+			kit.Button(T(prefix+"re_enable_all"), func() { finalize(nil) }, kit.Disabled(busy)),
+		).Gap(8).Wrap())
 		return section(
 			T(prefix+"done_title"),
 			T(prefix+"done_description", "path", bisectRelative(snapshot.ModRootPath, bad)),
-			fairy.Text(T(prefix+"keep_disabled_hint", "from", base, "to", disabled+base)).FontSize(12).
-				Color(t.MutedForeground).Wrap(),
-			fairy.Text(T(prefix+"new_bisect_hint")).FontSize(12).Color(t.MutedForeground).Wrap(),
-			fairy.Row(
-				kit.Button(T(prefix+"keep_disabled"), func() { finalize([]string{bad}) }, kit.Outline,
-					kit.Disabled(*busy)),
-				kit.Button(T(prefix+"re_enable_all"), func() { finalize(nil) }, kit.Disabled(*busy)),
-			).Gap(8).Wrap(),
+			children...,
 		)
 	case status == "done" && snapshot.Error != nil && *snapshot.Error == "All enabled INIs were excluded":
 		return note("all_excluded")

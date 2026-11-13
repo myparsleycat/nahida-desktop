@@ -1,6 +1,7 @@
 package modbisect
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,21 @@ const (
 	bisectExcludeOutside = "Exclude path must be inside the selected importer."
 	bisectExcludeRoot    = "Exclude path cannot be the importer root."
 	bisectExcludeMissing = "Exclude path does not exist."
+	bisectOutOfSync      = "Bisect files are out of sync. Cancel the session to restore them."
+	bisectStateChanged   = "The bisect state changed. Review the current round and answer again."
+	// bisectRecoverConflict prefixes the number of disabled INIs kept because a different file now holds the
+	// original name.
+	bisectRecoverConflict = "BISECT_RECOVER_CONFLICT"
+)
+
+var (
+	// errBisectOutOfSync marks a rename failure whose rollback also failed, so the files no longer match the session.
+	errBisectOutOfSync = errors.New("bisect files are out of sync")
+
+	// ErrBisectOutOfSync refuses an answer while the files do not match the session.
+	ErrBisectOutOfSync error = infra.ContractError(bisectOutOfSync)
+	// ErrBisectStateChanged refuses an action made against an older version of the state.
+	ErrBisectStateChanged error = infra.ContractError(bisectStateChanged)
 )
 
 type BisectStatus string
@@ -42,7 +58,14 @@ const (
 	BisectCancelled BisectStatus = "cancelled"
 )
 
+// BisectSnapshot is the bisect state. Version increases with every broadcast, so a newer state is never replaced by an
+// older one, and Respond, UndoLastRound and Finalize act only on the version the caller saw. Active is set while the
+// backend holds a session, including a finished one that is not finalized yet.
 type BisectSnapshot struct {
+	Version uint64 `json:"version"`
+	Active  bool   `json:"active"`
+	// OutOfSync is set when renamed files no longer match the session; only cancel and finalize are accepted.
+	OutOfSync      bool         `json:"outOfSync"`
 	Status         BisectStatus `json:"status"`
 	Game           string       `json:"game"`
 	ModRootPath    *string      `json:"modRootPath"`
@@ -67,6 +90,9 @@ type bisectSession struct {
 	undoStack    []bisectUndo
 	finalBadPath *string
 	phase        BisectStatus
+	// outOfSync is set when a failed rename could not be rolled back; answers are refused until the session is
+	// cancelled or finalized.
+	outOfSync bool
 }
 
 type bisectUndo struct {
@@ -80,17 +106,24 @@ type bisectUndo struct {
 func (t *Service) BisectGetState() *BisectSnapshot {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
-	if t.bisect == nil {
-		return nil
+	snapshot := emptyBisectSnapshot(BisectIdle)
+	if t.bisect != nil {
+		snapshot = snapshotFor(t.bisect, nil, sessionStatus(t.bisect))
+		snapshot.Active = true
 	}
-	status := BisectRound
-	if t.bisect.finalBadPath != nil {
-		status = BisectDone
-	} else if t.bisect.phase == BisectScanning {
-		status = BisectScanning
-	}
-	snapshot := snapshotFor(t.bisect, nil, status)
+	snapshot.Version = t.bisectVersion
 	return &snapshot
+}
+
+func sessionStatus(session *bisectSession) BisectStatus {
+	switch {
+	case session.finalBadPath != nil:
+		return BisectDone
+	case session.phase == BisectScanning:
+		return BisectScanning
+	default:
+		return BisectRound
+	}
 }
 
 func (t *Service) BisectValidateExcludePath(ctx context.Context, game, inputPath string) (string, error) {
@@ -120,6 +153,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		completed := t.bisect
 		t.broadcastBisect(snapshotFor(completed, nil, BisectCancelled))
 		if err := t.cancelBisectLocked(); err != nil {
+			t.broadcastBisect(snapshotFor(completed, nil, sessionStatus(completed)))
 			return BisectSnapshot{}, err
 		}
 		t.broadcastBisect(snapshotFor(completed, nil, BisectReverting))
@@ -158,7 +192,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 
 	paths, err := scanEnabledINIs(config.ModFolderPath)
 	if err != nil {
-		t.bisect = nil
+		t.abortStartLocked()
 		return BisectSnapshot{}, err
 	}
 	candidates := make([]string, 0, len(paths))
@@ -176,14 +210,13 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		done := scanning
 		done.Status = BisectDone
 		done.Error = message
-		t.broadcastBisect(done)
-		return done, nil
+		return t.broadcastBisect(done), nil
 	}
 
 	if t.settings != nil {
 		preserve, settingErr := t.settings.GetBisectPreserveD3dx(ctx)
 		if settingErr != nil {
-			t.bisect = nil
+			t.abortStartLocked()
 			return BisectSnapshot{}, settingErr
 		}
 		if preserve {
@@ -193,21 +226,21 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		}
 	}
 
-	if err := t.writeSessionMarker(ctx, game, config.ModFolderPath); err != nil {
+	if err := t.writeSessionMarker(ctx, game, config.ModFolderPath, candidates); err != nil {
 		guardErr := t.stopD3dxGuardLocked(game)
-		t.bisect = nil
+		t.abortStartLocked()
 		return BisectSnapshot{}, errors.Join(err, guardErr)
 	}
 
 	batchSize := chooseBisectBatchSize(len(candidates))
 	batch := slices.Clone(candidates[:batchSize])
 	if err := disableINIs(batch); err != nil {
-		rollbackErr := enableINIs(batch)
+		rollbackErr := restoreINIs(batch)
 		if rollbackErr == nil {
 			t.clearSessionMarker(ctx, game)
 		}
 		guardErr := t.stopD3dxGuardLocked(game)
-		t.bisect = nil
+		t.abortStartLocked()
 		return BisectSnapshot{}, infra.WithCause(
 			err,
 			infra.AnnotateError(
@@ -221,17 +254,24 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 	session.batchSize = batchSize
 	session.currentBatch = batch
 	session.phase = BisectRound
-	snapshot := snapshotFor(session, nil, BisectRound)
-	t.broadcastBisect(snapshot)
-	return snapshot, nil
+	return t.broadcastBisect(snapshotFor(session, nil, BisectRound)), nil
 }
 
-func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot, error) {
+// abortStartLocked drops a session that failed to start and tells every screen, which saw it scanning.
+func (t *Service) abortStartLocked() {
+	t.bisect = nil
+	t.broadcastBisect(emptyBisectSnapshot(BisectIdle))
+}
+
+func (t *Service) BisectRespond(ctx context.Context, version uint64, fixed bool) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
-	session, err := t.requireBisectSessionLocked()
+	session, err := t.requireBisectVersionLocked(version)
 	if err != nil {
 		return BisectSnapshot{}, err
+	}
+	if session.outOfSync {
+		return BisectSnapshot{}, ErrBisectOutOfSync
 	}
 	if len(session.currentBatch) == 0 {
 		//nolint:staticcheck // Electron contract text.
@@ -261,7 +301,7 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 		culprit := remaining[0]
 		if !fixed {
 			if err := disableINIs([]string{culprit}); err != nil {
-				return BisectSnapshot{}, err
+				return BisectSnapshot{}, t.failLocked(session, err)
 			}
 		}
 		session.candidates = remaining
@@ -272,54 +312,51 @@ func (t *Service) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot
 			session.currentBatch = []string{culprit}
 		}
 		session.finalBadPath = lo.ToPtr(culprit)
-		snapshot := snapshotFor(session, nil, BisectDone)
-		t.broadcastBisect(snapshot)
-		return snapshot, nil
+		return t.broadcastBisect(snapshotFor(session, nil, BisectDone)), nil
 	}
 
 	if len(remaining) == 0 {
 		toRestore := disabledBisectSet(session)
 		if err := enableINIs(toRestore); err != nil {
-			return BisectSnapshot{}, err
+			return BisectSnapshot{}, t.failLocked(session, err)
 		}
 		t.clearSessionMarker(ctx, session.game)
 		if err := t.stopD3dxGuardLocked(session.game); err != nil {
 			t.logError(err, "ModBisect:d3dxFinalRestore")
 		}
 		t.bisect = nil
-		snapshot := snapshotFor(session, lo.ToPtr(bisectInconclusive), BisectDone)
-		t.broadcastBisect(snapshot)
-		return snapshot, nil
+		return t.broadcastBisect(snapshotFor(session, lo.ToPtr(bisectInconclusive), BisectDone)), nil
 	}
 
 	nextBatchSize := chooseBisectBatchSize(len(remaining))
 	nextBatch := slices.Clone(remaining[:nextBatchSize])
 	if err := switchBisectBatch(currentBatch, nextBatch); err != nil {
-		return BisectSnapshot{}, err
+		return BisectSnapshot{}, t.failLocked(session, err)
 	}
 	session.undoStack = append(session.undoStack, undo)
 	session.candidates = remaining
 	session.currentBatch = nextBatch
 	session.batchSize = nextBatchSize
 	session.round++
-	snapshot := snapshotFor(session, nil, BisectRound)
-	t.broadcastBisect(snapshot)
-	return snapshot, nil
+	return t.broadcastBisect(snapshotFor(session, nil, BisectRound)), nil
 }
 
-func (t *Service) BisectUndoLastRound(_ context.Context) (BisectSnapshot, error) {
+func (t *Service) BisectUndoLastRound(_ context.Context, version uint64) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
-	session, err := t.requireBisectSessionLocked()
+	session, err := t.requireBisectVersionLocked(version)
 	if err != nil {
 		return BisectSnapshot{}, err
+	}
+	if session.outOfSync {
+		return BisectSnapshot{}, ErrBisectOutOfSync
 	}
 	if len(session.undoStack) == 0 {
 		return BisectSnapshot{}, errors.New("Nothing to undo.") //nolint:staticcheck // Electron contract text.
 	}
 	last := session.undoStack[len(session.undoStack)-1]
 	if err := switchBisectBatch(session.currentBatch, last.disabled); err != nil {
-		return BisectSnapshot{}, err
+		return BisectSnapshot{}, t.failLocked(session, err)
 	}
 	session.undoStack = session.undoStack[:len(session.undoStack)-1]
 	session.candidates = last.candidatesBefore
@@ -327,15 +364,13 @@ func (t *Service) BisectUndoLastRound(_ context.Context) (BisectSnapshot, error)
 	session.batchSize = last.batchSize
 	session.round = last.round
 	session.finalBadPath = nil
-	snapshot := snapshotFor(session, nil, BisectRound)
-	t.broadcastBisect(snapshot)
-	return snapshot, nil
+	return t.broadcastBisect(snapshotFor(session, nil, BisectRound)), nil
 }
 
-func (t *Service) BisectFinalize(ctx context.Context, keepDisabled []string) (BisectSnapshot, error) {
+func (t *Service) BisectFinalize(ctx context.Context, version uint64, keepDisabled []string) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
-	session, err := t.requireBisectSessionLocked()
+	session, err := t.requireBisectVersionLocked(version)
 	if err != nil {
 		return BisectSnapshot{}, err
 	}
@@ -349,9 +384,6 @@ func (t *Service) BisectFinalize(ctx context.Context, keepDisabled []string) (Bi
 			restore = append(restore, iniPath)
 		}
 	}
-	if err := enableINIs(restore); err != nil {
-		return BisectSnapshot{}, err
-	}
 	style := "space"
 	if len(keep) > 0 && t.settings != nil {
 		style, err = t.settings.GetDisabledPrefixStyle(ctx)
@@ -359,8 +391,13 @@ func (t *Service) BisectFinalize(ctx context.Context, keepDisabled []string) (Bi
 			return BisectSnapshot{}, err
 		}
 	}
+	if err := enableINIs(restore); err != nil {
+		return BisectSnapshot{}, t.failLocked(session, err)
+	}
 	for _, iniPath := range keep {
 		if err := keepBisectINIDisabled(iniPath, style); err != nil {
+			// The restored files no longer match the session; a retry or a cancel finishes from here.
+			t.setOutOfSyncLocked(session)
 			return BisectSnapshot{}, err
 		}
 	}
@@ -373,30 +410,35 @@ func (t *Service) BisectFinalize(ctx context.Context, keepDisabled []string) (Bi
 	reverting := final
 	reverting.Status = BisectReverting
 	t.broadcastBisect(reverting)
-	t.broadcastBisect(final)
-	return final, nil
+	return t.broadcastBisect(final), nil
 }
 
 func (t *Service) BisectCancel(ctx context.Context) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	if t.bisect == nil {
-		idle := emptyBisectSnapshot(BisectIdle)
-		t.broadcastBisect(idle)
-		return idle, nil
+		return t.broadcastBisect(emptyBisectSnapshot(BisectIdle)), nil
 	}
 	session := t.bisect
 	t.broadcastBisect(snapshotFor(session, nil, BisectCancelled))
 	if err := t.cancelBisectLocked(); err != nil {
+		t.broadcastBisect(snapshotFor(session, nil, sessionStatus(session)))
 		return BisectSnapshot{}, err
 	}
-	reverting := snapshotFor(session, nil, BisectReverting)
-	t.broadcastBisect(reverting)
-	idle := emptyBisectSnapshot(BisectIdle)
-	t.broadcastBisect(idle)
-	return idle, nil
+	t.broadcastBisect(snapshotFor(session, nil, BisectReverting))
+	return t.broadcastBisect(emptyBisectSnapshot(BisectIdle)), nil
 }
 
+// BisectRecoverConflictError reports the disabled INIs recovery kept because a different file now holds the
+// original name. BisectRecover returns it together with the number it restored.
+type BisectRecoverConflictError struct{ Conflicts int }
+
+func (e *BisectRecoverConflictError) Error() string {
+	return fmt.Sprintf("%s:%d", bisectRecoverConflict, e.Conflicts)
+}
+
+// BisectRecover restores the INIs an interrupted session left disabled. A disabled INI whose original name is now
+// held by a different file is kept and counted in a *BisectRecoverConflictError.
 func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 	if err := t.beginBisectRecovery(); err != nil {
 		//nolint:staticcheck // Electron contract text.
@@ -409,11 +451,41 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	paths, err := listBisectOrphans(ctx, config.ModFolderPath)
+	markers, err := t.sessionMarkers(ctx)
 	if err != nil {
 		return 0, err
 	}
-	return t.recoverINIs(ctx, paths), ctx.Err()
+	var marked []string
+	markerGame := ""
+	for _, marker := range markers {
+		if (marker.game == game || marker.game == config.Game) &&
+			platform.SamePathFold(marker.ModRootPath, config.ModFolderPath) {
+			marked, markerGame = marker.Paths, marker.game
+		}
+	}
+	paths, err := bisectRecoveryTargets(ctx, config.ModFolderPath, marked)
+	if err != nil {
+		return 0, err
+	}
+	restored, conflicts := t.recoverINIs(ctx, paths)
+	if err := ctx.Err(); err != nil {
+		return restored, err
+	}
+	if markerGame != "" && restored+len(conflicts) == len(paths) {
+		t.clearSessionMarker(ctx, markerGame)
+	}
+	if len(conflicts) > 0 {
+		return restored, infra.ReportError(
+			t.log,
+			&BisectRecoverConflictError{Conflicts: len(conflicts)},
+			"Tools",
+			infra.Diagnostic{
+				Operation: "ModBisect:recover", Stage: "conflict",
+				Fields: map[string]any{"game": config.Game, "conflicts": firstPaths(conflicts)},
+			},
+		)
+	}
+	return restored, nil
 }
 
 // RecoverBisects restores interrupted sessions. It walks only the mod folders of sessions that left a marker,
@@ -462,7 +534,10 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 				}
 				continue
 			}
-			complete = t.recoverINIs(ctx, orphans) == len(orphans) && complete
+			// A conflict is logged once and left for manual recovery; it does not hold back the done key.
+			restored, conflicts := t.recoverINIs(ctx, orphans)
+			t.logRecoverConflicts(game.Game, conflicts)
+			complete = restored+len(conflicts) == len(orphans) && complete
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -479,7 +554,7 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 		return err
 	}
 	for _, marker := range markers {
-		orphans, err := listBisectOrphans(ctx, marker.ModRootPath)
+		orphans, err := bisectRecoveryTargets(ctx, marker.ModRootPath, marker.Paths)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -490,11 +565,57 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 			}
 			continue
 		}
-		if t.recoverINIs(ctx, orphans) == len(orphans) && ctx.Err() == nil {
+		// A conflict is logged with its paths and does not keep the marker, or every launch would repeat the walk.
+		restored, conflicts := t.recoverINIs(ctx, orphans)
+		t.logRecoverConflicts(marker.game, conflicts)
+		if restored+len(conflicts) == len(orphans) && ctx.Err() == nil {
 			t.clearSessionMarker(ctx, marker.game)
 		}
 	}
 	return ctx.Err()
+}
+
+func (t *Service) logRecoverConflicts(game string, conflicts []string) {
+	if len(conflicts) == 0 {
+		return
+	}
+	_ = infra.ReportError(t.log, errors.New("disabled INI kept because the original name is taken"), "Tools",
+		infra.Diagnostic{
+			Operation: "ModBisect:recover", Stage: "conflict",
+			Fields: map[string]any{"game": game, "count": len(conflicts), "conflicts": firstPaths(conflicts)},
+		})
+}
+
+func firstPaths(paths []string) []string {
+	const limit = 10
+	return paths[:min(len(paths), limit)]
+}
+
+// bisectRecoveryTargets lists the INIs to restore below root: the disabled files the walk finds, plus the
+// session's recorded candidates that are still disabled. The walk does not enter junctions below root, but the
+// session scan does, so only the record reaches INIs behind them.
+func bisectRecoveryTargets(ctx context.Context, root string, marked []string) ([]string, error) {
+	targets, err := listBisectOrphans(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	seen := lowerPathSet(targets)
+	for _, relative := range marked {
+		local := filepath.FromSlash(relative)
+		if local == "" || filepath.IsAbs(local) || pathEscapes(filepath.Clean(local)) {
+			continue
+		}
+		original := filepath.Join(root, local)
+		if _, ok := seen[strings.ToLower(original)]; ok {
+			continue
+		}
+		if _, err := os.Lstat(bisectDisabledPath(original)); err != nil {
+			continue
+		}
+		seen[strings.ToLower(original)] = struct{}{}
+		targets = append(targets, original)
+	}
+	return targets, nil
 }
 
 func (t *Service) beginBisectRecovery() error {
@@ -548,12 +669,39 @@ func (t *Service) requireBisectSessionLocked() (*bisectSession, error) {
 	return t.bisect, nil
 }
 
+func (t *Service) requireBisectVersionLocked(version uint64) (*bisectSession, error) {
+	session, err := t.requireBisectSessionLocked()
+	if err != nil {
+		return nil, err
+	}
+	if version != t.bisectVersion {
+		return nil, ErrBisectStateChanged
+	}
+	return session, nil
+}
+
+// failLocked marks the session out of sync when err says the files no longer match it, then returns err.
+func (t *Service) failLocked(session *bisectSession, err error) error {
+	if errors.Is(err, errBisectOutOfSync) {
+		t.setOutOfSyncLocked(session)
+	}
+	return err
+}
+
+func (t *Service) setOutOfSyncLocked(session *bisectSession) {
+	session.outOfSync = true
+	t.broadcastBisect(snapshotFor(session, nil, sessionStatus(session)))
+}
+
+// cancelBisectLocked restores every INI the session disabled. It tries all of them; after a failure the session
+// stays, out of sync, so a retry can finish.
 func (t *Service) cancelBisectLocked() error {
 	session := t.bisect
 	if session == nil {
 		return nil
 	}
-	if err := enableINIs(disabledBisectSet(session)); err != nil {
+	if err := restoreINIs(disabledBisectSet(session)); err != nil {
+		session.outOfSync = true
 		return err
 	}
 	t.clearSessionMarker(context.Background(), session.game)
@@ -564,16 +712,29 @@ func (t *Service) cancelBisectLocked() error {
 	return nil
 }
 
-func (t *Service) recoverINIs(ctx context.Context, paths []string) int {
-	restored := 0
+// recoverINIs renames disabled INIs back. When the original name is taken, a disabled copy with the same content is
+// removed, and one with different content is kept and returned as a conflict.
+func (t *Service) recoverINIs(ctx context.Context, paths []string) (restored int, conflicts []string) {
 	for _, original := range paths {
 		if ctx.Err() != nil {
 			break
 		}
 		disabled := bisectDisabledPath(original)
 		if _, err := os.Stat(original); err == nil {
-			if err := os.Remove(disabled); err == nil || errors.Is(err, os.ErrNotExist) {
+			same, err := sameFileContent(disabled, original)
+			switch {
+			case errors.Is(err, os.ErrNotExist):
 				restored++
+			case err != nil:
+				t.logError(err, "ModBisect:recover")
+			case !same:
+				conflicts = append(conflicts, original)
+			default:
+				if err := os.Remove(disabled); err == nil || errors.Is(err, os.ErrNotExist) {
+					restored++
+				} else {
+					t.logError(err, "ModBisect:recover")
+				}
 			}
 			continue
 		}
@@ -583,15 +744,50 @@ func (t *Service) recoverINIs(ctx context.Context, paths []string) int {
 			restored++
 		}
 	}
-	return restored
+	return restored, conflicts
 }
 
-func (t *Service) broadcastBisect(snapshot BisectSnapshot) { t.emitEvent(bisectStateEvent, snapshot) }
+// sameFileContent compares two files byte for byte. A missing first file returns os.ErrNotExist.
+func sameFileContent(first, second string) (bool, error) {
+	firstInfo, err := os.Stat(first)
+	if err != nil {
+		return false, err
+	}
+	secondInfo, err := os.Stat(second)
+	if err != nil {
+		return false, err
+	}
+	if firstInfo.Size() != secondInfo.Size() {
+		return false, nil
+	}
+	firstData, err := os.ReadFile(first)
+	if err != nil {
+		return false, err
+	}
+	secondData, err := os.ReadFile(second)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(firstData, secondData), nil
+}
+
+// broadcastBisect stamps snapshot with the next version and whether a session exists, emits it and returns it.
+func (t *Service) broadcastBisect(snapshot BisectSnapshot) BisectSnapshot {
+	t.bisectVersion++
+	snapshot.Version = t.bisectVersion
+	snapshot.Active = t.bisect != nil
+	t.emitEvent(bisectStateEvent, snapshot)
+	return snapshot
+}
 
 func snapshotFor(session *bisectSession, message *string, status BisectStatus) BisectSnapshot {
+	if message == nil && session.outOfSync {
+		message = lo.ToPtr(bisectOutOfSync)
+	}
 	root := session.modRootPath
 	return BisectSnapshot{
-		Status: status, Game: session.game, ModRootPath: &root, Round: session.round, BatchSize: session.batchSize,
+		OutOfSync: session.outOfSync,
+		Status:    status, Game: session.game, ModRootPath: &root, Round: session.round, BatchSize: session.batchSize,
 		Candidates: slices.Clone(session.candidates), CurrentBatch: slices.Clone(session.currentBatch),
 		ExcludePaths: slices.Clone(session.excludePaths), UndoStackDepth: len(session.undoStack),
 		FinalBadPath: cloneStringPointer(session.finalBadPath), Error: cloneStringPointer(message),
@@ -730,91 +926,126 @@ func disabledBisectSet(session *bisectSession) []string {
 	return result
 }
 
-func disableINIs(paths []string) error {
+func disableINIs(paths []string) error { return renameINIs(paths, renameINIDisable, renameINIEnable) }
+
+func enableINIs(paths []string) error { return renameINIs(paths, renameINIEnable, renameINIDisable) }
+
+// renameINIs applies rename to each path in order. On a failure it reverts the paths it actually renamed, newest
+// first, so the files are left as they were; if a revert also fails the error wraps errBisectOutOfSync.
+func renameINIs(paths []string, rename, revert func(string) (bool, error)) error {
+	var renamed []string
 	for _, path := range paths {
-		if err := renameINIDisable(path); err != nil {
+		changed, err := rename(path)
+		if err == nil {
+			if changed {
+				renamed = append(renamed, path)
+			}
+			continue
+		}
+		var revertErrs []error
+		for undo := len(renamed) - 1; undo >= 0; undo-- {
+			if _, revertErr := revert(renamed[undo]); revertErr != nil {
+				revertErrs = append(revertErrs, revertErr)
+			}
+		}
+		if len(revertErrs) == 0 {
 			return err
 		}
+		return outOfSyncError(err, errors.Join(revertErrs...), path)
 	}
 	return nil
 }
 
-func enableINIs(paths []string) error {
+// restoreINIs enables every path, continuing past failures, for paths that must end up enabled either way.
+func restoreINIs(paths []string) error {
+	var errs []error
 	for _, path := range paths {
-		if err := renameINIEnable(path); err != nil {
-			return err
+		if _, err := renameINIEnable(path); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
+// switchBisectBatch enables oldBatch and disables newBatch. On a failure the files are put back as oldBatch had them.
 func switchBisectBatch(oldBatch, newBatch []string) error {
 	if err := enableINIs(oldBatch); err != nil {
 		return err
 	}
-	disabled := make([]string, 0, len(newBatch))
-	for _, path := range newBatch {
-		if err := renameINIDisable(path); err != nil {
-			rollbackErr := enableINIs(disabled)
-			restoreErr := disableINIs(oldBatch)
-			return infra.WithCause(
-				err,
-				infra.AnnotateError(
-					errors.Join(rollbackErr, restoreErr),
-					infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}},
-				),
-			)
-		}
-		disabled = append(disabled, path)
+	err := disableINIs(newBatch)
+	if err == nil || errors.Is(err, errBisectOutOfSync) {
+		return err
 	}
-	return nil
+	if restoreErr := disableINIs(oldBatch); restoreErr != nil {
+		return outOfSyncError(err, restoreErr, "")
+	}
+	return err
+}
+
+func outOfSyncError(err, rollbackErr error, path string) error {
+	return infra.WithCause(
+		fmt.Errorf("%w: %w", errBisectOutOfSync, err),
+		infra.AnnotateError(rollbackErr, infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"path": path}}),
+	)
 }
 
 func bisectDisabledPath(iniPath string) string { return iniPath + "." + bisectDisabledSuffix }
 
-func renameINIDisable(iniPath string) error {
+// renameINIDisable gives the INI its bisect name and reports whether it renamed anything; an INI already under that
+// name is left as it is.
+func renameINIDisable(iniPath string) (bool, error) {
 	target := bisectDisabledPath(iniPath)
 	if _, originalErr := os.Stat(iniPath); errors.Is(originalErr, os.ErrNotExist) {
 		if _, targetErr := os.Stat(target); targetErr == nil {
-			return nil
+			return false, nil
 		}
 	}
 	if _, err := os.Stat(target); err == nil {
-		return fmt.Errorf("cannot disable ini because target already exists: %s", target)
+		return false, fmt.Errorf("cannot disable ini because target already exists: %s", target)
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return false, err
 	}
 	if err := os.Rename(iniPath, target); err != nil {
-		return err
+		return false, err
 	}
 	if _, err := os.Stat(target); err != nil {
-		return fmt.Errorf("failed to disable ini %s: %w", iniPath, err)
+		return true, fmt.Errorf("failed to disable ini %s: %w", iniPath, err)
 	}
-	return nil
+	return true, nil
 }
 
-func renameINIEnable(iniPath string) error {
+// renameINIEnable restores the INI's original name and reports whether it renamed anything. An INI already enabled,
+// or gone under both names (deleted, or kept under its DISABLED name), is left as it is.
+func renameINIEnable(iniPath string) (bool, error) {
 	target := bisectDisabledPath(iniPath)
-	if _, originalErr := os.Stat(iniPath); originalErr == nil {
-		if _, targetErr := os.Stat(target); errors.Is(targetErr, os.ErrNotExist) {
-			return nil
-		}
+	_, originalErr := os.Stat(iniPath)
+	_, targetErr := os.Stat(target)
+	if errors.Is(targetErr, os.ErrNotExist) && (originalErr == nil || errors.Is(originalErr, os.ErrNotExist)) {
+		return false, nil
 	}
-	if _, err := os.Stat(iniPath); err == nil {
-		return fmt.Errorf("cannot restore ini because original already exists: %s", iniPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	if originalErr == nil {
+		return false, fmt.Errorf("cannot restore ini because original already exists: %s", iniPath)
+	} else if !errors.Is(originalErr, os.ErrNotExist) {
+		return false, originalErr
 	}
 	if err := os.Rename(target, iniPath); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
+// keepBisectINIDisabled renames the INI to its DISABLED name. When that name is taken, the INI gets a numbered
+// name such as "DISABLED mod.ini (2)", as merged files do, so neither file is lost. An INI that is already gone was
+// handled by an earlier attempt.
 func keepBisectINIDisabled(originalPath, style string) error {
 	source := bisectDisabledPath(originalPath)
 	if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
 		source = originalPath
+		if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+			return nil
+		} else if err != nil {
+			return err
+		}
 	} else if err != nil {
 		return err
 	}
@@ -822,19 +1053,26 @@ func keepBisectINIDisabled(originalPath, style string) error {
 	if style == "underscore" {
 		prefix = "DISABLED_"
 	}
-	target := filepath.Join(filepath.Dir(originalPath), prefix+filepath.Base(originalPath))
-	if _, err := os.Stat(target); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	target, err := freeSiblingPath(filepath.Dir(originalPath), prefix+filepath.Base(originalPath))
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(source, target); err != nil {
-		if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrExist) || errors.Is(err, os.ErrPermission) {
-			return nil
+	return os.Rename(source, target)
+}
+
+func freeSiblingPath(dir, name string) (string, error) {
+	for number := 1; ; number++ {
+		candidate := name
+		if number > 1 {
+			candidate = fmt.Sprintf("%s (%d)", name, number)
 		}
-		return err
+		path := filepath.Join(dir, candidate)
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			return path, nil
+		} else if err != nil {
+			return "", err
+		}
 	}
-	return nil
 }
 
 func listBisectOrphans(ctx context.Context, root string) ([]string, error) {

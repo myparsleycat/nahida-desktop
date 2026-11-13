@@ -7,8 +7,14 @@ import (
 )
 
 type (
-	BisectStatus   = modbisect.BisectStatus
-	BisectSnapshot = modbisect.BisectSnapshot
+	BisectStatus               = modbisect.BisectStatus
+	BisectSnapshot             = modbisect.BisectSnapshot
+	BisectRecoverConflictError = modbisect.BisectRecoverConflictError
+)
+
+var (
+	ErrBisectOutOfSync    = modbisect.ErrBisectOutOfSync
+	ErrBisectStateChanged = modbisect.ErrBisectStateChanged
 )
 
 func (t *Tools) BisectGetState() *BisectSnapshot {
@@ -23,16 +29,16 @@ func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []str
 	return t.bisect.BisectStart(ctx, game, excludePaths)
 }
 
-func (t *Tools) BisectRespond(ctx context.Context, fixed bool) (BisectSnapshot, error) {
-	return t.bisect.BisectRespond(ctx, fixed)
+func (t *Tools) BisectRespond(ctx context.Context, version uint64, fixed bool) (BisectSnapshot, error) {
+	return t.bisect.BisectRespond(ctx, version, fixed)
 }
 
-func (t *Tools) BisectUndoLastRound(ctx context.Context) (BisectSnapshot, error) {
-	return t.bisect.BisectUndoLastRound(ctx)
+func (t *Tools) BisectUndoLastRound(ctx context.Context, version uint64) (BisectSnapshot, error) {
+	return t.bisect.BisectUndoLastRound(ctx, version)
 }
 
-func (t *Tools) BisectFinalize(ctx context.Context, keepDisabled []string) (BisectSnapshot, error) {
-	return t.bisect.BisectFinalize(ctx, keepDisabled)
+func (t *Tools) BisectFinalize(ctx context.Context, version uint64, keepDisabled []string) (BisectSnapshot, error) {
+	return t.bisect.BisectFinalize(ctx, version, keepDisabled)
 }
 
 func (t *Tools) BisectCancel(ctx context.Context) (BisectSnapshot, error) {

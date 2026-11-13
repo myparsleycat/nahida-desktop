@@ -3,9 +3,18 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"nahida.live/desktop/internal/tools"
 )
+
+// bisectVersionSchema is the version of the bisect state an answer refers to; a newer state rejects it.
+func bisectVersionSchema() map[string]any {
+	return map[string]any{
+		"type": "integer", "minimum": 1,
+		"description": "The version field of the tools.bisect_state result this request refers to.",
+	}
+}
 
 // registerToolActions registers the local fix, texture, touch-profile, body-shape and model-viewer actions.
 func registerToolActions(registry *Registry, deps Dependencies) {
@@ -82,20 +91,29 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 		}))
 	registry.add(
 		simpleAction("tools.bisect_respond", "Record whether the current bisect round fixed the problem.", "tools",
-			RiskWrite, objectSchema(map[string]any{"fixed": booleanSchema()}, "fixed"),
+			RiskWrite, objectSchema(map[string]any{"version": bisectVersionSchema(), "fixed": booleanSchema()},
+				"version", "fixed"),
 			func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
 				var input struct {
-					Fixed bool `json:"fixed"`
+					Version uint64 `json:"version"`
+					Fixed   bool   `json:"fixed"`
 				}
 				if err := decodeActionArguments(raw, &input); err != nil {
 					return nil, err
 				}
-				return deps.Tools.BisectRespond(ctx, input.Fixed)
+				return deps.Tools.BisectRespond(ctx, input.Version, input.Fixed)
 			}),
 	)
 	registry.add(simpleAction("tools.bisect_undo", "Undo the last mod bisect round.", "tools", RiskWrite,
-		objectSchema(nil), func(ctx context.Context, _ actionContext, _ json.RawMessage) (any, error) {
-			return deps.Tools.BisectUndoLastRound(ctx)
+		objectSchema(map[string]any{"version": bisectVersionSchema()}, "version"),
+		func(ctx context.Context, _ actionContext, raw json.RawMessage) (any, error) {
+			var input struct {
+				Version uint64 `json:"version"`
+			}
+			if err := decodeActionArguments(raw, &input); err != nil {
+				return nil, err
+			}
+			return deps.Tools.BisectUndoLastRound(ctx, input.Version)
 		}))
 	registry.add(
 		simpleAction("tools.bisect_cancel", "Cancel and roll back local mod bisect.", "tools", RiskConfirm,
@@ -496,9 +514,12 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 	}, "rootId", "relativePath", "provider", "version", "importerKey")
 	registry.add(fixerBuild)
 	registry.add(simpleAction("tools.bisect_finalize", "Finish mod bisect and keep selected paths disabled.", "tools",
-		RiskConfirm, objectSchema(map[string]any{"keepDisabled": pathReferenceListSchema()}, "keepDisabled"),
+		RiskConfirm, objectSchema(map[string]any{
+			"version": bisectVersionSchema(), "keepDisabled": pathReferenceListSchema(),
+		}, "version", "keepDisabled"),
 		func(ctx context.Context, actionCtx actionContext, raw json.RawMessage) (any, error) {
 			var input struct {
+				Version      uint64          `json:"version"`
 				KeepDisabled []pathReference `json:"keepDisabled"`
 			}
 			if err := decodeActionArguments(raw, &input); err != nil {
@@ -508,7 +529,7 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			if err != nil {
 				return nil, err
 			}
-			return deps.Tools.BisectFinalize(ctx, paths)
+			return deps.Tools.BisectFinalize(ctx, input.Version, paths)
 		}))
 	registry.add(simpleAction("tools.bisect_recover", "Recover an interrupted mod bisect session.", "tools",
 		RiskConfirm, objectSchema(map[string]any{"game": stringSchema()}, "game"),
@@ -519,6 +540,13 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.Tools.BisectRecover(ctx, input.Game)
+			restored, err := deps.Tools.BisectRecover(ctx, input.Game)
+			if conflict, ok := errors.AsType[*tools.BisectRecoverConflictError](err); ok {
+				return map[string]any{"restored": restored, "conflicts": conflict.Conflicts}, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			return restored, nil
 		}))
 }

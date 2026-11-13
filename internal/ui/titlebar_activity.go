@@ -119,9 +119,7 @@ func (s *Shell) loadActivities() {
 			if f := &s.tools.fixer4001; s.deps.Tools != nil && !f.received {
 				f.task, f.progress, f.errorMessage = deref(fixer.ActiveTask), fixer.Progress, fixer.ErrorMessage
 			}
-			if bisect != nil && s.mods.bisect == nil {
-				s.mods.bisect = bisect
-			}
+			s.setBisect(bisect)
 			if s.deps.Tools != nil && s.tools.textureProgress == nil {
 				s.tools.textureProgress = &texture
 			}
