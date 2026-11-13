@@ -14,7 +14,6 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
-	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools"
 	"nahida.live/desktop/internal/tools/texture"
 )
@@ -29,14 +28,13 @@ var defaultTextureSettings = tools.TextureResizeSettings{
 	UpscaleScale: 2, UpscaleModel: "realesr-animevideov3",
 }
 
-// textureWorkspace lists the textures of a folder, or of one mod, and processes the selected ones through a
-// dialog. base is the stored resize settings the listing and the dialog start from.
+// textureWorkspace lists the textures of one mod and processes the selected ones through a dialog. base is the
+// stored resize settings the listing and the dialog start from.
 type textureWorkspace struct {
 	modPath, modName string
 	started          bool
 	base             tools.TextureResizeSettings
 
-	target   string
 	loaded   string
 	textures []tools.TextureResizeListItem
 	selected map[string]bool
@@ -48,12 +46,9 @@ type textureWorkspace struct {
 
 func newTextureWorkspace(modPath, modName string) *textureWorkspace {
 	return &textureWorkspace{
-		modPath: modPath, modName: modName, target: modPath, base: defaultTextureSettings,
-		selected: map[string]bool{},
+		modPath: modPath, modName: modName, base: defaultTextureSettings, selected: map[string]bool{},
 	}
 }
-
-func (w *textureWorkspace) forMod() bool { return w.modPath != "" }
 
 // textureDialog is the process dialog over the selected textures. settings is the form: the shared settings when
 // bulk applies, else those of the active texture, whose edits are kept in per.
@@ -123,33 +118,22 @@ func (s *Shell) startTextureWorkspace(w *textureWorkspace) {
 				return
 			}
 			w.base = settings
-			if w.forMod() {
-				s.loadTextures(w, w.modPath, settings)
-			}
+			s.loadTextures(w, settings)
 		})
 	})
 }
 
-// loadTextures lists target with settings. A newer listing drops the result of an earlier one.
-func (s *Shell) loadTextures(w *textureWorkspace, target string, settings tools.TextureResizeSettings) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return
-	}
+// loadTextures lists the workspace's mod with settings. A newer listing drops the result of an earlier one.
+func (s *Shell) loadTextures(w *textureWorkspace, settings tools.TextureResizeSettings) {
+	target := w.modPath
 	w.listSeq++
 	seq := w.listSeq
 	w.listing = true
 	patch := texture.SettingsPatch(settings)
 	s.background(func(ctx context.Context) {
-		var textures []tools.TextureResizeListItem
-		var err error
-		if w.forMod() {
-			textures, err = s.deps.Tools.ListTextureMod(ctx, target, &patch)
-		} else {
-			textures, err = s.deps.Tools.ListTextureFolder(ctx, target, &patch)
-		}
+		textures, err := s.deps.Tools.ListTextureMod(ctx, target, &patch)
 		if err != nil {
-			err = s.toolError(err, "texture.list", map[string]any{"path": target, "mod": w.forMod()})
+			err = s.toolError(err, "texture.list", map[string]any{"path": target})
 		}
 		fairy.Go(func() {
 			if seq != w.listSeq {
@@ -176,15 +160,6 @@ func (s *Shell) loadTextures(w *textureWorkspace, target string, settings tools.
 	})
 }
 
-func (s *Shell) textureToolPage(cx *fairy.Cx) *fairy.El {
-	if s.tools.texture == nil {
-		s.tools.texture = newTextureWorkspace("", "")
-	}
-	view := fairy.Col(s.textureWorkspaceView(cx, s.tools.texture, "tools.texture")).Pad(16).WFull().Grow(1).MinH(0)
-	s.textureProcessDialog(cx, s.tools.texture, "tools.texture")
-	return view
-}
-
 func (s *Shell) textureWorkspaceView(cx *fairy.Cx, w *textureWorkspace, key string) *fairy.El {
 	t := kit.T()
 	const prefix = "page.tools.texture_resizer."
@@ -192,44 +167,9 @@ func (s *Shell) textureWorkspaceView(cx *fairy.Cx, w *textureWorkspace, key stri
 	busy := w.listing || (w.dialog != nil && w.dialog.running)
 
 	view := fairy.Col().Gap(16).Grow(1).MinH(0).WFull()
-	if !w.forMod() {
-		browse := func() {
-			s.pickFile(
-				platform.OpenDialogOptions{Properties: []string{"openDirectory"}, Role: "texture-resizer-target"},
-				func(paths []string) {
-					w.target = paths[0]
-					s.loadTextures(w, paths[0], w.base)
-				},
-			)
-		}
-		view.Child(fairy.Row(
-			kit.TextField(w.target, func(value string) { w.target = value },
-				kit.Placeholder(T(prefix+"target_folder_placeholder")), kit.Label(T(prefix+"target_folder")),
-				kit.Disabled(busy)).Key(key+".target").Grow(1).MinW(0),
-			kit.Button(T(prefix+"browse"), browse, kit.Outline, kit.Icon(lucide.FolderOpen), kit.Disabled(busy)),
-		).Gap(8).Align(fairy.Center))
-	}
-
 	toolbar := fairy.Row().Gap(8).Wrap().RowGap(8).Align(fairy.Center)
-	if !w.forMod() {
-		toolbar.Child(kit.Button(
-			T(prefix+"load"),
-			func() { s.loadTextures(w, w.target, w.base) },
-			kit.Icon(
-				lucide.FolderOpen,
-			),
-			kit.Loading(w.listing),
-			kit.Disabled(strings.TrimSpace(w.target) == "" || busy),
-		))
-	}
-	if w.forMod() || w.loaded != "" {
-		target := w.loaded
-		if w.forMod() {
-			target = w.modPath
-		}
-		toolbar.Child(kit.Button(T(prefix+"refresh"), func() { s.loadTextures(w, target, w.base) }, kit.Outline,
-			kit.Icon(lucide.RefreshCw), kit.Loading(w.listing), kit.Disabled(busy || target == "")))
-	}
+	toolbar.Child(kit.Button(T(prefix+"refresh"), func() { s.loadTextures(w, w.base) }, kit.Outline,
+		kit.Icon(lucide.RefreshCw), kit.Loading(w.listing), kit.Disabled(busy)))
 	if len(w.textures) > 0 {
 		toolbar.Child(
 			fairy.Spacer(),
@@ -244,9 +184,6 @@ func (s *Shell) textureWorkspaceView(cx *fairy.Cx, w *textureWorkspace, key stri
 	view.Child(toolbar)
 
 	description := w.modName
-	if description == "" {
-		description = w.loaded
-	}
 	if description == "" {
 		description = T(prefix + "texture_list_empty")
 	}
@@ -626,7 +563,7 @@ func (s *Shell) processTextures(w *textureWorkspace, d *textureDialog) {
 				w.base = *result.saved
 			}
 			if w.loaded != "" {
-				s.loadTextures(w, w.loaded, w.base)
+				s.loadTextures(w, w.base)
 			}
 		})
 	})

@@ -32,14 +32,6 @@ func (t *Tools) SaveTextureResizeSettings(
 	return t.texture.SaveTextureResizeSettings(ctx, patch)
 }
 
-func (t *Tools) ListTextureFolder(
-	ctx context.Context,
-	targetPath string,
-	patch *TextureResizeSettingsPatch,
-) ([]TextureResizeListItem, error) {
-	return t.texture.ListTextureFolder(ctx, targetPath, patch)
-}
-
 func (t *Tools) ListTextureMod(
 	ctx context.Context,
 	modPath string,
@@ -50,10 +42,6 @@ func (t *Tools) ListTextureMod(
 
 func (t *Tools) GetTextureResizeState() TextureResizeProgressEvent {
 	return t.texture.GetTextureResizeState()
-}
-
-func (t *Tools) ResizeTextureFolder(ctx context.Context, input TextureResizeRunInput) (TextureResizeResult, error) {
-	return t.texture.ResizeTextureFolder(ctx, input)
 }
 
 func (t *Tools) ResizeTextureMod(

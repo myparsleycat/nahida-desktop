@@ -22,7 +22,6 @@ const (
 	toolPersist      toolID = "toggle-persistence"
 	toolMenuMaker    toolID = "menu-maker"
 	toolToggleViewer toolID = "toggle-viewer-generator"
-	toolTexture      toolID = "texture-resizer"
 	toolFixTool      toolID = "fix-tool-manager"
 	toolBisect       toolID = "mod-bisect"
 	toolBodyShape    toolID = "body-shape"
@@ -45,7 +44,6 @@ var toolList = []toolInfo{
 	{id: toolPersist, nameKey: "page.setting.xxmi.persistToggles", initials: "TP"},
 	{id: toolMenuMaker, nameKey: "page.tools.menu_maker.title", initials: "MM", page: true},
 	{id: toolToggleViewer, nameKey: "page.tools.toggle_viewer_generator.title", initials: "TV"},
-	{id: toolTexture, nameKey: "page.tools.texture_resizer.title", initials: "TR"},
 	{id: toolFixTool, nameKey: "page.tools.fix-tool-manager.title", initials: "FT"},
 	{id: toolBisect, nameKey: "page.tools.mod_bisect.title", initials: "MB"},
 	{id: toolBodyShape, nameKey: "page.tools.body_shape.title", initials: "BS", beta: true},
@@ -81,7 +79,6 @@ type toolsScreen struct {
 	bisect       bisectTool
 	fixer4001    fixer4001Tool
 	fixTool      fixToolManager
-	texture      *textureWorkspace
 	menuMaker    menuMakerTool
 	// bodyShape is the tools page's body shape editor and bodyShapeDialog the one the mod screen opens; nil
 	// while not shown.
@@ -287,8 +284,6 @@ func (s *Shell) toolBody(cx *fairy.Cx, tool toolInfo) *fairy.El {
 		return s.bisectToolPage()
 	case tool4001Fixer:
 		return s.fixer4001ToolPage(cx)
-	case toolTexture:
-		return s.textureToolPage(cx)
 	case toolFixTool:
 		return s.fixToolPage(cx)
 	}

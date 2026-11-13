@@ -1474,9 +1474,6 @@
       },
       "texture_resizer": {
         "title": "텍스처 리사이저",
-        "target_folder": "대상 폴더",
-        "target_folder_placeholder": "DDS 파일을 재귀적으로 검색할 폴더",
-        "browse": "찾아보기",
         "operation": "작업 종류",
         "operation_options": {
           "resize": "리사이즈만",
@@ -1543,7 +1540,6 @@
         "current_output_format": "선택된 출력 포맷",
         "backup": "백업 생성",
         "backup_description": "각 DDS를 덮어쓰기 전에 같은 위치에 .bak 파일을 만듭니다. 기존 백업은 유지합니다.",
-        "load": "텍스처 목록 불러오기",
         "refresh": "목록 새로고침",
         "texture_list_title": "텍스처 목록",
         "texture_list_empty": "경로를 선택한 뒤 텍스처 목록을 불러오세요.",

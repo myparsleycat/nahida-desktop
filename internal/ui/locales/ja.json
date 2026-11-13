@@ -1474,9 +1474,6 @@
       },
       "texture_resizer": {
         "title": "テクスチャ リサイザー",
-        "target_folder": "対象フォルダー",
-        "target_folder_placeholder": "DDS ファイルを再帰検索するフォルダー",
-        "browse": "参照",
         "operation": "処理",
         "operation_options": {
           "resize": "リサイズのみ",
@@ -1543,7 +1540,6 @@
         "current_output_format": "選択中の出力形式",
         "backup": "バックアップを作成",
         "backup_description": "上書き前に各 DDS の横へ .bak を作成します。既存のバックアップは保持します。",
-        "load": "テクスチャ一覧を読み込む",
         "refresh": "一覧を更新",
         "texture_list_title": "テクスチャ一覧",
         "texture_list_empty": "パスを選択してテクスチャ一覧を読み込んでください。",

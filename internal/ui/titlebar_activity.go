@@ -559,8 +559,7 @@ func textureActivity(event *tools.TextureResizeProgressEvent) *titlebarActivity 
 	}
 	return &titlebarActivity{
 		id: "tools:texture-resizer", label: T("titlebar.activity.textureResizer." + label),
-		detail: deref(event.FileName), icon: lucide.Scaling, status: activityRunning,
-		path: string(RouteTools) + "/" + string(toolTexture),
+		detail: deref(event.FileName), icon: lucide.Scaling, status: activityRunning, path: string(RouteMod),
 	}
 }
 
