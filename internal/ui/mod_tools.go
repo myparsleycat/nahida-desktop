@@ -89,8 +89,9 @@ func (s *Shell) runBisect(
 				return
 			}
 			s.modError(err, operation, fields)
+			// A rename failure that leaves the files out of sync returns the raw rename error; the state says so.
 			message := err.Error()
-			if errors.Is(err, tools.ErrBisectOutOfSync) {
+			if errors.Is(err, tools.ErrBisectOutOfSync) || current != nil && current.OutOfSync {
 				message = T("page.tools.mod_bisect.out_of_sync")
 			}
 			s.toasts.Show(kit.ToastError, message, "")

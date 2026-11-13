@@ -724,7 +724,10 @@ func (t *Service) recoverINIs(ctx context.Context, paths []string) (restored int
 			same, err := sameFileContent(disabled, original)
 			switch {
 			case errors.Is(err, os.ErrNotExist):
-				restored++
+				// The original can vanish after the check above; only a missing disabled copy is restored.
+				if _, statErr := os.Stat(disabled); errors.Is(statErr, os.ErrNotExist) {
+					restored++
+				}
 			case err != nil:
 				t.logError(err, "ModBisect:recover")
 			case !same:
