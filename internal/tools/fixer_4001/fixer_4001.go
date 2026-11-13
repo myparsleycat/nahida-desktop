@@ -384,6 +384,9 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		t.update4001Progress("XXMI_OBFUSCATE_ALREADY_APPLIED", "")
 		return result
 	}
+
+	// No backup matched this DLL at the start, so every backup left in the folder is stale.
+	t.removeDiversifierBackups(ctx, lease, importerPath, useElevated)
 	hashPrefix := diversifiedHash[:min(7, len(diversifiedHash))]
 	backupPath := filepath.Join(
 		importerPath,
@@ -792,6 +795,9 @@ func (t *Service) CleanupStaleD3DBuilds(ctx context.Context) error {
 	return nil
 }
 
+// findDiversifierBackup returns the newest backup made from the current d3d11.dll, or the newest backup when that
+// DLL cannot be read. It never removes anything: a backup that does not match yet may belong to a diversification
+// that has not replaced the DLL.
 func (t *Service) findDiversifierBackup(importerPath string) (*string, error) {
 	entries, err := os.ReadDir(importerPath)
 	if err != nil {
@@ -799,30 +805,28 @@ func (t *Service) findDiversifierBackup(importerPath string) (*string, error) {
 	}
 	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasPrefix(entry.Name(), diversifierBackupPre) &&
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), diversifierBackupPre) &&
 			strings.HasSuffix(entry.Name(), ".bak") {
 			names = append(names, entry.Name())
 		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(names)))
 	if len(names) == 0 {
 		return nil, nil
 	}
+	sort.Sort(sort.Reverse(sort.StringSlice(names)))
+
+	// An unreadable DLL cannot be matched, so any well-formed backup is offered for restore.
 	currentHash, hashErr := hashFile(filepath.Join(importerPath, targetD3D11DLL))
 	hasCurrentHash := hashErr == nil
+	var match *string
 	for _, name := range names {
-		candidate := filepath.Join(importerPath, name)
-		match := backupHashRE.FindStringSubmatch(name)
-		if match == nil {
-			t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
-			continue
+		parsed := backupHashRE.FindStringSubmatch(name)
+		if parsed != nil && (!hasCurrentHash || strings.HasPrefix(currentHash, parsed[1])) {
+			match = lo.ToPtr(filepath.Join(importerPath, name))
+			break
 		}
-		if !hasCurrentHash || strings.HasPrefix(currentHash, match[1]) {
-			return lo.ToPtr(candidate), nil
-		}
-		t.reportCleanup(os.Remove(candidate), "findDiversifierBackup")
 	}
-	return nil, nil
+	return match, nil
 }
 
 func (t *Service) removeDiversifierBackups(

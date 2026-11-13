@@ -498,23 +498,25 @@ func TestFourThousandOneFixerRestoresProtectedDllWithOnePrompt(t *testing.T) {
 	}
 }
 
-func TestFindDiversifierBackupRemovesStaleHash(t *testing.T) {
+// A diversification writes its backup before it replaces the DLL, so a state read in between sees a backup
+// whose hash does not match yet and must leave it in place.
+func TestDiversificationStateKeepsUnmatchedBackup(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, targetD3D11DLL)
 	if err := os.WriteFile(target, []byte("current"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stale := filepath.Join(root, diversifierBackupPre+"1234567-1.bak")
-	if err := os.WriteFile(stale, []byte("old"), 0o600); err != nil {
+	pending := filepath.Join(root, diversifierBackupPre+"1234567-1.bak")
+	if err := os.WriteFile(pending, []byte("original"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	service := New()
-	backup, err := service.findDiversifierBackup(root)
-	if err != nil || backup != nil {
-		t.Fatalf("findDiversifierBackup = %v, %v", backup, err)
+	state, err := service.FourThousandOneFixerGetDiversificationState(Fixer4001PathInput{ImporterPath: &root})
+	if err != nil || state.HasBackup {
+		t.Fatalf("diversification state = %#v, %v", state, err)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale backup remains: %v", err)
+	if _, err := os.Stat(pending); err != nil {
+		t.Fatalf("unmatched backup was removed: %v", err)
 	}
 }
 
