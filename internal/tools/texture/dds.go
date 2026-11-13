@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	"github.com/myparsleycat/ddsutil"
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -75,7 +77,11 @@ type normalizedTextureResizeRequest struct {
 }
 
 // executeTextureResize mirrors the sidecar's `resize` subcommand.
-func executeTextureResize(ctx context.Context, request textureResizeRequest) (TextureResizeResult, error) {
+func executeTextureResize(
+	ctx context.Context,
+	log *infra.Log,
+	request textureResizeRequest,
+) (TextureResizeResult, error) {
 	normalized, err := normalizeTextureResizeRequest(request)
 	if err != nil {
 		return TextureResizeResult{}, err
@@ -97,7 +103,10 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	var files []string
 	switch {
 	case info.IsDir():
-		if files, err = collectDDSFiles(resolved); err != nil {
+		if files, err = collectDDSFiles(ctx, resolved); err != nil {
+			if infra.IsCancellationError(err) {
+				return TextureResizeResult{}, err
+			}
 			return TextureResizeResult{}, textureError("Failed to scan target directory '%s': %s", resolved, err)
 		}
 	case !isDDSFilePath(resolved):
@@ -109,11 +118,17 @@ func executeTextureResize(ctx context.Context, request textureResizeRequest) (Te
 	}
 	sort.Strings(files)
 	result := TextureResizeResult{TargetPath: resolved, Files: make([]TextureResizeFileResult, 0, len(files))}
+	// A cancelled run returns the files finished so far with the error; those files are already replaced.
 	for _, filePath := range files {
 		if err := ctx.Err(); err != nil {
-			return TextureResizeResult{}, err
+			result.Processed = len(result.Files)
+			return result, err
 		}
-		fileResult := resizeDDSFile(filePath, &normalized)
+		fileResult, err := resizeDDSFile(ctx, log, filePath, &normalized)
+		if err != nil {
+			result.Processed = len(result.Files)
+			return result, err
+		}
 		switch fileResult.Status {
 		case "updated":
 			result.Updated++
@@ -163,7 +178,8 @@ func normalizeTextureResizeRequest(request textureResizeRequest) (normalizedText
 		operation:  operation,
 		backup:     request.Backup,
 	}
-	if strings.TrimSpace(request.OutputFormat) != "" {
+	// A plain resize keeps the source format even when settings still hold one from an earlier conversion.
+	if operation != textureOperationResize && strings.TrimSpace(request.OutputFormat) != "" {
 		format, formatErr := parseTextureOutputFormat(request.OutputFormat)
 		if formatErr != nil {
 			return normalizedTextureResizeRequest{}, formatErr
@@ -191,9 +207,14 @@ func isDDSFilePath(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".dds")
 }
 
-func collectDDSFiles(root string) ([]string, error) {
+func collectDDSFiles(ctx context.Context, root string) ([]string, error) {
+	release, err := diskio.AcquireDir(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	var files []string
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -205,30 +226,55 @@ func collectDDSFiles(root string) ([]string, error) {
 	return files, err
 }
 
-// resizeDDSFile never fails: processing errors become failed file results,
-// mirroring the sidecar's per-file unwrap_or_else behaviour.
-func resizeDDSFile(path string, request *normalizedTextureResizeRequest) TextureResizeFileResult {
-	result, err := processResizeDDSFile(path, request)
-	if err != nil {
-		return TextureResizeFileResult{
-			FilePath:       path,
-			Status:         "failed",
-			OriginalFormat: unknownTextureFormatName,
-			OutputFormat:   unknownTextureFormatName,
-			Message:        lo.ToPtr(err.Error()),
-		}
+// resizeDDSFile turns a processing error into a failed file result, mirroring the sidecar's per-file
+// unwrap_or_else behaviour. Only cancellation is returned as an error.
+func resizeDDSFile(
+	ctx context.Context,
+	log *infra.Log,
+	path string,
+	request *normalizedTextureResizeRequest,
+) (TextureResizeFileResult, error) {
+	result, stage, err := processResizeDDSFile(ctx, path, request)
+	if err == nil {
+		return result, nil
 	}
-	return result
+	if infra.IsCancellationError(err) {
+		return TextureResizeFileResult{}, err
+	}
+	fields := map[string]any{"path": path, "operation": request.operation}
+	if request.hasFormat {
+		fields["outputFormat"] = textureImageFormatName(request.outputFormat)
+	}
+	_ = infra.ReportError(log, err, "Tools", infra.Diagnostic{
+		Severity: infra.DiagnosticError, Operation: "texture-resize-file", Stage: stage, Fields: fields,
+	})
+	return TextureResizeFileResult{
+		FilePath:       path,
+		Status:         "failed",
+		OriginalFormat: unknownTextureFormatName,
+		OutputFormat:   unknownTextureFormatName,
+		Message:        lo.ToPtr(err.Error()),
+	}, nil
 }
 
-func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) (TextureResizeFileResult, error) {
-	dds, err := readDDSFile(path)
+// processResizeDDSFile also returns the stage an error happened in.
+func processResizeDDSFile(
+	ctx context.Context,
+	path string,
+	request *normalizedTextureResizeRequest,
+) (TextureResizeFileResult, string, error) {
+	release, err := diskio.Acquire(ctx, path)
 	if err != nil {
-		return TextureResizeFileResult{}, err
+		return TextureResizeFileResult{}, "read", err
+	}
+	dds, err := readDDSFile(path)
+	release()
+	if err != nil {
+		return TextureResizeFileResult{}, "read", err
 	}
 	surface, err := ddsutil.SurfaceFromDds(dds)
 	if err != nil {
-		return TextureResizeFileResult{}, textureError("Failed to decode DDS metadata '%s': %s", path, err)
+		return TextureResizeFileResult{}, "decode", textureError("Failed to decode DDS metadata '%s': %s", path, err)
 	}
 	originalWidth, originalHeight := int(surface.Width), int(surface.Height)
 	originalFormat := textureImageFormatName(surface.ImageFormat)
@@ -242,58 +288,93 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 		targetWidth, targetHeight = originalWidth, originalHeight
 		if outputFormat == surface.ImageFormat {
 			return skippedResizeFileResult(path, originalWidth, originalHeight, originalFormat, outputFormatName,
-				"Selected output format matches the source format."), nil
+				"Selected output format matches the source format."), "", nil
 		}
 	} else {
 		width, height, ok := calculateTextureResizeTarget(surface.Width, surface.Height, &request.mode)
 		if !ok {
 			return skippedResizeFileResult(path, originalWidth, originalHeight, originalFormat, outputFormatName,
-				"No valid downscale candidate matched the requested bounds."), nil
+				"No valid downscale candidate matched the requested bounds."), "", nil
 		}
 		targetWidth, targetHeight = width, height
 	}
-	decoded, err := surface.DecodeRgbaf32()
-	if err != nil {
-		return TextureResizeFileResult{}, textureError("Failed to decode DDS pixels '%s': %s", path, err)
+	sameSize := targetWidth == originalWidth && targetHeight == originalHeight
+
+	// At the source size the authored mipmaps are kept. A resize decodes only the base mip and regenerates as
+	// many levels as the source had.
+	// A same-size conversion between 8-bit formats decodes to 8-bit channels, a quarter of the float memory.
+	mipmaps := ddsutil.MipmapsDisabled
+	var output textureEncoder
+	var base *ddsutil.SurfaceRgba32Float
+	switch {
+	case !sameSize:
+		base, err = surface.DecodeLayersMipmapsRgbaf32(0, surface.Layers, 0, 1)
+		if surface.Mipmaps > 1 {
+			largest := max(uint32(targetWidth), uint32(targetHeight), surface.Depth)
+			mipmaps = ddsutil.GeneratedExact(min(surface.Mipmaps, uint32(bits.Len32(largest))))
+		}
+	case eightBitTextureFormats[surface.ImageFormat] && eightBitTextureFormats[outputFormat]:
+		output, err = surface.DecodeRgba8()
+	default:
+		output, err = surface.DecodeRgbaf32()
 	}
-	output := decoded
-	if targetWidth != originalWidth || targetHeight != originalHeight {
+	if sameSize && surface.Mipmaps > 1 {
+		mipmaps = ddsutil.MipmapsFromSurface
+	}
+	if err != nil {
+		return TextureResizeFileResult{}, "decode", textureError("Failed to decode DDS pixels '%s': %s", path, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return TextureResizeFileResult{}, "decode", err
+	}
+	if !sameSize {
 		if output, err = resizeTextureSurfaceRgba32F(
-			decoded,
+			base,
 			surface.Layers,
 			surface.Depth,
 			uint32(targetWidth),
 			uint32(targetHeight),
 		); err != nil {
-			return TextureResizeFileResult{}, textureError("Failed to resize DDS '%s': %s", path, err)
+			return TextureResizeFileResult{}, "resize", textureError("Failed to resize DDS '%s': %s", path, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return TextureResizeFileResult{}, "resize", err
 		}
 	}
-	mipmaps := ddsutil.MipmapsDisabled
-	if surface.Mipmaps > 1 {
-		mipmaps = ddsutil.MipmapsGeneratedAutomatic
-	}
+
 	encoded, err := output.Encode(outputFormat, ddsutil.QualityFast, mipmaps)
 	if err != nil {
-		return TextureResizeFileResult{}, textureError("Failed to encode processed DDS '%s': %s", path, err)
+		return TextureResizeFileResult{}, "encode", textureError("Failed to encode processed DDS '%s': %s", path, err)
 	}
-	resizedDDS, err := encoded.ToDds()
+	resizedDDS, err := encodedToDDS(encoded, dds, path)
 	if err != nil {
-		return TextureResizeFileResult{}, textureError("Failed to create DDS '%s': %s", path, err)
+		return TextureResizeFileResult{}, "encode", err
 	}
+
+	// Cancellation is honoured up to here; once the backup starts the file is replaced as a whole. The slot wait
+	// ignores cancellation so a cancel during it does not drop the file only on rotational disks.
+	if err := ctx.Err(); err != nil {
+		return TextureResizeFileResult{}, "write", err
+	}
+	if release, err = diskio.Acquire(context.WithoutCancel(ctx), path); err != nil {
+		return TextureResizeFileResult{}, "write", err
+	}
+	defer release()
 	backupCreated := false
 	if request.backup {
 		if backupCreated, err = createBackupIfMissing(path); err != nil {
-			return TextureResizeFileResult{}, err
+			return TextureResizeFileResult{}, "backup", err
 		}
 	}
 	if err := writeDDSAtomically(path, resizedDDS); err != nil {
-		return TextureResizeFileResult{}, err
+		return TextureResizeFileResult{}, "write", err
 	}
+
 	var message *string
 	switch {
 	case request.operation == textureOperationConvert:
 		message = lo.ToPtr("Format changed without resizing.")
-	case outputFormat != surface.ImageFormat && targetWidth == originalWidth && targetHeight == originalHeight:
+	case outputFormat != surface.ImageFormat && sameSize:
 		message = lo.ToPtr("Texture format changed without resizing.")
 	}
 	return TextureResizeFileResult{
@@ -307,7 +388,70 @@ func processResizeDDSFile(path string, request *normalizedTextureResizeRequest) 
 		OutputFormat:   outputFormatName,
 		BackupCreated:  backupCreated,
 		Message:        message,
-	}, nil
+	}, "", nil
+}
+
+type textureEncoder interface {
+	Encode(format ddsutil.ImageFormat, quality ddsutil.Quality, mipmaps ddsutil.Mipmaps) (*ddsutil.Surface, error)
+}
+
+// eightBitTextureFormats decode to 8-bit channels without losing precision and encode from them.
+var eightBitTextureFormats = map[ddsutil.ImageFormat]bool{
+	ddsutil.R8Unorm: true, ddsutil.Rg8Unorm: true, ddsutil.Rgba8Unorm: true, ddsutil.Rgba8UnormSrgb: true,
+	ddsutil.Bgra8Unorm: true, ddsutil.Bgra8UnormSrgb: true, ddsutil.Bgra4Unorm: true,
+	ddsutil.BC1RgbaUnorm: true, ddsutil.BC1RgbaUnormSrgb: true, ddsutil.BC2RgbaUnorm: true,
+	ddsutil.BC2RgbaUnormSrgb: true, ddsutil.BC3RgbaUnorm: true, ddsutil.BC3RgbaUnormSrgb: true,
+	ddsutil.BC7RgbaUnorm: true, ddsutil.BC7RgbaUnormSrgb: true,
+}
+
+// encodedToDDS builds the DDS for encoded, keeping the layout and alpha mode of source when it is not nil.
+func encodedToDDS(encoded *ddsutil.Surface, source *ddsutil.Dds, path string) (*ddsutil.Dds, error) {
+	out, err := encoded.ToDds()
+	if err != nil {
+		return nil, textureError("Failed to create DDS '%s': %s", path, err)
+	}
+	if source == nil {
+		return out, nil
+	}
+	if err := preserveDDSLayout(out, source, encoded.Layers, textureImageFormatName(encoded.ImageFormat)); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// preserveDDSLayout restores the source's array or cube layout and alpha mode on out. Surface.ToDds treats
+// exactly six layers as a cubemap and any other count as a plain array, and always writes straight alpha.
+func preserveDDSLayout(out, source *ddsutil.Dds, layers uint32, formatName string) error {
+	cube := source.Header.Caps2.Contains(ddsutil.Caps2CUBEMAP)
+	if source.Header10 != nil {
+		cube = source.Header10.MiscFlag.Contains(ddsutil.MiscFlagTEXTURECUBE)
+	}
+	if out.Header10 == nil {
+		// A legacy header holds one surface or one cubemap, and ToDds already flags six layers as a cubemap.
+		if layers > 1 && (!cube || layers != 6) {
+			return textureError("Output format '%s' cannot store DDS texture arrays.", formatName)
+		}
+		return nil
+	}
+
+	const cubeCaps = ddsutil.Caps2CUBEMAP | ddsutil.Caps2CUBEMAP_ALLFACES
+	arraySize := layers
+	if cube {
+		arraySize = layers / 6
+		out.Header10.MiscFlag.Insert(ddsutil.MiscFlagTEXTURECUBE)
+		out.Header.Caps2.Insert(cubeCaps)
+	} else {
+		out.Header10.MiscFlag &^= ddsutil.MiscFlagTEXTURECUBE
+		out.Header.Caps2 &^= cubeCaps
+	}
+	out.Header10.ArraySize = arraySize
+	if layers > 1 {
+		out.Header.Caps.Insert(ddsutil.CapsCOMPLEX)
+	}
+	if source.Header10 != nil {
+		out.Header10.AlphaMode = source.Header10.AlphaMode
+	}
+	return nil
 }
 
 func skippedResizeFileResult(
@@ -425,9 +569,10 @@ func decodeDDSToPng(input, output string) (textureDecodedMetadata, error) {
 	}, nil
 }
 
-// encodePNGToDDS mirrors the sidecar's `encode` subcommand.
+// encodePNGToDDS mirrors the sidecar's `encode` subcommand. source, when not nil, supplies the alpha mode.
 func encodePNGToDDS(
 	input, target, outputFormatName string,
+	source *ddsutil.Dds,
 	backup, generateMipmaps bool,
 ) (textureEncodedMetadata, error) {
 	pixels, width, height, err := loadTexturePNG(input)
@@ -461,9 +606,9 @@ func encodePNGToDDS(
 	if err != nil {
 		return textureEncodedMetadata{}, textureError("Failed to encode processed DDS '%s': %s", target, err)
 	}
-	outputDDS, err := encoded.ToDds()
+	outputDDS, err := encodedToDDS(encoded, source, target)
 	if err != nil {
-		return textureEncodedMetadata{}, textureError("Failed to create DDS '%s': %s", target, err)
+		return textureEncodedMetadata{}, err
 	}
 	backupCreated := false
 	if backup {
@@ -659,6 +804,7 @@ func writeDDSAtomically(path string, dds *ddsutil.Dds) error {
 	if err != nil {
 		return textureError("Failed to overwrite DDS file '%s': %s", path, err)
 	}
+	closed := false
 	writeErr := func() error {
 		writer := bufio.NewWriter(tempFile)
 		if err := dds.Write(writer); err != nil {
@@ -672,6 +818,7 @@ func writeDDSAtomically(path string, dds *ddsutil.Dds) error {
 		}
 		// Close before replacing: Go opens files without FILE_SHARE_DELETE on
 		// Windows, so the rename would fail while the handle is held.
+		closed = true
 		if err := tempFile.Close(); err != nil {
 			return textureError("Failed to finalize DDS file '%s': %s", path, err)
 		}
@@ -681,6 +828,9 @@ func writeDDSAtomically(path string, dds *ddsutil.Dds) error {
 		return nil
 	}()
 	if writeErr != nil {
+		if !closed {
+			_ = tempFile.Close()
+		}
 		return infra.WithCause(writeErr, os.Remove(tempPath))
 	}
 	return nil

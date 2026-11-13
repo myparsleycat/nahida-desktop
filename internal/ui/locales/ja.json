@@ -1596,6 +1596,7 @@
           "completed": "テクスチャ変換が完了しました",
           "completed_description": "{{updated}} 件変更、{{failed}} 件失敗、{{skipped}} 件スキップ",
           "none_processed": "変換されたテクスチャはありません",
+          "cancelled": "テクスチャ変換をキャンセルしました",
           "single_completed": "テクスチャ変換が完了しました",
           "single_completed_fallback": "選択したテクスチャの処理が完了しました",
           "failed": "テクスチャ変換に失敗しました"

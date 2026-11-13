@@ -314,9 +314,9 @@ func convertUncompressedFile(ctx context.Context, path string, backup bool) (Tex
 	if err != nil {
 		return TextureResizeFileResult{}, textureError("Failed to encode processed DDS '%s': %s", path, err)
 	}
-	compressed, err := encoded.ToDds()
+	compressed, err := encodedToDDS(encoded, dds, path)
 	if err != nil {
-		return TextureResizeFileResult{}, textureError("Failed to create DDS '%s': %s", path, err)
+		return TextureResizeFileResult{}, err
 	}
 
 	return replaceUncompressedFile(ctx, current, compressed, textureImageFormatName(format), backup)

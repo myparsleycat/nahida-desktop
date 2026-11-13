@@ -84,11 +84,13 @@ func TestExecuteTextureResizeEncodeDecodeAndResizeDDS(t *testing.T) {
 	if err := saveTexturePNG(pngPath, pixels, 2048, 2048); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", false, true); err != nil {
+	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", nil, false, true); err != nil {
 		t.Fatal(err)
 	}
-	result, err := executeTextureResize(context.Background(), textureResizeRequest{
+	result, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
 		TargetPath: ddsPath, Mode: "percent", Operation: "resize", Percent: 50, Backup: true,
+		// A stale output format from an earlier conversion must not apply to a plain resize.
+		OutputFormat: "DXGI_FORMAT_R8_UNORM",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,10 +127,10 @@ func TestExecuteResizeSkipsConvertWithSameFormat(t *testing.T) {
 	if err := saveTexturePNG(pngPath, pixels, 2048, 2048); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", false, false); err != nil {
+	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", nil, false, false); err != nil {
 		t.Fatal(err)
 	}
-	result, err := executeTextureResize(context.Background(), textureResizeRequest{
+	result, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
 		TargetPath: ddsPath, Mode: "percent", Operation: "convert",
 		OutputFormat: "DXGI_FORMAT_BC1_UNORM", Backup: false,
 	})
@@ -153,7 +155,7 @@ func TestExecuteResizeRejectsNonDDSFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not a dds"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := executeTextureResize(context.Background(), textureResizeRequest{
+	_, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
 		TargetPath: path, Mode: "percent", Operation: "resize", Percent: 50,
 	})
 	if err == nil || !strings.HasPrefix(err.Error(), "Target file '") ||
@@ -221,5 +223,123 @@ func TestParseTextureOutputFormatRoundTrip(t *testing.T) {
 
 	if _, err := parseTextureOutputFormat("DXGI_FORMAT_UNKNOWN"); err == nil {
 		t.Fatal("unknown format must be rejected")
+	}
+}
+
+func writeDXGITestDDS(t *testing.T, path string, params ddsutil.NewDxgiParams, fill func(data []byte)) {
+	t.Helper()
+	dds, err := ddsutil.NewDXGI(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill(dds.Data)
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dds.Write(file); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func convertTestDDS(t *testing.T, path, format string) *ddsutil.Dds {
+	t.Helper()
+	result, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
+		TargetPath: path, Mode: "percent", Operation: "convert", OutputFormat: format,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Updated != 1 || len(result.Files) != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	dds, err := readDDSFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dds
+}
+
+func TestExecuteConvertPreservesArrayAndCubeLayout(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name          string
+		layers        uint32
+		cube          bool
+		wantArraySize uint32
+	}{
+		{name: "six-layer 2D array", layers: 6, wantArraySize: 6},
+		{name: "cube array", layers: 12, cube: true, wantArraySize: 2},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "array.dds")
+			var caps2 ddsutil.Caps2
+			if testCase.cube {
+				caps2 = ddsutil.Caps2CUBEMAP | ddsutil.Caps2CUBEMAP_ALLFACES
+			}
+			layers := testCase.layers
+			writeDXGITestDDS(t, path, ddsutil.NewDxgiParams{
+				Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, ArrayLayers: &layers,
+				Caps2: &caps2, IsCubemap: testCase.cube, ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
+				AlphaMode: ddsutil.AlphaModeStraight,
+			}, func(data []byte) {
+				for index := range data {
+					data[index] = byte(index)
+				}
+			})
+
+			dds := convertTestDDS(t, path, "DXGI_FORMAT_B8G8R8A8_UNORM")
+			if dds.Header10 == nil {
+				t.Fatal("converted DDS has no DX10 header")
+			}
+			if got := dds.Header10.MiscFlag.Contains(ddsutil.MiscFlagTEXTURECUBE); got != testCase.cube {
+				t.Fatalf("cube flag = %v, want %v", got, testCase.cube)
+			}
+			if got := dds.Header.Caps2.Contains(ddsutil.Caps2CUBEMAP); got != testCase.cube {
+				t.Fatalf("caps2 cube = %v, want %v", got, testCase.cube)
+			}
+			if dds.Header10.ArraySize != testCase.wantArraySize {
+				t.Fatalf("array size = %d, want %d", dds.Header10.ArraySize, testCase.wantArraySize)
+			}
+		})
+	}
+}
+
+func TestExecuteConvertKeepsAuthoredMipmaps(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "mips.dds")
+	mipmaps := uint32(2)
+	var caps2 ddsutil.Caps2
+	writeDXGITestDDS(t, path, ddsutil.NewDxgiParams{
+		Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, MipmapLevels: &mipmaps, Caps2: &caps2,
+		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D, AlphaMode: ddsutil.AlphaModeStraight,
+	}, func(data []byte) {
+		// Mip 0 is red and mip 1 green, so a regenerated mip 1 would come out red.
+		for offset := 0; offset < len(data); offset += 4 {
+			if offset < 4*4*4 {
+				copy(data[offset:], []byte{255, 0, 0, 255})
+			} else {
+				copy(data[offset:], []byte{0, 255, 0, 255})
+			}
+		}
+	})
+
+	dds := convertTestDDS(t, path, "DXGI_FORMAT_B8G8R8A8_UNORM")
+	decoded, err := ddsutil.DecodeDds(dds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Mipmaps != 2 {
+		t.Fatalf("mipmaps = %d, want 2", decoded.Mipmaps)
+	}
+	mip := decoded.Get(0, 0, 1)
+	if len(mip) < 4 || mip[0] != 0 || mip[1] != 255 {
+		t.Fatalf("mip 1 first pixel = %v, want green", mip[:min(len(mip), 4)])
 	}
 }

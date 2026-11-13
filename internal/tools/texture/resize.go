@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/myparsleycat/ddsutil"
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/infra"
@@ -201,6 +202,13 @@ func (t *Service) runTextureResizeJob(
 	}
 	jobID := t.beginTextureJob(running)
 	result, err := work(ctx)
+	if infra.IsCancellationError(err) {
+		cancelled := running
+		cancelled.Status = "cancelled"
+		cancelled.ProcessedFiles = lo.ToPtr(result.Processed)
+		t.settleTextureJob(jobID, cancelled)
+		return result, err
+	}
 	if err != nil {
 		failed := running
 		failed.Status, failed.Error = "failed", lo.ToPtr(err.Error())
@@ -263,7 +271,7 @@ func (t *Service) runTextureResize(
 	target string,
 	settings TextureResizeSettings,
 ) (TextureResizeResult, error) {
-	return executeTextureResize(ctx, textureResizeRequest{
+	return executeTextureResize(ctx, t.log, textureResizeRequest{
 		TargetPath: target, Mode: settings.Mode, Operation: settings.Operation,
 		Percent: settings.Percent, CustomWidth: settings.CustomWidth, CustomHeight: settings.CustomHeight,
 		OutputFormat: settings.OutputFormat, Backup: settings.Backup,
@@ -287,6 +295,17 @@ func (t *Service) upscaleTextureFile(
 		t.emitTextureUpscaleProgress("done", lo.ToPtr[float64](100), reason, path)
 		return skippedTextureResizeResult(path, metadata, *reason), nil
 	}
+	source, err := ddsutil.Parse(raw)
+	if err != nil {
+		return TextureResizeResult{}, textureError("Failed to read DDS file '%s': %s", path, err)
+	}
+	// A cancellation is reported to the caller but not shown as an upscale error.
+	fail := func(err error) (TextureResizeResult, error) {
+		if !infra.IsCancellationError(err) {
+			t.emitTextureUpscaleProgress("error", nil, lo.ToPtr(err.Error()), path)
+		}
+		return TextureResizeResult{}, err
+	}
 	engine := textureUpscaleEngine(settings.UpscaleModel)
 	displayName := map[string]string{"realesrgan": "Real-ESRGAN", "realcugan": "Real-CUGAN"}[engine]
 	t.emitTextureUpscaleProgress(
@@ -303,8 +322,7 @@ func (t *Service) upscaleTextureFile(
 		t.emitTextureUpscaleProgress(phase, percent, lo.ToPtr(verb+displayName+" runtime"), path)
 	})
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, lo.ToPtr(err.Error()), path)
-		return TextureResizeResult{}, err
+		return fail(err)
 	}
 	if runtimeStatus.BinaryPath == nil || runtimeStatus.ModelsPath == nil {
 		return TextureResizeResult{}, fmt.Errorf("%s runtime is not installed", displayName)
@@ -318,8 +336,7 @@ func (t *Service) upscaleTextureFile(
 	t.emitTextureUpscaleProgress("decode", nil, lo.ToPtr("Decoding DDS texture"), path)
 	decoded, err := decodeDDSToPng(path, inputPNG)
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, lo.ToPtr(err.Error()), path)
-		return TextureResizeResult{}, err
+		return fail(err)
 	}
 	if decoded.Layers > 1 {
 		message := "Cubemap and layered DDS textures cannot be upscaled."
@@ -342,14 +359,15 @@ func (t *Service) upscaleTextureFile(
 		outputPNG,
 		settings,
 	); err != nil {
-		t.emitTextureUpscaleProgress("error", nil, lo.ToPtr(err.Error()), path)
+		return fail(err)
+	}
+	if err := ctx.Err(); err != nil {
 		return TextureResizeResult{}, err
 	}
 	t.emitTextureUpscaleProgress("encode", nil, lo.ToPtr("Encoding DDS texture"), path)
-	encoded, err := encodePNGToDDS(outputPNG, path, outputFormat, settings.Backup, decoded.Mipmaps > 1)
+	encoded, err := encodePNGToDDS(outputPNG, path, outputFormat, source, settings.Backup, decoded.Mipmaps > 1)
 	if err != nil {
-		t.emitTextureUpscaleProgress("error", nil, lo.ToPtr(err.Error()), path)
-		return TextureResizeResult{}, err
+		return fail(err)
 	}
 	expectedWidth := decoded.Width * settings.UpscaleScale
 	expectedHeight := decoded.Height * settings.UpscaleScale
@@ -391,6 +409,9 @@ func (t *Service) runNCNNUpscaler(
 	stdout.limit, stderr.limit = 1<<20, 1<<20
 	command.Stdout, command.Stderr = &stdout, &stderr
 	if err := command.Run(); err != nil {
+		if parentErr := parent.Err(); parentErr != nil {
+			return parentErr
+		}
 		displayName := textureUpscaleDisplayName(engine)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return errors.New(formatTextureProcessTimeout(displayName, strings.TrimSpace(stderr.String())))

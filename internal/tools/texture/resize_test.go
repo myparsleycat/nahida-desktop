@@ -114,7 +114,7 @@ func TestResizeTextureFileProcessesDDS(t *testing.T) {
 	if err := pngFile.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", false, true); err != nil {
+	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", nil, false, true); err != nil {
 		t.Fatalf("encode fixture: %v", err)
 	}
 	client := openToolsTestDB(t)

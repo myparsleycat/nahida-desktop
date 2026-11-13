@@ -1596,6 +1596,7 @@
           "completed": "텍스처 변환이 완료되었습니다",
           "completed_description": "{{updated}}개 변경, {{failed}}개 실패, {{skipped}}개 건너뜀",
           "none_processed": "변환된 텍스처가 없습니다",
+          "cancelled": "텍스처 변환을 취소했습니다",
           "single_completed": "텍스처 변환이 완료되었습니다",
           "single_completed_fallback": "선택한 텍스처 처리가 완료되었습니다",
           "failed": "텍스처 변환에 실패했습니다"

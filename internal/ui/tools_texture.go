@@ -12,6 +12,7 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 	"github.com/myparsleycat/fairy/motion"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools"
@@ -69,6 +70,9 @@ type textureDialog struct {
 	runningFile    string
 	current, total int
 	upscale        *tools.TextureUpscaleProgressEvent
+	// cancel stops the running batch; it is nil until the batch has started.
+	cancel     context.CancelFunc
+	cancelling bool
 }
 
 func (d *textureDialog) activeItem() *tools.TextureResizeListItem {
@@ -491,13 +495,23 @@ func (s *Shell) textureProcessDialog(cx *fairy.Cx, w *textureWorkspace, key stri
 			w.dialog = nil
 		}
 	}
+	cancelAction := closeDialog
+	if d.running {
+		cancelAction = func() {
+			if d.cancel != nil && !d.cancelling {
+				d.cancelling = true
+				d.cancel()
+			}
+		}
+	}
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title:       T(prefix + "dialog.title"),
 		Description: description,
 		Body:        body,
 		Width:       600,
 		Actions: []*fairy.El{
-			kit.Button(T("g.cancel"), closeDialog, kit.Outline, kit.Disabled(d.running)),
+			kit.Button(T("g.cancel"), cancelAction, kit.Outline,
+				kit.Disabled(d.running && (d.cancel == nil || d.cancelling))),
 			kit.Button(label, func() { s.processTextures(w, d) }, kit.Icon(lucide.Image), kit.Loading(d.running),
 				kit.Disabled(len(d.items) == 0 || d.running || !canProcess)),
 		},
@@ -545,12 +559,20 @@ func (s *Shell) processTextures(w *textureWorkspace, d *textureDialog) {
 		jobs = append(jobs, job{item, d.settingsFor(item)})
 	}
 	d.running, d.total, d.current, d.upscale = true, len(jobs), 0, nil
+	d.cancel, d.cancelling = nil, false
 	s.tools.textureRun = d
 
-	s.background(func(ctx context.Context) {
+	s.background(func(parent context.Context) {
+		ctx, cancel := context.WithCancel(parent)
+		defer cancel()
+		fairy.Go(func() { d.cancel = cancel })
 		var result textureBatchResult
 		result.selected = len(jobs)
 		for i, j := range jobs {
+			if ctx.Err() != nil {
+				result.cancelled = true
+				break
+			}
 			fairy.Go(func() { d.current, d.runningFile, d.upscale = i+1, "", nil })
 			if !texture.CanRun(j.item, j.settings) {
 				result.skipped++
@@ -561,6 +583,10 @@ func (s *Shell) processTextures(w *textureWorkspace, d *textureDialog) {
 			out, err := s.deps.Tools.ResizeTextureFile(ctx, tools.TextureResizeFileRunInput{
 				FilePath: j.item.FilePath, Settings: j.settings,
 			})
+			if infra.IsCancellationError(err) {
+				result.cancelled = true
+				break
+			}
 			if err != nil {
 				err = s.toolError(err, "texture.process", map[string]any{
 					"path": j.item.FilePath, "operation": j.settings.Operation,
@@ -592,7 +618,7 @@ func (s *Shell) processTextures(w *textureWorkspace, d *textureDialog) {
 			if s.tools.textureRun == d {
 				s.tools.textureRun = nil
 			}
-			d.running = false
+			d.running, d.cancel = false, nil
 			w.dialog = nil
 			clear(w.selected)
 			s.showTextureResult(result)
@@ -610,6 +636,7 @@ type textureBatchResult struct {
 	selected, updated, failed, skipped int
 	last                               *tools.TextureResizeFileResult
 	err                                string
+	cancelled                          bool
 	// saved is the settings of the last texture processed, which the backend stored as the resize settings.
 	saved *tools.TextureResizeSettings
 }
@@ -622,6 +649,8 @@ func (s *Shell) showTextureResult(r textureBatchResult) {
 		withError = description + "\n" + r.err
 	}
 	switch {
+	case r.cancelled:
+		s.toasts.Show(kit.ToastWarning, T(prefix+"cancelled"), withError)
 	case r.selected == 1 && r.updated == 1:
 		detail := T(prefix + "single_completed_fallback")
 		if f := r.last; f != nil {
@@ -778,6 +807,14 @@ func (s *Shell) textureForm(d *textureDialog, p textureFormProps, key string) *f
 		}, kit.Disabled(p.disabled || len(visible) == 0), kit.Label(T(prefix+"output_format"))).W(208),
 		formatHint)
 
+	var formatFields []*fairy.El
+	if outputFormat {
+		if colorSpaceField != nil {
+			formatFields = append(formatFields, colorSpaceField)
+		}
+		formatFields = append(formatFields, outputFormatField)
+	}
+
 	var grid, full []*fairy.El
 	switch {
 	case upscale:
@@ -786,7 +823,7 @@ func (s *Shell) textureForm(d *textureDialog, p textureFormProps, key string) *f
 			grid = append(grid, textureHint(T(prefix+"upscale_normal_warning")).Pad(12).Radius(6).
 				Fill(t.Muted.Alpha(0.5)).Basis(240).Grow(1))
 		}
-		grid = append(grid, backupField)
+		grid = append(append(grid, formatFields...), backupField)
 	case resizeInputs:
 		modeField := textureHint(T(prefix + "custom_hint")).Pad(12).Radius(6).Fill(t.Muted.Alpha(0.5)).
 			Basis(240).Grow(1)
@@ -799,7 +836,8 @@ func (s *Shell) textureForm(d *textureDialog, p textureFormProps, key string) *f
 					kit.Label(T(prefix+"mode"))).W(224),
 				T(prefix+"mode_descriptions."+settings.Mode))
 		}
-		grid = append(grid, operationField, modeField, backupField)
+		grid = append(append(grid, operationField, modeField), formatFields...)
+		grid = append(grid, backupField)
 		switch {
 		case p.shared && settings.Mode == "percent":
 			full = append(full, s.texturePercent(update, settings, disabled))
@@ -809,19 +847,11 @@ func (s *Shell) textureForm(d *textureDialog, p textureFormProps, key string) *f
 			full = append(full, s.textureResizeStep(update, settings, p.source, disabled))
 		}
 	case horizontalConvert && outputFormat:
-		grid = append(grid, operationField)
-		if colorSpaceField != nil {
-			grid = append(grid, colorSpaceField)
-		}
-		grid = append(grid, outputFormatField, backupField)
+		grid = append(append(grid, operationField), formatFields...)
+		grid = append(grid, backupField)
 	default:
 		grid = append(grid, operationField, backupField)
-		if outputFormat {
-			if colorSpaceField != nil {
-				full = append(full, colorSpaceField)
-			}
-			full = append(full, outputFormatField)
-		}
+		full = append(full, formatFields...)
 	}
 	return fairy.Col(append([]*fairy.El{fairy.Row(grid...).Gap(16).Wrap().RowGap(16)}, full...)...).Gap(16)
 }

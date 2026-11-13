@@ -1596,6 +1596,7 @@
           "completed": "纹理处理已完成",
           "completed_description": "修改 {{updated}} 个，失败 {{failed}} 个，跳过 {{skipped}} 个",
           "none_processed": "没有纹理被处理",
+          "cancelled": "纹理处理已取消",
           "single_completed": "纹理处理已完成",
           "single_completed_fallback": "选中纹理处理完成",
           "failed": "纹理处理失败"

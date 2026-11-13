@@ -1601,6 +1601,7 @@
           "completed": "Texture processing completed",
           "completed_description": "{{updated}} updated, {{failed}} failed, {{skipped}} skipped",
           "none_processed": "No textures were processed",
+          "cancelled": "Texture processing cancelled",
           "single_completed": "Texture processing completed",
           "single_completed_fallback": "Finished processing the selected texture",
           "failed": "Texture processing failed"
