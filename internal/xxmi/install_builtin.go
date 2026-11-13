@@ -247,7 +247,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if input.Config != nil {
 		setStage("save-config")
 		// Importer maintenance is still active; resuming it restarts the importer consumers.
-		if _, err := x.saveImporterConfig(ctx, spec.key, cfg); err != nil {
+		if _, err := x.saveImporterConfig(ctx, spec.key, cfg, nil); err != nil {
 			return err
 		}
 	}

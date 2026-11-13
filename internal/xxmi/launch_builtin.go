@@ -593,6 +593,20 @@ func (x *XXMI) acquireImporter(key string) bool {
 	return true
 }
 
+// HoldImporter keeps launches and other operations on the importer from starting until release is called.
+// The holder must not call methods that take the importer themselves, such as StartGame or RestoreOfficialDLL.
+// Config saves made during the hold skip writing d3dx.ini, so release writes it once the importer is free.
+func (x *XXMI) HoldImporter(importer string) (release func(), err error) {
+	key := strings.ToUpper(strings.TrimSpace(importer))
+	if !x.acquireImporter(key) {
+		return nil, errors.New("XXMI_BUSY")
+	}
+	return func() {
+		x.releaseImporter(key)
+		x.syncSettingsINI(context.Background(), key, "XXMI.HoldImporter")
+	}, nil
+}
+
 func (x *XXMI) releaseImporter(key string) {
 	key = strings.ToUpper(strings.TrimSpace(key))
 	x.mu.Lock()

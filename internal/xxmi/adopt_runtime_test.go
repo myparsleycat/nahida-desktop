@@ -35,7 +35,7 @@ func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
 	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.AdoptUserRuntime(ctx, "GIMI"); err != nil {
+	if err := service.AdoptUserRuntime(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")
@@ -56,6 +56,112 @@ func TestAdoptUserRuntimeRecordsModifiedDLL(t *testing.T) {
 	importers, err := service.builtinEnabledImporters(ctx)
 	if err != nil || len(importers) != 1 || !importers[0].CustomDLL {
 		t.Fatalf("importers = %+v, error = %v", importers, err)
+	}
+}
+
+func TestAdoptUserRuntimeRejectsMovedImporter(t *testing.T) {
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	built := filepath.Join(t.TempDir(), "GIMI-old")
+	moved := filepath.Join(t.TempDir(), "GIMI-new")
+	for _, folder := range []string{built, moved} {
+		if err := os.MkdirAll(folder, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(folder, "d3d11.dll"), []byte(folder), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := New()
+	useTestAppData(t, service)
+	service.UseClient(client)
+	useBuiltinLauncher(t, service)
+	if err := service.EnableImporter(ctx, "GIMI", moved); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.AdoptUserRuntime(ctx, "GIMI", built); err == nil || err.Error() != "XXMI_IMPORTER_CHANGED" {
+		t.Fatalf("error = %v", err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil || cfg.Migoto.UnsafeMode {
+		t.Fatalf("unsafe mode = %t, %v", cfg.Migoto.UnsafeMode, err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, runtimeManifestName)); !os.IsNotExist(err) {
+		t.Fatalf("manifest stat = %v", err)
+	}
+}
+
+// The manifest is written before the config save, so a rejected save must put the manifest back as it was.
+func TestAdoptUserRuntimeRestoresManifestWhenSaveFails(t *testing.T) {
+	for _, existing := range []bool{true, false} {
+		t.Run(map[bool]string{true: "existing manifest", false: "no manifest"}[existing], func(t *testing.T) {
+			ctx := context.Background()
+			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatal(err)
+			}
+			folder := filepath.Join(t.TempDir(), "GIMI")
+			if err := os.MkdirAll(folder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(folder, "d3d11.dll"), []byte("user build"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			manifestPath := filepath.Join(folder, runtimeManifestName)
+			original, err := json.Marshal(runtimeManifest{Mode: RuntimeXXMI, Files: map[string]string{"a": "b"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if existing {
+				if err := os.WriteFile(manifestPath, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			service := New()
+			useTestAppData(t, service)
+			service.UseClient(client)
+			useBuiltinLauncher(t, service)
+			if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
+				t.Fatal(err)
+			}
+
+			// A pinned package that is not installed passes the initial checks but fails the save's validation.
+			cfg, err := service.GetImporterConfig(ctx, "GIMI")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.PackageVersion = VersionPin{Pinned: "9.9.9"}
+			data, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := client.XXMIImporters.Upsert(ctx, "GIMI", string(data)); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := service.AdoptUserRuntime(ctx, "GIMI", folder); err == nil {
+				t.Fatal("adoption succeeded with an invalid config")
+			}
+			got, err := os.ReadFile(manifestPath)
+			switch {
+			case existing && (err != nil || string(got) != string(original)):
+				t.Fatalf("manifest = %q, %v; want %q", got, err, original)
+			case !existing && !os.IsNotExist(err):
+				t.Fatalf("manifest = %q, %v; want none", got, err)
+			}
+		})
 	}
 }
 

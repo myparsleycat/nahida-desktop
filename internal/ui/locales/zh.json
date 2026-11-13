@@ -1336,6 +1336,7 @@
           "XXMI_ERR_DLL_IN_USE": "无法替换 d3d11.dll。请先关闭游戏，然后重试。",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "无法关闭 XXMI Launcher。请手动关闭后重试。",
           "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "所选 Importer 未在内置 XXMI 运行时中启用，或其文件夹不匹配。请检查 XXMI 设置后重试。",
+          "XXMI_ERR_IMPORTER_BUSY": "Importer 正在启动或被其他操作使用。请等待其完成后重试。",
           "XXMI_ERR_LEGACY_RUNTIME": "所选 Importer 使用的是 3DMigoto 运行时。请在 XXMI 设置中切换到 XXMI 运行时后重试。",
           "XXMI_ERR_ELEVATION_FAILED": "管理员权限被拒绝，或提升权限后写入失败。请批准 UAC 提示后重试。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",

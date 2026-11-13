@@ -1339,6 +1339,7 @@
           "XXMI_ERR_DLL_IN_USE": "Cannot replace d3d11.dll. Close the game first, then try again.",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "Could not close XXMI Launcher. Close it and try again.",
           "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "The selected importer is not enabled in the built-in XXMI runtime, or its folder does not match. Check the XXMI settings and try again.",
+          "XXMI_ERR_IMPORTER_BUSY": "The importer is being launched or used by another operation. Wait for it to finish, then try again.",
           "XXMI_ERR_LEGACY_RUNTIME": "The selected importer uses the 3DMigoto runtime. Switch it to XXMI in the XXMI settings and try again.",
           "XXMI_ERR_ELEVATION_FAILED": "Administrator permission was denied or the elevated write failed. Approve the UAC prompt and try again.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",

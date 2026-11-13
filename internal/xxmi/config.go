@@ -348,9 +348,20 @@ func (x *XXMI) GetImporterConfig(ctx context.Context, key string) (ImporterConfi
 }
 
 func (x *XXMI) SaveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) error {
+	return x.saveImporterConfigIf(ctx, key, cfg, nil)
+}
+
+// saveImporterConfigIf saves cfg only when check accepts the stored row, which is nil when none exists. check
+// runs under the same lock as every other save, so nothing can change the row between the check and the write.
+func (x *XXMI) saveImporterConfigIf(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	check func(previous *ImporterConfig) error,
+) error {
 	// Rows are stored under the canonical key so every reader and the importer locks agree on it.
 	key = strings.ToUpper(strings.TrimSpace(key))
-	changes, err := x.saveImporterConfig(ctx, key, cfg)
+	changes, err := x.saveImporterConfig(ctx, key, cfg, check)
 	if err != nil {
 		return err
 	}
@@ -372,7 +383,12 @@ type configChanges struct {
 	dll bool
 }
 
-func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterConfig) (configChanges, error) {
+func (x *XXMI) saveImporterConfig(
+	ctx context.Context,
+	key string,
+	cfg ImporterConfig,
+	check func(previous *ImporterConfig) error,
+) (configChanges, error) {
 	if err := ValidateImporterSettings(key, cfg); err != nil {
 		return configChanges{}, err
 	}
@@ -405,10 +421,20 @@ func (x *XXMI) saveImporterConfig(ctx context.Context, key string, cfg ImporterC
 	}
 	previousCustomDLL := ""
 	changes := configChanges{selection: cfg.Enabled, dll: true}
+	if previous == nil && check != nil {
+		if err := check(nil); err != nil {
+			return configChanges{}, err
+		}
+	}
 	if previous != nil {
 		var old ImporterConfig
 		if err := json.Unmarshal([]byte(previous.Config), &old); err != nil {
 			return configChanges{}, err
+		}
+		if check != nil {
+			if err := check(&old); err != nil {
+				return configChanges{}, err
+			}
 		}
 		previousCustomDLL = old.CustomDLL
 		changes.selection = old.Enabled != cfg.Enabled ||

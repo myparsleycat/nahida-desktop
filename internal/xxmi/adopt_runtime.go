@@ -7,16 +7,31 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
-func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
+// AdoptUserRuntime records the d3d11.dll in folder as the importer's user-managed library and turns unsafe mode
+// on. It fails with XXMI_IMPORTER_CHANGED when the importer no longer uses folder, and a failed adoption leaves
+// the runtime manifest as it was.
+func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer, folder string) error {
 	external, err := x.usesExternalLauncher(ctx)
 	if err != nil {
 		return err
 	}
 	if external {
+		importers, err := x.externalEnabledImporters(ctx)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(importers, func(enabled EnabledImporter) bool {
+			return strings.EqualFold(enabled.Key, importer) && platform.SamePathFold(enabled.ImporterFolder, folder)
+		}) {
+			return ErrImporterChanged
+		}
 		return x.enableExternalUnsafeMode(ctx, importer)
 	}
 	cfg, err := x.GetImporterConfig(ctx, importer)
@@ -29,6 +44,9 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 	if cfg.Mode != RuntimeXXMI {
 		return errors.New("XXMI_LEGACY_RUNTIME_UNSUPPORTED")
 	}
+	if !platform.SamePathFold(cfg.ImporterFolder, folder) {
+		return ErrImporterChanged
+	}
 	root, err := openInstallRoot(cfg.ImporterFolder)
 	if err != nil {
 		return err
@@ -39,9 +57,9 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 		return err
 	}
 	manifest := runtimeManifest{Mode: RuntimeXXMI, Files: map[string]string{}}
-	data, info, err := root.readFile(runtimeManifestName)
+	original, info, err := root.readFile(runtimeManifestName)
 	if err == nil {
-		if err := json.Unmarshal(data, &manifest); err != nil {
+		if err := json.Unmarshal(original, &manifest); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -58,9 +76,34 @@ func (x *XXMI) AdoptUserRuntime(ctx context.Context, importer string) error {
 	if err := root.writeFileAtomic(ctx, runtimeManifestName, bytes.NewReader(encoded), 0o600, info); err != nil {
 		return err
 	}
+
 	cfg.Migoto.UnsafeMode = true
-	return x.SaveImporterConfig(ctx, importer, cfg)
+	err = x.saveImporterConfigIf(ctx, importer, cfg, func(previous *ImporterConfig) error {
+		if previous == nil || !previous.Enabled || !platform.SamePathFold(previous.ImporterFolder, folder) {
+			return ErrImporterChanged
+		}
+		return nil
+	})
+	if err == nil {
+		return nil
+	}
+	restoreCtx := context.WithoutCancel(ctx)
+	var restoreErr error
+	if info == nil {
+		restoreErr = root.removeAll(runtimeManifestName)
+	} else {
+		restoreErr = root.writeFileAtomic(restoreCtx, runtimeManifestName, bytes.NewReader(original), 0o600, nil)
+	}
+	if restoreErr != nil {
+		return infra.WithCause(err, infra.AnnotateError(restoreErr, infra.Diagnostic{
+			Stage: "restore-runtime-manifest", Fields: map[string]any{"importer_folder": cfg.ImporterFolder},
+		}))
+	}
+	return err
 }
+
+// ErrImporterChanged reports that the importer no longer uses the folder an operation was started for.
+var ErrImporterChanged = errors.New("XXMI_IMPORTER_CHANGED")
 
 // officialDLLConfig returns cfg changed to run the signed XXMI d3d11.dll. The provider is set on the importer
 // itself, so a shared provider that ships its own DLL does not bring that one back at the next launch. A version

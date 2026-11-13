@@ -681,7 +681,7 @@ func TestAdoptedDLLHidesProvider(t *testing.T) {
 	if err := service.EnableImporter(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.AdoptUserRuntime(ctx, "GIMI"); err != nil {
+	if err := service.AdoptUserRuntime(ctx, "GIMI", folder); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := service.GetImporterConfig(ctx, "GIMI")

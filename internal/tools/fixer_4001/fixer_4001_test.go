@@ -17,6 +17,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/pepad"
 	"nahida.live/desktop/internal/platform"
@@ -715,4 +716,33 @@ func writeVSDevCmd(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return abs
+}
+
+func TestRestore4001DLLReturnsTargetToItsPreviousState(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, targetD3D11DLL)
+	previous := filepath.Join(root, "previous")
+	if err := os.WriteFile(previous, []byte("previous"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lease := elevated.NewFileLease(nil)
+	defer lease.Release()
+
+	if err := os.WriteFile(target, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := restore4001DLL(context.Background(), lease, target, previous, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "previous" {
+		t.Fatalf("target = %q, %v; want the previous DLL", got, err)
+	}
+
+	// Without a previous DLL the install created target, so the rollback removes it.
+	if err := restore4001DLL(context.Background(), lease, target, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("target stat = %v; want removed", err)
+	}
 }

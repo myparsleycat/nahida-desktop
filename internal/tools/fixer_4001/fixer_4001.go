@@ -226,7 +226,8 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		t.update4001Progress("XXMI_ERR_GIMI_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
+	importerKey, err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath)
+	if err != nil {
 		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_BUILD_FAILED"), err)
 	}
 	finalDestination := filepath.Join(importerPath, targetD3D11DLL)
@@ -281,13 +282,35 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		t.update4001Progress("XXMI_ERR_DLL_NOT_FOUND", "")
 		return result
 	}
+
+	release, importerKey, err := t.hold4001Importer(ctx, importerKey, importerPath)
+	if err != nil {
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_BUILD_FAILED"), err)
+	}
+	defer release()
+	previous := ""
+	if regularFile(finalDestination) {
+		previous = filepath.Join(tempDir, "previous-"+targetD3D11DLL)
+		if err := copyFileOverwrite(finalDestination, previous); err != nil {
+			return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
+		}
+	}
 	if err := installFileCopies(
 		ctx, lease, []fileCopy{{Source: builtDLL, Target: finalDestination}}, useElevated,
 	); err != nil {
+		// A helper request that failed in transit may still have replaced the DLL.
+		builtHash, builtErr := hashFile(builtDLL)
+		if hash, hashErr := hashFile(finalDestination); builtErr == nil && hashErr == nil && hash == builtHash {
+			t.reportCleanup(
+				restore4001DLL(ctx, lease, finalDestination, previous, useElevated),
+				"FourThousandOneFixerBuildDll",
+			)
+		}
 		return t.failed4001Install(err, finalDestination, "XXMI_ERR_BUILD_FAILED")
 	}
-	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
-		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
+	if err := t.adoptUserRuntime(ctx, importerKey, importerPath); err != nil {
+		_, err = t.rollback4001Install(ctx, lease, err, finalDestination, previous, useElevated)
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_BUILD_FAILED"), err)
 	}
 	t.removeDiversifierBackups(ctx, lease, importerPath, useElevated)
 	t.update4001Progress("XXMI_BUILD_SUCCESS", "")
@@ -321,7 +344,8 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		t.update4001Progress("XXMI_ERR_DLL_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath); err != nil {
+	importerKey, err := t.ensureXXMIMode(ctx, input.ImporterKey, importerPath)
+	if err != nil {
 		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_OBFUSCATE_FAILED"), err)
 	}
 	access := t.fs.GetFileWriteAccess(target, importerPath)
@@ -385,8 +409,18 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		return result
 	}
 
-	// No backup matched this DLL at the start, so every backup left in the folder is stale.
+	release, importerKey, err := t.hold4001Importer(ctx, importerKey, importerPath)
+	if err != nil {
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_OBFUSCATE_FAILED"), err)
+	}
+	defer release()
+	if hash, err := hashFile(target); err != nil || !strings.EqualFold(hash, currentHash) {
+		changed := errors.New("d3d11.dll changed during padding diversification")
+		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", errors.Join(changed, err))
+	}
+	// No backup matched this unchanged DLL at the start, so every backup left in the folder is stale.
 	t.removeDiversifierBackups(ctx, lease, importerPath, useElevated)
+
 	hashPrefix := diversifiedHash[:min(7, len(diversifiedHash))]
 	backupPath := filepath.Join(
 		importerPath,
@@ -405,8 +439,19 @@ func (t *Service) FourThousandOneFixerDiversifyDllPadding(
 		}
 		return t.failed4001Install(err, target, "XXMI_ERR_OBFUSCATE_FAILED")
 	}
-	if err := t.adoptUserRuntime(ctx, input.ImporterKey); err != nil {
-		return t.failed4001("XXMI_ERR_OBFUSCATE_FAILED", err)
+	if err := t.adoptUserRuntime(ctx, importerKey, importerPath); err != nil {
+		restored, err := t.rollback4001Install(ctx, lease, err, target, backupPath, useElevated)
+		failed := t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_OBFUSCATE_FAILED"), err)
+		if !restored {
+			// The diversified DLL stayed in place, so its backup is what the user restores from.
+			failed.BackupPath = lo.ToPtr(backupPath)
+			return failed
+		}
+		t.reportCleanup(
+			removeFilePaths(context.WithoutCancel(ctx), lease, []string{backupPath}, useElevated),
+			"FourThousandOneFixerDiversifyDllPadding",
+		)
+		return failed
 	}
 	t.update4001Progress("XXMI_OBFUSCATE_SUCCESS", "")
 	t.log.Info(
@@ -446,7 +491,8 @@ func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
 		t.update4001Progress("XXMI_ERR_RESTORE_BACKUP_NOT_FOUND", "")
 		return result
 	}
-	if err := t.ensureXXMIMode(ctx, "", importerPath); err != nil {
+	importerKey, err := t.ensureXXMIMode(ctx, "", importerPath)
+	if err != nil {
 		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_RESTORE_FAILED"), err)
 	}
 	target := filepath.Join(importerPath, targetD3D11DLL)
@@ -456,6 +502,11 @@ func (t *Service) FourThousandOneFixerRestoreDiversifiedDll(
 	}
 	lease := elevated.NewFileLease(t.elevated)
 	defer lease.Release()
+	release, _, err := t.hold4001Importer(ctx, importerKey, importerPath)
+	if err != nil {
+		return t.failed4001(xxmiModeFailureCode(err, "XXMI_ERR_RESTORE_FAILED"), err)
+	}
+	defer release()
 	t.update4001Progress("XXMI_RESTORING", "")
 	if err := installFileCopies(
 		ctx, lease, []fileCopy{{Source: *backup, Target: target}}, !access.Writable,
@@ -532,66 +583,139 @@ func (t *Service) failed4001Build(err error) Fixer4001Result {
 	return Fixer4001Result{ErrorMessage: lo.ToPtr(message)}
 }
 
-func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath string) error {
+// ensureXXMIMode rejects importer folders the built-in runtime does not manage and returns the importer key the
+// folder belongs to, which is "" for a folder no enabled importer uses.
+func (t *Service) ensureXXMIMode(ctx context.Context, importerKey, importerPath string) (string, error) {
 	if t.xxmi == nil {
-		return nil
+		return importerKey, nil
 	}
 	mode, err := t.xxmi.GetLauncherMode(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if mode == xxmi.LauncherExternal {
+	external := mode == xxmi.LauncherExternal
+	if external {
 		if err := t.xxmi.EnsureLauncherClosed(ctx); err != nil {
-			return fmt.Errorf("%w: %w", errLauncherNotClosed, err)
+			return "", fmt.Errorf("%w: %w", errLauncherNotClosed, err)
 		}
-		return nil
 	}
 
-	if importerKey == "" {
+	if importerKey == "" || external {
 		importers, err := t.xxmi.GetEnabledImporters(ctx)
 		if err != nil {
-			return err
+			return "", err
 		}
+		resolved := ""
 		for _, importer := range importers {
-			if strings.EqualFold(filepath.Clean(importer.ImporterFolder), filepath.Clean(importerPath)) {
-				importerKey = importer.Key
+			if platform.SamePathFold(importer.ImporterFolder, importerPath) &&
+				(importerKey == "" || strings.EqualFold(importer.Key, importerKey)) {
+				resolved = importer.Key
 				break
 			}
 		}
+		if external && importerKey != "" && resolved == "" {
+			return "", fmt.Errorf("%w: %s at %s", errImporterNotConfigured, importerKey, importerPath)
+		}
+		importerKey = resolved
 	}
-	if importerKey == "" {
-		return nil
+	if importerKey == "" || external {
+		return importerKey, nil
 	}
 	cfg, err := t.xxmi.GetImporterConfig(ctx, importerKey)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// The DLL is adopted into the importer's runtime manifest after it is written, so reject targets the
 	// built-in runtime does not manage before touching the file.
-	if !cfg.Enabled || !strings.EqualFold(filepath.Clean(cfg.ImporterFolder), filepath.Clean(importerPath)) {
-		return fmt.Errorf("%w: %s at %s", errImporterNotConfigured, importerKey, importerPath)
+	if !cfg.Enabled || !platform.SamePathFold(cfg.ImporterFolder, importerPath) {
+		return "", fmt.Errorf("%w: %s at %s", errImporterNotConfigured, importerKey, importerPath)
 	}
 	if cfg.Mode == xxmi.RuntimeLegacy {
-		return fmt.Errorf("%w: %s", errLegacyRuntime, importerKey)
+		return "", fmt.Errorf("%w: %s", errLegacyRuntime, importerKey)
 	}
-	return nil
+	return importerKey, nil
+}
+
+// hold4001Importer keeps the importer from launching while its d3d11.dll is replaced and adopted, and checks
+// again that the importer still uses importerPath, since the settings may have changed during a long build. It
+// returns the importer key the folder belongs to now, which the adoption must use.
+func (t *Service) hold4001Importer(ctx context.Context, importerKey, importerPath string) (func(), string, error) {
+	key, err := t.ensureXXMIMode(ctx, importerKey, importerPath)
+	if err != nil {
+		return nil, "", err
+	}
+	release := func() {}
+	if t.xxmi != nil && key != "" {
+		held, err := t.xxmi.HoldImporter(key)
+		if err != nil {
+			return nil, "", fmt.Errorf("%w: %w", errImporterBusy, err)
+		}
+		release = held
+	}
+	if _, err := t.ensureXXMIMode(ctx, key, importerPath); err != nil {
+		release()
+		return nil, "", err
+	}
+	return release, key, nil
+}
+
+// restore4001DLL puts previous back at target, or removes target when previous is "" because target did not exist
+// before the install.
+func restore4001DLL(
+	ctx context.Context,
+	lease *elevated.FileLease,
+	target, previous string,
+	useElevated bool,
+) error {
+	ctx = context.WithoutCancel(ctx)
+	if previous == "" {
+		return removeFilePaths(ctx, lease, []string{target}, useElevated)
+	}
+	return installFileCopies(ctx, lease, []fileCopy{{Source: previous, Target: target}}, useElevated)
+}
+
+// rollback4001Install restores target after the runtime refused the DLL just installed there. It reports whether
+// target is back to its previous state and returns cause annotated with the outcome.
+func (t *Service) rollback4001Install(
+	ctx context.Context,
+	lease *elevated.FileLease,
+	cause error,
+	target, previous string,
+	useElevated bool,
+) (bool, error) {
+	err := restore4001DLL(ctx, lease, target, previous, useElevated)
+	outcome := "restored"
+	if err != nil {
+		outcome = "failed"
+	}
+	cause = infra.AnnotateError(cause, infra.Diagnostic{
+		Operation: "4001Fixer", Stage: "adopt-runtime",
+		Fields: map[string]any{"target": target, "previous": previous, "rollback": outcome},
+	})
+	if err != nil {
+		return false, infra.WithCause(cause, infra.AnnotateError(err, infra.Diagnostic{Stage: "rollback-dll"}))
+	}
+	return true, cause
 }
 
 var (
 	errLauncherNotClosed     = errors.New("close XXMI Launcher")
 	errImporterNotConfigured = errors.New("importer is not enabled in the built-in XXMI runtime")
 	errLegacyRuntime         = errors.New("importer uses the legacy 3DMigoto runtime")
+	errImporterBusy          = errors.New("another operation is using the importer")
 )
 
 func xxmiModeFailureCode(err error, fallback string) string {
 	switch {
 	case errors.Is(err, errLauncherNotClosed):
 		return "XXMI_ERR_LAUNCHER_CLOSE_FAILED"
-	case errors.Is(err, errImporterNotConfigured):
+	case errors.Is(err, errImporterNotConfigured), errors.Is(err, xxmi.ErrImporterChanged):
 		return "XXMI_ERR_IMPORTER_NOT_CONFIGURED"
 	case errors.Is(err, errLegacyRuntime):
 		return "XXMI_ERR_LEGACY_RUNTIME"
+	case errors.Is(err, errImporterBusy):
+		return "XXMI_ERR_IMPORTER_BUSY"
 	default:
 		return fallback
 	}
@@ -866,10 +990,10 @@ func hashFile(path string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-func (t *Service) adoptUserRuntime(ctx context.Context, importerKey string) error {
+func (t *Service) adoptUserRuntime(ctx context.Context, importerKey, importerPath string) error {
 	if t.xxmi == nil || strings.TrimSpace(importerKey) == "" {
 		return nil
 	}
 	t.update4001Progress("XXMI_ENABLE_UNSAFE_MODE", "")
-	return t.xxmi.AdoptUserRuntime(ctx, importerKey)
+	return t.xxmi.AdoptUserRuntime(ctx, importerKey, importerPath)
 }

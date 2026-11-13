@@ -1336,6 +1336,7 @@
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll을 교체할 수 없습니다. 게임을 먼저 종료한 뒤 다시 시도하세요.",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요.",
           "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "선택한 임포터가 내장 XXMI 런타임에서 활성화되어 있지 않거나 폴더가 일치하지 않습니다. XXMI 설정을 확인한 뒤 다시 시도하세요.",
+          "XXMI_ERR_IMPORTER_BUSY": "임포터가 실행 중이거나 다른 작업에서 사용 중입니다. 작업이 끝난 뒤 다시 시도하세요.",
           "XXMI_ERR_LEGACY_RUNTIME": "선택한 임포터가 3DMigoto 런타임을 사용하고 있습니다. XXMI 설정에서 XXMI 런타임으로 전환한 뒤 다시 시도하세요.",
           "XXMI_ERR_ELEVATION_FAILED": "관리자 권한이 거부되었거나 권한 상승 후 쓰기에 실패했습니다. UAC 확인을 허용한 뒤 다시 시도하세요.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
