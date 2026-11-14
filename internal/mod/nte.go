@@ -292,6 +292,7 @@ func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 	if info.Preview == nil && entry.previewFallback != "" {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
+	info.PreviewVersion = previewFileVersion(info.Preview, reports...)
 	return info
 }
 
@@ -308,6 +309,8 @@ func nteModInfoLight(entry nteModEntry, reports ...func(error)) ModInfo {
 	if info.Preview == nil && entry.previewFallback != "" {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
+	// The full scan that follows reports a version it cannot read.
+	info.PreviewVersion = previewFileVersion(info.Preview)
 	return info
 }
 

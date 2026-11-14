@@ -296,6 +296,11 @@ func TestGetModsLightDefersIniParse(t *testing.T) {
 	if full.Mods[0].Size == 0 {
 		t.Fatal("full scan missing size")
 	}
+	// The UI keys preview images by this version, so a mismatch decodes every preview again after the light
+	// listing.
+	if light.Mods[0].PreviewVersion == "" || light.Mods[0].PreviewVersion != full.Mods[0].PreviewVersion {
+		t.Fatalf("preview version light = %q, full = %q", light.Mods[0].PreviewVersion, full.Mods[0].PreviewVersion)
+	}
 }
 
 func TestGetModsReparsesIniPathsWithoutScanCache(t *testing.T) {

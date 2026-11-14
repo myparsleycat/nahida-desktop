@@ -3,10 +3,12 @@ package ui
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"weak"
 
 	_ "golang.org/x/image/bmp" // Mod previews may be BMP; fairy registers the other preview formats.
 
@@ -337,6 +339,7 @@ func (s *Shell) modBody(cx *fairy.Cx) *fairy.El {
 	if m.listing == nil {
 		return s.modSkeleton()
 	}
+	s.pruneModCardShown(m.listing)
 	mods := s.filteredMods()
 	if m.list {
 		return fairy.Col(
@@ -456,11 +459,8 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 			Label(T("page.mod.context-menu.open-folder")).Tooltip(T("page.mod.context-menu.open-folder")),
 	)
 
-	var imageKey string
-	if info.Preview != nil && isPreviewImage(*info.Preview) {
-		imageKey = modPreviewKey(info, *info.Preview)
-	}
-	preview := s.modPreview(info, hovered, imageKey)
+	shown := s.modCardPreview(info)
+	preview := s.modPreview(info, hovered, shown)
 	body := fairy.Row(preview).Grow(1).MinH(0).Gap(8)
 	if !nte && len(info.Inis) > 0 {
 		key := modListingKey(m.group.Path, info.Path)
@@ -485,7 +485,7 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 	}
 
 	card := fairy.Col().
-		Child(s.modCardBackdrop(info, imageKey), header, body).
+		Child(s.modCardBackdrop(shown), header, body).
 		Key("mod.card:" + info.Path).
 		WFull().
 		HFull().
@@ -543,27 +543,96 @@ func appliedToolIconsOf(info mod.ModInfo, t *kit.Theme) []*fairy.El {
 	return icons
 }
 
-// modCardBackdrop is the mod's preview image blurred and faded over the whole card, or nil while it loads or
-// when the preview is not an image (imageKey is empty).
-func (s *Shell) modCardBackdrop(info mod.ModInfo, imageKey string) *fairy.El {
-	if imageKey == "" {
-		return nil
+// cardPreview is the preview image a grid card draws and its blurred backdrop; key is empty when the preview is
+// not an image.
+type cardPreview struct {
+	key, file       string
+	image, backdrop *fairy.Image
+}
+
+// shownCardPreview is the preview a grid card last drew with its backdrop. Weak pointers let the cache free them
+// and spare a reload of an image that is only held until its successor loads.
+type shownCardPreview struct {
+	key             string
+	image, backdrop weak.Pointer[fairy.Image]
+	blurFailed      bool
+}
+
+// ready reports whether the preview and its backdrop have loaded; a failed blur leaves the card without one.
+func (p cardPreview) ready() bool {
+	return p.image != nil && (p.backdrop != nil || fairy.Images.BlurredErr(p.key, 64, 64, modBackdropBlur) != nil)
+}
+
+// modCardPreview loads the preview of the mod's card. While a newly selected image loads, the card keeps the
+// one it last drew, so that stepping through the images does not blank the backdrop behind the whole card.
+func (s *Shell) modCardPreview(info mod.ModInfo) cardPreview {
+	var want cardPreview
+	if info.Preview != nil && isPreviewImage(*info.Preview) {
+		file := *info.Preview
+		want = cardPreview{key: modPreviewKey(info, file), file: file}
+		want.image = s.sizedModPreview(want.key, file, modPreviewMaxWidth, modCardHeight, fairy.FitContain)
+		// Under the preview's own key the cache scales the decoded preview down instead of reading and decoding the
+		// file again, so the blur waits until the preview has loaded.
+		if want.image != nil {
+			want.backdrop = fairy.Images.Blurred(want.key, 64, 64, modBackdropBlur, func() ([]byte, error) {
+				return os.ReadFile(file)
+			})
+		}
 	}
-	// Under the preview's own key the cache scales the decoded preview down instead of reading and decoding the
-	// file again, so the blur waits until the preview has loaded.
-	file := *info.Preview
-	if s.sizedModPreview(imageKey, file, modPreviewMaxWidth, modCardHeight, fairy.FitContain) == nil {
-		return nil
+	shown, ok := s.modCardShown[info.Path]
+	if want.ready() {
+		if !ok || shown.image.Value() != want.image || shown.backdrop.Value() != want.backdrop {
+			if s.modCardShown == nil || len(s.modCardShown) >= maxModPreviewPaths {
+				s.modCardShown = map[string]shownCardPreview{}
+			}
+			shown = shownCardPreview{key: want.key, image: weak.Make(want.image)}
+			if want.backdrop != nil {
+				shown.backdrop = weak.Make(want.backdrop)
+			} else {
+				shown.blurFailed = true
+			}
+			s.modCardShown[info.Path] = shown
+		}
+		return want
 	}
-	img := fairy.Images.Blurred(imageKey, 64, 64, modBackdropBlur, func() ([]byte, error) { return os.ReadFile(file) })
-	if img == nil {
+
+	failed := want.key != "" &&
+		fairy.Images.SizedErr(want.key, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil
+	if !ok || want.key == "" || failed {
+		delete(s.modCardShown, info.Path)
+		return want
+	}
+	held := cardPreview{key: shown.key, image: shown.image.Value(), backdrop: shown.backdrop.Value()}
+	if held.image != nil && (held.backdrop != nil || shown.blurFailed) {
+		return held
+	}
+	return want
+}
+
+// pruneModCardShown drops the held previews of mods that left listing, such as deleted, merged or renamed ones,
+// so that a mod shown later at the same path does not draw the departed one's preview.
+func (s *Shell) pruneModCardShown(listing *mod.FolderGroup) {
+	if listing == s.modCardShownListing {
+		return
+	}
+	s.modCardShownListing = listing
+	present := make(map[string]bool, len(listing.Mods))
+	for _, info := range listing.Mods {
+		present[info.Path] = true
+	}
+	maps.DeleteFunc(s.modCardShown, func(path string, _ shownCardPreview) bool { return !present[path] })
+}
+
+// modCardBackdrop is the mod's preview image blurred and faded over the whole card, or nil without one.
+func (s *Shell) modCardBackdrop(p cardPreview) *fairy.El {
+	if p.backdrop == nil {
 		return nil
 	}
 	opacity := float32(0.1)
 	if s.dark {
 		opacity = 0.25
 	}
-	return fairy.ImageEl(img).Inset(0).Fit(fairy.FitFill).Radius(4).Opacity(opacity).
+	return fairy.ImageEl(p.backdrop).Inset(0).Fit(fairy.FitFill).Radius(4).Opacity(opacity).
 		PassThrough()
 }
 
@@ -587,7 +656,7 @@ func (s *Shell) clickMod(info mod.ModInfo) {
 
 // modPreview shows the mod's preview image with its details over the bottom edge, and buttons that step
 // through the other images of the mod while the pointer is over the card.
-func (s *Shell) modPreview(info mod.ModInfo, hovered bool, imageKey string) *fairy.El {
+func (s *Shell) modPreview(info mod.ModInfo, hovered bool, shown cardPreview) *fairy.El {
 	t := kit.T()
 	fallback := fairy.Col(
 		fairy.Icon(lucide.Image).Size(48, 48).Color(t.MutedForeground.Alpha(0.5)),
@@ -597,7 +666,7 @@ func (s *Shell) modPreview(info mod.ModInfo, hovered bool, imageKey string) *fai
 	).Gap(6).Align(fairy.Center)
 	content, modelPreview := s.cardModelPreview(info, fallback)
 	if !modelPreview {
-		content = s.previewImage(info, imageKey, fallback)
+		content = s.previewImage(info, shown, fallback)
 	}
 	area := fairy.Box(content).Grow(1).MinW(0).HFull().Center().Clip()
 
@@ -678,8 +747,8 @@ func (s *Shell) modVideo(path string, version any) *fairy.Video {
 	return s.modVideos.video(fmt.Sprint(path, ":", version), path, s.deps.Log, "Mod.preview")
 }
 
-func (s *Shell) previewImage(info mod.ModInfo, imageKey string, fallback *fairy.El) *fairy.El {
-	if imageKey == "" {
+func (s *Shell) previewImage(info mod.ModInfo, shown cardPreview, fallback *fairy.El) *fairy.El {
+	if shown.key == "" {
 		if info.Preview != nil && isPreviewVideo(*info.Preview) {
 			if video := s.modVideo(*info.Preview, info.Mtime); video != nil {
 				if video.State() == fairy.VideoLoading {
@@ -694,21 +763,20 @@ func (s *Shell) previewImage(info mod.ModInfo, imageKey string, fallback *fairy.
 		}
 		return fallback
 	}
-	img := s.sizedModPreview(imageKey, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain)
-	if img == nil {
-		if s.previewImageErr(imageKey, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
+	if shown.image == nil {
+		if s.previewImageErr(shown.key, shown.file, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
 			return fallback
 		}
 		return fairy.Spinner().Size(20, 20)
 	}
-	return fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitContain)
+	return fairy.ImageEl(shown.image).WFull().HFull().Fit(fairy.FitContain)
 }
 
 // modPreviewKey names an image of the mod in the cache by the mod's folder and the image's path inside it, which
 // keeps a DISABLED variant folder within the mod apart. Toggling the mod or a folder above it only adds or drops
 // the DISABLED prefix, so with the preview file's own version the folder leaves the prefix out and the cache
-// outlives the rename. The preview version includes file identity to distinguish separate copies. The light
-// listing has no such version and keys by the path.
+// outlives the rename. The preview version includes file identity to distinguish separate copies. Without a
+// version, when the scan could not read the file, the key falls back to the path.
 func modPreviewKey(info mod.ModInfo, file string) string {
 	if info.PreviewVersion == "" {
 		return fmt.Sprint("mod:", file, ":", info.Mtime)

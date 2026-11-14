@@ -512,6 +512,17 @@ func (s *Shell) stepPreview(info mod.ModInfo, direction int) {
 	groupPath := m.group.Path
 	s.background(func(ctx context.Context) {
 		err := s.deps.Mod.SetDefaultPreview(ctx, info.Path, image)
+		// The version the next scan reads keeps the preview's cache key through the refresh below.
+		var version string
+		if err == nil {
+			version = mod.PreviewVersion(image, func(err error) {
+				_ = infra.ReportError(s.deps.Log, err, "Mod.preview", infra.Diagnostic{
+					Severity:  infra.DiagnosticWarn,
+					Operation: "preview.version",
+					Fields:    map[string]any{"modPath": info.Path, "path": image},
+				})
+			})
+		}
 		fairy.Go(func() {
 			delete(m.stepping, info.Path)
 			if err != nil {
@@ -524,6 +535,7 @@ func (s *Shell) stepPreview(info mod.ModInfo, direction int) {
 				for i := range listing.Mods {
 					if listing.Mods[i].Path == info.Path {
 						listing.Mods[i].Preview = &image
+						listing.Mods[i].PreviewVersion = version
 					}
 				}
 				m.listing = &listing

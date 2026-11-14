@@ -123,6 +123,10 @@ type Shell struct {
 	previewImageFailures map[string]bool
 	// modPreviewPaths keeps the file each mod preview cache key was last loaded from; see sizedModPreview.
 	modPreviewPaths map[string]modPreviewPath
+	// modCardShown keeps, by mod path, the preview each grid card last drew; see modCardPreview.
+	modCardShown map[string]shownCardPreview
+	// modCardShownListing is the listing modCardShown was last pruned against.
+	modCardShownListing *mod.FolderGroup
 	// deviceGen is the graphics device generation the last build saw, for logging a recreated device.
 	deviceGen uint64
 	// paths are the download location prompts waiting for an answer, oldest first.

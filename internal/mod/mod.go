@@ -293,7 +293,7 @@ type ModInfo struct {
 	// Signature changes when any file in the mod is added, removed, renamed, resized, or touched. The full scan
 	// fills it so the renderer can cache derived images across listings.
 	Signature string `json:"signature,omitempty"`
-	// PreviewVersion includes the Preview file's identity, size and mtime from the full scan. It survives folder
+	// PreviewVersion includes the Preview file's identity, size and mtime from either scan. It survives folder
 	// renames and changes to other files without conflating separate previews with matching size and mtime.
 	PreviewVersion string `json:"previewVersion,omitempty"`
 }

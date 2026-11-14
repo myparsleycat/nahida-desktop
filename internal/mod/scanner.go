@@ -245,6 +245,8 @@ func scanModLight(groupPath, modPath, displayName string, reports ...func(error)
 	info.Preview = buckets.bestPath()
 	info.PreviewImages = sortedPreviewImages(images)
 	applyDefaultPreview(info, modPath, reports...)
+	// The full scan that follows reports a version it cannot read.
+	info.PreviewVersion = previewFileVersion(info.Preview)
 	applyAppliedTools(info, modPath, reports...)
 	return info
 }
@@ -316,6 +318,11 @@ func walkMod(groupPath, modPath, displayName string, reports ...func(error)) *wa
 	info.PreviewVersion = previewFileVersion(info.Preview, reports...)
 	applyAppliedTools(info, modPath, reports...)
 	return &walkedMod{info: info, iniPaths: iniPaths}
+}
+
+// PreviewVersion is the PreviewVersion a scan gives a mod whose preview is path.
+func PreviewVersion(path string, reports ...func(error)) string {
+	return previewFileVersion(&path, reports...)
 }
 
 func previewFileVersion(preview *string, reports ...func(error)) string {

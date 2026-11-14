@@ -35,10 +35,76 @@ func TestModPreviewKeyKeepsToggledMods(t *testing.T) {
 		key(`D:\Mods\Character`, `DISABLED Variant\preview.png`, "1:2") {
 		t.Error("the variants of one mod share a key")
 	}
-	// The light listing has no preview version, so only the path tells a mod apart from its disabled sibling.
+	// Without a preview version only the path tells a mod apart from its disabled sibling.
 	if key(`D:\Mods\Character`, "preview.png", "") == key(`D:\Mods\DISABLED Character`, "preview.png", "") {
 		t.Error("siblings without a preview version share a key")
 	}
+}
+
+// Stepping to another preview must not blank the card, and the backdrop behind its toggle list, while the next
+// image loads.
+func TestModCardPreviewHoldsLastImageWhileNextLoads(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 64, 64))); err != nil {
+		t.Fatal(err)
+	}
+	first, second := filepath.Join(root, "a.png"), filepath.Join(root, "b.png")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, data.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(preview string) mod.ModInfo {
+		return mod.ModInfo{Path: root, Preview: &preview, PreviewVersion: "test"}
+	}
+	firstKey, secondKey := modPreviewKey(at(first), first), modPreviewKey(at(second), second)
+	t.Cleanup(func() {
+		fairy.Images.Forget(firstKey)
+		fairy.Images.Forget(secondKey)
+	})
+	wait := func(what string, ready func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !ready() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	s := &Shell{}
+	wait("first preview", func() bool { return s.modCardPreview(at(first)).ready() })
+
+	started, proceed := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-proceed:
+		default:
+			close(proceed)
+		}
+	})
+	fairy.Images.Sized(secondKey, modPreviewMaxWidth, modCardHeight, fairy.FitContain, func() ([]byte, error) {
+		close(started)
+		<-proceed
+		return os.ReadFile(second)
+	})
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second preview read did not start")
+	}
+	if got := s.modCardPreview(at(second)); got.key != firstKey || got.image == nil || got.backdrop == nil {
+		t.Fatalf("card while the next preview loads = %+v, want the first preview with its backdrop", got)
+	}
+
+	close(proceed)
+	wait("second preview", func() bool {
+		got := s.modCardPreview(at(second))
+		return got.key == secondKey && got.ready()
+	})
 }
 
 func TestSizedModPreviewRetriesRenamedFileWithThumbnail(t *testing.T) {
