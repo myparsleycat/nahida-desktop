@@ -293,6 +293,9 @@ type ModInfo struct {
 	// Signature changes when any file in the mod is added, removed, renamed, resized, or touched. The full scan
 	// fills it so the renderer can cache derived images across listings.
 	Signature string `json:"signature,omitempty"`
+	// PreviewVersion includes the Preview file's identity, size and mtime from the full scan. It survives folder
+	// renames and changes to other files without conflating separate previews with matching size and mtime.
+	PreviewVersion string `json:"previewVersion,omitempty"`
 }
 
 type FolderGroup struct {
@@ -1396,10 +1399,7 @@ func stableID(groupPath, modPath string) string {
 		rel = modPath
 	}
 	parts := strings.FieldsFunc(filepath.ToSlash(rel), func(r rune) bool { return r == '/' })
-	for i := range parts {
-		parts[i] = strings.ToLower(stripDisabled(parts[i]))
-	}
-	sum := sha256.Sum256([]byte(strings.Join(parts, "/")))
+	sum := sha256.Sum256([]byte(strings.ToLower(modname.StripDisabledPath(strings.Join(parts, "/")))))
 	return hex.EncodeToString(sum[:])
 }
 

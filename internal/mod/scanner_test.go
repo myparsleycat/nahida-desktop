@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeModFile(t *testing.T, root, relative, content string) string {
@@ -45,6 +46,46 @@ func TestWalkModCollectsSizeMtimeIniAndPreviewInOnePass(t *testing.T) {
 	info := scanMod(group, modPath)
 	if info == nil || len(info.Inis) != 1 || !info.Inis[0].HasToggleKey {
 		t.Fatalf("scanMod inis = %#v", info)
+	}
+}
+
+func TestWalkModPreviewVersionDistinguishesFilesAcrossRenames(t *testing.T) {
+	t.Parallel()
+	group := t.TempDir()
+	modPath := filepath.Join(group, "Character")
+	siblingPath := filepath.Join(group, "DISABLED Character")
+	stamp := time.Unix(1700000000, 0)
+	for folder, content := range map[string]string{modPath: "first", siblingPath: "other"} {
+		preview := writeModFile(t, folder, "preview.bmp", content)
+		if err := os.Chtimes(preview, stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := scanMod(group, modPath)
+	sibling := scanMod(group, siblingPath)
+	if first == nil || sibling == nil || first.PreviewVersion == "" || sibling.PreviewVersion == "" {
+		t.Fatalf("missing preview versions: %#v, %#v", first, sibling)
+	}
+	if first.PreviewVersion == sibling.PreviewVersion {
+		t.Fatal("different preview files with the same size and mtime share a version")
+	}
+
+	renamedPath := filepath.Join(group, "DISABLED_Character")
+	if err := os.Rename(modPath, renamedPath); err != nil {
+		t.Fatal(err)
+	}
+	writeModFile(t, renamedPath, "mod.ini", "[Constants]\n")
+	renamed := scanMod(group, renamedPath)
+	if renamed == nil || renamed.PreviewVersion != first.PreviewVersion {
+		t.Fatalf("renaming or changing another file invalidated the preview: %#v", renamed)
+	}
+	preview := filepath.Join(renamedPath, "preview.bmp")
+	if err := os.Chtimes(preview, stamp, stamp.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	changed := scanMod(group, renamedPath)
+	if changed == nil || changed.PreviewVersion == first.PreviewVersion {
+		t.Fatal("changing the preview mtime kept its version")
 	}
 }
 

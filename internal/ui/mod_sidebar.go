@@ -502,7 +502,7 @@ func (s *Shell) folderRowView(row folderRow) *fairy.El {
 	if disabled {
 		ink = t.MutedForeground
 	}
-	avatar := fairy.Box(s.previewThumb(g.Preview, s.mods.previewVersion, 40, 20, fairy.Text("?").Bold())).
+	avatar := fairy.Box(s.previewThumb(g.Preview, s.mods.previewVersion, nil, 40, 20, fairy.Text("?").Bold())).
 		Size(40, 40).Shrink(0).Radius(20).Fill(t.Muted).Center().Clip()
 	if disabled {
 		avatar.Opacity(0.5)

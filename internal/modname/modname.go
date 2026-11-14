@@ -20,6 +20,23 @@ func StripDisabled(name string) string {
 	return strings.TrimSpace(disabledPrefixRE.ReplaceAllString(strings.TrimSpace(name), ""))
 }
 
+// StripDisabledPath applies StripDisabled to every element of a slash-separated path, so a folder keeps one name
+// whether it or a folder above it is disabled.
+func StripDisabledPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		// The renderer names mod previews with this on every view build, so the regexp runs only where the
+		// prefix can start; for any other element StripDisabled only trims spaces.
+		trimmed := strings.TrimSpace(part)
+		if len(trimmed) >= len("disabled") && strings.EqualFold(trimmed[:len("disabled")], "disabled") {
+			parts[i] = StripDisabled(trimmed)
+		} else {
+			parts[i] = trimmed
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
 // DisabledPrefix returns the prefix exactly as written in name, or "" when name is not disabled.
 func DisabledPrefix(name string) string {
 	return disabledPrefixRE.FindString(strings.TrimSpace(name))

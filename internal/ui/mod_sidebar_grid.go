@@ -130,7 +130,7 @@ func (s *Shell) folderCellView(row folderRow, size float32) *fairy.El {
 	m := &s.mods
 	g := row.group
 	selected := m.group != nil && m.group.Path == g.Path
-	preview := fairy.Box(s.previewThumb(g.Preview, m.previewVersion, size-8, 8,
+	preview := fairy.Box(s.previewThumb(g.Preview, m.previewVersion, nil, size-8, 8,
 		fairy.Text("?").Bold())).WFull().HFull().Center()
 	if !g.IsEnabled {
 		preview.Opacity(0.5)

@@ -67,4 +67,10 @@ func TestModelPreviewKeyFollowsWhatTheImageShows(t *testing.T) {
 	if key := modelPreviewKey(spelled, settings); key != base {
 		t.Errorf("another spelling of the same mod gives %s, want %s", key, base)
 	}
+
+	toggled := previewMod("a", [3]string{"Character.ini", "$outfit", "0"})
+	toggled.Path = `D:\Mods\DISABLED Character`
+	if key := modelPreviewKey(toggled, settings); key != base {
+		t.Errorf("the disabled mod gives %s, want %s", key, base)
+	}
 }

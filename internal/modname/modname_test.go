@@ -62,6 +62,10 @@ func TestStripDisabled(t *testing.T) {
 		if got := StripDisabled(test.in); got != test.want {
 			t.Fatalf("StripDisabled(%q) = %q, want %q", test.in, got, test.want)
 		}
+		// Mod IDs hash the path form, so it must strip every element exactly as StripDisabled does.
+		if got := StripDisabledPath(" DISABLED Group /" + test.in); got != "Group/"+test.want {
+			t.Fatalf("StripDisabledPath(%q) = %q, want %q", test.in, got, "Group/"+test.want)
+		}
 	}
 }
 

@@ -2,8 +2,10 @@ package platform
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -57,6 +59,20 @@ func fileTimesFromSys(info os.FileInfo) (ctime, birth time.Time) {
 	ctime = time.Unix(0, stat.CreationTime.Nanoseconds())
 	birth = ctime
 	return
+}
+
+// FileIdentity identifies an open file across renames without conflating copies with matching metadata.
+func FileIdentity(file *os.File) (string, error) {
+	var info windows.ByHandleFileInformation
+	err := windows.GetFileInformationByHandle(windows.Handle(file.Fd()), &info)
+	runtime.KeepAlive(file)
+	if err != nil {
+		return "", err
+	}
+	if info.FileIndexHigh == 0 && info.FileIndexLow == 0 {
+		return "", errors.New("file identity is unavailable")
+	}
+	return fmt.Sprintf("%08x:%08x%08x", info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow), nil
 }
 
 func isBusy(err error) bool {

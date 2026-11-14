@@ -21,6 +21,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/mod/appliedtool"
+	"nahida.live/desktop/internal/modname"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
@@ -72,8 +73,15 @@ func hasOwnPreview(folder string, preview *string) bool {
 }
 
 // previewThumb draws the preview at path with rounded corners, or fallback while it loads or when there is
-// none. version is part of the cache key, so a replaced file is read again.
-func (s *Shell) previewThumb(path *string, version any, size, radius float32, fallback *fairy.El) *fairy.El {
+// none. version is part of the cache key, so a replaced file is read again. imageKey, when set, names an image
+// preview in the cache instead of its path and version.
+func (s *Shell) previewThumb(
+	path *string,
+	version any,
+	imageKey func(file string) string,
+	size, radius float32,
+	fallback *fairy.El,
+) *fairy.El {
 	if path == nil || !isPreviewImage(*path) {
 		if path != nil && isPreviewVideo(*path) {
 			if video := s.modVideo(*path, version); video != nil && video.State() != fairy.VideoLoading {
@@ -85,9 +93,10 @@ func (s *Shell) previewThumb(path *string, version any, size, radius float32, fa
 	}
 	file := *path
 	key := fmt.Sprint("mod:", file, ":", version)
-	img := fairy.Images.Sized(key, size, size, fairy.FitCover, func() ([]byte, error) {
-		return os.ReadFile(file)
-	})
+	if imageKey != nil {
+		key = imageKey(file)
+	}
+	img := s.sizedModPreview(key, file, size, size, fairy.FitCover)
 	if img == nil {
 		_ = s.previewImageErr(key, file, size, size, fairy.FitCover)
 		return fallback
@@ -447,7 +456,11 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 			Label(T("page.mod.context-menu.open-folder")).Tooltip(T("page.mod.context-menu.open-folder")),
 	)
 
-	preview := s.modPreview(info, hovered)
+	var imageKey string
+	if info.Preview != nil && isPreviewImage(*info.Preview) {
+		imageKey = modPreviewKey(info, *info.Preview)
+	}
+	preview := s.modPreview(info, hovered, imageKey)
 	body := fairy.Row(preview).Grow(1).MinH(0).Gap(8)
 	if !nte && len(info.Inis) > 0 {
 		key := modListingKey(m.group.Path, info.Path)
@@ -472,7 +485,7 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 	}
 
 	card := fairy.Col().
-		Child(s.modCardBackdrop(info), header, body).
+		Child(s.modCardBackdrop(info, imageKey), header, body).
 		Key("mod.card:" + info.Path).
 		WFull().
 		HFull().
@@ -531,18 +544,18 @@ func appliedToolIconsOf(info mod.ModInfo, t *kit.Theme) []*fairy.El {
 }
 
 // modCardBackdrop is the mod's preview image blurred and faded over the whole card, or nil while it loads or
-// when the preview is not an image.
-func (s *Shell) modCardBackdrop(info mod.ModInfo) *fairy.El {
-	if info.Preview == nil || !isPreviewImage(*info.Preview) {
+// when the preview is not an image (imageKey is empty).
+func (s *Shell) modCardBackdrop(info mod.ModInfo, imageKey string) *fairy.El {
+	if imageKey == "" {
 		return nil
 	}
 	// Under the preview's own key the cache scales the decoded preview down instead of reading and decoding the
 	// file again, so the blur waits until the preview has loaded.
-	key, read := modPreviewSource(*info.Preview, info.Mtime)
-	if fairy.Images.Sized(key, modPreviewMaxWidth, modCardHeight, fairy.FitContain, read) == nil {
+	file := *info.Preview
+	if s.sizedModPreview(imageKey, file, modPreviewMaxWidth, modCardHeight, fairy.FitContain) == nil {
 		return nil
 	}
-	img := fairy.Images.Blurred(key, 64, 64, modBackdropBlur, read)
+	img := fairy.Images.Blurred(imageKey, 64, 64, modBackdropBlur, func() ([]byte, error) { return os.ReadFile(file) })
 	if img == nil {
 		return nil
 	}
@@ -574,7 +587,7 @@ func (s *Shell) clickMod(info mod.ModInfo) {
 
 // modPreview shows the mod's preview image with its details over the bottom edge, and buttons that step
 // through the other images of the mod while the pointer is over the card.
-func (s *Shell) modPreview(info mod.ModInfo, hovered bool) *fairy.El {
+func (s *Shell) modPreview(info mod.ModInfo, hovered bool, imageKey string) *fairy.El {
 	t := kit.T()
 	fallback := fairy.Col(
 		fairy.Icon(lucide.Image).Size(48, 48).Color(t.MutedForeground.Alpha(0.5)),
@@ -584,7 +597,7 @@ func (s *Shell) modPreview(info mod.ModInfo, hovered bool) *fairy.El {
 	).Gap(6).Align(fairy.Center)
 	content, modelPreview := s.cardModelPreview(info, fallback)
 	if !modelPreview {
-		content = s.previewImage(info, fallback)
+		content = s.previewImage(info, imageKey, fallback)
 	}
 	area := fairy.Box(content).Grow(1).MinW(0).HFull().Center().Clip()
 
@@ -665,8 +678,8 @@ func (s *Shell) modVideo(path string, version any) *fairy.Video {
 	return s.modVideos.video(fmt.Sprint(path, ":", version), path, s.deps.Log, "Mod.preview")
 }
 
-func (s *Shell) previewImage(info mod.ModInfo, fallback *fairy.El) *fairy.El {
-	if info.Preview == nil || !isPreviewImage(*info.Preview) {
+func (s *Shell) previewImage(info mod.ModInfo, imageKey string, fallback *fairy.El) *fairy.El {
+	if imageKey == "" {
 		if info.Preview != nil && isPreviewVideo(*info.Preview) {
 			if video := s.modVideo(*info.Preview, info.Mtime); video != nil {
 				if video.State() == fairy.VideoLoading {
@@ -681,10 +694,9 @@ func (s *Shell) previewImage(info mod.ModInfo, fallback *fairy.El) *fairy.El {
 		}
 		return fallback
 	}
-	key, read := modPreviewSource(*info.Preview, info.Mtime)
-	img := fairy.Images.Sized(key, modPreviewMaxWidth, modCardHeight, fairy.FitContain, read)
+	img := s.sizedModPreview(imageKey, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain)
 	if img == nil {
-		if s.previewImageErr(key, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
+		if s.previewImageErr(imageKey, *info.Preview, modPreviewMaxWidth, modCardHeight, fairy.FitContain) != nil {
 			return fallback
 		}
 		return fairy.Spinner().Size(20, 20)
@@ -692,8 +704,54 @@ func (s *Shell) previewImage(info mod.ModInfo, fallback *fairy.El) *fairy.El {
 	return fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitContain)
 }
 
-func modPreviewSource(file string, mtime float64) (string, func() ([]byte, error)) {
-	return fmt.Sprint("mod:", file, ":", mtime), func() ([]byte, error) { return os.ReadFile(file) }
+// modPreviewKey names an image of the mod in the cache by the mod's folder and the image's path inside it, which
+// keeps a DISABLED variant folder within the mod apart. Toggling the mod or a folder above it only adds or drops
+// the DISABLED prefix, so with the preview file's own version the folder leaves the prefix out and the cache
+// outlives the rename. The preview version includes file identity to distinguish separate copies. The light
+// listing has no such version and keys by the path.
+func modPreviewKey(info mod.ModInfo, file string) string {
+	if info.PreviewVersion == "" {
+		return fmt.Sprint("mod:", file, ":", info.Mtime)
+	}
+	if rel, err := filepath.Rel(info.Path, file); err == nil {
+		file = rel
+	}
+	folder := modname.StripDisabledPath(filepath.ToSlash(info.Path))
+	return fmt.Sprint("mod:", folder, "|", file, ":", info.PreviewVersion)
+}
+
+// maxModPreviewPaths bounds the keys sizedModPreview tracks; past it the map starts over.
+const maxModPreviewPaths = 4096
+
+type modPreviewPath struct {
+	file  string
+	retry bool
+}
+
+// sizedModPreview loads the mod preview at file under key. The key outlives a toggle, but a load requested
+// before the rename can fail at the old path. Keep the cached image while that read is pending, and retry
+// failures even when Sized returns a smaller cached image instead of nil.
+func (s *Shell) sizedModPreview(key, file string, w, h float32, fit fairy.Fit) *fairy.Image {
+	read := func() ([]byte, error) { return os.ReadFile(file) }
+	img := fairy.Images.Sized(key, w, h, fit, read)
+	previous, seen := s.modPreviewPaths[key]
+	changed := seen && !platform.SamePathFold(previous.file, file)
+	if seen && !changed && !previous.retry {
+		return img
+	}
+
+	if s.modPreviewPaths == nil || len(s.modPreviewPaths) >= maxModPreviewPaths {
+		s.modPreviewPaths = map[string]modPreviewPath{}
+	}
+	previous.file = file
+	previous.retry = previous.retry || changed
+	if previous.retry && (img == nil || fairy.Images.SizedErr(key, w, h, fit) != nil) {
+		fairy.Images.Forget(key)
+		img = fairy.Images.Sized(key, w, h, fit, read)
+		previous.retry = false
+	}
+	s.modPreviewPaths[key] = previous
+	return img
 }
 
 // maxPreviewImageFailures bounds the logged keys kept; past it the set starts over and may log a key again.
@@ -852,7 +910,8 @@ func (s *Shell) modListHead() *fairy.El {
 
 func (s *Shell) modRow(info mod.ModInfo) *fairy.El {
 	t := kit.T()
-	thumb := fairy.Box(s.previewThumb(info.Preview, info.Mtime, 40, 4,
+	imageKey := func(file string) string { return modPreviewKey(info, file) }
+	thumb := fairy.Box(s.previewThumb(info.Preview, info.Mtime, imageKey, 40, 4,
 		fairy.Icon(lucide.Folder).Size(20, 20).Color(t.MutedForeground))).Size(40, 40).Radius(4).Fill(t.Muted).
 		Center().Clip()
 	if info.Preview != nil && isPreviewMedia(*info.Preview) {

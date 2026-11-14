@@ -21,6 +21,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod/appliedtool"
 	"nahida.live/desktop/internal/modname"
+	"nahida.live/desktop/internal/platform"
 )
 
 var mediaExtensions = map[string]bool{
@@ -312,8 +313,33 @@ func walkMod(groupPath, modPath, displayName string, reports ...func(error)) *wa
 	info.Preview = buckets.bestPath()
 	info.PreviewImages = sortedPreviewImages(images)
 	applyDefaultPreview(info, modPath, reports...)
+	info.PreviewVersion = previewFileVersion(info.Preview, reports...)
 	applyAppliedTools(info, modPath, reports...)
 	return &walkedMod{info: info, iniPaths: iniPaths}
+}
+
+func previewFileVersion(preview *string, reports ...func(error)) string {
+	if preview == nil {
+		return ""
+	}
+	file, err := os.Open(*preview)
+	if err != nil {
+		reportScanFailure(err, reports)
+		return ""
+	}
+	defer func() { reportScanFailure(file.Close(), reports) }()
+	metadata, err := file.Stat()
+	if err != nil {
+		reportScanFailure(err, reports)
+		return ""
+	}
+	identity, err := platform.FileIdentity(file)
+	if err != nil {
+		reportScanFailure(&os.PathError{Op: "identify", Path: *preview, Err: err}, reports)
+		return ""
+	}
+	return identity + ":" + strconv.FormatInt(metadata.Size(), 10) + ":" +
+		strconv.FormatInt(metadata.ModTime().UnixNano(), 10)
 }
 
 // root must be cleaned: WalkDir joins child paths with filepath.Join, which cleans the root it was given.

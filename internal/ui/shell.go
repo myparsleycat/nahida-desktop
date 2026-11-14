@@ -121,6 +121,8 @@ type Shell struct {
 	driveVideos previewVideos
 	// previewImageFailures keeps the cache keys of mod preview images that failed to load, so each is logged once.
 	previewImageFailures map[string]bool
+	// modPreviewPaths keeps the file each mod preview cache key was last loaded from; see sizedModPreview.
+	modPreviewPaths map[string]modPreviewPath
 	// deviceGen is the graphics device generation the last build saw, for logging a recreated device.
 	deviceGen uint64
 	// paths are the download location prompts waiting for an answer, oldest first.

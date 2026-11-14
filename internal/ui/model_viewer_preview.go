@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/modname"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -47,7 +50,7 @@ type modelPreviewSettings struct {
 type modelPreviews struct {
 	images   map[string]*modelPreviewImage
 	queue    map[string]*modelPreviewJob
-	failures map[string]modelPreviewFailure
+	failures map[string][]modelPreviewFailure
 	running  bool
 	used     uint64
 	renderer viewerRenderer
@@ -66,7 +69,10 @@ type modelPreviewJob struct {
 	wanted   time.Time
 }
 
+// modelPreviewFailure counts the failed renders of one folder. The key outlives a toggle, so each name of the
+// folder keeps its own count: a render of the old name fails without saying anything about the renamed one.
 type modelPreviewFailure struct {
+	path  string
 	at    time.Time
 	count int
 }
@@ -74,9 +80,12 @@ type modelPreviewFailure struct {
 // modelPreviewKey names a preview by everything it shows: the folder, its content signature, the INI toggle
 // values the image is posed in and the render settings, so a changed mod is rendered again.
 func modelPreviewKey(info mod.ModInfo, settings modelPreviewSettings) string {
-	version := any(info.Signature)
+	version, path := any(info.Signature), info.Path
 	if info.Signature == "" {
 		version = info.Mtime
+	} else {
+		// The signature tells the folder apart from a disabled copy beside it, so toggling keeps the render.
+		path = modname.StripDisabledPath(filepath.ToSlash(path))
 	}
 	var toggles [][3]any
 	for _, ini := range info.Inis {
@@ -90,7 +99,7 @@ func modelPreviewKey(info mod.ModInfo, settings modelPreviewSettings) string {
 			})
 		}
 	}
-	key, _ := json.Marshal([]any{strings.ToLower(info.Path), version, toggles, settings, modelPreviewSize})
+	key, _ := json.Marshal([]any{strings.ToLower(path), version, toggles, settings, modelPreviewSize})
 	return string(key)
 }
 
@@ -191,7 +200,7 @@ func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
 		entry.used = p.used
 		return entry.image, false
 	}
-	if failure, failed := p.failures[key]; failed &&
+	if failure := p.failure(key, info.Path); failure != nil &&
 		(failure.count > modelPreviewRetries || time.Since(failure.at) < modelPreviewRetryAfter) {
 		return nil, false
 	}
@@ -201,10 +210,10 @@ func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
 	}
 	job := p.queue[key]
 	if job == nil {
-		job = &modelPreviewJob{key: key, info: info, settings: settings}
+		job = &modelPreviewJob{key: key, settings: settings}
 		p.queue[key] = job
 	}
-	job.wanted = time.Now()
+	job.info, job.wanted = info, time.Now()
 	s.pumpModelPreviews()
 	return nil, true
 }
@@ -249,11 +258,15 @@ func (s *Shell) finishModelPreview(job *modelPreviewJob, img *fairy.Image, gener
 	p.running = false
 	if err != nil {
 		if p.failures == nil {
-			p.failures = map[string]modelPreviewFailure{}
+			p.failures = map[string][]modelPreviewFailure{}
 		}
-		failure := p.failures[job.key]
-		p.failures[job.key] = modelPreviewFailure{at: time.Now(), count: failure.count + 1}
-		if failure.count+1 <= modelPreviewRetries {
+		failure := p.failure(job.key, job.info.Path)
+		if failure == nil {
+			p.failures[job.key] = append(p.failures[job.key], modelPreviewFailure{path: job.info.Path})
+			failure = &p.failures[job.key][len(p.failures[job.key])-1]
+		}
+		failure.at, failure.count = time.Now(), failure.count+1
+		if failure.count <= modelPreviewRetries {
 			// A card that stays in view is built again only when something changes, so it is asked to be.
 			time.AfterFunc(modelPreviewRetryAfter, func() { fairy.Go(func() {}) })
 		}
@@ -262,6 +275,25 @@ func (s *Shell) finishModelPreview(job *modelPreviewJob, img *fairy.Image, gener
 		p.store(job.key, img, generation)
 	}
 	s.pumpModelPreviews()
+}
+
+func (p *modelPreviews) failure(key, path string) *modelPreviewFailure {
+	failures := p.failures[key]
+	if len(failures) == 0 {
+		return nil
+	}
+	// Each card asks on every build. The paths come from the same scanner, so an exact match spares the UI thread
+	// the system calls SamePathFold makes.
+	i := slices.IndexFunc(failures, func(failure modelPreviewFailure) bool { return failure.path == path })
+	if i < 0 {
+		i = slices.IndexFunc(failures, func(failure modelPreviewFailure) bool {
+			return platform.SamePathFold(failure.path, path)
+		})
+	}
+	if i < 0 {
+		return nil
+	}
+	return &failures[i]
 }
 
 // store keeps img and drops the least recently shown previews past the limit. A dropped image is freed when
