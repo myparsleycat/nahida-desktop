@@ -40,6 +40,12 @@ type backupScreen struct {
 	overview *backup.Overview
 	loadErr  error
 	loading  bool
+	// reload asks for another read once the one in flight ends, as it may have started before a change.
+	reload bool
+	// writing counts the backupAction changes in flight. excluding holds, by game, the included state being
+	// written, until a read that started and ended with no change in flight replaces it.
+	writing   int
+	excluding map[string]bool
 
 	snapshots       []backup.Snapshot
 	snapshotsErr    error
@@ -123,19 +129,32 @@ func (s *Shell) backupFailed(err error, action string, fields map[string]any) {
 
 func (s *Shell) loadBackupOverview() {
 	b := &s.backup
-	if b.loading || s.deps.Backup == nil {
+	if s.deps.Backup == nil {
+		return
+	}
+	if b.loading {
+		b.reload = true
 		return
 	}
 	b.loading = true
+	clean := b.writing == 0
 	go func() {
 		overview, err := s.deps.Backup.GetOverview(context.Background())
 		fairy.Go(func() {
 			b.loading = false
+			settled := !b.reload && clean && b.writing == 0
+			if b.reload {
+				b.reload = false
+				defer s.loadBackupOverview()
+			}
 			if err != nil {
 				b.loadErr = infra.ReportError(s.deps.Log, err, "Backup", infra.Diagnostic{Operation: "backup.overview"})
 				return
 			}
 			b.overview, b.loadErr = &overview, nil
+			if settled {
+				clear(b.excluding)
+			}
 		})
 	}()
 }
@@ -174,9 +193,12 @@ func (s *Shell) loadBackupSnapshots() {
 
 // backupAction runs a service call that changes the overview, then reads the overview again.
 func (s *Shell) backupAction(action string, fields map[string]any, run func(context.Context) error) {
+	b := &s.backup
+	b.writing++
 	s.background(func(ctx context.Context) {
 		err := run(ctx)
 		fairy.Go(func() {
+			b.writing--
 			if err != nil {
 				s.backupFailed(err, action, fields)
 			}
@@ -479,7 +501,8 @@ func (s *Shell) backupScheduleCard() *fairy.El {
 
 func (s *Shell) backupTargetsCard() *fairy.El {
 	t := kit.T()
-	targets := s.backup.overview.Targets
+	b := &s.backup
+	targets := b.overview.Targets
 	add := kit.Button(T("page.backup.targets.add_folder"), func() {
 		go func() {
 			result, err := s.deps.Dialog.SelectDirectory("backup-target")
@@ -532,11 +555,19 @@ func (s *Shell) backupTargetsCard() *fairy.El {
 		if target.Game != nil {
 			game = *target.Game
 		}
-		rows = append(rows, row(target, lucide.Gamepad, kit.Switch(!target.Excluded, func(included bool) {
+		included, writing := b.excluding[game]
+		if !writing {
+			included = !target.Excluded
+		}
+		rows = append(rows, row(target, lucide.Gamepad, kit.Switch(included, func(included bool) {
+			if b.excluding == nil {
+				b.excluding = map[string]bool{}
+			}
+			b.excluding[game] = included
 			s.backupAction("exclude-game", map[string]any{"game": game}, func(ctx context.Context) error {
 				return s.deps.Backup.SetGameExcluded(ctx, game, !included)
 			})
-		}).Label(T("page.backup.targets.include", "name", target.Label))))
+		}, kit.Disabled(writing)).Label(T("page.backup.targets.include", "name", target.Label))))
 	}
 	for _, target := range targets {
 		if target.Kind != "custom" {
