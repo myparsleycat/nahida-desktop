@@ -94,6 +94,9 @@ type driveView struct {
 	anchor   int
 	// reveal is the item to select and scroll to once the folder shows, as when going up to a parent.
 	reveal string
+	// revealDir names a folder just created in the listed folder. The create response carries no id, so it
+	// becomes reveal once a listing shows a folder of that name.
+	revealDir string
 
 	search        string
 	searchApplied string
@@ -224,7 +227,7 @@ func (s *Shell) openDriveFolder(v *driveView, id, reveal string) {
 		}
 		return
 	}
-	v.selected, v.anchor = nil, -1
+	v.selected, v.anchor, v.revealDir = nil, -1, ""
 	v.search, v.searchApplied, v.results, v.resultsFor, v.resultsBusy = "", "", nil, "", false
 	s.loadDriveFolder(v)
 }
@@ -598,7 +601,17 @@ func (s *Shell) selectDriveIndex(v *driveView, items []driveItem, index int) {
 
 // revealDriveItem selects the pending reveal item once it is in the listing.
 func (s *Shell) revealDriveItem(v *driveView) {
-	if v.reveal == "" || v.listing == nil || v.listed != s.driveFolder(v) {
+	if v.listing == nil || v.listed != s.driveFolder(v) {
+		return
+	}
+	if v.revealDir != "" {
+		if i := slices.IndexFunc(v.listing.children, func(item driveItem) bool {
+			return item.IsDir && item.Name == v.revealDir
+		}); i >= 0 {
+			v.reveal, v.revealDir = v.listing.children[i].ID, ""
+		}
+	}
+	if v.reveal == "" {
 		return
 	}
 	items := s.driveDisplay(v)
@@ -947,6 +960,9 @@ func (s *Shell) submitDriveMkdir() {
 			}
 			if s.drive.mkdir == m {
 				s.drive.mkdir = nil
+			}
+			if s.driveFolder(m.view) == folder {
+				m.view.revealDir = name
 			}
 			s.reloadDrives()
 		})
