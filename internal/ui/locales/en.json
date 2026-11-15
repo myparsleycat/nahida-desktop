@@ -2673,7 +2673,7 @@
           "updateDialogTitle": "Update {{importer}}",
           "updateDialogDescription": "Update the following packages to their latest versions?",
           "sharedLibsVersion": "Shared XXMI libraries version",
-          "sharedLibsApplying": "Applying",
+          "applying": "Applying",
           "sharedLibsProvider": "Shared XXMI libraries provider",
           "sharedLibsDescription": "Applies to importers that follow the shared settings.",
           "libsFollowShared": "Follow shared version",

@@ -25,10 +25,13 @@ const (
 type reshadePage struct {
 	// pending holds a game's switch state until its saved config is read back, so the switch does not flip twice.
 	pending map[string]bool
-	// wantedVersion is the latest version choice. Choices apply one at a time in order, because a version is
-	// downloaded before it is stored and an earlier choice could otherwise finish last.
+	// wantedVersion is the version choice being applied, shown until the status is read back. A version is
+	// downloaded before it is stored, so the select stays disabled while one applies.
 	wantedVersion  *string
 	settingVersion bool
+	// applyingVersion is wantedVersion as the backend names it in its download progress.
+	applyingVersion string
+	versionProgress string
 
 	selected []string
 	// effectsRunning is the effect package change in progress: effectsBatch for the selected packages, or the ID of
@@ -74,11 +77,22 @@ func (s *Shell) reshadeSettingsPage() *fairy.El {
 		versionItems = append(versionItems, kit.Item{Value: version, Label: version})
 	}
 	version := status.Pinned
+	// A failure leaves the stored version, which the status read after it shows; a success shows the new one.
+	if r.wantedVersion != nil && !r.settingVersion && (x.reshadeStatus.current || x.reshadeStatus.err != nil) {
+		r.wantedVersion = nil
+	}
 	if r.wantedVersion != nil {
 		version = *r.wantedVersion
 	}
 	if version == "" {
 		version = followLatest
+	}
+	versionDescription := T(prefix + "versionDescription")
+	if r.settingVersion {
+		versionDescription = r.versionProgress
+		if versionDescription == "" {
+			versionDescription = T("page.setting.xxmi.builtin.applying")
+		}
 	}
 	binarySection := settingsGroup(T(prefix+"title"),
 		settingRow(T(prefix+"binary"), binary, kit.Button(installLabel, func() {
@@ -88,14 +102,14 @@ func (s *Shell) reshadeSettingsPage() *fairy.El {
 			}, x.reshadeStatus.invalidate, nil)
 		}, kit.Outline, kit.Small, kit.Icon(lucide.Download), kit.Disabled(target == "" || status.Active == target),
 			kit.Loading(x.busy["reshade-install"]))),
-		selectRow("reshade.version", T(prefix+"version"), T(prefix+"versionDescription"), version, versionItems,
+		selectRow("reshade.version", T(prefix+"version"), versionDescription, version, versionItems,
 			func(value string) {
 				if value == followLatest {
 					value = ""
 				}
 				r.wantedVersion = &value
 				s.applyReShadeVersion()
-			}),
+			}, kit.Disabled(r.settingVersion)),
 	)
 
 	overview := x.overview.value
@@ -130,19 +144,15 @@ func (s *Shell) applyReShadeVersion() {
 	}
 	version := *r.wantedVersion
 	r.settingVersion = true
+	r.applyingVersion, r.versionProgress = strings.TrimPrefix(strings.TrimSpace(version), "v"), ""
 	s.background(func(ctx context.Context) {
 		err := s.deps.ReShade.SetVersion(ctx, version)
 		fairy.Go(func() {
-			r.settingVersion = false
+			r.settingVersion, r.versionProgress = false, ""
 			if err != nil {
 				s.xxmiFail(err, "reshade-set-version", map[string]any{"version": version}, "")
 			}
 			s.xxmi.reshadeStatus.invalidate()
-			if r.wantedVersion != nil && *r.wantedVersion == version {
-				r.wantedVersion = nil
-				return
-			}
-			s.applyReShadeVersion()
 		})
 	})
 }

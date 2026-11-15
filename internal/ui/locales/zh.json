@@ -2657,7 +2657,7 @@
           "updateDialogTitle": "更新 {{importer}}",
           "updateDialogDescription": "要将以下软件包更新到最新版本吗？",
           "sharedLibsVersion": "共用 XXMI 库版本",
-          "sharedLibsApplying": "正在应用",
+          "applying": "正在应用",
           "sharedLibsProvider": "共用 XXMI 库提供者",
           "sharedLibsDescription": "应用于跟随共用设置的导入器。",
           "libsFollowShared": "跟随共用版本",

@@ -245,7 +245,7 @@ func (s *Shell) builtinOptions() []*fairy.El {
 	}
 	status := m.sharedProgress
 	if status == "" {
-		status = T(prefix + "sharedLibsApplying")
+		status = T(prefix + "applying")
 	}
 
 	sharedDLL := ov.SharedCustomDLL

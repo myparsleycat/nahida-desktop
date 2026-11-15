@@ -305,10 +305,15 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 			return
 		}
 		key := "reshade:" + kind + ":" + name
+		r := &x.reshade
+		applying := kind == "binary" && r.settingVersion && name == r.applyingVersion
 		stage, _ := payload["stage"].(string)
 		downloaded, ok := number(payload["downloaded"])
 		if stage != "download" || !ok {
 			s.endProgress(key)
+			if applying {
+				r.versionProgress = ""
+			}
 			return
 		}
 		total, _ := number(payload["total"])
@@ -316,8 +321,12 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 		if kind == "binary" {
 			label = "ReShade " + name
 		}
-		s.showProgress(key, label+" · "+T("page.setting.xxmi.builtin.downloadingPackage")+" "+
-			downloadProgress(downloaded, total))
+		title := label + " · " + T("page.setting.xxmi.builtin.downloadingPackage") + " " +
+			downloadProgress(downloaded, total)
+		s.showProgress(key, title)
+		if applying {
+			r.versionProgress = title
+		}
 	})
 	on("setting:update", func(data []any) {
 		update, _ := first(data).(map[string]any)

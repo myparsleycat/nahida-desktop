@@ -2657,7 +2657,7 @@
           "updateDialogTitle": "{{importer}} を更新",
           "updateDialogDescription": "次のパッケージを最新バージョンに更新しますか？",
           "sharedLibsVersion": "共有 XXMI ライブラリのバージョン",
-          "sharedLibsApplying": "適用中",
+          "applying": "適用中",
           "sharedLibsProvider": "共有 XXMI ライブラリの提供元",
           "sharedLibsDescription": "共有設定に従うインポーターに適用されます。",
           "libsFollowShared": "共有バージョンに従う",
