@@ -29,6 +29,7 @@ type modelViewerSlotBinding struct {
 	Values        []any
 	Effects       []ModelViewerMenuEffect
 	AlwaysVisible bool
+	Label         string
 }
 
 const maxModelViewerMenuValues = 4096
@@ -444,6 +445,129 @@ func modelViewerGuardedEffects(guard ModelViewerDNF, variable, value string) []M
 	return effects
 }
 
+// modelViewerStepDispatchBindings binds the variables a conditional after a wrapping
+// counter sets on each step, as XXMI Menu Maker writes in place of a cycle key:
+//
+//	$step = $step + 1
+//	if $step >= 2
+//	    $step = 0
+//	endif
+//	if $step == 0
+//	    $hair = 0
+//	elif $step == 1
+//	    $hair = 1
+//	endif
+//
+// A variable set to one value on every step becomes an effect of the others.
+func modelViewerStepDispatchBindings(
+	lines []string,
+	step, label string,
+	seen map[string]bool,
+) []modelViewerSlotBinding {
+	for index := 0; index < len(lines); index++ {
+		if !strings.HasPrefix(strings.ToLower(lines[index]), "if ") {
+			continue
+		}
+		branches, end, ok := splitModelViewerDirectConditional(lines, index)
+		if !ok {
+			return nil
+		}
+		variables, values, ok := parseModelViewerStepBranches(branches, step)
+		if !ok {
+			index = end
+			continue
+		}
+
+		var effects []ModelViewerMenuEffect
+		for _, variable := range variables {
+			if len(values[variable]) == 1 {
+				effects = append(
+					effects,
+					ModelViewerMenuEffect{Var: variable, Value: modelViewerString(values[variable][0])},
+				)
+			}
+		}
+		var output []modelViewerSlotBinding
+		for _, variable := range variables {
+			if len(values[variable]) == 1 || seen[variable] {
+				continue
+			}
+			seen[variable] = true
+			output = append(output, modelViewerSlotBinding{
+				Variable: variable,
+				Values:   values[variable],
+				Effects:  effects,
+				Label:    label,
+			})
+		}
+		return output
+	}
+	return nil
+}
+
+func parseModelViewerStepBranches(
+	branches []modelViewerDirectConditionalBranch,
+	step string,
+) ([]string, map[string][]any, bool) {
+	if len(branches) < 2 {
+		return nil, nil, false
+	}
+	type selected struct {
+		step  int
+		lines []string
+	}
+	ordered := make([]selected, 0, len(branches))
+	for _, branch := range branches {
+		match := modelViewerMenuSlotRE.FindStringSubmatch(stringValue(branch.expression))
+		if match == nil || modelViewerNormalizeKey(match[1]) != step {
+			return nil, nil, false
+		}
+		value, _ := strconv.Atoi(match[2])
+		ordered = append(ordered, selected{step: value, lines: branch.lines})
+	}
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].step < ordered[j].step })
+
+	var variables []string
+	values := make(map[string][]any)
+	rejected := make(map[string]bool)
+	for _, branch := range ordered {
+		depth := 0
+		for _, line := range branch.lines {
+			lower := strings.ToLower(line)
+			switch {
+			case strings.HasPrefix(lower, "if "):
+				depth++
+				continue
+			case lower == "endif":
+				depth--
+				continue
+			case depth > 0:
+				continue
+			}
+			assignment := modelViewerMenuAssignRE.FindStringSubmatch(line)
+			if assignment == nil {
+				continue
+			}
+			variable := modelViewerNormalizeKey(assignment[1])
+			raw := strings.TrimSpace(assignment[2])
+			if variable == step || rejected[variable] {
+				continue
+			}
+			if !modelViewerMenuLiteralRE.MatchString(raw) {
+				rejected[variable] = true
+				continue
+			}
+			number, _ := strconv.ParseFloat(raw, 64)
+			if _, known := values[variable]; !known {
+				variables = append(variables, variable)
+			}
+			values[variable] = appendUniqueModelViewerValue(values[variable], number)
+		}
+	}
+	variables = slices.DeleteFunc(variables, func(variable string) bool { return rejected[variable] })
+	return variables, values, len(variables) > 0
+}
+
 // collectModelViewerWrapBindings reads the values of a variable a command list
 // steps through and wraps back to zero, as an on-screen button does on click:
 //
@@ -453,7 +577,8 @@ func modelViewerGuardedEffects(guard ModelViewerDNF, variable, value string) []M
 //	endif
 //
 // The bound is a literal or a variable with an integer default. Variables that
-// already have a binding keep it.
+// already have a binding keep it. The variables the counter's steps select are
+// bound as well, labeled after the key that runs the list.
 func collectModelViewerWrapBindings(
 	sections []modINISection,
 	defaults map[string]any,
@@ -462,6 +587,14 @@ func collectModelViewerWrapBindings(
 	seen := make(map[string]bool, len(existing))
 	for _, binding := range existing {
 		seen[binding.Variable] = true
+	}
+	labels := make(map[string]string)
+	for _, section := range sections {
+		if strings.HasPrefix(modelViewerNormalizeKey(section.Header), "key") && len(section.Header) > 3 {
+			if run := modelViewerNormalizeKey(sectionValue(section.Lines, "run")); run != "" && labels[run] == "" {
+				labels[run] = section.Header[3:]
+			}
+		}
 	}
 	var output []modelViewerSlotBinding
 	for _, section := range sections {
@@ -492,6 +625,12 @@ func collectModelViewerWrapBindings(
 			}
 			seen[variable] = true
 			output = append(output, modelViewerSlotBinding{Variable: variable, Values: values})
+			output = append(output, modelViewerStepDispatchBindings(
+				lines[index+1:],
+				variable,
+				labels[modelViewerNormalizeKey(section.Header+section.Name)],
+				seen,
+			)...)
 		}
 	}
 	return output

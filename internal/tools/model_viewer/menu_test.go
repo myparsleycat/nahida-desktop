@@ -3,6 +3,7 @@ package modelviewer
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -80,6 +81,113 @@ $counter = $counter + 1`)
 	}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("bindings = %v, want %v", got, want)
+	}
+}
+
+// XXMI Menu Maker replaces a cycle key's assignments with a step counter and a list
+// that selects each value by step.
+func TestModelViewerSlotBindingsFindMenuMakerStepDispatch(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global $active = 0
+global persist $hair = 1
+global $ks_step_KeyHair = 0
+
+[KeyHair]
+key = vk_up
+condition = $active == 1
+run = CommandListCycleKeyHair
+
+[CommandListGuiClick]
+$gui_clicked = $gui_hovered
+if $gui_clicked == 1
+  if $active == 1
+    run = CommandListCycleKeyHair
+  endif
+endif
+
+[CommandListCycleKeyHair]
+$ks_step_KeyHair = $ks_step_KeyHair + 1
+if $ks_step_KeyHair >= 2
+  $ks_step_KeyHair = 0
+endif
+if $ks_step_KeyHair == 0
+  $hair = 0
+elif $ks_step_KeyHair == 1
+  $hair = 1
+endif
+
+[CommandListCycleKeyHairBack]
+$ks_step_KeyHair = $ks_step_KeyHair - 1
+if $ks_step_KeyHair < 0
+  $ks_step_KeyHair = 1
+endif
+if $ks_step_KeyHair == 0
+  $hair = 0
+elif $ks_step_KeyHair == 1
+  $hair = 1
+endif`)
+	defaults := collectModelViewerDefaultVariables(sections)
+	variables := buildModelViewerDirectVariables(
+		sections,
+		collectModelViewerSlotBindings(sections, defaults),
+		defaults,
+	)
+	index := slices.IndexFunc(variables, func(variable ModelViewerVariable) bool { return variable.ID == "hair" })
+	if index < 0 || variables[index].Label != "Hair" {
+		t.Fatalf("variables = %#v, want a hair variable labeled Hair", variables)
+	}
+	values := make([]any, 0, len(variables[index].Values))
+	for _, value := range variables[index].Values {
+		values = append(values, value.Value)
+	}
+	if want := []any{float64(0), float64(1)}; !reflect.DeepEqual(values, want) {
+		t.Errorf("values = %v, want %v", values, want)
+	}
+}
+
+// A hand-written counter may gate draws itself, so it keeps its own binding next to
+// the variables its steps set; a variable set to one value on every step is an effect.
+func TestModelViewerSlotBindingsKeepStepCounterAndDispatchEffects(t *testing.T) {
+	sections := parseModINI(`[Constants]
+global persist $outfit = 0
+global persist $hat = 0
+global persist $glow = 0
+
+[KeyOutfit]
+key = x
+run = CommandListNext
+
+[CommandListNext]
+$outfit = $outfit + 1
+if $outfit > 2
+  $outfit = 0
+endif
+if $outfit == 0
+  $hat = 0
+  $glow = 1
+elif $outfit == 1
+  $hat = 1
+  $glow = 1
+elif $outfit == 2
+  $hat = 1
+  $glow = 1
+endif`)
+	got := make(map[string]modelViewerSlotBinding)
+	for _, binding := range collectModelViewerSlotBindings(sections, collectModelViewerDefaultVariables(sections)) {
+		got[binding.Variable] = binding
+	}
+	if want := []any{float64(0), float64(1), float64(2)}; !reflect.DeepEqual(got["outfit"].Values, want) {
+		t.Errorf("outfit values = %v, want %v", got["outfit"].Values, want)
+	}
+	hat := got["hat"]
+	if want := []any{float64(0), float64(1)}; !reflect.DeepEqual(hat.Values, want) || hat.Label != "Outfit" {
+		t.Errorf("hat = %#v, want values %v labeled Outfit", hat, want)
+	}
+	if want := []ModelViewerMenuEffect{{Var: "glow", Value: "1"}}; !reflect.DeepEqual(hat.Effects, want) {
+		t.Errorf("hat effects = %#v, want %#v", hat.Effects, want)
+	}
+	if _, ok := got["glow"]; ok {
+		t.Errorf("glow has a binding; it takes one value and belongs in effects")
 	}
 }
 

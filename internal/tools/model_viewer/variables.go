@@ -105,6 +105,9 @@ func modelViewerDirectVariableMetadata(
 	fallbackLabel string,
 ) (string, []ModelViewerMenuEffect) {
 	label := fallbackLabel
+	if binding.Label != "" {
+		label = binding.Label
+	}
 	var effects []ModelViewerMenuEffect
 	for _, section := range sections {
 		if !strings.HasPrefix(strings.ToLower(section.Header), "key") {
