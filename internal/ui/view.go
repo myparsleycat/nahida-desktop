@@ -234,7 +234,7 @@ func (s *Shell) navButton(route Route, icon *svg.Vector, label string, active fa
 	}
 	b := fairy.Box(glyph).Key(string(route)).Size(navButtonSize, navButtonSize).Center().
 		Radius(t.RadiusMd()).Color(ink).HoverFill(hoverFill(t)).Animate(motion.Fast).Cursor(fairy.CursorPointer).
-		Tooltip(label).Label(label).Selected(selected).OnClick(func() {
+		Tooltip(label).TooltipSide(fairy.SideRight).Label(label).Selected(selected).OnClick(func() {
 		// Opening GameBanana from the mod screen shows the game the mod screen shows, as the React sidebar did.
 		if route == RouteGameBanana && s.router.Current() == RouteMod {
 			s.gameBanana.syncFromMod = true
