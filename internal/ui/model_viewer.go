@@ -133,6 +133,8 @@ type ModelViewer struct {
 	gamePreview      *tools.GamePreview
 	gamePreviewShown bool
 	previewVars      []string
+	// scenePreview is set while the scene was last evaluated from preview rather than state.
+	scenePreview bool
 	// togglePresets are the mod's toggle presets for the Toggle menu, presetDraft the open save dialog, and
 	// applyingPreset set while a preset is being applied.
 	togglePresets  []mod.TogglePreset
@@ -345,6 +347,7 @@ func (v *ModelViewer) evaluate() {
 		state = v.preview
 	}
 	v.resolved, v.toggleStates = modelviewer.EvaluateViewerState(v.scene.transport, state, v.shownForm())
+	v.scenePreview = v.preview != nil
 	v.observeCompute()
 	v.present()
 	v.syncGamePreview()

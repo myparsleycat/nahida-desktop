@@ -1618,6 +1618,8 @@
         "ineffective_blocked_by": "This value cannot be used with the current combination: {{variables}}",
         "ineffective_suggestion": "To use this value, change the following:",
         "ineffective_apply": "Apply this combination",
+        "no_preview": "Not shown in viewer",
+        "no_preview_hint": "Changes textures or effects the viewer does not render. The values are saved in presets",
         "open_file": "Open File",
         "open_folder": "Open Folder",
         "retry": "Try Again",

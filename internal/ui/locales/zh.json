@@ -1613,6 +1613,8 @@
         "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",
         "ineffective_suggestion": "要使用此值，请更改以下变量:",
         "ineffective_apply": "应用此组合",
+        "no_preview": "不在查看器中显示",
+        "no_preview_hint": "更改查看器不渲染的纹理或效果。数值会保存到预设",
         "open_file": "打开文件",
         "open_folder": "打开文件夹",
         "retry": "重试",

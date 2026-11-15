@@ -1,5 +1,32 @@
 package modelviewer
 
+import "slices"
+
+// modelViewerDrawnVariables extends the variables gating what the viewer draws with
+// those the state rules test to set them, transitively.
+func modelViewerDrawnVariables(gating map[string]bool, rules []ModelViewerStateRule) map[string]bool {
+	drawn := make(map[string]bool, len(gating))
+	for name := range gating {
+		drawn[name] = true
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, rule := range rules {
+			if !drawn[modelViewerNormalizeKey(rule.Var)] {
+				continue
+			}
+			for _, group := range rule.Conditions {
+				for _, clause := range group {
+					if name := modelViewerNormalizeKey(clause.Var); !drawn[name] {
+						drawn[name], changed = true, true
+					}
+				}
+			}
+		}
+	}
+	return drawn
+}
+
 func configureModelViewerState(
 	transport *ModelViewerTransport,
 	allSections []modINISection,
@@ -43,9 +70,21 @@ func configureModelViewerState(
 			animationVars[id] = true
 		}
 	}
+	drawn := modelViewerDrawnVariables(gating, stateRules)
 	for _, variable := range variables {
-		if includeAllVariables ||
-			!animationVars[variable.ID] && (variable.alwaysVisible || modelViewerVariableIsGating(variable, gating)) {
+		// A variable that changes nothing the viewer draws is still listed: presets and
+		// the game take its value. A step counter that draws nothing itself is not, since
+		// the variables its steps select are listed instead.
+		variable.NoPreview = !variable.alwaysVisible && !modelViewerVariableIsGating(variable, drawn) &&
+			!slices.ContainsFunc(variable.Effects, func(effect ModelViewerMenuEffect) bool {
+				return drawn[modelViewerNormalizeKey(effect.Var)]
+			})
+		// An effect or a [Present] rule may already hold the value a choice sets, so
+		// such a variable changes the model only in some states.
+		variable.indirect = !variable.NoPreview && !variable.alwaysVisible &&
+			!modelViewerVariableIsGating(variable, gating)
+		hiddenCounter := variable.NoPreview && variable.stepCounter
+		if includeAllVariables || !animationVars[variable.ID] && !hiddenCounter {
 			transport.Variables = append(transport.Variables, variable)
 		}
 		transport.DefaultState[variable.ID] = variable.DefaultValue

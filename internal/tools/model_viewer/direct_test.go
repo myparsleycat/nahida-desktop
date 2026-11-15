@@ -691,14 +691,24 @@ func TestModelViewerVariableGatingDoesNotUseEffectVariables(t *testing.T) {
 	}
 }
 
-func TestConfigureModelViewerStateIncludesEffectOnlyVariablesForGridPreview(t *testing.T) {
+// A variable reaching what the viewer draws only through an effect or a [Present]
+// rule still changes the model, so it is listed with a preview.
+func TestConfigureModelViewerStatePreviewsEffectAndRuleOnlyVariables(t *testing.T) {
 	sections := parseModINI(`[Constants]
 global persist $outfit = 0
 global persist $underwear = 0
+global persist $mood = 0
 [KeyOutfit]
 type = cycle
 $outfit = 0,1
-$underwear = 0`)
+$underwear = 0
+[KeyMood]
+type = cycle
+$mood = 0,1
+[Present]
+if $mood == 1
+$underwear = 0
+endif`)
 	newTransport := func() ModelViewerTransport {
 		return ModelViewerTransport{
 			Meshes: []ModelViewerMeshTransport{{
@@ -710,14 +720,17 @@ $underwear = 0`)
 
 	regular := newTransport()
 	configureModelViewerState(&regular, sections, nil, nil, nil, false)
-	if len(regular.Variables) != 0 {
-		t.Fatalf("regular variables = %#v, want effect-only source hidden", regular.Variables)
+	if len(regular.Variables) != 2 || regular.Variables[0].NoPreview || regular.Variables[1].NoPreview {
+		t.Fatalf("regular variables = %#v, want outfit and mood with preview", regular.Variables)
 	}
 
 	grid := newTransport()
 	configureModelViewerState(&grid, sections, nil, nil, nil, true)
-	if len(grid.Variables) != 1 || grid.Variables[0].ID != "outfit" ||
-		len(grid.Variables[0].Effects) != 1 || grid.Variables[0].Effects[0].Var != "underwear" {
+	outfit := slices.IndexFunc(
+		grid.Variables,
+		func(variable ModelViewerVariable) bool { return variable.ID == "outfit" },
+	)
+	if outfit < 0 || len(grid.Variables[outfit].Effects) != 1 || grid.Variables[outfit].Effects[0].Var != "underwear" {
 		t.Fatalf("grid variables = %#v, want outfit with underwear effect", grid.Variables)
 	}
 }

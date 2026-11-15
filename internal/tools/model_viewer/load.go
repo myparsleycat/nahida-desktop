@@ -276,7 +276,9 @@ func (t *Service) loadModViewer(
 		ctx,
 		folder,
 		prepared.scans,
-		transport.Variables,
+		slices.DeleteFunc(slices.Clone(transport.Variables), func(variable ModelViewerVariable) bool {
+			return !variable.gatesDirectly()
+		}),
 		prepared.variableNames,
 		modelViewerOverlayMenuOnlyVariables(&transport),
 	))

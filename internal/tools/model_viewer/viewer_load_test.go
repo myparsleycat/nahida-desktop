@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"image"
 	"image/color"
@@ -1112,6 +1113,85 @@ endif
 	live := computeViewerIneffectiveValues(result, map[string]any{"futa": "0", "bottom": "0", "skirt": "0"})
 	if live["skirt"]["1"] != nil {
 		t.Fatalf("live = %#v", live)
+	}
+}
+
+// A toggle may change only what the viewer does not draw, such as the texture of a
+// mesh the mod leaves to the game. It is still listed so presets and the game get
+// its value, but none of its values may be reported as ineffective. The same holds for
+// a toggle drawing only through an effect another value already holds. The Menu Maker
+// counter stepping a toggle is not listed next to it.
+func TestLoadModViewerListsTogglesWithoutVisibleEffect(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[Constants]
+global persist $hat = 0
+global persist $face = 0
+global persist $outfit = 0
+global $ks_step_KeyFace = 0
+[KeyHat]
+type = cycle
+$hat = 0,1
+[KeyOutfit]
+type = cycle
+$outfit = 0,1
+$hat = 0
+[KeyFace]
+key = vk_down
+run = CommandListCycleKeyFace
+[CommandListCycleKeyFace]
+$ks_step_KeyFace = $ks_step_KeyFace + 1
+if $ks_step_KeyFace >= 2
+  $ks_step_KeyFace = 0
+endif
+if $ks_step_KeyFace == 0
+  $face = 0
+elif $ks_step_KeyFace == 1
+  $face = 1
+endif
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $hat == 1
+drawindexed = 3, 0, 0
+endif
+[TextureOverrideGameFace]
+hash = a10efc40
+if $face == 0
+ps-t0 = ResourceFaceA
+else
+ps-t0 = ResourceFaceB
+endif
+[ResourceFaceA]
+filename = face_a.dds
+[ResourceFaceB]
+filename = face_b.dds
+`+viewerBodyResources), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeViewerGeometry(t, dir)
+	fixture := loadViewerDir(t, dir)
+	result := fixture.result
+	hat, face := findViewerVariable(result, "hat"), findViewerVariable(result, "face")
+	if hat == nil || face == nil || findViewerVariable(result, "outfit") == nil || len(result.Variables) != 3 {
+		t.Fatalf("variables = %#v, want hat, outfit and face only", result.Variables)
+	}
+	if hat.NoPreview || !face.NoPreview {
+		t.Fatalf("NoPreview hat=%v face=%v, want false and true", hat.NoPreview, face.NoPreview)
+	}
+	entries, err := fixture.service.GetModelViewerIneffectiveValues(
+		context.Background(),
+		result.MemorySessionID,
+		"",
+		map[string]any{"hat": "0", "face": "0", "outfit": "0"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.VariableID == "face" || entry.VariableID == "outfit" {
+			t.Fatalf("%s value %s reported ineffective", entry.VariableID, entry.Value)
+		}
 	}
 }
 

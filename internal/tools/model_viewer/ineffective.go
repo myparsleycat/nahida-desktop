@@ -59,7 +59,7 @@ func (e *modelViewerEvaluator) ensureBlocking() {
 			byID[variable.ID] = variable
 		}
 		for _, variable := range e.payload.Variables {
-			if variable.ControlType == "slider" || len(variable.Values) == 0 {
+			if variable.ControlType == "slider" || len(variable.Values) == 0 || !variable.gatesDirectly() {
 				continue
 			}
 			for _, blocking := range buildViewerBlockingVars(e.payload, variable.ID, all) {
@@ -137,7 +137,10 @@ func (e *modelViewerEvaluator) evaluate(
 	alternatives := make(map[string]modelViewerAlternative)
 	result := make([]ModelViewerIneffectiveValue, 0)
 	for _, variable := range e.payload.Variables {
-		if variable.ControlType == "slider" || len(variable.Values) == 0 || !viewerFormVisible(variable.Form, form) {
+		// A value that changes nothing now may still matter to presets and the game when
+		// the variable does not gate a draw itself.
+		if variable.ControlType == "slider" || len(variable.Values) == 0 || !variable.gatesDirectly() ||
+			!viewerFormVisible(variable.Form, form) {
 			continue
 		}
 		current := modelViewerEvalValue(resolved, variable)

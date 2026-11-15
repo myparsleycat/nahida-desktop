@@ -30,6 +30,8 @@ type modelViewerSlotBinding struct {
 	Effects       []ModelViewerMenuEffect
 	AlwaysVisible bool
 	Label         string
+	// StepCounter marks a counter whose steps select the values of other bound variables.
+	StepCounter bool
 }
 
 const maxModelViewerMenuValues = 4096
@@ -458,19 +460,21 @@ func modelViewerGuardedEffects(guard ModelViewerDNF, variable, value string) []M
 //	    $hair = 1
 //	endif
 //
-// A variable set to one value on every step becomes an effect of the others.
+// A variable set to one value on every step becomes an effect of the others. It also
+// reports whether such a conditional exists, even when every variable it sets is
+// already bound.
 func modelViewerStepDispatchBindings(
 	lines []string,
 	step, label string,
 	seen map[string]bool,
-) []modelViewerSlotBinding {
+) ([]modelViewerSlotBinding, bool) {
 	for index := 0; index < len(lines); index++ {
 		if !strings.HasPrefix(strings.ToLower(lines[index]), "if ") {
 			continue
 		}
 		branches, end, ok := splitModelViewerDirectConditional(lines, index)
 		if !ok {
-			return nil
+			return nil, false
 		}
 		variables, values, ok := parseModelViewerStepBranches(branches, step)
 		if !ok {
@@ -500,9 +504,9 @@ func modelViewerStepDispatchBindings(
 				Label:    label,
 			})
 		}
-		return output
+		return output, true
 	}
-	return nil
+	return nil, false
 }
 
 func parseModelViewerStepBranches(
@@ -624,13 +628,14 @@ func collectModelViewerWrapBindings(
 				values = append(values, float64(value))
 			}
 			seen[variable] = true
-			output = append(output, modelViewerSlotBinding{Variable: variable, Values: values})
-			output = append(output, modelViewerStepDispatchBindings(
+			dispatch, dispatches := modelViewerStepDispatchBindings(
 				lines[index+1:],
 				variable,
 				labels[modelViewerNormalizeKey(section.Header+section.Name)],
 				seen,
-			)...)
+			)
+			output = append(output, modelViewerSlotBinding{Variable: variable, Values: values, StepCounter: dispatches})
+			output = append(output, dispatch...)
 		}
 	}
 	return output

@@ -129,8 +129,15 @@ type ModelViewerVariable struct {
 	Slider        *ModelViewerSlider         `json:"slider,omitempty"`
 	Effects       []ModelViewerMenuEffect    `json:"effects,omitempty"`
 	Form          string                     `json:"form,omitempty"`
+	NoPreview     bool                       `json:"noPreview,omitempty"`
 	alwaysVisible bool
+	stepCounter   bool
+	indirect      bool
 }
+
+// gatesDirectly reports whether the variable is listed for gating what the viewer
+// draws or for its menu, rather than only for an effect, a rule, or no visible change.
+func (v ModelViewerVariable) gatesDirectly() bool { return !v.NoPreview && !v.indirect }
 
 type ModelViewerStateRule struct {
 	Var        string         `json:"var"`

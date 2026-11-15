@@ -1166,7 +1166,7 @@ func modelViewerOverlayMenuOnlyVariables(transport *ModelViewerTransport) map[st
 	menuOnly := make(map[string]bool)
 	for _, variable := range transport.Variables {
 		id := modelViewerNormalizeKey(variable.ID)
-		if !used[id] && len(variable.Effects) == 0 {
+		if variable.gatesDirectly() && !used[id] && len(variable.Effects) == 0 {
 			menuOnly[id] = true
 		}
 	}

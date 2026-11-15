@@ -1613,6 +1613,8 @@
         "ineffective_blocked_by": "다음 설정이 함께 적용되어 이 값을 사용할 수 없습니다: {{variables}}",
         "ineffective_suggestion": "이 값을 사용하려면 아래 변수를 변경하세요:",
         "ineffective_apply": "이 조합 적용",
+        "no_preview": "뷰어에 표시되지 않음",
+        "no_preview_hint": "뷰어가 렌더링하지 않는 텍스처나 효과를 변경합니다. 값은 프리셋에 저장됩니다",
         "open_file": "파일 열기",
         "open_folder": "폴더 열기",
         "retry": "다시 시도",

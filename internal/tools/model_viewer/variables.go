@@ -28,6 +28,7 @@ func buildModelViewerDirectVariables(
 			Slot:          binding.Slot,
 			ControlType:   "buttons",
 			alwaysVisible: binding.AlwaysVisible,
+			stepCounter:   binding.StepCounter,
 		}
 		variable.Label, variable.Effects = modelViewerDirectVariableMetadata(sections, binding, variable.Label)
 		if variable.DefaultValue == nil && len(binding.Values) > 0 {

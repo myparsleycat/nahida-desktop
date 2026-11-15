@@ -124,12 +124,21 @@ func (v *ModelViewer) previewValue(variable modelviewer.ModelViewerVariable, val
 	v.preview = maps.Clone(v.state)
 	v.preview[variable.ID] = value
 	v.previewVars = []string{variable.ID}
+	// A value the viewer does not draw leaves a scene showing the selection as it is.
+	if variable.NoPreview && !v.scenePreview {
+		v.syncGamePreview()
+		return
+	}
 	v.evaluate()
 }
 
 func (v *ModelViewer) clearPreview() {
 	if v.preview != nil {
 		v.preview, v.previewVars = nil, nil
+		if !v.scenePreview {
+			v.syncGamePreview()
+			return
+		}
 		v.evaluate()
 	}
 }
@@ -257,11 +266,7 @@ func groupVariablesByForm(
 		}
 		groups[at].variables = append(groups[at].variables, variable)
 	}
-	used := slices.DeleteFunc(groups, func(g viewerVariableGroup) bool { return len(g.variables) == 0 })
-	if len(used) == 1 {
-		used[0].label = ""
-	}
-	return used
+	return slices.DeleteFunc(groups, func(g viewerVariableGroup) bool { return len(g.variables) == 0 })
 }
 
 // showsToggleControls reports whether the side column has anything to show: toggles, or the overlay menus
@@ -278,14 +283,21 @@ func (v *ModelViewer) toggleControls(
 	variables []modelviewer.ModelViewerVariable,
 	width float32,
 ) *fairy.El {
-	var lists, sliders []modelviewer.ModelViewerVariable
+	var lists, sliders, unpreviewed, tiles []modelviewer.ModelViewerVariable
 	for _, variable := range variables {
-		if variable.ControlType == "slider" {
+		switch {
+		case variable.ControlType == "slider":
 			sliders = append(sliders, variable)
-		} else {
+			continue
+		case variable.NoPreview:
+			unpreviewed = append(unpreviewed, variable)
+		default:
 			lists = append(lists, variable)
 		}
+		tiles = append(tiles, variable)
 	}
+	// Form headings show when the lists of both sections together span more than one form.
+	labeled := len(groupVariablesByForm(tiles, v.scene.transport.Forms)) > 1
 	const pad = 16
 	inner := width - 2*pad
 	panel := fairy.Col().Gap(12).Pad(pad)
@@ -303,12 +315,38 @@ func (v *ModelViewer) toggleControls(
 			)
 		}
 	}
-	if v.scene.transport.UIAssets.BackgroundPath != "" && len(lists) > 0 {
-		panel.Child(fairy.Box(v.variantTiles(t, lists, inner)).PadEdges(0, 0, 4, 0))
+	if v.scene.transport.UIAssets.BackgroundPath != "" && len(tiles) > 0 {
+		panel.Child(fairy.Box(v.variantTiles(t, tiles, inner)).PadEdges(0, 0, 4, 0))
 	}
+	v.listGroups(t, panel, lists, labeled)
+	for _, variable := range sliders {
+		panel.Child(v.sliderControl(t, variable))
+	}
+	if len(unpreviewed) > 0 {
+		panel.Child(fairy.Row(
+			fairy.Icon(lucide.Info).Size(14, 14).Color(t.MutedForeground).Shrink(0),
+			fairy.Text(T("page.tools.model_viewer.no_preview")).
+				FontSize(12).
+				Medium().
+				Color(t.MutedForeground).
+				Ellipsis(),
+		).Gap(6).Align(fairy.Center).PadEdges(0, 0, 4, 0).
+			Role(fairy.RoleText).Heading(3).Tooltip(T("page.tools.model_viewer.no_preview_hint")))
+		v.listGroups(t, panel, unpreviewed, labeled)
+	}
+	return panel
+}
+
+// listGroups adds the list toggles to panel in two columns, under their form when labeled.
+func (v *ModelViewer) listGroups(
+	t kit.Theme,
+	panel *fairy.El,
+	lists []modelviewer.ModelViewerVariable,
+	labeled bool,
+) {
 	for _, group := range groupVariablesByForm(lists, v.scene.transport.Forms) {
 		section := fairy.Col().Gap(8)
-		if group.label != "" {
+		if labeled && group.label != "" {
 			section.Child(fairy.Text(group.label).FontSize(12).Medium().Color(t.MutedForeground).Ellipsis())
 		}
 		grid := fairy.Col().Gap(12)
@@ -323,10 +361,6 @@ func (v *ModelViewer) toggleControls(
 		}
 		panel.Child(section.Child(grid))
 	}
-	for _, variable := range sliders {
-		panel.Child(v.sliderControl(t, variable))
-	}
-	return panel
 }
 
 func (v *ModelViewer) listControl(t kit.Theme, variable modelviewer.ModelViewerVariable) *fairy.El {
@@ -410,10 +444,13 @@ func (v *ModelViewer) listControl(t kit.Theme, variable modelviewer.ModelViewerV
 			v.clearPreview()
 		}
 	})).WFull()
-	return fairy.Col(
-		fairy.Text(variable.Label).FontSize(14).LineHeight(20).Medium().Ellipsis(),
-		list,
-	).Gap(8).Grow(1).Basis(0).MinW(0).PadEdges(0, 0, 0, 12).BorderEdges(0, 0, 0, 4, t.Primary.Alpha(0.4))
+	label := fairy.Text(variable.Label).FontSize(14).LineHeight(20).Medium().Ellipsis()
+	accent := t.Primary.Alpha(0.4)
+	if variable.NoPreview {
+		label.Color(t.MutedForeground)
+		accent = t.Border
+	}
+	return fairy.Col(label, list).Gap(8).Grow(1).Basis(0).MinW(0).PadEdges(0, 0, 0, 12).BorderEdges(0, 0, 0, 4, accent)
 }
 
 func (v *ModelViewer) sliderControl(t kit.Theme, variable modelviewer.ModelViewerVariable) *fairy.El {

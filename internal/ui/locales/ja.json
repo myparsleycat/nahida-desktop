@@ -1613,6 +1613,8 @@
         "ineffective_blocked_by": "現在の組み合わせではこの値は使用できません: {{variables}}",
         "ineffective_suggestion": "この値を使用するには以下の変数を変更してください:",
         "ineffective_apply": "この組み合わせを適用",
+        "no_preview": "ビューアーに表示されない",
+        "no_preview_hint": "ビューアーが描画しないテクスチャやエフェクトを変更します。値はプリセットに保存されます",
         "open_file": "ファイルを開く",
         "open_folder": "フォルダーを開く",
         "retry": "再試行",
