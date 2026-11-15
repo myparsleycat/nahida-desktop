@@ -50,9 +50,14 @@ type xxmiManage struct {
 	unsafePrompt []string
 	// pickingSharedDLL shows the custom DLL field before a DLL is picked, which stores nothing yet.
 	pickingSharedDLL bool
-	importMode       xxmi.ImportVersionMode
-	userData         xxmi.ImportUserDataMode
-	importStep       int
+	// sharedProvider and sharedVersion are the shared libraries choices being applied, shown until the overview
+	// stores them.
+	sharedProvider string
+	sharedVersion  string
+	sharedProgress string
+	importMode     xxmi.ImportVersionMode
+	userData       xxmi.ImportUserDataMode
+	importStep     int
 }
 
 type xxmiExternal struct {
@@ -232,6 +237,17 @@ func (s *Shell) builtinOptions() []*fairy.El {
 				func(on bool) { s.setSetting(setting.KeyXXMIIncludePrereleases, on) }, false))
 	}
 
+	applyingProvider, applyingVersion := x.busy["set-shared-provider"], x.busy["set-shared-version"]
+	applying := applyingProvider || applyingVersion
+	// A failure leaves the overview as it was, so the stored choices show again; a success reads it anew.
+	if !applying && (x.overview.current || x.overview.err != nil) {
+		m.sharedProvider, m.sharedVersion = "", ""
+	}
+	status := m.sharedProgress
+	if status == "" {
+		status = T(prefix + "sharedLibsApplying")
+	}
+
 	sharedDLL := ov.SharedCustomDLL
 	sharedSource := sharedDLL != "" || m.pickingSharedDLL
 	providers := []kit.Item{}
@@ -243,19 +259,27 @@ func (s *Shell) builtinOptions() []*fairy.El {
 	if sharedSource {
 		source = customDLLSource
 	}
+	if m.sharedProvider != "" {
+		source = m.sharedProvider
+	}
+	providerDescription := T(prefix + "sharedLibsDescription")
+	if applyingProvider {
+		providerDescription = status
+	}
 	rows = append(rows, selectRow("xxmi.shared-provider", T(prefix+"sharedLibsProvider"),
-		T(prefix+"sharedLibsDescription"), source, providers, func(value string) {
+		providerDescription, source, providers, func(value string) {
 			m.pickingSharedDLL = value == customDLLSource
 			// Selecting a provider drops the shared custom DLL with it, so the current provider is selected again
 			// when only the DLL has to go.
 			if value == customDLLSource || value == ov.SharedLibsProvider && sharedDLL == "" {
 				return
 			}
+			m.sharedProvider, m.sharedProgress = value, ""
 			s.xxmiAction("set-shared-provider", func(ctx context.Context) error {
 				return s.deps.XXMI.SetSharedLibsProvider(ctx, value)
 			}, x.refresh, nil)
 			x.overview.invalidate()
-		}))
+		}, kit.Disabled(applying)))
 
 	if sharedSource {
 		name := ""
@@ -308,15 +332,23 @@ func (s *Shell) builtinOptions() []*fairy.El {
 		if value == "" {
 			value = followLatest
 		}
-		rows = append(rows, selectRow("xxmi.shared-version", T(prefix+"sharedLibsVersion"), "", value, versions,
-			func(value string) {
+		if m.sharedVersion != "" {
+			value = m.sharedVersion
+		}
+		description := ""
+		if applyingVersion {
+			description = status
+		}
+		rows = append(rows, selectRow("xxmi.shared-version", T(prefix+"sharedLibsVersion"), description, value,
+			versions, func(value string) {
+				m.sharedVersion, m.sharedProgress = value, ""
 				if value == followLatest {
 					value = ""
 				}
 				s.xxmiAction("set-shared-version", func(ctx context.Context) error {
 					return s.deps.XXMI.SetSharedLibsVersion(ctx, value)
 				}, x.refresh, nil)
-			}))
+			}, kit.Disabled(applying)))
 	}
 	return rows
 }

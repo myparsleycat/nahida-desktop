@@ -2657,6 +2657,7 @@
           "updateDialogTitle": "{{importer}} 업데이트",
           "updateDialogDescription": "다음 패키지를 최신 버전으로 업데이트할까요?",
           "sharedLibsVersion": "공용 XXMI 라이브러리 버전",
+          "sharedLibsApplying": "적용 중",
           "sharedLibsProvider": "공용 XXMI 라이브러리 제공자",
           "sharedLibsDescription": "공용 설정을 따르는 임포터에 적용됩니다.",
           "libsFollowShared": "공용 버전 따르기",

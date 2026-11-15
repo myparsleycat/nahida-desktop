@@ -245,8 +245,15 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 			return
 		}
 		key := "xxmi-package:" + pkg
+		// Applying a shared libraries choice downloads "xxmi-libs" and the provider overlay packages, which share
+		// its prefix ("xxmi-libs-<provider>").
+		applyingShared := (x.busy["set-shared-version"] || x.busy["set-shared-provider"]) &&
+			strings.HasPrefix(pkg, "xxmi-libs")
 		if stage == "downloaded" || stage == "failed" {
 			s.endProgress(key)
+			if applyingShared {
+				x.manage.sharedProgress = ""
+			}
 			return
 		}
 		downloaded, ok := number(payload["downloaded"])
@@ -258,8 +265,12 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 		if version, _ := payload["version"].(string); version != "" {
 			label += " " + version
 		}
-		s.showProgress(key, label+" · "+T("page.setting.xxmi.builtin.downloadingPackage")+" "+
-			downloadProgress(downloaded, total))
+		title := label + " · " + T("page.setting.xxmi.builtin.downloadingPackage") + " " +
+			downloadProgress(downloaded, total)
+		s.showProgress(key, title)
+		if applyingShared {
+			x.manage.sharedProgress = title
+		}
 	})
 	on("xxmi:import-progress", func(data []any) {
 		payload, _ := first(data).(map[string]any)
