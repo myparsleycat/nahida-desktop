@@ -22,7 +22,7 @@ var keyLabels = map[string]string{
 	"VK_RETURN": "Enter", "ENTER": "Enter", "VK_BACK": "Backspace", "VK_TAB": "Tab", "VK_SPACE": "Space",
 	"VK_ESCAPE": "Esc", "VK_DELETE": "Del", "VK_INSERT": "Ins", "VK_SNAPSHOT": "PrtSc", "VK_PAUSE": "Pause",
 	"VK_OEM_3": "`", "VK_OEM_MINUS": "-", "VK_OEM_PLUS": "+", "VK_OEM_COMMA": ",", "VK_OEM_PERIOD": ".",
-	"VK_OEM_1": ";", "VK_OEM_2": "/", "VK_OEM_4": "[", "VK_OEM_5": "\\", "VK_OEM_6": "]", "VK_OEM_7": "'",
+	"_": "-", "VK_OEM_1": ";", "VK_OEM_2": "/", "VK_OEM_4": "[", "VK_OEM_5": "\\", "VK_OEM_6": "]", "VK_OEM_7": "'",
 	"XB_LEFT_TRIGGER": "LT", "XB_RIGHT_TRIGGER": "RT", "XB_LEFT_SHOULDER": "LB", "XB_RIGHT_SHOULDER": "RB",
 	"XB_LEFT_THUMB": "LS", "XB_RIGHT_THUMB": "RS", "XB_DPAD_UP": "D-Pad ↑", "XB_DPAD_DOWN": "D-Pad ↓",
 	"XB_DPAD_LEFT": "D-Pad ←", "XB_DPAD_RIGHT": "D-Pad →", "XB_A": "A", "XB_B": "B", "XB_X": "X", "XB_Y": "Y",

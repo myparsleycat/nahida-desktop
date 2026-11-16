@@ -1142,7 +1142,11 @@
         "key_dialog_description": "按下要设置的按键组合",
         "add_key": "添加按键",
         "add_back_key": "添加上一个按键",
-        "open_file": "打开 INI 文件"
+        "open_file": "打开 INI 文件",
+        "nte_key_dialog_description": "请按下一个不带修饰键的按键",
+        "nte_key_unsupported": "无法使用此按键。请指定一个不带修饰键的按键。",
+        "nte_key_in_use": "此模组已在使用此按键。",
+        "nte_key_save_failed": "无法更改按键"
       },
       "view": {
         "list": "列表视图",

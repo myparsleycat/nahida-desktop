@@ -11,6 +11,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.10.0
 	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/gen2brain/avif v0.6.0
+	github.com/go-faster/city v1.0.1
 	github.com/go-ozzo/ozzo-validation/v4 v4.4.1
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.20.3
@@ -22,6 +23,7 @@ require (
 	github.com/rodrigocfd/windigo v0.2.7
 	github.com/samber/lo v1.53.0
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/arch v0.30.0
 	golang.org/x/image v0.47.0
 	golang.org/x/mod v0.42.0
@@ -49,6 +51,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect

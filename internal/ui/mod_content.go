@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -462,7 +463,7 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 	shown := s.modCardPreview(info)
 	preview := s.modPreview(info, hovered, shown)
 	body := fairy.Row(preview).Grow(1).MinH(0).Gap(8)
-	if !nte && len(info.Inis) > 0 {
+	if (!nte && len(info.Inis) > 0) || (nte && len(info.NteKeys) > 0) {
 		key := modListingKey(m.group.Path, info.Path)
 		shut := m.iniShut[key]
 		label := T("page.mod.card.collapse_ini_list")
@@ -478,7 +479,11 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 		if shut {
 			slot.W(0)
 		} else {
-			slot.Child(s.modIniList(info).Key("list").Enter(fairy.Fade().With(modIniMotion)).
+			list := s.modIniList
+			if nte {
+				list = s.modNteKeyList
+			}
+			slot.Child(list(info).Key("list").Enter(fairy.Fade().With(modIniMotion)).
 				Exit(fairy.Fade().With(modIniMotion)))
 		}
 		body.Child(fairy.Box(toggle).W(1).Shrink(0).HFull().Fill(t.Border).AnimateLayout(modIniMotion), slot)
@@ -911,6 +916,17 @@ func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {
 // modKeyTrigger shows one key binding of a toggle section, or placeholder when it is unset, and opens the key
 // dialog when clicked.
 func (s *Shell) modKeyTrigger(info mod.ModInfo, iniPath, section, variable, value, placeholder string) *fairy.El {
+	return keyTrigger(
+		variable,
+		value,
+		placeholder,
+		func() { s.openModKeyEdit(info, iniPath, section, variable, value) },
+	)
+}
+
+// keyTrigger shows a key binding as key chips after prefix, or placeholder when it is unset, and calls open when
+// clicked. An empty prefix shows the chips alone.
+func keyTrigger(prefix, value, placeholder string, open func()) *fairy.El {
 	t := kit.T()
 	border, fill, hover := fairy.RGBA(0, 0, 0, 0.05), fairy.RGBA(255, 255, 255, 0.3), fairy.RGBA(255, 255, 255, 0.6)
 	chipFill, chipText := fairy.RGBA(0, 0, 0, 0.06), t.Foreground.Alpha(0.75)
@@ -920,7 +936,7 @@ func (s *Shell) modKeyTrigger(info mod.ModInfo, iniPath, section, variable, valu
 	}
 	row := fairy.Row().WFull().MinH(30).Pad(4).Gap(4).Align(fairy.Center).Radius(8).Border(1, border).Fill(fill).
 		HoverFill(hover).Animate(motion.Fast).Cursor(fairy.CursorPointer).Focusable().Role(fairy.RoleButton).
-		OnClick(func() { s.openModKeyEdit(info, iniPath, section, variable, value) })
+		OnClick(open)
 	labels := keyLabelsOf(value)
 	if len(labels) == 0 {
 		return row.Label(placeholder).Child(
@@ -934,8 +950,35 @@ func (s *Shell) modKeyTrigger(info mod.ModInfo, iniPath, section, variable, valu
 	for _, label := range labels {
 		keys.Child(kit.Kbd(label).Fill(chipFill).Color(chipText))
 	}
-	return row.Label(variable+": "+strings.Join(labels, " ")).
-		Child(fairy.Text(variable+":").FontSize(14).Shrink(0), keys)
+	if prefix == "" {
+		return row.Label(strings.Join(labels, " ")).Child(keys)
+	}
+	return row.Label(prefix+": "+strings.Join(labels, " ")).
+		Child(fairy.Text(prefix+":").FontSize(14).Shrink(0), keys)
+}
+
+// modNteKeyList lists the input keys of an NTE mod by the Blueprint package that reads them.
+func (s *Shell) modNteKeyList(info mod.ModInfo) *fairy.El {
+	t := kit.T()
+	groupFill, groupShadow := fairy.RGBA(255, 255, 255, 0.35), fairy.RGBA(0, 0, 0, 0.05)
+	if t.Dark {
+		groupFill = t.Foreground.Alpha(0.05)
+	}
+	list := fairy.Col().Grow(1).MinH(0).ScrollY().Gap(10)
+	var current string
+	var box *fairy.El
+	for _, key := range info.NteKeys {
+		if group := key.Container + "/" + key.Chunk; group != current || box == nil {
+			current = group
+			box = fairy.Col(
+				fairy.Text(path.Base(key.Package)).Opacity(0.8).Ellipsis().MinW(0).Tooltip(key.Package),
+			).Gap(4).Pad(4).Radius(8).Fill(groupFill).Shadow(0, 1, 2, 0, groupShadow)
+			list.Child(box)
+		}
+		box.Child(keyTrigger("", mod.NteKeyBinding(key.Key), "", func() { s.openNteKeyEdit(info, key) }))
+	}
+	return fairy.Col(list).W(modIniWidth).Shrink(0).HFull().Gap(8).Pad(6).Radius(4).
+		Fill(t.Background.Alpha(0.1)).FontSize(13)
 }
 
 func (s *Shell) modListHead() *fairy.El {

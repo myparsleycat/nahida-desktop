@@ -1142,7 +1142,11 @@
         "key_dialog_description": "설정할 단축키 조합을 누르세요",
         "add_key": "키 추가",
         "add_back_key": "이전 키 추가",
-        "open_file": "INI 파일 열기"
+        "open_file": "INI 파일 열기",
+        "nte_key_dialog_description": "보조 키 없이 키 하나를 누르세요",
+        "nte_key_unsupported": "사용할 수 없는 키입니다. 보조 키 없이 키 하나를 지정하세요.",
+        "nte_key_in_use": "이 모드에서 이미 사용하는 키입니다.",
+        "nte_key_save_failed": "키를 변경하지 못했습니다"
       },
       "view": {
         "list": "목록 보기",

@@ -286,6 +286,8 @@ type ModInfo struct {
 	Mtime         float64     `json:"mtime"`
 	Size          float64     `json:"size"`
 	Inis          []IniResult `json:"inis"`
+	// NteKeys is filled by the full scan of NTE mods, which have no INI.
+	NteKeys []NteKey `json:"nteKeys,omitempty"`
 	// Dependencies is filled by the full scan only; the light scan reads no INI.
 	Dependencies []ModDependency `json:"dependencies,omitempty"`
 	// AppliedTools lists the appliedtool IDs of the tools whose output is in the mod.

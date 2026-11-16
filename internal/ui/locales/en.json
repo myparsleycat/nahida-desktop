@@ -1145,7 +1145,11 @@
         "key_dialog_description": "Press the key combination to set",
         "add_key": "Add key",
         "add_back_key": "Add previous key",
-        "open_file": "Open INI file"
+        "open_file": "Open INI file",
+        "nte_key_dialog_description": "Press one key without modifiers",
+        "nte_key_unsupported": "This key cannot be used. Set one key without modifiers.",
+        "nte_key_in_use": "This mod already uses this key.",
+        "nte_key_save_failed": "Failed to change the key"
       },
       "view": {
         "list": "List view",

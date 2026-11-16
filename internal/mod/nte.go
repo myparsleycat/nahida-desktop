@@ -293,6 +293,7 @@ func nteModInfo(entry nteModEntry, reports ...func(error)) ModInfo {
 		info.Preview = findPreview(entry.previewFallback, false, reports...)
 	}
 	info.PreviewVersion = previewFileVersion(info.Preview, reports...)
+	info.NteKeys = scanNteKeys(entry.path, reports...)
 	return info
 }
 

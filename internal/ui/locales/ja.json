@@ -1142,7 +1142,11 @@
         "key_dialog_description": "設定するキーの組み合わせを押してください",
         "add_key": "キーを追加",
         "add_back_key": "戻るキーを追加",
-        "open_file": "INI ファイルを開く"
+        "open_file": "INI ファイルを開く",
+        "nte_key_dialog_description": "修飾キーなしでキーを1つ押してください",
+        "nte_key_unsupported": "このキーは使用できません。修飾キーなしでキーを1つ指定してください。",
+        "nte_key_in_use": "この MOD ですでに使用しているキーです。",
+        "nte_key_save_failed": "キーを変更できませんでした"
       },
       "view": {
         "list": "リスト表示",
