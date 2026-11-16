@@ -575,11 +575,12 @@ func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int) *fairy.El {
 func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth float32) *fairy.El {
 	variables := v.shownVariables()
 	stacked := windowWidth < toolsWideViewport
-	measure := func(w, _ float32) {
-		if v.splitWidth != w {
-			v.splitWidth = w
-			fairy.Go(func() {})
+	measure := func(w, _ float32) bool {
+		if v.splitWidth == w {
+			return false
 		}
+		v.splitWidth = w
+		return true
 	}
 	if stacked {
 		width := v.splitWidth

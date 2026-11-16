@@ -43,11 +43,10 @@ func (s *Shell) menuMakerToolPage(cx *fairy.Cx) *fairy.El {
 	width, _ := cx.Size()
 	narrow := width < menuMakerNarrowWidth
 
-	page := fairy.Col(s.menuMakerHeader()).Grow(1).MinH(0).WFull().OnLayout(func(w, _ float32) {
-		if (w < menuMakerNarrowWidth) != (m.width < menuMakerNarrowWidth) || m.width == 0 {
-			fairy.Go(func() {})
-		}
+	page := fairy.Col(s.menuMakerHeader()).Grow(1).MinH(0).WFull().OnLayout(func(w, _ float32) bool {
+		rebuild := (w < menuMakerNarrowWidth) != (m.width < menuMakerNarrowWidth) || m.width == 0
 		m.width = w
+		return rebuild
 	})
 	if narrow {
 		page.Child(fairy.Row(menuMakerPanelButtons(m.narrowPanel, []kit.Item{
@@ -658,7 +657,10 @@ func (s *Shell) menuMakerSlotCard(index, columns int, slot menuMakerSlot) *fairy
 	).Key("menu-maker.slot."+id).MinH(menuMakerSlotMinH).Pad(8).Radius(4).
 		Fill(menuMakerUIColor(palette.SlotBackground, palette.SlotBackgroundAlpha)).
 		Border(1, menuMakerUIColor(palette.SlotBorder, 255)).
-		OnLayout(func(w, h float32) { *size = [2]float32{w, h} }).
+		OnLayout(func(w, h float32) bool {
+			*size = [2]float32{w, h}
+			return false
+		}).
 		OnDrag(func(e fairy.DragEvent) { s.menuMakerDragSlot(index, columns, *size, e) })
 	if slot.Skip {
 		row.Opacity(0.4)

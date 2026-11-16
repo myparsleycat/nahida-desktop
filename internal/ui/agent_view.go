@@ -268,11 +268,12 @@ func (s *Shell) agentChat(windowWidth, windowHeight float32) *fairy.El {
 	empty := s.agentEmpty()
 	if empty {
 		height := fairy.Local[float32]("agent.empty-pane-height")
-		pane.OnLayout(func(_, h float32) {
-			if *height != h {
-				*height = h
-				s.win.Post(func() {})
+		pane.OnLayout(func(_, h float32) bool {
+			if *height == h {
+				return false
 			}
+			*height = h
+			return true
 		})
 		paneHeight := *height
 		if paneHeight == 0 {
@@ -358,11 +359,12 @@ func (s *Shell) agentChat(windowWidth, windowHeight float32) *fairy.El {
 		s.agentComposer(false).MaxW(chatWidth+32),
 	).Key("agent.composer-overlay").
 		Absolute().Left(0).Right(0).Bottom(0).Align(fairy.Center).PadEdges(36, 16, 12, 16).PassThrough().
-		OnLayout(func(_, h float32) {
-			if *composerHeight != h {
-				*composerHeight = h
-				s.win.Post(func() {})
+		OnLayout(func(_, h float32) bool {
+			if *composerHeight == h {
+				return false
 			}
+			*composerHeight = h
+			return true
 		})
 	return pane.Child(composer)
 }

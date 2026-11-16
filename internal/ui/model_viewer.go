@@ -813,7 +813,11 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			v.runCamera(now)
 			return true
 		}).
-		OnLayout(func(w, h float32) { v.width, v.height = w, h })
+		OnLayout(func(w, h float32) bool {
+			// The floating overlay menu is placed by the viewer's size.
+			v.width, v.height = w, h
+			return true
+		})
 	if v.tool != nil && v.tool.pick != nil {
 		surface.Cursor(fairy.CursorCrosshair).
 			OnPointerDown(func(e fairy.PointerEvent) {

@@ -274,7 +274,10 @@ func (v *sculptViewport) surface(background [4]float32, log *infra.Log, fields m
 			_ = infra.ReportError(log, err, "BodyShape.draw", infra.Diagnostic{Operation: "draw", Fields: fields})
 		}
 		return false
-	}).Retain(v.version(opts)).OnLayout(func(w, h float32) { v.width, v.height = w, h })
+	}).Retain(v.version(opts)).OnLayout(func(w, h float32) bool {
+		v.width, v.height = w, h
+		return false
+	})
 }
 
 // upload makes the mesh's GPU copy on the frame's device when it has none there yet.

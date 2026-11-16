@@ -249,11 +249,12 @@ func (s *Shell) measureDriveColumns(v *driveView, items []driveItem) *fairy.El {
 					seen[label] = true
 				}
 			}
-			return texts.OnLayout(func(width, _ float32) {
-				if *measured != width {
-					*measured = width
-					s.win.Post(func() {})
+			return texts.OnLayout(func(width, _ float32) bool {
+				if *measured == width {
+					return false
 				}
+				*measured = width
+				return true
 			})
 		}
 		return fairy.Row(column(driveSize, 16, driveSizeMinWidth, &v.columns.size),
