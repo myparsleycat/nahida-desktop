@@ -893,13 +893,11 @@ func (s *Shell) folderDraftDialog(cx *fairy.Cx) {
 	if d == nil {
 		return
 	}
-	name := strings.TrimSpace(d.name)
-	invalid := ""
-	if d.name != "" {
-		invalid = folderNameError(name)
-	}
+	// Reads d.name when called: the Enter or click that commits an IME composition submits before this view is
+	// built again, so a name captured during the build lacks the last composed syllable.
 	submit := func(string) {
-		if d.busy || name == "" || folderNameError(name) != "" {
+		name := strings.TrimSpace(d.name)
+		if d.busy || folderNameError(name) != "" {
 			return
 		}
 		d.busy = true
@@ -921,6 +919,11 @@ func (s *Shell) folderDraftDialog(cx *fairy.Cx) {
 				s.selectGroup(&mod.FolderGroup{Name: name, Path: path, IsEnabled: true})
 			})
 		})
+	}
+	name := strings.TrimSpace(d.name)
+	invalid := ""
+	if d.name != "" {
+		invalid = folderNameError(name)
 	}
 	field := kit.TextField(d.name, func(v string) { d.name = v },
 		kit.Placeholder(T("page.mod.dialog.create-folder.name-placeholder")), kit.Invalid(invalid != ""),

@@ -457,6 +457,8 @@ func (s *Shell) numberRow(
 		// A partial entry such as "-" stays as typed instead of committing as 0.
 		p.numbers[id] = next
 		if n, err := strconv.Atoi(strings.TrimSpace(next)); err == nil {
+			// A blur or arrow step can run before the next build, so it starts from this value.
+			value = n
 			onChange(n)
 		}
 	}, kit.Label(title)).Key("xxmi.number:" + id).W(112).Grow(0).OnBlur(func() {
