@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/semver"
+
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
@@ -57,6 +59,9 @@ type libsProviderSpec struct {
 	// versionMark separates the signed libraries version a provider release is built on from the provider's
 	// own revision, as in "1.2.2-nhd.1".
 	versionMark string
+	// unmarkedSince is the first provider release tagged without the version mark. Those releases name no signed
+	// release and deploy over the latest one. A pin below it names a signed release, as pins of the provider may.
+	unmarkedSince string
 	// smoothMotion is whether the provider's d3d11.dll renders alongside NVIDIA Smooth Motion. Without it,
 	// Smooth Motion has to be off for mods to load.
 	smoothMotion bool
@@ -149,6 +154,7 @@ var libsProviders = []libsProviderSpec{
 		repo:                    github.Repo{Owner: "myparsleycat", Name: "XXMI-Libs-Package-Forked"},
 		overlayPackage:          "xxmi-libs-myparsleycat",
 		versionMark:             "-nhd.",
+		unmarkedSince:           "2.0.0",
 		smoothMotion:            true,
 		dx12:                    true,
 		diagnostics:             true,
@@ -208,7 +214,8 @@ func lookupOverlayPackage(pkg string) (libsProviderSpec, bool) {
 }
 
 // signedLibsVersion returns the signed SpectrumQT libraries a libraries version deploys: the release a
-// provider version is built on, or the version itself.
+// provider version with a version mark is built on, or the version itself. A provider release without the mark
+// names no signed release, which signedLibsOf resolves.
 func signedLibsVersion(version string) string {
 	version = normalizeVersion(version)
 	for _, spec := range libsProviders {
@@ -220,6 +227,100 @@ func signedLibsVersion(version string) string {
 		}
 	}
 	return version
+}
+
+// unmarkedProviderRelease reports whether version is a release of spec without the version mark, which names no
+// signed release. A pin of the provider may also name a signed release, so only a cached or listed release from
+// unmarkedSince on counts. A release list that cannot be read is an error, since either answer may be wrong.
+func (x *XXMI) unmarkedProviderRelease(ctx context.Context, spec libsProviderSpec, version string) (bool, error) {
+	version = normalizeVersion(version)
+	if spec.unmarkedSince == "" || signedLibsVersion(version) != version || !semver.IsValid("v"+version) ||
+		semver.Compare("v"+version, "v"+spec.unmarkedSince) < 0 {
+		return false, nil
+	}
+	if root, err := x.cacheRoot(); err == nil {
+		if info, err := os.Stat(
+			filepath.Join(root, "packages", spec.overlayPackage, version),
+		); err == nil &&
+			info.IsDir() {
+			return true, nil
+		}
+	}
+	releases, err := x.ListReleases(ctx, spec.overlayPackage)
+	if err != nil {
+		return false, fmt.Errorf("resolve %s %s: %w", spec.overlayPackage, version, err)
+	}
+	return slices.ContainsFunc(releases, func(release ReleaseInfo) bool {
+		return release.Version == version
+	}), nil
+}
+
+// signedPin returns the signed release a version of spec names, or "" for a provider release without the
+// version mark, which names none.
+func (x *XXMI) signedPin(ctx context.Context, spec libsProviderSpec, version string) (string, error) {
+	unmarked, err := x.unmarkedProviderRelease(ctx, spec, version)
+	if err != nil || unmarked {
+		return "", err
+	}
+	return signedLibsVersion(version), nil
+}
+
+// signedLibsOf returns the signed libraries a version of spec deploys over. A provider release without the
+// version mark deploys over the latest signed release, held back to the one deployed in folder until that is
+// cached.
+func (x *XXMI) signedLibsOf(ctx context.Context, spec libsProviderSpec, version, folder string) (string, error) {
+	return x.signedLibsFor(ctx, spec, version, folder, x.verifiedCachedLibsVersion)
+}
+
+// signedLibsToFetch is signedLibsOf for a download: the latest signed release is taken whether or not it is cached,
+// unless it is skipped or older than the one deployed in folder.
+func (x *XXMI) signedLibsToFetch(ctx context.Context, spec libsProviderSpec, version, folder string) (string, error) {
+	return x.signedLibsFor(ctx, spec, version, folder, func(string) bool { return true })
+}
+
+func (x *XXMI) signedLibsFor(
+	ctx context.Context,
+	spec libsProviderSpec,
+	version, folder string,
+	cacheVerified func(string) bool,
+) (string, error) {
+	unmarked, err := x.unmarkedProviderRelease(ctx, spec, version)
+	if err != nil {
+		return "", err
+	}
+	if !unmarked {
+		return signedLibsVersion(version), nil
+	}
+	return x.latestSignedLibsVersion(ctx, folder, cacheVerified)
+}
+
+// pinProvider returns the provider whose releases an importer's libraries pin names: the shared provider for the
+// shared version, otherwise the importer's own provider. A user-provided DLL does not change it.
+func (x *XXMI) pinProvider(ctx context.Context, cfg ImporterConfig) (libsProviderSpec, error) {
+	if cfg.XXMIVersion.Follow == followShared {
+		return x.sharedLibsProvider(ctx)
+	}
+	return x.libsProvider(ctx, cfg)
+}
+
+// EnsurePinnedLibs caches the signed libraries the importer's own pinned libraries version deploys over.
+func (x *XXMI) EnsurePinnedLibs(ctx context.Context, cfg ImporterConfig) error {
+	version, err := x.pinnedSignedLibs(ctx, cfg)
+	if err != nil || version == "" {
+		return err
+	}
+	return x.EnsureLibsVersion(ctx, version)
+}
+
+func (x *XXMI) pinnedSignedLibs(ctx context.Context, cfg ImporterConfig) (string, error) {
+	if normalizeVersion(cfg.XXMIVersion.Pinned) == "" {
+		return "", nil
+	}
+	spec, err := x.pinProvider(ctx, cfg)
+	if err != nil {
+		return "", err
+	}
+	return x.signedLibsToFetch(ctx, spec, cfg.XXMIVersion.Pinned, cfg.ImporterFolder)
 }
 
 // GetLibsProviderReleases lists the libraries versions an importer of the provider can be held to.
@@ -255,9 +356,13 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (retu
 	if stored != nil {
 		pinned = normalizeVersion(*stored)
 	}
+	from, err := x.sharedLibsProvider(ctx)
+	if err != nil {
+		return err
+	}
 	spec, known := lookupLibsProvider(provider)
 	if known && pinned != "" {
-		if version, err = x.providerPin(ctx, spec, pinned); err != nil {
+		if version, err = x.providerPin(ctx, from, spec, pinned); err != nil {
 			return err
 		}
 	}
@@ -309,15 +414,22 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (retu
 			continue
 		}
 
-		// A user-provided DLL deploys over the signed libraries, which a pin of either provider names.
+		// A user-provided DLL deploys over the signed libraries, which a pin of either provider names unless it is a
+		// provider release without the version mark.
 		custom, err := x.launchesCustomDLL(ctx, cfg)
 		if err != nil {
 			return err
 		}
 		if custom {
-			continue
+			signed, err := x.signedPin(ctx, from, own)
+			if err != nil {
+				return err
+			}
+			if signed != "" {
+				continue
+			}
 		}
-		moved, err := x.providerPin(ctx, spec, own)
+		moved, err := x.providerPin(ctx, from, spec, own)
 		if err != nil {
 			return err
 		}
@@ -578,29 +690,43 @@ func customDLLFeatures(declared string) DLLFeatures {
 }
 
 // providerVersionAtLeast reports whether a provider release is minimum or newer: the signed libraries version
-// it is built on compared first, then the provider's own revision. An unparseable version is older than any.
+// it is built on compared first, then the provider's own revision. Releases without the version mark replaced
+// the marked ones from unmarkedSince on, so each comes after every marked release and they compare by their own
+// version. An unparseable version is older than any.
 func providerVersionAtLeast(spec libsProviderSpec, version, minimum string) bool {
-	parse := func(value string) ([]int, int, bool) {
-		signed, revision, ok := strings.Cut(normalizeVersion(value), spec.versionMark)
-		if !ok || spec.versionMark == "" {
-			return nil, 0, false
+	type release struct {
+		unmarked bool
+		base     []int
+		revision int
+	}
+	parse := func(value string) (release, bool) {
+		if spec.versionMark == "" {
+			return release{}, false
 		}
+		signed, revision, marked := strings.Cut(normalizeVersion(value), spec.versionMark)
 		base, baseOK := dottedVersion(signed)
+		if !marked {
+			return release{unmarked: true, base: base}, baseOK && len(base) == 3 && spec.unmarkedSince != "" &&
+				semver.Compare("v"+signed, "v"+spec.unmarkedSince) >= 0
+		}
 		number, err := strconv.Atoi(revision)
 		if !baseOK || err != nil || number < 0 {
-			return nil, 0, false
+			return release{}, false
 		}
-		return base, number, true
+		return release{base: base, revision: number}, true
 	}
-	base, revision, ok := parse(version)
-	minBase, minRevision, minOK := parse(minimum)
+	got, ok := parse(version)
+	min, minOK := parse(minimum)
 	if !ok || !minOK {
 		return false
 	}
-	if c := slices.Compare(base, minBase); c != 0 {
+	if got.unmarked != min.unmarked {
+		return got.unmarked
+	}
+	if c := slices.Compare(got.base, min.base); c != 0 {
 		return c > 0
 	}
-	return revision >= minRevision
+	return got.revision >= min.revision
 }
 
 // sharedDLLFollowers lists the importers whose d3d11.dll comes from the shared provider and custom DLL
@@ -623,13 +749,21 @@ func (x *XXMI) sharedDLLFollowers(ctx context.Context, client *db.Client) ([]str
 	return followers, nil
 }
 
-// providerPin moves a pinned libraries version to a provider: to the release built on the same signed
-// libraries, or to "" when the provider has none and the pin goes back to following the latest release.
-func (x *XXMI) providerPin(ctx context.Context, spec libsProviderSpec, pinned string) (string, error) {
-	if spec.overlayPackage == "" {
-		return signedLibsVersion(pinned), nil
+// providerPin moves a pinned libraries version of provider from to provider to: to the release built on the
+// same signed libraries, or to "" when to has none and the pin goes back to following the latest release.
+func (x *XXMI) providerPin(ctx context.Context, from, to libsProviderSpec, pinned string) (string, error) {
+	signed, err := x.signedPin(ctx, from, pinned)
+	switch {
+	case err != nil:
+		return "", err
+	case to.overlayPackage == "":
+		return signed, nil
+	case from.id == to.id:
+		return x.providerRelease(ctx, to, pinned)
+	case signed == "":
+		return "", nil
 	}
-	return x.providerRelease(ctx, spec, pinned)
+	return x.providerReleaseOn(ctx, to, signed, false)
 }
 
 // providerRelease returns the provider release a pinned libraries version stands for: that release, or the
@@ -638,16 +772,29 @@ func (x *XXMI) providerRelease(ctx context.Context, spec libsProviderSpec, pin s
 	if spec.versionMark != "" && strings.Contains(pin, spec.versionMark) {
 		return pin, nil
 	}
+	return x.providerReleaseOn(ctx, spec, pin, true)
+}
+
+// providerReleaseOn returns the newest provider release with the version mark built on the signed release
+// signed, or "" when there is none. With exact, a release named signed is taken first, as a pin of the
+// provider names it.
+func (x *XXMI) providerReleaseOn(
+	ctx context.Context,
+	spec libsProviderSpec,
+	signed string,
+	exact bool,
+) (string, error) {
 	releases, err := x.ListReleases(ctx, spec.overlayPackage)
 	if err != nil {
 		return "", err
 	}
-	signed, built := signedLibsVersion(pin), ""
+	built := ""
 	for _, release := range releases {
-		if release.Version == pin {
-			return pin, nil
+		if exact && release.Version == signed {
+			return signed, nil
 		}
-		if built == "" && signedLibsVersion(release.Version) == signed {
+		if built == "" && strings.Contains(release.Version, spec.versionMark) &&
+			signedLibsVersion(release.Version) == signed {
 			built = release.Version
 		}
 	}

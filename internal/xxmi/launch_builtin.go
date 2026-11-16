@@ -825,7 +825,7 @@ func (x *XXMI) useExtraDLLInjector(ctx context.Context, cfg ImporterConfig, spec
 	if err != nil {
 		return err
 	}
-	version := x.selectedLegacyInjectorVersion(pin)
+	version := x.selectedLegacyInjectorVersion(ctx, cfg, pin)
 	if version == "" {
 		// Nothing is cached until a launch deploys the XXMI runtime, which this one does not.
 		version, err = x.resolveLibsVersion(ctx, cfg)

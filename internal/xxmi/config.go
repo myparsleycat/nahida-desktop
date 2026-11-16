@@ -525,12 +525,10 @@ func (x *XXMI) SetImporterVersions(ctx context.Context, key string, versions Imp
 		return err
 	}
 	if versions.XXMI != nil {
-		if versions.XXMI.Pinned != "" {
-			if err := x.EnsureLibsVersion(ctx, versions.XXMI.Pinned); err != nil {
-				return err
-			}
-		}
 		cfg.XXMIVersion = *versions.XXMI
+		if err := x.EnsurePinnedLibs(ctx, cfg); err != nil {
+			return err
+		}
 	}
 	if versions.Package != nil {
 		cfg.PackageVersion = *versions.Package
@@ -569,7 +567,15 @@ func (x *XXMI) setSharedLibsVersion(ctx context.Context, client *db.Client, vers
 				return nil, err
 			}
 		}
-		if err := x.EnsureLibsVersion(ctx, version); err != nil {
+		spec, err := x.sharedLibsProvider(ctx)
+		if err != nil {
+			return nil, err
+		}
+		signed, err := x.signedLibsToFetch(ctx, spec, version, "")
+		if err != nil {
+			return nil, err
+		}
+		if err := x.EnsureLibsVersion(ctx, signed); err != nil {
 			return nil, err
 		}
 	}

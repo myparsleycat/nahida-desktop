@@ -287,5 +287,9 @@ func (x *XXMI) pendingProviderINI(ctx context.Context, cfg ImporterConfig) (prov
 	if err != nil {
 		return nil, ""
 	}
-	return providerINI, signedLibsVersion(version)
+	signed, err := x.signedLibsOf(ctx, spec, version, cfg.ImporterFolder)
+	if err != nil {
+		return providerINI, ""
+	}
+	return providerINI, signed
 }

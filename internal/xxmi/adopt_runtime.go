@@ -2,6 +2,7 @@ package xxmi
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -108,17 +109,21 @@ var ErrImporterChanged = errors.New("XXMI_IMPORTER_CHANGED")
 // officialDLLConfig returns cfg changed to run the signed XXMI d3d11.dll. The provider is set on the importer
 // itself, so a shared provider that ships its own DLL does not bring that one back at the next launch. A version
 // that followed the shared settings becomes the importer's own with it: sharedVersion is the shared pin, which
-// names a release of the shared provider.
-func officialDLLConfig(cfg ImporterConfig, sharedVersion string) ImporterConfig {
+// names a release of the shared provider. signedPin returns the signed release a pin names, or "" for a provider
+// release without the version mark, which names none and leaves the importer following the latest one.
+func officialDLLConfig(cfg ImporterConfig, signedPin func(string) string, sharedVersion string) ImporterConfig {
 	cfg.Migoto.UnsafeMode = false
 	cfg.CustomDLL = ""
 	cfg.LibsProvider = signedLibsProvider
 	if cfg.XXMIVersion.Follow != followShared {
+		if cfg.XXMIVersion.Pinned != "" && signedPin(cfg.XXMIVersion.Pinned) == "" {
+			cfg.XXMIVersion = VersionPin{Follow: "latest"}
+		}
 		return cfg
 	}
 
 	cfg.XXMIVersion = VersionPin{Follow: "latest"}
-	if version := signedLibsVersion(sharedVersion); version != "" {
+	if version := signedPin(sharedVersion); version != "" {
 		cfg.XXMIVersion = VersionPin{Pinned: version}
 	}
 	return cfg
@@ -167,7 +172,19 @@ func (x *XXMI) RestoreOfficialDLL(ctx context.Context, importer string) (warning
 	if err != nil {
 		return nil, err
 	}
-	cfg = officialDLLConfig(cfg, sharedVersion)
+	pinSpec, err := x.pinProvider(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	var pinErr error
+	cfg = officialDLLConfig(cfg, func(version string) string {
+		signed, err := x.signedPin(ctx, pinSpec, version)
+		pinErr = cmp.Or(pinErr, err)
+		return signed
+	}, sharedVersion)
+	if pinErr != nil {
+		return nil, pinErr
+	}
 	warnings, err = x.deployRuntime(ctx, importer, cfg, false)
 	if err != nil {
 		return nil, err

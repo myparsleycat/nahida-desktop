@@ -166,26 +166,52 @@ func TestAdoptUserRuntimeRestoresManifestWhenSaveFails(t *testing.T) {
 }
 
 func TestOfficialDLLConfigOwnsTheLibrariesVersion(t *testing.T) {
+	signed := signedLibsVersion
+	// The fork has released 2.0.0, a release without the version mark.
+	fork := func(version string) string {
+		if version == "2.0.0" {
+			return ""
+		}
+		return signedLibsVersion(version)
+	}
 	tests := []struct {
 		name          string
+		signedPin     func(string) string
 		version       VersionPin
 		sharedVersion string
 		want          VersionPin
 	}{
-		{"shared latest", VersionPin{Follow: followShared}, "", VersionPin{Follow: "latest"}},
-		{"shared pin", VersionPin{Follow: followShared}, "1.7.5", VersionPin{Pinned: "1.7.5"}},
-		{"shared provider release", VersionPin{Follow: followShared}, "1.7.5-nhd.2", VersionPin{Pinned: "1.7.5"}},
+		{"shared latest", signed, VersionPin{Follow: followShared}, "", VersionPin{Follow: "latest"}},
+		{"shared pin", signed, VersionPin{Follow: followShared}, "1.7.5", VersionPin{Pinned: "1.7.5"}},
+		{
+			"shared provider release",
+			fork,
+			VersionPin{Follow: followShared},
+			"1.7.5-nhd.2",
+			VersionPin{Pinned: "1.7.5"},
+		},
+		// A provider release without the version mark names no signed release to pin.
+		{
+			"shared unmarked provider release",
+			fork,
+			VersionPin{Follow: followShared},
+			"2.0.0",
+			VersionPin{Follow: "latest"},
+		},
 		{
 			"own pin",
+			signed,
 			VersionPin{Pinned: "1.7.4", Notify: true},
 			"1.7.5",
 			VersionPin{Pinned: "1.7.4", Notify: true},
 		},
-		{"own latest", VersionPin{Follow: "latest"}, "1.7.5", VersionPin{Follow: "latest"}},
+		{"own provider release", fork, VersionPin{Pinned: "1.7.4-nhd.1"}, "", VersionPin{Pinned: "1.7.4-nhd.1"}},
+		{"own unmarked provider release", fork, VersionPin{Pinned: "2.0.0"}, "", VersionPin{Follow: "latest"}},
+		{"own latest", signed, VersionPin{Follow: "latest"}, "1.7.5", VersionPin{Follow: "latest"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cfg := officialDLLConfig(ImporterConfig{XXMIVersion: test.version}, test.sharedVersion)
+			cfg := officialDLLConfig(ImporterConfig{XXMIVersion: test.version}, test.signedPin, test.sharedVersion)
 			if cfg.XXMIVersion != test.want || cfg.LibsProvider != signedLibsProvider {
 				t.Fatalf("version = %+v, provider = %q, want %+v", cfg.XXMIVersion, cfg.LibsProvider, test.want)
 			}

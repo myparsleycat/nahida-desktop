@@ -103,7 +103,11 @@ func (x *XXMI) installImporterPackage(
 		}
 		if cfg.XXMIVersion.Pinned != "" {
 			setStage("ensure-libraries")
-			if err := x.ensureLibsVersionLocked(ctx, cfg.XXMIVersion.Pinned); err != nil {
+			signed, err := x.pinnedSignedLibs(ctx, cfg)
+			if err != nil {
+				return err
+			}
+			if err := x.ensureLibsVersionLocked(ctx, signed); err != nil {
 				return err
 			}
 		}

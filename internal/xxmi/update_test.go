@@ -601,7 +601,7 @@ func TestSelectedLegacyInjectorVersionNormalizesPin(t *testing.T) {
 	t.Parallel()
 	service := New()
 	useTestAppData(t, service)
-	if got := service.selectedLegacyInjectorVersion("v1.7.6"); got != "1.7.6" {
+	if got := service.selectedLegacyInjectorVersion(context.Background(), ImporterConfig{}, "v1.7.6"); got != "1.7.6" {
 		t.Fatalf("selected legacy injector version = %q", got)
 	}
 }

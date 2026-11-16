@@ -52,6 +52,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 	}
 	packages := map[string]struct{}{}
 	providers := make(map[string]libsProviderSpec, len(rows))
+	signedFollowed := false
 	for _, row := range rows {
 		cfg, err := x.GetImporterConfig(ctx, row.Key)
 		if err != nil {
@@ -66,8 +67,11 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			return nil, err
 		}
 		providers[row.Key] = provider
-		if followsSignedLibs(cfg, provider) {
+		// A provider release without the version mark deploys over the latest signed release, which is checked
+		// here too but not announced apart from the provider's own update, nor allowed to fail the check.
+		if followsSignedLibs(cfg, provider) || provider.overlayPackage != "" {
 			packages["xxmi-libs"] = struct{}{}
+			signedFollowed = signedFollowed || followsSignedLibs(cfg, provider)
 		}
 		if provider.overlayPackage != "" {
 			packages[provider.overlayPackage] = struct{}{}
@@ -92,6 +96,9 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 				Operation: "check-updates", Stage: "release-metadata",
 				Fields: map[string]any{"package": pkg, "force": force},
 			})
+			if pkg == "xxmi-libs" && !signedFollowed {
+				continue
+			}
 			if !force && errors.Is(err, github.ErrRateLimited) {
 				break
 			}
@@ -160,7 +167,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			// reports no version; the next launch deploys the selected cached libraries without downloading.
 			if libs.Installed == "" && (cfg.Mode == RuntimeXXMI || legacyUsesXXMIInjector(cfg)) {
 				if version := x.selectedLegacyInjectorVersion(
-					pin,
+					ctx, cfg, pin,
 				); version != "" &&
 					x.verifiedCachedLibsVersion(version) {
 					libs.Installed = version
@@ -170,7 +177,11 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			// A pin that still announces releases is compared by the pinned version itself, so moving the pin
 			// clears the notice before the next launch deploys it.
 			if notify {
-				libs.Installed = signedLibsVersion(pin)
+				if spec, err := x.pinProvider(ctx, cfg); err == nil {
+					if signed, err := x.signedLibsOf(ctx, spec, pin, cfg.ImporterFolder); err == nil {
+						libs.Installed = signed
+					}
+				}
 			}
 			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
 			statuses = append(statuses, libs)
@@ -258,11 +269,18 @@ func (x *XXMI) newestCachedPackageVersion(pkg string) string {
 	return latest
 }
 
-func (x *XXMI) selectedLegacyInjectorVersion(pin string) string {
-	if version := signedLibsVersion(pin); version != "" {
+func (x *XXMI) selectedLegacyInjectorVersion(ctx context.Context, cfg ImporterConfig, pin string) string {
+	if pin == "" {
+		return x.newestCachedPackageVersion("xxmi-libs")
+	}
+	spec, err := x.pinProvider(ctx, cfg)
+	if err != nil {
+		return signedLibsVersion(pin)
+	}
+	if version, err := x.signedLibsOf(ctx, spec, pin, cfg.ImporterFolder); err == nil && version != "" {
 		return version
 	}
-	return x.newestCachedPackageVersion("xxmi-libs")
+	return signedLibsVersion(pin)
 }
 
 func updateAvailable(latest, installed, skipped string) bool {
@@ -387,14 +405,22 @@ func (x *XXMI) installLibsUpdate(ctx context.Context, importer, version string) 
 }
 
 // installProviderUpdate is installLibsUpdate for a provider release, cached together with the signed libraries
-// it deploys over.
+// it deploys over. A release without the version mark brings the latest signed release along.
 func (x *XXMI) installProviderUpdate(
 	ctx context.Context,
 	importer string,
 	provider libsProviderSpec,
 	version string,
 ) error {
-	if err := x.EnsureLibsVersion(ctx, version); err != nil {
+	cfg, err := x.GetImporterConfig(ctx, importer)
+	if err != nil {
+		return err
+	}
+	signed, err := x.signedLibsToFetch(ctx, provider, version, cfg.ImporterFolder)
+	if err != nil {
+		return err
+	}
+	if err := x.EnsureLibsVersion(ctx, signed); err != nil {
 		return err
 	}
 	if err := x.ensureProviderDLL(ctx, provider, version); err != nil {

@@ -754,7 +754,7 @@ func TestCustomDLLHidesProviderUpdates(t *testing.T) {
 	}
 
 	// Restoring the official DLL drops the custom DLL and keeps the fork from taking its place.
-	restored := officialDLLConfig(cfg, "")
+	restored := officialDLLConfig(cfg, signedLibsVersion, "")
 	if spec, err := service.libsProvider(ctx, restored); err != nil || spec.id != signedLibsProvider {
 		t.Fatalf("restored provider = %q, err = %v", spec.id, err)
 	}
@@ -967,6 +967,73 @@ func TestProviderReleasePinsSignedLibraries(t *testing.T) {
 	}
 	if got := selectProvider("1.1.7", "myparsleycat"); got != "" {
 		t.Fatalf("shared version without a fork release = %q", got)
+	}
+}
+
+// Fork releases from 2.0.0 on carry no signed version, so they deploy over the latest signed release, while a
+// signed version pinned under the fork, even one numbered like a fork release, keeps naming that signed release.
+func TestUnmarkedProviderReleaseDeploysLatestSignedLibraries(t *testing.T) {
+	ctx := context.Background()
+	unmarked, marked := testCustomDLLImage("2.0.0"), testCustomDLLImage("1.2.2-nhd.31")
+	service, client, _ := newProviderTestService(t, []providerTestRelease{
+		{tag: "v2.0.0", data: unmarked, digest: providerTestDigest(unmarked)},
+		{tag: "v1.2.2-nhd.31", data: marked, digest: providerTestDigest(marked)},
+	})
+	latest := "1.3.1"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		db.XXMIPackageRow{Package: "xxmi-libs", LatestVersion: &latest},
+	); err != nil {
+		t.Fatal(err)
+	}
+	fork, _ := lookupLibsProvider(defaultLibsProvider)
+	signed, _ := lookupLibsProvider(signedLibsProvider)
+
+	for _, tc := range []struct {
+		spec          libsProviderSpec
+		version, want string
+	}{
+		{fork, "v2.0.0", "1.3.1"},
+		{fork, "1.2.2-nhd.31", "1.2.2"},
+		{fork, "1.2.0", "1.2.0"},
+		// The fork has no 2.1.0 release, so the pin names the signed one.
+		{fork, "2.1.0", "2.1.0"},
+		{signed, "2.0.0", "2.0.0"},
+	} {
+		if got, err := service.signedLibsOf(ctx, tc.spec, tc.version, ""); err != nil || got != tc.want {
+			t.Errorf("signed libraries of %s %q = %q, err = %v, want %q", tc.spec.id, tc.version, got, err, tc.want)
+		}
+	}
+
+	// The deployed signed libraries stay until the latest one is cached.
+	folder := t.TempDir()
+	writeTestFile(t, filepath.Join(folder, runtimeManifestName),
+		fmt.Appendf(nil, `{"mode":%q,"source":"xxmi-libs@1.2.2"}`, RuntimeXXMI))
+	if got, err := service.signedLibsOf(ctx, fork, "2.0.0", folder); err != nil || got != "1.2.2" {
+		t.Errorf("signed libraries before the latest one is cached = %q, err = %v", got, err)
+	}
+
+	for _, tc := range []struct {
+		from, to  libsProviderSpec
+		pin, want string
+	}{
+		{fork, signed, "2.0.0", ""},
+		{fork, signed, "1.2.2-nhd.31", "1.2.2"},
+		{signed, fork, "1.2.2", "1.2.2-nhd.31"},
+		{signed, fork, "2.0.0", ""},
+		{fork, fork, "2.0.0", "2.0.0"},
+	} {
+		if got, err := service.providerPin(ctx, tc.from, tc.to, tc.pin); err != nil || got != tc.want {
+			t.Errorf(
+				"pin %q moved from %s to %s = %q, err = %v, want %q",
+				tc.pin,
+				tc.from.id,
+				tc.to.id,
+				got,
+				err,
+				tc.want,
+			)
+		}
 	}
 }
 
@@ -1808,13 +1875,29 @@ func TestProviderVersionAtLeast(t *testing.T) {
 		{"1.2.2-nhd.9", false},
 		{"1.2.3-nhd.1", true},
 		{"1.3.0-nhd.0", true},
-		{"1.2.2", false},
 		{"", false},
 		{"1.2.2-nhd.x", false},
+		// Releases without the mark replaced the marked ones from 2.0.0 on.
+		{"2.0.0", true},
+		{"1.2.2", false},
+		{"2.0", false},
 	}
 	for _, tc := range cases {
 		if got := providerVersionAtLeast(spec, tc.version, "1.2.2-nhd.13"); got != tc.want {
 			t.Errorf("providerVersionAtLeast(%q) = %v, want %v", tc.version, got, tc.want)
+		}
+	}
+	unmarked := []struct {
+		version, minimum string
+		want             bool
+	}{
+		{"2.0.1", "2.0.0", true},
+		{"2.0.0", "2.0.1", false},
+		{"1.2.2-nhd.31", "2.0.0", false},
+	}
+	for _, tc := range unmarked {
+		if got := providerVersionAtLeast(spec, tc.version, tc.minimum); got != tc.want {
+			t.Errorf("providerVersionAtLeast(%q, %q) = %v, want %v", tc.version, tc.minimum, got, tc.want)
 		}
 	}
 }

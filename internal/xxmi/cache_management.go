@@ -158,18 +158,24 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 			return "", nil, err
 		}
 
-		selected, release := signedLibsVersion(pin), ""
-
 		// A provider d3d11.dll deploys over the signed libraries its release was built on, whichever
 		// signed release is the latest.
 		provider, err := x.deployedLibsProvider(ctx, cfg)
 		if err != nil {
 			return "", nil, err
 		}
+		selected, release := "", ""
 		if provider.overlayPackage != "" {
 			version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder)
 			if err == nil {
-				selected, release = signedLibsVersion(version), version
+				if signed, err := x.signedLibsOf(ctx, provider, version, cfg.ImporterFolder); err == nil {
+					selected, release = signed, version
+				}
+			}
+		}
+		if selected == "" && pin != "" {
+			if spec, err := x.pinProvider(ctx, cfg); err == nil {
+				selected, _ = x.signedLibsOf(ctx, spec, pin, cfg.ImporterFolder)
 			}
 		}
 		if selected == "" && cfg.Mode == RuntimeXXMI {

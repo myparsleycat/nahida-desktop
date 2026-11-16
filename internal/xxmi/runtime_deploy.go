@@ -175,12 +175,34 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	}
 	if provider.overlayPackage != "" {
 		version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder)
-		return signedLibsVersion(version), err
+		if err != nil {
+			return "", err
+		}
+		return x.signedLibsOf(ctx, provider, version, cfg.ImporterFolder)
 	}
 	if pin != "" {
-		return signedLibsVersion(pin), nil
+		// A user-provided DLL deploys over the signed libraries the pin of the importer's provider names.
+		spec, err := x.pinProvider(ctx, cfg)
+		if err != nil {
+			return "", err
+		}
+		return x.signedLibsOf(ctx, spec, pin, cfg.ImporterFolder)
 	}
-	deployed, _ := deployedLibsVersion(cfg.ImporterFolder)
+	return x.latestSignedLibsVersion(ctx, cfg.ImporterFolder, x.verifiedCachedLibsVersion)
+}
+
+// latestSignedLibsVersion returns the signed libraries an importer following the latest release deploys: the
+// latest release once cacheVerified accepts it, otherwise the one deployed in folder. An empty folder has none
+// deployed.
+func (x *XXMI) latestSignedLibsVersion(
+	ctx context.Context,
+	folder string,
+	cacheVerified func(string) bool,
+) (string, error) {
+	deployed := ""
+	if folder != "" {
+		deployed, _ = deployedLibsVersion(folder)
+	}
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
@@ -194,7 +216,7 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, "xxmi-libs")
 		if err == nil && len(releases) > 0 {
-			return selectLibsVersion(releases[0].Version, "", deployed, x.verifiedCachedLibsVersion), nil
+			return selectLibsVersion(releases[0].Version, "", deployed, cacheVerified), nil
 		}
 		if deployed != "" {
 			return deployed, nil
@@ -211,7 +233,7 @@ func (x *XXMI) resolveLibsVersion(ctx context.Context, cfg ImporterConfig) (stri
 	if pkg.SkippedVersion != nil {
 		skipped = normalizeVersion(*pkg.SkippedVersion)
 	}
-	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, x.verifiedCachedLibsVersion), nil
+	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, cacheVerified), nil
 }
 
 func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {

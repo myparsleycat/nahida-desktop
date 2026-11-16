@@ -387,7 +387,7 @@ func (s *Shell) saveImporter(ic *importerContext, install *packageInstall) {
 			pin := next.XXMIVersion.Pinned
 			pinChanged := pin != "" && pin != saved.XXMIVersion.Pinned
 			if pinChanged {
-				if err := s.deps.XXMI.EnsureLibsVersion(ctx, pin); err != nil {
+				if err := s.deps.XXMI.EnsurePinnedLibs(ctx, next); err != nil {
 					return err
 				}
 			}

@@ -32,8 +32,10 @@ func (x *XXMI) EnsureLibsVersion(ctx context.Context, version string) error {
 // ensureLibsVersionLocked shares the package lock with importer installation.
 func (x *XXMI) ensureLibsVersionLocked(ctx context.Context, version string) error {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-libraries")
-	version = signedLibsVersion(version)
-	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) {
+	// Callers name the signed release itself; signedLibsOf maps a provider release to it.
+	version = normalizeVersion(version)
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `\/:*?"<>|`) ||
+		signedLibsVersion(version) != version {
 		return errors.New("invalid XXMI libraries version")
 	}
 	root, err := x.cacheRoot()
