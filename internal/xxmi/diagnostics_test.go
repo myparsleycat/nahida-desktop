@@ -235,7 +235,7 @@ func TestCollectDiagnosticsBundlesOnlyTheSessionFiles(t *testing.T) {
 		t.Fatalf("collect without session files: err = %v, want %s", err, errDiagnosticsEmpty)
 	}
 
-	if err := service.recordDiagnosticsLaunch(ctx, "GIMI", gameFolder); err != nil {
+	if _, err := service.recordDiagnosticsLaunch(ctx, "GIMI", cfg.ImporterFolder, gameFolder); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, staleLog, []byte("D3D11 DLL starting init\nsession line\n"))
@@ -420,7 +420,7 @@ func TestCollectDiagnosticsLeavesOtherSessionsReadable(t *testing.T) {
 	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{Level: DiagnosticsInfo}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.recordDiagnosticsLaunch(ctx, "GIMI", t.TempDir()); err != nil {
+	if _, err := service.recordDiagnosticsLaunch(ctx, "GIMI", cfg.ImporterFolder, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, diagnosticsLogName), []byte("D3D11 DLL starting init\n"))
@@ -469,7 +469,7 @@ func TestRestartThatFailsKeepsTheCollectedSession(t *testing.T) {
 	if err := service.StartDiagnostics(ctx, "GIMI", DiagnosticsOptions{Level: DiagnosticsInfo}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.recordDiagnosticsLaunch(ctx, "GIMI", t.TempDir()); err != nil {
+	if _, err := service.recordDiagnosticsLaunch(ctx, "GIMI", cfg.ImporterFolder, t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(cfg.ImporterFolder, diagnosticsLogName), []byte("D3D11 DLL starting init\n"))

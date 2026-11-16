@@ -51,11 +51,14 @@ func (*recordingLaunchHelper) HelperImageName() string { return "nahida-elevated
 
 func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	for _, restore := range []string{"unused", "restored", "failed"} {
-		t.Run(restore, func(t *testing.T) { testLegacyLaunchPipeline(t, restore) })
+		t.Run(restore, func(t *testing.T) { testLegacyLaunchPipeline(t, restore, "") })
+	}
+	for _, logging := range []string{"settings", "session"} {
+		t.Run("logging-"+logging, func(t *testing.T) { testLegacyLaunchPipeline(t, "unused", logging) })
 	}
 }
 
-func testLegacyLaunchPipeline(t *testing.T, restore string) {
+func testLegacyLaunchPipeline(t *testing.T, restore, logging string) {
 	t.Helper()
 	data, cacheRoot := newTestAppData(t)
 	ctx := context.Background()
@@ -78,6 +81,9 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	cfg.GameFolder = filepath.Join(root, "game")
 	cfg.ConfigureGame = false
 	cfg.IniOptimizer.Enabled = true
+	if logging == "settings" {
+		cfg.Migoto.LogLevel = "Debug"
+	}
 	for _, folder := range []string{cfg.ImporterFolder, cfg.GameFolder} {
 		if err := os.MkdirAll(folder, 0o700); err != nil {
 			t.Fatal(err)
@@ -194,7 +200,15 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.StartGame(ctx, "EFMI"); err != nil {
+	if logging == "session" {
+		session := map[string]*diagnosticsRecord{"EFMI": {
+			State: DiagnosticsArmed, Level: DiagnosticsDebug, ImporterFolder: cfg.ImporterFolder,
+		}}
+		if err := service.storeDiagnostics(ctx, session); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := service.StartGameWithOptions(ctx, "EFMI", LaunchOptions{KeepLogging: logging != ""}); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"pre-launch", "resolve-game", "auto-update", "launch-guard", "xcmd-prelaunch",
@@ -227,6 +241,13 @@ func testLegacyLaunchPipeline(t *testing.T, restore string) {
 	if helper.calls != 1 || helper.spec.Mode != inject.ModeLegacy || helper.spec.StartExe != gameExe ||
 		helper.spec.ParentExe != gamesExe || helper.spec.LegacyLoader.Path != filepath.Join(cfg.ImporterFolder, "3DMigoto Loader.exe") {
 		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, helper.spec)
+	}
+	wantWindow := 0
+	if logging != "" {
+		wantWindow = loggingWindowTimeoutSeconds
+	}
+	if helper.spec.WindowTimeoutSeconds != wantWindow {
+		t.Fatalf("window timeout = %d, want %d with logging %q", helper.spec.WindowTimeoutSeconds, wantWindow, logging)
 	}
 	if helper.leases != 1 || helper.released != 1 {
 		t.Fatalf(

@@ -14,21 +14,22 @@ import (
 
 const HelperOperation = "xxmi.launch"
 
-// helperGrace is how long a helper launch may outlast the spec's process timeout for injection and
-// cleanup.
+// helperGrace is how long a helper launch may outlast the spec's process and window waits for injection
+// and cleanup.
 const helperGrace = 60 * time.Second
 
 var errInvalidHelperLaunch = errors.New("invalid XXMI launch request")
 
 func HelperHandler() elevated.Handler {
 	return elevated.Handler{
-		Timeout: helperTimeout(maxTimeoutSeconds),
+		Timeout: helperTimeout(LaunchSpec{TimeoutSeconds: maxTimeoutSeconds, WindowTimeoutSeconds: maxTimeoutSeconds}) +
+			legacyLoaderReadyTimeout + legacyLoaderMaxDelay + legacyLoaderExitMargin,
 		Run: func(ctx context.Context, _ elevated.Peer, payload json.RawMessage) (json.RawMessage, error) {
 			var spec LaunchSpec
 			if err := json.Unmarshal(payload, &spec); err != nil {
 				return nil, errInvalidHelperLaunch
 			}
-			ctx, cancel := context.WithTimeout(ctx, helperTimeout(spec.TimeoutSeconds))
+			ctx, cancel := context.WithTimeout(ctx, helperTimeout(spec))
 			defer cancel()
 			result, err := Launch(ctx, spec)
 			if err != nil {
@@ -57,7 +58,7 @@ func LaunchThroughHelper(ctx context.Context, caller elevated.Caller, spec Launc
 	if err != nil {
 		return LaunchResult{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, helperTimeout(spec.TimeoutSeconds))
+	ctx, cancel := context.WithTimeout(ctx, helperTimeout(spec))
 	defer cancel()
 	response, err := caller.Call(ctx, HelperOperation, payload)
 	if err != nil {
@@ -70,6 +71,12 @@ func LaunchThroughHelper(ctx context.Context, caller elevated.Caller, spec Launc
 	return result, nil
 }
 
-func helperTimeout(timeoutSeconds int) time.Duration {
-	return time.Duration(timeoutSeconds)*time.Second + helperGrace
+// helperTimeout covers the process wait and the window wait, which each take their own full timeout, and the
+// legacy loader's waits around them.
+func helperTimeout(spec LaunchSpec) time.Duration {
+	budget := spec.timeout() + spec.windowTimeout() + helperGrace
+	if spec.usesLegacyLoader() {
+		budget += legacyLoaderReadyTimeout + legacyLoaderExitTimeout(spec.ModuleDLL)
+	}
+	return budget
 }

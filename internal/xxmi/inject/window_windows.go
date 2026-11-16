@@ -10,7 +10,11 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
+
+var errWindowTimeout = errors.New("XXMI_GAME_START_TIMEOUT: game window did not appear")
 
 var (
 	windowUser32        = syscall.NewLazyDLL("user32.dll")
@@ -35,7 +39,7 @@ func waitForVisibleWindow(ctx context.Context, pid int, timeout time.Duration) e
 			return nil
 		}
 		if !time.Now().Before(deadline) {
-			return errors.New("XXMI_GAME_START_TIMEOUT: game window did not appear")
+			return errWindowTimeout
 		}
 		timer := time.NewTimer(100 * time.Millisecond)
 		select {
@@ -45,6 +49,30 @@ func waitForVisibleWindow(ctx context.Context, pid int, timeout time.Duration) e
 		case <-timer.C:
 		}
 	}
+}
+
+// waitForWindow waits for the game window. A window that is late does not fail a launch whose game still runs
+// once injected reports the DLLs are in it; late is then true instead.
+func waitForWindow(ctx context.Context, pid int, timeout time.Duration, injected func() bool) (late bool, err error) {
+	err = waitForVisibleWindow(ctx, pid, timeout)
+	if errors.Is(err, errWindowTimeout) && injected() && processRunning(pid) {
+		return true, nil
+	}
+	return false, err
+}
+
+func alwaysInjected() bool { return true }
+
+func processRunning(pid int) bool {
+	process, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	if err != nil {
+		// Windows reports ERROR_INVALID_PARAMETER for a PID that no longer exists; access denied, as an
+		// anti-cheat driver may cause, still means the process is running.
+		return !errors.Is(err, windows.ERROR_INVALID_PARAMETER)
+	}
+	defer func() { _ = windows.CloseHandle(process) }()
+	event, err := windows.WaitForSingleObject(process, 0)
+	return err != nil || event == uint32(windows.WAIT_TIMEOUT)
 }
 
 func hasVisibleWindow(pid int) bool {

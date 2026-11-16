@@ -20,6 +20,12 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	legacyLoaderReadyTimeout = 10 * time.Second
+	legacyLoaderMaxDelay     = 600 * time.Second
+	legacyLoaderExitMargin   = 5 * time.Second
+)
+
 func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if pid, err := findProcessPID(spec.ProcessName); err != nil {
 		return LaunchResult{}, err
@@ -42,7 +48,7 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		return LaunchResult{}, fmt.Errorf("start legacy loader: %w", err)
 	}
 	defer func() { _ = loader.Process.Release() }()
-	ready, err := waitLegacyLoaderReady(ctx, loader.Process.Pid, spec.ModuleDLL, 10*time.Second)
+	ready, err := waitLegacyLoaderReady(ctx, loader.Process.Pid, spec.ModuleDLL, legacyLoaderReadyTimeout)
 	if err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
@@ -91,12 +97,16 @@ func launchLegacy(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			return LaunchResult{}, err
 		}
 	}
-	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
+	late, err := waitForWindow(ctx, pid, spec.windowTimeout(), func() bool {
+		loaded, err := processHasModule(pid, spec.ModuleDLL)
+		return err == nil && loaded
+	})
+	if err != nil {
 		_ = loader.Process.Kill()
 		return LaunchResult{}, err
 	}
 	verified, err := processHasModule(pid, spec.ModuleDLL)
-	result := LaunchResult{PID: pid, InjectionVerified: verified, Warnings: warnings}
+	result := LaunchResult{PID: pid, InjectionVerified: verified, LateWindow: late, Warnings: warnings}
 	if err != nil {
 		result.Warnings = append(result.Warnings, "Could not verify legacy DLL in game process: "+err.Error())
 	}
@@ -135,8 +145,8 @@ func legacyLoaderExitTimeout(modulePath string) time.Duration {
 			continue
 		}
 		seconds, err := strconv.Atoi(strings.TrimSpace(value))
-		if err == nil && seconds > 10 && seconds <= 600 {
-			return time.Duration(seconds+5) * time.Second
+		if err == nil && seconds > 10 && seconds <= int(legacyLoaderMaxDelay/time.Second) {
+			return time.Duration(seconds)*time.Second + legacyLoaderExitMargin
 		}
 		return 15 * time.Second
 	}

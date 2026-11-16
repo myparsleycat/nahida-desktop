@@ -88,10 +88,13 @@ func launchNative(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			return LaunchResult{}, fmt.Errorf("XXMI_INJECT_FAILED: native injection PID %d DLL %q: %w", pid, dll, err)
 		}
 	}
-	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
+	late, err := waitForWindow(ctx, pid, spec.timeout(), alwaysInjected)
+	if err != nil {
 		return LaunchResult{}, err
 	}
-	return LaunchResult{PID: pid, InjectionVerified: spec.InjectMode != "Bypass", Warnings: warnings}, nil
+	return LaunchResult{
+		PID: pid, InjectionVerified: spec.InjectMode != "Bypass", LateWindow: late, Warnings: warnings,
+	}, nil
 }
 
 func injectNativeDLL(ctx context.Context, pid int, path string, timeout time.Duration) (uint64, error) {

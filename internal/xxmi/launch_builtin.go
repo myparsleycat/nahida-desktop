@@ -22,6 +22,11 @@ import (
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
+// loggingWindowTimeoutSeconds is the least time a launch with 3DMigoto logging waits for the game window.
+// The DLL then writes every call it logs straight to disk, which delays the window well past a process
+// timeout tuned for normal starts.
+const loggingWindowTimeoutSeconds = 300
+
 func (x *XXMI) launchBuiltinGameLocked(
 	ctx context.Context,
 	key string,
@@ -505,9 +510,17 @@ func (x *XXMI) launchBuiltinGameLocked(
 		if gameExe != "" {
 			gameDir = filepath.Dir(gameExe)
 		}
-		err := x.recordDiagnosticsLaunch(ctx, key, launchSpec.WorkDir, gameDir, cfg.GameFolder, cfg.ImporterFolder)
+		session, err := x.recordDiagnosticsLaunch(
+			ctx, key, cfg.ImporterFolder, launchSpec.WorkDir, gameDir, cfg.GameFolder, cfg.ImporterFolder,
+		)
+		if infra.IsCancellationError(err) {
+			return err
+		}
 		if err != nil {
 			warn("Logging session launch was not recorded: " + err.Error())
+		}
+		if session || cfg.Migoto.verboseLogging() {
+			launchSpec.WindowTimeoutSeconds = max(launchSpec.TimeoutSeconds, loggingWindowTimeoutSeconds)
 		}
 	}
 	progress("inject-launch")
@@ -523,6 +536,12 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	for _, warning := range result.Warnings {
 		warn(warning)
+	}
+	if result.LateWindow {
+		x.notifyLaunchWarning(key, launchWarning{
+			code: launchWarningLateWindow,
+			err:  fmt.Errorf("game window did not appear within the window wait (PID %d)", result.PID),
+		})
 	}
 
 	// The game is already running, so later failures are reported as warnings instead of a failed launch.

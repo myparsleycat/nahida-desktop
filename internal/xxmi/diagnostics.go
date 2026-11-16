@@ -538,24 +538,24 @@ func (r diagnosticsRecord) config(cfg ImporterConfig) ImporterConfig {
 	return cfg
 }
 
-// recordDiagnosticsLaunch notes that a launch logged with the session's options and where the game may
-// write a crash dump.
-func (x *XXMI) recordDiagnosticsLaunch(ctx context.Context, key string, dumpDirs ...string) error {
+// recordDiagnosticsLaunch notes that a launch from folder logged with the session's options and where the game
+// may write a crash dump. It reports whether the launch logs with a session.
+func (x *XXMI) recordDiagnosticsLaunch(ctx context.Context, key, folder string, dumpDirs ...string) (bool, error) {
 	x.mu.RLock()
 	client := x.client
 	x.mu.RUnlock()
 	if client == nil {
-		return nil
+		return false, nil
 	}
 	x.diagnosticsMu.Lock()
 	defer x.diagnosticsMu.Unlock()
 	records, err := x.loadDiagnostics(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	record := records[key]
-	if record == nil || record.State != DiagnosticsArmed {
-		return nil
+	if record == nil || record.State != DiagnosticsArmed || !record.targets(folder) {
+		return false, nil
 	}
 	record.LaunchedAt = time.Now()
 	for _, dir := range dumpDirs {
@@ -566,10 +566,10 @@ func (x *XXMI) recordDiagnosticsLaunch(ctx context.Context, key string, dumpDirs
 		}
 	}
 	if err := x.storeDiagnostics(ctx, records); err != nil {
-		return err
+		return true, err
 	}
 	x.emitDiagnosticsChanged(key)
-	return nil
+	return true, nil
 }
 
 // loadDiagnostics returns the stored sessions by importer. The caller must hold diagnosticsMu.

@@ -57,6 +57,10 @@ type LaunchSpec struct {
 	ExtraDLLs      []string     `json:"extraDLLs"`
 	LegacyLoader   VerifiedFile `json:"legacyLoader"`
 	TimeoutSeconds int          `json:"timeoutSeconds"`
+	// WindowTimeoutSeconds bounds the wait for the game window in launches that need it to load the XXMI DLL,
+	// a window hook or the legacy loader, when the game starts slower than its process, as with 3DMigoto
+	// logging on. Zero uses TimeoutSeconds.
+	WindowTimeoutSeconds int `json:"windowTimeoutSeconds"`
 
 	// parent is the running ParentExe process, set by Launch for the start of the game.
 	parent *parentProcess
@@ -65,9 +69,12 @@ type LaunchSpec struct {
 const maxTimeoutSeconds = 600
 
 type LaunchResult struct {
-	PID               int      `json:"pid"`
-	InjectionVerified bool     `json:"injectionVerified"`
-	Warnings          []string `json:"warnings"`
+	PID               int  `json:"pid"`
+	InjectionVerified bool `json:"injectionVerified"`
+	// LateWindow is set when the game window did not appear before the window wait ended, though the game
+	// still runs with its DLLs in it.
+	LateWindow bool     `json:"lateWindow"`
+	Warnings   []string `json:"warnings"`
 }
 
 func ValidateLaunchSpec(spec LaunchSpec) error {
@@ -80,6 +87,10 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 	}
 	if spec.TimeoutSeconds < 5 || spec.TimeoutSeconds > maxTimeoutSeconds {
 		return errors.New("invalid process timeout")
+	}
+	if spec.WindowTimeoutSeconds != 0 &&
+		(spec.WindowTimeoutSeconds < spec.TimeoutSeconds || spec.WindowTimeoutSeconds > maxTimeoutSeconds) {
+		return errors.New("invalid window timeout")
 	}
 	if spec.StartMethod != "Native" && spec.StartMethod != "Shell" && spec.StartMethod != "Manual" {
 		return errors.New("invalid start method")
@@ -159,6 +170,18 @@ func ValidateLaunchSpec(spec LaunchSpec) error {
 // each get the full timeout, so launchers that start the game through a wrapper do not share one budget.
 func (spec LaunchSpec) timeout() time.Duration {
 	return time.Duration(spec.TimeoutSeconds) * time.Second
+}
+
+// usesLegacyLoader matches the order Launch picks a launch path in.
+func (spec LaunchSpec) usesLegacyLoader() bool {
+	return spec.InjectionMethod != "Native" && spec.InjectMode != "Bypass" && spec.Mode == ModeLegacy
+}
+
+func (spec LaunchSpec) windowTimeout() time.Duration {
+	if spec.WindowTimeoutSeconds == 0 {
+		return spec.timeout()
+	}
+	return time.Duration(spec.WindowTimeoutSeconds) * time.Second
 }
 
 func priorityClass(priority string) (uint32, error) {

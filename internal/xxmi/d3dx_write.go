@@ -160,7 +160,7 @@ func settingsINIWrites(key string, cfg ImporterConfig, support migotoSupport) []
 			})
 		}
 	} else {
-		boolean("Logging", "calls", migoto.LogLevel == "Info" || migoto.LogLevel == "Debug", "1", "0")
+		boolean("Logging", "calls", migoto.verboseLogging(), "1", "0")
 		boolean("Logging", "debug", migoto.LogLevel == "Debug", "1", "0")
 	}
 	boolean("Logging", "show_warnings", migoto.MuteWarnings, "0", "1")

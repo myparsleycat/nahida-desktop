@@ -19,6 +19,7 @@ const (
 	launchWarningGimiDCRUnreadable  = "GIMI_DCR_UNREADABLE"
 	launchWarningDX12Unsupported    = "XXMI_DX12_UNSUPPORTED"
 	launchWarningLauncherNotSkipped = "XXMI_GAME_LAUNCHER_NOT_SKIPPED"
+	launchWarningLateWindow         = "XXMI_GAME_WINDOW_LATE"
 
 	// Storage keys of the xxmi.launchGuard* settings. Keep them in sync with internal/setting/keys.go.
 	launchGuardKey             = "xxmi_launch_guard"
@@ -405,7 +406,7 @@ func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external boo
 	if err != nil {
 		return false, err
 	}
-	if !cfg.Enabled || cfg.Migoto.LogLevel != "Info" && cfg.Migoto.LogLevel != "Debug" {
+	if !cfg.Enabled || !cfg.Migoto.verboseLogging() {
 		return false, nil
 	}
 	used, err := x.migotoDLLUsed(ctx, cfg)

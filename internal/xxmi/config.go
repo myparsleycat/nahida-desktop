@@ -81,6 +81,11 @@ type MigotoOptions struct {
 	UnsafeMode       bool   `json:"unsafeMode"`
 }
 
+// verboseLogging reports whether LogLevel logs every call, which slows the game down.
+func (m MigotoOptions) verboseLogging() bool {
+	return m.LogLevel == "Info" || m.LogLevel == "Debug"
+}
+
 type IniOptimizerOptions struct {
 	Enabled    bool `json:"enabled"`
 	ResetCache bool `json:"resetCache"`

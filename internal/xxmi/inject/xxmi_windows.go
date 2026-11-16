@@ -87,10 +87,11 @@ func launchBypass(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 			return LaunchResult{}, err
 		}
 	}
-	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
+	late, err := waitForWindow(ctx, pid, spec.timeout(), alwaysInjected)
+	if err != nil {
 		return LaunchResult{}, err
 	}
-	return LaunchResult{PID: pid, InjectionVerified: false, Warnings: warnings}, nil
+	return LaunchResult{PID: pid, InjectionVerified: false, LateWindow: late, Warnings: warnings}, nil
 }
 
 func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
@@ -167,16 +168,19 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 		if err := injectExtraDLLs(injectProc, pid, extras, spec.TimeoutSeconds); err != nil {
 			return LaunchResult{}, err
 		}
-		if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
+		late, err := waitForWindow(ctx, pid, spec.timeout(), alwaysInjected)
+		if err != nil {
 			return LaunchResult{}, err
 		}
-		return LaunchResult{PID: pid, InjectionVerified: true, Warnings: warnings}, nil
+		return LaunchResult{PID: pid, InjectionVerified: true, LateWindow: late, Warnings: warnings}, nil
 	}
 	if err := injectExtraDLLs(injectProc, pid, spec.ExtraDLLs, spec.TimeoutSeconds); err != nil {
 		return LaunchResult{}, err
 	}
 	earlyCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
-	if err := waitForVisibleWindow(ctx, pid, spec.timeout()); err != nil {
+	// The hook stays until the window wait ends, so only a DLL the hook already loaded lets a late window pass.
+	late, err := waitForWindow(ctx, pid, spec.windowTimeout(), func() bool { return earlyCode == 0 })
+	if err != nil {
 		return LaunchResult{}, err
 	}
 	lateCode, _, _ := waitProc.Call(uintptr(unsafe.Pointer(module)), uintptr(unsafe.Pointer(process)), 5)
@@ -184,7 +188,7 @@ func launchXXMI(ctx context.Context, spec LaunchSpec) (LaunchResult, error) {
 	if warning != "" {
 		warnings = append(warnings, warning)
 	}
-	return LaunchResult{PID: pid, InjectionVerified: verified, Warnings: warnings}, nil
+	return LaunchResult{PID: pid, InjectionVerified: verified, LateWindow: late, Warnings: warnings}, nil
 }
 
 func summarizeHookVerification(earlyCode, lateCode uintptr) (bool, string) {
