@@ -458,11 +458,16 @@ func (d *Drive) runUpload(
 				)
 			}
 		}
-		sha256 := hashes[file.FID].SHA256
-		if sha256 == "" {
+		hash := hashes[file.FID]
+		if hash.SHA256 == "" {
 			return d.failUploadTransfer(transfers, pid, "hash", fmt.Errorf("hash missing for file %s", file.Name))
 		}
-		incomplete[index] = FinalUploadFile{UploadFile: file, ParentID: parentID, SHA256: sha256}
+		incomplete[index] = FinalUploadFile{
+			UploadFile: file,
+			ParentID:   parentID,
+			SHA256:     hash.SHA256,
+			PopKey:     hash.PopKey,
+		}
 	}
 
 	progressStatus := transfer.StatusProgress

@@ -46,6 +46,9 @@ type scannedFile struct {
 	size     int64
 	modified time.Time
 	sha256   string
+	// popKey is set only when this run read the file; the hash cache keeps
+	// no pop key, so a file with a cached hash uploads its bytes if asked.
+	popKey []byte
 }
 
 // scanResult is every file of the included targets, and what was left out by
@@ -293,6 +296,7 @@ func hashFiles(
 	for _, result := range hashed {
 		file := &files[pendingIndex[result.FID]]
 		file.sha256 = result.SHA256
+		file.popKey = result.PopKey
 		rows = append(rows, db.BackupFileCacheRow{
 			Path: file.fullPath, Size: file.size, Mtime: file.modified.UnixNano(), SHA256: file.sha256,
 		})

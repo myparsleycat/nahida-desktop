@@ -31,10 +31,11 @@ func newPackMemberError(member preparedUpload, err error) error {
 }
 
 type intentPackResult struct {
-	IntentID string `json:"intentId"`
-	Status   string `json:"status"`
-	FileID   string `json:"fileId,omitempty"`
-	Reason   string `json:"reason,omitempty"`
+	IntentID   string `json:"intentId"`
+	Status     string `json:"status"`
+	FileID     string `json:"fileId,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	NextAction string `json:"nextAction,omitempty"`
 }
 
 // uploadPack sends the members as one pack. Beside the logical bytes, onProgress

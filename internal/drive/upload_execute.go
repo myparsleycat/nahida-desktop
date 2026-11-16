@@ -228,7 +228,14 @@ func (r *uploadRun) dispatchIntents() error {
 	r.taskPool = newUploadTaskPool(r.ctx, r.concurrency)
 	r.partLimiter = newPartLimiter()
 
+	proven, err := r.proveIntents()
+	if err != nil {
+		return err
+	}
 	for _, intentID := range r.intentOrder {
+		if _, settled := proven[intentID]; settled {
+			continue
+		}
 		if err := r.dispatchIntent(intentID); err != nil {
 			return err
 		}

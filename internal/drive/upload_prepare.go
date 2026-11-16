@@ -33,6 +33,9 @@ type FinalUploadFile struct {
 	UploadFile
 	ParentID string `json:"parentId"`
 	SHA256   string `json:"sha256"`
+	// PopKey proves possession of the content to the server; nil when the
+	// content was not read in this run, which leaves its upload to the bytes.
+	PopKey []byte `json:"-"`
 }
 
 type UploadDirectory struct {
@@ -452,7 +455,7 @@ func HashUploadFiles(
 	}
 	out := make([]FinalUploadFile, len(files))
 	for index, entry := range entries {
-		out[index] = FinalUploadFile{UploadFile: files[index], SHA256: entry.SHA256}
+		out[index] = FinalUploadFile{UploadFile: files[index], SHA256: entry.SHA256, PopKey: entry.PopKey}
 	}
 	return out, nil
 }

@@ -138,6 +138,7 @@ type BackupUploadFile struct {
 	FullPath   string
 	Size       int64
 	SHA256     string
+	PopKey     []byte
 	ModifiedAt time.Time
 }
 
@@ -187,6 +188,7 @@ func (d *Drive) UploadBackupFiles(
 			},
 			ParentID: file.TargetID + "/" + path.Dir(file.RelPath),
 			SHA256:   file.SHA256,
+			PopKey:   file.PopKey,
 		}
 	}
 	pages, err := paginateUploadFiles(finals, pageSize)
@@ -221,7 +223,7 @@ func (d *Drive) UploadBackupFiles(
 			Uploads    []UploadPlanEntry `json:"uploads"`
 			NTEBundles []NTEBundle       `json:"nteBundles"`
 		}
-		body := map[string]any{"capabilities": []string{"nte-bundle-v1"}, "files": payload}
+		body := map[string]any{"capabilities": uploadPlanCapabilities(), "files": payload}
 		if err := d.BackupJSON(ctx, http.MethodPost, route, body, &response); err != nil {
 			return rejections, fmt.Errorf("%w: page starting at file %d: %w", ErrBackupPlanning, start, err)
 		}

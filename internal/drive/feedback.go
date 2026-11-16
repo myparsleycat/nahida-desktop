@@ -24,6 +24,7 @@ type FeedbackModFile struct {
 	FullPath string
 	Size     int64
 	SHA256   string
+	PopKey   []byte
 }
 
 // FeedbackModResult is what the server holds of a report's mod files once they
@@ -80,6 +81,7 @@ func (d *Drive) UploadFeedbackMod(
 			},
 			ParentID: path.Dir(file.Path),
 			SHA256:   file.SHA256,
+			PopKey:   file.PopKey,
 		}
 	}
 	pages, err := paginateUploadFiles(finals, max(rules.MaxPlanFiles, 1))
@@ -128,7 +130,7 @@ func (d *Drive) planFeedbackMod(
 	}
 	body := map[string]any{
 		"reportId":     reportID,
-		"capabilities": []string{"nte-bundle-v1"},
+		"capabilities": uploadPlanCapabilities(),
 		"files":        declarations,
 	}
 	decoded, edenErr, err := d.doJSON(ctx, http.MethodPost, feedbackModPlanRoute, nil, body)

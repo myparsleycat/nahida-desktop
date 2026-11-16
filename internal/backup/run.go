@@ -569,6 +569,7 @@ func (b *Backup) upload(
 			FullPath:   file.fullPath,
 			Size:       file.size,
 			SHA256:     file.sha256,
+			PopKey:     file.popKey,
 			ModifiedAt: file.modified,
 		}
 	}

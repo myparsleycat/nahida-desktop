@@ -193,7 +193,8 @@ func restoreUploadFile(
 		return uploadHashEntry{}, err
 	}
 	hasher := sha256.New()
-	writer := uploadRestoreWriter{writer: io.MultiWriter(temp, hasher), onProgress: onProgress}
+	pop := newUploadPopHash()
+	writer := uploadRestoreWriter{writer: io.MultiWriter(temp, hasher, pop), onProgress: onProgress}
 	size, copyErr := decodeUploadNZST(ctx, source, writer, min(file.Size, uploadNZSTMaxSize))
 	if copyErr != nil {
 		return uploadHashEntry{}, copyErr
@@ -213,7 +214,12 @@ func restoreUploadFile(
 	if err != nil {
 		return uploadHashEntry{}, err
 	}
-	return uploadHashEntry{SHA256: hex.EncodeToString(hasher.Sum(nil)), Path: temp.Name(), Info: info}, nil
+	return uploadHashEntry{
+		SHA256: hex.EncodeToString(hasher.Sum(nil)),
+		PopKey: pop.Sum(nil),
+		Path:   temp.Name(),
+		Info:   info,
+	}, nil
 }
 
 type uploadRestoreWriter struct {

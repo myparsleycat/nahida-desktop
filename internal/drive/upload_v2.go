@@ -77,6 +77,7 @@ type UploadPlanEntry struct {
 		Token  string `json:"token"`
 		SHA256 string `json:"sha256"`
 	} `json:"form"`
+	Challenge *UploadChallenge `json:"challenge,omitempty"`
 }
 
 type NTEBundle struct {
@@ -201,7 +202,7 @@ func (d *Drive) planUploadV2(
 		body, marshalErr := json.Marshal(map[string]any{
 			"requestId":    requestID,
 			"current":      currentID,
-			"capabilities": []string{"nte-bundle-v1"},
+			"capabilities": uploadPlanCapabilities(),
 			"files":        payloadFiles,
 		})
 		if marshalErr != nil {

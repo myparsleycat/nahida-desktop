@@ -213,7 +213,7 @@ func TestUploadBackupFilesKeepsAnNteSetOnOnePageAndCompletesItsBundle(t *testing
 		t.Fatalf("pages = %v, want %v", pages, want)
 	}
 	for _, announced := range capabilities {
-		if !slices.Equal(announced, []string{"nte-bundle-v1"}) {
+		if !slices.Equal(announced, []string{"nte-bundle-v1", "upload-pop-v1"}) {
 			t.Fatalf("capabilities = %v", capabilities)
 		}
 	}

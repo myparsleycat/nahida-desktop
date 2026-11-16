@@ -421,6 +421,7 @@ func (s *Service) uploadMods(
 			FullPath: mod.source.path,
 			Size:     mod.source.size,
 			SHA256:   hashed[index].SHA256,
+			PopKey:   hashed[index].PopKey,
 		}
 	}
 

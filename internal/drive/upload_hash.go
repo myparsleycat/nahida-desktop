@@ -24,6 +24,7 @@ var uploadHashBuffers = sync.Pool{New: func() any {
 
 type uploadHashEntry struct {
 	SHA256 string
+	PopKey []byte
 	Path   string
 	Info   os.FileInfo
 }
@@ -170,7 +171,9 @@ func hashUploadSource(
 		*buffer, _ = uploadHashBuffers.Get().(*[]byte)
 	}
 	hasher := sha256.New()
-	n, err := io.CopyBuffer(hasher, contextReader{ctx: ctx, reader: file, onBytes: opts.onBytes}, **buffer)
+	pop := newUploadPopHash()
+	reader := contextReader{ctx: ctx, reader: file, onBytes: opts.onBytes}
+	n, err := io.CopyBuffer(io.MultiWriter(hasher, pop), reader, **buffer)
 	if err != nil {
 		return uploadHashEntry{}, err
 	}
@@ -181,7 +184,12 @@ func hashUploadSource(
 	if opts.verifySource && (n != before.Size() || !sameUploadSource(before, after)) {
 		return uploadHashEntry{}, uploadSourceChanged(source, "hash-read", before, after)
 	}
-	return uploadHashEntry{SHA256: hex.EncodeToString(hasher.Sum(nil)), Path: source.FullPath, Info: after}, nil
+	return uploadHashEntry{
+		SHA256: hex.EncodeToString(hasher.Sum(nil)),
+		PopKey: pop.Sum(nil),
+		Path:   source.FullPath,
+		Info:   after,
+	}, nil
 }
 
 func sameUploadSource(expected, observed os.FileInfo) bool {
