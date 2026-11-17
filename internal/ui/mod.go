@@ -575,6 +575,7 @@ func (s *Shell) selectGroup(group *mod.FolderGroup) {
 	}
 	m.group, m.listing, m.listingFull, m.hover, m.lightbox = group, nil, false, "", nil
 	m.listingSeq++
+	m.modelPreviews.cancelRunning()
 	s.setMergeMode(false)
 	s.closeModelViewer()
 	if group == nil {

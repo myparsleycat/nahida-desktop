@@ -32,7 +32,8 @@ const (
 	// this delay; a second failure is kept until the render settings change.
 	modelPreviewRetryAfter = time.Minute
 	modelPreviewRetries    = 1
-	// A queued preview whose card has not been built for this long has left the view and is dropped.
+	// A queued preview whose card has not been built for this long has left the view and waits until its card
+	// asks again.
 	modelPreviewWantedFor = 2 * time.Second
 )
 
@@ -51,7 +52,9 @@ type modelPreviews struct {
 	images   map[string]*modelPreviewImage
 	queue    map[string]*modelPreviewJob
 	failures map[string][]modelPreviewFailure
-	running  bool
+	// current is the preview being rendered; a card built meanwhile must not queue it again.
+	current  *modelPreviewJob
+	cancel   context.CancelFunc
 	used     uint64
 	renderer viewerRenderer
 }
@@ -66,7 +69,11 @@ type modelPreviewJob struct {
 	key      string
 	info     mod.ModInfo
 	settings modelPreviewSettings
-	wanted   time.Time
+	// queued is when a card of the folder first asked for the preview.
+	queued time.Time
+	wanted time.Time
+	// stopped is set on the UI thread when the render is canceled because the folder or the screen was left.
+	stopped bool
 }
 
 // modelPreviewFailure counts the failed renders of one folder. The key outlives a toggle, so each name of the
@@ -204,13 +211,16 @@ func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
 		(failure.count > modelPreviewRetries || time.Since(failure.at) < modelPreviewRetryAfter) {
 		return nil, false
 	}
+	if p.current != nil && !p.current.stopped && p.current.key == key {
+		return nil, true
+	}
 
 	if p.queue == nil {
 		p.queue = map[string]*modelPreviewJob{}
 	}
 	job := p.queue[key]
 	if job == nil {
-		job = &modelPreviewJob{key: key, settings: settings}
+		job = &modelPreviewJob{key: key, settings: settings, queued: time.Now()}
 		p.queue[key] = job
 	}
 	job.info, job.wanted = info, time.Now()
@@ -218,16 +228,15 @@ func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
 	return nil, true
 }
 
-// pumpModelPreviews starts the preview whose card asked for it last, after dropping the ones no card wants now.
+// pumpModelPreviews starts the preview whose card asked for it last, skipping the ones no card wants now.
 func (s *Shell) pumpModelPreviews() {
 	p := &s.mods.modelPreviews
-	if p.running {
+	if p.current != nil {
 		return
 	}
 	var next *modelPreviewJob
-	for key, job := range p.queue {
+	for _, job := range p.queue {
 		if time.Since(job.wanted) > modelPreviewWantedFor {
-			delete(p.queue, key)
 			continue
 		}
 		if next == nil || job.wanted.After(next.wanted) {
@@ -238,12 +247,16 @@ func (s *Shell) pumpModelPreviews() {
 		return
 	}
 	delete(p.queue, next.key)
-	p.running = true
-	s.background(func(ctx context.Context) {
-		ctx, cancel := context.WithTimeout(ctx, modelPreviewTimeout)
+	p.current = next
+	jobCtx, cancelJob := context.WithCancel(context.Background())
+	p.cancel = cancelJob
+	s.background(func(runCtx context.Context) {
+		defer cancelJob()
+		defer context.AfterFunc(runCtx, cancelJob)()
+		ctx, cancel := context.WithTimeout(jobCtx, modelPreviewTimeout)
 		defer cancel()
 		img, generation, err := s.renderModelPreview(ctx, p, next)
-		if err != nil {
+		if err != nil && jobCtx.Err() == nil {
 			err = infra.ReportError(s.deps.Log, err, "Mod.gridModelPreview", infra.Diagnostic{
 				Operation: "grid-model-preview",
 				Fields:    map[string]any{"modName": next.info.Name, "modPath": next.info.Path},
@@ -253,10 +266,24 @@ func (s *Shell) pumpModelPreviews() {
 	})
 }
 
+// cancelRunning stops the running preview and drops the queued ones, as when another folder is selected or the
+// mod screen is left.
+func (p *modelPreviews) cancelRunning() {
+	if p.current != nil && !p.current.stopped {
+		p.current.stopped = true
+		p.cancel()
+	}
+	clear(p.queue)
+}
+
 func (s *Shell) finishModelPreview(job *modelPreviewJob, img *fairy.Image, generation uint64, err error) {
 	p := &s.mods.modelPreviews
-	p.running = false
-	if err != nil {
+	p.current, p.cancel = nil, nil
+	switch {
+	case err != nil && job.stopped:
+		// A render stopped because its folder or the screen was left says nothing about the mod, so it is not
+		// counted.
+	case err != nil:
 		if p.failures == nil {
 			p.failures = map[string][]modelPreviewFailure{}
 		}
@@ -270,7 +297,7 @@ func (s *Shell) finishModelPreview(job *modelPreviewJob, img *fairy.Image, gener
 			// A card that stays in view is built again only when something changes, so it is asked to be.
 			time.AfterFunc(modelPreviewRetryAfter, func() { fairy.Go(func() {}) })
 		}
-	} else {
+	default:
 		delete(p.failures, job.key)
 		p.store(job.key, img, generation)
 	}
@@ -324,6 +351,7 @@ func (s *Shell) renderModelPreview(
 ) (img *fairy.Image, generation uint64, err error) {
 	go warmViewerRenderer()
 	tools := s.deps.Tools
+	started := time.Now()
 	stage := "load"
 	defer func() {
 		if err != nil {
@@ -337,6 +365,7 @@ func (s *Shell) renderModelPreview(
 	if id := transport.MemorySessionID; id != "" {
 		defer func() { _, _ = tools.CleanupModelViewer(context.Background(), id) }()
 	}
+	loaded := time.Now()
 
 	stage = "read-meshes"
 	_, states := modelviewer.EvaluateViewerState(transport, modelPreviewState(transport, job.info), "")
@@ -349,6 +378,7 @@ func (s *Shell) renderModelPreview(
 		return nil, 0, err
 	}
 	markViewerMeshes(scene)
+	built := time.Now()
 
 	stage = "upload"
 	scene.gpu, err = uploadViewerScene(ctx, tools.ReadModelViewerResource, s.deps.Log, transport,
@@ -357,6 +387,11 @@ func (s *Shell) renderModelPreview(
 		return nil, 0, err
 	}
 	defer scene.gpu.release()
+	// The upload can finish without an error after a cancellation, since only some texture reads check ctx.
+	if ctx.Err() != nil {
+		return nil, 0, ctx.Err()
+	}
+	uploaded := time.Now()
 
 	stage = "render"
 	opts := modelPreviewDrawOptions(scene, job.settings)
@@ -376,6 +411,23 @@ func (s *Shell) renderModelPreview(
 	if err != nil {
 		return nil, 0, fmt.Errorf("render %dpx model preview: %w", modelPreviewSize, err)
 	}
+
+	done := time.Now()
+	s.deps.Log.Info(
+		fmt.Sprintf(
+			"Grid model preview rendered in %dms "+
+				"(wait=%dms load=%dms scene=%dms upload=%dms render=%dms meshes=%d textures=%d)",
+			done.Sub(started).Milliseconds(),
+			started.Sub(job.queued).Milliseconds(),
+			loaded.Sub(started).Milliseconds(),
+			built.Sub(loaded).Milliseconds(),
+			uploaded.Sub(built).Milliseconds(),
+			done.Sub(uploaded).Milliseconds(),
+			len(transport.Meshes),
+			len(transport.Textures),
+		),
+		"Mod.gridModelPreview",
+	)
 	return img, generation, nil
 }
 

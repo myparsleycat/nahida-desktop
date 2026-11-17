@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"context"
+	"maps"
+	"slices"
 	"testing"
 
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -42,6 +46,47 @@ func TestModelPreviewStateScopesVariablesToTheirINI(t *testing.T) {
 		if state[key] != value {
 			t.Errorf("state[%q] = %v, want %v", key, state[key], value)
 		}
+	}
+}
+
+// A failure keeps the card from asking again for a minute and, after the retry, for good, so a render that
+// was stopped because its folder was left must not count as one.
+func TestModelPreviewCancelIsNotAFailure(t *testing.T) {
+	s := &Shell{}
+	p := &s.mods.modelPreviews
+	job := &modelPreviewJob{key: "key", info: previewMod("a")}
+	p.current, p.cancel = job, func() {}
+	p.cancelRunning()
+
+	s.finishModelPreview(job, nil, 0, context.Canceled)
+
+	if p.current != nil {
+		t.Error("the preview queue is still marked running")
+	}
+	if failure := p.failure(job.key, job.info.Path); failure != nil {
+		t.Errorf("the canceled render was recorded as a failure: %+v", *failure)
+	}
+}
+
+// A card built while its own preview renders must not queue it again, or the mod is rendered twice in a row.
+func TestModelPreviewDoesNotQueueTheRunningKey(t *testing.T) {
+	s := &Shell{}
+	s.settings.values = map[string]any{
+		setting.KeyModelViewerToneMapping: "",
+		setting.KeyModelViewerEnvironment: "",
+		setting.KeyModelViewerExposure:    1.0,
+		setting.KeyModelViewerToonShadows: true,
+		setting.KeyModelViewerToonStyles:  "",
+	}
+	info := previewMod("a", [3]string{"Character.ini", "$outfit", "0"})
+	p := &s.mods.modelPreviews
+	p.current = &modelPreviewJob{key: modelPreviewKey(info, s.modelPreviewSettings())}
+
+	if img, loading := s.modelPreview(info); img != nil || !loading {
+		t.Errorf("modelPreview = %v, %v; want a placeholder while it renders", img, loading)
+	}
+	if len(p.queue) != 0 {
+		t.Errorf("the running preview was queued again: %v", slices.Collect(maps.Keys(p.queue)))
 	}
 }
 

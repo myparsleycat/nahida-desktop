@@ -286,6 +286,7 @@ func (s *Shell) page(cx *fairy.Cx) *fairy.El {
 	s.hideDrives(route)
 	if route != RouteMod {
 		s.modVideos.closeAll()
+		s.mods.modelPreviews.cancelRunning()
 	}
 	if route != RouteDrive && route != RouteShare {
 		s.driveVideos.closeAll()
