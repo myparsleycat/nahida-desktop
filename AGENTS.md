@@ -10,12 +10,6 @@
 - Do not restore Linux, Android, iOS, or macOS build targets.
 - Make small, reviewable changes and keep the build and types valid after each unit.
 
-## Go Skills
-
-- Use the `golang-*` skills from `https://github.com/samber/cc-skills-golang` for Go work: style, naming, error handling, testing, concurrency, performance, and library choice.
-- `golang-how-to` is the entry point; it routes to the relevant skills and loads several together when a task spans multiple concerns.
-- This file takes precedence on conflict: project commands, pinned tools, UI framework wiring, and cross-layer contracts override general skill guidance.
-
 ## Layout
 
 - `main.go` calls `app.Run`. `internal/app/app.go` takes the single-instance lock, boots the backend, and runs the `fairy` message loop with the tray and the main window (`internal/app/window.go`, `internal/app/tray.go`).
