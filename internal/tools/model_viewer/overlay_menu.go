@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -497,7 +498,7 @@ func (p *modelViewerOverlayProgram) build(
 			stateVariables = append(stateVariables, id)
 		}
 	}
-	return assembleModelViewerOverlayMenu(pages, explorer.form, stateVariables)
+	return assembleModelViewerOverlayMenu(ctx, pages, explorer.form, stateVariables)
 }
 
 // drawsDifferently reports whether a page built so far would now come out otherwise.
@@ -980,6 +981,7 @@ func modelViewerOverlaySameQuads(a, b []modelViewerOverlayTracedQuad, layoutOnly
 // the gaps of dropped ones. Without a toggle on any page the menu operates nothing
 // in the viewer, and the regular controls stay on their own.
 func assembleModelViewerOverlayMenu(
+	ctx context.Context,
 	pages []*modelViewerOverlayPageBuild,
 	form string,
 	stateVariables []string,
@@ -990,6 +992,7 @@ func assembleModelViewerOverlayMenu(
 	kept := make([]int, len(pages))
 	count := 0
 	hasToggle := false
+	areas := make(map[string]modelViewerOverlayVisibleArea)
 	for index, page := range pages {
 		kept[index] = -1
 		if page == nil {
@@ -998,7 +1001,7 @@ func assembleModelViewerOverlayMenu(
 		kept[index] = count
 		count++
 		for _, quad := range page.page.Quads {
-			left, top, right, bottom := modelViewerOverlayVisibleBounds(quad)
+			left, top, right, bottom := modelViewerOverlayVisibleBounds(ctx, quad, areas)
 			originX, originY = min(originX, left), min(originY, top)
 			maxX, maxY = max(maxX, right), max(maxY, bottom)
 		}
@@ -1063,36 +1066,42 @@ func assembleModelViewerOverlayMenu(
 
 // modelViewerOverlayVisibleBounds is the area a quad takes up in the menu. A
 // backdrop covering the window is mostly empty, with the menu painted on one part.
-func modelViewerOverlayVisibleBounds(quad ModelViewerOverlayQuad) (left, top, right, bottom float64) {
+// areas holds the measured images by path, since every page draws the same backdrop.
+func modelViewerOverlayVisibleBounds(
+	ctx context.Context,
+	quad ModelViewerOverlayQuad,
+	areas map[string]modelViewerOverlayVisibleArea,
+) (left, top, right, bottom float64) {
 	left, top, right, bottom = quad.X, quad.Y, quad.X+quad.Width, quad.Y+quad.Height
 	if quad.Width < modelViewerOverlayWidth || quad.Height < modelViewerOverlayHeight {
 		return left, top, right, bottom
 	}
-	file, err := os.Open(quad.Path)
-	if err != nil {
+	area, ok := areas[quad.Path]
+	if !ok {
+		area = measureModelViewerOverlayVisibleArea(ctx, quad.Path)
+		areas[quad.Path] = area
+	}
+	if area.visible.Empty() {
 		return left, top, right, bottom
 	}
-	defer func() { _ = file.Close() }()
 
-	// The same formats and input limit as textures apply, checked from the header before the pixels are allocated.
-	header := make([]byte, 512)
-	count, err := io.ReadFull(file, header)
-	if (err != nil && !errors.Is(err, io.ErrUnexpectedEOF)) || modelViewerImageContentType(header[:count]) == "" {
-		return left, top, right, bottom
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return left, top, right, bottom
-	}
-	config, _, err := image.DecodeConfig(file)
-	if err != nil || int64(config.Width)*int64(config.Height) > maxModelViewerTextureInputPixels {
-		return left, top, right, bottom
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return left, top, right, bottom
-	}
-	decoded, _, err := image.Decode(file)
+	bounds, visible := area.bounds, area.visible
+	scaleX, scaleY := quad.Width/float64(bounds.Dx()), quad.Height/float64(bounds.Dy())
+	return quad.X + float64(visible.Min.X-bounds.Min.X)*scaleX, quad.Y + float64(visible.Min.Y-bounds.Min.Y)*scaleY,
+		quad.X + float64(visible.Max.X-bounds.Min.X)*scaleX,
+		quad.Y + float64(visible.Max.Y-bounds.Min.Y)*scaleY
+}
+
+// modelViewerOverlayVisibleArea is the part of an image with visible pixels. visible is empty when the image
+// cannot be measured, and the whole quad counts.
+type modelViewerOverlayVisibleArea struct {
+	bounds, visible image.Rectangle
+}
+
+func measureModelViewerOverlayVisibleArea(ctx context.Context, path string) modelViewerOverlayVisibleArea {
+	decoded, err := decodeModelViewerOverlayBackdrop(ctx, path)
 	if err != nil {
-		return left, top, right, bottom
+		return modelViewerOverlayVisibleArea{}
 	}
 
 	bounds := decoded.Bounds()
@@ -1101,23 +1110,84 @@ func modelViewerOverlayVisibleBounds(quad ModelViewerOverlayQuad) (left, top, ri
 		for x := bounds.Min.X; x < bounds.Max.X; x += modelViewerOverlayAlphaSampleStep {
 			if _, _, _, alpha := decoded.At(x, y).RGBA(); alpha > modelViewerOverlayVisibleAlpha {
 				minX, minY = min(minX, x), min(minY, y)
-				maxX, maxY = max(
-					maxX,
-					x+modelViewerOverlayAlphaSampleStep,
-				), max(
-					maxY,
-					y+modelViewerOverlayAlphaSampleStep,
-				)
+				maxX = max(maxX, x+modelViewerOverlayAlphaSampleStep)
+				maxY = max(maxY, y+modelViewerOverlayAlphaSampleStep)
 			}
 		}
 	}
 	if minX >= maxX || minY >= maxY {
-		return left, top, right, bottom
+		return modelViewerOverlayVisibleArea{}
 	}
-	scaleX, scaleY := quad.Width/float64(bounds.Dx()), quad.Height/float64(bounds.Dy())
-	return quad.X + float64(minX-bounds.Min.X)*scaleX, quad.Y + float64(minY-bounds.Min.Y)*scaleY,
-		quad.X + float64(min(maxX, bounds.Max.X)-bounds.Min.X)*scaleX,
-		quad.Y + float64(min(maxY, bounds.Max.Y)-bounds.Min.Y)*scaleY
+	return modelViewerOverlayVisibleArea{
+		bounds:  bounds,
+		visible: image.Rect(minX, minY, min(maxX, bounds.Max.X), min(maxY, bounds.Max.Y)),
+	}
+}
+
+func decodeModelViewerOverlayBackdrop(ctx context.Context, path string) (image.Image, error) {
+	data, err := readModelViewerOverlayBackdrop(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	decoded, _, err := image.Decode(modelViewerContextReader{ctx: ctx, reader: bytes.NewReader(data)})
+	return decoded, err
+}
+
+// readModelViewerOverlayBackdrop reads a backdrop under a disk slot, which it releases before the pixels are
+// decoded. The same formats and input limit as textures apply, checked from the header before the file is read.
+func readModelViewerOverlayBackdrop(ctx context.Context, path string) ([]byte, error) {
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+
+	header := make([]byte, 512)
+	count, err := io.ReadFull(file, header)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, err
+	}
+	if modelViewerImageContentType(header[:count]) == "" {
+		return nil, fmt.Errorf("overlay backdrop is not a supported image: %s", path)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	config, _, err := image.DecodeConfig(file)
+	if err != nil {
+		return nil, err
+	}
+	if int64(config.Width)*int64(config.Height) > maxModelViewerTextureInputPixels {
+		return nil, fmt.Errorf("overlay backdrop is too large: %s", path)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(
+		io.LimitReader(modelViewerContextReader{ctx: ctx, reader: file}, maxModelViewerBufferFileBytes+1),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxModelViewerBufferFileBytes {
+		return nil, fmt.Errorf("overlay backdrop is too large: %s", path)
+	}
+	return data, nil
+}
+
+// readModelViewerOverlayImage reads an overlay image under a disk slot, with the size limit of textures.
+func readModelViewerOverlayImage(ctx context.Context, path string) ([]byte, error) {
+	release, err := diskio.Acquire(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return readModelViewerTextureFile(path)
 }
 
 // modelViewerOverlayMenuOnlyVariables returns the listed variables nothing in the
@@ -1239,7 +1309,7 @@ func (t *Service) serveModelViewerOverlayTextures(
 				sessionID,
 				"overlay-tex:"+strconv.Itoa(len(served)),
 				imageType,
-				func(context.Context) ([]byte, error) { return os.ReadFile(path) },
+				func(loadCtx context.Context) ([]byte, error) { return readModelViewerOverlayImage(loadCtx, path) },
 			)
 			if err != nil {
 				return "", err

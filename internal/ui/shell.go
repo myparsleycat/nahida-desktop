@@ -131,6 +131,8 @@ type Shell struct {
 	deviceGen uint64
 	// paths are the download location prompts waiting for an answer, oldest first.
 	paths []pathPrompt
+	// viewers are the open model viewers, in dialogs, tools and their own windows.
+	viewers map[*ModelViewer]struct{}
 	// download is the mod manager download the user is choosing a folder for.
 	download *pathPrompt
 	// win is the main window, for handlers that read the clipboard, the modifier keys or move focus.

@@ -59,13 +59,14 @@ func resolveModelViewerEffectiveResourcesAt(
 	root, baseDir string,
 	sections []modINISection,
 	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
 ) []modelViewerResource {
 	candidates := append([]modelViewerResource(nil), resources...)
 	for index, resource := range candidates {
 		if resource.Filename == "" {
 			continue
 		}
-		path, err := resolveModelViewerResourcePath(root, baseDir, resource.Filename)
+		path, err := cache.resourcePath(root, baseDir, resource.Filename)
 		if err != nil || !platform.SameOrChildPath(root, path) {
 			continue
 		}
@@ -86,7 +87,7 @@ func resolveModelViewerEffectiveResourcesAt(
 			output[index] = resources[index]
 			continue
 		}
-		path, err := resolveModelViewerResourcePath(root, baseDir, output[index].Filename)
+		path, err := cache.resourcePath(root, baseDir, output[index].Filename)
 		if err != nil || !platform.SameOrChildPath(root, path) {
 			output[index] = resources[index]
 			continue

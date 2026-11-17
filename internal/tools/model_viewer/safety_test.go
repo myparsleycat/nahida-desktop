@@ -55,6 +55,37 @@ func TestModelViewerSafetyRejectsDirectoryLinkEscape(t *testing.T) {
 	}
 }
 
+func TestModelViewerSafetyFollowsSiblingJunctions(t *testing.T) {
+	base := t.TempDir()
+	mods := filepath.Join(base, "Mods")
+	modDir := filepath.Join(mods, "MyMod")
+	sharedDir := filepath.Join(mods, "Shared")
+	outsideDir := filepath.Join(base, "Outside")
+	for _, dir := range []string{modDir, sharedDir, outsideDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, dir := range []string{sharedDir, outsideDir} {
+		if err := os.WriteFile(filepath.Join(dir, "diffuse.dds"), []byte("DDS "), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	createViewerDirectoryLink(t, "junction", sharedDir, filepath.Join(mods, "Linked"))
+	// A mod folder linked into Mods from a library elsewhere.
+	createViewerDirectoryLink(t, "junction", outsideDir, filepath.Join(mods, "Library"))
+	createViewerDirectoryLink(t, "junction", outsideDir, filepath.Join(sharedDir, "Escape"))
+
+	for _, relative := range []string{`..\Linked\diffuse.dds`, `..\Library\diffuse.dds`} {
+		if _, err := resolveModelViewerResourcePath(modDir, modDir, relative); err != nil {
+			t.Fatalf("%s: linked sibling folder was rejected: %v", relative, err)
+		}
+	}
+	if path, err := resolveModelViewerResourcePath(modDir, modDir, `..\Shared\Escape\diffuse.dds`); err == nil {
+		t.Fatalf("link inside a sibling folder leaving it was resolved: %s", path)
+	}
+}
+
 func TestModelViewerSafetyKeepsDirectoryLinkedModFiles(t *testing.T) {
 	for _, kind := range []string{"junction", "symlink"} {
 		t.Run(kind, func(t *testing.T) {

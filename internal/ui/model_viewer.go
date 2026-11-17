@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -78,6 +79,11 @@ type ModelViewer struct {
 	revision  uint64
 	uploading bool
 	drawErr   string
+	// uploadErr is set when the scene could not be uploaded again after the device was lost; it holds further
+	// attempts until Retry.
+	uploadErr string
+	// window is the window that last built the viewer.
+	window *fairy.Window
 	// imageFailures logs each menu or toggle picture that cannot be read once, not on every request for it.
 	imageFailures infra.DiagnosticThrottle
 	dragStart     orbitCamera
@@ -161,6 +167,10 @@ func (s *Shell) NewModelViewer(path string) *ModelViewer {
 		toasts:      &s.toasts,
 		importer:    s.currentImporter(),
 	}
+	if s.viewers == nil {
+		s.viewers = map[*ModelViewer]struct{}{}
+	}
+	s.viewers[v] = struct{}{}
 	v.refreshGameLinked()
 	v.loadTogglePresets()
 	v.load()
@@ -185,6 +195,9 @@ func (v *ModelViewer) Close() {
 		return
 	}
 	v.closed = true
+	if v.shell != nil {
+		delete(v.shell.viewers, v)
+	}
 	v.motion.stop()
 	v.cancel()
 	if v.gamePreview != nil {
@@ -221,7 +234,7 @@ func (v *ModelViewer) read(ctx context.Context, url string) ([]byte, error) {
 
 // load reads the mod on a background goroutine and installs it on the UI thread.
 func (v *ModelViewer) load() {
-	v.loading, v.loadErr = true, ""
+	v.loading, v.loadErr, v.uploadErr = true, "", ""
 	v.releaseScene()
 	ctx := v.ctx
 	go func() {
@@ -250,6 +263,7 @@ func (v *ModelViewer) load() {
 }
 
 func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err error) {
+	go warmViewerRenderer()
 	stage := "wait-startup"
 	defer func() {
 		if err != nil && !infra.IsCancellationError(err) && ctx.Err() == nil {
@@ -509,13 +523,20 @@ func (v *ModelViewer) loadVariant(i, index int) {
 	}
 	v.pendingVariants[pending] = true
 	ctx := v.ctx
+	mesh := scene.meshes[i]
+	info, vertexCount := mesh.info, mesh.vertexCount
+	post := v.poster()
 	go func() {
-		variant, err := scene.loadVariant(ctx, v.read, i, index)
-		fairy.Go(func() {
+		variant, err := readViewerVariant(ctx, v.read, info, vertexCount, index)
+		post(func() {
 			if v.scene != scene {
 				return
 			}
 			delete(v.pendingVariants, pending)
+			// The mesh was read meanwhile with another vertex count; the next present asks for the variant again.
+			if mesh.vertexCount != vertexCount {
+				return
+			}
 			if err != nil {
 				if ctx.Err() == nil {
 					v.failVariant(scene, i, index, err)
@@ -588,6 +609,11 @@ func (v *ModelViewer) reupload() {
 			v.uploading = false
 			if err != nil || v.scene != scene {
 				set.release()
+				if err != nil && v.scene == scene && !infra.IsCancellationError(err) {
+					v.uploadErr = infra.ReportError(v.log, err, "ModelViewer.reupload", infra.Diagnostic{
+						Operation: "reupload", Fields: map[string]any{"modPath": v.path},
+					}).Error()
+				}
 				return
 			}
 			scene.gpu.release()
@@ -606,6 +632,27 @@ func (v *ModelViewer) reupload() {
 			v.present()
 		})
 	}()
+}
+
+// poster returns how a goroutine started now hands a result without device objects to the UI thread. Posting to
+// the viewer's window rebuilds only that window, where fairy.Go rebuilds every window; a window that closes
+// meanwhile drops the call, so results that hold GPU buffers to release still go through fairy.Go.
+func (v *ModelViewer) poster() func(func()) {
+	if v.window != nil {
+		return v.window.Post
+	}
+	return fairy.Go
+}
+
+// retryDraw makes the renderer create its device objects again, which it otherwise does not after a failure until
+// the device changes, and lets the scene upload again.
+func (v *ModelViewer) retryDraw() {
+	_ = fairy.UseDevice(func(fairy.GPU) error {
+		v.renderer.release()
+		return nil
+	})
+	v.drawErr, v.uploadErr = "", ""
+	v.revision++
 }
 
 // version identifies the picture for the surface's Retain.
@@ -775,6 +822,7 @@ func (v *ModelViewer) View(cx *fairy.Cx) *fairy.El {
 // content builds the viewer with header above its menu bar and viewport; a tool's dialog passes nil and titles
 // the dialog itself, as React's ModelViewerWorkspace has no header of its own.
 func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fairy.El {
+	v.window = cx.Window()
 	background := t.Background.Mix(t.Muted, 0.5)
 
 	scene := v.scene
@@ -788,15 +836,20 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	animated := opts.overlay != nil && opts.overlay.animated != nil
 	surface := fairy.Surface(func(f fairy.SurfaceFrame) bool {
 		v.surfaceSize = [2]int{f.Width, f.Height}
-		if scene != nil && scene.gpu != nil && scene.gpu.generation != f.Generation {
+		if scene != nil && scene.gpu != nil && scene.gpu.generation != f.Generation && v.uploadErr == "" {
 			v.reupload()
 		}
 		err := v.renderer.draw(f, scene, opts)
-		if message := fmt.Sprint(err); err != nil && message != v.drawErr {
+		switch message := fmt.Sprint(err); {
+		case err != nil && message != v.drawErr:
 			v.drawErr = message
 			_ = infra.ReportError(v.log, err, "ModelViewer.draw", infra.Diagnostic{
 				Operation: "draw", Fields: map[string]any{"modPath": v.path},
 			})
+			cx.Window().Update()
+		case err == nil && v.drawErr != "":
+			v.drawErr = ""
+			cx.Window().Update()
 		}
 		if v.motion.running {
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
@@ -857,6 +910,17 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			fairy.Text(T("page.tools.model_viewer.toast.load_error")).FontSize(14).LineHeight(20).SemiBold(),
 			fairy.Text(v.loadErr).Color(t.Destructive).FontSize(12).LineHeight(16).MaxW(560).Wrap(),
 			kit.Button(T("page.tools.model_viewer.retry"), v.load),
+		).Absolute().Inset(0).Center().Gap(10).Pad(24))
+	case v.drawErr != "" || v.uploadErr != "":
+		viewport.Child(fairy.Col(
+			fairy.Text(T("page.tools.model_viewer.draw_error")).FontSize(14).LineHeight(20).SemiBold(),
+			fairy.Text(cmp.Or(v.uploadErr, v.drawErr)).
+				Color(t.Destructive).
+				FontSize(12).
+				LineHeight(16).
+				MaxW(560).
+				Wrap(),
+			kit.Button(T("page.tools.model_viewer.retry"), v.retryDraw),
 		).Absolute().Inset(0).Center().Gap(10).Pad(24))
 	}
 

@@ -20,6 +20,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
+	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
 // viewerRotations are the Model menu's turns of the model, in degrees of roll, pitch and yaw.
@@ -138,29 +139,54 @@ func (v *ModelViewer) menuBar() *fairy.El {
 		}},
 		{Label: T("page.tools.model_viewer.menu.texture"), Items: func() []kit.MenuItem {
 			return []kit.MenuItem{{
-				Label: "Double Sided", Checkbox: true, Checked: v.doubleSided,
+				Label: T("page.tools.model_viewer.menu.double_sided"), Checkbox: true, Checked: v.doubleSided,
 				OnClick: func() { v.doubleSided = !v.doubleSided },
 			}}
 		}},
 		{Label: T("page.tools.model_viewer.menu.rendering"), Items: func() []kit.MenuItem {
 			items := []kit.MenuItem{
-				{Heading: true, Label: "Tone Mapping"},
-				radio("Neutral", viewerToneNeutral, tone, setting.KeyModelViewerToneMapping),
-				radio("ACES Filmic", viewerToneACES, tone, setting.KeyModelViewerToneMapping),
-				radio("None", viewerToneNone, tone, setting.KeyModelViewerToneMapping),
+				{Heading: true, Label: T("page.tools.model_viewer.menu.tone_mapping")},
+				radio(
+					T("page.tools.model_viewer.menu.tone_neutral"),
+					viewerToneNeutral,
+					tone,
+					setting.KeyModelViewerToneMapping,
+				),
+				radio(
+					T("page.tools.model_viewer.menu.tone_aces"),
+					viewerToneACES,
+					tone,
+					setting.KeyModelViewerToneMapping,
+				),
+				radio(T("page.tools.model_viewer.menu.none"), viewerToneNone, tone, setting.KeyModelViewerToneMapping),
 				{Separator: true},
-				{Heading: true, Label: "Environment"},
-				radio("Studio", viewerEnvironmentStudio, environment, setting.KeyModelViewerEnvironment),
-				radio("Soft", viewerEnvironmentSoft, environment, setting.KeyModelViewerEnvironment),
-				radio("None", viewerEnvironmentNone, environment, setting.KeyModelViewerEnvironment),
+				{Heading: true, Label: T("page.tools.model_viewer.menu.environment")},
+				radio(
+					T("page.tools.model_viewer.menu.environment_studio"),
+					viewerEnvironmentStudio,
+					environment,
+					setting.KeyModelViewerEnvironment,
+				),
+				radio(
+					T("page.tools.model_viewer.menu.environment_soft"),
+					viewerEnvironmentSoft,
+					environment,
+					setting.KeyModelViewerEnvironment,
+				),
+				radio(
+					T("page.tools.model_viewer.menu.none"),
+					viewerEnvironmentNone,
+					environment,
+					setting.KeyModelViewerEnvironment,
+				),
 				{Separator: true},
-				{Heading: true, Label: "Exposure"},
+				{Heading: true, Label: T("page.tools.model_viewer.menu.exposure")},
 				{Content: v.exposureControl(exposure)},
 			}
 			if v.hasToon() {
 				toonShadows := v.toonShadows()
 				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
-					Label: "Toon Shadows", Checkbox: true, Checked: toonShadows,
+					Label: T("page.tools.model_viewer.menu.toon_shadows"), Checkbox: true, Checked: toonShadows,
 					OnClick: func() { v.setRenderSetting(setting.KeyModelViewerToonShadows, !toonShadows) },
 				}, kit.MenuItem{
 					Label:   T("page.tools.model_viewer.menu." + viewerToonProfiles[v.toonProfile()].label),
@@ -247,11 +273,22 @@ func (v *ModelViewer) exposureControl(exposure float64) *fairy.El {
 	return fairy.Col(
 		fairy.Row(
 			kit.Button("-0.1", func() { v.commitExposure(exposure - 0.1) }, kit.Outline, kit.Small),
-			kit.Button("Reset", func() { v.commitExposure(viewerDefaultExposure) }, kit.Outline, kit.Small),
+			kit.Button(
+				T("page.tools.model_viewer.menu.reset"),
+				func() { v.commitExposure(viewerDefaultExposure) },
+				kit.Outline,
+				kit.Small,
+			),
 			kit.Button("+0.1", func() { v.commitExposure(exposure + 0.1) }, kit.Outline, kit.Small),
 		).Gap(4),
-		kit.TextField(text, func(value string) { v.exposureDraft = &value }, kit.Label("Exposure")).
-			Key("model-viewer.exposure").OnBlur(commit).OnSubmit(func(string) { commit() }),
+		kit.TextField(
+			text,
+			func(value string) { v.exposureDraft = &value },
+			kit.Label(T("page.tools.model_viewer.menu.exposure")),
+		).
+			Key("model-viewer.exposure").
+			OnBlur(commit).
+			OnSubmit(func(string) { commit() }),
 		fairy.Row(
 			fairy.Text(formatViewerNumber(viewerMinExposure)),
 			fairy.Text(formatViewerNumber(viewerMaxExposure)),
@@ -354,14 +391,14 @@ func (v *ModelViewer) saveTogglesToINI() {
 	})
 }
 
-// applyTogglesToGame sets every variable of the current toggle state in the running games that load the mod,
+// applyTogglesToGame sets the toggle variables of the current state in the running games that load the mod,
 // without changing the INI files.
 func (v *ModelViewer) applyTogglesToGame() {
 	scene := v.scene
 	if scene == nil || v.tools == nil || v.shell == nil || v.applyingToGame {
 		return
 	}
-	state := maps.Clone(v.state)
+	state := toggleState(v.state, &scene.transport)
 	inis := scene.transport.INIs
 	toasts := v.toasts
 	v.applyingToGame = true
@@ -408,11 +445,44 @@ func (v *ModelViewer) refreshGameLinked() {
 	v.shell.background(func(context.Context) {
 		linked := v.tools.ModelViewerGameLinked(v.path)
 		fairy.Go(func() {
-			if v.gameLinkCheck == check {
-				v.gameLinked = linked
+			if v.gameLinkCheck != check || v.closed || v.gameLinked == linked {
+				return
 			}
+			v.gameLinked = linked
+			v.syncGamePreview()
 		})
 	})
+}
+
+// toggleState keeps the variables the viewer's controls and overlay menus set. The rest of the state holds every
+// variable the INIs assign, including runtime counters and handshake values that a running game must keep.
+func toggleState(state map[string]any, transport *modelviewer.ModelViewerTransport) map[string]any {
+	ids := map[string]bool{}
+	for _, variable := range transport.Variables {
+		ids[variable.ID] = true
+		for _, effect := range variable.Effects {
+			ids[effect.Var] = true
+		}
+	}
+	for _, menu := range transport.OverlayMenus {
+		for _, page := range menu.Pages {
+			for _, button := range page.Buttons {
+				ids[button.Variable] = true
+			}
+			for _, slider := range page.Sliders {
+				for _, mode := range slider.Modes {
+					ids[mode.Variable] = true
+				}
+			}
+		}
+	}
+	toggles := map[string]any{}
+	for id, value := range state {
+		if ids[id] {
+			toggles[id] = value
+		}
+	}
+	return toggles
 }
 
 // iniToggleValues picks the values of the variables one INI declares from the viewer state, by their declared
@@ -472,6 +542,10 @@ func (v *ModelViewer) savePreview() {
 		return
 	}
 	shot, err := v.capture()
+	if errors.Is(err, errViewerCaptureNotReady) {
+		v.toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.capture_not_ready"), "")
+		return
+	}
 	if err != nil {
 		_ = infra.ReportError(v.log, err, "ModelViewer.capturePreview", infra.Diagnostic{
 			Operation: "capture-preview", Stage: "render", Fields: map[string]any{"modPath": v.path},
@@ -513,11 +587,18 @@ func (v *ModelViewer) savePreview() {
 	})
 }
 
+// errViewerCaptureNotReady is returned while the scene is not on the current device, so a capture would miss it.
+var errViewerCaptureNotReady = errors.New("model viewer is still loading the model")
+
 // capture renders the current view at the surface's size and crops its centre square.
 func (v *ModelViewer) capture() (image.Image, error) {
 	width, height := v.surfaceSize[0], v.surfaceSize[1]
-	if v.scene == nil || width <= 0 || height <= 0 {
-		return nil, errors.New("the viewer has not drawn the model yet")
+	scene := v.scene
+	// While the scene waits for a mesh it keeps drawing the frame it shows, so only a scene without its GPU set is
+	// incomplete.
+	if scene == nil || width <= 0 || height <= 0 || v.uploading || scene.gpu == nil ||
+		scene.gpu.generation != fairy.DeviceGeneration() {
+		return nil, errViewerCaptureNotReady
 	}
 	opts := v.drawOptions([4]float32{})
 	var drawErr error

@@ -72,7 +72,7 @@ ResourceBodyPosition = ref cs-u5
 filename = %s
 stride = 40`, filename))
 		resources := collectModelViewerResources(sections)
-		resolved := resolveModelViewerEffectiveResourcesAt(root, root, sections, resources)
+		resolved := resolveModelViewerEffectiveResourcesAt(root, root, sections, resources, nil)
 		if resolved[0].Filename != "" {
 			t.Fatalf("%s resolved outside the safe mod root: %#v", filename, resolved[0])
 		}
@@ -113,7 +113,7 @@ stride = 24
 filename = %s
 stride = 40`, tc.sourceFile))
 			resources := collectModelViewerResources(sections)
-			resolved := resolveModelViewerEffectiveResourcesAt(root, root, sections, resources)
+			resolved := resolveModelViewerEffectiveResourcesAt(root, root, sections, resources, nil)
 			if got := resolved[0]; got.Filename != tc.wantFile || got.Stride != tc.wantStride {
 				t.Fatalf("effective position = %#v; want file %q stride %d", got, tc.wantFile, tc.wantStride)
 			}

@@ -712,19 +712,20 @@ func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) viewerMissing 
 	return missing
 }
 
-// loadVariant reads position variant index of mesh i.
-func (s *viewerScene) loadVariant(
+// readViewerVariant reads position variant index of the mesh info describes, which has vertexCount vertices. It
+// takes copies of the mesh's fields, since the UI thread fills the mesh while variants read.
+func readViewerVariant(
 	ctx context.Context,
 	read func(context.Context, string) ([]byte, error),
-	i, index int,
+	info modelviewer.ModelViewerMeshTransport,
+	vertexCount, index int,
 ) (*viewerPositionGeometry, error) {
-	mesh := s.meshes[i]
-	if index < 0 || index >= len(mesh.info.PositionVariants) {
-		return nil, fmt.Errorf("mesh %s has no position variant %d", mesh.info.ID, index)
+	if index < 0 || index >= len(info.PositionVariants) {
+		return nil, fmt.Errorf("mesh %s has no position variant %d", info.ID, index)
 	}
-	data, err := read(ctx, mesh.info.PositionVariants[index].GeometryURL)
+	data, err := read(ctx, info.PositionVariants[index].GeometryURL)
 	if err != nil {
 		return nil, err
 	}
-	return decodeViewerPosition(data, mesh.vertexCount)
+	return decodeViewerPosition(data, vertexCount)
 }

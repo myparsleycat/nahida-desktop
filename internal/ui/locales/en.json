@@ -1627,6 +1627,7 @@
         "open_file": "Open File",
         "open_folder": "Open Folder",
         "retry": "Try Again",
+        "draw_error": "Failed to draw the model",
         "loading": "Loading model…",
         "convert_first": "Convert a mod to GLB first, then open it here.",
         "generating_selected_state": "Generating selected state",
@@ -1683,7 +1684,17 @@
           "apply_preset": "Apply preset",
           "no_presets": "No presets",
           "apply_to_game": "Apply to game",
-          "game_preview": "Preview hovered values in game"
+          "game_preview": "Preview hovered values in game",
+          "double_sided": "Double Sided",
+          "tone_mapping": "Tone Mapping",
+          "tone_neutral": "Neutral",
+          "tone_aces": "ACES Filmic",
+          "none": "None",
+          "environment": "Environment",
+          "environment_studio": "Studio",
+          "environment_soft": "Soft",
+          "exposure": "Exposure",
+          "toon_shadows": "Toon Shadows"
         },
         "dialog": {
           "save_preset": {
@@ -1709,6 +1720,7 @@
           "overlay_in_viewer_save_error": "Failed to save the overlay display setting",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
           "capture_preview_error": "Failed to save the current viewer capture as preview.png",
+          "capture_not_ready": "The model is still loading",
           "load_error": "Failed to load the model"
         },
         "rotate_actions": {

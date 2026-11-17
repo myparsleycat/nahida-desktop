@@ -75,8 +75,10 @@ func buildViewerScene(
 	group, groupCtx = errgroup.WithContext(ctx)
 	group.SetLimit(viewerLoadConcurrency)
 	for i, index := range missing.variants {
+		mesh := scene.meshes[i]
+		info, vertexCount := mesh.info, mesh.vertexCount
 		group.Go(func() error {
-			variant, err := scene.loadVariant(groupCtx, read, i, index)
+			variant, err := readViewerVariant(groupCtx, read, info, vertexCount, index)
 			if err != nil {
 				return fmt.Errorf("mesh %s position variant %d: %w", scene.meshes[i].info.ID, index, err)
 			}

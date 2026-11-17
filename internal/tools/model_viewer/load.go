@@ -151,7 +151,7 @@ func (t *Service) loadModViewer(
 		transport.PreviewPath = t.findModelViewerPreview(folder)
 	}
 	stage = "prepare-geometry"
-	prepared, prepareErr := t.prepareModelViewerGeometry(ctx, folder, iniPaths, budget)
+	prepared, prepareErr := t.prepareModelViewerGeometry(ctx, folder, iniPaths, budget, options.spoolGeometry)
 	if prepareErr != nil {
 		return ModelViewerTransport{}, prepareErr
 	}
@@ -415,6 +415,7 @@ func (t *Service) prepareModelViewerGeometry(
 	folder string,
 	iniPaths []string,
 	budget *modelViewerLoadBudget,
+	hashSources bool,
 ) (*modelViewerPreparedGeometry, error) {
 	prepared := &modelViewerPreparedGeometry{
 		cache:             newModelViewerBufferCache(ctx),
@@ -424,6 +425,8 @@ func (t *Service) prepareModelViewerGeometry(
 		computeAnimations: []modelViewerPreparedAnimationClip{},
 		inis:              make([]ModelViewerINI, 0, len(iniPaths)),
 	}
+	prepared.cache.hashSources = hashSources
+	defer prepared.cache.diagnostics.Report(t.log, "StaticGlb.loadForViewer", "model-viewer-buffers")
 	keep := false
 	defer func() {
 		if !keep {
@@ -473,7 +476,7 @@ func (t *Service) prepareModelViewerGeometry(
 		for key, value := range scoped.names {
 			prepared.variableNames[key] = value
 		}
-		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder) {
+		for _, resource := range sanitizeModelViewerResourcePaths(sections, folder, folder, prepared.cache) {
 			t.log.Warn(
 				"Skipped unsafe Model Viewer resource path: "+sanitizeModelViewerLogValue(resource),
 				"StaticGlb.loadForViewer",
@@ -484,6 +487,7 @@ func (t *Service) prepareModelViewerGeometry(
 			folder,
 			sections,
 			collectModelViewerResources(sections),
+			prepared.cache,
 		)
 		for _, resource := range resources {
 			if resource.Filename != "" {

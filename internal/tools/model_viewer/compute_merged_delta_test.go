@@ -261,7 +261,7 @@ func detectMergedDeltaTestINI(
 ) (*ModelViewerComputeDeformerTransport, []modelViewerPreparedAnimationClip, modelViewerGeometryScan, map[string]modelViewerVariableName) {
 	t.Helper()
 	sections, names := scopeModelViewerSections(parseModINI(ini), 0, "", "")
-	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections), nil)
 	deformer, clips := detectModelViewerComputeAnimation(dir, dir, "", sections, resources, meshes, names)
 	if deformer == nil || deformer.Kind != modelViewerMergedDeltaKind || len(clips) != 1 {
 		t.Fatalf("deformer = %+v, clips = %d", deformer, len(clips))

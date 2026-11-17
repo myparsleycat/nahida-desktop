@@ -322,6 +322,7 @@ func (s *Shell) renderModelPreview(
 	p *modelPreviews,
 	job *modelPreviewJob,
 ) (img *fairy.Image, generation uint64, err error) {
+	go warmViewerRenderer()
 	tools := s.deps.Tools
 	stage := "load"
 	defer func() {

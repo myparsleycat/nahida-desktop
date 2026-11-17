@@ -127,7 +127,8 @@ func (v *ModelViewer) runAnimationClock() {
 }
 
 func (v *ModelViewer) scheduleAnimationTick(clock uint64, delay time.Duration) {
-	time.AfterFunc(delay, func() { fairy.Go(func() { v.animationTick(clock) }) })
+	post := v.poster()
+	time.AfterFunc(delay, func() { post(func() { v.animationTick(clock) }) })
 }
 
 func (v *ModelViewer) animationTick(clock uint64) {

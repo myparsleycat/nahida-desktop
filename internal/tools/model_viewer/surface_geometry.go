@@ -37,10 +37,14 @@ func readSurfaceFile(ctx context.Context, name string) ([]byte, error) {
 
 // Capture provenance before scratch buffers are released, using only hashes of
 // the bytes read for decoding. Index hashes belong to the cached decoded format.
+// A cache that does not hash its sources has no provenance and returns nil.
 func (c *modelViewerBufferCache) surfaceSourceFiles(
 	root, ibPath, ibFormat string,
 	positionFiles ...string,
 ) (map[string][32]byte, error) {
+	if !c.hashSources {
+		return nil, nil
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	digest, ok := c.sourceHashes[modelViewerIndicesKey(ibPath, ibFormat)]

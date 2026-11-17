@@ -267,7 +267,7 @@ func (p *modelViewerOverlayPanel) build(ctx context.Context) *ModelViewerOverlay
 			Flipbook: idle.flipbook(quad),
 		})
 	}
-	return assembleModelViewerOverlayMenu([]*modelViewerOverlayPageBuild{{
+	return assembleModelViewerOverlayMenu(ctx, []*modelViewerOverlayPageBuild{{
 		page:  ModelViewerOverlayPage{Quads: quads, Buttons: buttons, Sliders: sliders},
 		drawn: idle.quads,
 	}}, form, nil)

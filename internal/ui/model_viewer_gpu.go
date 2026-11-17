@@ -20,6 +20,15 @@ type viewerShaders struct {
 	vs, ps, outlineVS, outlinePS, shadowVS, ringVS, ringPS, overlayVS, overlayPS []byte
 }
 
+// warmViewerRenderer compiles the viewer's shaders and computes its environment lighting while a model loads. The
+// first draw otherwise does both on the UI thread, holding the device lock that every window draws under.
+func warmViewerRenderer() {
+	_, _ = viewerShaderCode()
+	_, _ = viewerBlitCode()
+	viewerEnvironmentSH()
+	viewerPMREMBands()
+}
+
 var viewerShaderCode = sync.OnceValues(func() (viewerShaders, error) {
 	var code viewerShaders
 	for _, entry := range []struct {
@@ -266,9 +275,18 @@ type viewerRenderer struct {
 	shadow    d3d.Texture2D
 	shadowDSV d3d.DepthStencilView
 	shadowSRV d3d.ShaderResourceView
-	depthOn   d3d.DepthStencilState
-	depthRead d3d.DepthStencilState
-	blend     d3d.BlendState
+	// shadowKey, shadowCasters and shadowBuffers are what the shadow map was last drawn with; a draw that matches
+	// them and uploads no vertices keeps the map. A released buffer's address can be reused by a new one, so the
+	// casters are compared by index as well as by buffer. The scratch slices hold the next draw's casters.
+	shadowKey     viewerShadowKey
+	shadowCasters []int
+	shadowBuffers []d3d.Buffer
+	casterScratch []int
+	bufferScratch []d3d.Buffer
+	shadowDrawn   bool
+	depthOn       d3d.DepthStencilState
+	depthRead     d3d.DepthStencilState
+	blend         d3d.BlendState
 
 	width, height int
 	samples       uint32
@@ -306,11 +324,12 @@ func (r *viewerRenderer) releaseTargets() {
 }
 
 func (r *viewerRenderer) init(g fairy.GPU) error {
-	if r.generation == g.Generation && r.vs.P != nil {
-		return nil
-	}
+	// A failed create can leave some objects made, so the error is checked first.
 	if r.generation == g.Generation && r.err != nil {
 		return r.err
+	}
+	if r.generation == g.Generation && r.vs.P != nil {
+		return nil
 	}
 	r.release()
 	r.generation = g.Generation
@@ -482,7 +501,8 @@ func (r *viewerRenderer) targets(dev d3d.Device, width, height int) error {
 	}
 	r.releaseTargets()
 	r.samples = 1
-	for _, count := range []uint32{8, 4, 2} {
+	// 8x would double the targets' memory at large sizes for little visible gain.
+	for _, count := range []uint32{4, 2} {
 		if dev.MultisampleQualityLevels(d3d.FORMAT_B8G8R8A8_UNORM, count) > 0 &&
 			dev.MultisampleQualityLevels(d3d.FORMAT_D32_FLOAT, count) > 0 {
 			r.samples = count
@@ -550,12 +570,30 @@ func (r *viewerRenderer) draw(f fairy.SurfaceFrame, scene *viewerScene, opts vie
 	return nil
 }
 
+type viewerShadowKey struct {
+	gpu             *viewerGPUSet
+	viewProj, world [16]float32
+	doubleSided     bool
+}
+
+func (r *viewerRenderer) releaseShadow() {
+	r.shadowSRV.Release()
+	r.shadowDSV.Release()
+	r.shadow.Release()
+	r.shadow, r.shadowDSV, r.shadowSRV = d3d.Texture2D{}, d3d.DepthStencilView{}, d3d.ShaderResourceView{}
+	r.shadowCasters, r.shadowBuffers, r.shadowDrawn = nil, nil, false
+}
+
 // shadowTargets makes the key light's depth map on first use.
-func (r *viewerRenderer) shadowTargets(dev d3d.Device) error {
+func (r *viewerRenderer) shadowTargets(dev d3d.Device) (err error) {
 	if r.shadowSRV.P != nil {
 		return nil
 	}
-	var err error
+	defer func() {
+		if err != nil {
+			r.releaseShadow()
+		}
+	}()
 	if r.shadow, err = dev.CreateTexture2D(&d3d.Texture2DDesc{
 		Width: viewerShadowMapSize, Height: viewerShadowMapSize, MipLevels: 1, ArraySize: 1,
 		Format: d3d.FORMAT_R32_TYPELESS, SampleDesc: d3d.SampleDesc{Count: 1},
@@ -687,11 +725,11 @@ func (r *viewerRenderer) drawScene(
 		buffers := gpu.meshes[i]
 		if mesh.dirty && buffers.indexCount > 0 && len(mesh.current) == int(buffers.vertices.Desc().ByteWidth)/4 {
 			d3d.UpdateData(ctx, buffers.vertices, mesh.current)
-			mesh.dirty = false
+			mesh.dirty, r.shadowDrawn = false, false
 		}
 		if mesh.extraDirty && buffers.indexCount > 0 && len(mesh.extra) == int(buffers.extra.Desc().ByteWidth) {
 			d3d.UpdateData(ctx, buffers.extra, mesh.extra)
-			mesh.extraDirty = false
+			mesh.extraDirty, r.shadowDrawn = false, false
 		}
 	}
 
@@ -700,9 +738,11 @@ func (r *viewerRenderer) drawScene(
 	ctx.VSSetConstantBuffers(0, r.frameCB, r.meshCB)
 	ctx.PSSetConstantBuffers(0, r.frameCB, r.meshCB)
 	if shadowed {
-		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts); err != nil {
+		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, &frame); err != nil {
 			return err
 		}
+	} else if r.shadowSRV.P != nil {
+		r.releaseShadow()
 	}
 
 	ctx.OMSetRenderTargets([]d3d.RenderTargetView{rtv}, r.dsv)
@@ -829,16 +869,42 @@ func (r *viewerRenderer) drawRing(ctx d3d.Context, rtv d3d.RenderTargetView, rin
 	return nil
 }
 
-// drawShadowMap renders the depth of the meshes that cast shadows into the key light's map.
+// drawShadowMap renders the depth of the meshes that cast shadows into the key light's map, unless the map already
+// holds them as frame's light sees them.
 func (r *viewerRenderer) drawShadowMap(
 	ctx d3d.Context,
 	dev d3d.Device,
 	scene *viewerScene,
 	opts viewerDrawOptions,
+	frame *viewerFrameConstants,
 ) error {
 	if err := r.shadowTargets(dev); err != nil {
 		return err
 	}
+	gpu := scene.gpu
+	casters, buffers := r.casterScratch[:0], r.bufferScratch[:0]
+	for i, mesh := range scene.meshes {
+		if !mesh.drawn(false) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
+			continue
+		}
+		// Coverage cards are flat ink decals that block no light.
+		if texture, ok := gpu.textures[mesh.state.TexKey]; ok && texture.flags&viewerFlagCoverage != 0 {
+			continue
+		}
+		casters = append(casters, i)
+		buffers = append(buffers, gpu.meshes[i].vertices)
+	}
+	key := viewerShadowKey{
+		gpu: gpu, viewProj: frame.shadowViewProj, world: frame.world, doubleSided: opts.doubleSided,
+	}
+	if r.shadowDrawn && key == r.shadowKey && slices.Equal(casters, r.shadowCasters) &&
+		slices.Equal(buffers, r.shadowBuffers) {
+		r.casterScratch, r.bufferScratch = casters, buffers
+		return nil
+	}
+	r.casterScratch, r.bufferScratch = r.shadowCasters, r.shadowBuffers
+	r.shadowKey, r.shadowCasters, r.shadowBuffers, r.shadowDrawn = key, casters, buffers, true
+
 	ctx.PSSetShaderResources(9, d3d.ShaderResourceView{})
 	ctx.OMSetRenderTargets(nil, r.shadowDSV)
 	ctx.ClearDepthStencilView(r.shadowDSV, d3d.CLEAR_DEPTH, 1, 0)
@@ -853,15 +919,7 @@ func (r *viewerRenderer) drawShadowMap(
 	}
 	ctx.VSSetShader(r.shadowVS)
 	ctx.PSSetShader(d3d.PixelShader{})
-	gpu := scene.gpu
-	for i, mesh := range scene.meshes {
-		if !mesh.drawn(false) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
-			continue
-		}
-		// Coverage cards are flat ink decals that block no light.
-		if texture, ok := gpu.textures[mesh.state.TexKey]; ok && texture.flags&viewerFlagCoverage != 0 {
-			continue
-		}
+	for _, i := range casters {
 		r.drawMesh(ctx, gpu.meshes[i])
 	}
 	return nil

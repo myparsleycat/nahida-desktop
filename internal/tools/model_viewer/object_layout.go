@@ -467,7 +467,7 @@ func readModelViewerObjectBuffer(
 	position modelViewerResource,
 	cache *modelViewerBufferCache,
 ) ([]byte, bool) {
-	path, ok := resolveModelViewerModBufferPath(modDir, position.Filename)
+	path, ok := cache.modBufferPath(modDir, position.Filename)
 	if !ok {
 		return nil, false
 	}
@@ -655,13 +655,13 @@ func loadModelViewerDrawVertexBuffers(
 	case modelViewerDrawVertexMihoyo:
 		posSource := source.streamKey
 		if source.positionData == nil {
-			path, ok := resolveModelViewerModBufferPath(modDir, position.Filename)
+			path, ok := cache.modBufferPath(modDir, position.Filename)
 			if !ok {
 				return modelViewerDrawVertexBuffers{}, false, nil
 			}
 			posSource = path
 		}
-		tcPath, ok := resolveModelViewerModBufferPath(modDir, texcoord.Filename)
+		tcPath, ok := cache.modBufferPath(modDir, texcoord.Filename)
 		if !ok {
 			return modelViewerDrawVertexBuffers{}, false, nil
 		}
@@ -798,8 +798,8 @@ func resolveModelViewerPackedTexcoordOffset(
 		return 16
 	}
 	for _, filename := range modelViewerSiblingTexcoordFilenames(position) {
-		resolved, err := resolveModelViewerResourcePath(modDir, modDir, filename)
-		if err != nil || !platform.SameOrChildPath(modDir, resolved) {
+		resolved, ok := cache.modBufferPath(modDir, filename)
+		if !ok {
 			continue
 		}
 		info, err := os.Stat(resolved)

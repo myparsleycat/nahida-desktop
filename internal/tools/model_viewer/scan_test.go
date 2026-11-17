@@ -294,7 +294,7 @@ type = Buffer
 format = DXGI_FORMAT_R32_UINT
 filename = BodyA.ib
 `)
-	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections), nil)
 	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 
@@ -718,6 +718,59 @@ format = DXGI_FORMAT_R32_UINT
 	}
 }
 
+func TestModelViewerScannedMeshesSkipUndecodableIndexBuffer(t *testing.T) {
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "broken.ib"), make([]byte, 5), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	iniText := `[TextureOverrideBroken]
+ib = ResourceBrokenIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceBrokenIB]
+filename = broken.ib
+format = DXGI_FORMAT_R32_UINT
+` + viewerBodyResources
+	iniPath := filepath.Join(dir, "mod.ini")
+	if err := os.WriteFile(iniPath, []byte(iniText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sections := parseModINI(iniText)
+	cache := newModelViewerBufferCache(context.Background())
+	defer cache.releaseAll()
+
+	meshes, err := buildModelViewerDirectScannedMeshesAt(
+		iniPath,
+		dir,
+		sections,
+		collectModelViewerDefaultVariables(sections),
+		cache,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meshes) != 1 || meshes[0].drawSource == nil || meshes[0].drawSource.Section != "Body" {
+		t.Fatalf("meshes = %#v", meshes)
+	}
+
+	var output strings.Builder
+	log := infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	cache.diagnostics.Report(log, "StaticGlb.loadForViewer", "model-viewer-buffers")
+	for _, want := range []string{"BrokenIB", "broken.ib", "DXGI_FORMAT_R32_UINT"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("report lacks %q: %s", want, output.String())
+		}
+	}
+}
+
 func TestModelViewerScannedMeshesPropagatePairedReadErrors(t *testing.T) {
 	dir := t.TempDir()
 	iniText := `[TextureOverrideBody]
@@ -1109,7 +1162,7 @@ format = DXGI_FORMAT_R32_UINT`
 		}
 	}
 	sections := parseModINI(iniText)
-	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections), nil)
 	cache := newModelViewerBufferCache(context.Background())
 	meshes, err := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath, dir, sections, collectModelViewerDefaultVariables(sections), resources, cache, nil,

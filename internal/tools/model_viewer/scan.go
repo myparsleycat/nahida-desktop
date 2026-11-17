@@ -2,7 +2,9 @@ package modelviewer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -429,7 +431,13 @@ func buildModelViewerDirectScannedMeshesAt(
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, error) {
-	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(
+		modDir,
+		modDir,
+		sections,
+		collectModelViewerResources(sections),
+		cache,
+	)
 	return buildModelViewerDirectScannedMeshesPrepared(iniPath, modDir, sections, variables, resources, cache, timing)
 }
 
@@ -500,13 +508,16 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	}
 	geometryIndexes := make(map[geometryIndexKey]int)
 	geometries := make(map[modelViewerDrawGeometryKey]*modelViewerGeometry)
-	releaseAfter := modelViewerDrawBufferLastUses(modDir, draws, resourceMap)
+	releaseAfter := modelViewerDrawBufferLastUses(modDir, draws, resourceMap, cache)
 	// The draws release the buffers they were the last to read at the start of the next one, which also covers
 	// the draws the loop skips.
 	if len(releaseAfter) > 0 {
 		defer func() { cache.release(releaseAfter[len(releaseAfter)-1]...) }()
 	}
 	for drawIndex, draw := range draws {
+		if err := cache.ctx.Err(); err != nil {
+			return nil, err
+		}
 		if drawIndex > 0 {
 			cache.release(releaseAfter[drawIndex-1]...)
 		}
@@ -580,15 +591,24 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			appendModelViewerSlotTextureCandidates(mesh, record.slotTextures, resourceMap)
 			continue
 		}
-		ibPath, ibOK := resolveModelViewerModBufferPath(modDir, ib.Filename)
+		ibPath, ibOK := cache.modBufferPath(modDir, ib.Filename)
 		if !ibOK {
 			continue
 		}
 		indices, readErr, decodeErr := cache.indexBuffer(ibPath, ib.Format)
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
 		if readErr != nil {
+			if infra.IsCancellationError(readErr) {
+				return nil, readErr
+			}
+			if !errors.Is(readErr, fs.ErrNotExist) {
+				cache.diagnostics.Add(fmt.Errorf("read index buffer %s (%s): %w", ib.Name, ibPath, readErr))
+			}
+			continue
+		}
+		if decodeErr != nil {
+			cache.diagnostics.Add(
+				fmt.Errorf("decode index buffer %s (%s, format %q): %w", ib.Name, ibPath, ib.Format, decodeErr),
+			)
 			continue
 		}
 		end := len(indices)
@@ -663,7 +683,9 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			if geometryErr != nil {
 				return nil, geometryErr
 			}
-			maps.Copy(geometry.surfaceFiles, source.streamFiles)
+			if geometry.surfaceFiles != nil {
+				maps.Copy(geometry.surfaceFiles, source.streamFiles)
+			}
 			if source.kind == modelViewerDrawVertexPacked {
 				normalizeModelViewerPackedObjectNormals(geometry.Normal)
 			}
@@ -790,6 +812,7 @@ func modelViewerDrawBufferLastUses(
 	modDir string,
 	draws []modelViewerResolvedDraw,
 	resourceMap map[string]modelViewerResource,
+	cache *modelViewerBufferCache,
 ) [][]string {
 	lastUse := make(map[string]int)
 	paths := make(map[string]string)
@@ -799,7 +822,7 @@ func modelViewerDrawBufferLastUses(
 			if !ok || resource.Filename == "" {
 				continue
 			}
-			path, ok := resolveModelViewerModBufferPath(modDir, resource.Filename)
+			path, ok := cache.modBufferPath(modDir, resource.Filename)
 			if !ok {
 				continue
 			}

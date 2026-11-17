@@ -15,7 +15,6 @@ const (
 	maxModelViewerDraws            = 10_000
 	maxModelViewerBufferFileBytes  = int64(512 * 1024 * 1024)
 	maxModelViewerTotalBufferBytes = int64(2 * 1024 * 1024 * 1024)
-	maxModelViewerLinkHops         = 32
 )
 
 type modelViewerLoadBudget struct {
@@ -123,7 +122,11 @@ func collectModelViewerReferencedResources(sections []modINISection) map[string]
 // sanitizeModelViewerResourcePaths mirrors Electron's resource resolver: an
 // unsafe filename removes that resource from consideration instead of making
 // the entire model fail to load. Size/type budget failures remain fatal.
-func sanitizeModelViewerResourcePaths(sections []modINISection, root, baseDir string) []string {
+func sanitizeModelViewerResourcePaths(
+	sections []modINISection,
+	root, baseDir string,
+	cache *modelViewerBufferCache,
+) []string {
 	var skipped []string
 	for index := range sections {
 		section := &sections[index]
@@ -134,7 +137,7 @@ func sanitizeModelViewerResourcePaths(sections []modINISection, root, baseDir st
 		if strings.TrimSpace(filename) == "" {
 			continue
 		}
-		if _, err := resolveModelViewerResourcePath(root, baseDir, filename); err != nil {
+		if _, err := cache.resourcePath(root, baseDir, filename); err != nil {
 			setModelViewerSectionValue(section, "filename", "")
 			skipped = append(skipped, section.Name)
 		}
@@ -152,6 +155,18 @@ func sanitizeModelViewerLogValue(value string) string {
 }
 
 func resolveModelViewerResourcePath(root, baseDir, relative string) (string, error) {
+	return resolveModelViewerResourcePathWith(root, baseDir, relative, platform.FinalPath)
+}
+
+// resolveModelViewerResourcePathWith allows a filename to reach the parent of the mod folder, where sibling folders
+// hold shared textures. Links are followed with finalPath: a filename written inside root must stay inside root's
+// final location, and one in a sibling folder inside that sibling's. A sibling may itself be a link, as mod folders
+// linked into the mods folder are, but a link below it must not lead out of it. A target that cannot be opened keeps
+// its lexical path and fails when it is read.
+func resolveModelViewerResourcePathWith(
+	root, baseDir, relative string,
+	finalPath func(string) (string, error),
+) (string, error) {
 	relative = filepath.FromSlash(strings.ReplaceAll(strings.TrimSpace(relative), `\`, string(filepath.Separator)))
 	if relative == "" || filepath.IsAbs(relative) {
 		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource path must be relative: %s", relative))
@@ -160,76 +175,33 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 	if err != nil {
 		return "", err
 	}
-	ceiling := filepath.Dir(filepath.Clean(root))
+	root = filepath.Clean(root)
+	ceiling := filepath.Dir(root)
 	if !platform.SameOrChildPath(ceiling, target) {
 		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
-	// A filename authored inside the mod folder must also resolve there: a
-	// symlink or junction inside it must not redirect a read to a sibling
-	// folder.
-	if platform.SameOrChildPath(root, target) {
-		realRoot, rootOK := resolveModelViewerLinkPath(root)
-		realTarget, targetOK := resolveModelViewerLinkPath(target)
-		if rootOK && targetOK && !platform.SameOrChildPath(realRoot, realTarget) {
+
+	if finalTarget, targetErr := finalPath(target); targetErr == nil {
+		bound := root
+		if !platform.SameOrChildPath(root, target) {
+			bound = ceiling
+			if relative, err := filepath.Rel(ceiling, target); err == nil {
+				if sibling, _, nested := strings.Cut(relative, string(filepath.Separator)); nested {
+					bound = filepath.Join(ceiling, sibling)
+				}
+			}
+		}
+		finalBound, err := finalPath(bound)
+		if err != nil {
+			return "", err
+		}
+		if !platform.SameOrChildPath(finalBound, finalTarget) {
 			return "", infra.ContractError(
 				fmt.Sprintf("Model Viewer resource link escapes the mod folder: %s", relative),
 			)
 		}
 	}
-	if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil {
-		resolvedCeiling := ceiling
-		if realCeiling, ceilingErr := filepath.EvalSymlinks(ceiling); ceilingErr == nil {
-			resolvedCeiling = realCeiling
-		}
-		if !platform.SameOrChildPath(resolvedCeiling, resolved) {
-			return "", infra.ContractError(
-				fmt.Sprintf("Model Viewer resource symlink escapes the mod folder: %s", relative),
-			)
-		}
-	}
-	return filepath.Clean(target), nil
-}
-
-// resolveModelViewerLinkPath resolves symlinks and Windows junctions in path.
-// filepath.EvalSymlinks stops below a junction, so reparse points are
-// substituted component by component here instead. The second result reports
-// whether the path could be resolved.
-func resolveModelViewerLinkPath(path string) (string, bool) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", false
-	}
-	separator := string(filepath.Separator)
-	volume := filepath.VolumeName(absolute)
-	resolved := volume + separator
-	pending := strings.Split(strings.TrimPrefix(absolute[len(volume):], separator), separator)
-	hops := 0
-	for len(pending) > 0 {
-		component := pending[0]
-		pending = pending[1:]
-		candidate := filepath.Join(resolved, component)
-		link, linkErr := os.Readlink(candidate)
-		if linkErr != nil {
-			resolved = candidate
-			continue
-		}
-		hops++
-		if hops > maxModelViewerLinkHops {
-			return "", false
-		}
-		// Junction targets are stored as NT object paths.
-		target := strings.TrimPrefix(link, `\??\`)
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(filepath.Dir(candidate), target)
-		}
-		targetVolume := filepath.VolumeName(target)
-		resolved = targetVolume + separator
-		pending = append(
-			strings.Split(strings.TrimPrefix(target[len(targetVolume):], separator), separator),
-			pending...,
-		)
-	}
-	return filepath.Clean(resolved), true
+	return target, nil
 }
 
 // resolveModelViewerModBufferPath resolves a mod INI buffer filename and keeps

@@ -1622,6 +1622,7 @@
         "open_file": "打开文件",
         "open_folder": "打开文件夹",
         "retry": "重试",
+        "draw_error": "无法绘制模型",
         "loading": "正在加载模型…",
         "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
         "generating_selected_state": "正在生成所选状态",
@@ -1677,7 +1678,17 @@
           "apply_preset": "应用预设",
           "no_presets": "没有预设",
           "apply_to_game": "应用到游戏",
-          "game_preview": "在游戏中预览悬停的值"
+          "game_preview": "在游戏中预览悬停的值",
+          "double_sided": "双面渲染",
+          "tone_mapping": "色调映射",
+          "tone_neutral": "中性",
+          "tone_aces": "ACES Filmic",
+          "none": "无",
+          "environment": "环境光",
+          "environment_studio": "工作室",
+          "environment_soft": "柔和",
+          "exposure": "曝光",
+          "toon_shadows": "卡通阴影"
         },
         "dialog": {
           "save_preset": {
@@ -1703,6 +1714,7 @@
           "overlay_in_viewer_save_error": "保存覆盖层显示设置失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",
+          "capture_not_ready": "模型仍在加载中",
           "load_error": "无法加载模型"
         },
         "rotate_actions": {

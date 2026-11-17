@@ -33,7 +33,7 @@ func TestSurfaceGeometryRejectsChangesAfterDecode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			prepared, err := service.prepareModelViewerGeometry(ctx, root, []string{iniPath}, budget)
+			prepared, err := service.prepareModelViewerGeometry(ctx, root, []string{iniPath}, budget, true)
 			if err != nil {
 				t.Fatal(err)
 			}

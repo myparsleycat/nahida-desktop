@@ -1051,7 +1051,7 @@ func TestPackedDualQuaternionLocalMod(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := &Service{}
-	prepared, err := service.prepareModelViewerGeometry(context.Background(), dir, paths, budget)
+	prepared, err := service.prepareModelViewerGeometry(context.Background(), dir, paths, budget, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1124,7 +1124,7 @@ func TestPackedDualQuaternion24LocalMod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := (&Service{}).prepareModelViewerGeometry(context.Background(), dir, paths, budget)
+	prepared, err := (&Service{}).prepareModelViewerGeometry(context.Background(), dir, paths, budget, true)
 	if err != nil {
 		t.Fatal(err)
 	}

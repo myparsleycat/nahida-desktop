@@ -216,9 +216,10 @@ func (v *ModelViewer) dispatchCompute() {
 	phase, weights := c.playback.Advance(request.clip.ID, frame.Time, request.duration, v.resolved)
 	c.busy = true
 	kernel, meshes := c.kernel, c.meshes
+	post := v.poster()
 	go func() {
 		results, err := computeViewerFrame(kernel, meshes, frame.Index, phase, weights)
-		fairy.Go(func() {
+		post(func() {
 			if v.compute != c {
 				return
 			}

@@ -110,7 +110,13 @@ func buildModelViewerDirectMeshesAt(
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
 ) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
-	resources := resolveModelViewerEffectiveResourcesAt(modDir, modDir, sections, collectModelViewerResources(sections))
+	resources := resolveModelViewerEffectiveResourcesAt(
+		modDir,
+		modDir,
+		sections,
+		collectModelViewerResources(sections),
+		cache,
+	)
 	return buildModelViewerDirectMeshesPrepared(iniPath, modDir, assetPath, sections, resources, nil, cache, timing)
 }
 

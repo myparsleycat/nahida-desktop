@@ -1622,6 +1622,7 @@
         "open_file": "ファイルを開く",
         "open_folder": "フォルダーを開く",
         "retry": "再試行",
+        "draw_error": "モデルを描画できませんでした",
         "loading": "モデルを読み込み中…",
         "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
         "generating_selected_state": "選択した状態を生成中",
@@ -1677,7 +1678,17 @@
           "apply_preset": "プリセットを適用",
           "no_presets": "プリセットなし",
           "apply_to_game": "ゲームに適用",
-          "game_preview": "ホバーした値をゲームでプレビュー"
+          "game_preview": "ホバーした値をゲームでプレビュー",
+          "double_sided": "両面表示",
+          "tone_mapping": "トーンマッピング",
+          "tone_neutral": "ニュートラル",
+          "tone_aces": "ACES Filmic",
+          "none": "なし",
+          "environment": "環境光",
+          "environment_studio": "スタジオ",
+          "environment_soft": "ソフト",
+          "exposure": "露出",
+          "toon_shadows": "トゥーンシャドウ"
         },
         "dialog": {
           "save_preset": {
@@ -1703,6 +1714,7 @@
           "overlay_in_viewer_save_error": "オーバーレイ表示設定の保存に失敗しました",
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
           "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",
+          "capture_not_ready": "モデルを読み込み中です",
           "load_error": "モデルの読み込みに失敗しました"
         },
         "rotate_actions": {

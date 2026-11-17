@@ -17,6 +17,8 @@ import (
 	"unicode/utf8"
 
 	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type modelViewerResource struct {
@@ -411,8 +413,15 @@ type modelViewerInterleavedBuffers struct {
 
 type modelViewerBufferCache struct {
 	// ctx is the load the cache belongs to; reads stop when it is cancelled.
-	ctx             context.Context
+	ctx context.Context
+	// hashSources records the SHA-256 of every buffer read, which surface snapshots of a spooled load check
+	// against the files later.
+	hashSources bool
+	// diagnostics collects the buffers the load skipped because they could not be read or decoded.
+	diagnostics     infra.DiagnosticBatch
 	mu              sync.Mutex
+	resourcePaths   map[modelViewerResourcePathKey]modelViewerResourcePathResult
+	finalPaths      map[string]modelViewerResourcePathResult
 	geometryPending map[string]*modelViewerGeometryPending
 	filesPending    map[string]*modelViewerFilePending
 	files           map[string][]byte
@@ -422,6 +431,15 @@ type modelViewerBufferCache struct {
 	pairs           map[string]modelViewerPairedBuffers
 	fmts            map[string]modelViewerFmtCacheEntry
 	interleaved     map[string]modelViewerInterleavedBuffers
+}
+
+type modelViewerResourcePathKey struct {
+	root, baseDir, relative string
+}
+
+type modelViewerResourcePathResult struct {
+	path string
+	err  error
 }
 
 type modelViewerFilePending struct {
@@ -448,14 +466,17 @@ type modelViewerPairedBuffers struct {
 
 func newModelViewerBufferCache(ctx context.Context) *modelViewerBufferCache {
 	return &modelViewerBufferCache{
-		ctx:          ctx,
-		files:        make(map[string][]byte),
-		sourceHashes: make(map[string][32]byte),
-		indices:      make(map[string][]uint32),
-		geometries:   make(map[string]*modelViewerGeometry),
-		pairs:        make(map[string]modelViewerPairedBuffers),
-		fmts:         make(map[string]modelViewerFmtCacheEntry),
-		interleaved:  make(map[string]modelViewerInterleavedBuffers),
+		ctx:           ctx,
+		hashSources:   true,
+		resourcePaths: make(map[modelViewerResourcePathKey]modelViewerResourcePathResult),
+		finalPaths:    make(map[string]modelViewerResourcePathResult),
+		files:         make(map[string][]byte),
+		sourceHashes:  make(map[string][32]byte),
+		indices:       make(map[string][]uint32),
+		geometries:    make(map[string]*modelViewerGeometry),
+		pairs:         make(map[string]modelViewerPairedBuffers),
+		fmts:          make(map[string]modelViewerFmtCacheEntry),
+		interleaved:   make(map[string]modelViewerInterleavedBuffers),
 	}
 }
 
@@ -606,13 +627,15 @@ func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
 	c.mu.Unlock()
 	data, err := c.readFile(path)
 	var digest [32]byte
-	if err == nil {
+	if err == nil && c.hashSources {
 		digest = sha256.Sum256(data)
 	}
 	c.mu.Lock()
 	if err == nil {
 		c.files[key] = data
-		c.sourceHashes[key] = digest
+		if c.hashSources {
+			c.sourceHashes[key] = digest
+		}
 	}
 	pending.data, pending.err = data, err
 	delete(c.filesPending, key)
@@ -628,6 +651,52 @@ func (c *modelViewerBufferCache) readFile(path string) ([]byte, error) {
 	}
 	defer release()
 	return os.ReadFile(path)
+}
+
+// resourcePath is resolveModelViewerResourcePath memoized for the load: draws resolve the same filenames many
+// times, and each resolution opens the target and its folder to follow links. A nil cache resolves uncached.
+func (c *modelViewerBufferCache) resourcePath(root, baseDir, relative string) (string, error) {
+	if c == nil {
+		return resolveModelViewerResourcePath(root, baseDir, relative)
+	}
+	key := modelViewerResourcePathKey{root: root, baseDir: baseDir, relative: relative}
+	c.mu.Lock()
+	if result, ok := c.resourcePaths[key]; ok {
+		c.mu.Unlock()
+		return result.path, result.err
+	}
+	c.mu.Unlock()
+
+	path, err := resolveModelViewerResourcePathWith(root, baseDir, relative, c.finalPath)
+	c.mu.Lock()
+	c.resourcePaths[key] = modelViewerResourcePathResult{path: path, err: err}
+	c.mu.Unlock()
+	return path, err
+}
+
+func (c *modelViewerBufferCache) finalPath(path string) (string, error) {
+	key := strings.ToLower(path)
+	c.mu.Lock()
+	if result, ok := c.finalPaths[key]; ok {
+		c.mu.Unlock()
+		return result.path, result.err
+	}
+	c.mu.Unlock()
+
+	final, err := platform.FinalPath(path)
+	c.mu.Lock()
+	c.finalPaths[key] = modelViewerResourcePathResult{path: final, err: err}
+	c.mu.Unlock()
+	return final, err
+}
+
+// modBufferPath is resolveModelViewerModBufferPath through the load's path cache.
+func (c *modelViewerBufferCache) modBufferPath(modDir, filename string) (string, bool) {
+	path, err := c.resourcePath(modDir, modDir, filename)
+	if err != nil || !platform.SameOrChildPath(modDir, path) {
+		return "", false
+	}
+	return path, true
 }
 
 func modelViewerIndicesKey(path, format string) string {
@@ -648,6 +717,7 @@ func (c *modelViewerBufferCache) indexBuffer(path, format string) (indices []uin
 		return decoded, nil, nil
 	}
 	raw, cached := c.files[strings.ToLower(path)]
+	digest, hashed := c.sourceHashes[strings.ToLower(path)]
 	c.mu.Unlock()
 	if !cached {
 		if raw, readErr = c.readFile(path); readErr != nil {
@@ -658,10 +728,14 @@ func (c *modelViewerBufferCache) indexBuffer(path, format string) (indices []uin
 	if err != nil {
 		return nil, nil, err
 	}
-	digest := sha256.Sum256(raw)
+	if c.hashSources && !hashed {
+		digest = sha256.Sum256(raw)
+	}
 	c.mu.Lock()
 	c.indices[key] = decoded
-	c.sourceHashes[key] = digest
+	if c.hashSources {
+		c.sourceHashes[key] = digest
+	}
 	c.mu.Unlock()
 	return decoded, nil, nil
 }
