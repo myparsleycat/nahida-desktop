@@ -174,7 +174,7 @@ func (s *Shell) downloadOverlay() *fairy.El {
 			fairy.Text(T(prefix+"title")).FontSize(18).LineHeight(28).SemiBold(),
 			fairy.Text(T(prefix+"description")).FontSize(14).LineHeight(20).Color(t.MutedForeground),
 		).Gap(4),
-	).W(448).Pad(16).Gap(16).Radius(t.RadiusLg()).Fill(t.Background.Alpha(0.75)).Ring(1, t.Foreground).
+	).W(448).Pad(16).Gap(16).Radius(t.RadiusLg()).Fill(t.Background.Alpha(0.75)).Ring(1, t.Ring.Alpha(0.5)).
 		Shadow(0, 10, 15, -3, shadowColor(t)).OnClick(func() {})
 	frosted(card, 16)
 	field := func(label string, control *fairy.El) *fairy.El {
