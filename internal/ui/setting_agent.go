@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/clipboard"
 	"github.com/myparsleycat/fairy/icons/lucide"
 	"github.com/myparsleycat/fairy/kit"
 
@@ -392,7 +393,7 @@ func (s *Shell) copyAgentLogin() {
 	if sec.login == nil {
 		return
 	}
-	if s.win == nil || !s.win.SetClipboardText(sec.login.URL) {
+	if !clipboard.SetText(sec.login.URL) {
 		s.toasts.Show(kit.ToastError, T("page.agent.login_copy_failed"), "")
 		return
 	}

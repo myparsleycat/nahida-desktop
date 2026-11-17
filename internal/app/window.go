@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/taskbar"
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
@@ -36,7 +37,7 @@ type Window struct {
 	ready       bool
 	startHidden bool
 	everShown   bool
-	progress    fairy.Progress
+	progress    taskbar.Progress
 	value       float64
 }
 
@@ -183,7 +184,7 @@ func (w *Window) onReady(window *fairy.Window) {
 	w.ready = true
 	progress, value := w.progress, w.value
 	w.mu.Unlock()
-	window.SetProgress(progress, value)
+	taskbar.SetProgress(window, progress, value)
 }
 
 func (w *Window) onClose() bool {
@@ -229,17 +230,17 @@ func saveBounds(window *fairy.Window, settings *setting.Setting, log *infra.Log)
 
 // SetProgressBar mirrors transfer progress, a percentage, on the taskbar button. A nil value clears it.
 func (w *Window) SetProgressBar(value *float64, mode string) {
-	progress := fairy.ProgressNone
+	progress := taskbar.ProgressNone
 	if value != nil {
 		switch mode {
 		case "indeterminate":
-			progress = fairy.ProgressIndeterminate
+			progress = taskbar.ProgressIndeterminate
 		case "error":
-			progress = fairy.ProgressError
+			progress = taskbar.ProgressError
 		case "paused":
-			progress = fairy.ProgressPaused
+			progress = taskbar.ProgressPaused
 		default:
-			progress = fairy.ProgressNormal
+			progress = taskbar.ProgressNormal
 		}
 	}
 	w.mu.Lock()
@@ -251,7 +252,7 @@ func (w *Window) SetProgressBar(value *float64, mode string) {
 	window, ready, current := w.window, w.ready, w.value
 	w.mu.Unlock()
 	if window != nil && ready {
-		window.SetProgress(progress, current)
+		taskbar.SetProgress(window, progress, current)
 	}
 }
 

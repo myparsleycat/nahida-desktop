@@ -19,6 +19,7 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 	"github.com/myparsleycat/fairy/motion"
 	"github.com/myparsleycat/fairy/svg"
+	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/infra"
@@ -87,8 +88,8 @@ func (s *Shell) previewThumb(
 ) *fairy.El {
 	if path == nil || !isPreviewImage(*path) {
 		if path != nil && isPreviewVideo(*path) {
-			if video := s.modVideo(*path, version); video != nil && video.State() != fairy.VideoLoading {
-				return fairy.VideoView(video).WFull().HFull().Fit(fairy.FitCover).Radius(radius)
+			if vid := s.modVideo(*path, version); vid != nil && vid.State() != video.Loading {
+				return video.View(vid).WFull().HFull().Fit(fairy.FitCover).Radius(radius)
 			}
 			return fairy.Icon(lucide.Film).Size(float32(size)/2, float32(size)/2).Color(kit.T().MutedForeground)
 		}
@@ -748,18 +749,18 @@ func (s *Shell) modPreview(info mod.ModInfo, hovered bool, shown cardPreview) *f
 }
 
 // modVideo plays the preview video at path muted and looping, or returns nil when it cannot play now.
-func (s *Shell) modVideo(path string, version any) *fairy.Video {
-	return s.modVideos.video(fmt.Sprint(path, ":", version), path, s.deps.Log, "Mod.preview")
+func (s *Shell) modVideo(path string, version any) *video.Video {
+	return s.modVideos.play(fmt.Sprint(path, ":", version), path, s.deps.Log, "Mod.preview")
 }
 
 func (s *Shell) previewImage(info mod.ModInfo, shown cardPreview, fallback *fairy.El) *fairy.El {
 	if shown.key == "" {
 		if info.Preview != nil && isPreviewVideo(*info.Preview) {
-			if video := s.modVideo(*info.Preview, info.Mtime); video != nil {
-				if video.State() == fairy.VideoLoading {
+			if vid := s.modVideo(*info.Preview, info.Mtime); vid != nil {
+				if vid.State() == video.Loading {
 					return fairy.Spinner().Size(20, 20)
 				}
-				return fairy.VideoView(video).WFull().HFull()
+				return video.View(vid).WFull().HFull()
 			}
 			return fairy.Col(
 				fairy.Icon(lucide.Film).Size(48, 48).Color(kit.T().MutedForeground),

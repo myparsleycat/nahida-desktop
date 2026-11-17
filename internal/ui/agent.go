@@ -16,6 +16,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/clipboard"
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/agent"
@@ -723,10 +724,10 @@ func (s *Shell) addAgentImages(paths []string) {
 // pasteAgentImage attaches the clipboard image as a PNG when the clipboard holds an image and no text, so a
 // text paste still inserts the text. It reports whether it took the paste.
 func (s *Shell) pasteAgentImage() bool {
-	if s.win == nil || strings.TrimSpace(s.win.ClipboardText()) != "" {
+	if strings.TrimSpace(clipboard.Text()) != "" {
 		return false
 	}
-	img, ok := s.win.ClipboardImage()
+	img, ok := clipboard.Image()
 	if !ok {
 		return false
 	}
@@ -765,10 +766,10 @@ func (s *Shell) pasteAgentImage() bool {
 }
 
 func (s *Shell) copyAgentText(key, text string) {
-	if text == "" || s.win == nil {
+	if text == "" {
 		return
 	}
-	if !s.win.SetClipboardText(text) {
+	if !clipboard.SetText(text) {
 		s.toasts.Show(kit.ToastError, T(lo.Ternary(key == "hunting", "page.agent.hunting_copy_failed",
 			"page.agent.copy_failed")), "")
 		return

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -91,7 +92,7 @@ func (s *Shell) driveVideoPath(src string) string {
 
 // driveVideo plays the preview video at src once its file is cached, or returns nil until then. It fetches
 // only while a player is free, so rows past the limit do not download what they cannot play.
-func (s *Shell) driveVideo(src string) *fairy.Video {
+func (s *Shell) driveVideo(src string) *video.Video {
 	if src == "" || !s.driveVideos.room(src) {
 		return nil
 	}
@@ -99,7 +100,7 @@ func (s *Shell) driveVideo(src string) *fairy.Video {
 	if path == "" {
 		return nil
 	}
-	return s.driveVideos.video(src, path, s.deps.Log, "Drive.preview")
+	return s.driveVideos.play(src, path, s.deps.Log, "Drive.preview")
 }
 
 // cachedDriveVideo is driveVideoPath for a file about to be opened. The cache prunes files no player holds

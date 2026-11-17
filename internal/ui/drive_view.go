@@ -15,6 +15,7 @@ import (
 	"github.com/myparsleycat/fairy/keyboard"
 	"github.com/myparsleycat/fairy/kit"
 	"github.com/myparsleycat/fairy/svg"
+	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/infra"
@@ -453,8 +454,8 @@ func (s *Shell) driveIcon(v *driveView, item driveItem, size float32, cover bool
 		if cover {
 			box = driveGridCell
 		}
-		if video := s.driveVideo(item.Video); video != nil && video.State() != fairy.VideoLoading {
-			preview = fairy.VideoView(video).WFull().HFull()
+		if vid := s.driveVideo(item.Video); vid != nil && vid.State() != video.Loading {
+			preview = video.View(vid).WFull().HFull()
 			if !cover {
 				preview.Fit(fairy.FitCover)
 			}
@@ -752,9 +753,9 @@ func (s *Shell) showDrivePreview(cx *fairy.Cx, item *driveItem) {
 	t := kit.T()
 	closePreview := func() { s.drive.preview = nil }
 	windowW, windowH := cx.Size()
-	var video *fairy.Video
+	var vid *video.Video
 	if path := s.cachedDriveVideo(item.Video); path != "" {
-		video = s.driveVideos.pinned(item.Video, path, s.deps.Log, "Drive.preview")
+		vid = s.driveVideos.pinned(item.Video, path, s.deps.Log, "Drive.preview")
 	}
 	var img *fairy.Image
 	if item.Video == "" || s.driveVideoFailed(item.Video) {
@@ -762,8 +763,8 @@ func (s *Shell) showDrivePreview(cx *fairy.Cx, item *driveItem) {
 	}
 	var content *fairy.El
 	switch {
-	case video != nil && video.State() != fairy.VideoLoading:
-		content = fairy.VideoView(video).WFull().HFull()
+	case vid != nil && vid.State() != video.Loading:
+		content = video.View(vid).WFull().HFull()
 	case item.Video != "" && !s.driveVideoFailed(item.Video):
 		content = fairy.Spinner().Size(28, 28)
 	case img != nil:

@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -20,15 +20,15 @@ type previewVideos struct {
 }
 
 type previewPlayer struct {
-	video *fairy.Video
-	gen   int
+	v   *video.Video
+	gen int
 }
 
 // sweep closes the players nothing asked for since the previous sweep. The shell calls it as each build starts.
 func (p *previewVideos) sweep() {
 	for key, player := range p.players {
 		if player.gen != p.gen {
-			player.video.Close()
+			player.v.Close()
 			delete(p.players, key)
 		}
 	}
@@ -37,32 +37,32 @@ func (p *previewVideos) sweep() {
 
 func (p *previewVideos) closeAll() {
 	for _, player := range p.players {
-		player.video.Close()
+		player.v.Close()
 	}
 	clear(p.players)
 }
 
-// video returns the player for the local file at path, opening it when there is room. key names the file's
+// play returns the player for the local file at path, opening it when there is room. key names the file's
 // version, so a replaced file is opened again. It returns nil when the file cannot be played or the screen
 // already has maxPreviewVideos players.
-func (p *previewVideos) video(key, path string, log *infra.Log, where string) *fairy.Video {
+func (p *previewVideos) play(key, path string, log *infra.Log, where string) *video.Video {
 	return p.open(key, path, log, where, maxPreviewVideos)
 }
 
-// room reports whether video would return a player for key now.
+// room reports whether play would return a player for key now.
 func (p *previewVideos) room(key string) bool {
 	return p.players[key] != nil || (!p.failed[key] && len(p.players) < maxPreviewVideos)
 }
 
-// pinned is video without the limit, for the preview the user opened on its own.
-func (p *previewVideos) pinned(key, path string, log *infra.Log, where string) *fairy.Video {
+// pinned is play without the limit, for the preview the user opened on its own.
+func (p *previewVideos) pinned(key, path string, log *infra.Log, where string) *video.Video {
 	return p.open(key, path, log, where, -1)
 }
 
-func (p *previewVideos) open(key, path string, log *infra.Log, where string, limit int) *fairy.Video {
+func (p *previewVideos) open(key, path string, log *infra.Log, where string, limit int) *video.Video {
 	if player := p.players[key]; player != nil {
 		player.gen = p.gen
-		return player.video
+		return player.v
 	}
 	if p.failed[key] || (limit >= 0 && len(p.players) >= limit) {
 		return nil
@@ -72,7 +72,7 @@ func (p *previewVideos) open(key, path string, log *infra.Log, where string, lim
 	}
 	fail := func(err error) {
 		if player := p.players[key]; player != nil {
-			player.video.Close()
+			player.v.Close()
 			delete(p.players, key)
 		}
 		p.failed[key] = true
@@ -82,11 +82,11 @@ func (p *previewVideos) open(key, path string, log *infra.Log, where string, lim
 			Fields:    map[string]any{"path": path},
 		})
 	}
-	video, err := fairy.OpenVideo(path, fairy.VideoOptions{AutoPlay: true, Loop: true, Muted: true, OnError: fail})
+	vid, err := video.Open(path, video.Options{AutoPlay: true, Loop: true, Muted: true, OnError: fail})
 	if err != nil {
 		fail(err)
 		return nil
 	}
-	p.players[key] = &previewPlayer{video: video, gen: p.gen}
-	return video
+	p.players[key] = &previewPlayer{v: vid, gen: p.gen}
+	return vid
 }

@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/webview"
 
 	"nahida.live/desktop/internal/gamebanana"
 )
 
 type fakeLoginWindow struct {
 	mu                 sync.Mutex
-	cookies            []fairy.Cookie
+	cookies            []webview.Cookie
 	getErr             error
 	deleteErr          error
 	gets               atomic.Int32
@@ -39,8 +39,8 @@ type fakeLoginWindow struct {
 	runHook            func()
 }
 
-func newFakeLoginWindow(cookies ...fairy.Cookie) *fakeLoginWindow {
-	return &fakeLoginWindow{cookies: append([]fairy.Cookie(nil), cookies...), autoReady: true}
+func newFakeLoginWindow(cookies ...webview.Cookie) *fakeLoginWindow {
+	return &fakeLoginWindow{cookies: append([]webview.Cookie(nil), cookies...), autoReady: true}
 }
 
 func (w *fakeLoginWindow) Run() {
@@ -75,7 +75,7 @@ func (w *fakeLoginWindow) Close() {
 	}
 }
 
-func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]fairy.Cookie, error) {
+func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]webview.Cookie, error) {
 	current := w.inFlight.Add(1)
 	for {
 		prev := w.maxFlight.Load()
@@ -107,7 +107,7 @@ func (w *fakeLoginWindow) GetCookies(ctx context.Context, uri string) ([]fairy.C
 	if w.cookieScopeURI != "" && uri != w.cookieScopeURI {
 		return nil, nil
 	}
-	return append([]fairy.Cookie(nil), w.cookies...), nil
+	return append([]webview.Cookie(nil), w.cookies...), nil
 }
 
 func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...string) error {
@@ -122,7 +122,7 @@ func (w *fakeLoginWindow) DeleteCookies(_ context.Context, uri string, names ...
 	w.deleted = append(w.deleted, names...)
 	w.cookies = slices.DeleteFunc(
 		w.cookies,
-		func(cookie fairy.Cookie) bool { return slices.Contains(names, cookie.Name) },
+		func(cookie webview.Cookie) bool { return slices.Contains(names, cookie.Name) },
 	)
 	return nil
 }
@@ -175,9 +175,9 @@ func (w *fakeLoginWindow) fail(err error) {
 	}
 }
 
-func (w *fakeLoginWindow) setCookies(cookies ...fairy.Cookie) {
+func (w *fakeLoginWindow) setCookies(cookies ...webview.Cookie) {
 	w.mu.Lock()
-	w.cookies = append([]fairy.Cookie(nil), cookies...)
+	w.cookies = append([]webview.Cookie(nil), cookies...)
 	w.mu.Unlock()
 }
 
@@ -277,7 +277,7 @@ func TestGameBananaLoginWaitsForNavigationBeforeCookiePoll(t *testing.T) {
 }
 
 func TestGameBananaLoginPollsDoNotOverlap(t *testing.T) {
-	win := newFakeLoginWindow(fairy.Cookie{Name: "keep", Value: "x"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "keep", Value: "x"})
 	win.getDelay = 80 * time.Millisecond
 	login := newGameBananaLogin()
 	login.pollWait = 10 * time.Millisecond
@@ -291,7 +291,7 @@ func TestGameBananaLoginPollsDoNotOverlap(t *testing.T) {
 }
 
 func TestGameBananaLoginDeletesInvalidCandidateOnceAndStaysOpen(t *testing.T) {
-	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "bad"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "bad"})
 	var validates atomic.Int32
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
@@ -314,8 +314,8 @@ func TestGameBananaLoginDeletesInvalidCandidateOnceAndStaysOpen(t *testing.T) {
 
 func TestGameBananaLoginTriesAllRMCCandidatesBeforeDeleting(t *testing.T) {
 	win := newFakeLoginWindow(
-		fairy.Cookie{Name: "rmc", Value: "stale", Domain: ".gamebanana.com", Path: "/members"},
-		fairy.Cookie{Name: "rmc", Value: "valid", Domain: ".gamebanana.com", Path: "/", HTTPOnly: true},
+		webview.Cookie{Name: "rmc", Value: "stale", Domain: ".gamebanana.com", Path: "/members"},
+		webview.Cookie{Name: "rmc", Value: "valid", Domain: ".gamebanana.com", Path: "/", HTTPOnly: true},
 	)
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
@@ -352,7 +352,7 @@ func TestGameBananaLoginUserCloseIsCancelledAndLateCookieIgnored(t *testing.T) {
 	if err := <-errCh; !errors.Is(err, gamebanana.ErrLoginCancelled) {
 		t.Fatalf("err = %v", err)
 	}
-	win.setCookies(fairy.Cookie{Name: "rmc", Value: "late"})
+	win.setCookies(webview.Cookie{Name: "rmc", Value: "late"})
 	time.Sleep(400 * time.Millisecond)
 	login.mu.Lock()
 	result := login.result
@@ -378,7 +378,7 @@ func TestGameBananaLoginWebViewFailureIsUnsupported(t *testing.T) {
 }
 
 func TestGameBananaLoginDoesNotReuseSettledResultWithoutCloseEvent(t *testing.T) {
-	first := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "first"})
+	first := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "first"})
 	first.suppressCloseEvent = true
 	second := newFakeLoginWindow()
 	windows := []loginWindow{first, second}
@@ -398,7 +398,7 @@ func TestGameBananaLoginDoesNotReuseSettledResultWithoutCloseEvent(t *testing.T)
 }
 
 func TestGameBananaOldWindowCannotCloseNewLogin(t *testing.T) {
-	first := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "first"})
+	first := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "first"})
 	second := newFakeLoginWindow()
 	second.autoReady = false
 	login := newGameBananaLogin()
@@ -446,7 +446,10 @@ func TestGameBananaLoginDeadlineClosesWindow(t *testing.T) {
 }
 
 func TestGameBananaLoginPreparesSharedProfileBeforeCreatingWindow(t *testing.T) {
-	logout := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "stale"}, fairy.Cookie{Name: "PHPSESSID", Value: "s"})
+	logout := newFakeLoginWindow(
+		webview.Cookie{Name: "rmc", Value: "stale"},
+		webview.Cookie{Name: "PHPSESSID", Value: "s"},
+	)
 	logout.cookieScopeURI = gameBananaLoginURL
 	win := newFakeLoginWindow()
 	var stages []string
@@ -479,7 +482,7 @@ func TestGameBananaLoginPreparesSharedProfileBeforeCreatingWindow(t *testing.T) 
 }
 
 func TestGameBananaLoginClearCookiesWaitsForLogoutNavigation(t *testing.T) {
-	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "old"}, fairy.Cookie{Name: "rmc", Value: "dup"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "old"}, webview.Cookie{Name: "rmc", Value: "dup"})
 	win.autoReady = false
 	login := newGameBananaLogin()
 	login.logoutFactory = func() (loginWindow, error) { return win, nil }
@@ -510,7 +513,7 @@ func TestGameBananaLoginClearCookiesWithoutWebView2Succeeds(t *testing.T) {
 }
 
 func TestGameBananaLoginErrorsDoNotIncludeCookieValues(t *testing.T) {
-	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "super-secret"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "super-secret"})
 	login := newGameBananaLogin()
 	login.factory = func() (loginWindow, error) { return win, nil }
 	_, err := login.Open(context.Background(), func(context.Context, string) (bool, error) {

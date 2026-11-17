@@ -9,6 +9,7 @@ import (
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/kit"
+	"github.com/myparsleycat/fairy/webview"
 
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/ui"
@@ -78,7 +79,7 @@ type guiLoginWindow struct {
 
 	// UI thread only.
 	window  *fairy.Window
-	view    *fairy.WebView
+	view    *webview.WebView
 	failure error
 }
 
@@ -104,7 +105,7 @@ func (w *guiLoginWindow) Run() {
 		if w.logout {
 			url = gameBananaLogoutURL
 		}
-		w.view = fairy.NewWebView(fairy.WebViewOptions{
+		w.view = webview.New(webview.Options{
 			URL:            url,
 			UserDataFolder: w.opts.UserDataFolder,
 			BrowserArgs:    w.opts.BrowserArgs,
@@ -155,7 +156,7 @@ func (w *guiLoginWindow) build(theme kit.Theme) *fairy.El {
 	if w.logout {
 		return fairy.Col(
 			fairy.Row(kit.Spinner(16), fairy.Text(ui.T("page.gamebanana.logout"))).Gap(8).Align(fairy.Center),
-			fairy.WebViewHost(w.view).Size(1, 1),
+			webview.Host(w.view).Size(1, 1),
 		).WFull().HFull().Center().Gap(4).Fill(theme.Card).Color(theme.Foreground)
 	}
 	if w.failure != nil {
@@ -164,7 +165,7 @@ func (w *guiLoginWindow) build(theme kit.Theme) *fairy.El {
 			fairy.Text(ui.T("page.gamebanana.auth.unsupported_description")).Color(theme.MutedForeground),
 		).WFull().HFull().Center().Gap(8).Pad(24).Fill(theme.Card).Color(theme.Foreground)
 	}
-	return fairy.WebViewHost(w.view).WFull().HFull()
+	return webview.Host(w.view).WFull().HFull()
 }
 
 // fail runs on the UI thread.
@@ -215,9 +216,9 @@ func (w *guiLoginWindow) Close() {
 
 var errLoginWindowClosed = errors.New("login window closed")
 
-func (w *guiLoginWindow) GetCookies(ctx context.Context, uri string) ([]fairy.Cookie, error) {
+func (w *guiLoginWindow) GetCookies(ctx context.Context, uri string) ([]webview.Cookie, error) {
 	type result struct {
-		cookies []fairy.Cookie
+		cookies []webview.Cookie
 		err     error
 	}
 	done := make(chan result, 1)
@@ -228,7 +229,7 @@ func (w *guiLoginWindow) GetCookies(ctx context.Context, uri string) ([]fairy.Co
 		case w.view == nil || !w.view.Ready():
 			done <- result{err: errLoginWindowClosed}
 		default:
-			w.view.Cookies(uri, func(cookies []fairy.Cookie, err error) { done <- result{cookies, err} })
+			w.view.Cookies(uri, func(cookies []webview.Cookie, err error) { done <- result{cookies, err} })
 		}
 	})
 	select {

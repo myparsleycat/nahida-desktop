@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/webview"
 	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/gamebanana"
@@ -40,7 +40,7 @@ type loginWindow interface {
 	Show()
 	Focus()
 	Close()
-	GetCookies(context.Context, string) ([]fairy.Cookie, error)
+	GetCookies(context.Context, string) ([]webview.Cookie, error)
 	DeleteCookies(context.Context, string, ...string) error
 	OnNavigated(func()) func()
 	OnClosing(func()) func()
@@ -396,7 +396,7 @@ func clearGameBananaCookies(ctx context.Context, window loginWindow) error {
 	// additional cookies visible to the login page.
 	names := lo.Uniq(slices.Concat(
 		gameBananaAuthCookieNames,
-		lo.FilterMap(cookies, func(cookie fairy.Cookie, _ int) (string, bool) {
+		lo.FilterMap(cookies, func(cookie webview.Cookie, _ int) (string, bool) {
 			return cookie.Name, cookie.Name != ""
 		}),
 	))

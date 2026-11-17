@@ -15,8 +15,10 @@ import (
 	"strings"
 
 	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/clipboard"
 	"github.com/myparsleycat/fairy/icons/lucide"
 	"github.com/myparsleycat/fairy/kit"
+	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/infra"
@@ -272,8 +274,8 @@ func (s *Shell) modLightboxDialog(cx *fairy.Cx) {
 	var content *fairy.El
 	if isPreviewVideo(file) {
 		content = fairy.Spinner().Size(28, 28).Color(white)
-		if video := s.modVideo(file, info.Mtime); video != nil && video.State() != fairy.VideoLoading {
-			content = fairy.VideoView(video).WFull().HFull()
+		if vid := s.modVideo(file, info.Mtime); vid != nil && vid.State() != video.Loading {
+			content = video.View(vid).WFull().HFull()
 		}
 	} else {
 		key := fmt.Sprint("mod-lightbox:", file, ":", info.Mtime)
@@ -629,14 +631,14 @@ func (s *Shell) pastePreview(info mod.ModInfo) {
 	m := &s.mods
 	draft := &pasteDraft{mod: info, groupPath: m.group.Path}
 	files := s.deps.Platform.GetClipboardFiles()
-	text := strings.TrimSpace(s.win.ClipboardText())
+	text := strings.TrimSpace(clipboard.Text())
 	switch {
 	case len(files) > 0 && isPreviewImage(files[0]):
 		draft.kind, draft.data = "path", files[0]
 	case strings.HasPrefix(text, "http") && isPreviewImage(strings.SplitN(text, "?", 2)[0]):
 		draft.kind, draft.data = "url", text
 	default:
-		img, ok := s.win.ClipboardImage()
+		img, ok := clipboard.Image()
 		if !ok {
 			s.toasts.Show(kit.ToastWarning, T("page.mod.toast.paste-preview.no-image"), "")
 			return

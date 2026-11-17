@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/webview"
 
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/infra"
@@ -18,9 +18,9 @@ import (
 
 func TestGameBananaLoginClearsCookiesWhenLogoutPageStalls(t *testing.T) {
 	var output bytes.Buffer
-	logout := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "private-token"})
+	logout := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "private-token"})
 	logout.autoReady = false
-	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "candidate"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "candidate"})
 	login := newGameBananaLogin()
 	login.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
 	login.logoutWait = 5 * time.Millisecond
@@ -96,7 +96,7 @@ func TestGameBananaLoginRejectsUnsafeReset(t *testing.T) {
 
 func TestGameBananaCookieCleanupDiagnostic(t *testing.T) {
 	var output bytes.Buffer
-	win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "candidate-secret"})
+	win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "candidate-secret"})
 	win.deleteErr = errors.New("DeleteCookies E_INVALIDARG rmc=error-secret")
 	login := newGameBananaLogin()
 	login.window = win
@@ -162,7 +162,7 @@ func TestGameBananaCookieDiagnosticsIgnoreCancellation(t *testing.T) {
 	for _, stage := range []string{"poll", "cleanup"} {
 		t.Run(stage, func(t *testing.T) {
 			var output bytes.Buffer
-			win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "secret"})
+			win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "secret"})
 			if stage == "poll" {
 				win.getErr = context.Canceled
 			} else {
@@ -194,7 +194,7 @@ func TestGameBananaLoginDiagnosticPreservesClassifiedCause(t *testing.T) {
 			var err error
 			switch stage {
 			case "validate-cookie", "poll-cookies":
-				win := newFakeLoginWindow(fairy.Cookie{Name: "rmc", Value: "candidate-secret"})
+				win := newFakeLoginWindow(webview.Cookie{Name: "rmc", Value: "candidate-secret"})
 				login.window = win
 				if stage == "poll-cookies" {
 					win.getErr = fmt.Errorf("native failure: %w", errLoginWebViewUnavailable)
