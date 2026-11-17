@@ -293,6 +293,22 @@ func (t *Service) loadModViewer(
 			prepared.variableNames,
 		))...,
 	)
+	meshCount := len(transport.Meshes)
+	meshPayloads, meshAliases, consolidateErr := consolidateModelViewerMeshes(
+		ctx,
+		&transport,
+		meshPayloads,
+		prepared.drawSources,
+	)
+	if consolidateErr != nil {
+		return ModelViewerTransport{}, consolidateErr
+	}
+	if len(meshAliases) > 0 {
+		t.log.Info(
+			fmt.Sprintf("Mesh consolidation: %d meshes became %d", meshCount, len(transport.Meshes)),
+			"StaticGlb.loadForViewer",
+		)
+	}
 	postProcessMs = time.Since(stageStartedAt).Milliseconds()
 	stageStartedAt = time.Now()
 	if options.spoolGeometry {
@@ -304,6 +320,12 @@ func (t *Service) loadModViewer(
 			options.spool,
 		); err != nil {
 			return ModelViewerTransport{}, err
+		}
+	}
+	// A tool that saved the ID of a mesh that was folded or removed still finds its draw.
+	for id, target := range meshAliases {
+		if source, exists := prepared.drawSources[target]; exists {
+			prepared.drawSources[id] = source
 		}
 	}
 	stage = "write-payload"

@@ -1136,7 +1136,8 @@ filename = Textures/Components-3 t=beef001f.png
 [ResourceTextureOther]
 filename = Textures/Components-3 t=beef0020.png
 `)
-	if len(result.Meshes) < 2 {
+	// The two overrides draw the same buffers with the same textures, so one mesh draws both.
+	if len(result.Meshes) != 1 {
 		t.Fatalf("meshes = %#v", result.Meshes)
 	}
 	for _, mesh := range result.Meshes {

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -102,6 +103,13 @@ func (lt *liquidTool) mesh(id string) *modelviewer.ModelViewerMeshTransport {
 	meshes := lt.viewer.scene.transport.Meshes
 	for i := range meshes {
 		if meshes[i].ID == id {
+			return &meshes[i]
+		}
+	}
+	// A profile may name a mesh the viewer merged into another: a frame of a folded animation or a copy of a draw
+	// under another hash.
+	for i := range meshes {
+		if slices.Contains(meshes[i].MergedIDs, id) {
 			return &meshes[i]
 		}
 	}

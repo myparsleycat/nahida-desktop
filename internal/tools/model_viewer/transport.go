@@ -82,6 +82,9 @@ type ModelViewerMeshTransport struct {
 	// DrawKey groups meshes of one INI draw with matching viewer-to-source face
 	// indices for surface tracking; empty when that draw is unknown.
 	DrawKey string `json:"drawKey,omitempty"`
+	// MergedIDs are the IDs of the meshes this one draws for: copies of its draw under another override hash, and
+	// the other frames of a frame animation that became its position variants.
+	MergedIDs []string `json:"mergedIds,omitempty"`
 }
 
 type ModelViewerTextureTransport struct {

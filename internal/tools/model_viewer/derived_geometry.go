@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 )
 
@@ -93,8 +94,52 @@ func modelViewerGeometryBounds(ctx context.Context, positions []float32) (*Model
 	return bounds, ctx.Err()
 }
 
-// Geometry variants: ten float64 bounds values, then compact float32 XYZ and normals.
+// Geometry variants: ten float64 bounds values, then compact float32 XYZ and normals, and the four-float tangent of
+// each vertex when the variant carries tangents.
 const modelViewerVariantHeaderBytes = 10 * 8
+
+func modelViewerVariantByteLength(positions, normals, tangents []float32) int {
+	return modelViewerVariantHeaderBytes + 4*(len(positions)+len(normals)+len(tangents))
+}
+
+func writeModelViewerVariantBytes(
+	w io.Writer,
+	bounds *ModelViewerBounds,
+	positions, normals, tangents []float32,
+) error {
+	out := newModelViewerChunkWriter(w)
+	out.bytes(modelViewerVariantBytes(bounds, nil, nil))
+	out.float32s(positions)
+	out.float32s(normals)
+	out.float32s(tangents)
+	return out.close()
+}
+
+// unionModelViewerBounds bounds both boxes; a nil box adds nothing.
+func unionModelViewerBounds(left, right *ModelViewerBounds) *ModelViewerBounds {
+	if left == nil {
+		return right
+	}
+	if right == nil {
+		return left
+	}
+	union := &ModelViewerBounds{}
+	for axis := range 3 {
+		union.Min[axis] = min(left.Min[axis], right.Min[axis])
+		union.Max[axis] = max(left.Max[axis], right.Max[axis])
+		union.Center[axis] = (union.Min[axis] + union.Max[axis]) / 2
+	}
+	// Each box's sphere lies inside the sphere around the union's centre that reaches past both of them.
+	for _, box := range []*ModelViewerBounds{left, right} {
+		var distanceSquared float64
+		for axis := range 3 {
+			d := box.Center[axis] - union.Center[axis]
+			distanceSquared += d * d
+		}
+		union.Radius = max(union.Radius, math.Sqrt(distanceSquared)+box.Radius)
+	}
+	return union
+}
 
 func modelViewerVariantBytes(bounds *ModelViewerBounds, positions, normals []float32) []byte {
 	data := make([]byte, modelViewerVariantHeaderBytes+4*(len(positions)+len(normals)))

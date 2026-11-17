@@ -103,6 +103,8 @@ type modelViewerMeshPayload struct {
 	ShapeLowPositions [][]float32
 	SourceIndices     []uint32
 	PositionSources   []modelViewerDirectPositionAssignment
+	// Frames holds the geometry of each position variant of a folded frame animation, in variant order.
+	Frames []modelViewerFrameGeometry
 }
 
 type modelViewerPayloadOptions struct {
@@ -420,6 +422,39 @@ func writeModelViewerPayload(
 			if err != nil {
 				return err
 			}
+		}
+		if len(payload.Frames) > 0 {
+			if len(payload.Frames) != len(mesh.PositionVariants) {
+				return fmt.Errorf("model viewer frame payload count mismatch for %s", mesh.ID)
+			}
+			for frameIndex, frame := range payload.Frames {
+				bounds, err := modelViewerGeometryBounds(meshCtx, frame.Positions)
+				if err != nil {
+					return fmt.Errorf("mesh %s frame %d bounds: %w", mesh.ID, frameIndex, err)
+				}
+				mesh.Bounds = unionModelViewerBounds(mesh.Bounds, bounds)
+				if frame.Normals == nil {
+					frame.Normals, err = modelViewerVertexNormals(meshCtx, frame.Positions, payload.Indices)
+					if err != nil {
+						return fmt.Errorf("mesh %s frame %d normals: %w", mesh.ID, frameIndex, err)
+					}
+				}
+				tangents := frame.Tangents
+				if len(tangents) != len(frame.Positions)/3*4 {
+					tangents = nil
+				}
+				mesh.PositionVariants[frameIndex].GeometryURL, err = write(
+					fmt.Sprintf(".frame.%d", frameIndex),
+					modelViewerVariantByteLength(frame.Positions, frame.Normals, tangents),
+					func(w io.Writer) error {
+						return writeModelViewerVariantBytes(w, bounds, frame.Positions, frame.Normals, tangents)
+					},
+				)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		if len(payload.PositionSources) != len(mesh.PositionVariants) {
 			return fmt.Errorf("model viewer position variant payload count mismatch for %s", mesh.ID)

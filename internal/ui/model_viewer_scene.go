@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -35,11 +37,59 @@ type viewerScene struct {
 	// meshUse lists the loaded meshes, least recently drawn first, and meshBytes is their GPU size.
 	meshUse   []int
 	meshBytes int
+	// meshBudget and variantBudget replace viewerMeshCacheBytes and viewerVariantCacheBytes when set.
+	meshBudget, variantBudget int
+	// schedule lists what each frame of the clip being played draws, and frame is the frame shown. With a schedule
+	// the caches drop what the clip draws last, instead of what it drew longest ago.
+	schedule *viewerSchedule
+	frame    int
+	// demand marks what the viewer still wants loaded.
+	demand *viewerDemand
+	// evictions counts the meshes and variants dropped from the caches. resident is a schedule found fully loaded
+	// when evictions was residentAt.
+	evictions  uint64
+	resident   *viewerSchedule
+	residentAt uint64
 }
 
 // viewerMeshCacheBytes bounds the GPU size of the meshes a scene keeps loaded beyond the ones it shows. A mod
 // that animates by switching between many meshes, one per frame, only ever draws a few of them.
 const viewerMeshCacheBytes = 256 << 20
+
+func (s *viewerScene) meshCacheBytes() int {
+	if s.meshBudget > 0 {
+		return s.meshBudget
+	}
+	return viewerMeshCacheBytes
+}
+
+func (s *viewerScene) variantCacheBytes() int {
+	if s.variantBudget > 0 {
+		return s.variantBudget
+	}
+	return viewerVariantCacheBytes
+}
+
+// dropOrder orders the droppable items of a cache, given in least recently drawn order, by which to drop first:
+// with a schedule the one the clip draws last, the least recently drawn of those drawn equally late first.
+func dropOrder[T any](s *viewerScene, refs []T, item func(T) viewerScheduleItem) []T {
+	if s.schedule == nil {
+		return refs
+	}
+	distances := make(map[viewerScheduleItem]int, len(refs))
+	for _, ref := range refs {
+		distances[item(ref)] = s.schedule.distance(item(ref), s.frame)
+	}
+	ordered := slices.Clone(refs)
+	slices.SortStableFunc(ordered, func(a, b T) int { return cmp.Compare(distances[item(b)], distances[item(a)]) })
+	return ordered
+}
+
+// keepsMesh reports a mesh the cache never drops: one shown, about to show, or read by a deformer.
+func (s *viewerScene) keepsMesh(ref int) bool {
+	mesh := s.meshes[ref]
+	return mesh.pinned || mesh.state.Visible || (ref < len(s.wanted) && s.wanted[ref].Visible)
+}
 
 // viewerMissing is what apply waits for: position variants by mesh index, and meshes to load.
 type viewerMissing struct {
@@ -65,33 +115,37 @@ func (s *viewerScene) trackLoaded() {
 	}
 }
 
-// storeMesh counts a newly loaded mesh and unloads the least recently drawn ones while the meshes the scene may
-// drop are over the cache size; the ones it shows, is about to show or deforms do not count. It returns the
-// meshes it unloaded, whose GPU buffers the caller releases.
+// storeMesh counts a newly loaded mesh and unloads others in dropOrder while the meshes the scene may drop are over
+// the cache size; the ones it keeps do not count, and the new one stays. It returns the meshes it unloaded, whose
+// GPU buffers the caller releases.
 func (s *viewerScene) storeMesh(i int) []int {
 	s.meshUse = append(s.meshUse, i)
 	s.meshBytes += s.meshes[i].gpuBytes()
-	kept := func(ref int) bool {
-		mesh := s.meshes[ref]
-		return mesh.pinned || mesh.state.Visible || (ref < len(s.wanted) && s.wanted[ref].Visible)
-	}
 	held := 0
+	var droppable []int
 	for _, ref := range s.meshUse {
-		if kept(ref) {
+		switch {
+		case s.keepsMesh(ref):
 			held += s.meshes[ref].gpuBytes()
+		case ref != i:
+			droppable = append(droppable, ref)
 		}
+	}
+	if s.meshBytes-held <= s.meshCacheBytes() {
+		return nil
 	}
 	var unloaded []int
-	for at := 0; s.meshBytes-held > viewerMeshCacheBytes && at < len(s.meshUse); {
-		ref := s.meshUse[at]
-		if ref == i || kept(ref) {
-			at++
-			continue
+	for _, ref := range dropOrder(s, droppable, func(ref int) viewerScheduleItem {
+		return viewerScheduleItem{mesh: ref, variant: -1}
+	}) {
+		if s.meshBytes-held <= s.meshCacheBytes() {
+			break
 		}
 		mesh := s.meshes[ref]
-		s.meshUse = slices.Delete(s.meshUse, at, at+1)
+		s.meshUse = slices.DeleteFunc(s.meshUse, func(other int) bool { return other == ref })
 		s.meshBytes -= mesh.gpuBytes()
 		mesh.unload()
+		s.evictions++
 		unloaded = append(unloaded, ref)
 	}
 	return unloaded
@@ -104,6 +158,7 @@ func (s *viewerScene) forgetMesh(i int) {
 		s.meshBytes -= s.meshes[i].gpuBytes()
 	}
 	s.meshes[i].unload()
+	s.evictions++
 }
 
 // touchMesh marks a loaded mesh as the most recently drawn.
@@ -119,13 +174,13 @@ func (s *viewerScene) waitsForMesh(i int) bool {
 	return i < len(s.wanted) && s.wanted[i].Visible && mesh.unloaded && !mesh.failed
 }
 
-// viewerVariantCacheBytes bounds the position variants a scene keeps loaded, as the React viewer's position
-// loader does. An animation may step through hundreds of them.
-const viewerVariantCacheBytes = 32 << 20
+// viewerVariantCacheBytes bounds the position variants a scene keeps loaded when the installed memory is unknown.
+// An animation may step through hundreds of them.
+const viewerVariantCacheBytes = 256 << 20
 
-func (g *viewerPositionGeometry) bytes() int { return (len(g.positions) + len(g.normals)) * 4 }
+func (g *viewerPositionGeometry) bytes() int { return len(g.current)*4 + len(g.extra) }
 
-// storeVariant keeps a loaded position variant and drops the least recently drawn ones over the cache size.
+// storeVariant keeps a loaded position variant and drops others in dropOrder while over the cache size.
 func (s *viewerScene) storeVariant(i, index int, variant *viewerPositionGeometry) {
 	mesh := s.meshes[i]
 	if previous := mesh.variants[index]; previous != nil {
@@ -135,18 +190,27 @@ func (s *viewerScene) storeVariant(i, index int, variant *viewerPositionGeometry
 	}
 	mesh.variants[index] = variant
 	s.variantBytes += variant.bytes()
+	if s.variantBytes <= s.variantCacheBytes() {
+		return
+	}
 
-	for at := 0; s.variantBytes > viewerVariantCacheBytes && at < len(s.variantUse); {
-		ref := s.variantUse[at]
-		owner := s.meshes[ref[0]]
-		// A variant the scene waits to show stays, as does the new one.
-		if s.waitsFor(ref[0], ref[1]) || ref == [2]int{i, index} {
-			at++
-			continue
+	// A variant the scene waits to show stays, as does the new one.
+	var droppable [][2]int
+	for _, ref := range s.variantUse {
+		if !s.waitsFor(ref[0], ref[1]) && ref != [2]int{i, index} {
+			droppable = append(droppable, ref)
 		}
-		s.variantUse = slices.Delete(s.variantUse, at, at+1)
-		s.variantBytes -= owner.variants[ref[1]].bytes()
-		delete(owner.variants, ref[1])
+	}
+	for _, ref := range dropOrder(s, droppable, func(ref [2]int) viewerScheduleItem {
+		return viewerScheduleItem{mesh: ref[0], variant: ref[1]}
+	}) {
+		if s.variantBytes <= s.variantCacheBytes() {
+			break
+		}
+		s.variantUse = slices.DeleteFunc(s.variantUse, func(other [2]int) bool { return other == ref })
+		s.variantBytes -= s.meshes[ref[0]].variants[ref[1]].bytes()
+		delete(s.meshes[ref[0]].variants, ref[1])
+		s.evictions++
 	}
 }
 
@@ -169,8 +233,10 @@ type viewerMesh struct {
 	// uvs holds four floats per vertex: the first UV set, then the second, or the first again without one.
 	uvs     []float32
 	indices []uint32
-	// extra holds what the toon pass reads per vertex (see viewerVertexExtra), which never changes.
-	extra []byte
+	// extra holds what the toon pass reads per vertex (see viewerVertexExtra): baseExtra, or the extra of the
+	// position variant shown.
+	extra     []byte
+	baseExtra []byte
 	// tangentUsable reports vertex tangents that span a frame with the normals. GIMI-style buffers store the
 	// outline's smoothed normal in TANGENT instead.
 	tangentUsable bool
@@ -239,6 +305,7 @@ func (m *viewerMesh) fill(decoded *viewerMesh) {
 	m.vertexCount = decoded.vertexCount
 	m.positions, m.normals, m.uvs, m.indices, m.extra = decoded.positions, decoded.normals, decoded.uvs,
 		decoded.indices, decoded.extra
+	m.baseExtra = decoded.extra
 	m.tangentUsable, m.hasTangents, m.hasColors, m.hasUV1 = decoded.tangentUsable, decoded.hasTangents,
 		decoded.hasColors, decoded.hasUV1
 	m.faceForward, m.shapes = decoded.faceForward, decoded.shapes
@@ -250,6 +317,7 @@ func (m *viewerMesh) fill(decoded *viewerMesh) {
 // unload drops the mesh's geometry. Its GPU buffers are the caller's to release.
 func (m *viewerMesh) unload() {
 	m.positions, m.normals, m.uvs, m.indices, m.extra, m.shapes, m.current = nil, nil, nil, nil, nil, nil, nil
+	m.baseExtra = nil
 	m.geometryKey, m.computed, m.dirty, m.extraDirty = "", false, false, false
 	m.unloaded, m.cpuDropped = true, false
 }
@@ -264,7 +332,7 @@ func (m *viewerMesh) dropCPU() {
 	if m.unloaded || !m.static() {
 		return
 	}
-	m.positions, m.normals, m.uvs, m.indices, m.extra, m.current = nil, nil, nil, nil, nil, nil
+	m.positions, m.normals, m.uvs, m.indices, m.extra, m.baseExtra, m.current = nil, nil, nil, nil, nil, nil, nil
 	m.cpuDropped = true
 }
 
@@ -281,9 +349,22 @@ type viewerShapeTarget struct {
 	mode         string
 }
 
+// viewerPositionGeometry is a position variant as drawn: its current and extra replace the mesh's while it shows.
 type viewerPositionGeometry struct {
-	positions []float32
-	normals   []float32
+	current []float32
+	extra   []byte
+}
+
+// viewerVariantBase is what a position variant takes from its mesh to make its extra data: the mesh's own extra,
+// whose colours and, without tangents of the variant's own, tangents it keeps, and how the outline extrudes.
+type viewerVariantBase struct {
+	vertexCount    int
+	extra          []byte
+	tangentOutline bool
+}
+
+func (m *viewerMesh) variantBase() viewerVariantBase {
+	return viewerVariantBase{vertexCount: m.vertexCount, extra: m.baseExtra, tangentOutline: m.tangentOutline()}
 }
 
 // drawn reports whether the mesh draws, given whether game textures are highlighted.
@@ -341,10 +422,7 @@ func decodeViewerMesh(data []byte, averagedOutline bool) (*viewerMesh, error) {
 	}
 	colorValues := data[offset : offset+colors]
 	offset += colors
-	mesh.indices = make([]uint32, indices)
-	for i := range mesh.indices {
-		mesh.indices[i] = binary.LittleEndian.Uint32(data[offset+i*4:])
-	}
+	mesh.indices = uint32s(data[offset : offset+indices*4])
 	for _, index := range mesh.indices {
 		if int(index) >= vertices {
 			return nil, fmt.Errorf("mesh index %d is out of range for %d vertices", index, vertices)
@@ -356,13 +434,7 @@ func decodeViewerMesh(data []byte, averagedOutline bool) (*viewerMesh, error) {
 	mesh.hasTangents, mesh.hasColors = len(tangentValues) > 0, len(colorValues) > 0
 	mesh.tangentUsable = usableTangentFrame(tangentValues, mesh.normals, nil)
 	mesh.faceForward = meanNormal(mesh.normals)
-	outline := averagedNormals(mesh.positions, mesh.normals)
-	if mesh.tangentOutline() {
-		outline = make([]float32, vertices*3)
-		for v := range vertices {
-			copy(outline[v*3:v*3+3], tangentValues[v*4:v*4+3])
-		}
-	}
+	outline := viewerOutline(mesh.tangentOutline(), mesh.positions, mesh.normals, tangentValues)
 	mesh.extra = viewerVertexExtras(tangentValues, outline, colorValues, vertices)
 	// Start from the base geometry, so a mesh hidden at load still has GPU buffers to show later.
 	mesh.current, mesh.geometryKey = interleaveViewerGeometry(mesh.positions, mesh.normals), baseGeometryKey
@@ -372,6 +444,20 @@ func decodeViewerMesh(data []byte, averagedOutline bool) (*viewerMesh, error) {
 // tangentOutline reports a hull that extrudes along the outline direction GIMI-style buffers keep in TANGENT.
 func (m *viewerMesh) tangentOutline() bool {
 	return m.hasTangents && !m.tangentUsable && !m.averagedOutline
+}
+
+// viewerOutline is the direction each vertex's outline hull extrudes along: the TANGENT direction of a tangent
+// outline, or the normals averaged across seams.
+func viewerOutline(tangentOutline bool, positions, normals, tangents []float32) []float32 {
+	if !tangentOutline {
+		return averagedNormals(positions, normals)
+	}
+	vertices := len(positions) / 3
+	outline := make([]float32, vertices*3)
+	for v := range vertices {
+		copy(outline[v*3:v*3+3], tangents[v*4:v*4+3])
+	}
+	return outline
 }
 
 // viewerVertexExtraStride is the size of a vertex's extra data: its tangent (four floats), the direction its
@@ -454,14 +540,40 @@ func averagedNormals(positions, normals []float32) []float32 {
 		return k
 	}
 	vertices := len(positions) / 3
-	sums := make(map[key]vec3, vertices)
+	// An open-addressed table: a Go map hashing the three-word key costs most of a mesh's decode.
+	size := 1
+	for size < vertices*2 {
+		size <<= 1
+	}
+	slotKeys := make([]key, size)
+	slotGroups := make([]int32, size)
+	for i := range slotGroups {
+		slotGroups[i] = -1
+	}
+	groups := make([]int32, vertices)
+	var sums []vec3
 	for v := range vertices {
 		k := at(v)
-		sums[k] = sums[k].add(vec3{float64(normals[v*3]), float64(normals[v*3+1]), float64(normals[v*3+2])})
+		hash := uint64(k[0])*0x9e3779b97f4a7c15 ^ uint64(k[1])*0xc2b2ae3d27d4eb4f ^ uint64(k[2])*0x165667b19e3779f9
+		slot := int((hash ^ hash>>29) & uint64(size-1))
+		for slotGroups[slot] >= 0 && slotKeys[slot] != k {
+			slot = (slot + 1) & (size - 1)
+		}
+		group := slotGroups[slot]
+		if group < 0 {
+			group = int32(len(sums))
+			slotKeys[slot], slotGroups[slot] = k, group
+			sums = append(sums, vec3{})
+		}
+		groups[v] = group
+		sums[group] = sums[group].add(vec3{float64(normals[v*3]), float64(normals[v*3+1]), float64(normals[v*3+2])})
+	}
+	for i := range sums {
+		sums[i] = sums[i].normalize()
 	}
 	averaged := make([]float32, len(positions))
-	for v := range vertices {
-		n := sums[at(v)].normalize()
+	for v, group := range groups {
+		n := sums[group]
 		averaged[v*3], averaged[v*3+1], averaged[v*3+2] = float32(n[0]), float32(n[1]), float32(n[2])
 	}
 	return averaged
@@ -470,24 +582,57 @@ func averagedNormals(positions, normals []float32) []float32 {
 // baseGeometryKey names the base positions with no shape target applied.
 const baseGeometryKey = "shape"
 
-// float32s copies little-endian float32 values out of data.
+// float32s copies little-endian float32 values out of data. Windows runs only on little-endian CPUs, so the
+// bytes copy as they are.
 func float32s(data []byte) []float32 {
 	values := make([]float32, len(data)/4)
-	for i := range values {
-		values[i] = math.Float32frombits(binary.LittleEndian.Uint32(data[i*4:]))
+	if len(values) > 0 {
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&values[0])), len(values)*4), data)
 	}
 	return values
 }
 
-// decodeViewerPosition reads a position variant: ten float64 bounds, then positions and normals.
-func decodeViewerPosition(data []byte, vertexCount int) (*viewerPositionGeometry, error) {
-	if len(data) != 80+vertexCount*24 {
+// uint32s copies little-endian uint32 values out of data, as float32s does.
+func uint32s(data []byte) []uint32 {
+	values := make([]uint32, len(data)/4)
+	if len(values) > 0 {
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&values[0])), len(values)*4), data)
+	}
+	return values
+}
+
+// decodeViewerPosition reads a position variant: ten float64 bounds, then positions and normals, and four-float
+// tangents when the variant carries them. Its extra data starts from the base's, with the variant's tangents and
+// the outline direction of its own shape.
+func decodeViewerPosition(data []byte, base viewerVariantBase) (*viewerPositionGeometry, error) {
+	vertices := base.vertexCount
+	if len(data) != 80+vertices*24 && len(data) != 80+vertices*40 {
 		return nil, errors.New("invalid model viewer position variant length")
 	}
-	return &viewerPositionGeometry{
-		positions: float32s(data[80 : 80+vertexCount*12]),
-		normals:   float32s(data[80+vertexCount*12:]),
-	}, nil
+	if len(base.extra) != vertices*viewerVertexExtraStride {
+		return nil, errors.New("model viewer position variant has no base geometry")
+	}
+	positions := float32s(data[80 : 80+vertices*12])
+	normals := float32s(data[80+vertices*12 : 80+vertices*24])
+	var tangents []float32
+	if len(data) > 80+vertices*24 {
+		tangents = float32s(data[80+vertices*24:])
+	}
+
+	extra := slices.Clone(base.extra)
+	if tangents != nil {
+		for v := range vertices {
+			copy(extra[v*viewerVertexExtraStride:], unsafe.Slice((*byte)(unsafe.Pointer(&tangents[v*4])), 16))
+		}
+	}
+	// A tangent outline without tangents of the variant's own keeps the base's direction.
+	if !base.tangentOutline || tangents != nil {
+		outline := viewerOutline(base.tangentOutline, positions, normals, tangents)
+		for v := range vertices {
+			copy(extra[v*viewerVertexExtraStride+16:], unsafe.Slice((*byte)(unsafe.Pointer(&outline[v*3])), 12))
+		}
+	}
+	return &viewerPositionGeometry{current: interleaveViewerGeometry(positions, normals), extra: extra}, nil
 }
 
 // vertexNormals averages the face normals around each vertex, weighted by face area.
@@ -536,8 +681,13 @@ func (m *viewerMesh) setGeometry() {
 		if key == m.geometryKey || variant == nil {
 			return
 		}
-		m.current, m.geometryKey, m.dirty = interleaveViewerGeometry(variant.positions, variant.normals), key, true
+		m.current, m.geometryKey, m.dirty = variant.current, key, true
+		m.extra, m.extraDirty = variant.extra, true
 		return
+	}
+	if len(m.info.PositionVariants) > 0 && m.baseExtra != nil &&
+		unsafe.SliceData(m.extra) != unsafe.SliceData(m.baseExtra) {
+		m.extra, m.extraDirty = m.baseExtra, true
 	}
 
 	var key strings.Builder
@@ -712,13 +862,14 @@ func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) viewerMissing 
 	return missing
 }
 
-// readViewerVariant reads position variant index of the mesh info describes, which has vertexCount vertices. It
-// takes copies of the mesh's fields, since the UI thread fills the mesh while variants read.
+// readViewerVariant reads position variant index of the mesh info describes over base. It takes copies of the
+// mesh's fields, since the UI thread fills the mesh while variants read.
 func readViewerVariant(
 	ctx context.Context,
 	read func(context.Context, string) ([]byte, error),
 	info modelviewer.ModelViewerMeshTransport,
-	vertexCount, index int,
+	base viewerVariantBase,
+	index int,
 ) (*viewerPositionGeometry, error) {
 	if index < 0 || index >= len(info.PositionVariants) {
 		return nil, fmt.Errorf("mesh %s has no position variant %d", info.ID, index)
@@ -727,5 +878,5 @@ func readViewerVariant(
 	if err != nil {
 		return nil, err
 	}
-	return decodeViewerPosition(data, vertexCount)
+	return decodeViewerPosition(data, base)
 }

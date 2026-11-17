@@ -36,7 +36,7 @@ func TestSceneApplyCommitsMeshesTogether(t *testing.T) {
 		t.Error("mesh 0 changed before the frame's position variant was read")
 	}
 
-	scene.storeVariant(1, 0, &viewerPositionGeometry{positions: []float32{1, 2, 3}, normals: []float32{0, 1, 0}})
+	scene.storeVariant(1, 0, &viewerPositionGeometry{current: []float32{1, 2, 3, 0, 1, 0}})
 	if missing := scene.apply(next); !missing.empty() {
 		t.Fatalf("frame still waits for %v", missing)
 	}

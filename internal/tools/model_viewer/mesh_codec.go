@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"unsafe"
 )
 
 // modelViewerEncodeChunkBytes bounds the scratch buffer of a streamed encoding, so writing a mesh to the spool
@@ -28,15 +29,16 @@ func (c *modelViewerChunkWriter) uint32(value uint32) {
 	c.buf = binary.LittleEndian.AppendUint32(c.buf, value)
 }
 
+// float32s writes values little-endian. Windows runs only on little-endian CPUs, so their bytes go as they are.
 func (c *modelViewerChunkWriter) float32s(values []float32) {
-	for _, value := range values {
-		c.uint32(math.Float32bits(value))
+	if len(values) > 0 {
+		c.bytes(unsafe.Slice((*byte)(unsafe.Pointer(&values[0])), len(values)*4))
 	}
 }
 
 func (c *modelViewerChunkWriter) uint32s(values []uint32) {
-	for _, value := range values {
-		c.uint32(value)
+	if len(values) > 0 {
+		c.bytes(unsafe.Slice((*byte)(unsafe.Pointer(&values[0])), len(values)*4))
 	}
 }
 

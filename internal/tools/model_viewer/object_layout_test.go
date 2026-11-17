@@ -868,13 +868,25 @@ filename = body.png
 		t.Fatalf("texcoord after V-flip = %v", meshes[0].geometry.Texcoord0)
 	}
 
-	service := NewWithOptions(Options{Protocol: infra.NewProtocol()})
+	protocol := infra.NewProtocol()
+	service := NewWithOptions(Options{Protocol: protocol})
 	result, loadErr := service.LoadModViewer(context.Background(), dir)
 	if loadErr != nil {
 		t.Fatal(loadErr)
 	}
-	if len(result.Meshes) != 2 {
+	// The two frames share their triangles and texture coordinates, so they fold into position variants.
+	if len(result.Meshes) != 1 || len(result.Meshes[0].PositionVariants) != 2 {
 		t.Fatalf("loaded meshes = %#v", result.Meshes)
+	}
+	for frame, wantX := range []float32{1, 10} {
+		data := readModelViewerProtocolBytes(t, protocol, result.Meshes[0].PositionVariants[frame].GeometryURL)
+		if x := math.Float32frombits(binary.LittleEndian.Uint32(data[modelViewerVariantHeaderBytes:])); x != wantX {
+			t.Fatalf("frame %d x = %v, want %v", frame, x, wantX)
+		}
+		_, states := EvaluateViewerState(result, map[string]any{"swapvar": float64(frame)}, "")
+		if !states[0].Visible || states[0].PositionVariant != frame {
+			t.Fatalf("frame %d state = %#v", frame, states[0])
+		}
 	}
 	if len(result.Animations) != 1 || result.Animations[0].ID != "swapvar" || result.Animations[0].FrameEnd != 1 {
 		t.Fatalf("animations = %#v", result.Animations)

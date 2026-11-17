@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"maps"
 	"math"
 	"reflect"
@@ -38,7 +39,22 @@ type viewerAnimation struct {
 	resume *bool
 	// fpsDraft is the rate being typed while its popover is open.
 	fpsDraft *string
+	// warmSince is set while playback waits, from that time, for the frames ahead to load before its clock runs.
+	warmSince *time.Time
+	// scheduleKey is what the scene's schedule is built, or being built, for; scheduleRevision numbers the builds,
+	// so an earlier one that finishes late is dropped. scheduleCancel stops the build in progress and is nil
+	// when none is.
+	scheduleKey      viewerScheduleKey
+	scheduleRevision uint64
+	scheduleCancel   context.CancelFunc
 }
+
+// viewerWarmLead is how much of a clip ahead of the frame shown loads before playback starts, and viewerWarmLimit
+// how long playback waits for it. Past that the clock runs and frames that are not loaded in time are skipped.
+const (
+	viewerWarmLead  = 500 * time.Millisecond
+	viewerWarmLimit = 3 * time.Second
+)
 
 // animationClip returns the clip being played, or nil for a model without animations.
 func (v *ModelViewer) animationClip() *modelviewer.ModelViewerAnimationClip {
@@ -105,6 +121,7 @@ func (v *ModelViewer) startAnimation(clipID string) {
 	clip := v.animationClip()
 	v.anim.playing = clip != nil && len(clip.Frames) > 1
 	v.syncCompute()
+	v.syncSchedule()
 	v.setAnimationFrame(0)
 	v.runAnimationClock()
 }
@@ -112,18 +129,62 @@ func (v *ModelViewer) startAnimation(clipID string) {
 func (v *ModelViewer) setAnimationPlaying(playing bool) {
 	clip := v.animationClip()
 	v.anim.playing = playing && clip != nil && len(clip.Frames) > 1
+	if !v.anim.playing && v.untrimmed > 0 {
+		v.trimDevice()
+	}
 	v.runAnimationClock()
 }
 
 // runAnimationClock starts the timer of the current playback and stops any earlier one.
 func (v *ModelViewer) runAnimationClock() {
 	v.anim.clock++
+	v.anim.warmSince = nil
 	clip := v.animationClip()
 	if !v.anim.playing || clip == nil {
 		return
 	}
-	v.anim.applied = time.Now()
+	now := time.Now()
+	v.anim.applied, v.anim.warmSince = now, &now
 	v.scheduleAnimationTick(v.anim.clock, time.Duration(float64(time.Second)/v.animationFPS(clip)))
+}
+
+// animationWarm reports whether the frame shown and the frames of the next viewerWarmLead are loaded, so playback
+// can run in real time from here.
+func (v *ModelViewer) animationWarm(clip *modelviewer.ModelViewerAnimationClip) bool {
+	scene := v.scene
+	if scene == nil {
+		return true
+	}
+	if scene.waiting {
+		return false
+	}
+	schedule := scene.schedule
+	if schedule == nil {
+		// Without a schedule the frames ahead are unknown; while one builds, wait for it.
+		return v.anim.scheduleCancel == nil
+	}
+	lead := min(len(schedule.frames)-1, int(math.Ceil(viewerWarmLead.Seconds()*v.animationFPS(clip))))
+	for step := 1; step <= lead; step++ {
+		frame := scene.frame + step
+		if frame >= len(schedule.frames) {
+			if !schedule.loop {
+				break
+			}
+			frame -= len(schedule.frames)
+		}
+		for _, item := range schedule.frames[frame] {
+			mesh := scene.meshes[item.mesh]
+			if item.variant < 0 {
+				if mesh.unloaded && !mesh.failed {
+					return false
+				}
+			} else if mesh.variants[item.variant] == nil && !mesh.unreadable[item.variant] &&
+				mesh.geometryKey != variantGeometryKey(item.variant) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (v *ModelViewer) scheduleAnimationTick(clock uint64, delay time.Duration) {
@@ -137,12 +198,15 @@ func (v *ModelViewer) animationTick(clock uint64) {
 		return
 	}
 	fps := v.animationFPS(clip)
-	// A frame whose meshes or position variants are still loading holds playback, so a clip that loads slower
-	// than it plays still shows its frames instead of moving on before any of them arrives.
-	if scene := v.scene; scene != nil && scene.waiting {
-		v.anim.applied = time.Now()
-		v.scheduleAnimationTick(clock, time.Duration(float64(time.Second)/fps))
-		return
+	// Playback starts once the frames ahead are loaded, then keeps real time: a frame whose meshes or position
+	// variants are not loaded when its time comes is skipped, and the frame before stays on screen.
+	if since := v.anim.warmSince; since != nil {
+		if !v.animationWarm(clip) && time.Since(*since) < viewerWarmLimit {
+			v.anim.applied = time.Now()
+			v.scheduleAnimationTick(clock, time.Duration(float64(time.Second)/fps))
+			return
+		}
+		v.anim.warmSince, v.anim.applied = nil, time.Now()
 	}
 	frame, consumed, complete := advanceAnimationFrame(
 		v.anim.frame, time.Since(v.anim.applied), fps, len(clip.Frames), clip.Loop,
@@ -172,6 +236,9 @@ func (v *ModelViewer) setAnimationFrame(index int) {
 		return
 	}
 	v.anim.frame = min(max(index, 0), len(clip.Frames)-1)
+	if v.scene != nil {
+		v.scene.frame = v.anim.frame
+	}
 	v.requestCompute(clip, v.anim.frame)
 	frame := clip.Frames[v.anim.frame]
 	values := frame.Values

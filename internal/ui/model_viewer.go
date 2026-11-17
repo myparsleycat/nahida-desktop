@@ -117,6 +117,8 @@ type ModelViewer struct {
 	// pendingMeshes holds the meshes being loaded, by index, and meshLoads limits how many read at once.
 	pendingMeshes map[int]bool
 	meshLoads     chan struct{}
+	// untrimmed is the GPU size of the meshes released since the device was last trimmed.
+	untrimmed int
 	// loadFailureShown is set once the scene's first unreadable mesh or position variant was shown.
 	loadFailureShown bool
 	toonAssets       viewerToonAssets
@@ -213,6 +215,9 @@ func (v *ModelViewer) Close() {
 	if err := fairy.TrimDevice(); err != nil {
 		v.log.Warn(fmt.Sprintf("Model viewer could not trim the graphics device: %v", err), "ModelViewer.Close")
 	}
+	if v.shell != nil && len(v.shell.viewers) > 0 {
+		shareViewerCacheBudgets(v.shell.viewers)
+	}
 }
 
 func (v *ModelViewer) releaseScene() {
@@ -307,8 +312,60 @@ func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err er
 	return scene, nil
 }
 
+const (
+	viewerMeshBudgetFloor, viewerMeshBudgetCeiling       = 256 << 20, 2 << 30
+	viewerVariantBudgetFloor, viewerVariantBudgetCeiling = 128 << 20, 1 << 30
+)
+
+// viewerCacheBudgets sizes the caches all open viewers share: the GPU mesh cache from the adapter's memory, and
+// the position variant cache, which lives in system memory, from the installed memory. held is the GPU size the
+// viewers' mesh caches hold already, which the adapter reports as used.
+func viewerCacheBudgets(held uint64) (mesh, variant int) {
+	mesh = viewerMeshCacheBytes
+	if memory, err := fairy.QueryGPUMemory(); err == nil && !memory.Info.Software {
+		available := memory.Info.DedicatedVideoMemory
+		if available < 512<<20 {
+			// An integrated GPU draws from shared system memory.
+			available = memory.Info.SharedSystemMemory / 2
+		}
+		if memory.VideoKnown && memory.Video.Budget+held > memory.Video.CurrentUsage {
+			available = min(available, memory.Video.Budget+held-memory.Video.CurrentUsage)
+		}
+		mesh = int(min(max(available/4, viewerMeshBudgetFloor), viewerMeshBudgetCeiling))
+	}
+	variant = viewerVariantCacheBytes
+	if physical := platform.PhysicalMemory(); physical > 0 {
+		variant = int(min(max(physical/16, viewerVariantBudgetFloor), viewerVariantBudgetCeiling))
+	}
+	return mesh, variant
+}
+
+// shareViewerCacheBudgets divides the cache budgets between the open viewers, counting the ones still loading. A
+// scene over its new share drops the excess the next time it stores a mesh or variant.
+func shareViewerCacheBudgets(viewers map[*ModelViewer]struct{}) {
+	var held uint64
+	for viewer := range viewers {
+		if viewer.scene != nil {
+			held += uint64(viewer.scene.meshBytes)
+		}
+	}
+	mesh, variant := viewerCacheBudgets(held)
+	mesh = max(mesh/max(len(viewers), 1), viewerMeshBudgetFloor/2)
+	variant = max(variant/max(len(viewers), 1), viewerVariantBudgetFloor/2)
+	for viewer := range viewers {
+		if viewer.scene != nil {
+			viewer.scene.meshBudget, viewer.scene.variantBudget = mesh, variant
+		}
+	}
+}
+
 func (v *ModelViewer) install(scene *viewerScene) {
 	v.scene = scene
+	if v.shell != nil {
+		shareViewerCacheBudgets(v.shell.viewers)
+	} else {
+		shareViewerCacheBudgets(map[*ModelViewer]struct{}{v: {}})
+	}
 	markViewerMeshes(scene)
 	for _, mesh := range scene.meshes {
 		v.dropCPU(mesh)
@@ -329,6 +386,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 		v.previewPath = *scene.transport.PreviewPath
 	}
 	v.overlayMenus = newViewerOverlayMenus()
+	v.cancelSchedule()
 	v.anim = viewerAnimation{waves: modelviewer.NewShapeWavePlayback(scene.transport.Meshes)}
 	v.evaluate()
 	v.startAnimation("")
@@ -364,6 +422,7 @@ func (v *ModelViewer) evaluate() {
 	v.scenePreview = v.preview != nil
 	v.observeCompute()
 	v.present()
+	v.syncSchedule()
 	v.syncGamePreview()
 }
 
@@ -382,25 +441,8 @@ func (v *ModelViewer) present() {
 		_, states = modelviewer.EvaluateViewerState(scene.transport, state, form)
 	}
 	v.revision++
-	missing := scene.apply(states)
-	for _, i := range missing.meshes {
-		v.loadMesh(i)
-	}
-	for i, index := range missing.variants {
-		v.loadVariant(i, index)
-	}
-	for _, upcoming := range v.upcomingAnimationStates(form) {
-		for i, state := range upcoming {
-			mesh := scene.meshes[i]
-			if state.Visible && mesh.unloaded {
-				v.loadMesh(i)
-			}
-			if state.Visible && state.PositionVariant >= 0 && mesh.variants[state.PositionVariant] == nil &&
-				mesh.geometryKey != variantGeometryKey(state.PositionVariant) {
-				v.loadVariant(i, state.PositionVariant)
-			}
-		}
-	}
+	scene.apply(states)
+	v.refreshLoads()
 }
 
 // dropCPU frees the arrays of a static mesh once its GPU buffers are made. A tool that picks the surface reads
@@ -427,16 +469,21 @@ func (v *ModelViewer) loadMesh(i int) {
 		v.meshLoads = make(chan struct{}, viewerLoadConcurrency)
 	}
 	ctx, loads, info, averagedOutline := v.ctx, v.meshLoads, mesh.info, mesh.averagedOutline
+	demand := scene.demand
 	go func() {
 		var decoded *viewerMesh
 		var buffers viewerMeshGPU
 		var generation uint64
 		var err error
+		skipped := false
 		select {
 		case loads <- struct{}{}:
-			decoded, err = readViewerMesh(ctx, v.read, info, averagedOutline)
-			if err == nil {
-				buffers, generation, err = uploadViewerMesh(decoded.upload())
+			// Playback may have moved past the frame that wanted the mesh while it queued.
+			if skipped = demand != nil && !demand.wanted(viewerScheduleItem{mesh: i, variant: -1}); !skipped {
+				decoded, err = readViewerMesh(ctx, v.read, info, averagedOutline)
+				if err == nil {
+					buffers, generation, err = uploadViewerMesh(decoded.upload())
+				}
 			}
 			<-loads
 		case <-ctx.Done():
@@ -448,6 +495,11 @@ func (v *ModelViewer) loadMesh(i int) {
 				return
 			}
 			delete(v.pendingMeshes, i)
+			if skipped {
+				// A present that wanted the mesh again while it was skipped found it pending.
+				v.retryWanted(viewerScheduleItem{mesh: i, variant: -1})
+				return
+			}
 			if err != nil {
 				if ctx.Err() == nil {
 					v.failMesh(scene, i, err)
@@ -472,18 +524,33 @@ func (v *ModelViewer) loadMesh(i int) {
 					}
 					return nil
 				})
-				// The driver keeps the memory of released buffers until a trim, which would let a long flipbook
-				// grow to the size of all its frames.
-				if err := fairy.TrimDevice(); err != nil {
-					v.log.Warn(fmt.Sprintf("Model viewer could not trim the graphics device: %v", err),
-						"ModelViewer.loadMesh")
+				for _, j := range unloaded {
+					v.untrimmed += scene.meshes[j].gpuBytes()
+				}
+				if v.untrimmed >= viewerTrimBytes {
+					v.trimDevice()
 				}
 			}
 			if waited {
 				v.present()
+			} else {
+				v.refreshLoads()
 			}
 		})
 	}()
+}
+
+// viewerTrimBytes is how much released mesh memory waits for a trim. A trim flushes the device, so trimming after
+// every evicted mesh would stall a flipbook that evicts several meshes per frame.
+const viewerTrimBytes = 256 << 20
+
+// trimDevice returns the memory of released buffers to the system. The driver keeps it until a trim, which would
+// let a long flipbook grow to the size of all its frames.
+func (v *ModelViewer) trimDevice() {
+	v.untrimmed = 0
+	if err := fairy.TrimDevice(); err != nil {
+		v.log.Warn(fmt.Sprintf("Model viewer could not trim the graphics device: %v", err), "ModelViewer.trimDevice")
+	}
 }
 
 func releaseViewerMeshGPU(buffers *viewerMeshGPU) {
@@ -510,29 +577,49 @@ func (v *ModelViewer) failMesh(scene *viewerScene, i int, err error) {
 	v.present()
 }
 
-// loadVariant reads position variant index of mesh i unless it is loading or could not be read before. The
-// scene is presented again once a variant it waits to show arrives.
+// loadVariant reads position variant index of mesh i unless it is loading or could not be read before. A variant
+// builds on its mesh's geometry, so one of an unloaded mesh waits for the mesh. The scene is presented again once a
+// variant it waits to show arrives.
 func (v *ModelViewer) loadVariant(i, index int) {
 	scene := v.scene
 	pending := [2]int{i, index}
-	if v.pendingVariants[pending] || scene.meshes[i].unreadable[index] {
+	mesh := scene.meshes[i]
+	if v.pendingVariants[pending] || mesh.unreadable[index] || mesh.unloaded {
 		return
 	}
 	if v.pendingVariants == nil {
 		v.pendingVariants = map[[2]int]bool{}
 	}
 	v.pendingVariants[pending] = true
-	ctx := v.ctx
-	mesh := scene.meshes[i]
-	info, vertexCount := mesh.info, mesh.vertexCount
+	if v.meshLoads == nil {
+		v.meshLoads = make(chan struct{}, viewerLoadConcurrency)
+	}
+	ctx, loads, demand := v.ctx, v.meshLoads, scene.demand
+	info, base := mesh.info, mesh.variantBase()
+	vertexCount := base.vertexCount
 	post := v.poster()
 	go func() {
-		variant, err := readViewerVariant(ctx, v.read, info, vertexCount, index)
+		var variant *viewerPositionGeometry
+		var err error
+		skipped := false
+		select {
+		case loads <- struct{}{}:
+			if skipped = demand != nil && !demand.wanted(viewerScheduleItem{mesh: i, variant: index}); !skipped {
+				variant, err = readViewerVariant(ctx, v.read, info, base, index)
+			}
+			<-loads
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
 		post(func() {
 			if v.scene != scene {
 				return
 			}
 			delete(v.pendingVariants, pending)
+			if skipped {
+				v.retryWanted(viewerScheduleItem{mesh: i, variant: index})
+				return
+			}
 			// The mesh was read meanwhile with another vertex count; the next present asks for the variant again.
 			if mesh.vertexCount != vertexCount {
 				return
@@ -546,6 +633,8 @@ func (v *ModelViewer) loadVariant(i, index int) {
 			scene.storeVariant(i, index, variant)
 			if scene.waitsFor(i, index) {
 				v.present()
+			} else {
+				v.refreshLoads()
 			}
 		})
 	}()

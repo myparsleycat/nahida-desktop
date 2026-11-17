@@ -76,9 +76,12 @@ func buildViewerScene(
 	group.SetLimit(viewerLoadConcurrency)
 	for i, index := range missing.variants {
 		mesh := scene.meshes[i]
-		info, vertexCount := mesh.info, mesh.vertexCount
+		if mesh.unloaded {
+			continue
+		}
+		info, base := mesh.info, mesh.variantBase()
 		group.Go(func() error {
-			variant, err := readViewerVariant(groupCtx, read, info, vertexCount, index)
+			variant, err := readViewerVariant(groupCtx, read, info, base, index)
 			if err != nil {
 				return fmt.Errorf("mesh %s position variant %d: %w", scene.meshes[i].info.ID, index, err)
 			}
@@ -90,7 +93,9 @@ func buildViewerScene(
 		return nil, err
 	}
 	for i, index := range missing.variants {
-		scene.storeVariant(i, index, variants[i])
+		if variants[i] != nil {
+			scene.storeVariant(i, index, variants[i])
+		}
 	}
 	scene.apply(states)
 	return scene, nil
