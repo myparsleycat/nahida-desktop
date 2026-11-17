@@ -577,7 +577,8 @@
         },
         "tools": "도구",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
-        "zzmi-mod-fixer": "ZZMI Mod Fixer"
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
+        "set-character": "캐릭터 지정…"
       },
       "drag_drop": {
         "target_path_not_set": "대상 경로가 설정되지 않았습니다.",
@@ -943,6 +944,23 @@
               "preparing": "준비 중"
             },
             "restore_entry": "이 파일 복원"
+          }
+        },
+        "character": {
+          "title": "캐릭터 지정",
+          "description": "\"{{name}}\" 안의 모드는 모델 뷰어에서 이 캐릭터의 툰 스타일을 사용합니다.",
+          "game": "게임",
+          "character": "캐릭터",
+          "search-placeholder": "캐릭터 검색",
+          "#": {
+            "failed": "폴더의 캐릭터를 저장하지 못했습니다."
+          },
+          "games": {
+            "EFMI": "명일방주: 엔드필드",
+            "GIMI": "원신",
+            "SRMI": "붕괴: 스타레일",
+            "WWMI": "명조: 워더링 웨이브",
+            "ZZMI": "젠레스 존 제로"
           }
         }
       },
@@ -1650,14 +1668,32 @@
           "toon_self_shadow": "자체 그림자",
           "toon_light_follows_camera": "조명 카메라 추종",
           "toon_flat_face": "얼굴 평면 음영",
+          "toon_shading": "셰이딩",
+          "toon_shading_reset": "셰이딩 초기화",
+          "toon_character": "{{name}} 스타일",
+          "toon_character_clear": "캐릭터 스타일 초기화",
+          "toon_param_character": "캐릭터 재질",
+          "toon_param_light_area": "그림자 임계값",
+          "toon_param_shadow_brightness": "그림자 밝기",
+          "toon_param_shallow_brightness": "옅은 그림자 밝기",
+          "toon_param_shadow_softness": "그림자 부드러움",
+          "toon_param_shadow_tint": "그림자 색조",
+          "toon_param_brightness": "밝기",
+          "toon_param_specular": "스페큘러",
+          "toon_param_rim_strength": "림 라이트",
+          "toon_param_emission": "발광",
+          "toon_param_outline_width": "외곽선 두께",
+          "toon_param_outline_color": "외곽선 색상",
+          "toon_param_outline_brightness": "외곽선 밝기",
           "gimi_toon_style": "원신 툰 스타일",
           "srmi_toon_style": "스타레일 툰 스타일",
           "zzmi_toon_style": "젠레스 존 제로 툰 스타일",
           "wwmi_toon_style": "명조 툰 스타일",
           "gimi_toon_ramp": "그림자 램프",
+          "gimi_toon_ramp_auto": "자동 ({{name}})",
           "gimi_toon_ramp_builtin": "내장",
           "gimi_toon_face_type": "얼굴 그림자 맵",
-          "gimi_toon_face_auto": "램프 이름에서",
+          "gimi_toon_face_auto": "자동",
           "gimi_toon_face_boy": "소년",
           "gimi_toon_face_girl": "소녀",
           "gimi_toon_face_lady": "성인 여성",

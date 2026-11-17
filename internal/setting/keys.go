@@ -66,13 +66,14 @@ const (
 
 	KeyDebugOpenConsole = "debug.openConsole"
 
-	KeyModelViewerToneMapping     = "modelViewer.toneMapping"
-	KeyModelViewerEnvironment     = "modelViewer.environment"
-	KeyModelViewerExposure        = "modelViewer.exposure"
-	KeyModelViewerToonShadows     = "modelViewer.toonShadows"
-	KeyModelViewerToonStyles      = "modelViewer.toonStyles"
-	KeyModelViewerOverlayInViewer = "modelViewer.overlayInViewer"
-	KeyModelViewerGamePreview     = "modelViewer.gamePreview"
+	KeyModelViewerToneMapping         = "modelViewer.toneMapping"
+	KeyModelViewerEnvironment         = "modelViewer.environment"
+	KeyModelViewerExposure            = "modelViewer.exposure"
+	KeyModelViewerToonShadows         = "modelViewer.toonShadows"
+	KeyModelViewerToonStyles          = "modelViewer.toonStyles"
+	KeyModelViewerCharacterToonStyles = "modelViewer.characterToonStyles"
+	KeyModelViewerOverlayInViewer     = "modelViewer.overlayInViewer"
+	KeyModelViewerGamePreview         = "modelViewer.gamePreview"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -179,6 +180,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerExposure, ScopeModelViewer, "model_viewer_exposure"},
 	{KeyModelViewerToonShadows, ScopeModelViewer, "model_viewer_toon_shadows"},
 	{KeyModelViewerToonStyles, ScopeModelViewer, "model_viewer_toon_styles"},
+	{KeyModelViewerCharacterToonStyles, ScopeModelViewer, "model_viewer_character_toon_styles"},
 	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
 	{KeyModelViewerGamePreview, ScopeModelViewer, "model_viewer_game_preview"},
 

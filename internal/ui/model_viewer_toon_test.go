@@ -2,6 +2,9 @@ package ui
 
 import (
 	"encoding/json"
+	"maps"
+	"regexp"
+	"strings"
 	"testing"
 
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
@@ -43,6 +46,51 @@ func TestMarkEFMIMeshesHidesOverlayShadows(t *testing.T) {
 	}
 }
 
+// The shader reads each profile's values at fixed slots, so the Go table and the HLSL #defines must agree on
+// which slots hold values; a slot only one side knows reads zero or is never written.
+func TestViewerToonParamsMatchShaderSlots(t *testing.T) {
+	defineRE := regexp.MustCompile(`(?m)^#define (GIMI|SRMI|ZZMI|WWMI|EFMI)_\w+ \(?-?toonParams\[(\d)\]\.([xyzw]+)`)
+	shaderSlots := map[string]map[int]bool{}
+	for _, match := range defineRE.FindAllStringSubmatch(string(modelViewerHLSL), -1) {
+		profile := strings.ToLower(match[1])
+		if shaderSlots[profile] == nil {
+			shaderSlots[profile] = map[int]bool{}
+		}
+		row := int(match[2][0] - '0')
+		for _, component := range match[3] {
+			shaderSlots[profile][row*4+strings.IndexRune("xyzw", component)] = true
+		}
+	}
+
+	for profile, params := range viewerToonParams {
+		tableSlots := map[int]bool{}
+		for _, param := range params {
+			count := 1
+			if param.color {
+				count = 3
+				if param.slot%4 != 0 {
+					t.Errorf("%s %s: colour at slot %d, want a multiple of 4", profile, param.key, param.slot)
+				}
+			}
+			for i := range count {
+				slot := param.slot + i
+				if slot >= 12 || tableSlots[slot] {
+					t.Errorf("%s %s: slot %d is out of range or taken", profile, param.key, slot)
+				}
+				tableSlots[slot] = true
+			}
+			for i := range count {
+				if param.def[i] < param.min || param.def[i] > param.max {
+					t.Errorf("%s %s: default %v outside %v..%v", profile, param.key, param.def[i], param.min, param.max)
+				}
+			}
+		}
+		if !maps.Equal(tableSlots, shaderSlots[profile]) {
+			t.Errorf("%s slots: table %v, shader %v", profile, tableSlots, shaderSlots[profile])
+		}
+	}
+}
+
 func TestToonStyleAliasesAndFlatFace(t *testing.T) {
 	style := parseToonStyle(`{}`, efmiProfile)
 	if !style.FlatFace {
@@ -79,5 +127,92 @@ func TestStoreToonStyleKeepsOtherProfiles(t *testing.T) {
 	srmi := styles[srmiProfile]
 	if _, ok := srmi["ramp"]; ok || len(srmi) != 3 || srmi["selfShadow"] != false {
 		t.Errorf("srmi entry = %v, want only its three flags with selfShadow off", srmi)
+	}
+}
+
+// Stored shading comes from settings that older or hand-edited versions wrote, so what the shader cannot take must
+// not reach it, and what the menu stores must read back the same.
+func TestToonShadingDropsInvalidValues(t *testing.T) {
+	stored := `{"gimi":{"shading":{"lightArea":5,"rimStrength":"high","toneCurve":1,"unknown":1,` +
+		`"outlineColor":"#ff8000","specular":0.5}}}`
+	shading := parseToonStyle(stored, gimiProfile).Shading
+	if got := shading["lightArea"][0]; got != 0.8 {
+		t.Errorf("lightArea = %v, want clamped to 0.8", got)
+	}
+	for _, key := range []string{"rimStrength", "toneCurve", "unknown"} {
+		if _, ok := shading[key]; ok {
+			t.Errorf("%s kept as %v, want dropped", key, shading[key])
+		}
+	}
+
+	roundTrip := parseToonStyle(storeToonStyle(`{}`, gimiProfile, viewerToonStyle{Shading: shading}), gimiProfile)
+	if !maps.Equal(roundTrip.Shading, shading) {
+		t.Errorf("stored shading reads back as %v, want %v", roundTrip.Shading, shading)
+	}
+	if got := packToonParams(gimiProfile, shading)[0][3]; got != 0.5 {
+		t.Errorf("packed specular = %v, want 0.5", got)
+	}
+}
+
+// A character entry holds only what was changed for that character, so the rest keeps following the profile's
+// style, and the light direction and texture folder stay shared by every character.
+func TestCharacterToonStyleStoresOnlyChanges(t *testing.T) {
+	const key = "GIMI/nahida"
+	global := `{"gimi":{"outlines":false,"assetDir":"D:/tex","ramp":"Avatar_Girl_Sword_Ayaka",` +
+		`"shading":{"lightArea":0.6}}}`
+	stored := `{"GIMI/nahida":{"selfShadow":false,"shading":{"specular":0.5}},"GIMI/other":{"outlines":true}}`
+
+	before := parseCharacterToonStyle(parseToonStyle(global, gimiProfile), stored, key, gimiProfile)
+	if before.Outlines || before.SelfShadow || before.AssetDir != "D:/tex" ||
+		before.Shading["lightArea"][0] != 0.6 || before.Shading["specular"][0] != 0.5 {
+		t.Fatalf("character style = %+v, want its entry over the profile's style", before)
+	}
+
+	after := before
+	after.Outlines, after.LightFollowsCamera, after.AssetDir = true, false, "elsewhere"
+	after.Shading = maps.Clone(before.Shading)
+	after.Shading["emission"] = [3]float64{1}
+	var styles map[string]map[string]any
+	if err := json.Unmarshal(
+		[]byte(storeCharacterToonStyle(stored, key, gimiProfile, before, after)),
+		&styles,
+	); err != nil {
+		t.Fatal(err)
+	}
+	entry := styles[key]
+	shading, _ := entry["shading"].(map[string]any)
+	if entry["outlines"] != true || entry["selfShadow"] != false || len(entry) != 3 ||
+		len(shading) != 2 || shading["specular"] != 0.5 || shading["emission"] != 1.0 {
+		t.Errorf("entry = %v, want outlines, the kept selfShadow and its own shading only", entry)
+	}
+	if styles["GIMI/other"]["outlines"] != true {
+		t.Errorf("other characters = %v, want kept", styles)
+	}
+
+	reset := before
+	reset.Shading = nil
+	updated := storeCharacterToonStyle(stored, key, gimiProfile, before, reset)
+	if got := parseCharacterToonStyle(
+		parseToonStyle(global, gimiProfile),
+		updated,
+		key,
+		gimiProfile,
+	); len(
+		got.Shading,
+	) != 1 ||
+		got.Shading["lightArea"][0] != 0.6 {
+		t.Errorf("after reset shading = %v, want the profile's", got.Shading)
+	}
+}
+
+func TestGenshinCharacterRamp(t *testing.T) {
+	ramps := []modelviewer.GenshinToonRampTransport{
+		{Name: "Avatar_Lady_Sword_Ayaka"}, {Name: "Avatar_Girl_Sword_Ayaka"}, {Name: "Avatar_Girl_Sword_Ayakax"},
+	}
+	if got := genshinCharacterRamp(ramps, "girl", "Ayaka"); got != "Avatar_Girl_Sword_Ayaka" {
+		t.Errorf("ramp = %q, want the girl body's exact avatar", got)
+	}
+	if got := genshinCharacterRamp(ramps, "loli", "Ayaka"); got != "" {
+		t.Errorf("ramp = %q, want none for another body", got)
 	}
 }

@@ -10,11 +10,14 @@ import (
 	"image/draw"
 	_ "image/jpeg" // Mod textures that are not DDS arrive as PNG or JPEG.
 	_ "image/png"
+
 	"math"
 	"runtime"
 	"strings"
 	"sync"
 	"unsafe"
+
+	_ "golang.org/x/image/webp" // The bundled character ramps are WebP.
 
 	"github.com/myparsleycat/fairy/d3d"
 

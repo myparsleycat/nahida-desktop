@@ -580,7 +580,8 @@
         },
         "tools": "Tools",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
-        "zzmi-mod-fixer": "ZZMI Mod Fixer"
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
+        "set-character": "Set Character…"
       },
       "drag_drop": {
         "target_path_not_set": "Target path is not set.",
@@ -946,6 +947,23 @@
               "preparing": "Preparing"
             },
             "restore_entry": "Restore this file"
+          }
+        },
+        "character": {
+          "title": "Set Character",
+          "description": "Mods in \"{{name}}\" use this character's toon style in the model viewer.",
+          "game": "Game",
+          "character": "Character",
+          "search-placeholder": "Search characters",
+          "#": {
+            "failed": "Could not save the folder's character."
+          },
+          "games": {
+            "EFMI": "Arknights: Endfield",
+            "GIMI": "Genshin Impact",
+            "SRMI": "Honkai: Star Rail",
+            "WWMI": "Wuthering Waves",
+            "ZZMI": "Zenless Zone Zero"
           }
         }
       },
@@ -1656,14 +1674,32 @@
           "toon_self_shadow": "Self Shadow",
           "toon_light_follows_camera": "Light Follows Camera",
           "toon_flat_face": "Flat Face Shading",
+          "toon_shading": "Shading",
+          "toon_shading_reset": "Reset Shading",
+          "toon_character": "Style for {{name}}",
+          "toon_character_clear": "Reset Character Style",
+          "toon_param_character": "Character material",
+          "toon_param_light_area": "Shadow Threshold",
+          "toon_param_shadow_brightness": "Shadow Brightness",
+          "toon_param_shallow_brightness": "Light Shadow Brightness",
+          "toon_param_shadow_softness": "Shadow Softness",
+          "toon_param_shadow_tint": "Shadow Tint",
+          "toon_param_brightness": "Brightness",
+          "toon_param_specular": "Specular",
+          "toon_param_rim_strength": "Rim Light",
+          "toon_param_emission": "Emission",
+          "toon_param_outline_width": "Outline Width",
+          "toon_param_outline_color": "Outline Color",
+          "toon_param_outline_brightness": "Outline Brightness",
           "gimi_toon_style": "Genshin Toon Style",
           "srmi_toon_style": "Star Rail Toon Style",
           "zzmi_toon_style": "Zenless Zone Zero Toon Style",
           "wwmi_toon_style": "Wuthering Waves Toon Style",
           "gimi_toon_ramp": "Shadow Ramp",
+          "gimi_toon_ramp_auto": "Auto ({{name}})",
           "gimi_toon_ramp_builtin": "Built-in",
           "gimi_toon_face_type": "Face Shadow Map",
-          "gimi_toon_face_auto": "From Ramp Name",
+          "gimi_toon_face_auto": "Auto",
           "gimi_toon_face_boy": "Boy",
           "gimi_toon_face_girl": "Girl",
           "gimi_toon_face_lady": "Lady",

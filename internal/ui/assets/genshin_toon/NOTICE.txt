@@ -1,0 +1,5 @@
+These textures are Genshin Impact game assets (c) HoYoverse.
+
+They were extracted from the textures packed in "HoYoverse - Genshin Impact v3.4.blend" of
+festivities/Blender-miHoYo-Shaders, which is licensed under GPL-3.0:
+https://github.com/festivities/Blender-miHoYo-Shaders (commit b79f0f3fb47b4de2b6d187ee6b66d93cb965968d)

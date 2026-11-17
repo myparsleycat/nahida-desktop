@@ -932,6 +932,7 @@ func (s *Shell) showModDialogs(cx *fairy.Cx) {
 	s.presetDraftDialog(cx)
 	s.togglePresetsDialog(cx)
 	s.classificationDialog(cx)
+	s.characterDialog(cx)
 	s.extractDialog(cx)
 	s.gameDialog(cx)
 	s.nteLaunchDialog(cx)

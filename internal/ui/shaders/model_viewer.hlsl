@@ -25,9 +25,8 @@ cbuffer Frame : register(b0) {
     float4x4 shadowViewProj;
     float4 toonLight;   // xyz: direction towards the key light, w: TOON_* shading, 0 without toon
     float4 toonShadow;  // x: 1 while receiving the shadow map, y: depth bias, z: normal bias, w: map size
-    float4 gimiShade;   // x: daytime, y: light area, z: shadow brightness, w: brightness
-    float4 gimiExtra;   // x: specular, y: rim strength, z: emission, w: tone curve
-    float4 gimiOutline; // x: outline width, y: 2.414 tan(fov / 2), z: face light map, w: face shadow
+    float4 toonParams[3]; // the profile's shading values, laid out as viewerToonParams in model_viewer_toon.go
+    float4 toonState;     // x: 2.414 tan(fov / 2), y: GIMI daytime, z: GIMI face light map, w: GIMI face shadow
     float4 viewport;    // xy: size in pixels
 };
 
@@ -36,8 +35,22 @@ cbuffer Mesh : register(b1) {
     float4 faceForward; // xyz: mean normal of a face mesh in model space
     uint flags;
     uint normalMode;
-    uint2 meshPad;
+    uint characterUse;  // CHARACTER_* bits, 0 without the character's material values
+    uint meshPad;
+    float4 characterScale; // x: scale of the character's specular values
 };
+
+// The character's stock material values, laid out as characterMaterial in model_viewer_character_material.go, which
+// the shaders read only under characterUse.
+cbuffer Character : register(b3) {
+    float4 character[24];
+};
+
+static const uint CHARACTER_VALUES = 1;
+static const uint CHARACTER_LIGHT_AREA = 2;
+static const uint CHARACTER_OUTLINE = 4;
+static const uint CHARACTER_SHADOW = 8;
+static const uint CHARACTER_SHALLOW = 16;
 
 static const uint FLAG_DIFFUSE = 1;
 static const uint FLAG_DIFFUSE_SRGB = 2;
@@ -85,6 +98,46 @@ static const uint TOON_WWMI = 4;
 static const uint TOON_EFMI = 5;
 
 uint toonMode() { return (uint)(toonLight.w + 0.5); }
+
+// The shading values of each profile, at the slots viewerToonParams gives them; a profile reads only its own.
+#define GIMI_LIGHT_AREA toonParams[0].x
+#define GIMI_SHADOW_BRIGHTNESS toonParams[0].y
+#define GIMI_BRIGHTNESS toonParams[0].z
+#define GIMI_SPECULAR toonParams[0].w
+#define GIMI_RIM_STRENGTH toonParams[1].x
+#define GIMI_EMISSION toonParams[1].y
+#define GIMI_OUTLINE_WIDTH toonParams[1].z
+#define GIMI_TONE_CURVE toonParams[1].w
+#define GIMI_OUTLINE_COLOR toonParams[2].xyz
+#define SRMI_LIGHT_AREA toonParams[0].x
+#define SRMI_SPECULAR toonParams[0].y
+#define SRMI_RIM_STRENGTH toonParams[0].z
+#define SRMI_OUTLINE_WIDTH toonParams[0].w
+#define SRMI_SHADOW_TINT toonParams[1].xyz
+#define SRMI_OUTLINE_COLOR toonParams[2].xyz
+#define ZZMI_SHADOW_BRIGHTNESS toonParams[0].x
+#define ZZMI_SHALLOW_BRIGHTNESS toonParams[0].y
+#define ZZMI_SPECULAR_INTENSITY toonParams[0].z
+#define ZZMI_RIM_STRENGTH toonParams[0].w
+#define ZZMI_EMISSION toonParams[1].x
+#define ZZMI_OUTLINE_WIDTH toonParams[1].y
+#define ZZMI_OUTLINE_BRIGHTNESS toonParams[1].z
+#define WWMI_SHADOW_PROCESS toonParams[0].x
+#define WWMI_SHADOW_WIDTH toonParams[0].y
+#define WWMI_SHADOW_BRIGHTNESS toonParams[0].z
+#define WWMI_SPECULAR toonParams[0].w
+#define WWMI_RIM_STRENGTH toonParams[1].x
+#define WWMI_OUTLINE_WIDTH toonParams[1].y
+#define WWMI_OUTLINE_COLOR toonParams[2].xyz
+#define EFMI_BRIGHTNESS toonParams[0].x
+#define EFMI_SHADOW_BRIGHTNESS toonParams[0].y
+#define EFMI_SOFTNESS toonParams[0].z
+// The menu's light area grows the shadow, as the other profiles' does, so it is the negated bias of N.L.
+#define EFMI_RANGE_BIAS (-toonParams[0].w)
+#define EFMI_SPECULAR toonParams[1].x
+#define EFMI_RIM_STRENGTH toonParams[1].y
+#define EFMI_OUTLINE_WIDTH toonParams[1].z
+#define EFMI_OUTLINE_BRIGHTNESS toonParams[1].w
 
 static const uint TONE_NEUTRAL = 0;
 static const uint TONE_ACES = 1;
@@ -337,6 +390,16 @@ float genshinMaterialRow(float id) {
     return 3;
 }
 
+// HoyoToon's Genshin material ID, 1 to 5 as 0 to 4, from the light map's alpha and the switches of materials 2 to 5.
+uint gimiMaterialIndex(float alpha) {
+    float4 enabled = character[12];
+    uint id = enabled.x > 0.5 && alpha >= 0.8 ? 1 : 0;
+    if (enabled.y > 0.5 && alpha >= 0.4 && alpha <= 0.6) id = 2;
+    if (enabled.z > 0.5 && alpha >= 0.2 && alpha <= 0.4) id = 3;
+    if (enabled.w > 0.5 && alpha >= 0.6 && alpha <= 0.8) id = 4;
+    return id;
+}
+
 // HoyoToon's Genshin post curve: a bloom-like lift above 0.6, a rational filmic curve, then the game's white
 // balance.
 float3 genshinToneMap(float3 x) {
@@ -352,7 +415,8 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
     float4 lightTexel = lightMap.Sample(linearWrap, i.uv);
     float4 vertexColor = (flags & FLAG_VERTEX_COLOR) != 0 ? i.color : float4(1, 0.5, 1, 0.5);
     float face = (flags & FLAG_FACE) != 0 ? 1 : 0;
-    float lightArea = gimiShade.y;
+    bool values = (characterUse & CHARACTER_VALUES) != 0;
+    float lightArea = (characterUse & CHARACTER_LIGHT_AREA) != 0 ? character[11].y : GIMI_LIGHT_AREA;
     float NoL = dot(n, l);
     float row = genshinMaterialRow(lightTexel.a);
 
@@ -367,12 +431,12 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
     if (face > 0.5) {
         row = 3;
         float2 faceLight = toonFaceLight(mul((float3x3)world, faceForward.xyz), l);
-        if (gimiOutline.z > 0.5) {
+        if (toonState.z > 0.5) {
             float2 faceUV = i.uv;
             if (faceLight.y > 0.5) faceUV.x = 1 - faceUV.x;
             float faceThreshold = smoothstep(0, 1, 0.5 - 0.5 * faceLight.x);
             lit = toonStep(faceThreshold, faceLightMap.SampleLevel(linearClamp, faceUV, 0).a);
-            lit = lerp(lit, 1, faceShadowMap.SampleLevel(linearClamp, i.uv, 0).a * gimiOutline.w);
+            lit = lerp(lit, 1, faceShadowMap.SampleLevel(linearClamp, i.uv, 0).a * toonState.w);
         } else {
             lit = smoothstep(-0.35, -0.15, faceLight.x);
         }
@@ -383,30 +447,51 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
     float occlusion = toonShadow.x > 0.5 ? shadowOcclusion(i.shadowCoord, i.pos.xy) : 1;
     lit *= occlusion;
     rampU *= occlusion;
-    float rampV = (row + 5 * gimiShade.x + 0.5) / 10;
+    float rampV = (row + 5 * toonState.y + 0.5) / 10;
     float3 ramp = rampMap.SampleLevel(linearClamp, float2(clamp(rampU, 0.004, 0.996), 1 - rampV), 0).rgb;
-    float3 shade = ramp * lerp(gimiShade.z, 1, smoothstep(0.9, 1, rampU));
+    float3 shade = ramp * lerp(GIMI_SHADOW_BRIGHTNESS, 1, smoothstep(0.9, 1, rampU));
     shade = lerp(shade, 1, lit);
 
     // Light map red at 0.9 and above marks metal, drawn from a view-space matcap with a sharp highlight, both
-    // dimmed in shadow.
+    // dimmed in shadow, with HoyoToon's default metal values or the character's.
+    float4 metalDark = float4(0.51, 0.3, 0.19, 3);
+    float4 metalLight = float4(1, 1, 1, 90);
+    float4 metalShadow = float4(0.78, 0.77, 0.82, 15);
+    float4 metalSpecularColor = float4(1, 1, 1, 0.2);
+    float metalEnabled = 1;
+    if (values) {
+        metalDark = character[13];
+        metalLight = character[14];
+        metalShadow = character[15];
+        metalSpecularColor = character[16];
+        metalEnabled = character[11].z;
+    }
     float3 halfDirection = normalize(l + v);
     float NoH = max(dot(n, halfDirection), 0.001);
-    float metal = step(0.89, lightTexel.r);
+    float metal = step(0.89, lightTexel.r) * step(0.5, metalEnabled);
     float2 matcap = normalize(mul((float3x3)view, n)).xy * 0.5 + 0.5;
-    float metalTexel = saturate(metalMap.SampleLevel(linearClamp, float2(matcap.x, 1 - matcap.y), 0).r * 3);
-    float metalSpecular = saturate(pow(NoH, 90) * 15) * lightTexel.r * lerp(0.2, 1, lit);
-    float3 metalColor = albedo * lerp(float3(0.51, 0.3, 0.19), 1, metalTexel) + 0.5 * metalSpecular;
-    metalColor *= lerp(float3(0.78, 0.77, 0.82), 1, lit);
+    float metalTexel = metalMap.SampleLevel(linearClamp, float2(matcap.x, 1 - matcap.y), 0).r;
+    metalTexel = saturate(metalTexel * metalDark.w);
+    float3 metalSpecular = saturate(pow(NoH, metalLight.w) * metalShadow.w) * lightTexel.r *
+                           lerp(metalSpecularColor.w, 1, lit) * metalSpecularColor.rgb;
+    float3 metalColor = albedo * lerp(metalDark.rgb, metalLight.rgb, metalTexel) + 0.5 * metalSpecular;
+    metalColor *= lerp(metalShadow.rgb, 1, lit);
 
     // Other materials get a hard Blinn-Phong highlight past the light map's blue, tinted 10% toward the surface
-    // colour.
-    float term = pow(NoH, 10);
-    float specular = toonStep(1.015 - lightTexel.b, term) * term * lightTexel.r * gimiExtra.x * 0.5;
+    // colour; the character's material ID sets its colour, shininess and multiplier.
+    float3 specularColor = GIMI_SPECULAR;
+    float shininess = 10;
+    if (values) {
+        uint id = gimiMaterialIndex(lightTexel.a);
+        specularColor = character[id].rgb * character[5 + id].w * characterScale.x;
+        shininess = character[id].w;
+    }
+    float term = pow(NoH, shininess);
+    float3 specular = toonStep(1.015 - lightTexel.b, term) * term * lightTexel.r * specularColor * 0.5;
     specular *= (1 - metal) * (1 - face);
 
     float3 surface = lerp(albedo, metalColor, metal * (1 - face));
-    float3 toon = (surface * shade + (0.9 + 0.1 * surface) * specular) * gimiShade.w;
+    float3 toon = (surface * shade + (0.9 + 0.1 * surface) * specular) * GIMI_BRIGHTNESS;
 
     // The 4.0+ rim: a thin band inside the silhouette, brightest where the normal turns away from the
     // camera-to-light direction, fading with distance.
@@ -415,16 +500,22 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
     rimDirection = dot(rimDirection, rimDirection) > 1e-6 ? normalize(rimDirection) : v;
     float rimFacing = dot(n, rimDirection);
     float rimLight = saturate(pow(max(1 - rimFacing, 0), 7.5)) + saturate(pow(max(rimFacing, 0), 7.5));
-    float viewDepth = abs(mul(view, float4(i.worldPos, 1)).z) * gimiOutline.y;
+    float viewDepth = abs(mul(view, float4(i.worldPos, 1)).z) * toonState.x;
     float rimBand = toonSilhouetteBand(NoV, 2.5) * saturate(1 - viewDepth / 5);
-    toon += saturate(albedo * 5 * rimLight * rimBand) * gimiExtra.y * (1 - face);
+    toon += saturate(albedo * 5 * rimLight * rimBand) * GIMI_RIM_STRENGTH * (1 - face);
 
-    if ((flags & FLAG_EMISSION) != 0) toon += albedo * emissionMask * gimiExtra.z;
-    return gimiExtra.w > 0.5 ? genshinToneMap(toon) : toon;
+    if ((flags & FLAG_EMISSION) != 0) toon += albedo * emissionMask * GIMI_EMISSION;
+    return GIMI_TONE_CURVE > 0.5 ? genshinToneMap(toon) : toon;
 }
 
-// srmiToon is HoyoToon's Star Rail shading with one shadow tint for every material, as the game's ramps are per
-// character and not in mods. The light map holds the rim mask in R, AO in G, the specular threshold in B and the
+// srmiMaterialIndex is the character's slot for a Star Rail material ID; HoyoToon reads hair's values from
+// material 0 whatever its light map holds.
+uint srmiMaterialIndex(float alpha) {
+    return (flags & FLAG_HAIR) != 0 ? 0 : (uint)min(floor(8 * alpha), 7);
+}
+
+// srmiToon is HoyoToon's Star Rail shading with the character's warm ramp, which mods do not ship, or one shadow
+// tint for every material without it. The light map holds the rim mask in R, AO in G, the specular threshold in B and the
 // material in A; the face reads its SDF from the alpha of its own light map, the game's FaceMap.
 float3 srmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     float3 l = toonLight.xyz;
@@ -439,8 +530,8 @@ float3 srmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     float NoL = dot(n, l);
     float rate = min(1, (NoL * 0.5 + 0.5) * occlusion * 4 * lightTexel.g * vertexColor.r);
     rate = max(0.001, rate) * 0.85 + 0.15;
-    float lit = toonStep(0.575, rate);
-    float band = smoothstep(0.405, 0.53, rate) * (1 - lit);
+    float lit = toonStep(SRMI_LIGHT_AREA, rate);
+    float band = smoothstep(SRMI_LIGHT_AREA - 0.17, SRMI_LIGHT_AREA - 0.045, rate) * (1 - lit);
 
     if (face > 0.5) {
         float2 faceLight = toonFaceLight(mul((float3x3)world, faceForward.xyz), l);
@@ -456,36 +547,58 @@ float3 srmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
         band = 0;
     }
 
-    // A darker band right before the terminator, like the game's ramps.
-    const float3 shadowColor = float3(0.85, 0.74, 0.78);
-    float3 shade = lerp(lerp(shadowColor, shadowColor * shadowColor, band), 1, lit);
+    float3 shade;
+    if ((flags & FLAG_RAMP_MAP) != 0 && face < 0.5) {
+        // HoyoToon samples the ramp at the shadow rate, in the row pair of the light map's material ID, and reads
+        // the lit side from its last column.
+        float rampV = 1 - (min(floor(8 * lightTexel.a), 7) * 2 + 1) * 0.0625;
+        float3 shadowRamp = rampMap.SampleLevel(linearClamp, float2(rate, rampV), 0).rgb;
+        float3 litRamp = rampMap.SampleLevel(linearClamp, float2(0.99, rampV), 0).rgb;
+        shade = lerp(shadowRamp, litRamp, lit);
+    } else {
+        // A darker band right before the terminator, like the game's ramps.
+        float3 shadowColor = SRMI_SHADOW_TINT;
+        shade = lerp(lerp(shadowColor, shadowColor * shadowColor, band), 1, lit);
+    }
 
     // A Blinn-Phong highlight past the light map's blue, faded in over the roughness and scaled by the shadow
-    // rate, with HoyoToon's default shininess, roughness and intensity.
+    // rate: HoyoToon's with the character's colour, shininess, roughness and intensity of the material ID, else with
+    // its default shininess and a filtered edge.
     float3 halfDirection = normalize(l + v);
     float NoV = saturate(dot(n, v));
-    float term = rate * pow(max(0.01, dot(n, halfDirection)), 10);
-    float softness = max(0.02, fwidth(term));
-    float edge = 1 - lightTexel.b - softness;
-    float specular = smoothstep(0, 1, (term - edge) / (2 * softness)) * 0.5 * 0.35 * (1 - face);
+    float NoH = max(0.01, dot(n, halfDirection));
+    float3 specular;
+    float3 rimColor = 1;
+    if ((characterUse & CHARACTER_VALUES) != 0) {
+        uint id = srmiMaterialIndex(lightTexel.a);
+        float roughness = max(character[8 + id].w, 0.001);
+        float t = saturate((rate * pow(NoH, character[id].w) - (1 - lightTexel.b) + roughness) / (2 * roughness));
+        specular = character[id].rgb * (t * t * (3 - 2 * t)) * character[16 + id].w * 0.35 * characterScale.x;
+        rimColor = character[16 + id].rgb;
+    } else {
+        float term = rate * pow(NoH, 10);
+        float softness = max(0.02, fwidth(term));
+        float edge = 1 - lightTexel.b - softness;
+        specular = smoothstep(0, 1, (term - edge) / (2 * softness)) * 0.5 * SRMI_SPECULAR;
+    }
+    specular *= 1 - face;
 
     // The depth rim, masked by the light map's red and fading with distance.
     float rim = toonSilhouetteBand(NoV, 2) * lightTexel.r;
-    rim *= 0.1 * max(0.5, saturate(1 / length(eye.xyz - i.worldPos))) * (1 - face);
+    rim *= SRMI_RIM_STRENGTH * max(0.5, saturate(1 / length(eye.xyz - i.worldPos))) * (1 - face);
 
-    return albedo * shade + specular + rim;
+    return albedo * shade + specular + rim * rimColor;
 }
 
 float toonOcclusion(VSOut i) {
     return toonShadow.x > 0.5 ? shadowOcclusion(i.shadowCoord, i.pos.xy) : 1;
 }
 
-// HoyoToon's ZZZ material defaults; the game's per-material values come from material files that mods do not
-// ship. Metallic is 1 so the light map's green marks metal, as the game's metal materials set it.
+// HoyoToon's ZZZ material defaults for a mod without a character's material values, which mods do not ship.
+// Metallic is 1 so the light map's green marks metal, as the game's metal materials set it.
 static const float ZZMI_ALBEDO_SMOOTHNESS = 0.05;
 static const float ZZMI_METALLIC = 1;
 static const float ZZMI_GLOSSINESS = 0.5;
-static const float ZZMI_SPECULAR_INTENSITY = 0.1;
 static const float ZZMI_TOON_SPECULAR = 0.01;
 static const float ZZMI_SHAPE_SOFTNESS = 0.1;
 // Neutral texels: the light map holds the material ID in R, metallic in G and the specular mask in B; the material
@@ -504,9 +617,14 @@ float3 zzmiNormalizeColor(float3 color) {
     return saturate(color / average) * 0.56275 + color * 0.43725;
 }
 
+// HoyoToon's ZZZ material ID, 1 to 5 as 0 to 4, from the light map's red.
+uint zzmiMaterialIndex(float red) {
+    return red >= 0.8 ? 0 : red >= 0.6 ? 1 : red >= 0.4 ? 2 : red >= 0.2 ? 3 : 4;
+}
+
 // HoyoToon's body shadow: the shadow value runs from -3 to 3 and splits into deep shadow, shadow, shallow,
 // transition, subsurface, front and lit bands, each with its tint.
-float3 zzmiShadowTint(float shade) {
+float3 zzmiShadowTint(float shade, float3 shadowColor, float3 shallowColor) {
     const float smoothness = ZZMI_ALBEDO_SMOOTHNESS;
     float k = 3 / (2 - 3 * smoothness);
     float shallowEdge = 0.5 * smoothness - 0.3333;
@@ -521,8 +639,8 @@ float3 zzmiShadowTint(float shade) {
     float middle = saturate(min(1 - r, q));
     float front = saturate(min(r, 1 - (shade - litEdge) * k));
     float lit = saturate((shade - litEdge) * k);
-    float3 shadowColor = zzmiNormalizeColor(0.6);
-    float3 shallowColor = zzmiNormalizeColor(0.8);
+    shadowColor = zzmiNormalizeColor(shadowColor);
+    shallowColor = zzmiNormalizeColor(shallowColor);
     float3 tint = float3(0.850980, 0.780392, 0.772549) * shadowColor * (deep + shadow) +
                   float3(0.874510, 0.8, 0.792157) * shallowColor * shallow +
                   float3(0.956863, 0.960784, 0.901961) * shallowColor * transition +
@@ -531,18 +649,19 @@ float3 zzmiShadowTint(float shade) {
 }
 
 // HoyoToon's toon GGX on the shaded colour, or on hair a highlight band that the specular mask cuts from the
-// half-Lambert of the half vector.
+// half-Lambert of the half vector. material holds the specular intensity, glossiness, metallic and toon specular,
+// and tint the specular colour.
 float3 zzmiSpecular(float3 color, float3 n, float3 l, float3 v, float4 lightTexel, float smoothness, float shade,
-                    bool hair) {
+                    bool hair, float4 material, float3 tint) {
     float NoL = dot(n, l);
     float lambert = saturate(NoL);
     float luminance = dot(color, float3(0.29, 0.6, 0.11)) * 0.2875 + 1.4375;
     float3 contrast = pow(color, lerp(luminance, 1, 0.5 * (NoL * 0.5 + 0.5) + 0.5 * lambert));
     float3 surface = lerp(color, contrast, 0.5);
     surface = lerp(surface, contrast, lambert);
-    float3 f0 = lerp(0.04, surface, ZZMI_METALLIC * lightTexel.g);
+    float3 f0 = lerp(0.04, surface, material.z * lightTexel.g);
 
-    float roughness = 1 - smoothness * ZZMI_GLOSSINESS;
+    float roughness = 1 - smoothness * material.y;
     float a = roughness * roughness;
     float3 halfDirection = normalize(l + v);
     float NoH = dot(n, halfDirection);
@@ -558,11 +677,11 @@ float3 zzmiSpecular(float3 color, float3 n, float3 l, float3 v, float4 lightTexe
     float LoH2 = max(0.1, wrappedLoH * wrappedLoH);
     float d = wrappedNoH * wrappedNoH * (a * a - 1) + 1.00001;
     float D = (a * a) / (d * d * LoH2 * (4 * a + 2));
-    float toon = saturate(D - smoothness * ZZMI_GLOSSINESS) * wrappedNoL / max(1e-5, a);
-    toon = saturate(10 * toon * ZZMI_TOON_SPECULAR) * 100;
+    float toon = saturate(D - smoothness * material.y) * wrappedNoL / max(1e-5, a);
+    toon = saturate(10 * toon * material.w) * 100;
     float shaped = min(1, 0.16666 / LoH2) * wrappedNoL * 100;
     float lobe = hair ? shaped : toon;
-    return lobe * 0.5 * ZZMI_SPECULAR_INTENSITY * 10 * mask * f0 * color;
+    return lobe * 0.5 * material.x * 10 * mask * f0 * color * tint;
 }
 
 // HoyoToon's fresnel rim: brighter toward the camera-facing light and on upward normals, wider off skin, tinted by
@@ -621,23 +740,31 @@ float3 zzmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
         shade = (faceLit * 2 - 1) * occlusion;
     }
 
-    float3 color = saturate(albedo * zzmiShadowTint(shade));
-    float3 specular = zzmiSpecular(color, n, l, v, lightTexel, materialTexel.g, shade, (flags & FLAG_HAIR) != 0);
+    uint id = zzmiMaterialIndex(lightTexel.r);
+    float3 shadowColor = (characterUse & CHARACTER_SHADOW) != 0 ? character[id].rgb : ZZMI_SHADOW_BRIGHTNESS;
+    float3 shallowColor = (characterUse & CHARACTER_SHALLOW) != 0 ? character[5 + id].rgb : ZZMI_SHALLOW_BRIGHTNESS;
+    float3 color = saturate(albedo * zzmiShadowTint(shade, shadowColor, shallowColor));
+    float4 specularMaterial = float4(ZZMI_SPECULAR_INTENSITY, ZZMI_GLOSSINESS, ZZMI_METALLIC, ZZMI_TOON_SPECULAR);
+    float3 specularTint = 1;
+    if ((characterUse & CHARACTER_VALUES) != 0) {
+        specularMaterial = float4(character[20].x * characterScale.x, character[20].yz, character[id].w);
+        specularTint = character[10 + id].rgb;
+    }
+    float3 specular = zzmiSpecular(color, n, l, v, lightTexel, materialTexel.g, shade, (flags & FLAG_HAIR) != 0,
+                                   specularMaterial, specularTint);
     color += face ? 0 : specular * (skin ? 0.1 : 1);
 
     // HoyoToon's rim covers the band whose depth steps away past the silhouette, on the lit side.
     float NoV = saturate(dot(n, v));
-    color += zzmiRim(n, v, l, skin) * 1.5 * toonSilhouetteBand(NoV, 4) * saturate(NoL * 10);
+    color += zzmiRim(n, v, l, skin) * ZZMI_RIM_STRENGTH * toonSilhouetteBand(NoV, 4) * saturate(NoL * 10);
 
     // The material map's blue above 0.2 marks emission; below it is the matcap mask, and the game's matcaps are not
     // in mods.
-    return color + albedo * saturate((materialTexel.b - 0.2) * 1.25);
+    return color + albedo * saturate((materialTexel.b - 0.2) * 1.25) * ZZMI_EMISSION;
 }
 
 // HoyoToon's WuWa material defaults; the game's shadow ramp and matcaps are not in mods, so the ramp is HoyoToon's
 // white default and the matcap is left out.
-static const float WWMI_SHADOW_PROCESS = 0.55;
-static const float WWMI_SHADOW_WIDTH = 0.01;
 static const float3 WWMI_SKIN_SUBSURFACE = float3(0.9387, 0.6038, 0.4072);
 
 // HoyoToon's base shadow: N.L past the front offset steps over the shadow width, is cut by the light map's mask and
@@ -677,9 +804,9 @@ float3 wwmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
         float id = materialMap.Sample(linearWrap, i.uv).r;
         skinType = float3(id > 0.9 ? 1 : 0, id > 0.5 && id <= 0.9 ? 1 : 0, id <= 0.5 ? 1 : 0);
     }
-    float3 shadowColor = lerp(lerp(0.5, WWMI_SKIN_SUBSURFACE, skinType.x), 1, 0.3);
+    float3 shadowColor = lerp(lerp(WWMI_SHADOW_BRIGHTNESS, WWMI_SKIN_SUBSURFACE, skinType.x), 1, 0.3);
     float3 halfDirection = normalize(l + v);
-    float3 specular = wwmiSpecular(albedo, n, halfDirection, mask, normalData, skinType.z);
+    float3 specular = wwmiSpecular(albedo, n, halfDirection, mask, normalData, skinType.z) * WWMI_SPECULAR;
 
     if ((flags & FLAG_FACE) != 0) {
         float2 faceLight = toonFaceLight(mul((float3x3)world, faceForward.xyz), l);
@@ -703,30 +830,21 @@ float3 wwmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
         shadowColor = sqrt(sqrt(shadowColor));
         float NoH = saturate(dot(n, halfDirection));
         float highlight = (max(lightTexel.r, 1 - NoH) - (1 - NoH)) / max(0.0001, NoH);
-        specular = highlight * NoH * 0.2;
+        specular = highlight * NoH * 0.2 * WWMI_SPECULAR;
     }
 
     // HoyoToon's rim covers the band whose depth steps away past the silhouette, on the lit side.
     float NoV = saturate(dot(n, v));
-    float3 rim = 0.5 * toonSilhouetteBand(NoV, 4) * smoothstep(0, 0.5, saturate(NoL));
+    float3 rim = WWMI_RIM_STRENGTH * toonSilhouetteBand(NoV, 4) * smoothstep(0, 0.5, saturate(NoL));
     float3 color = albedo + rim;
     return lerp(color * shadowColor, color, shadowArea) + specular;
 }
 
-// EFMI's toon values. Only the switches are settings; Warfarin's brightness default of 2 clips less because its
-// materials carry tints that mods lack, and 1.5 approximates its output for the same textures.
-static const float EFMI_RANGE_BIAS = -0.4;
-static const float EFMI_SOFTNESS = 0.02;
-static const float EFMI_SHADOW_BRIGHTNESS = 0.5;
+// EFMI's toon values the menu does not show.
 static const float EFMI_SHADOW_SATURATION = 1;
 static const float EFMI_AMBIENT = 0.8;
 static const float EFMI_LIGHT_STRENGTH = 0.9;
-static const float EFMI_BRIGHTNESS = 1.5;
-static const float EFMI_SPECULAR = 1;
-static const float EFMI_RIM_STRENGTH = 0.5;
 static const float EFMI_RIM_WIDTH = 0.3;
-static const float EFMI_OUTLINE_WIDTH = 0.25;
-static const float EFMI_OUTLINE_BRIGHTNESS = 0.5;
 static const float3 EFMI_SHADOW_TINT = float3(0.878, 0.93, 1.122);
 static const float3 EFMI_SKIN_SHADOW_TINT = float3(1.187, 0.927, 0.813);
 // The game pushes the face's hull back so it cannot poke through the nose and lips: Warfarin reads _OutlineOffsetZ
@@ -735,7 +853,7 @@ static const float EFMI_FACE_OUTLINE_DEPTH_OFFSET = 0.0236;
 
 float efmiLuma(float3 color) { return dot(color, float3(0.212673, 0.715152, 0.072175)); }
 
-// Without a mod's _DiffRampMap, the ramp reduces to its coverage step.
+// Without a _DiffRampMap from the mod or the character's stock ramps, the ramp reduces to its coverage step.
 float4 efmiRamp(float cosine) {
     float position = clamp(cosine, -1, 1) * 0.5 + 0.5;
     if ((flags & FLAG_RAMP_MAP) != 0) {
@@ -955,7 +1073,7 @@ OutlineOut zzmiOutline(VSIn i) {
     float3 direction = float3(normalize(float3(smoothNormal.xy, 0.0001)).xy, 0.0001);
     float depth = abs(viewPos.z) * (2.414 / proj[1][1]);
     viewPos.xyz *= 1 + 0.0001 * lerp(0.1, 1, saturate(1 - depth));
-    viewPos.xyz += direction * 0.5 * color.r * 0.0015;
+    viewPos.xyz += direction * ZZMI_OUTLINE_WIDTH * color.r * 0.0015;
     o.pos = mul(proj, viewPos);
     return o;
 }
@@ -964,7 +1082,7 @@ OutlineOut zzmiOutline(VSIn i) {
 OutlineOut wwmiOutline(VSIn i) {
     float4 viewPos = mul(view, mul(world, float4(i.pos, 1)));
     OutlineOut o = outlineBase(i, viewPos);
-    viewPos.xyz += outlineViewNormal(i) * 0.00055;
+    viewPos.xyz += outlineViewNormal(i) * 0.00055 * WWMI_OUTLINE_WIDTH;
     o.pos = mul(proj, viewPos);
     return o;
 }
@@ -1035,7 +1153,7 @@ OutlineOut srmiOutline(VSIn i) {
     o.width = color.a;
     float3 toCamera = normalize(-viewPos.xyz);
     o.facing = dot(smoothNormal, toCamera);
-    float width = sqrt(abs(viewPos.z) / proj[1][1]) * color.a * 0.05 * 0.187;
+    float width = sqrt(abs(viewPos.z) / proj[1][1]) * color.a * 0.05 * 0.187 * SRMI_OUTLINE_WIDTH;
     if ((flags & FLAG_FACE) != 0) {
         float3 forward = mul((float3x3)view, mul((float3x3)world, faceForward.xyz));
         forward = dot(forward, forward) > 1e-8 ? normalize(forward) : float3(0, 0, 1);
@@ -1063,13 +1181,13 @@ OutlineOut vs_outline(VSIn i) {
 
     float4 viewPos = mul(view, mul(world, float4(i.pos, 1)));
     OutlineOut o = outlineBase(i, viewPos);
-    float depth = abs(viewPos.z) * gimiOutline.y;
+    float depth = abs(viewPos.z) * toonState.x;
     float4 piece = depth < OUTLINE_ADJUST_DEPTHS.y
         ? float4(OUTLINE_ADJUST_DEPTHS.xy, OUTLINE_ADJUST_SCALES.xy)
         : float4(OUTLINE_ADJUST_DEPTHS.yz, OUTLINE_ADJUST_SCALES.yz);
     float depthScale = lerp(piece.z, piece.w, saturate((depth - piece.x) / max(piece.y - piece.x, 0.001)));
     float widthScale = (flags & FLAG_VERTEX_COLOR) != 0 ? i.color.a : 0.5;
-    float width = gimiOutline.x * 1.5 * depthScale * 0.414 * widthScale;
+    float width = GIMI_OUTLINE_WIDTH * 1.5 * depthScale * 0.414 * widthScale;
     viewPos.xyz *= 1 + 0.01 * lerp(0.1, 1, saturate(1 - depth));
     viewPos.xyz += width * direction;
     o.pos = mul(proj, viewPos);
@@ -1088,17 +1206,29 @@ float4 ps_outline(OutlineOut i) : SV_Target {
     }
     uint mode = toonMode();
     if (mode == TOON_EFMI) return float4(linearToSrgb(efmiOutlineColor(i, albedo)), 1);
-    float3 tint = float3(0.26, 0.16, 0.24);
+    // The character's outline colours follow the light map's material ID, read as the surface reads it when the
+    // mesh has no light map.
+    bool characterOutline = (characterUse & CHARACTER_OUTLINE) != 0;
+    float4 lightTexel = (flags & FLAG_LIGHT_MAP) != 0 ? lightMap.Sample(linearWrap, i.uv)
+        : mode == TOON_ZZMI ? ZZMI_NEUTRAL_LIGHT : 0;
+    float3 tint = GIMI_OUTLINE_COLOR;
     if (mode == TOON_ZZMI) {
         // The albedo under a dimmed outline tint, darker on the side away from the light.
         float NoL = dot(i.normal, i.normal) > 1e-10 ? saturate(dot(normalize(i.normal), toonLight.xyz)) : 1;
-        tint = lerp(0.01, 1, NoL * 0.5 + 0.5) * pow(0.5, 1.5);
+        float3 brightness = ZZMI_OUTLINE_BRIGHTNESS;
+        if (characterOutline) brightness = pow(character[15 + zzmiMaterialIndex(lightTexel.r)].rgb * 0.5, 1.5);
+        tint = lerp(0.01, 1, NoL * 0.5 + 0.5) * brightness;
     } else if (mode == TOON_WWMI) {
-        tint = 0.765;
+        tint = WWMI_OUTLINE_COLOR;
     } else if (mode == TOON_SRMI) {
-        // Star Rail's tint is not measured; StarRailNPRShader's default black reads too harsh. GIMI's dark mauve
-        // was measured against the lit skin in game.
-        tint = float3(0.3, 0.22, 0.24);
+        tint = characterOutline ? character[8 + srmiMaterialIndex(lightTexel.a)].rgb : SRMI_OUTLINE_COLOR;
+        // HoyoToon draws a Star Rail face's outline in its outline colour alone.
+        if (characterOutline && (flags & FLAG_FACE) != 0) return float4(linearToSrgb(tint), 1);
+    } else if (characterOutline) {
+        // HoyoToon's Genshin outline is the material's colour, moved toward a fifth of the albedo by its intensity.
+        uint id = gimiMaterialIndex(lightTexel.a);
+        float intensity = id < 4 ? character[10][id] : character[11].x;
+        return float4(linearToSrgb(lerp(character[5 + id].rgb, albedo * 0.203, intensity)), 1);
     }
     return float4(linearToSrgb(albedo * tint), 1);
 }

@@ -20,6 +20,9 @@ import (
 type viewerScene struct {
 	transport modelviewer.ModelViewerTransport
 	meshes    []*viewerMesh
+	// genshinFace is set when a GIMI mod draws a face of its own. Most replace only the body, hair and dress, and
+	// the game draws its face.
+	genshinFace bool
 	// world turns the mod's space into the viewer's Y-up space.
 	world mat4
 	// minimum and maximum bound every mesh in viewer space.
@@ -250,8 +253,11 @@ type viewerMesh struct {
 	faceForward vec3
 	// toonFace, toonHair and toonEye mark the parts the toon shades as a face, hair or eyes.
 	toonFace, toonHair, toonEye bool
-	// efmiHead marks an EFMI mesh in the head zone, which a flat face style lights as a face.
-	efmiHead bool
+	// toonDress marks a Genshin Dress part, which takes the character's dress material.
+	toonDress bool
+	// efmiHead marks an EFMI mesh in the head zone, which a flat face style lights as a face, and efmiFace the
+	// head meshes taken for the face.
+	efmiHead, efmiFace bool
 	// normalMapUnused marks a normal map slot that holds other shading data, such as a ZZMI face's SDF.
 	normalMapUnused bool
 	// overlayShadow marks one of EFMI's overlay shadows, which the game multiplies over the face through a mask

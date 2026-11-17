@@ -1136,14 +1136,34 @@ func (m *Mod) ownedPath(ctx context.Context, target string) (*GameConfig, error)
 // only by physical location is rewritten below the configured root, because download reservations, ShaderFixes
 // ownership and listings all compare paths in that spelling; any other target is returned as given.
 func (m *Mod) ownedTarget(ctx context.Context, target string) (*GameConfig, string, error) {
-	input := strings.TrimSpace(target)
-	target, err := resolveForCompare(input, m.reportUnresolvedPath)
+	owned, err := m.ownedRoot(ctx, target)
 	if err != nil {
 		return nil, "", err
 	}
+	if pathWithin(owned.root.resolved, owned.resolved) {
+		return owned.game, strings.TrimSpace(target), nil
+	}
+	return owned.game, filepath.Join(owned.root.path, owned.relative), nil
+}
+
+type ownedLocation struct {
+	game *GameConfig
+	root managedRoot
+	// resolved is the target as resolveForCompare returns it.
+	resolved string
+	relative string
+}
+
+// ownedRoot finds the game and mod folder root that hold target.
+func (m *Mod) ownedRoot(ctx context.Context, target string) (ownedLocation, error) {
+	input := strings.TrimSpace(target)
+	target, err := resolveForCompare(input, m.reportUnresolvedPath)
+	if err != nil {
+		return ownedLocation{}, err
+	}
 	games, err := m.listGames(ctx)
 	if err != nil {
-		return nil, "", err
+		return ownedLocation{}, err
 	}
 	roots := m.managedRoots(games)
 	root, relative, ok := owningRoot(roots, target)
@@ -1155,15 +1175,12 @@ func (m *Mod) ownedTarget(ctx context.Context, target string) (*GameConfig, stri
 		if physical, physicalErr := platform.PhysicalPath(target); physicalErr == nil {
 			fields["physicalPath"] = physical
 		}
-		return nil, "", infra.AnnotateError(errors.New("MOD_PATH_OUTSIDE_MANAGED_ROOT"), infra.Diagnostic{
+		return ownedLocation{}, infra.AnnotateError(errors.New("MOD_PATH_OUTSIDE_MANAGED_ROOT"), infra.Diagnostic{
 			Operation: "resolve-owned-path", Stage: "match-root", Fields: fields,
 		})
 	}
 	game := games[root.game]
-	if pathWithin(root.resolved, target) {
-		return &game, input, nil
-	}
-	return &game, filepath.Join(root.path, relative), nil
+	return ownedLocation{game: &game, root: root, resolved: target, relative: relative}, nil
 }
 
 type managedRoot struct {

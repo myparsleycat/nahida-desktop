@@ -542,6 +542,13 @@ func buildSpecs() map[string]spec {
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },
 		},
+		// JSON object keyed by "<importer>/<character id>"; each entry overrides fields of the profile's style.
+		KeyModelViewerCharacterToonStyles: {
+			def:        definitionsByKey[KeyModelViewerCharacterToonStyles],
+			getDefault: func(*Setting) any { return "" },
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
 
 		KeyXXMIPersistToggles: {
 			def:        definitionsByKey[KeyXXMIPersistToggles],

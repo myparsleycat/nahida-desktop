@@ -577,7 +577,8 @@
         },
         "tools": "工具",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
-        "zzmi-mod-fixer": "ZZMI Mod Fixer"
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
+        "set-character": "设置角色…"
       },
       "drag_drop": {
         "target_path_not_set": "未设置目标路径。",
@@ -943,6 +944,23 @@
               "preparing": "准备中"
             },
             "restore_entry": "恢复此文件"
+          }
+        },
+        "character": {
+          "title": "设置角色",
+          "description": "“{{name}}”中的模组在模型查看器中使用此角色的卡通风格。",
+          "game": "游戏",
+          "character": "角色",
+          "search-placeholder": "搜索角色",
+          "#": {
+            "failed": "无法保存文件夹的角色。"
+          },
+          "games": {
+            "EFMI": "明日方舟：终末地",
+            "GIMI": "原神",
+            "SRMI": "崩坏：星穹铁道",
+            "WWMI": "鸣潮",
+            "ZZMI": "绝区零"
           }
         }
       },
@@ -1650,14 +1668,32 @@
           "toon_self_shadow": "自阴影",
           "toon_light_follows_camera": "灯光跟随相机",
           "toon_flat_face": "面部平面着色",
+          "toon_shading": "着色",
+          "toon_shading_reset": "重置着色",
+          "toon_character": "{{name}}的风格",
+          "toon_character_clear": "重置角色风格",
+          "toon_param_character": "角色材质",
+          "toon_param_light_area": "阴影阈值",
+          "toon_param_shadow_brightness": "阴影亮度",
+          "toon_param_shallow_brightness": "浅阴影亮度",
+          "toon_param_shadow_softness": "阴影柔和度",
+          "toon_param_shadow_tint": "阴影色调",
+          "toon_param_brightness": "亮度",
+          "toon_param_specular": "高光",
+          "toon_param_rim_strength": "边缘光",
+          "toon_param_emission": "自发光",
+          "toon_param_outline_width": "描边宽度",
+          "toon_param_outline_color": "描边颜色",
+          "toon_param_outline_brightness": "描边亮度",
           "gimi_toon_style": "原神卡通风格",
           "srmi_toon_style": "星穹铁道卡通风格",
           "zzmi_toon_style": "绝区零卡通风格",
           "wwmi_toon_style": "鸣潮卡通风格",
           "gimi_toon_ramp": "阴影色阶",
+          "gimi_toon_ramp_auto": "自动（{{name}}）",
           "gimi_toon_ramp_builtin": "内置",
           "gimi_toon_face_type": "面部阴影图",
-          "gimi_toon_face_auto": "根据色阶名称",
+          "gimi_toon_face_auto": "自动",
           "gimi_toon_face_boy": "少年",
           "gimi_toon_face_girl": "少女",
           "gimi_toon_face_lady": "成女",

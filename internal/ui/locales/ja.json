@@ -577,7 +577,8 @@
         },
         "tools": "ツール",
         "wuwa-mod-fixer": "Wuwa Mod Fixer",
-        "zzmi-mod-fixer": "ZZMI Mod Fixer"
+        "zzmi-mod-fixer": "ZZMI Mod Fixer",
+        "set-character": "キャラクターを設定…"
       },
       "drag_drop": {
         "target_path_not_set": "対象パスが設定されていません。",
@@ -943,6 +944,23 @@
               "preparing": "準備中"
             },
             "restore_entry": "このファイルを復元"
+          }
+        },
+        "character": {
+          "title": "キャラクターを設定",
+          "description": "「{{name}}」内のMODは、モデルビューアでこのキャラクターのトゥーンスタイルを使用します。",
+          "game": "ゲーム",
+          "character": "キャラクター",
+          "search-placeholder": "キャラクターを検索",
+          "#": {
+            "failed": "フォルダのキャラクターを保存できませんでした。"
+          },
+          "games": {
+            "EFMI": "アークナイツ：エンドフィールド",
+            "GIMI": "原神",
+            "SRMI": "崩壊：スターレイル",
+            "WWMI": "鳴潮",
+            "ZZMI": "ゼンレスゾーンゼロ"
           }
         }
       },
@@ -1650,14 +1668,32 @@
           "toon_self_shadow": "セルフシャドウ",
           "toon_light_follows_camera": "ライトをカメラに追従",
           "toon_flat_face": "顔のフラットシェーディング",
+          "toon_shading": "シェーディング",
+          "toon_shading_reset": "シェーディングをリセット",
+          "toon_character": "{{name}}のスタイル",
+          "toon_character_clear": "キャラクタースタイルをリセット",
+          "toon_param_character": "キャラクター素材",
+          "toon_param_light_area": "影のしきい値",
+          "toon_param_shadow_brightness": "影の明るさ",
+          "toon_param_shallow_brightness": "薄い影の明るさ",
+          "toon_param_shadow_softness": "影の柔らかさ",
+          "toon_param_shadow_tint": "影の色調",
+          "toon_param_brightness": "明るさ",
+          "toon_param_specular": "スペキュラー",
+          "toon_param_rim_strength": "リムライト",
+          "toon_param_emission": "発光",
+          "toon_param_outline_width": "アウトラインの太さ",
+          "toon_param_outline_color": "アウトラインの色",
+          "toon_param_outline_brightness": "アウトラインの明るさ",
           "gimi_toon_style": "原神トゥーンスタイル",
           "srmi_toon_style": "スターレイル トゥーンスタイル",
           "zzmi_toon_style": "ゼンレスゾーンゼロ トゥーンスタイル",
           "wwmi_toon_style": "鳴潮 トゥーンスタイル",
           "gimi_toon_ramp": "影ランプ",
+          "gimi_toon_ramp_auto": "自動（{{name}}）",
           "gimi_toon_ramp_builtin": "内蔵",
           "gimi_toon_face_type": "顔の影マップ",
-          "gimi_toon_face_auto": "ランプ名から",
+          "gimi_toon_face_auto": "自動",
           "gimi_toon_face_boy": "少年",
           "gimi_toon_face_girl": "少女",
           "gimi_toon_face_lady": "成女",

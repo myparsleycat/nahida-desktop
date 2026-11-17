@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/icons/lucide"
@@ -621,34 +622,46 @@ func (v *ModelViewer) capture() (image.Image, error) {
 	return pixels.SubImage(image.Rect(x, y, x+size, y+size)), nil
 }
 
-// toonMenu is the toon style submenu: the style's switches and, for GIMI, the texture folder and, once it is
-// listed, the shadow ramp and face shadow map choices.
+// toonMenu is the toon style submenu: the style's switches and, for GIMI, the texture folder, the shadow ramps
+// it lists and the face light map choice.
 func (v *ModelViewer) toonMenu() []kit.MenuItem {
 	style := v.toonStyle()
 	update := func(change func(*viewerToonStyle)) func() {
-		return func() {
-			latest := v.toonStyle()
-			change(&latest)
-			v.setToonStyle(latest)
-		}
+		return func() { v.updateToonStyle(change) }
 	}
 	flag := func(label string, on bool, change func(*viewerToonStyle)) kit.MenuItem {
 		return kit.MenuItem{
 			Label: T("page.tools.model_viewer.menu." + label), Checkbox: true, Checked: on, OnClick: update(change),
 		}
 	}
-	items := []kit.MenuItem{
+	var items []kit.MenuItem
+	c := v.toonCharacter()
+	if c != nil {
+		items = append(items, kit.MenuItem{
+			Heading: true, Label: T("page.tools.model_viewer.menu.toon_character", "name", c.Name(catalog.Language())),
+		})
+	}
+	items = append(items,
 		flag("toon_outlines", style.Outlines, func(s *viewerToonStyle) { s.Outlines = !s.Outlines }),
 		flag("toon_self_shadow", style.SelfShadow, func(s *viewerToonStyle) { s.SelfShadow = !s.SelfShadow }),
 		flag("toon_light_follows_camera", style.LightFollowsCamera, func(s *viewerToonStyle) {
 			s.LightFollowsCamera = !s.LightFollowsCamera
 		}),
-	}
+	)
 	if v.toonProfile() == efmiProfile {
 		items = append(
 			items,
 			flag("toon_flat_face", style.FlatFace, func(s *viewerToonStyle) { s.FlatFace = !s.FlatFace }),
 		)
+	}
+	items = append(items, kit.MenuItem{
+		Label: T("page.tools.model_viewer.menu.toon_shading"), Submenu: v.toonShadingMenu(style), SubmenuWidth: 288,
+	})
+	if c != nil {
+		items = append(items, kit.MenuItem{
+			Label: T("page.tools.model_viewer.menu.toon_character_clear"), Icon: lucide.RotateCcw,
+			Disabled: !v.hasCharacterToonStyle(), OnClick: v.clearCharacterToonStyle,
+		})
 	}
 	if v.toonProfile() != gimiProfile {
 		return items
@@ -665,36 +678,143 @@ func (v *ModelViewer) toonMenu() []kit.MenuItem {
 		})
 	}
 	listed := v.toonAssets.listed
-	if listed == nil || v.toonAssets.dir != style.AssetDir {
-		return items
+	if listed != nil && v.toonAssets.dir != style.AssetDir {
+		listed = nil
 	}
-
-	items = append(items, kit.MenuItem{Separator: true},
-		kit.MenuItem{Heading: true, Label: T("page.tools.model_viewer.menu.gimi_toon_ramp")},
-		kit.MenuItem{
-			Label: T("page.tools.model_viewer.menu.gimi_toon_ramp_builtin"), Radio: true, Checked: style.Ramp == "",
-			OnClick: update(func(s *viewerToonStyle) { s.Ramp = "" }),
-		})
-	for _, ramp := range listed.Ramps {
-		label := ramp.Name
-		if len(label) > len("avatar_") && strings.EqualFold(label[:len("avatar_")], "avatar_") {
-			label = label[len("avatar_"):]
+	bundled := c != nil && c.ramps != nil
+	if listed != nil || bundled {
+		items = append(items, kit.MenuItem{Separator: true},
+			kit.MenuItem{Heading: true, Label: T("page.tools.model_viewer.menu.gimi_toon_ramp")})
+		if bundled || (listed != nil && c != nil && c.Genshin != nil && c.Genshin.Avatar != "") {
+			items = append(items, kit.MenuItem{
+				Label: T("page.tools.model_viewer.menu.gimi_toon_ramp_auto", "name", c.Name(catalog.Language())),
+				Radio: true, Checked: style.rampAuto,
+				OnClick: update(func(s *viewerToonStyle) { s.Ramp = toonRampAuto }),
+			})
 		}
 		items = append(items, kit.MenuItem{
-			Label: label, Radio: true, Checked: style.Ramp == ramp.Name,
-			OnClick: update(func(s *viewerToonStyle) { s.Ramp = ramp.Name }),
+			Label: T("page.tools.model_viewer.menu.gimi_toon_ramp_builtin"), Radio: true,
+			Checked: style.Ramp == "" && !style.rampAuto,
+			OnClick: update(func(s *viewerToonStyle) { s.Ramp, s.rampAuto = "", false }),
 		})
+		var ramps []modelviewer.GenshinToonRampTransport
+		if listed != nil {
+			ramps = listed.Ramps
+		}
+		for _, ramp := range ramps {
+			label := ramp.Name
+			if len(label) > len("avatar_") && strings.EqualFold(label[:len("avatar_")], "avatar_") {
+				label = label[len("avatar_"):]
+			}
+			items = append(items, kit.MenuItem{
+				Label: label, Radio: true, Checked: style.Ramp == ramp.Name && !style.rampAuto,
+				OnClick: update(func(s *viewerToonStyle) { s.Ramp, s.rampAuto = ramp.Name, false }),
+			})
+		}
+	}
+
+	if v.scene == nil || !v.scene.genshinFace {
+		return items
 	}
 	items = append(items, kit.MenuItem{Separator: true},
 		kit.MenuItem{Heading: true, Label: T("page.tools.model_viewer.menu.gimi_toon_face_type")})
 	for _, faceType := range append([]string{"auto"}, genshinFaceTypes...) {
 		items = append(items, kit.MenuItem{
-			Label:    T("page.tools.model_viewer.menu.gimi_toon_face_" + faceType),
-			Radio:    true,
-			Checked:  style.FaceType == faceType,
-			Disabled: faceType != "auto" && listed.FaceLightmaps[faceType] == "",
-			OnClick:  update(func(s *viewerToonStyle) { s.FaceType = faceType }),
+			Label:   T("page.tools.model_viewer.menu.gimi_toon_face_" + faceType),
+			Radio:   true,
+			Checked: style.FaceType == faceType,
+			OnClick: update(func(s *viewerToonStyle) { s.FaceType = faceType }),
 		})
 	}
 	return items
+}
+
+// toonShadingMenu holds a slider or a colour picker for each shading value of the toon style, and a reset.
+func (v *ModelViewer) toonShadingMenu(style viewerToonStyle) []kit.MenuItem {
+	t := kit.T()
+	profile := v.toonProfile()
+	var body *characterMaterial
+	var use uint32
+	if c := v.toonCharacter(); c != nil && c.materials != nil && c.materials.body != nil {
+		body = c.materials.body
+		use, _ = characterMaterialUse(profile, style.characterShading, style.Shading)
+	}
+	var rows []*fairy.El
+	for _, param := range viewerToonParams[toonStyleKey(profile)] {
+		if param.hidden {
+			continue
+		}
+		value, changed := style.Shading[param.key]
+		if !changed {
+			value = param.def
+		}
+		// A value the character's material sets shows the material's until the user changes it for the character.
+		fromCharacter := false
+		if bit := characterMenuKeys[profile][param.key]; body != nil && use&bit != 0 {
+			value, fromCharacter = characterShadingValue(profile, param.key, body)
+		}
+		label := T("page.tools.model_viewer.menu.toon_param_" + toonParamLabel(param.key))
+		heading := []*fairy.El{fairy.Text(label).Grow(1).MinW(0)}
+		if fromCharacter {
+			heading = append(heading,
+				fairy.Text(T("page.tools.model_viewer.menu.toon_param_character")).Color(t.MutedForeground))
+		}
+		key := "model-viewer.toon." + param.key
+		if param.color {
+			color := fairy.Color{A: 1}
+			for i, channel := range []*float32{&color.R, &color.G, &color.B} {
+				*channel = float32(min(max(linearToSRGB(value[i]), 0), 1))
+			}
+			rows = append(rows, fairy.Row(append(heading,
+				kit.ColorPicker(key, color, func(c fairy.Color, _ bool) {
+					v.setToonShading(param.key, [3]float64{
+						srgbToLinear(float64(c.R)), srgbToLinear(float64(c.G)), srgbToLinear(float64(c.B)),
+					})
+				}, kit.Label(label)),
+			)...).Gap(8).Align(fairy.Center))
+			continue
+		}
+		rows = append(rows, fairy.Col(
+			fairy.Row(append(heading,
+				fairy.Text(formatToonParam(value[0], param.step)).Color(t.MutedForeground),
+			)...).Gap(8),
+			kit.Slider(value[0], param.min, param.max, param.step, func(x float64) {
+				v.setToonShading(param.key, [3]float64{x})
+			}, kit.Label(label)).Key(key),
+		).Gap(4))
+	}
+	return []kit.MenuItem{
+		{Content: fairy.Col(rows...).Gap(12).FontSize(13)},
+		{Separator: true},
+		{
+			Label: T("page.tools.model_viewer.menu.toon_shading_reset"), Icon: lucide.RotateCcw,
+			Disabled: len(style.Shading) == 0, OnClick: v.resetToonShading,
+		},
+	}
+}
+
+// toonParamLabel is the snake case of a toonParam key, as its label key ends.
+func toonParamLabel(key string) string {
+	var label strings.Builder
+	for _, r := range key {
+		if unicode.IsUpper(r) {
+			label.WriteByte('_')
+			r = unicode.ToLower(r)
+		}
+		label.WriteRune(r)
+	}
+	return label.String()
+}
+
+// formatToonParam shows a value with as many decimals as its step has.
+func formatToonParam(value, step float64) string {
+	decimals := 0
+	for step > 0 && step < 1 && decimals < 4 {
+		step *= 10
+		decimals++
+		if math.Abs(step-math.Round(step)) < 1e-9 {
+			break
+		}
+	}
+	return strconv.FormatFloat(value, 'f', decimals, 64)
 }

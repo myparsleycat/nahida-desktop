@@ -1,18 +1,24 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/d3d"
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/mod/character"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
@@ -49,15 +55,17 @@ type viewerToonProfile struct {
 	label string
 	// styleKey is the profile whose stored style it reads and writes; RabbitFX mods draw with the WWMI shader.
 	styleKey string
+	// importer is the game of the character catalog whose characters the profile draws.
+	importer string
 }
 
 var viewerToonProfiles = map[string]viewerToonProfile{
-	gimiProfile:     {mode: toonModeGIMI, label: "gimi_toon_style", styleKey: gimiProfile},
-	srmiProfile:     {mode: toonModeSRMI, label: "srmi_toon_style", styleKey: srmiProfile},
-	zzmiProfile:     {mode: toonModeZZMI, label: "zzmi_toon_style", styleKey: zzmiProfile},
-	wwmiProfile:     {mode: toonModeWWMI, label: "wwmi_toon_style", styleKey: wwmiProfile},
-	rabbitFXProfile: {mode: toonModeWWMI, label: "wwmi_toon_style", styleKey: wwmiProfile},
-	efmiProfile:     {mode: toonModeEFMI, label: "toon_style", styleKey: efmiProfile},
+	gimiProfile:     {mode: toonModeGIMI, label: "gimi_toon_style", styleKey: gimiProfile, importer: "GIMI"},
+	srmiProfile:     {mode: toonModeSRMI, label: "srmi_toon_style", styleKey: srmiProfile, importer: "SRMI"},
+	zzmiProfile:     {mode: toonModeZZMI, label: "zzmi_toon_style", styleKey: zzmiProfile, importer: "ZZMI"},
+	wwmiProfile:     {mode: toonModeWWMI, label: "wwmi_toon_style", styleKey: wwmiProfile, importer: "WWMI"},
+	rabbitFXProfile: {mode: toonModeWWMI, label: "wwmi_toon_style", styleKey: wwmiProfile, importer: "WWMI"},
+	efmiProfile:     {mode: toonModeEFMI, label: "toon_style", styleKey: efmiProfile, importer: "EFMI"},
 }
 
 // averagedOutlineProfiles extrude their hulls along seam-averaged normals, as the React viewer's zzmi.ts, wwmi.ts
@@ -76,7 +84,7 @@ type toonFlags struct {
 }
 
 // viewerToonStyle is what a toon menu stores under its profile's key of the toon styles setting. Only GIMI has
-// the fields after FlatFace, and only EFMI FlatFace.
+// Ramp, FaceType and AssetDir, and only EFMI FlatFace.
 type viewerToonStyle struct {
 	toonFlags
 	// FlatFace lights EFMI's head meshes from the face mask instead of N.L.
@@ -85,13 +93,18 @@ type viewerToonStyle struct {
 	// FaceType is "auto", which takes the body type from the ramp name, or one of genshinFaceTypes.
 	FaceType string `json:"faceType"`
 	AssetDir string `json:"assetDir"`
+	Shading  toonShading
+	// rampAuto is set when Ramp is the character's ramp found in the texture folder rather than a choice.
+	rampAuto bool
+	// characterBody is the character's body type, which the automatic face type prefers to the ramp's.
+	characterBody string
+	// characterShading holds the shading values the character's own entry and the menu set, which take over from
+	// the character's material; values of the profile's style do not.
+	characterShading toonShading
 }
 
-// efmiToonStyle is what the EFMI menu stores.
-type efmiToonStyle struct {
-	toonFlags
-	FlatFace bool `json:"flatFace"`
-}
+// toonRampAuto is the stored ramp of a character style that takes the character's ramp from the texture folder.
+const toonRampAuto = "auto"
 
 var defaultToonStyle = viewerToonStyle{
 	toonFlags: toonFlags{Outlines: true, SelfShadow: true, LightFollowsCamera: true},
@@ -99,18 +112,195 @@ var defaultToonStyle = viewerToonStyle{
 	FaceType:  "auto",
 }
 
-// The shading values the GIMI menu does not show: HoyoToon's defaults, except the light area, with which
-// frontal light would shade limbs the game keeps lit; shadow brightness and specular strength come from
-// kaze-mio's Nahida material.
-const (
-	gimiLightArea        = 0.5
-	gimiShadowBrightness = 1.1
-	gimiBrightness       = 1
-	gimiSpecular         = 0.3
-	gimiRimStrength      = 1
-	gimiEmission         = 0.2
-	gimiOutlineWidth     = 0.015
-)
+// toonShading holds the shading values a style changes from their defaults, by toonParam key. A scalar uses the
+// first element; a colour is linear.
+type toonShading map[string][3]float64
+
+// toonParam is one shading value of a profile, which the renderer packs into the toonParams constants at slot.
+// A colour takes the three floats from slot, which is a multiple of four.
+type toonParam struct {
+	// key names the value in the stored style and, in snake case, its label
+	// page.tools.model_viewer.menu.toon_param_<key>.
+	key            string
+	slot           int
+	color          bool
+	def            [3]float64
+	min, max, step float64
+	// hidden values are packed but not offered in the menu.
+	hidden bool
+}
+
+func scalarToonParam(key string, slot int, def, low, high, step float64) toonParam {
+	return toonParam{key: key, slot: slot, def: [3]float64{def}, min: low, max: high, step: step}
+}
+
+func colorToonParam(key string, slot int, def [3]float64) toonParam {
+	return toonParam{key: key, slot: slot, color: true, def: def, max: 1}
+}
+
+// viewerToonParams are the shading values of each toon style, by style key, at the slots the #defines at the top
+// of model_viewer.hlsl read.
+//
+// GIMI: HoyoToon's defaults, except the light area, with which frontal light would shade limbs the game keeps lit;
+// shadow brightness and specular strength come from kaze-mio's Nahida material, and the outline colour was measured
+// against lit skin in game. SRMI: StarRailNPRShader's black outline reads too harsh, and neither its tint nor the
+// shadow tint is measured. EFMI: Warfarin's brightness default of 2 clips less because its materials carry tints
+// that mods lack, and 1.5 approximates its output for the same textures.
+var viewerToonParams = map[string][]toonParam{
+	gimiProfile: {
+		scalarToonParam("lightArea", 0, 0.5, 0.2, 0.8, 0.01),
+		scalarToonParam("shadowBrightness", 1, 1.1, 0.5, 1.5, 0.01),
+		scalarToonParam("brightness", 2, 1, 0.5, 1.5, 0.01),
+		scalarToonParam("specular", 3, 0.3, 0, 2, 0.01),
+		scalarToonParam("rimStrength", 4, 1, 0, 3, 0.05),
+		scalarToonParam("emission", 5, 0.2, 0, 2, 0.01),
+		scalarToonParam("outlineWidth", 6, 0.015, 0, 0.05, 0.001),
+		{key: "toneCurve", slot: 7, max: 1, hidden: true},
+		colorToonParam("outlineColor", 8, [3]float64{0.26, 0.16, 0.24}),
+	},
+	srmiProfile: {
+		scalarToonParam("lightArea", 0, 0.575, 0.3, 0.85, 0.005),
+		scalarToonParam("specular", 1, 0.35, 0, 1.5, 0.01),
+		scalarToonParam("rimStrength", 2, 0.1, 0, 0.5, 0.01),
+		scalarToonParam("outlineWidth", 3, 1, 0, 3, 0.05),
+		colorToonParam("shadowTint", 4, [3]float64{0.85, 0.74, 0.78}),
+		colorToonParam("outlineColor", 8, [3]float64{0.3, 0.22, 0.24}),
+	},
+	zzmiProfile: {
+		scalarToonParam("shadowBrightness", 0, 0.6, 0.3, 1, 0.01),
+		scalarToonParam("shallowBrightness", 1, 0.8, 0.4, 1, 0.01),
+		scalarToonParam("specular", 2, 0.1, 0, 0.5, 0.01),
+		scalarToonParam("rimStrength", 3, 1.5, 0, 4, 0.05),
+		scalarToonParam("emission", 4, 1, 0, 3, 0.05),
+		scalarToonParam("outlineWidth", 5, 0.5, 0, 2, 0.05),
+		scalarToonParam("outlineBrightness", 6, math.Pow(0.5, 1.5), 0, 1, 0.01),
+	},
+	wwmiProfile: {
+		scalarToonParam("lightArea", 0, 0.55, 0.3, 0.8, 0.01),
+		scalarToonParam("shadowSoftness", 1, 0.01, 0, 0.2, 0.005),
+		scalarToonParam("shadowBrightness", 2, 0.5, 0, 1, 0.01),
+		scalarToonParam("specular", 3, 1, 0, 3, 0.05),
+		scalarToonParam("rimStrength", 4, 0.5, 0, 2, 0.05),
+		scalarToonParam("outlineWidth", 5, 1, 0, 3, 0.05),
+		colorToonParam("outlineColor", 8, [3]float64{0.765, 0.765, 0.765}),
+	},
+	efmiProfile: {
+		scalarToonParam("brightness", 0, 1.5, 0.5, 3, 0.05),
+		scalarToonParam("shadowBrightness", 1, 0.5, 0, 1, 0.01),
+		scalarToonParam("shadowSoftness", 2, 0.02, 0, 0.3, 0.005),
+		scalarToonParam("lightArea", 3, 0.4, -0.5, 1, 0.01),
+		scalarToonParam("specular", 4, 1, 0, 3, 0.05),
+		scalarToonParam("rimStrength", 5, 0.5, 0, 2, 0.05),
+		scalarToonParam("outlineWidth", 6, 0.25, 0, 1, 0.01),
+		scalarToonParam("outlineBrightness", 7, 0.5, 0, 1, 0.01),
+	},
+}
+
+// parseToonShading reads a stored shading object: a number for a scalar, "#rrggbb" sRGB for a colour. Unknown and
+// hidden keys and values of the wrong type are dropped, and scalars are clamped to their range.
+func parseToonShading(profile string, raw any) toonShading {
+	record, _ := raw.(map[string]any)
+	var shading toonShading
+	for _, param := range viewerToonParams[toonStyleKey(profile)] {
+		value, ok := record[param.key]
+		if !ok || param.hidden {
+			continue
+		}
+		var parsed [3]float64
+		if param.color {
+			text, _ := value.(string)
+			color, ok := parseToonColor(text)
+			if !ok {
+				continue
+			}
+			parsed = color
+		} else {
+			number, ok := value.(float64)
+			if !ok || math.IsNaN(number) {
+				continue
+			}
+			parsed[0] = min(max(number, param.min), param.max)
+		}
+		if shading == nil {
+			shading = toonShading{}
+		}
+		shading[param.key] = parsed
+	}
+	return shading
+}
+
+// encodeToonShading is the stored form parseToonShading reads, or nil when nothing is changed.
+func encodeToonShading(profile string, shading toonShading) map[string]any {
+	var encoded map[string]any
+	for _, param := range viewerToonParams[toonStyleKey(profile)] {
+		value, ok := shading[param.key]
+		if !ok || param.hidden {
+			continue
+		}
+		if encoded == nil {
+			encoded = map[string]any{}
+		}
+		if param.color {
+			encoded[param.key] = formatToonColor(value)
+		} else {
+			encoded[param.key] = value[0]
+		}
+	}
+	return encoded
+}
+
+func parseToonColor(text string) ([3]float64, bool) {
+	hex, ok := strings.CutPrefix(text, "#")
+	if !ok || len(hex) != 6 {
+		return [3]float64{}, false
+	}
+	packed, err := strconv.ParseUint(hex, 16, 32)
+	if err != nil {
+		return [3]float64{}, false
+	}
+	var color [3]float64
+	for i := range 3 {
+		color[i] = srgbToLinear(float64(packed>>(16-8*i)&0xff) / 255)
+	}
+	return color, true
+}
+
+func formatToonColor(color [3]float64) string {
+	var packed uint32
+	for i := range 3 {
+		channel := math.Round(min(max(linearToSRGB(color[i]), 0), 1) * 255)
+		packed |= uint32(channel) << (16 - 8*i)
+	}
+	return fmt.Sprintf("#%06x", packed)
+}
+
+func linearToSRGB(c float64) float64 {
+	if c <= 0.0031308 {
+		return c * 12.92
+	}
+	return 1.055*math.Pow(c, 1/2.4) - 0.055
+}
+
+// packToonParams lays out a profile's shading values as the toonParams constants, taking each value from shading
+// or its default.
+func packToonParams(profile string, shading toonShading) [3][4]float32 {
+	var packed [3][4]float32
+	for _, param := range viewerToonParams[toonStyleKey(profile)] {
+		value, ok := shading[param.key]
+		if !ok {
+			value = param.def
+		}
+		count := 1
+		if param.color {
+			count = 3
+		}
+		for i := range count {
+			slot := param.slot + i
+			packed[slot/4][slot%4] = float32(value[i])
+		}
+	}
+	return packed
+}
 
 // toonFieldOfView is the lens of every toon style.
 const toonFieldOfView = 20 * math.Pi / 180
@@ -125,13 +315,26 @@ func toonStyleKey(profile string) string {
 
 // parseToonStyle reads a profile's entry of the stored toon styles; values of the wrong type keep the defaults.
 func parseToonStyle(stored, profile string) viewerToonStyle {
-	style := defaultToonStyle
+	var styles map[string]map[string]any
+	if json.Unmarshal([]byte(stored), &styles) != nil {
+		return defaultToonStyle
+	}
+	return applyToonRecord(defaultToonStyle, toonStyleKey(profile), styles[toonStyleKey(profile)], false)
+}
+
+// parseCharacterToonStyle lays a character's entry of the stored character toon styles over style. The light
+// direction and the texture folder are not per character, and the shading values a character entry leaves out
+// keep style's.
+func parseCharacterToonStyle(style viewerToonStyle, stored, characterKey, profile string) viewerToonStyle {
 	var styles map[string]map[string]any
 	if json.Unmarshal([]byte(stored), &styles) != nil {
 		return style
 	}
-	profile = toonStyleKey(profile)
-	record := styles[profile]
+	return applyToonRecord(style, toonStyleKey(profile), styles[characterKey], true)
+}
+
+// applyToonRecord lays the fields of a stored style record over style; values of the wrong type are skipped.
+func applyToonRecord(style viewerToonStyle, profile string, record map[string]any, overlay bool) viewerToonStyle {
 	flag := func(key string, target *bool) {
 		if value, ok := record[key].(bool); ok {
 			*target = value
@@ -139,20 +342,34 @@ func parseToonStyle(stored, profile string) viewerToonStyle {
 	}
 	flag("outlines", &style.Outlines)
 	flag("selfShadow", &style.SelfShadow)
-	flag("lightFollowsCamera", &style.LightFollowsCamera)
+	if !overlay {
+		flag("lightFollowsCamera", &style.LightFollowsCamera)
+	}
 	if profile == efmiProfile {
 		flag("flatFace", &style.FlatFace)
+	}
+	shading := parseToonShading(profile, record["shading"])
+	if overlay && shading != nil {
+		merged := maps.Clone(style.Shading)
+		if merged == nil {
+			merged = toonShading{}
+		}
+		maps.Copy(merged, shading)
+		shading = merged
+	}
+	if !overlay || shading != nil {
+		style.Shading = shading
 	}
 	if profile != gimiProfile {
 		return style
 	}
-	if value, ok := record["ramp"].(string); ok {
+	if value, ok := record["ramp"].(string); ok && (overlay || value != toonRampAuto) {
 		style.Ramp = value
 	}
 	if value, ok := record["faceType"].(string); ok && (value == "auto" || slices.Contains(genshinFaceTypes, value)) {
 		style.FaceType = value
 	}
-	if value, ok := record["assetDir"].(string); ok {
+	if value, ok := record["assetDir"].(string); ok && !overlay {
 		style.AssetDir = value
 	}
 	return style
@@ -166,23 +383,116 @@ func storeToonStyle(stored, profile string, style viewerToonStyle) string {
 		styles = map[string]json.RawMessage{}
 	}
 	profile = toonStyleKey(profile)
-	var entry []byte
+	record := map[string]any{
+		"outlines":           style.Outlines,
+		"selfShadow":         style.SelfShadow,
+		"lightFollowsCamera": style.LightFollowsCamera,
+	}
 	switch profile {
 	case gimiProfile:
-		entry, _ = json.Marshal(struct {
-			toonFlags
-			Ramp     string `json:"ramp"`
-			FaceType string `json:"faceType"`
-			AssetDir string `json:"assetDir"`
-		}{style.toonFlags, style.Ramp, style.FaceType, style.AssetDir})
+		record["ramp"], record["faceType"], record["assetDir"] = style.Ramp, style.FaceType, style.AssetDir
 	case efmiProfile:
-		entry, _ = json.Marshal(efmiToonStyle{style.toonFlags, style.FlatFace})
-	default:
-		entry, _ = json.Marshal(style.toonFlags)
+		record["flatFace"] = style.FlatFace
 	}
+	if shading := encodeToonShading(profile, style.Shading); shading != nil {
+		record["shading"] = shading
+	}
+	entry, _ := json.Marshal(record)
 	styles[profile] = entry
 	encoded, _ := json.Marshal(styles)
 	return string(encoded)
+}
+
+// storeCharacterToonStyle writes the fields that differ between before and after, two styles of the profile as the
+// viewer showed them with the character's entry applied, into that entry of the stored character toon styles.
+// The light direction and the texture folder are left to the profile's style.
+func storeCharacterToonStyle(stored, characterKey, profile string, before, after viewerToonStyle) string {
+	styles := map[string]map[string]any{}
+	if json.Unmarshal([]byte(stored), &styles) != nil || styles == nil {
+		styles = map[string]map[string]any{}
+	}
+	profile = toonStyleKey(profile)
+	record := styles[characterKey]
+	if record == nil {
+		record = map[string]any{}
+	}
+	if after.Outlines != before.Outlines {
+		record["outlines"] = after.Outlines
+	}
+	if after.SelfShadow != before.SelfShadow {
+		record["selfShadow"] = after.SelfShadow
+	}
+	if profile == efmiProfile && after.FlatFace != before.FlatFace {
+		record["flatFace"] = after.FlatFace
+	}
+	if profile == gimiProfile && (after.Ramp != before.Ramp || after.rampAuto != before.rampAuto) {
+		if after.Ramp == toonRampAuto {
+			delete(record, "ramp")
+		} else {
+			record["ramp"] = after.Ramp
+		}
+	}
+	if profile == gimiProfile && after.FaceType != before.FaceType {
+		record["faceType"] = after.FaceType
+	}
+
+	shading := parseToonShading(profile, record["shading"])
+	for key, value := range after.Shading {
+		if previous, ok := before.Shading[key]; !ok || previous != value {
+			if shading == nil {
+				shading = toonShading{}
+			}
+			shading[key] = value
+		}
+	}
+	for key := range before.Shading {
+		if _, ok := after.Shading[key]; !ok {
+			delete(shading, key)
+		}
+	}
+	if encoded := encodeToonShading(profile, shading); encoded != nil {
+		record["shading"] = encoded
+	} else {
+		delete(record, "shading")
+	}
+
+	if len(record) == 0 {
+		delete(styles, characterKey)
+	} else {
+		styles[characterKey] = record
+	}
+	encoded, _ := json.Marshal(styles)
+	return string(encoded)
+}
+
+// removeCharacterToonStyle drops a character's entry of the stored character toon styles.
+func removeCharacterToonStyle(stored, characterKey string) string {
+	styles := map[string]json.RawMessage{}
+	if json.Unmarshal([]byte(stored), &styles) != nil || styles == nil {
+		return stored
+	}
+	delete(styles, characterKey)
+	encoded, _ := json.Marshal(styles)
+	return string(encoded)
+}
+
+// genshinCharacterRamp finds a character's shadow ramp, Avatar_<Body>_<Weapon>_<Avatar>, among the listed ones.
+func genshinCharacterRamp(ramps []modelviewer.GenshinToonRampTransport, body, avatar string) string {
+	if body == "" || avatar == "" {
+		return ""
+	}
+	prefix, suffix := "avatar_"+body+"_", "_"+strings.ToLower(avatar)
+	for _, ramp := range ramps {
+		name := strings.ToLower(ramp.Name)
+		weapon, ok := strings.CutPrefix(name, prefix)
+		if !ok {
+			continue
+		}
+		if weapon, ok = strings.CutSuffix(weapon, suffix); ok && weapon != "" && !strings.Contains(weapon, "_") {
+			return ramp.Name
+		}
+	}
+	return ""
 }
 
 var genshinBodyTypeRE = regexp.MustCompile(`(?i)^avatar_([a-z]+)_`)
@@ -191,6 +501,9 @@ var genshinBodyTypeRE = regexp.MustCompile(`(?i)^avatar_([a-z]+)_`)
 func genshinFaceType(style viewerToonStyle) string {
 	if style.FaceType != "auto" {
 		return style.FaceType
+	}
+	if style.characterBody != "" {
+		return style.characterBody
 	}
 	if match := genshinBodyTypeRE.FindStringSubmatch(style.Ramp); match != nil {
 		if bodyType := strings.ToLower(match[1]); slices.Contains(genshinFaceTypes, bodyType) {
@@ -216,6 +529,8 @@ func markGenshinMeshes(scene *viewerScene) {
 		names := mesh.info.Component + " " + mesh.info.ID + " " + texKey
 		mesh.toonFace = genshinFaceRE.MatchString(names)
 		mesh.toonHair = !mesh.toonFace && genshinHairRE.MatchString(names)
+		mesh.toonDress = strings.Contains(strings.ToLower(mesh.info.Component), "dress")
+		scene.genshinFace = scene.genshinFace || mesh.toonFace
 	}
 }
 
@@ -341,6 +656,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 		headFloor = math.Inf(-1)
 		for _, mesh := range faces {
 			headFloor = max(headFloor, mesh.info.Bounds.Min[2])
+			mesh.efmiFace = true
 		}
 		headFloor -= efmiHeadBelowFace
 	}
@@ -385,9 +701,8 @@ func toonLightDirection(forward vec3) vec3 {
 }
 
 const (
-	genshinRampWidth    = 256
-	genshinRampRows     = 10
-	genshinMetalMapSize = 64
+	genshinRampWidth = 256
+	genshinRampRows  = 10
 )
 
 // genshinRampShadows are the sRGB shadow ends of the built-in ramp rows, by light map alpha 0.7, 0.3, 0.5,
@@ -433,37 +748,34 @@ func genshinProceduralRamp() []byte {
 	return data
 }
 
-// genshinProceduralMetalMap is a grey matcap with a bright horizontal band above the centre, the shape of the
-// game's shared metal map, as sRGB RGBA rows from the top.
-func genshinProceduralMetalMap() []byte {
-	data := make([]byte, genshinMetalMapSize*genshinMetalMapSize*4)
-	for y := range genshinMetalMapSize {
-		v := float64(y) / (genshinMetalMapSize - 1)
-		at := (genshinMetalMapSize - 1 - y) * genshinMetalMapSize * 4
-		for x := range genshinMetalMapSize {
-			u := float64(x)/(genshinMetalMapSize-1) - 0.5
-			offset := (v - 0.65) / 0.1
-			band := math.Exp(-offset*offset) * (1 - u*u*2)
-			value := byte(math.Round((0.15 + 0.6*band) * 255))
-			copy(data[at+x*4:], []byte{value, value, value, 255})
-		}
-	}
-	return data
-}
-
 func smoothstep(edge0, edge1, x float64) float64 {
 	t := min(max((x-edge0)/(edge1-edge0), 0), 1)
 	return t * t * (3 - 2*t)
 }
 
 // viewerToonTextures are the game textures the GIMI style selects, as GPU views; a zero view falls back to
-// the built-in map.
+// the renderer's built-in or bundled map.
 type viewerToonTextures struct {
 	bodyRamp, hairRamp, metalMap, faceLightMap, faceShadow d3d.ShaderResourceView
+	// ramps holds the views of the character's bundled ramps in the order of character.names, zero until loaded,
+	// for the profiles that bind them per mesh; character picks each mesh's.
+	ramps     []d3d.ShaderResourceView
+	character *characterToonRamps
 }
 
-// viewerToonAssets holds the listing of the GIMI texture folder and the textures loaded from it. It belongs
-// to the UI thread.
+// characterRamp is the loaded bundled ramp the mesh draws with, or a zero view.
+func (t viewerToonTextures) characterRamp(mesh *viewerMesh) d3d.ShaderResourceView {
+	if t.character == nil {
+		return d3d.ShaderResourceView{}
+	}
+	if i, ok := t.character.index[t.character.rampFor(mesh)]; ok {
+		return t.ramps[i]
+	}
+	return d3d.ShaderResourceView{}
+}
+
+// viewerToonAssets holds the listing of the GIMI texture folder and the textures loaded from it or from the
+// bundled maps. It belongs to the UI thread.
 type viewerToonAssets struct {
 	dir     string
 	listed  *modelviewer.GenshinToonAssetsTransport
@@ -495,20 +807,209 @@ func (v *ModelViewer) toonProfile() string {
 	return ""
 }
 
-// toonStyle returns the stored style of the model's toon profile, or the default until the setting loads.
-func (v *ModelViewer) toonStyle() viewerToonStyle {
-	if s := v.shell; s != nil && s.settingsLoaded(setting.KeyModelViewerToonStyles) {
-		return parseToonStyle(s.stringSetting(setting.KeyModelViewerToonStyles), v.toonProfile())
-	}
-	return defaultToonStyle
+// viewerCharacter is the catalog character assigned to a folder holding the viewer's mod.
+type viewerCharacter struct {
+	game string
+	character.Character
+	characterToon
 }
 
-func (v *ModelViewer) setToonStyle(style viewerToonStyle) {
-	profile := v.toonProfile()
-	if s := v.shell; s != nil && profile != "" {
-		s.setSetting(setting.KeyModelViewerToonStyles,
-			storeToonStyle(s.stringSetting(setting.KeyModelViewerToonStyles), profile, style))
+// styleKey is the character's entry in the character toon styles setting.
+func (c *viewerCharacter) styleKey() string { return c.game + "/" + c.ID }
+
+// loadCharacter looks up the character assigned to the folders holding the mod.
+func (v *ModelViewer) loadCharacter() {
+	s := v.shell
+	if s == nil || s.deps.Mod == nil {
+		return
 	}
+	path := v.path
+	s.backgroundRead(func(ctx context.Context) {
+		assigned, err := s.deps.Mod.ResolveModCharacter(ctx, path)
+		var next *viewerCharacter
+		if err == nil && assigned != nil {
+			if entry, ok := character.Lookup(assigned.Game, assigned.ID); ok {
+				toon, toonErr := loadCharacterToon(assigned.Game, assigned.ID)
+				if toonErr != nil {
+					_ = infra.ReportError(v.log, toonErr, "ModelViewer.loadCharacter", infra.Diagnostic{
+						Operation: "load-character-toon",
+						Fields:    map[string]any{"game": assigned.Game, "character": assigned.ID},
+					})
+				}
+				next = &viewerCharacter{game: assigned.Game, Character: entry, characterToon: toon}
+			}
+		}
+		fairy.Go(func() {
+			if v.closed || err != nil {
+				return
+			}
+			if (next == nil) == (v.character == nil) && (next == nil || next.styleKey() == v.character.styleKey()) {
+				return
+			}
+			// Shading being changed belongs to the style it was changed in.
+			v.flushToonDraft()
+			v.character = next
+			v.revision++
+		})
+	})
+}
+
+// toonCharacter is the mod's character when its game draws with the model's toon profile, or nil.
+func (v *ModelViewer) toonCharacter() *viewerCharacter {
+	if c := v.character; c != nil && c.game == viewerToonProfiles[v.toonProfile()].importer {
+		return c
+	}
+	return nil
+}
+
+// toonStyle returns the stored style of the model's toon profile, with the character's entry and then the shading
+// being changed over it, or the default until the settings load.
+func (v *ModelViewer) toonStyle() viewerToonStyle {
+	style := defaultToonStyle
+	profile := v.toonProfile()
+	s := v.shell
+	if s != nil && s.settingsLoaded(setting.KeyModelViewerToonStyles) {
+		style = parseToonStyle(s.stringSetting(setting.KeyModelViewerToonStyles), profile)
+	}
+	if c := v.toonCharacter(); c != nil && s != nil && s.settingsLoaded(setting.KeyModelViewerCharacterToonStyles) {
+		genshin := c.Genshin
+		if profile == gimiProfile {
+			if genshin != nil {
+				style.characterBody = genshin.Body
+			}
+			if (genshin != nil && genshin.Avatar != "") || c.ramps != nil {
+				style.Ramp = toonRampAuto
+			}
+		}
+		stored := s.stringSetting(setting.KeyModelViewerCharacterToonStyles)
+		style = parseCharacterToonStyle(style, stored, c.styleKey(), profile)
+		style.characterShading = parseCharacterToonStyle(viewerToonStyle{}, stored, c.styleKey(), profile).Shading
+		if style.Ramp == toonRampAuto {
+			style.Ramp, style.rampAuto = "", true
+			if c.ramps != nil {
+				style.Ramp = c.ramps.body
+			} else if listed := v.toonAssets.listed; listed != nil && genshin != nil {
+				style.Ramp = genshinCharacterRamp(listed.Ramps, genshin.Body, genshin.Avatar)
+			}
+		}
+	}
+	if len(v.toonDraft) > 0 {
+		style.Shading = withToonShading(style.Shading, v.toonDraft)
+		style.characterShading = withToonShading(style.characterShading, v.toonDraft)
+	}
+	return style
+}
+
+// withToonShading returns shading with the values of changes laid over it, leaving shading as it is.
+func withToonShading(shading, changes toonShading) toonShading {
+	merged := maps.Clone(shading)
+	if merged == nil {
+		merged = toonShading{}
+	}
+	maps.Copy(merged, changes)
+	return merged
+}
+
+// toonDraftDelay is how long a shading value stays unchanged before it is stored, so a slider drag writes the
+// setting once.
+const toonDraftDelay = 400 * time.Millisecond
+
+// setToonShading shows a changed shading value at once and stores it once it stops changing.
+func (v *ModelViewer) setToonShading(key string, value [3]float64) {
+	if v.toonDraft == nil {
+		v.toonDraft = toonShading{}
+	}
+	v.toonDraft[key] = value
+	v.revision++
+	if v.toonDraftTimer != nil {
+		v.toonDraftTimer.Stop()
+	}
+	v.toonDraftTimer = time.AfterFunc(toonDraftDelay, func() { fairy.Go(v.flushToonDraft) })
+}
+
+// flushToonDraft stores the shading values being changed.
+func (v *ModelViewer) flushToonDraft() {
+	if v.toonDraftTimer != nil {
+		v.toonDraftTimer.Stop()
+		v.toonDraftTimer = nil
+	}
+	if len(v.toonDraft) == 0 {
+		return
+	}
+	draft := v.toonDraft
+	v.toonDraft = nil
+	v.updateToonStyle(func(style *viewerToonStyle) { style.Shading = withToonShading(style.Shading, draft) })
+}
+
+// resetToonShading drops the shading values of the character's entry, or of the profile's style without a
+// character.
+func (v *ModelViewer) resetToonShading() {
+	if v.toonDraftTimer != nil {
+		v.toonDraftTimer.Stop()
+		v.toonDraftTimer = nil
+	}
+	v.toonDraft = nil
+	v.updateToonStyle(func(style *viewerToonStyle) { style.Shading = nil })
+}
+
+// updateToonStyle stores a change to the shown toon style: in the character's entry when the mod has a character,
+// except the light direction and the texture folder, and in the profile's style otherwise. change must replace
+// Shading rather than modify it.
+func (v *ModelViewer) updateToonStyle(change func(*viewerToonStyle)) {
+	profile := v.toonProfile()
+	s := v.shell
+	if s == nil || profile == "" {
+		return
+	}
+	before := v.toonStyle()
+	after := before
+	change(&after)
+
+	stored := s.stringSetting(setting.KeyModelViewerToonStyles)
+	c := v.toonCharacter()
+	if c == nil {
+		s.setSetting(setting.KeyModelViewerToonStyles, storeToonStyle(stored, profile, after))
+		return
+	}
+	if after.LightFollowsCamera != before.LightFollowsCamera || after.AssetDir != before.AssetDir {
+		global := parseToonStyle(stored, profile)
+		global.LightFollowsCamera, global.AssetDir = after.LightFollowsCamera, after.AssetDir
+		s.setSetting(setting.KeyModelViewerToonStyles, storeToonStyle(stored, profile, global))
+	}
+	characterStyles := s.stringSetting(setting.KeyModelViewerCharacterToonStyles)
+	if updated := storeCharacterToonStyle(characterStyles, c.styleKey(), profile, before, after); updated !=
+		characterStyles {
+		s.setSetting(setting.KeyModelViewerCharacterToonStyles, updated)
+	}
+}
+
+// hasCharacterToonStyle reports whether the mod's character has an entry in the character toon styles.
+func (v *ModelViewer) hasCharacterToonStyle() bool {
+	c := v.toonCharacter()
+	if c == nil || v.shell == nil || !v.shell.settingsLoaded(setting.KeyModelViewerCharacterToonStyles) {
+		return false
+	}
+	var styles map[string]json.RawMessage
+	if json.Unmarshal([]byte(v.shell.stringSetting(setting.KeyModelViewerCharacterToonStyles)), &styles) != nil {
+		return false
+	}
+	_, ok := styles[c.styleKey()]
+	return ok
+}
+
+func (v *ModelViewer) clearCharacterToonStyle() {
+	c := v.toonCharacter()
+	if c == nil || v.shell == nil {
+		return
+	}
+	if v.toonDraftTimer != nil {
+		v.toonDraftTimer.Stop()
+		v.toonDraftTimer = nil
+	}
+	v.toonDraft = nil
+	s := v.shell
+	s.setSetting(setting.KeyModelViewerCharacterToonStyles,
+		removeCharacterToonStyle(s.stringSetting(setting.KeyModelViewerCharacterToonStyles), c.styleKey()))
 }
 
 // toonShadows reports the stored Toon Shadows switch, which is on until the setting loads, as its default is.
@@ -545,11 +1046,13 @@ func (v *ModelViewer) syncFieldOfView() {
 	}
 }
 
-// syncToonAssets lists the GIMI texture folder the style names and loads the textures it selects.
+// syncToonAssets lists the GIMI texture folder the style names and loads the textures it selects and the
+// character's bundled ramps.
 func (v *ModelViewer) syncToonAssets(style viewerToonStyle) {
 	assets := &v.toonAssets
+	gimi := v.toonProfile() == gimiProfile
 	dir := ""
-	if v.toonProfile() == gimiProfile {
+	if gimi {
 		dir = style.AssetDir
 	}
 	if dir != assets.dir {
@@ -562,7 +1065,17 @@ func (v *ModelViewer) syncToonAssets(style viewerToonStyle) {
 			v.listToonAssets(dir)
 		}
 	}
-	if assets.listed == nil {
+	requests := v.characterRampRequests()
+	if gimi {
+		fixed := v.toonTextureRequests(style)
+		if dir != "" && assets.listed == nil && assets.listing != nil {
+			// Until the folder is listed only the character's bundled ramps are certain; its face maps replace the
+			// bundled ones.
+			fixed = [5]toonTextureRequest{fixed[0], fixed[1]}
+		}
+		requests = append(requests, fixed[:]...)
+	}
+	if len(requests) == 0 {
 		return
 	}
 	generation := fairy.DeviceGeneration()
@@ -572,7 +1085,7 @@ func (v *ModelViewer) syncToonAssets(style viewerToonStyle) {
 		}
 		assets.generation, assets.textures, assets.loading = generation, map[string]d3d.ShaderResourceView{}, nil
 	}
-	for _, request := range v.toonTextureRequests(style) {
+	for _, request := range requests {
 		key := request.key()
 		if request.url == "" || assets.loading[key] || assets.textures[key].P != nil {
 			continue
@@ -620,26 +1133,51 @@ func (r toonTextureRequest) key() string {
 }
 
 // toonTextureRequests lists the body ramp, hair ramp, metal map, face light map and face shadow the style
-// selects from the listing, in viewerToonTextures order.
+// selects from the character's bundled ramps and the listing, in viewerToonTextures order. The face maps are requested only for a mod with a face,
+// and the face light map falls back to the bundled one; the other empty requests fall back to the renderer's maps.
 func (v *ModelViewer) toonTextureRequests(style viewerToonStyle) [5]toonTextureRequest {
 	var requests [5]toonTextureRequest
+	face := v.scene != nil && v.scene.genshinFace
+	faceType := genshinFaceType(style)
+	if face {
+		requests[3] = toonTextureRequest{url: bundledFaceLightmapURL(faceType)}
+	}
+	c := v.toonCharacter()
+	bundled := style.rampAuto && c != nil && c.ramps != nil && c.ramps.body != ""
+	if bundled {
+		requests[0] = toonTextureRequest{url: c.ramps.url(c.ramps.body), srgb: true}
+		requests[1] = toonTextureRequest{url: c.ramps.url(cmp.Or(c.ramps.hair, c.ramps.body)), srgb: true}
+	}
 	listed := v.toonAssets.listed
 	if listed == nil {
 		return requests
 	}
 	for _, ramp := range listed.Ramps {
-		if ramp.Name == style.Ramp {
+		if !bundled && ramp.Name == style.Ramp {
 			requests[0] = toonTextureRequest{url: ramp.BodyURL, srgb: true}
 			requests[1] = toonTextureRequest{url: ramp.HairURL, srgb: true}
 			break
 		}
 	}
-	requests[2] = toonTextureRequest{url: listed.MetalMapURL}
-	if faceType := genshinFaceType(style); faceType != "" {
-		requests[3] = toonTextureRequest{url: listed.FaceLightmaps[faceType]}
+	requests[2] = toonTextureRequest{url: listed.MetalMapURL, srgb: true}
+	if !face {
+		return requests
+	}
+	if url := listed.FaceLightmaps[faceType]; url != "" {
+		requests[3] = toonTextureRequest{url: url}
 	}
 	requests[4] = toonTextureRequest{url: listed.FaceShadowURL}
 	return requests
+}
+
+// characterRampRequests lists the character's bundled ramps for the profiles that bind them per mesh; GIMI takes
+// its two through toonTextureRequests.
+func (v *ModelViewer) characterRampRequests() []toonTextureRequest {
+	c := v.toonCharacter()
+	if c == nil || c.ramps == nil || v.toonProfile() == gimiProfile {
+		return nil
+	}
+	return c.ramps.requests
 }
 
 func (v *ModelViewer) toonTextures(style viewerToonStyle) viewerToonTextures {
@@ -647,24 +1185,40 @@ func (v *ModelViewer) toonTextures(style viewerToonStyle) viewerToonTextures {
 	if assets.generation != fairy.DeviceGeneration() {
 		return viewerToonTextures{}
 	}
-	var views [5]d3d.ShaderResourceView
-	for i, request := range v.toonTextureRequests(style) {
-		if request.url != "" {
-			views[i] = assets.textures[request.key()]
+	var textures viewerToonTextures
+	if v.toonProfile() == gimiProfile {
+		var views [5]d3d.ShaderResourceView
+		for i, request := range v.toonTextureRequests(style) {
+			if request.url != "" {
+				views[i] = assets.textures[request.key()]
+			}
+		}
+		textures = viewerToonTextures{
+			bodyRamp: views[0], hairRamp: views[1], metalMap: views[2], faceLightMap: views[3], faceShadow: views[4],
 		}
 	}
-	return viewerToonTextures{
-		bodyRamp: views[0], hairRamp: views[1], metalMap: views[2], faceLightMap: views[3], faceShadow: views[4],
+	if c := v.toonCharacter(); c != nil && c.ramps != nil && v.toonProfile() != gimiProfile {
+		textures.character, textures.ramps = c.ramps, make([]d3d.ShaderResourceView, len(c.ramps.keys))
+		for i, key := range c.ramps.keys {
+			textures.ramps[i] = assets.textures[key]
+		}
 	}
+	return textures
 }
 
-// loadToonTexture reads and uploads one game texture. A texture that fails is logged and stays unloaded, so
-// the built-in map shows in its place.
+// loadToonTexture reads and uploads one game texture from the texture folder or the bundled maps. A texture
+// that fails is logged and stays unloaded, so the built-in map shows in its place.
 func (v *ModelViewer) loadToonTexture(request toonTextureRequest, generation uint64) {
 	ctx, key := v.ctx, request.key()
 	go func() {
 		var view d3d.ShaderResourceView
-		data, err := v.read(ctx, request.url)
+		var data []byte
+		var err error
+		if strings.HasPrefix(request.url, bundledToonScheme) {
+			data, err = readBundledToonMap(request.url)
+		} else {
+			data, err = v.read(ctx, request.url)
+		}
 		var texture *viewerTextureData
 		if err == nil {
 			texture, err = decodeViewerImage(data)
@@ -725,9 +1279,7 @@ func (v *ModelViewer) pickToonAssetDir(style viewerToonStyle) {
 			if result.Canceled || len(result.FilePaths) == 0 {
 				return
 			}
-			latest := v.toonStyle()
-			latest.AssetDir = result.FilePaths[0]
-			v.setToonStyle(latest)
+			v.updateToonStyle(func(style *viewerToonStyle) { style.AssetDir = result.FilePaths[0] })
 		})
 	}()
 }

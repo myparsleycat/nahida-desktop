@@ -655,6 +655,12 @@ func (s *Shell) folderMenuItems(g mod.FolderGroup) []kit.MenuItem {
 			OnClick: func() { s.setManualSubGroup(g.Path, false) },
 		})
 	}
+	if !s.isNteGame() {
+		items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+			Label: T("page.mod.character-sidebar.set-character"), Icon: lucide.User,
+			OnClick: func() { s.openCharacterDraft(g) },
+		})
+	}
 	if sub := s.classificationMenu(g); sub != nil {
 		items = append(items, kit.MenuItem{Separator: true}, *sub)
 	}

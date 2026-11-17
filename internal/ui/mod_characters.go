@@ -1,0 +1,150 @@
+package ui
+
+import (
+	"context"
+	"slices"
+	"strings"
+
+	"github.com/myparsleycat/fairy"
+	"github.com/myparsleycat/fairy/kit"
+
+	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/mod/character"
+	"nahida.live/desktop/internal/platform"
+)
+
+const characterDialogPrefix = "page.mod.dialog.character."
+
+// characterDraft is the dialog that assigns a catalog character to a sidebar folder.
+type characterDraft struct {
+	folder mod.FolderGroup
+	game   string
+	id     string
+	// current is the folder's stored assignment, once loaded.
+	current *mod.CharacterAssignment
+	loaded  bool
+	busy    bool
+}
+
+func (s *Shell) openCharacterDraft(folder mod.FolderGroup) {
+	games := character.Games()
+	game := s.currentImporter()
+	if !slices.Contains(games, game) {
+		game = games[0]
+	}
+	d := &characterDraft{folder: folder, game: game}
+	s.mods.characterDraft = d
+	s.backgroundRead(func(ctx context.Context) {
+		current, err := s.deps.Mod.FolderCharacter(ctx, folder.Path)
+		fairy.Go(func() {
+			d.loaded = true
+			if err != nil {
+				s.toasts.Show(kit.ToastError, T(characterDialogPrefix+"#.failed"), "")
+				return
+			}
+			if current != nil && d.id == "" {
+				d.current = current
+				d.game, d.id = current.Game, current.ID
+			}
+		})
+	})
+}
+
+func characterItems(game string) []kit.Item {
+	lang := catalog.Language()
+	characters := character.List(game)
+	less := platform.NewLocaleLess()
+	slices.SortFunc(characters, func(a, b character.Character) int {
+		switch an, bn := a.Name(lang), b.Name(lang); {
+		case less(an, bn):
+			return -1
+		case less(bn, an):
+			return 1
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	items := make([]kit.Item, len(characters))
+	for i, c := range characters {
+		// The combobox filters by label, so the English name stays searchable in every language.
+		label := c.Name(lang)
+		if english := c.Name("en"); english != label {
+			label += " · " + english
+		}
+		items[i] = kit.Item{Value: c.ID, Label: label}
+	}
+	return items
+}
+
+func (s *Shell) saveFolderCharacter(d *characterDraft, assignment *mod.CharacterAssignment) {
+	if d.busy {
+		return
+	}
+	d.busy = true
+	path := d.folder.Path
+	s.background(func(ctx context.Context) {
+		err := s.deps.Mod.SetFolderCharacter(ctx, path, assignment)
+		fairy.Go(func() {
+			d.busy = false
+			if err != nil {
+				s.toasts.Show(kit.ToastError, T(characterDialogPrefix+"#.failed"), "")
+				return
+			}
+			if s.mods.characterDraft == d {
+				s.mods.characterDraft = nil
+			}
+			for v := range s.viewers {
+				if platform.SameOrChildPath(path, v.path) {
+					v.loadCharacter()
+				}
+			}
+		})
+	})
+}
+
+func (s *Shell) characterDialog(cx *fairy.Cx) {
+	m := &s.mods
+	d := m.characterDraft
+	if d == nil {
+		return
+	}
+	const prefix = characterDialogPrefix
+	games := character.Games()
+	gameItems := make([]kit.Item, len(games))
+	for i, game := range games {
+		gameItems[i] = kit.Item{Value: game, Label: T(prefix + "games." + game)}
+	}
+	disabled := d.busy || !d.loaded
+	body := fairy.Col(
+		modDialogField(T(prefix+"game"), kit.Select("mod.character.game", d.game, gameItems, func(game string) {
+			d.game, d.id = game, ""
+		}, kit.Disabled(disabled))),
+		modDialogField(T(prefix+"character"), kit.Combobox("mod.character.id", d.id, characterItems(d.game),
+			func(id string) { d.id = id }, kit.Placeholder(T(prefix+"search-placeholder")), kit.Disabled(disabled))),
+	).Gap(16)
+
+	close := func() {
+		if !d.busy {
+			m.characterDraft = nil
+		}
+	}
+	unchanged := d.current != nil && d.current.Game == d.game && d.current.ID == d.id
+	var leading []*fairy.El
+	if d.current != nil {
+		leading = append(leading, kit.Button(T("g.clear"), func() { s.saveFolderCharacter(d, nil) },
+			kit.Outline, kit.Disabled(d.busy)))
+	}
+	kit.ShowDialog(cx, kit.DialogProps{
+		Title:          T(prefix + "title"),
+		Description:    T(prefix+"description", "name", d.folder.Name),
+		Body:           body,
+		LeadingActions: leading,
+		Actions: []*fairy.El{
+			kit.Button(T("g.cancel"), close, kit.Outline, kit.Disabled(d.busy)),
+			kit.Button(T("g.save"), func() {
+				s.saveFolderCharacter(d, &mod.CharacterAssignment{Game: d.game, ID: d.id})
+			}, kit.Loading(d.busy), kit.Disabled(disabled || d.id == "" || unchanged)),
+		},
+		OnClose: close,
+		Key:     "mod.character",
+	})
+}

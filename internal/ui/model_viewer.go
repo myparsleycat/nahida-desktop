@@ -122,6 +122,10 @@ type ModelViewer struct {
 	// loadFailureShown is set once the scene's first unreadable mesh or position variant was shown.
 	loadFailureShown bool
 	toonAssets       viewerToonAssets
+	// toonDraft holds the shading values being changed in the toon menu, which toonDraftTimer stores once they
+	// stop changing.
+	toonDraft      toonShading
+	toonDraftTimer *time.Timer
 
 	// toasts shows the viewer's notices: the main window's toasts in the dialog, its own in a window.
 	toasts         *kit.Toaster
@@ -148,6 +152,8 @@ type ModelViewer struct {
 	togglePresets  []mod.TogglePreset
 	presetDraft    *viewerPresetDraft
 	applyingPreset bool
+	// character is the character assigned to the nearest folder holding the mod, whose toon style it uses.
+	character *viewerCharacter
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -175,6 +181,7 @@ func (s *Shell) NewModelViewer(path string) *ModelViewer {
 	s.viewers[v] = struct{}{}
 	v.refreshGameLinked()
 	v.loadTogglePresets()
+	v.loadCharacter()
 	v.load()
 	return v
 }
@@ -205,6 +212,7 @@ func (v *ModelViewer) Close() {
 	if v.gamePreview != nil {
 		v.gamePreview.Close()
 	}
+	v.flushToonDraft()
 	v.releaseScene()
 	v.toonAssets.release()
 	_ = fairy.UseDevice(func(fairy.GPU) error {
@@ -768,6 +776,10 @@ func (v *ModelViewer) version(opts viewerDrawOptions) uint64 {
 		_, _ = fmt.Fprintf(h, "|toon:%v:%p:%p:%p:%p:%p", toon.style, toon.textures.bodyRamp.P,
 			toon.textures.hairRamp.P, toon.textures.metalMap.P, toon.textures.faceLightMap.P,
 			toon.textures.faceShadow.P)
+		_, _ = fmt.Fprintf(h, "|%p", toon.materials)
+		for _, ramp := range toon.textures.ramps {
+			_, _ = fmt.Fprintf(h, "|%p", ramp.P)
+		}
 	}
 	return h.Sum64()
 }
@@ -801,6 +813,11 @@ func (v *ModelViewer) drawOptions(background [4]float32) viewerDrawOptions {
 	if v.toonActive() {
 		style := v.toonStyle()
 		opts.toon = &viewerToonDraw{profile: v.toonProfile(), style: style, textures: v.toonTextures(style)}
+		if c := v.toonCharacter(); c != nil && c.materials != nil {
+			opts.toon.materials = c.materials
+			opts.toon.characterUse, opts.toon.characterScale = characterMaterialUse(opts.toon.profile,
+				style.characterShading, style.Shading)
+		}
 		opts.minimum, opts.maximum, _ = viewerBounds(v.scene.transport.Meshes, opts.world)
 	}
 	return opts

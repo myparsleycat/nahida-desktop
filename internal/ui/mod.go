@@ -104,11 +104,13 @@ type modScreen struct {
 	refreshGame    bool
 
 	folderDraft *folderDraft
-	renameDraft *renameDraft
-	keyEdit     *modKeyEdit
-	pasteDraft  *pasteDraft
-	openPreset  *mod.Preset
-	presetDraft *presetDraft
+	// characterDraft is the dialog that assigns a catalog character to a folder.
+	characterDraft *characterDraft
+	renameDraft    *renameDraft
+	keyEdit        *modKeyEdit
+	pasteDraft     *pasteDraft
+	openPreset     *mod.Preset
+	presetDraft    *presetDraft
 	// togglePresets is the toggle preset dialog open on one mod.
 	togglePresets *togglePresetsDialog
 	// togglePresetMenus holds the toggle preset menus of the mod cards that were opened, by mod path.

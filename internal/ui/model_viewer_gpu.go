@@ -27,6 +27,7 @@ func warmViewerRenderer() {
 	_, _ = viewerBlitCode()
 	viewerEnvironmentSH()
 	viewerPMREMBands()
+	_, _ = bundledToonMaps()
 }
 
 var viewerShaderCode = sync.OnceValues(func() (viewerShaders, error) {
@@ -153,18 +154,20 @@ type viewerFrameConstants struct {
 	shadowViewProj [16]float32
 	toonLight      [4]float32
 	toonShadow     [4]float32
-	gimiShade      [4]float32
-	gimiExtra      [4]float32
-	gimiOutline    [4]float32
+	toonParams     [3][4]float32
+	toonState      [4]float32
 	viewport       [4]float32
 }
 
 type viewerMeshConstants struct {
-	tint        [4]float32
-	faceForward [4]float32
-	flags       uint32
-	normalMode  uint32
-	_           [2]uint32
+	tint         [4]float32
+	faceForward  [4]float32
+	flags        uint32
+	normalMode   uint32
+	characterUse uint32
+	_            uint32
+	// characterScale.x scales the character's specular values.
+	characterScale [4]float32
 }
 
 // Shader flags the renderer adds per mesh, matching FLAG_* in model_viewer.hlsl.
@@ -196,6 +199,10 @@ type viewerToonDraw struct {
 	profile  string
 	style    viewerToonStyle
 	textures viewerToonTextures
+	// materials are the character's stock materials, applied as characterUse allows.
+	materials      *characterToonMaterials
+	characterUse   uint32
+	characterScale float32
 }
 
 // viewerDrawOptions are the view settings a draw takes from the screen.
@@ -261,16 +268,19 @@ type viewerRenderer struct {
 	layout        d3d.InputLayout
 	frameCB       d3d.Buffer
 	meshCB        d3d.Buffer
-	sampler       d3d.SamplerState
-	clamp         d3d.SamplerState
-	dfg           d3d.ShaderResourceView
-	raster        d3d.RasterizerState
-	culled        d3d.RasterizerState
+	// characterCB holds the characterMaterial of the meshes drawn since it was last written.
+	characterCB d3d.Buffer
+	sampler     d3d.SamplerState
+	clamp       d3d.SamplerState
+	dfg         d3d.ShaderResourceView
+	raster      d3d.RasterizerState
+	culled      d3d.RasterizerState
 	// frontCulled draws back faces only, for the outline hull and the shadows of single-sided meshes.
 	frontCulled d3d.RasterizerState
 	compare     d3d.SamplerState
-	// toonMaps holds the neutral light map, built-in ramp, built-in metal map and a white texture.
-	toonMaps [4]d3d.ShaderResourceView
+	// toonMaps holds the neutral light map, built-in ramp, bundled metal map, a white texture and the bundled
+	// face shadow.
+	toonMaps [5]d3d.ShaderResourceView
 	// shadow is the key light's depth map, made when self shadows are first drawn.
 	shadow    d3d.Texture2D
 	shadowDSV d3d.DepthStencilView
@@ -302,7 +312,7 @@ func (r *viewerRenderer) release() {
 		r.vs.Release, r.ps.Release, r.outlineVS.Release, r.outlinePS.Release, r.shadowVS.Release, r.ringVS.Release,
 		r.ringPS.Release, r.ringCB.Release, r.overlayVS.Release, r.overlayPS.Release, r.overlayLayout.Release,
 		r.overlayVB.Release, r.layout.Release,
-		r.frameCB.Release, r.meshCB.Release, r.sampler.Release, r.clamp.Release, r.dfg.Release, r.raster.Release,
+		r.frameCB.Release, r.meshCB.Release, r.characterCB.Release, r.sampler.Release, r.clamp.Release, r.dfg.Release, r.raster.Release,
 		r.culled.Release, r.frontCulled.Release, r.compare.Release, r.depthOn.Release, r.depthRead.Release,
 		r.blend.Release, r.shadowSRV.Release, r.shadowDSV.Release, r.shadow.Release,
 	} {
@@ -410,6 +420,9 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 	if r.meshCB, err = constants(unsafe.Sizeof(viewerMeshConstants{})); err != nil {
 		return err
 	}
+	if r.characterCB, err = constants(unsafe.Sizeof(characterMaterial{})); err != nil {
+		return err
+	}
 	if r.ringCB, err = constants(unsafe.Sizeof(viewerRingConstants{})); err != nil {
 		return err
 	}
@@ -444,8 +457,6 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 	}{
 		{1, d3d.FORMAT_R8G8B8A8_UNORM, []byte{0, 128, 0, 77}},
 		{genshinRampWidth, d3d.FORMAT_R8G8B8A8_UNORM_SRGB, genshinProceduralRamp()},
-		{genshinMetalMapSize, d3d.FORMAT_R8G8B8A8_UNORM_SRGB, genshinProceduralMetalMap()},
-		{1, d3d.FORMAT_R8G8B8A8_UNORM, []byte{255, 255, 255, 255}},
 	} {
 		height := uint32(len(texture.pixels)) / (texture.size * 4)
 		if r.toonMaps[i], err = (&viewerTextureData{
@@ -454,6 +465,22 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 		}).upload(dev, d3d.Context{}); err != nil {
 			return err
 		}
+	}
+	if r.toonMaps[3], err = (&viewerTextureData{
+		format: d3d.FORMAT_R8G8B8A8_UNORM, width: 1, height: 1,
+		mips: [][]byte{{255, 255, 255, 255}}, pitches: []uint32{4},
+	}).upload(dev, d3d.Context{}); err != nil {
+		return err
+	}
+	bundled, err := bundledToonMaps()
+	if err != nil {
+		return err
+	}
+	if r.toonMaps[2], err = bundled[0].upload(dev, d3d.Context{}); err != nil {
+		return err
+	}
+	if r.toonMaps[4], err = bundled[1].upload(dev, d3d.Context{}); err != nil {
+		return err
 	}
 	// Front faces wind counter-clockwise, as in three.js; SV_IsFrontFace follows the same rule.
 	if r.raster, err = dev.CreateRasterizerState(&d3d.RasterizerDesc{
@@ -622,11 +649,9 @@ func toonFrame(frame *viewerFrameConstants, toon *viewerToonDraw, opts viewerDra
 	frame.toonLight = [4]float32{
 		float32(light[0]), float32(light[1]), float32(light[2]), viewerToonProfiles[toon.profile].mode,
 	}
-	frame.gimiShade = [4]float32{1, gimiLightArea, gimiShadowBrightness, gimiBrightness}
-	frame.gimiExtra = [4]float32{gimiSpecular, gimiRimStrength, gimiEmission, 0}
-	frame.gimiOutline = [4]float32{
-		gimiOutlineWidth, float32(2.414 * math.Tan(opts.camera.lens()/2)),
-		viewerFlag(toon.textures.faceLightMap.P != nil), viewerFlag(toon.textures.faceShadow.P != nil),
+	frame.toonParams = packToonParams(toon.profile, style.Shading)
+	frame.toonState = [4]float32{
+		float32(2.414 * math.Tan(opts.camera.lens()/2)), 1, viewerFlag(toon.textures.faceLightMap.P != nil), 1,
 	}
 	if !style.SelfShadow {
 		return false
@@ -737,6 +762,9 @@ func (r *viewerRenderer) drawScene(
 	ctx.IASetPrimitiveTopology(d3d.PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 	ctx.VSSetConstantBuffers(0, r.frameCB, r.meshCB)
 	ctx.PSSetConstantBuffers(0, r.frameCB, r.meshCB)
+	ctx.PSSetConstantBuffers(3, r.characterCB)
+	// A mod's meshes share a few stock materials, so the character constants are written only when they change.
+	var written *characterMaterial
 	if shadowed {
 		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, &frame); err != nil {
 			return err
@@ -759,7 +787,7 @@ func (r *viewerRenderer) drawScene(
 		ctx.PSSetShaderResources(6,
 			cmpView(textures.metalMap, r.toonMaps[2]),
 			cmpView(textures.faceLightMap, r.toonMaps[3]),
-			cmpView(textures.faceShadow, r.toonMaps[3]),
+			cmpView(textures.faceShadow, r.toonMaps[4]),
 			shadow,
 		)
 	}
@@ -811,6 +839,12 @@ func (r *viewerRenderer) drawScene(
 			}
 			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{material.constants}); err != nil {
 				return err
+			}
+			if material.character != nil && material.character != written {
+				if err := d3d.WriteData(ctx, r.characterCB, []characterMaterial{*material.character}); err != nil {
+					return err
+				}
+				written = material.character
 			}
 			ctx.PSSetShaderResources(0, material.views[:3]...)
 			if opts.toon != nil {
@@ -947,6 +981,8 @@ var derivativeTangentProfiles = []string{"efmi", "wwmi", "wuwa:rabbitfx"}
 // toon ramp (t4, t5), then its material map, normal map read as data and highlight map (t10-t12).
 type viewerMeshMaterial struct {
 	constants viewerMeshConstants
+	// character is the stock material characterUse applies, or nil.
+	character *characterMaterial
 	views     [8]d3d.ShaderResourceView
 	// outlineMask is EFMI's outline width mask, read by the hull's vertex shader.
 	outlineMask d3d.ShaderResourceView
@@ -1063,6 +1099,12 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 		}
 	}
 
+	if values := opts.toon.materials.forMesh(mesh); values != nil && opts.toon.characterUse != 0 {
+		m.character = values
+		c.characterUse = opts.toon.characterUse
+		c.characterScale = [4]float32{opts.toon.characterScale}
+	}
+
 	face := mesh.toonFace
 	if mode == toonModeEFMI {
 		// A flat face lights the head meshes that bind no light map of their own from the face mask instead of N.L.
@@ -1087,6 +1129,11 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 		m.views[4] = opts.toon.textures.bodyRamp
 		if mesh.toonHair {
 			m.views[4] = cmpView(opts.toon.textures.hairRamp, opts.toon.textures.bodyRamp)
+		}
+	case toonModeSRMI:
+		if ramp := opts.toon.textures.characterRamp(mesh); ramp.P != nil {
+			m.views[4] = ramp
+			c.flags |= viewerFlagRampMap
 		}
 	case toonModeZZMI, toonModeWWMI:
 		// The material map and the normal map hold shading data, which one- and two-channel containers lack.
@@ -1113,6 +1160,11 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 				m.views[slot.view] = texture.view
 				c.flags |= slot.flag
 			}
+		}
+		// The character's stock ramp stands in for a _DiffRampMap the mod does not bind.
+		if ramp := opts.toon.textures.characterRamp(mesh); c.flags&viewerFlagRampMap == 0 && ramp.P != nil {
+			m.views[4] = ramp
+			c.flags |= viewerFlagRampMap
 		}
 	}
 	return m
