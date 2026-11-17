@@ -70,6 +70,8 @@ type Drive struct {
 	mu         sync.Mutex
 	ops        map[string]*copyOperation
 	fetchRules func(context.Context) (UploadRules, any, error)
+	// payloadBudget overrides uploadPayloadBudget when positive.
+	payloadBudget int64
 
 	previewFlight singleflight.Group
 	previewSlots  chan struct{}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"time"
@@ -40,10 +41,13 @@ type intentPackResult struct {
 
 // uploadPack sends the members as one pack. Beside the logical bytes, onProgress
 // carries the change in members sent in full but not yet answered by the
-// server; onReady says whether its member is still counted among those.
+// server; onReady says whether its member is still counted among those. Once
+// the server answers the pack, the members drop their bytes and release, when
+// set, runs before any member is polled.
 func (d *Drive) uploadPack(
 	ctx context.Context,
 	members []preparedUpload,
+	release func(),
 	onProgress func(bytes int64, sentFiles int),
 	onReady func(source FinalUploadFile, copies []FinalUploadFile, sent bool),
 ) error {
@@ -54,18 +58,18 @@ func (d *Drive) uploadPack(
 	if err != nil {
 		return err
 	}
-	var payload bytes.Buffer
+	var payloadSize int64
 	entries := make([]map[string]any, len(members))
 	for index, member := range members {
-		_, _ = payload.Write(member.data)
+		payloadSize += int64(len(member.payload.data))
 		entry := map[string]any{
 			"intentId":     member.upload.IntentID,
 			"token":        member.upload.Form.Token,
 			"sha256":       member.upload.Form.SHA256,
-			"payloadBytes": member.payloadBytes,
+			"payloadBytes": member.payload.size,
 		}
-		if member.compression != "" {
-			entry["compAlg"] = member.compression
+		if member.payload.compression != "" {
+			entry["compAlg"] = member.payload.compression
 		}
 		entries[index] = entry
 	}
@@ -78,6 +82,10 @@ func (d *Drive) uploadPack(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		parts := make([]io.Reader, len(members))
+		for index, member := range members {
+			parts[index] = bytes.NewReader(member.payload.data)
+		}
 		var uploadedPayload int64
 		var reportedLogical int64
 		var reportedSent int
@@ -88,8 +96,8 @@ func (d *Drive) uploadPack(
 		}
 		result, sendErr := d.sendMultipart(ctx, packURL, http.MethodPost, multipartUpload{
 			fields:    [][2]string{{"manifest", string(manifest)}},
-			file:      bytes.NewReader(payload.Bytes()),
-			fileSize:  int64(payload.Len()),
+			file:      io.MultiReader(parts...),
+			fileSize:  payloadSize,
 			filename:  "pack.bin",
 			fieldName: "pack",
 			onProgress: func(uploaded int64) {
@@ -118,6 +126,14 @@ func (d *Drive) uploadPack(
 			if parseErr != nil {
 				withdraw()
 				return parseErr
+			}
+			// The server holds the bytes it accepted; a member it asks for again
+			// is read from its source.
+			for index := range members {
+				members[index].payload.drop()
+			}
+			if release != nil {
+				release()
 			}
 			failures := make([]error, 0)
 			for index, member := range members {
@@ -163,9 +179,9 @@ func (d *Drive) uploadPack(
 						ctx,
 						member.upload,
 						member.source,
-						member.data,
-						member.compression,
+						&members[index].payload,
 						member.recoverable,
+						nil,
 						func(bytes int64) {
 							if onProgress != nil {
 								onProgress(bytes, 0)

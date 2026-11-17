@@ -228,6 +228,50 @@ func TestUploadIntentCompressesNonPreviewDirectFile(t *testing.T) {
 	}
 }
 
+func TestUploadIntentStreamsUncompressedFileTooLargeForPack(t *testing.T) {
+	content := append([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, bytes.Repeat([]byte{0x01}, 8192)...)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if err := request.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+			return
+		}
+		file, _, err := request.FormFile("file")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		got, err := io.ReadAll(file)
+		_ = file.Close()
+		if err != nil || !bytes.Equal(got, content) || request.FormValue("compAlg") != "" {
+			t.Errorf("payload = %d bytes, compAlg = %q, error = %v", len(got), request.FormValue("compAlg"), err)
+		}
+		// The first answer forces a retry, which must read the file again.
+		if requests.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	path := writeUploadContent(t, "image.bin", content)
+	drive := uploadTestDrive(server)
+	rules := testUploadRules()
+	rules.Pack.MemberMax = 1024
+	withUploadRules(drive, rules)
+	upload := UploadPlanEntry{URL: server.URL}
+	upload.Form.Token = "token"
+	progress := int64(0)
+	if err := drive.uploadIntent(context.Background(), upload, FinalUploadFile{
+		UploadFile: UploadFile{Name: "image.bin", FullPath: filepath.ToSlash(path), Size: int64(len(content))},
+	}, func(bytes int64) { progress += bytes }); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 2 || progress != int64(len(content)) {
+		t.Fatalf("requests = %d, progress = %d", requests.Load(), progress)
+	}
+}
+
 func TestUploadIntentRollsBackFailedAttemptProgress(t *testing.T) {
 	content := []byte("small payload")
 	var requests atomic.Int32
@@ -333,8 +377,10 @@ func TestUploadIntentDoesNotResendForMissingIntentStatus(t *testing.T) {
 }
 
 func TestUploadIntentFallsBackWhenStatusEndpointIsUnavailable(t *testing.T) {
-	content := []byte("accepted payload")
+	content := bytes.Repeat([]byte("accepted payload "), 64)
 	var uploadRequests atomic.Int32
+	var bodiesMu sync.Mutex
+	var bodies [][]byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if strings.HasSuffix(request.URL.Path, "/status") {
 			w.WriteHeader(http.StatusNotFound)
@@ -342,7 +388,23 @@ func TestUploadIntentFallsBackWhenStatusEndpointIsUnavailable(t *testing.T) {
 			return
 		}
 
-		_, _ = io.Copy(io.Discard, request.Body)
+		if err := request.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+			return
+		}
+		file, _, err := request.FormFile("file")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		body, err := io.ReadAll(file)
+		_ = file.Close()
+		if err != nil || request.FormValue("compAlg") != "zstd" {
+			t.Errorf("compAlg = %q, error = %v", request.FormValue("compAlg"), err)
+		}
+		bodiesMu.Lock()
+		bodies = append(bodies, body)
+		bodiesMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		if uploadRequests.Add(1) == 1 {
 			w.WriteHeader(http.StatusAccepted)
@@ -366,6 +428,12 @@ func TestUploadIntentFallsBackWhenStatusEndpointIsUnavailable(t *testing.T) {
 	}
 	if uploadRequests.Load() != 2 {
 		t.Fatalf("upload requests = %d, want the legacy retry", uploadRequests.Load())
+	}
+	// The accepted copy was let go during the wait, so the retry encodes the file again.
+	bodiesMu.Lock()
+	defer bodiesMu.Unlock()
+	if len(bodies) != 2 || !bytes.Equal(bodies[0], bodies[1]) {
+		t.Fatalf("resent payload differs from the first: %d bodies", len(bodies))
 	}
 }
 
@@ -499,10 +567,10 @@ func TestDirectUploadExceedsMaxBodyIncludesMultipartOverhead(t *testing.T) {
 	upload.Form.Token = "token"
 	file := FinalUploadFile{UploadFile: UploadFile{Name: "file.ini"}}
 	data := []byte("small")
-	if !directUploadExceedsMaxBody(file, data, "", upload, int64(len(data))) {
+	if !directUploadExceedsMaxBody(file, int64(len(data)), "", upload, int64(len(data))) {
 		t.Fatal("payload equal to max body should still exceed after multipart overhead")
 	}
-	if directUploadExceedsMaxBody(file, data, "", upload, 1024) {
+	if directUploadExceedsMaxBody(file, int64(len(data)), "", upload, 1024) {
 		t.Fatal("small direct request should fit a 1KiB body limit")
 	}
 }

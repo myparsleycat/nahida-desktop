@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/transfer"
 )
@@ -18,6 +20,12 @@ import (
 // maxMultipartUploadConcurrency bounds the part requests in flight, for one
 // file and across one upload run.
 const maxMultipartUploadConcurrency = 4
+
+// uploadPayloadBudget bounds the prepared payloads a run's dispatcher keeps in
+// memory until the server accepts them. A file larger than the budget takes all
+// of it. Encoding scratch, polled intents and payloads read again because the
+// server asked for the bytes once more are outside the budget.
+const uploadPayloadBudget = 256 << 20
 
 type UploadExecutionProgress struct {
 	Bytes                int64
@@ -44,8 +52,11 @@ type uploadRun struct {
 
 	taskPool          *uploadTaskPool
 	partLimiter       *partLimiter
+	payloadBudget     *semaphore.Weighted
+	payloadBudgetSize int64
 	packed            []preparedUpload
 	packedBytes       int64
+	packedHeld        int64
 	pendingByIntent   map[string][]FinalUploadFile
 	intentOrder       []string
 	returned          map[string]struct{}
@@ -227,6 +238,11 @@ func (r *uploadRun) dispatchIntents() error {
 	r.packed = make([]preparedUpload, 0, max(1, r.rules.Pack.MaxFiles))
 	r.taskPool = newUploadTaskPool(r.ctx, r.concurrency)
 	r.partLimiter = newPartLimiter()
+	r.payloadBudgetSize = uploadPayloadBudget
+	if r.drive.payloadBudget > 0 {
+		r.payloadBudgetSize = r.drive.payloadBudget
+	}
+	r.payloadBudget = semaphore.NewWeighted(r.payloadBudgetSize)
 
 	proven, err := r.proveIntents()
 	if err != nil {
@@ -290,14 +306,22 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 	if source.Size >= r.rules.DirectUploadMaxLogicalBytes {
 		return r.queuePartsIntent(upload, source, targets)
 	}
+	reserved := int64(0)
+	var reserveErr error
 	r.activity.setPreparing(true)
-	data, compression, useParts, err := prepareUploadRoute(
-		source,
-		upload,
-		r.rules.Compression,
-		r.rules.MaxUploadBodyBytes,
-	)
+	payload, useParts, err := prepareUploadRoute(source, upload, r.rules, func(size int64) error {
+		reserved, reserveErr = r.reservePayload(size)
+		return reserveErr
+	})
 	r.activity.setPreparing(false)
+	if reserveErr != nil {
+		return reserveErr
+	}
+	held := int64(0)
+	if err == nil && !useParts {
+		held = min(int64(len(payload.data)), reserved)
+	}
+	r.payloadBudget.Release(reserved - held)
 	if err != nil {
 		r.failTargets(err, targets)
 		return nil
@@ -307,21 +331,21 @@ func (r *uploadRun) dispatchIntent(intentID string) error {
 	}
 
 	member := preparedUpload{
-		upload:       upload,
-		source:       source,
-		copies:       slices.Clone(targets[1:]),
-		data:         data,
-		compression:  compression,
-		payloadBytes: int64(len(data)),
-		logicalSize:  source.Size,
-		recoverable:  r.recoverable(targets),
+		upload:      upload,
+		source:      source,
+		copies:      slices.Clone(targets[1:]),
+		payload:     payload,
+		logicalSize: source.Size,
+		held:        held,
+		recoverable: r.recoverable(targets),
 	}
 	if allBundled {
 		return r.queueBundledDirectIntent(member, targets)
 	}
 
 	r.packed = append(r.packed, member)
-	r.packedBytes += member.payloadBytes
+	r.packedBytes += member.payload.size
+	r.packedHeld += member.held
 	if shouldFlushUploadPack(len(r.packed), r.packedBytes, r.rules.Pack) {
 		return r.flushPacked()
 	}
@@ -353,13 +377,15 @@ func (r *uploadRun) queuePartsIntent(upload UploadPlanEntry, source FinalUploadF
 func (r *uploadRun) queueBundledDirectIntent(member preparedUpload, targets []FinalUploadFile) error {
 	taskCtx := r.targetContext(targets)
 	return r.queueTask(func() {
+		release := r.payloadRelease(member.held)
+		defer release()
 		err := r.drive.uploadPreparedDirect(
 			taskCtx,
 			member.upload,
 			member.source,
-			member.data,
-			member.compression,
+			&member.payload,
 			member.recoverable,
+			release,
 			func(bytes int64) { r.report(member.source, bytes, false) },
 		)
 		if err != nil {
@@ -376,17 +402,20 @@ func (r *uploadRun) flushPacked() error {
 	groups := partitionPackedUploads(r.packed, r.rules.Pack)
 	r.packed = make([]preparedUpload, 0, max(1, r.rules.Pack.MaxFiles))
 	r.packedBytes = 0
+	r.packedHeld = 0
 	for _, group := range groups {
 		if len(group.members) == 1 {
 			member := group.members[0]
 			if err := r.queueTask(func() {
+				release := r.payloadRelease(member.held)
+				defer release()
 				err := r.drive.uploadPreparedDirect(
 					r.ctx,
 					member.upload,
 					member.source,
-					member.data,
-					member.compression,
+					&member.payload,
 					member.recoverable,
+					release,
 					func(bytes int64) {
 						r.report(member.source, bytes, false)
 					},
@@ -402,8 +431,14 @@ func (r *uploadRun) flushPacked() error {
 			continue
 		}
 		members := slices.Clone(group.members)
+		var held int64
+		for _, member := range members {
+			held += member.held
+		}
 		if err := r.queueTask(func() {
-			if err := r.drive.uploadPack(r.ctx, members, func(bytes int64, sentFiles int) {
+			release := r.payloadRelease(held)
+			defer release()
+			if err := r.drive.uploadPack(r.ctx, members, release, func(bytes int64, sentFiles int) {
 				r.emitProgress(UploadExecutionProgress{Bytes: bytes, SentFiles: sentFiles})
 			}, r.markPackMemberReady); err != nil {
 				r.failPack(err)
@@ -413,6 +448,37 @@ func (r *uploadRun) flushPacked() error {
 		}
 	}
 	return nil
+}
+
+// reservePayload takes a share of the payload budget for a file about to be
+// read into memory and answers the share taken; one file always fits. Members
+// in r.packed hold budget but have no task yet to return it, so they are
+// queued first when the budget the tasks hold cannot make room on its own.
+func (r *uploadRun) reservePayload(size int64) (int64, error) {
+	weight := min(max(size, 0), r.payloadBudgetSize)
+	if r.payloadBudget.TryAcquire(weight) {
+		return weight, nil
+	}
+
+	r.activity.setPreparing(false)
+	if r.payloadBudgetSize-r.packedHeld < weight {
+		if err := r.flushPacked(); err != nil {
+			return 0, err
+		}
+	}
+	err := r.payloadBudget.Acquire(r.ctx, weight)
+	r.activity.setPreparing(true)
+	if err != nil {
+		r.drive.abortAllNTEBundles(r.ctx, r.plan.Bundles)
+		return 0, err
+	}
+	return weight, nil
+}
+
+// payloadRelease answers a function that returns held to the payload budget
+// on its first call only.
+func (r *uploadRun) payloadRelease(held int64) func() {
+	return sync.OnceFunc(func() { r.payloadBudget.Release(held) })
 }
 
 func (r *uploadRun) queueTask(task func()) error {

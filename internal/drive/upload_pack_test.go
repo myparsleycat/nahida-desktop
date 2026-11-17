@@ -3,7 +3,7 @@ package drive
 import "testing"
 
 func packMember(payload, logical int64) preparedUpload {
-	return preparedUpload{payloadBytes: payload, logicalSize: logical}
+	return preparedUpload{payload: uploadPayload{size: payload}, logicalSize: logical}
 }
 
 func TestPartitionPackedUploadsHonorsMemberAndGroupLimits(t *testing.T) {

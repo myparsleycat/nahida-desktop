@@ -220,17 +220,14 @@ func (r *uploadRun) uploadAlone(
 ) error {
 	report := func(bytes int64) { r.report(source, bytes, false) }
 	if source.Size < r.rules.DirectUploadMaxLogicalBytes {
-		data, compression, useParts, err := prepareUploadRoute(
-			source,
-			upload,
-			r.rules.Compression,
-			r.rules.MaxUploadBodyBytes,
-		)
+		// A worker that waited on the payload budget could deadlock the run: the
+		// tasks holding the budget wait in the queue for that worker.
+		payload, useParts, err := prepareUploadRoute(source, upload, r.rules, nil)
 		if err != nil {
 			return err
 		}
 		if !useParts {
-			return r.drive.uploadPreparedDirect(ctx, upload, source, data, compression, recoverable, report)
+			return r.drive.uploadPreparedDirect(ctx, upload, source, &payload, recoverable, nil, report)
 		}
 	}
 	return r.drive.uploadParts(ctx, upload, source, r.rules, recoverable, r.partLimiter, report)

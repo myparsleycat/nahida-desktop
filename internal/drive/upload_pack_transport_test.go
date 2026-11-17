@@ -61,26 +61,23 @@ func TestUploadPackSendsManifestAndCreditsLogicalFiles(t *testing.T) {
 	defer server.Close()
 	members := []preparedUpload{
 		{
-			upload:       uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
-			source:       FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 100}},
-			data:         []byte("ab"),
-			payloadBytes: 2,
-			logicalSize:  100,
+			upload:      uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
+			source:      FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 100}},
+			payload:     uploadPayload{data: []byte("ab"), size: 2},
+			logicalSize: 100,
 		},
 		{
-			upload:       uploadPlanEntry("two", server.URL+"/v2/uploads/two", "token-2", "hash-2"),
-			source:       FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 50}},
-			data:         []byte("XYZ"),
-			compression:  "zstd",
-			payloadBytes: 3,
-			logicalSize:  50,
+			upload:      uploadPlanEntry("two", server.URL+"/v2/uploads/two", "token-2", "hash-2"),
+			source:      FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 50}},
+			payload:     uploadPayload{data: []byte("XYZ"), size: 3, compression: "zstd"},
+			logicalSize: 50,
 		},
 	}
 	progress := int64(0)
 	sentFiles := 0
 	sentAtReady := make([]bool, 0, 2)
 	ready := make([]string, 0, 2)
-	if err := uploadTestDrive(server).uploadPack(context.Background(), members, func(bytes int64, sent int) {
+	if err := uploadTestDrive(server).uploadPack(context.Background(), members, nil, func(bytes int64, sent int) {
 		progress += bytes
 		sentFiles += sent
 	}, func(file FinalUploadFile, _ []FinalUploadFile, sent bool) {
@@ -130,24 +127,23 @@ func TestUploadPackAcceptsCBORResultsFromNHDAPI(t *testing.T) {
 	})
 	members := []preparedUpload{
 		{
-			upload:       uploadPlanEntry("one", "https://api.nahida.live/akasha/v2/uploads/one", "token-1", "hash-1"),
-			source:       FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 2}},
-			data:         []byte("ab"),
-			payloadBytes: 2,
-			logicalSize:  2,
+			upload:      uploadPlanEntry("one", "https://api.nahida.live/akasha/v2/uploads/one", "token-1", "hash-1"),
+			source:      FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 2}},
+			payload:     uploadPayload{data: []byte("ab"), size: 2},
+			logicalSize: 2,
 		},
 		{
-			upload:       uploadPlanEntry("two", "https://api.nahida.live/akasha/v2/uploads/two", "token-2", "hash-2"),
-			source:       FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 3}},
-			data:         []byte("XYZ"),
-			payloadBytes: 3,
-			logicalSize:  3,
+			upload:      uploadPlanEntry("two", "https://api.nahida.live/akasha/v2/uploads/two", "token-2", "hash-2"),
+			source:      FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 3}},
+			payload:     uploadPayload{data: []byte("XYZ"), size: 3},
+			logicalSize: 3,
 		},
 	}
 	ready := make([]string, 0, 2)
 	if err := drive.uploadPack(
 		context.Background(),
 		members,
+		nil,
 		nil,
 		func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
 			ready = append(ready, file.FID)
@@ -182,20 +178,20 @@ func TestUploadPackPollsPendingMembersWithoutResendingPack(t *testing.T) {
 
 	members := []preparedUpload{
 		{
-			upload: uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
-			source: FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 2}},
-			data:   []byte("ab"), payloadBytes: 2, logicalSize: 2,
+			upload:  uploadPlanEntry("one", server.URL+"/v2/uploads/one", "token-1", "hash-1"),
+			source:  FinalUploadFile{UploadFile: UploadFile{FID: "file-1", Name: "one.ini", Size: 2}},
+			payload: uploadPayload{data: []byte("ab"), size: 2}, logicalSize: 2,
 		},
 		{
-			upload: uploadPlanEntry("two", server.URL+"/v2/uploads/two", "token-2", "hash-2"),
-			source: FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 3}},
-			data:   []byte("XYZ"), payloadBytes: 3, logicalSize: 3,
+			upload:  uploadPlanEntry("two", server.URL+"/v2/uploads/two", "token-2", "hash-2"),
+			source:  FinalUploadFile{UploadFile: UploadFile{FID: "file-2", Name: "two.ini", Size: 3}},
+			payload: uploadPayload{data: []byte("XYZ"), size: 3}, logicalSize: 3,
 		},
 	}
 	ready := make([]string, 0, 2)
 	if err := uploadTestDrive(
 		server,
-	).uploadPack(context.Background(), members, nil, func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
+	).uploadPack(context.Background(), members, nil, nil, func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
 		ready = append(ready, file.FID)
 	}); err != nil {
 		t.Fatal(err)

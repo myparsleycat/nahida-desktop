@@ -2,7 +2,9 @@ package drive
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -405,6 +407,75 @@ func TestExecuteUploadPlanPreservesRejectionsWhenFinalizationIsCanceled(t *testi
 	}
 	if len(refused) != 1 || refused["refused"] != "unsupported_file_type" {
 		t.Fatalf("rejections = %v, want refused file", refused)
+	}
+}
+
+func TestExecuteUploadPlanFinishesWhenPayloadBudgetIsFull(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/uploads:pack" {
+			_, _ = io.Copy(io.Discard, request.Body)
+			_, _ = io.WriteString(w, `{}`)
+			return
+		}
+		if err := request.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+			return
+		}
+		var manifest struct {
+			Entries []struct {
+				IntentID string `json:"intentId"`
+			} `json:"entries"`
+		}
+		if err := json.Unmarshal([]byte(request.FormValue("manifest")), &manifest); err != nil {
+			t.Error(err)
+			return
+		}
+		results := make([]map[string]string, len(manifest.Entries))
+		for index, entry := range manifest.Entries {
+			results[index] = map[string]string{"intentId": entry.IntentID, "status": "completed"}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
+	}))
+	defer server.Close()
+
+	directory := t.TempDir()
+	files := []FinalUploadFile{uploadExecutionFile(t, directory, "large", "large.ini", "larger than the budget")}
+	for index := range 6 {
+		id := fmt.Sprintf("small-%d", index)
+		files = append(files, uploadExecutionFile(t, directory, id, id+".ini", "abc"))
+	}
+	plan := UploadPlan{Uploads: map[string]UploadPlanEntry{}, Bundles: map[string]NTEBundle{}}
+	for _, file := range files {
+		plan.Items = append(plan.Items, UploadPlanItem{ClientID: file.FID, Status: "pending", IntentID: file.FID})
+		plan.Uploads[file.FID] = uploadPlanEntry(file.FID, server.URL+"/v2/uploads/"+file.FID, "token", "hash")
+	}
+	drive := uploadTestDrive(server)
+	// Two small files do not fit at once, so the next one waits on the members
+	// still collected for a pack.
+	drive.payloadBudget = 4
+
+	done := make(chan error, 1)
+	completed := make(chan string, len(files))
+	go func() {
+		_, err := drive.executeUploadPlanV2(t.Context(), files, plan, testUploadRules(), 1,
+			func(progress UploadExecutionProgress) {
+				if progress.FileID != "" {
+					completed <- progress.FileID
+				}
+			})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("upload run stalled waiting for its payload budget")
+	}
+	if len(completed) != len(files) {
+		t.Fatalf("completed files = %d, want %d", len(completed), len(files))
 	}
 }
 

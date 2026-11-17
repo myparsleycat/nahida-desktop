@@ -152,43 +152,74 @@ func (d *Drive) uploadIntent(
 	if file.Size >= rules.DirectUploadMaxLogicalBytes {
 		return d.uploadParts(ctx, upload, file, rules, false, nil, onProgress)
 	}
-	data, compression, useParts, err := prepareUploadRoute(file, upload, rules.Compression, rules.MaxUploadBodyBytes)
+	payload, useParts, err := prepareUploadRoute(file, upload, rules, nil)
 	if err != nil {
 		return err
 	}
 	if useParts {
 		return d.uploadParts(ctx, upload, file, rules, false, nil, onProgress)
 	}
-	return d.uploadPreparedDirect(ctx, upload, file, data, compression, false, onProgress)
+	return d.uploadPreparedDirect(ctx, upload, file, &payload, false, nil, onProgress)
 }
 
+// uploadPreparedDirect sends payload in one request. Once the server accepts
+// the bytes for processing, the payload drops them and release, when set, runs
+// before the wait; a later attempt reads the source again.
 func (d *Drive) uploadPreparedDirect(
 	ctx context.Context,
 	upload UploadPlanEntry,
 	file FinalUploadFile,
-	data []byte,
-	compression string,
+	payload *uploadPayload,
 	recoverable bool,
+	release func(),
 	onProgress func(int64),
 ) error {
-	fields := directUploadFields(upload, compression)
+	sourcePath := filepath.FromSlash(file.FullPath)
+	var source *os.File
+	if payload.streamed {
+		handle, err := os.Open(sourcePath)
+		if err != nil {
+			return fmt.Errorf("%w: open upload file %q: %w", ErrBackupSourceRead, file.Name, err)
+		}
+		defer func() { _ = handle.Close() }()
+		source = handle
+	}
+
+	fields := directUploadFields(upload, payload.compression)
 	for attempt := 0; attempt <= uploadRetryLimit; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if payload.dropped {
+			if err := payload.reload(file); err != nil {
+				return err
+			}
+		}
+		var body io.Reader = bytes.NewReader(payload.data)
+		if source != nil {
+			body = &diskGatedReader{
+				ctx:  ctx,
+				path: sourcePath,
+				reader: &backupSourceReader{
+					reader:    io.NewSectionReader(source, 0, payload.size),
+					remaining: payload.size,
+				},
+				size: int(min(payload.size, uploadReadBlockSize)),
+			}
 		}
 		uploadedPayload := int64(0)
 		reportedLogical := int64(0)
 		result, sendErr := d.sendMultipart(ctx, upload.URL, http.MethodPost, multipartUpload{
 			fields:    fields,
-			file:      bytes.NewReader(data),
-			fileSize:  int64(len(data)),
+			file:      body,
+			fileSize:  payload.size,
 			filename:  file.Name,
 			fieldName: "file",
 			onProgress: func(bytes int64) {
 				uploadedPayload += bytes
 				target := file.Size
-				if len(data) > 0 {
-					target = min(file.Size, uploadedPayload*file.Size/int64(len(data)))
+				if payload.size > 0 {
+					target = min(file.Size, uploadedPayload*file.Size/payload.size)
 				}
 				if onProgress != nil && target != reportedLogical {
 					onProgress(target - reportedLogical)
@@ -200,7 +231,7 @@ func (d *Drive) uploadPreparedDirect(
 			if reportedLogical > 0 && onProgress != nil {
 				onProgress(-reportedLogical)
 			}
-			if ctx.Err() != nil || attempt == uploadRetryLimit {
+			if ctx.Err() != nil || errors.Is(sendErr, ErrBackupSourceRead) || attempt == uploadRetryLimit {
 				return sendErr
 			}
 			if err := d.sleep(ctx, retryDelay(attempt, 8*time.Second)); err != nil {
@@ -215,6 +246,10 @@ func (d *Drive) uploadPreparedDirect(
 			return nil
 		}
 		if result.status == http.StatusAccepted {
+			payload.drop()
+			if release != nil {
+				release()
+			}
 			uploadRequired, waitErr := d.waitUploadIntent(ctx, upload, recoverable)
 			if waitErr != nil {
 				if reportedLogical > 0 && onProgress != nil {
@@ -597,20 +632,84 @@ func infraFetchJSON(method string, body []byte) infra.FetchOptions {
 	}
 }
 
+// uploadPayload is the body of a direct upload. A streamed payload holds no
+// bytes: every attempt reads the source file from disk.
+type uploadPayload struct {
+	data        []byte
+	size        int64
+	compression string
+	level       int
+	streamed    bool
+	// dropped marks a payload whose bytes were let go while the server
+	// processed a copy it had accepted; sending it again reads the source anew.
+	dropped bool
+}
+
+func (p *uploadPayload) drop() {
+	if !p.streamed {
+		p.data, p.dropped = nil, true
+	}
+}
+
+// reload reads a dropped payload back from its source file with the encoding
+// it was sent with.
+func (p *uploadPayload) reload(file FinalUploadFile) error {
+	data, err := readUploadSource(filepath.FromSlash(file.FullPath), nil)
+	if err != nil {
+		return fmt.Errorf("%w: read upload file %q: %w", ErrBackupSourceRead, file.Name, err)
+	}
+	if p.compression != "" {
+		if data, err = encodeUpload(p.level, data, nil); err != nil {
+			return err
+		}
+	}
+	p.data, p.size, p.dropped = data, int64(len(data)), false
+	return nil
+}
+
+// prepareUploadRoute answers the payload of a direct upload, or true when the
+// file goes in parts instead. reserve, when set, runs with the file size right
+// before the whole file is read into memory, and its error is returned as is.
 func prepareUploadRoute(
 	file FinalUploadFile,
 	upload UploadPlanEntry,
-	compression UploadCompressionRules,
-	maxBody int64,
-) ([]byte, string, bool, error) {
+	rules UploadRules,
+	reserve func(int64) error,
+) (uploadPayload, bool, error) {
+	payload, err := prepareUploadPayload(file, rules, reserve)
+	if err != nil {
+		return uploadPayload{}, false, err
+	}
+	if directUploadExceedsMaxBody(file, payload.size, payload.compression, upload, rules.MaxUploadBodyBytes) {
+		return uploadPayload{}, true, nil
+	}
+	return payload, false, nil
+}
+
+// prepareUploadPayload streams a file the compression rules skip once it is
+// too large for a pack; its bytes would only be copied into memory unchanged.
+func prepareUploadPayload(file FinalUploadFile, rules UploadRules, reserve func(int64) error) (uploadPayload, error) {
+	compression := rules.Compression
+	if file.Size > compression.SkipMaxBytes && file.Size > rules.Pack.MemberMax {
+		detected, err := mimetype.DetectFile(filepath.FromSlash(file.FullPath))
+		if err != nil {
+			return uploadPayload{}, fmt.Errorf("%w: read upload file %q: %w", ErrBackupSourceRead, file.Name, err)
+		}
+		if skipUploadMimeType(uploadMimeType(detected), compression) {
+			return uploadPayload{size: file.Size, streamed: true}, nil
+		}
+	}
+
+	if reserve != nil {
+		if err := reserve(file.Size); err != nil {
+			return uploadPayload{}, err
+		}
+	}
 	data, algorithm, err := prepareDirectUpload(file, compression)
 	if err != nil {
-		return nil, "", false, err
+		return uploadPayload{}, err
 	}
-	if directUploadExceedsMaxBody(file, data, algorithm, upload, maxBody) {
-		return nil, "", true, nil
-	}
-	return data, algorithm, false, nil
+	return uploadPayload{data: data, size: int64(len(data)), compression: algorithm, level: compression.Level}, nil
 }
 
 func directUploadFields(upload UploadPlanEntry, compression string) [][2]string {
@@ -623,7 +722,7 @@ func directUploadFields(upload UploadPlanEntry, compression string) [][2]string 
 
 func directUploadExceedsMaxBody(
 	file FinalUploadFile,
-	data []byte,
+	payloadSize int64,
 	compression string,
 	upload UploadPlanEntry,
 	maxBody int64,
@@ -631,7 +730,7 @@ func directUploadExceedsMaxBody(
 	if maxBody <= 0 {
 		return true
 	}
-	size, err := multipartRequestSize(directUploadFields(upload, compression), int64(len(data)), file.Name, "file")
+	size, err := multipartRequestSize(directUploadFields(upload, compression), payloadSize, file.Name, "file")
 	if err != nil {
 		return true
 	}
@@ -732,12 +831,21 @@ func sanitizeMultipartValue(value string) string {
 
 // uploadScratch holds the read and encode buffers of direct uploads. A prepared
 // payload waits in packs and retries, so it is cloned to its exact size and the
-// scratch goes back for the next file.
+// scratch goes back for the next file. Only buffers up to uploadScratchKeepBytes
+// go back: one grown for a large file would otherwise stay for the whole run.
 var uploadScratch = sync.Pool{New: func() any { return new([]byte) }}
+
+const uploadScratchKeepBytes = 8 << 20
+
+func putUploadScratch(buffer *[]byte) {
+	if cap(*buffer) <= uploadScratchKeepBytes {
+		uploadScratch.Put(buffer)
+	}
+}
 
 func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRules) ([]byte, string, error) {
 	source, _ := uploadScratch.Get().(*[]byte)
-	defer uploadScratch.Put(source)
+	defer putUploadScratch(source)
 	data, err := readUploadSource(filepath.FromSlash(file.FullPath), (*source)[:0])
 	*source = data[:0]
 	if err != nil {
@@ -748,7 +856,7 @@ func prepareDirectUpload(file FinalUploadFile, compression UploadCompressionRule
 	}
 
 	output, _ := uploadScratch.Get().(*[]byte)
-	defer uploadScratch.Put(output)
+	defer putUploadScratch(output)
 	compressed, err := encodeUpload(compression.Level, data, (*output)[:0])
 	if err != nil {
 		return nil, "", err
@@ -801,7 +909,13 @@ func skipUploadCompression(data []byte, size int64, compression UploadCompressio
 	if size <= compression.SkipMaxBytes {
 		return true
 	}
-	mimeType := uploadMimeType(data)
+	if len(data) == 0 {
+		return false
+	}
+	return skipUploadMimeType(uploadMimeType(mimetype.Detect(data)), compression)
+}
+
+func skipUploadMimeType(mimeType string, compression UploadCompressionRules) bool {
 	if mimeType == "" {
 		return false
 	}
@@ -813,15 +927,10 @@ func skipUploadCompression(data []byte, size int64, compression UploadCompressio
 	return slices.Contains(compression.SkipMimeTypes, mimeType)
 }
 
-// uploadMimeType reports the bare type the leading bytes identify. Content that
-// identifies nothing, or only the generic binary type, answers nothing so the
-// caller compresses it — the server stores an untyped file compressed the same
-// way.
-func uploadMimeType(data []byte) string {
-	if len(data) == 0 {
-		return ""
-	}
-	detected := mimetype.Detect(data)
+// uploadMimeType reports the bare type of a detection. Content that identifies
+// nothing, or only the generic binary type, answers nothing so the caller
+// compresses it — the server stores an untyped file compressed the same way.
+func uploadMimeType(detected *mimetype.MIME) string {
 	if detected == nil || detected.Is("application/octet-stream") {
 		return ""
 	}
