@@ -745,7 +745,7 @@ func (s *Shell) agentComposer(empty bool) *fairy.El {
 		kit.OnSubmit(func(string) { s.sendAgent() }),
 		kit.OnPaste(func() bool { return canAttach && s.pasteAgentImage() }),
 	).Key("agent.draft").MinH(52).MaxH(260).WFull().PadEdges(5, 7, 0, 7).Fill(fairy.Color{}).Border(0, fairy.Color{}).
-		FocusBorder(fairy.Color{}).FontSize(14).LineHeight(24)
+		FocusBorder(fairy.Color{}).FocusRing(0, fairy.Transparent).FontSize(14).LineHeight(24)
 	panel.Child(input)
 
 	left := fairy.Row().Gap(4).Align(fairy.Center).Grow(1).MinW(0)
