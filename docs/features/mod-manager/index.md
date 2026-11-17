@@ -1,23 +1,20 @@
 # Mod Manager
 
-Nahida Desktop includes built-in mod management. In the Mod Manager, you can manage mod activation states and use features such as adding mods, assigning previews, and organizing groups.
+The Mod Manager enables and disables mods, organizes them into groups, and manages previews and presets for each registered game.
 
-![Image](/features/mod-manager/0.png)
-
-The Mod Manager page is divided into the left sidebar and the mod list area on the right.
+The page is divided into the sidebar on the left and the mod list on the right. The game and preset selectors are at the bottom of the sidebar.
 
 ## Add a Game
 
-![Image](/features/mod-manager/add-game.png)
+Click the `+` button next to the game selector to open the Add Game dialog.
 
-Click the `+` icon at the bottom of the sidebar to open the Add Game dialog.
+- **Game Name**: The name shown in the game selector.
+- **Importer**: Selects how the game loads mods.
+  - An XXMI importer (`GIMI`, `SRMI`, `WWMI`, `ZZMI`, `HIMI`, `EFMI`): The importer's Mods folder is used as the mod folder. Importers are listed after [XXMI is set up](/others/set-up-xxmi).
+  - `NTE`: Select the Neverness to Everness install folder. You can also choose a custom mod folder, which the game's Mods folder is linked to. Nahida Desktop installs the files the game needs to load mods.
+  - `None`: Select any folder as the mod folder. The game cannot be launched from Nahida Desktop.
 
-- `Game Name`: The name shown in the game list inside Mod Manager.
-- `Mod Folder Path`: Click the folder icon on the right to select the mod folder for that game.
-  - `C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods`
-  - `D:\Mods\Genshin`
-  - etc.
-- `Importer`: If an [XXMI path](/others/set-up-xxmi) is configured, you can select which XXMI importer to use for that game.
+To change a game later, open the game selector and click the pencil button next to the game. The Edit Game dialog also changes the game's display order and deletes the game.
 
 ## Folder Structure
 
@@ -39,75 +36,64 @@ NPC
 ```
 
 ::: info
-The first-level folders directly under the configured mod folder are shown in the sidebar.
+The sidebar shows the folders directly under the mod folder. Place mods in category folders such as `Character`, `Enemy`, or `NPC` rather than directly in the mod folder.
 
-Because of that, it is recommended not to place mods directly in the configured mod folder. Create category folders such as `Character`, `Enemy`, or `NPC` first, then place mod folders inside them.
-
-For example, if your mod folder is configured as:
-
-```txt
-C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods
-```
-
-This structure is not recommended:
-
-```txt
-C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\SomeCharacterMod
-```
-
-This structure is recommended instead:
-
-```txt
-C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\Character\SomeCharacterMod
-```
-
+- Recommended: `Mods\Character\SomeCharacterMod`
+- Not recommended: `Mods\SomeCharacterMod`
 :::
 
 ### Subgroups
 
-![Image](/features/mod-manager/1.gif)
+A folder in the sidebar can show its subfolders below it. Right-click the folder in the sidebar and select `Expand subgroups` to show them, or `Persist subgroups` to keep them shown. Clicking a folder whose subfolders are shown or persisted collapses or expands it; clicking any other folder selects it.
 
-Groups such as `Character` that contain one or more subfolders can be marked as subgroups by right-clicking them in the sidebar.
+While holding `Ctrl`, clicking a folder expands and selects it. While holding `Alt`, clicking a folder collapses or expands its parent.
 
-Groups marked as subgroups can be collapsed and expanded by clicking them.
+A folder in the mod list can also be treated as a subgroup: right-click it and select `Mark as subgroup`. `Unmark manual subgroup` in the sidebar folder's menu undoes it.
 
-While holding `Ctrl`, clicking a group expands it to reveal its subfolders in the tree (or keeps it expanded) and selects it. While holding `Alt`, clicking a subgroup collapses/expands its parent group.
+### Group By
+
+`Group by` in the sidebar's `More options` menu groups the game's folders by classifications you define instead of by folder. Select `Manage classifications…` to create classifications, then right-click a folder in the sidebar and assign it with `Classify`.
 
 ## Add Mods
 
-With a group selected in the sidebar, you can add a new mod in the following ways:
+With a folder selected in the sidebar, add a mod in one of these ways:
 
-- Download a mod from GameBanana.
-- Drag and drop a mod folder or compressed mod archive into the mod list.
-- Click the `...` button in the header above the mod list, select `Download`, and enter the URL of the file to download.
+- Download a mod from [GameBanana](/features/gamebanana).
+- Drag and drop a mod folder or archive into the mod list.
+- Click the `...` button above the mod list, select `Download`, and enter the URL of the file to download.
+
+## Search
+
+Press `Ctrl+F` to search the current game's mods. Korean names also match by their initial consonants.
 
 ## Previews
 
-Nahida Desktop's Mod Manager looks for image or video files named `preview` inside a mod folder, case-insensitively, and uses them as the preview.
-
-Supported preview media formats are `jpeg`, `png`, `webp`, `avif`, `mp4`, and `webm`.
-
-If no media file named `preview` exists, the first supported media file found in ascending order inside the folder is used instead. If no supported media exists, no preview is shown.
+The Mod Manager uses an image or video file named `preview` inside a mod folder, case-insensitively, as the mod's preview. If there is none, the first supported media file in the folder is used.
 
 ::: info
-If `Search previews in subfolders` is enabled in Settings → Mods, the app searches subfolders recursively as well.
+If `Search Preview in Subfolders` is enabled in Settings → Mod, subfolders are searched as well.
 :::
+
+If `Show model previews for mods without previews` is enabled in Settings → Mod, mods without a preview show a model image of their current toggle state in the grid.
 
 ### Set or Replace a Preview
 
-For groups in the sidebar, you can assign a preview by dragging and dropping an image or video file.
+- For a folder in the sidebar, drag and drop an image or video file onto it.
+- For a mod, copy an image or video file, then right-click the mod and select `Paste` under `Preview`. A mod without a preview also shows a `Paste` button in the preview area.
+- In the [Model Viewer](/features/mod-manager/model-viewer), select `Misc` → `Capture and set preview`.
 
-For mods, the workflow depends on whether a preview already exists:
+`Delete preview` in the same menu removes the current preview.
 
-- If there is no preview: copy a media file, then click the paste button in the preview section.
-- If there is already a preview: right-click the existing preview and replace it with another media file.
+## Presets
 
-## Quick Launch Games
+A preset saves and restores which mods are enabled. Click the `+` button next to the preset selector to save the current state, and select a preset to apply or delete it.
 
-![Image](/features/mod-manager/quick-start.gif)
+## Toggle Presets {#toggle-presets}
 
-If the [XXMI path](/others/set-up-xxmi) is configured, you can launch games from Mod Manager without opening the XXMI Launcher.
+A toggle preset saves the values of one mod's toggles. Right-click a mod and select `Toggle presets` to save the current values or apply a saved preset. Presets can be stored in the mod folder (`nhd.json`) or in the app database.
 
-1. Click the pencil icon on the right side of a game in the game list to open the settings dialog.
-2. Select the importer to use for that game, then click the save button.
-3. Click the play icon on the left side of the game trigger to launch the game.
+Reading values from the running game requires the built-in launcher and the myparsleycat XXMI libraries. Otherwise, values are read from the mod's INI files and `d3dx_user.ini`.
+
+## Launch a Game
+
+Select a game in the game selector and click the play button to launch it with mods. XXMI games use the launcher chosen on the [XXMI](/others/set-up-xxmi) page. For Neverness to Everness, set the game's launcher path the first time you launch it.

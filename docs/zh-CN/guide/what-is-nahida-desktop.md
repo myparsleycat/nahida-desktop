@@ -1,11 +1,11 @@
 # 什么是 Nahida Desktop
 
-Nahida Desktop 是一个为 3DMigoto 模组打造的管理器，目标是让模组管理更简单、更高效。
+Nahida Desktop 是一款 Windows 模组管理器，适用于使用 XXMI Importer（GIMI、SRMI、WWMI、ZZMI、HIMI 和 EFMI）的游戏以及《异环》。
 
-除了基础的模组管理功能外，它还提供 Nahida Live、GameBanana 集成，以及帮助进行模组转换和安装的多种辅助工具。
+它可以管理模组、通过 XXMI 启动游戏、浏览并下载 GameBanana 模组，并提供用于查看、编辑和修复模组的工具。使用 nahida.live 账号时，还可以使用 Nahida Drive 和备份功能。
 
-Nahida Desktop 是一个开源项目。你可以在[官方仓库](https://github.com/myparsleycat/nahida-desktop)中查看源码或参与贡献，项目基于 [GNU GPLv3](https://github.com/myparsleycat/nahida-desktop/blob/main/LICENSE) 许可证发布。
+源码以 [GNU GPLv3](https://github.com/myparsleycat/nahida-desktop/blob/main/LICENSE) 许可证在 [GitHub](https://github.com/myparsleycat/nahida-desktop) 上公开。
 
 ::: info
-本文档仍在编写中。部分功能可能尚未补充说明，现有内容后续也可能调整。
+本文档仍在编写中，部分功能尚未说明。
 :::

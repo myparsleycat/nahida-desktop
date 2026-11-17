@@ -1,76 +1,49 @@
 # 4001 Fixer
 
-In Genshin Impact, the illegal program detection error `4001` continues to be reported.
-Previously, this could often be handled by applying cloud provider flags and similar workarounds, but recently more cases have appeared where older methods no longer solve the issue.
+The `4001` error (illegal program detected) in Genshin Impact is often resolved by using a DLL built from the `XXMI-Libs-Package` source instead of the default DLL that ships with XXMI.
 
-In Korean communities, many users have confirmed that the `4001` issue can often be resolved by cloning the `XXMI-Libs-Package` repository directly and using a self-built DLL instead of the default DLL provided by XXMI.
-
-The `4001 Fixer` brings the available GIMI `4001` workarounds into one tool. It can build a replacement `d3d11.dll` or apply native PE padding diversification to the DLL.
+The `4001 Fixer` builds a replacement `d3d11.dll` or applies PE padding diversification to the existing DLL.
 
 ## Install Required Build Tools
 
-This feature automates much of the DLL build process, but you still need to install the required build tools yourself.
-
-The build checks out the selected release tag with its Git metadata, which the version header generator requires, so it needs Git. Nahida Desktop downloads a portable Git (MinGit, about 40 MB) on the first build and uses it only from its app data folder, so you do not need to install Git. A Git already installed on the PC is not used.
+The build tools must be installed manually. Git is not required: on the first build, Nahida Desktop downloads a portable Git (MinGit, about 40 MB) and uses it from its app data folder.
 
 1. Download and run [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe).
 2. Under Individual components, select the following items and install them:
-   - **MSVC v143 - VS 2022 C++ x64/x86 build tools (latest)**
+   - **MSVC v143 - VS 2022 C++ x64/x86 build tools (Latest)**
    - **Windows 11 SDK (10.0.22621.0)**
 
 ::: warning
-Installing the build tools requires approximately 4.4 GB of disk space. Make sure you have enough free space before proceeding.
+The build tools require about 4.4 GB of disk space.
 :::
 
-## Configure the XXMI Path
+## Set Up XXMI
 
-To use this feature, you need to configure the XXMI path first. See [Set Up XXMI](/others/set-up-xxmi) for details.
+This feature requires XXMI to be set up first. See [Set Up XXMI](/others/set-up-xxmi).
 
 ## Build the DLL
 
-![Image](/features/mod-tools/dll-builder/page.png)
+The build screen has the following options:
 
-On the build screen, you can configure the following options:
+- **Provider**: The `XXMI-Libs-Package` repository to build. `myparsleycat` builds the `XXMI-Libs-Package-Forked` fork.
+- **Version**: The XXMI library version to build.
+- **Target GIMI Importer**: The GIMI importer that receives the built DLL. Only GIMI importers are listed because the `4001` error occurs only in Genshin Impact.
 
-- **Provider**:
-  Select the provider of the `XXMI-Libs-Package` repository to use for the build. Selecting `myparsleycat` builds the `XXMI-Libs-Package-Forked` fork.
-
-- **Version**:
-  Select the XXMI library version to build.
-
-- **Target Importer**:
-  Select the importer that will use the built DLL.
-  Since the `4001` error currently occurs only in Genshin Impact, choose **GIMI**.
-
-After selecting all options, click **Start Build** to begin building the DLL. If the build fails because Windows SDK/UCRT headers (`crtdbg.h`, `windows.h`, `SDKDDKVer.h`) or the required Windows SDK version cannot be found, installation or repair guidance is shown. If the SDK is already installed, repair that Visual Studio installation or set the **build tools path** to `vcvars64.bat` from a working Build Tools 2022 installation.
+Click **Start Build** to start the build. If it fails because Windows SDK headers (such as `crtdbg.h`) or the required SDK version cannot be found, installation or repair guidance is shown. If the SDK is already installed, repair the installation in Visual Studio Installer, or set **Visual Studio path** to a Visual Studio or Build Tools 2022 install folder or its `vcvars64.bat`.
 
 ## Diversify DLL Padding
 
-The **Diversify DLL Padding** tab backs up the selected GIMI importer's existing `d3d11.dll`, then diversifies safe PE padding bytes without changing the DLL layout.
+The **Diversify DLL Padding** tab diversifies the PE padding bytes of the selected GIMI importer's `d3d11.dll` without changing the DLL layout. It creates a `pepd` backup in the same folder first, and shows a restore action while the diversified DLL is in place.
 
-Before replacing the DLL, Nahida Desktop creates a `pepd` backup file in the same folder. The backup filename embeds a short SHA-256 hash of the diversified DLL, so the tool can detect when the DLL has been replaced after diversification (for example, by the **Start Build** action or by manual edits). If the backup is present and its embedded hash matches the current `d3d11.dll`, the tool treats the DLL padding as already diversified and shows a restore action. Otherwise, the stale backup is removed automatically and the DLL is treated as not yet diversified.
+## System Folders and Administrator Permission
 
-## System folders and administrator permission
-
-If the selected GIMI importer path is under a protected location such as `C:\Program Files\`, Nahida Desktop may not be able to write `d3d11.dll` with normal user permissions.
-
-In that case:
-
-1. The 4001 Fixer shows a warning that Windows may ask for administrator permission.
-2. Build, diversify, and restore still prepare files in a user-writable temp directory when possible.
-3. When the final install into the importer folder needs higher privileges, Windows shows a UAC prompt and the elevated write is performed only for that step.
-4. If the game is currently using `d3d11.dll`, elevation will not help. Close the game first.
-
-If you deny the UAC prompt, the operation fails with an elevation error. Approve the prompt and try again.
+If the GIMI importer is in a protected location such as `C:\Program Files\`, Windows shows a UAC prompt when the DLL is installed. Denying the prompt fails the operation. If the game is using `d3d11.dll`, the file cannot be replaced; close the game first.
 
 ## Unsafe Mode
 
-![Image](/features/mod-tools/dll-builder/unsafe.png)
+Unless **Unsafe Mode** is on, XXMI shows a warning for DLLs that are not officially provided. Applying a DLL with the 4001 Fixer turns on Unsafe Mode for the GIMI importer. If a warning about an invalid `d3d11.dll` signature still appears, turn it on manually:
 
-The XXMI Launcher shows a warning when you use an unverified DLL instead of an officially provided one.
+- **Built-in launcher**: On the XXMI page, open the GIMI importer and turn on `Unsafe mode` on the `Advanced` tab.
+- **XXMI Launcher**: Turn on Unsafe Mode in the XXMI Launcher settings.
 
-When you apply a DLL fix through the 4001 Fixer, **Unsafe Mode** is enabled automatically. However, if automatic activation does not apply correctly, you may still see a warning that the DLL signature is invalid.
-
-If you see a warning that the `d3d11.dll` signature is invalid, enable **Unsafe Mode** manually in the XXMI Launcher settings.
-
-After enabling Unsafe Mode, run the importer again to use the DLL you built.
+Then restart the game. To return to the signed DLL with the built-in launcher, click `Restore official DLL` on the importer's `Packages` tab.

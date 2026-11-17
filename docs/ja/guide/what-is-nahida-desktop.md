@@ -1,11 +1,11 @@
 # Nahida Desktop とは
 
-Nahida Desktop は、3DMigoto ベースの MOD を簡単かつ高速に管理できるように設計された MOD マネージャーです。
+Nahida Desktop は、XXMI Importer（GIMI、SRMI、WWMI、ZZMI、HIMI、EFMI）を使うゲームと異環に対応した、Windows 向けの MOD マネージャーです。
 
-基本的な MOD 管理機能に加えて、Nahida Live、GameBanana 連携、MOD 変換や導入を支援する各種ツールなど、便利な機能を提供します。
+MOD の管理、XXMI を通したゲームの起動、GameBanana の MOD の閲覧とダウンロードに対応し、MOD の表示、編集、修正に使うツールも備えています。nahida.live アカウントがあれば、Nahida Drive とバックアップも利用できます。
 
-Nahida Desktop はオープンソースプロジェクトです。[公式リポジトリ](https://github.com/myparsleycat/nahida-desktop) でソースコードを確認したり、プロジェクトに貢献したりできます。ライセンスは [GNU GPLv3](https://github.com/myparsleycat/nahida-desktop/blob/main/LICENSE) です。
+ソースコードは [GitHub](https://github.com/myparsleycat/nahida-desktop) で [GNU GPLv3](https://github.com/myparsleycat/nahida-desktop/blob/main/LICENSE) ライセンスのもとで公開されています。
 
 ::: info
-このドキュメントは現在も作成中です。一部の機能説明が未記載であったり、今後内容が変更される場合があります。
+このドキュメントは作成中で、一部の機能はまだ記載されていません。
 :::

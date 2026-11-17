@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "Nahida Desktop"
-  text: "面向 3DMigoto 模组的一体化管理器"
-  tagline: "更轻松、更高效地管理基于 3DMigoto 的模组。"
+  text: "面向 3DMigoto (XXMI) 游戏和《异环》的模组管理器"
+  tagline: "在一个应用中管理模组、通过 XXMI 启动游戏，以及编辑和修复模组。"
   image:
     src: "/logo.png"
     alt: Nahida Desktop
@@ -18,9 +18,11 @@ hero:
 
 features:
   - title: 模组管理
-    details: 在一个界面中完成模组启用、禁用、分组和预览设置。
-  - title: GameBanana 集成
+    details: 启用、禁用、整理、搜索和预览模组，并保存模组预设和切换状态预设。
+  - title: XXMI 启动器
+    details: 通过内置启动器或现有的 XXMI Launcher 安装启动游戏。
+  - title: 模组工具
+    details: 查看模型、修复 4001 错误、持久保存切换状态、缩放纹理，以及在游戏更新后修复模组。
+  - title: GameBanana
     details: 无需打开浏览器，直接在应用内浏览并下载 GameBanana 模组。
-  - title: 实用工具
-    details: 提供 DLL 构建、切换状态持久化、静态 GLB 转换等辅助功能。
 ---

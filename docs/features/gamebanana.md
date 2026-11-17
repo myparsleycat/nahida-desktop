@@ -1,41 +1,23 @@
 # GameBanana
 
-Nahida Desktop lets you browse and download GameBanana mods directly inside the app without opening a web browser.
+Browse and download GameBanana mods inside the app without opening a web browser.
 
-This page explains how to browse and download mods from the GameBanana page.
+## Sign In
 
-## Getting Started
+Signing in is optional. Without a GameBanana account, you can browse mods and download mods that do not require sign-in.
 
-![Image](/features/gamebanana/login1.png)
+The sign-in window appears only when needed, such as when you press the sign-in button on the GameBanana page or like a mod.
 
-Signing in is optional. You can browse mods and download mods that do not require sign-in without a GameBanana account.
+::: info
+The sign-in window uses the Microsoft Edge WebView2 Runtime. The installer installs it; the portable executable requires it to be installed already.
+:::
 
-![Image](/features/gamebanana/login2.png)
+## Browse
 
-A GameBanana sign-in window appears only when it is needed, such as when you press the sign-in button in the GameBanana toolbar or like a mod.
+Choose a game and a category, then click a mod to open its detail page. Every game the Mod Manager supports is available, including Neverness to Everness.
 
-You can sign in with whichever method you prefer, such as Username or Email.
+## Download
 
-![Image](/features/index/gamebanana-ko.png)
+The mod detail page lists the mod's files. Click a file and choose a download location to start the download. Downloads appear on the Transfers page.
 
-After sign-in completes successfully, the sign-in window closes automatically and your account appears in the GameBanana toolbar.
-
-## Browsing
-
-![Image](/features/gamebanana/browsing.gif)
-
-You can browse mods on the GameBanana page in the following ways:
-
-- Select the game you want to browse from the upper-left corner.
-- Choose the category you want from the right side.
-- Click a mod card to open its detail page.
-
-## Downloading
-
-![Image](/features/gamebanana/download.gif)
-
-On the download card at the right side of the mod detail page, you can see the list of files for that mod.
-
-Click the file you want to download, choose a download method, and the download will start.
-
-When the download finishes, the mod's thumbnail image is also downloaded automatically and saved in the extracted mod folder.
+When the download finishes, the archive is extracted into the selected mod folder, and the mod's thumbnail is saved there as its preview.

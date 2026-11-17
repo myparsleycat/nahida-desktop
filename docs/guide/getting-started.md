@@ -9,13 +9,13 @@ The latest version is distributed as the following two Windows amd64 executables
 
 See the [GitHub Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) page for release notes and other assets.
 
+`SHA256SUMS` on the release page lists the checksums of both files. Nahida Desktop runs on 64-bit Windows only. GameBanana sign-in uses the Microsoft Edge WebView2 Runtime; the installer installs it, and the portable version requires it to be installed already.
+
 ## Build From Source
 
-Before building, make sure the following tools are installed:
+Building requires the following tools:
 
 - Go (the version specified in `go.mod`)
-- Node.js 22
-- pnpm v11
 - Task v3
 
 ```sh
@@ -25,4 +25,4 @@ go install github.com/go-task/task/v3/cmd/task@v3.53.1
 task build
 ```
 
-`task build` installs and builds the frontend dependencies, generates the Wails bindings, and creates the Windows executable at `bin/nahida-desktop.exe`. You do not need to install the Wails v3 CLI separately because the project runs the version pinned in `go.mod` through `go tool wails3`.
+`task build` creates the Windows executable at `bin/nahida-desktop.exe`.

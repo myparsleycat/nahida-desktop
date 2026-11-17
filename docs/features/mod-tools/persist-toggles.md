@@ -1,28 +1,21 @@
 # Persist Toggles
 
-3DMigoto stores the state of toggle variables marked with `persist` in `d3dx_user.ini`, so their previous states remain even after the game is launched again.
-
-However, those values are stored only in `d3dx_user.ini`, not in the mod's INI file. Because of that, if you run Reload (`F10`) while the mod is disabled, the toggle value can be removed. When the mod is enabled again later, the default value from the mod INI file may be applied instead of the previous state.
+3DMigoto stores the values of toggle variables marked `persist` in `d3dx_user.ini`, not in the mod's INI file. If you run Reload (`F10`) while the mod is disabled, the value can be removed, and the mod's INI default applies when the mod is enabled again.
 
 ## How It Works
 
-When this feature is enabled, Nahida Desktop watches for changes to each importer's `d3dx_user.ini`.
-
-After you change a toggle in-game and `d3dx_user.ini` is updated by Reload (`F10`), Nahida Desktop automatically writes the saved toggle value from `d3dx_user.ini` back into the corresponding mod INI file.
-
-As a result, the previous toggle state can remain intact even after disabling or reloading the mod.
+When this feature is on, Nahida Desktop watches each importer's `d3dx_user.ini` and writes the saved toggle values into the corresponding mod INI files. Toggle states then remain after the mod is disabled or reloaded.
 
 ## Copied Mods and Namespaces
 
-Nahida Desktop finds the INI that declares each persistent variable using its effective namespace, including an explicit `namespace = ...`. Main and help/menu INIs can share a namespace when they declare different variables.
+The INI to write is found by the namespace of the INI that declares each variable, including an explicit `namespace = ...`. If several INIs declare the same variable in the same namespace, that variable is skipped and the conflicting paths are recorded in the log. Disabled mods are not part of this check.
 
-If multiple INIs declare the same variable in the same namespace, Nahida Desktop skips that variable and records the conflicting paths in the persist log. Disabled copies are not part of this check, because 3DMigoto does not load them. Other unambiguous variables continue to save.
+Renaming a folder does not change an explicit namespace. To keep copied mods' toggle states independent, give each copy a distinct namespace and update the references in its help/menu INIs. Nahida Desktop does not change namespaces or references.
 
-Changing a folder name does not change an explicit namespace. To keep copied mods independent in-game, give each copy a distinct namespace and update the corresponding references in its help/menu INIs. Nahida Desktop does not automatically rename these namespaces or rewrite their references.
+## Turn It On
 
-## Before You Use It
+Open `Persist Toggles` on the Tools page and turn on the switch. The log below the switch lists saved values and skipped variables.
 
 ::: warning
-To use this feature, you must configure the XXMI path first.  
-For details, see [Set Up XXMI](/others/set-up-xxmi).
+This feature requires XXMI to be set up first. See [Set Up XXMI](/others/set-up-xxmi).
 :::

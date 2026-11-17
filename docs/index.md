@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "Nahida Desktop"
-  text: "An all-in-one mod manager for 3DMigoto mods"
-  tagline: "Manage 3DMigoto-based mods faster with integrated browsing, tooling, and workflows."
+  text: "A mod manager for 3DMigoto (XXMI) games and Neverness to Everness"
+  tagline: "Manage mods, launch games with XXMI, and edit or fix mods in one app."
   image:
     src: "/logo.png"
     alt: Nahida Desktop
@@ -18,9 +18,11 @@ hero:
 
 features:
   - title: Mod Management
-    details: Enable, disable, organize, and preview mods from a built-in manager.
-  - title: GameBanana Integration
-    details: Browse and download GameBanana mods directly inside the app.
+    details: Enable, disable, organize, search, and preview mods, and save mod and toggle presets.
+  - title: XXMI Launcher
+    details: Launch games through the built-in launcher or an installed XXMI Launcher.
   - title: Mod Tools
-    details: Use helper features such as DLL building, toggle persistence, and static GLB conversion.
+    details: View models, fix the 4001 error, persist toggles, resize textures, and fix mods after game updates.
+  - title: GameBanana
+    details: Browse and download GameBanana mods directly inside the app.
 ---

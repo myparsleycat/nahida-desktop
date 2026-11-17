@@ -1,23 +1,42 @@
 # 機能
 
-このセクションでは、Nahida Desktop で利用できる機能を紹介します。
+左側のナビゲーションレールから開ける各画面を説明します。
 
 ## 転送
 
-![転送](/features/index/transfer-ko.png)
-ダウンロードやアップロードの進行状況を確認し、管理できるページです。転送の一時停止、再開、失敗した転送の再試行に対応しています。
+ダウンロードとアップロードの状態を表示します。転送の一時停止、再開、再試行ができます。同時実行数とダウンロード帯域幅の制限は、設定 → Transfer で設定します。
 
 ## [GameBanana](/ja/features/gamebanana)
 
-![GameBanana](/features/index/gamebanana-ko.png)
-Nahida Desktop は GameBanana API を利用し、Web ブラウザを使わずに GameBanana の MOD を閲覧してダウンロードできます。
-ログインは任意で、いいねなどアカウントが必要な操作でのみ求められます。
+Web ブラウザを開かずに GameBanana の MOD を閲覧してダウンロードできます。ログインは任意で、いいねなどアカウントが必要な操作でのみ必要です。
 
-## MOD マネージャー
+## [MODマネージャー](/ja/features/mod-manager/)
 
-![MOD マネージャー](/features/index/modmanager-ko.png)
-Nahida Desktop の中核機能のひとつです。単純な MOD の有効化と無効化だけでなく、MOD ツールやそのほかの機能と連携して、より良い操作体験を提供します。
+登録したゲームごとに、MOD の有効化、無効化、整理、プレビューを行います。MOD プリセットとトグルプリセットの管理や、選択した MOD に対する MOD ツールの起動もここから行えます。MOD ツールには [モデルビューアー](/ja/features/mod-manager/model-viewer) などがあります。
 
-## MOD ツール
+## Tools
 
-![MOD ツール](/features/index/tools-ko.png)
+複数の MOD を対象とするツールを一覧表示します。
+
+- [4001 Fixer](/ja/features/mod-tools/dll-builder)
+- [トグルの永続保存](/ja/features/mod-tools/persist-toggles)
+- XXMI メニューメーカー
+- Toggle Viewer ジェネレーター
+- Fix Tool Manager
+- 二分探索
+- 体型変更 (ベータ)
+- タッチプロファイル (ベータ)
+
+モデルビューアー、テクスチャ リサイザー、液体噴射ポイントなど、1 つの MOD を対象とするツールは、MODマネージャーで MOD のコンテキストメニューから開きます。
+
+## Nahida Agent
+
+MOD を扱うアプリ内アシスタントです。設定 → Nahida Agent でプロバイダーとモデルを設定すると、ナビゲーションレールに表示されます。
+
+## [XXMI](/ja/others/set-up-xxmi)
+
+ゲームを内蔵ランチャーとインストール済みの XXMI Launcher のどちらで起動するかを選択し、Importer パッケージ、XXMI ライブラリ、ReShade、ゲームごとの設定を管理します。
+
+## ドライブ、共有ドライブ、バックアップ
+
+Nahida Drive へのファイルのアップロードと Nahida Drive からのダウンロード、共有ドライブのリンクを自分のドライブへ取り込む操作、MOD フォルダーの定期バックアップを行います。これらの画面は nahida.live アカウントでログインすると表示されます。

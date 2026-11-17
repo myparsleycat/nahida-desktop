@@ -44,16 +44,12 @@ export default defineConfig({
                         collapsed: true,
                         items: [
                             {
-                                text: "d3d11.dll Builder",
+                                text: "4001 Fixer",
                                 link: "/dll-builder",
                             },
                             {
                                 text: "Persist Toggles",
                                 link: "/persist-toggles",
-                            },
-                            {
-                                text: "Static GLB Converter",
-                                link: "/static-glb-converter",
                             },
                         ],
                     },
@@ -133,16 +129,12 @@ export default defineConfig({
                                 collapsed: true,
                                 items: [
                                     {
-                                        text: "d3d11.dll 빌더",
+                                        text: "4001 Fixer",
                                         link: "/dll-builder",
                                     },
                                     {
                                         text: "토글 영구 저장",
                                         link: "/persist-toggles",
-                                    },
-                                    {
-                                        text: "정적 GLB 변환기",
-                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
@@ -197,7 +189,7 @@ export default defineConfig({
                                 collapsed: true,
                                 items: [
                                     {
-                                        text: "モデルビューア",
+                                        text: "モデルビューアー",
                                         link: "/mod-manager/model-viewer",
                                     },
                                 ],
@@ -208,16 +200,12 @@ export default defineConfig({
                                 collapsed: true,
                                 items: [
                                     {
-                                        text: "d3d11.dll ビルダー",
+                                        text: "4001 Fixer",
                                         link: "/dll-builder",
                                     },
                                     {
-                                        text: "トグル状態の永続保存",
+                                        text: "トグルの永続保存",
                                         link: "/persist-toggles",
-                                    },
-                                    {
-                                        text: "静的 GLB 変換",
-                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
@@ -283,16 +271,12 @@ export default defineConfig({
                                 collapsed: true,
                                 items: [
                                     {
-                                        text: "d3d11.dll 构建器",
+                                        text: "4001 Fixer",
                                         link: "/dll-builder",
                                     },
                                     {
-                                        text: "切换状态持久化",
+                                        text: "持久保存切换状态",
                                         link: "/persist-toggles",
-                                    },
-                                    {
-                                        text: "静态 GLB 转换器",
-                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
