@@ -261,26 +261,28 @@ func loadViewerMotion(
 	for i := range parents {
 		parents[i] = int32(motion.NodeParent(i))
 	}
-	totals := make([]float64, nodes)
-	for _, name := range order {
-		meshes := palettes[name]
-		var positions []float32
-		var blend []uint16
-		for _, mesh := range meshes {
-			positions = append(positions, mesh.positions...)
-			blend = append(blend, mesh.blend...)
+	sources := make([]modelviewer.MotionPalette, len(order))
+	for i, name := range order {
+		for _, mesh := range palettes[name] {
+			sources[i].Positions = append(sources[i].Positions, mesh.positions...)
+			sources[i].Blend = append(sources[i].Blend, mesh.blend...)
 		}
-		palette := motion.MapPalette(positions, blend)
-		for _, mesh := range meshes {
+	}
+	mapped, err := motion.MapPalettes(ctx, sources)
+	if err != nil {
+		return nil, err
+	}
+
+	totals := make([]float64, nodes)
+	for i, name := range order {
+		palette := mapped[i]
+		for _, mesh := range palettes[name] {
 			m.meshes = append(m.meshes, viewerMotionMesh{
 				index: mesh.index, vertices: len(mesh.blend) / 8, blend: packMotionBlend(mesh.blend, palette),
 			})
 			clear(totals)
 			addMotionBoxes(m.boxes, totals, mesh.positions, mesh.blend, palette)
 			m.anchorNodes[mesh.index] = anchorNode(totals, parents)
-		}
-		if err := ctx.Err(); err != nil {
-			return nil, err
 		}
 	}
 

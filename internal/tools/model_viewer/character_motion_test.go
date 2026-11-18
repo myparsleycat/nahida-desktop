@@ -102,7 +102,7 @@ func TestCharacterMotionPose_Evaluate(t *testing.T) {
 	}
 }
 
-func TestCharacterMotion_MapPalette(t *testing.T) {
+func TestCharacterMotion_MapPalettes(t *testing.T) {
 	tests := []struct {
 		name string
 		// xs is the mod X of each vertex group's vertices.
@@ -115,19 +115,158 @@ func TestCharacterMotion_MapPalette(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := mirroredTestMotion(t)
-			var positions []float32
-			var blend []uint16
+			var palette MotionPalette
 			for group, x := range tt.xs {
-				for _, y := range []float32{-0.005, 0.005} {
-					positions = append(positions, x, y, 0)
-					blend = append(blend, uint16(group), 0, 0, 0, 65535, 0, 0, 0)
-				}
+				addTestVertices(
+					&palette,
+					fullTestWeight(uint16(group)),
+					[3]float32{x, -0.005, 0},
+					[3]float32{x, 0.005, 0},
+				)
 			}
-			if got := m.MapPalette(positions, blend); !slices.Equal(got, tt.want) {
-				t.Errorf("MapPalette() = %v, want %v", got, tt.want)
+			got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got[0], tt.want) {
+				t.Errorf("MapPalettes() = %v, want %v", got[0], tt.want)
 			}
 		})
 	}
+}
+
+func TestCharacterMotion_MapPalettesSeam(t *testing.T) {
+	left := [][3]float32{{-0.3, -0.005, 0}, {-0.3, 0.005, 0}}
+	right := [][3]float32{{0.3, -0.005, 0}, {0.3, 0.005, 0}}
+	half := func(a, b uint16) [8]uint16 { return [8]uint16{a, b, 0, 0, 32768, 32767} }
+	tests := []struct {
+		name     string
+		palettes func() []MotionPalette
+		want     [][]int32
+	}{
+		{
+			name: "seam vertices link",
+			palettes: func() []MotionPalette {
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(0), seamTestPoints(0, 3)...)
+				addTestVertices(&b, fullTestWeight(3), seamTestPoints(0, 3)...)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1}, {-1, -1, -1, 1}},
+		},
+		{
+			name: "one touching vertex does not link",
+			palettes: func() []MotionPalette {
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(0), seamTestPoints(0, 1)...)
+				addTestVertices(&b, fullTestWeight(3), seamTestPoints(0, 1)...)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1}, {-1, -1, -1, 2}},
+		},
+		{
+			name: "ambiguous weights do not link",
+			palettes: func() []MotionPalette {
+				// Both groups of a follow the left joint, so any link would move a group of b off the right joint.
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left[0])
+				addTestVertices(&a, fullTestWeight(1), left...)
+				addTestVertices(&a, half(0, 1), seamTestPoints(0, 3)...)
+				addTestVertices(&b, half(3, 4), seamTestPoints(0, 3)...)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1, 1}, {-1, -1, -1, 2, 2}},
+		},
+		{
+			name: "one vertex matching two weights links",
+			palettes: func() []MotionPalette {
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(1), right...)
+				addTestVertices(&a, [8]uint16{0, 1, 0, 0, 45875, 19660}, seamTestPoints(0, 1)...)
+				addTestVertices(&b, [8]uint16{3, 4, 0, 0, 45875, 19660}, seamTestPoints(0, 1)...)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1, 2}, {-1, -1, -1, 1, 2}},
+		},
+		{
+			name: "near duplicates at one point do not link",
+			palettes: func() []MotionPalette {
+				point := [3]float32{0.05005, 0.00005, 0.00005}
+				near := [3]float32{0.05005, 0.00005, 0.000051}
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(0), point, near)
+				addTestVertices(&b, fullTestWeight(3), point, near)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1}, {-1, -1, -1, 2}},
+		},
+		{
+			name: "a negligible extra weight still links",
+			palettes: func() []MotionPalette {
+				var a, b MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(0), seamTestPoints(0, 3)...)
+				addTestVertices(&b, [8]uint16{3, 7, 0, 0, 65534, 1}, seamTestPoints(0, 3)...)
+				return []MotionPalette{a, b}
+			},
+			want: [][]int32{{1}, {-1, -1, -1, 1, -1, -1, -1, 2}},
+		},
+		{
+			name: "a chain through other palettes keeps one palette's groups apart",
+			palettes: func() []MotionPalette {
+				var a, b, c MotionPalette
+				addTestVertices(&a, fullTestWeight(0), left...)
+				addTestVertices(&a, fullTestWeight(0), seamTestPoints(0, 3)...)
+				addTestVertices(&a, fullTestWeight(1), right...)
+				addTestVertices(&a, fullTestWeight(1), seamTestPoints(0.1, 3)...)
+				addTestVertices(&b, fullTestWeight(0), seamTestPoints(0, 3)...)
+				addTestVertices(&b, fullTestWeight(0), seamTestPoints(0.2, 3)...)
+				addTestVertices(&c, fullTestWeight(0), seamTestPoints(0.2, 3)...)
+				addTestVertices(&c, fullTestWeight(0), seamTestPoints(0.1, 3)...)
+				return []MotionPalette{a, b, c}
+			},
+			want: [][]int32{{1, 2}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := mirroredTestMotion(t).MapPalettes(t.Context(), tt.palettes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, want := range tt.want {
+				if !slices.Equal(got[i], want) {
+					t.Errorf("palette %d = %v, want %v", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
+// addTestVertices appends points with one set of bone weights to a palette.
+func addTestVertices(palette *MotionPalette, blend [8]uint16, points ...[3]float32) {
+	for _, point := range points {
+		palette.Positions = append(palette.Positions, point[:]...)
+		palette.Blend = append(palette.Blend, blend[:]...)
+	}
+}
+
+func fullTestWeight(group uint16) [8]uint16 {
+	return [8]uint16{group, 0, 0, 0, 65535}
+}
+
+// seamTestPoints returns n points 1 mm apart from (0.05, y, 0): no reference vertex of mirroredTestMotion lies near
+// them, and its right joint is the nearest.
+func seamTestPoints(y float32, n int) [][3]float32 {
+	points := make([][3]float32, n)
+	for i := range points {
+		points[i] = [3]float32{0.05, y, float32(i) * 0.001}
+	}
+	return points
 }
 
 var viewerMotionTestIdentity = [12]float32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}
