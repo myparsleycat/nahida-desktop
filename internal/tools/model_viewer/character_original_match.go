@@ -77,7 +77,14 @@ const (
 	originalUVShare = 0.25
 	// originalPlaceShare is the share of position-only votes one part must win when UVs match nowhere.
 	originalPlaceShare = 0.6
+	// originalKeptCovered is the share of a hair part that mod meshes matched to no part may cover before they count
+	// as a replacement for it.
+	originalKeptCovered = 0.3
 )
+
+// originalSeparateDraws are the games that draw each mesh of a character with its own draw call, which mods override
+// one by one. A mod that overrides only some of them leaves the others, such as the hair, to the game.
+var originalSeparateDraws = map[string]bool{"SRMI": true, "ZZMI": true, "WWMI": true}
 
 // OriginalMatchMesh is a mod mesh in mod space, with its UVs when it has them.
 type OriginalMatchMesh struct {
@@ -89,6 +96,8 @@ type OriginalMatchMesh struct {
 type OriginalMatch struct {
 	// HeadParts are the face group parts the mod does not replace, which the game draws itself.
 	HeadParts []int
+	// KeptParts are the parts of hair meshes that no mod mesh draws in place of, which the game keeps drawing.
+	KeptParts []int
 	// AbsentParts are the other parts with almost no mod geometry, which the mod may have removed on purpose.
 	AbsentParts []int
 	// Sources gives, for each mod mesh, the part whose material the game binds to it, or -1.
@@ -97,7 +106,8 @@ type OriginalMatch struct {
 
 // MatchCharacterOriginal finds the original parts a mod does not cover and the original material behind each mod
 // mesh. A mesh whose vertices coincide with a part in position and UV belongs to it; otherwise a clear majority of
-// nearby original vertices decides.
+// nearby original vertices decides. In games that draw each mesh apart, a hair mesh no mod mesh belongs to stays
+// drawn by the game.
 func MatchCharacterOriginal(
 	ctx context.Context,
 	original *CharacterOriginal,
@@ -106,45 +116,6 @@ func MatchCharacterOriginal(
 	match := OriginalMatch{Sources: make([]int, len(meshes))}
 	unit := modUnitsPerMetre(original.Game)
 	coverCell, headCell, sameVertex := originalCoverCell*unit, originalHeadCell*unit, float32(originalSameVertex*unit)
-
-	modGrid, headGrid := map[[3]int32][]int32{}, map[[3]int32][]int32{}
-	var modPositions []float32
-	for _, mesh := range meshes {
-		for v := 0; v+2 < len(mesh.Positions); v += 3 {
-			at, index := mesh.Positions[v:v+3], int32(len(modPositions)/3)
-			cell := motionCell(at[0], at[1], at[2], coverCell)
-			modGrid[cell] = append(modGrid[cell], index)
-			cell = motionCell(at[0], at[1], at[2], headCell)
-			headGrid[cell] = append(headGrid[cell], index)
-			modPositions = append(modPositions, at...)
-		}
-	}
-	for p, part := range original.Parts {
-		if err := ctx.Err(); err != nil {
-			return OriginalMatch{}, err
-		}
-		if part.Role == OriginalRoleOverlay {
-			continue
-		}
-		count := len(part.Positions) / 3
-		grid, radius := modGrid, float32(coverCell)
-		if IsHeadRole(part.Role) {
-			grid, radius = headGrid, float32(headCell)
-		}
-		covered := 0
-		for v := range count {
-			if within(grid, modPositions, part.Positions[v*3:v*3+3], radius) {
-				covered++
-			}
-		}
-		share := float64(covered) / float64(max(count, 1))
-		switch {
-		case IsHeadRole(part.Role) && share < originalHeadCovered:
-			match.HeadParts = append(match.HeadParts, p)
-		case !IsHeadRole(part.Role) && share < originalPartAbsent:
-			match.AbsentParts = append(match.AbsentParts, p)
-		}
-	}
 
 	// Endfield mod buffers can lay out UVs differently from Warfarin's model, so a Warfarin texture fits only the
 	// meshes whose UVs agree with it.
@@ -222,7 +193,82 @@ func MatchCharacterOriginal(
 			match.Sources[m] = best
 		}
 	}
+
+	modGrid, headGrid := map[[3]int32][]int32{}, map[[3]int32][]int32{}
+	var modPositions []float32
+	for _, mesh := range meshes {
+		for v := 0; v+2 < len(mesh.Positions); v += 3 {
+			at, index := mesh.Positions[v:v+3], int32(len(modPositions)/3)
+			cell := motionCell(at[0], at[1], at[2], coverCell)
+			modGrid[cell] = append(modGrid[cell], index)
+			cell = motionCell(at[0], at[1], at[2], headCell)
+			headGrid[cell] = append(headGrid[cell], index)
+			modPositions = append(modPositions, at...)
+		}
+	}
+
+	// A hair mesh counts as left to the game unless a mod mesh is matched to it or mod meshes matched to no part
+	// cover it.
+	drawn, hair := map[string]bool{}, map[string]bool{}
+	unmatchedGrid := map[[3]int32][]int32{}
+	var unmatched []float32
+	if originalSeparateDraws[original.Game] {
+		for m, source := range match.Sources {
+			if source >= 0 {
+				drawn[original.Parts[source].Mesh] = true
+				continue
+			}
+			mesh := meshes[m].Positions
+			for v := 0; v+2 < len(mesh); v += 3 {
+				at := mesh[v : v+3]
+				cell := motionCell(at[0], at[1], at[2], coverCell)
+				unmatchedGrid[cell] = append(unmatchedGrid[cell], int32(len(unmatched)/3))
+				unmatched = append(unmatched, at...)
+			}
+		}
+		for _, part := range original.Parts {
+			if part.Role == OriginalRoleHair {
+				hair[part.Mesh] = true
+			}
+		}
+	}
+
+	for p, part := range original.Parts {
+		if err := ctx.Err(); err != nil {
+			return OriginalMatch{}, err
+		}
+		if part.Role == OriginalRoleOverlay {
+			continue
+		}
+		if IsHeadRole(part.Role) {
+			if coveredShare(headGrid, modPositions, part.Positions, float32(headCell)) < originalHeadCovered {
+				match.HeadParts = append(match.HeadParts, p)
+			}
+			continue
+		}
+		if hair[part.Mesh] && !drawn[part.Mesh] &&
+			coveredShare(unmatchedGrid, unmatched, part.Positions, float32(coverCell)) < originalKeptCovered {
+			match.KeptParts = append(match.KeptParts, p)
+			continue
+		}
+		if coveredShare(modGrid, modPositions, part.Positions, float32(coverCell)) < originalPartAbsent {
+			match.AbsentParts = append(match.AbsentParts, p)
+		}
+	}
 	return match, nil
+}
+
+// coveredShare is the share of the vertices at that lie within radius of a vertex of positions, which grid indexes
+// in cells of radius.
+func coveredShare(grid map[[3]int32][]int32, positions, at []float32, radius float32) float64 {
+	count := len(at) / 3
+	covered := 0
+	for v := range count {
+		if within(grid, positions, at[v*3:v*3+3], radius) {
+			covered++
+		}
+	}
+	return float64(covered) / float64(max(count, 1))
 }
 
 func within(grid map[[3]int32][]int32, positions, at []float32, radius float32) bool {

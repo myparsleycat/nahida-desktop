@@ -36,8 +36,8 @@ var fillRoles = [fillSlots]string{
 // viewerTextureFill holds the keys of the original textures a mesh takes in the slots its mod leaves empty.
 type viewerTextureFill [fillSlots]string
 
-// viewerOriginal is the character's original model shown with a mod: the face parts the mod leaves to the game,
-// the parts the mod lacks that the user turns on, and the original textures behind the slots the mod leaves
+// viewerOriginal is the character's original model shown with a mod: the face and hair parts the mod leaves to the
+// game, the parts the mod lacks that the user turns on, and the original textures behind the slots the mod leaves
 // empty. It belongs to the UI thread; its GPU resources belong to the device generation it was made on.
 type viewerOriginal struct {
 	scene      *viewerScene
@@ -69,8 +69,10 @@ type viewerOriginal struct {
 // viewerOriginalPart is a part of the original model that the viewer may draw.
 type viewerOriginalPart struct {
 	index int
-	// head marks a face part the mod does not replace, shown by default; the others are parts the mod lacks.
+	// head marks a face part the mod does not replace, always shown. kept marks a hair part the game keeps drawing,
+	// shown until the user hides it. The others are parts the mod lacks, hidden until the user shows them.
 	head  bool
+	kept  bool
 	shown bool
 	label string
 	mesh  *viewerMesh
@@ -230,8 +232,8 @@ type viewerOriginalSource struct {
 }
 
 // loadOriginal builds the original model of key on a background goroutine. previous is the scene's stale original,
-// or nil: it keeps drawing until the build replaces it, lends its model data, and the parts the user showed stay
-// shown.
+// or nil: it keeps drawing until the build replaces it, lends its model data, and the parts the user showed or hid
+// stay so.
 func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, previous *viewerOriginal) {
 	scene := key.scene
 	ctx, cancel := context.WithCancel(v.ctx)
@@ -240,11 +242,11 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, pr
 	scene.originalStale = false
 	v.revision++
 
-	var shown []int
+	toggled := map[int]bool{}
 	if previous != nil {
 		for _, part := range previous.parts {
-			if !part.head && part.shown {
-				shown = append(shown, part.index)
+			if !part.head && part.shown != part.kept {
+				toggled[part.index] = part.shown
 			}
 		}
 	}
@@ -308,7 +310,7 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, pr
 			}
 			scene.original = o
 			for _, part := range o.parts {
-				if !part.head && slices.Contains(shown, part.index) {
+				if shown, ok := toggled[part.index]; ok && !part.head && shown != part.shown {
 					v.toggleOriginalPart(o, part)
 				}
 			}
@@ -435,12 +437,13 @@ func buildViewerOriginal(
 		}
 	}
 
-	add := func(index int, head bool) {
+	add := func(index int, head, kept bool) {
 		part := data.Parts[index]
 		mesh := originalViewerMesh(part, data.Game)
+		shown := head || kept
 		into := requests
 		var pending map[string]originalTextureRequest
-		if !head {
+		if !shown {
 			pending = map[string]originalTextureRequest{}
 			into = pending
 		}
@@ -461,14 +464,18 @@ func buildViewerOriginal(
 			pending = nil
 		}
 		o.parts = append(o.parts, &viewerOriginalPart{
-			index: index, head: head, shown: head, label: originalPartLabel(part), mesh: mesh, pending: pending,
+			index: index, head: head, kept: kept, shown: shown, label: originalPartLabel(part), mesh: mesh,
+			pending: pending,
 		})
 	}
 	for _, index := range match.HeadParts {
-		add(index, true)
+		add(index, true, false)
+	}
+	for _, index := range match.KeptParts {
+		add(index, false, true)
 	}
 	for _, index := range match.AbsentParts {
-		add(index, false)
+		add(index, false, false)
 	}
 	// Absent parts load their textures apart, so each pending request carries the flags of every part sharing it.
 	shared := map[string]originalTextureRequest{}
@@ -657,8 +664,8 @@ func loadOriginalTextures(
 	return textures, generations, failed, nil
 }
 
-// toggleOriginalPart shows or hides a part the mod lacks, loading the textures only it uses when it shows and they
-// are neither loaded nor loading.
+// toggleOriginalPart shows or hides a part other than a face part, loading the textures only it uses when it shows
+// and they are neither loaded nor loading.
 func (v *ModelViewer) toggleOriginalPart(o *viewerOriginal, part *viewerOriginalPart) {
 	part.shown = !part.shown
 	v.revision++

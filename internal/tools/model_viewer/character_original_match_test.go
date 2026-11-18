@@ -68,3 +68,59 @@ func TestMatchCharacterOriginal(t *testing.T) {
 		t.Errorf("EFMI Sources = %v, want %v without the remodelled UVs", match.Sources, want)
 	}
 }
+
+func TestMatchCharacterOriginalKeptHair(t *testing.T) {
+	body := originalTestPart(OriginalRoleBody, 0, 0.2)
+	body.Mesh = "Body"
+	hair := originalTestPart(OriginalRoleHair, 1, 0.4)
+	hair.Mesh = "Hair"
+	near := func(part CharacterOriginalPart, uv float32) OriginalMatchMesh {
+		var mesh OriginalMatchMesh
+		for v := range len(part.Positions) / 3 {
+			mesh.Positions = append(mesh.Positions, part.Positions[v*3], part.Positions[v*3+1], 0.01)
+			mesh.UVs = append(mesh.UVs, uv, part.UVs[v*2+1])
+		}
+		return mesh
+	}
+	join := func(a, b OriginalMatchMesh) OriginalMatchMesh {
+		return OriginalMatchMesh{
+			Positions: slices.Concat(a.Positions, b.Positions),
+			UVs:       slices.Concat(a.UVs, b.UVs),
+		}
+	}
+	// The hood lies within the cover distance of the hair but belongs to the body mesh, as in a mod that replaces
+	// only the body draw.
+	hooded := join(OriginalMatchMesh{Positions: body.Positions, UVs: body.UVs}, near(hair, 0.9))
+
+	tests := []struct {
+		name   string
+		game   string
+		meshes []OriginalMatchMesh
+		want   []int
+	}{
+		{name: "body only", game: "SRMI", meshes: []OriginalMatchMesh{hooded}, want: []int{1}},
+		{
+			name:   "hair replaced",
+			game:   "SRMI",
+			meshes: []OriginalMatchMesh{hooded, {Positions: hair.Positions, UVs: hair.UVs}},
+		},
+		{
+			name:   "unmatched mesh over the hair",
+			game:   "SRMI",
+			meshes: []OriginalMatchMesh{hooded, join(near(hair, 0.9), near(body, 0.9))},
+		},
+		{name: "one draw for the whole body", game: "GIMI", meshes: []OriginalMatchMesh{hooded}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &CharacterOriginal{Game: tt.game, Parts: []CharacterOriginalPart{body, hair}}
+			match, err := MatchCharacterOriginal(t.Context(), original, tt.meshes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(match.KeptParts, tt.want) {
+				t.Errorf("KeptParts = %v, want %v (Sources %v)", match.KeptParts, tt.want, match.Sources)
+			}
+		})
+	}
+}
