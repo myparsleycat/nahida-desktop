@@ -102,7 +102,9 @@ type modelViewerMeshPayload struct {
 	ShapePositions    [][]float32
 	ShapeLowPositions [][]float32
 	SourceIndices     []uint32
-	PositionSources   []modelViewerDirectPositionAssignment
+	// Blend holds four bone groups and four UNORM16 weights per vertex, or nil.
+	Blend           []uint16
+	PositionSources []modelViewerDirectPositionAssignment
 	// Frames holds the geometry of each position variant of a folded frame animation, in variant order.
 	Frames []modelViewerFrameGeometry
 }
@@ -402,6 +404,18 @@ func writeModelViewerPayload(
 			if err != nil {
 				return err
 			}
+		}
+		if len(payload.Blend) == mesh.VertexCount*8 && mesh.VertexCount > 0 {
+			mesh.BlendURL, err = write(
+				".blend",
+				len(payload.Blend)*2,
+				func(w io.Writer) error { return writeModelViewerUint16s(w, payload.Blend) },
+			)
+			if err != nil {
+				return err
+			}
+		} else {
+			mesh.BlendPalette = ""
 		}
 		if len(payload.ShapePositions) != len(mesh.ShapeTargets) ||
 			len(payload.ShapeLowPositions) != len(mesh.ShapeTargets) {

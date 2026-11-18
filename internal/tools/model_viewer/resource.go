@@ -35,6 +35,8 @@ type modelViewerBufferGroup struct {
 	VB          []byte
 	Stride      int
 	SourceFiles []string
+	// BlendStride is the stride of SourceFiles[1] when the group interleaves position, blend and texcoord files.
+	BlendStride int
 }
 
 type modelViewerTypedResource struct {
@@ -223,7 +225,10 @@ func collectModelViewerMihoyoGroups(
 		}
 		groups = append(
 			groups,
-			modelViewerBufferGroup{Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles},
+			modelViewerBufferGroup{
+				Key: key, VBFilename: key + ".vb", VB: vb, Stride: stride, SourceFiles: sourceFiles,
+				BlendStride: entry.blend.Stride,
+			},
 		)
 	}
 	return groups, nil

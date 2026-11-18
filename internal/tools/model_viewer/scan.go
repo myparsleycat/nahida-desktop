@@ -746,6 +746,11 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				carrierRows: record.draw.BaseVertex - vertexBase,
 			},
 		}
+		if source.kind == modelViewerDrawVertexMihoyo && source.positionData == nil {
+			mesh.blend = resolveModelViewerBlendSource(
+				modDir, draw.state.vb2, position, source.carrierStart, resourceMap, resources, cache,
+			)
+		}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		appendModelViewerSlotTextureCandidates(&mesh, record.slotTextures, resourceMap)
 		geometryIndexes[geometryKey] = len(output)

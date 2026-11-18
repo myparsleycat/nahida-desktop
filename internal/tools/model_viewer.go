@@ -77,3 +77,10 @@ func (t *Tools) CleanupStaleModelViewerDirs(ctx context.Context) error {
 func (t *Tools) shutdownModelViewer() error {
 	return t.modelViewer.Shutdown()
 }
+
+type CharacterMotion = modelviewer.CharacterMotion
+
+// LoadCharacterMotion returns the game motions of the character id of game, downloading them when needed.
+func (t *Tools) LoadCharacterMotion(ctx context.Context, game, id string) (*CharacterMotion, error) {
+	return t.modelViewer.LoadCharacterMotion(ctx, game, id)
+}

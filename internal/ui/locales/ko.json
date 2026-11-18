@@ -1724,7 +1724,8 @@
           "environment_studio": "스튜디오",
           "environment_soft": "부드러움",
           "exposure": "노출",
-          "toon_shadows": "툰 그림자"
+          "toon_shadows": "툰 그림자",
+          "character_motion": "캐릭터 모션"
         },
         "dialog": {
           "save_preset": {
@@ -1751,7 +1752,9 @@
           "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
           "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다.",
           "capture_not_ready": "모델을 불러오는 중입니다.",
-          "load_error": "모델을 불러오지 못했습니다."
+          "load_error": "모델을 불러오지 못했습니다.",
+          "motion_error": "캐릭터 모션을 불러오지 못했습니다.",
+          "motion_no_blend": "모드에 모션을 적용할 본 가중치가 없습니다."
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",

@@ -134,9 +134,17 @@ func (v *ModelViewer) menuBar() *fairy.El {
 					OnClick: func() { v.rotate(rotation.delta) },
 				})
 			}
-			return append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+			items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
 				Label: T("page.tools.model_viewer.menu.reset"), Icon: lucide.RotateCcw, OnClick: v.resetView,
 			})
+			if v.characterMotionAvailable() {
+				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+					Label: T("page.tools.model_viewer.menu.character_motion"), Checkbox: true,
+					Checked: v.activeMotion() != nil, Loading: v.motionCancel != nil,
+					OnClick: v.toggleCharacterMotion,
+				})
+			}
+			return items
 		}},
 		{Label: T("page.tools.model_viewer.menu.texture"), Items: func() []kit.MenuItem {
 			return []kit.MenuItem{{

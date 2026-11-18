@@ -60,6 +60,10 @@ type ModelViewerMeshTransport struct {
 	Form             string `json:"form,omitempty"`
 	GeometryURL      string `json:"geometryUrl"`
 	SourceIndicesURL string `json:"sourceIndicesUrl,omitempty"`
+	// BlendURL holds four bone groups then four UNORM16 weights per vertex, as uint16; BlendPalette names the
+	// bone palette the groups index, shared by meshes reading the same blend buffer.
+	BlendURL     string `json:"blendUrl,omitempty"`
+	BlendPalette string `json:"blendPalette,omitempty"`
 	// VertexCount and IndexCount size the geometry, so a viewer can plan a mesh before it reads it.
 	VertexCount         int                          `json:"vertexCount"`
 	IndexCount          int                          `json:"indexCount"`
@@ -155,15 +159,17 @@ type ModelViewerAnimationFrame struct {
 }
 
 type ModelViewerAnimationClip struct {
-	ID          string                      `json:"id"`
-	Label       string                      `json:"label"`
-	DeformerID  string                      `json:"deformerId,omitempty"`
-	VariableIDs []string                    `json:"variableIds"`
-	FPS         float64                     `json:"fps"`
-	FrameStart  int                         `json:"frameStart"`
-	FrameEnd    int                         `json:"frameEnd"`
-	Loop        bool                        `json:"loop"`
-	Frames      []ModelViewerAnimationFrame `json:"frames"`
+	ID          string   `json:"id"`
+	Label       string   `json:"label"`
+	DeformerID  string   `json:"deformerId,omitempty"`
+	VariableIDs []string `json:"variableIds"`
+	FPS         float64  `json:"fps"`
+	FrameStart  int      `json:"frameStart"`
+	FrameEnd    int      `json:"frameEnd"`
+	Loop        bool     `json:"loop"`
+	// LoopStart is the frame a looping clip continues from after its last frame.
+	LoopStart int                         `json:"loopStart,omitempty"`
+	Frames    []ModelViewerAnimationFrame `json:"frames"`
 }
 
 // ModelViewerComputeSourceEncoding names the record layout the backend decoded

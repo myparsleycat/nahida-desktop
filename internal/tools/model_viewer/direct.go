@@ -25,10 +25,12 @@ type modelViewerDirectMesh struct {
 	id, component, sectionName, ibName string
 	// commandForm comes from an authored _<form>Sub draw wrapper. It becomes
 	// selectable only when the INI draws at least two distinct named forms.
-	commandForm            string
-	form                   string
-	positionFile           string
-	geometry               *modelViewerGeometry
+	commandForm  string
+	form         string
+	positionFile string
+	geometry     *modelViewerGeometry
+	// blend is the buffer holding the bone weights of the position rows, or nil.
+	blend                  *modelViewerBlendSource
 	conditions             ModelViewerDNF
 	textureAssignments     []modelViewerDirectTextureAssignment
 	positionAssignments    []modelViewerDirectPositionAssignment
@@ -409,6 +411,15 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			geometry:     geometry,
 			conditions:   conditions,
 		}
+		if group := task.entry.group; len(group.SourceFiles) == 3 && modelViewerBlendStride(group.BlendStride) {
+			if path, ok := cache.modBufferPath(modDir, group.SourceFiles[1]); ok {
+				mesh.blend = &modelViewerBlendSource{
+					path:    path,
+					palette: strings.ToLower(filepath.ToSlash(group.SourceFiles[1])) + "#0",
+					stride:  group.BlendStride,
+				}
+			}
+		}
 		// A draw without an override section has no INI line to hook, and a
 		// dropped index would shift mesh faces off the draw's triangles.
 		if task.draw.section != "" && len(active) == task.draw.draw.IndexCount {
@@ -772,6 +783,10 @@ func buildModelViewerDirectMeshPayload(
 		Colors:        modelViewerColorBytes(mesh.geometry.Color0),
 		Indices:       mesh.geometry.Indices,
 		SourceIndices: mesh.geometry.SourceIndices,
+	}
+	if blend := readModelViewerMeshBlend(cache, mesh.blend, mesh.geometry.SourceIndices,
+		len(mesh.geometry.Position)/3); blend != nil {
+		payload.Blend, item.BlendPalette = blend, mesh.blend.palette
 	}
 	if len(mesh.positionAssignments) > 0 {
 		for _, assignment := range mesh.positionAssignments {

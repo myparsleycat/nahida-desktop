@@ -1724,7 +1724,8 @@
           "environment_studio": "スタジオ",
           "environment_soft": "ソフト",
           "exposure": "露出",
-          "toon_shadows": "トゥーンシャドウ"
+          "toon_shadows": "トゥーンシャドウ",
+          "character_motion": "キャラクターモーション"
         },
         "dialog": {
           "save_preset": {
@@ -1751,7 +1752,9 @@
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
           "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",
           "capture_not_ready": "モデルを読み込み中です",
-          "load_error": "モデルの読み込みに失敗しました"
+          "load_error": "モデルの読み込みに失敗しました",
+          "motion_error": "キャラクターモーションの読み込みに失敗しました",
+          "motion_no_blend": "MOD にモーションを適用するボーンウェイトがありません"
         },
         "rotate_actions": {
           "Left 90°": "左に 90°",

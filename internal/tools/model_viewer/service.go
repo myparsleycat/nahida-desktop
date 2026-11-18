@@ -14,12 +14,20 @@ type Options struct {
 	Log                    *infra.Log
 	Protocol               *infra.Protocol
 	FindModelViewerPreview func(string) *string
+	// Download fetches character motion files.
+	Download *infra.Download
 }
 
 type Service struct {
 	log                    *infra.Log
 	protocol               *infra.Protocol
 	findModelViewerPreview func(string) *string
+	download               *infra.Download
+	// motionFiles admits one character motion download or cache prune at a time, so two viewers never write the
+	// same file and a prune never removes a download in progress.
+	motionFiles chan struct{}
+	// motionPrune clears the motion cache of files the index no longer names, once per process.
+	motionPrune sync.Once
 	// appData holds the mesh spool; without it, viewer sessions keep mesh buffers in memory.
 	appData             *appdata.Store
 	modelViewerMu       sync.Mutex
@@ -43,6 +51,8 @@ func NewWithOptions(opts Options) *Service {
 		log:                    opts.Log,
 		protocol:               opts.Protocol,
 		findModelViewerPreview: opts.FindModelViewerPreview,
+		download:               opts.Download,
+		motionFiles:            make(chan struct{}, 1),
 		modelViewerSessions:    make(map[string]*modelViewerSession),
 		modelViewerLoads:       make(map[*modelViewerLoad]struct{}),
 		freeOSMemory:           debug.FreeOSMemory,

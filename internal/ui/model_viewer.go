@@ -59,7 +59,10 @@ type ModelViewer struct {
 	form         string
 	anim         viewerAnimation
 	// compute is the deformer of the clip being played, or nil for a clip without one.
-	compute      *viewerCompute
+	compute *viewerCompute
+	// charMotion plays the character's game motions; motionCancel stops them loading.
+	charMotion   *viewerMotion
+	motionCancel context.CancelFunc
 	ineffective  viewerIneffective
 	overlayMenus viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
@@ -230,6 +233,7 @@ func (v *ModelViewer) Close() {
 
 func (v *ModelViewer) releaseScene() {
 	v.stopCompute(false)
+	v.stopMotion(false)
 	scene := v.scene
 	v.scene = nil
 	if scene == nil {
@@ -524,6 +528,7 @@ func (v *ModelViewer) loadMesh(i int) {
 			scene.gpu.meshes[i] = buffers
 			mesh.fill(decoded)
 			v.dropCPU(mesh)
+			v.motionMeshLoaded(i)
 			unloaded := scene.storeMesh(i)
 			if len(unloaded) > 0 {
 				_ = fairy.UseDevice(func(fairy.GPU) error {

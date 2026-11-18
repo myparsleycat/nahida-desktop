@@ -58,10 +58,7 @@ const (
 
 // animationClip returns the clip being played, or nil for a model without animations.
 func (v *ModelViewer) animationClip() *modelviewer.ModelViewerAnimationClip {
-	if v.scene == nil {
-		return nil
-	}
-	clips := v.scene.transport.Animations
+	clips := v.animationClips()
 	for i := range clips {
 		if clips[i].ID == v.anim.clipID {
 			return &clips[i]
@@ -88,15 +85,15 @@ func (v *ModelViewer) animationFPS(clip *modelviewer.ModelViewerAnimationClip) f
 	return normalizeAnimationFPS(clip.FPS)
 }
 
-// advanceAnimationFrame steps a clip of frameCount frames from current by the whole frames that fit in
-// elapsed. It returns the time those frames took, and whether a clip that does not loop reached its end.
+// advanceAnimationFrame steps a clip from current by the whole frames that fit in elapsed. It returns the time
+// those frames took, and whether a clip that does not loop reached its end.
 func advanceAnimationFrame(
 	current int,
 	elapsed time.Duration,
 	fps float64,
-	frameCount int,
-	loop bool,
+	clip *modelviewer.ModelViewerAnimationClip,
 ) (frame int, consumed time.Duration, complete bool) {
+	frameCount := len(clip.Frames)
 	if frameCount <= 1 {
 		return 0, 0, true
 	}
@@ -106,11 +103,21 @@ func advanceAnimationFrame(
 		return current, 0, false
 	}
 	consumed = time.Duration(steps) * frameDuration
-	if loop {
-		return (current + steps) % frameCount, consumed, false
+	if clip.Loop {
+		return loopAnimationFrame(clip, current+steps), consumed, false
 	}
 	frame = min(current+steps, frameCount-1)
 	return frame, consumed, frame == frameCount-1
+}
+
+// loopAnimationFrame wraps a frame index past the end of a looping clip back into its loop section.
+func loopAnimationFrame(clip *modelviewer.ModelViewerAnimationClip, index int) int {
+	frameCount := len(clip.Frames)
+	if index < frameCount {
+		return index
+	}
+	start := min(max(clip.LoopStart, 0), frameCount-1)
+	return start + (index-start)%(frameCount-start)
 }
 
 // startAnimation selects a clip of a newly installed scene, or of the user's choice, and plays it from its
@@ -121,6 +128,7 @@ func (v *ModelViewer) startAnimation(clipID string) {
 	clip := v.animationClip()
 	v.anim.playing = clip != nil && len(clip.Frames) > 1
 	v.syncCompute()
+	v.syncMotion()
 	v.syncSchedule()
 	v.setAnimationFrame(0)
 	v.runAnimationClock()
@@ -208,9 +216,7 @@ func (v *ModelViewer) animationTick(clock uint64) {
 		}
 		v.anim.warmSince, v.anim.applied = nil, time.Now()
 	}
-	frame, consumed, complete := advanceAnimationFrame(
-		v.anim.frame, time.Since(v.anim.applied), fps, len(clip.Frames), clip.Loop,
-	)
+	frame, consumed, complete := advanceAnimationFrame(v.anim.frame, time.Since(v.anim.applied), fps, clip)
 	v.anim.applied = v.anim.applied.Add(consumed)
 	if frame != v.anim.frame {
 		v.setAnimationFrame(frame)
@@ -240,6 +246,7 @@ func (v *ModelViewer) setAnimationFrame(index int) {
 		v.scene.frame = v.anim.frame
 	}
 	v.requestCompute(clip, v.anim.frame)
+	v.requestMotion(clip, v.anim.frame)
 	frame := clip.Frames[v.anim.frame]
 	values := frame.Values
 	if v.anim.waves != nil {
@@ -269,7 +276,7 @@ func (v *ModelViewer) setAnimationFrame(index int) {
 // of them, paused or playing. A wave phase depends on the frames before it, so a clip with waves has none.
 func (v *ModelViewer) upcomingAnimationStates(form string) [][]modelviewer.ViewerMeshState {
 	clip := v.animationClip()
-	if clip == nil || len(clip.Frames) < 2 || v.anim.waves != nil {
+	if clip == nil || len(clip.Frames) < 2 || v.anim.waves != nil || isMotionClip(clip) {
 		return nil
 	}
 	var upcoming [][]modelviewer.ViewerMeshState
@@ -279,7 +286,7 @@ func (v *ModelViewer) upcomingAnimationStates(form string) [][]modelviewer.Viewe
 			if !clip.Loop {
 				break
 			}
-			index %= len(clip.Frames)
+			index = loopAnimationFrame(clip, index)
 		}
 		state := maps.Clone(v.resolved)
 		maps.Copy(state, clip.Frames[index].Values)
@@ -303,7 +310,7 @@ func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 	if clip == nil {
 		return nil
 	}
-	clips := v.scene.transport.Animations
+	clips := v.animationClips()
 	last := max(len(clip.Frames)-1, 0)
 	current := clip.FrameStart
 	if v.anim.frame < len(clip.Frames) {

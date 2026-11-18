@@ -1724,7 +1724,8 @@
           "environment_studio": "工作室",
           "environment_soft": "柔和",
           "exposure": "曝光",
-          "toon_shadows": "卡通阴影"
+          "toon_shadows": "卡通阴影",
+          "character_motion": "角色动作"
         },
         "dialog": {
           "save_preset": {
@@ -1751,7 +1752,9 @@
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",
           "capture_not_ready": "模型仍在加载中",
-          "load_error": "无法加载模型"
+          "load_error": "无法加载模型",
+          "motion_error": "无法加载角色动作",
+          "motion_no_blend": "模组没有可用于动作的骨骼权重"
         },
         "rotate_actions": {
           "Left 90°": "向左旋转 90°",

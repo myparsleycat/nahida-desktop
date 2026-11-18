@@ -23,10 +23,12 @@ const (
 	DrivePreviewDir  = "drive-preview"
 	// ModelViewerSpoolDir holds the mesh buffers of open model viewer sessions.
 	ModelViewerSpoolDir = "model-viewer-spool"
-	AgentDir            = "agent"
-	AgentSkillsDir      = AgentDir + string(filepath.Separator) + "skills"
-	ElevatedDir         = "elevated"
-	WebViewDir          = "webview"
+	// CharacterMotionDir caches the character motion files the model viewer plays.
+	CharacterMotionDir = "character-motion"
+	AgentDir           = "agent"
+	AgentSkillsDir     = AgentDir + string(filepath.Separator) + "skills"
+	ElevatedDir        = "elevated"
+	WebViewDir         = "webview"
 	// NotificationIcon is the image Windows shows on the app's toast notifications.
 	NotificationIcon = "notification-icon.png"
 )
