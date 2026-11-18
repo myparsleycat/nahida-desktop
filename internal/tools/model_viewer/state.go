@@ -63,7 +63,7 @@ func configureModelViewerState(
 		}
 	}
 	normalizeModelViewerTransportConditions(transport, tracked)
-	gating := modelViewerDirectGatingVariables(transport.Meshes, stateRules)
+	gating := modelViewerDirectGatingVariables(transport)
 	animationVars := make(map[string]bool)
 	for _, clip := range animations {
 		for _, id := range clip.VariableIDs {

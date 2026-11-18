@@ -47,6 +47,11 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			remapDNF(mesh.PositionVariants[variantIndex].Conditions)
 		}
 	}
+	for _, face := range transport.FaceTextures {
+		for variantIndex := range face.Variants {
+			remapDNF(face.Variants[variantIndex].Conditions)
+		}
+	}
 	for variableIndex := range transport.Variables {
 		variable := &transport.Variables[variableIndex]
 		oldID := variable.ID

@@ -1193,7 +1193,7 @@ func readModelViewerOverlayImage(ctx context.Context, path string) ([]byte, erro
 // modelViewerOverlayMenuOnlyVariables returns the listed variables nothing in the
 // model reads, so that a menu may claim them as its own state.
 func modelViewerOverlayMenuOnlyVariables(transport *ModelViewerTransport) map[string]bool {
-	used := modelViewerDirectGatingVariables(transport.Meshes, nil)
+	used := modelViewerDirectGatingVariables(transport)
 	mark := func(id string) { used[modelViewerNormalizeKey(id)] = true }
 	for _, mesh := range transport.Meshes {
 		for _, target := range mesh.ShapeTargets {

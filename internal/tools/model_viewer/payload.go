@@ -71,6 +71,9 @@ func prepareModelViewerPayload(
 				prepared.drawSources[item.ID] = source
 			}
 		}
+		if face, ok := buildModelViewerFaceTexture(work.form, work.face, textures); ok {
+			transport.FaceTextures = append(transport.FaceTextures, face)
+		}
 	}
 	linkModelViewerDrawSources(transport, prepared.drawSources)
 	return meshPayloads, texturePayloads, textureStats, ctx.Err()

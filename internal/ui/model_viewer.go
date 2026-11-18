@@ -462,13 +462,14 @@ func (v *ModelViewer) present() {
 		return
 	}
 	form := v.shownForm()
-	states := v.toggleStates
+	resolved, states := v.resolved, v.toggleStates
 	if len(v.anim.values) > 0 {
 		state := maps.Clone(v.resolved)
 		maps.Copy(state, v.anim.values)
-		_, states = modelviewer.EvaluateViewerState(scene.transport, state, form)
+		resolved, states = modelviewer.EvaluateViewerState(scene.transport, state, form)
 	}
 	v.revision++
+	scene.faceTexture = modelviewer.ViewerFaceTexture(scene.transport, resolved, form)
 	scene.apply(states)
 	v.syncNextFrame()
 	v.refreshLoads()

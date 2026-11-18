@@ -59,7 +59,7 @@ type modelViewerDirectPositionAssignment struct {
 	sourceBytes int64
 }
 
-func modelViewerDirectGatingVariables(meshes []ModelViewerMeshTransport, _ []ModelViewerStateRule) map[string]bool {
+func modelViewerDirectGatingVariables(transport *ModelViewerTransport) map[string]bool {
 	output := make(map[string]bool)
 	addDNF := func(dnf ModelViewerDNF) {
 		for _, group := range dnf {
@@ -68,7 +68,7 @@ func modelViewerDirectGatingVariables(meshes []ModelViewerMeshTransport, _ []Mod
 			}
 		}
 	}
-	for _, mesh := range meshes {
+	for _, mesh := range transport.Meshes {
 		addDNF(mesh.Conditions)
 		for _, variants := range [][]ModelViewerTextureVariant{
 			mesh.TextureVariants,
@@ -82,6 +82,11 @@ func modelViewerDirectGatingVariables(meshes []ModelViewerMeshTransport, _ []Mod
 			}
 		}
 		for _, variant := range mesh.PositionVariants {
+			addDNF(variant.Conditions)
+		}
+	}
+	for _, face := range transport.FaceTextures {
+		for _, variant := range face.Variants {
 			addDNF(variant.Conditions)
 		}
 	}

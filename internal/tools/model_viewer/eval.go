@@ -18,8 +18,9 @@ type viewerEvalMesh struct {
 }
 
 type viewerEvalState struct {
-	State  map[string]any
-	Meshes []viewerEvalMesh
+	State      map[string]any
+	Meshes     []viewerEvalMesh
+	FaceTexKey string
 }
 
 func viewerEvalLookup(state map[string]any, variable string) (any, bool) {
@@ -151,7 +152,11 @@ func evaluateViewerTransport(payload ModelViewerTransport, state map[string]any)
 // renderer's evaluateViewerState does; an empty form selects every mesh.
 func evaluateViewerTransportInForm(payload ModelViewerTransport, state map[string]any, form string) viewerEvalState {
 	resolved := viewerEvalApplyStateRules(mergeViewerEvalState(payload.DefaultState, state), payload.StateRules)
-	evaluated := viewerEvalState{State: resolved, Meshes: make([]viewerEvalMesh, len(payload.Meshes))}
+	evaluated := viewerEvalState{
+		State:      resolved,
+		Meshes:     make([]viewerEvalMesh, len(payload.Meshes)),
+		FaceTexKey: ViewerFaceTexture(payload, resolved, form),
+	}
 	for index, mesh := range payload.Meshes {
 		positionIndex := viewerEvalResolvePositionIndex(mesh.PositionVariants, resolved)
 		visible := viewerFormVisible(mesh.Form, form) && viewerEvalDNFSatisfied(mesh.Conditions, resolved) &&
@@ -212,6 +217,20 @@ func EvaluateViewerState(
 	return evaluated.State, meshes
 }
 
+// ViewerFaceTexture returns the key of the face diffuse the mod puts on the face the game draws in the resolved
+// state, from the first INI of the form that sets one, or "" when none does.
+func ViewerFaceTexture(payload ModelViewerTransport, resolved map[string]any, form string) string {
+	for _, face := range payload.FaceTextures {
+		if !viewerFormVisible(face.Form, form) {
+			continue
+		}
+		if key := viewerEvalResolveTexture(face.Variants, face.TexKey, resolved); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
 func viewerShapeWeights(targets []ModelViewerShapeTarget, state map[string]any) []float64 {
 	if len(targets) == 0 {
 		return nil
@@ -253,7 +272,7 @@ type viewerBlockingVar struct {
 }
 
 func viewerEvalStatesDiffer(left, right viewerEvalState) bool {
-	if len(left.Meshes) != len(right.Meshes) {
+	if len(left.Meshes) != len(right.Meshes) || left.FaceTexKey != right.FaceTexKey {
 		return true
 	}
 	for index := range left.Meshes {
@@ -318,6 +337,11 @@ func buildViewerBlockingVars(payload ModelViewerTransport, testedVar string, sta
 			for _, variant := range variants {
 				addDNF(variant.Conditions)
 			}
+		}
+	}
+	for _, face := range payload.FaceTextures {
+		for _, variant := range face.Variants {
+			addDNF(variant.Conditions)
 		}
 	}
 	coOccurringLower := map[string]bool{}

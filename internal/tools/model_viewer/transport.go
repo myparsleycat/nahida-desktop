@@ -317,6 +317,17 @@ type ModelViewerTransport struct {
 	// Forms includes folder groups and named draw groups within one INI.
 	Forms []ModelViewerForm `json:"forms"`
 	INIs  []ModelViewerINI  `json:"inis"`
+	// FaceTextures are the diffuse textures mods put by hash on the face the game draws, which no mesh of the mod
+	// draws with.
+	FaceTextures []ModelViewerFaceTexture `json:"faceTextures,omitempty"`
+}
+
+// ModelViewerFaceTexture is the face diffuse one INI replaces: TexKey by default, and Variants under their
+// conditions. Form is the form of the INI's meshes.
+type ModelViewerFaceTexture struct {
+	Form     string                      `json:"form,omitempty"`
+	TexKey   *string                     `json:"texKey"`
+	Variants []ModelViewerTextureVariant `json:"variants"`
 }
 
 // ModelViewerINI is one loaded INI. Prefix starts the public ID of every
@@ -366,6 +377,14 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 			if target.Wave != nil {
 				target.Wave.When = normalizeModelViewerDNFWithTracked(target.Wave.When, tracked)
 			}
+		}
+	}
+	for _, face := range transport.FaceTextures {
+		for variantIndex := range face.Variants {
+			face.Variants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(
+				face.Variants[variantIndex].Conditions,
+				tracked,
+			)
 		}
 	}
 }

@@ -1679,6 +1679,127 @@ filename = fire.png
 	}
 }
 
+func TestLoadModViewerKeepsHashOnlyFaceDiffuseForTheGameFace(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"head.png", "face_a.png", "face_b.png", "other.png"} {
+		writeTextureFile(t, dir, name, encodeTinyPNG())
+	}
+	result := loadViewerMod(t, dir, `[Constants]
+global persist $swapface = 0
+[KeySwapface]
+key = [
+type = cycle
+$swapface = 0,1
+[TextureOverrideHeadA]
+ib = ResourceHeadIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceHeadDiffuse
+drawindexed = 3, 0, 0
+[TextureOverrideWaterSurfaceDiffuse]
+hash = 5eaf0ace
+this = ResourceOther
+[TextureOverrideFacelessMaskDiffuse]
+hash = 5eaf0acf
+this = ResourceOther
+[TextureOverrideCharFaceHeadDiffuse]
+hash = e6f05166
+run = CommandListCharFaceHeadDiffuse
+[CommandListCharFaceHeadDiffuse]
+if $swapface == 0
+	this = ResourceFaceA
+else if $swapface == 1
+	this = ResourceFaceB
+endif
+[TextureOverride_deadbeef]
+hash = deadbeef
+this = ResourceOther
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceHeadIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceHeadDiffuse]
+filename = head.png
+[ResourceFaceA]
+filename = face_a.png
+[ResourceFaceB]
+filename = face_b.png
+[ResourceOther]
+filename = other.png
+`)
+	head := meshesNamed(result, "HeadA")
+	if len(head) != 1 || !strings.Contains(texKey(head[0]), "head.png") {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	if len(result.FaceTextures) != 1 || result.FaceTextures[0].TexKey != nil ||
+		len(result.FaceTextures[0].Variants) != 2 {
+		t.Fatalf("face textures = %#v", result.FaceTextures)
+	}
+	for _, variant := range result.FaceTextures[0].Variants {
+		if _, ok := result.Textures[variant.TexKey]; !ok || strings.Contains(variant.TexKey, "other.png") {
+			t.Fatalf("face variant %q, textures %v", variant.TexKey, result.Textures)
+		}
+	}
+
+	var swap ModelViewerVariable
+	for _, variable := range result.Variables {
+		if strings.Contains(strings.ToLower(variable.ID), "swapface") {
+			swap = variable
+		}
+	}
+	if swap.ID == "" || swap.NoPreview {
+		t.Fatalf("swapface variable = %#v", swap)
+	}
+	resolved, _ := EvaluateViewerState(result, nil, "")
+	if got := ViewerFaceTexture(result, resolved, ""); !strings.Contains(got, "face_a.png") {
+		t.Fatalf("default face texture = %q", got)
+	}
+	resolved, _ = EvaluateViewerState(result, ApplyViewerVariableSelection(resolved, swap, "1"), "")
+	if got := ViewerFaceTexture(result, resolved, ""); !strings.Contains(got, "face_b.png") {
+		t.Fatalf("swapped face texture = %q", got)
+	}
+}
+
+func TestLoadModViewerLeavesFaceDiffuseADrawBinds(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "head.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "Tex/face.png", encodeTinyPNG())
+	result := loadViewerMod(t, dir, `[TextureOverrideHeadA]
+ib = ResourceHeadIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceHeadDiffuse
+ps-t5 = ResourceFaceDrawn
+drawindexed = 3, 0, 0
+[TextureOverrideCharFaceHeadDiffuse]
+hash = e6f05166
+this = ResourceFaceHashed
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceHeadIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceHeadDiffuse]
+filename = head.png
+[ResourceFaceDrawn]
+filename = Tex/face.png
+[ResourceFaceHashed]
+filename = .\Tex\face.png
+`)
+	if len(result.FaceTextures) != 0 {
+		t.Fatalf("face textures = %#v", result.FaceTextures)
+	}
+}
+
 func TestLoadModViewerFallsBackToIBStemDiffuseResources(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "bodyb.png", encodeTinyPNG())

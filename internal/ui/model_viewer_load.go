@@ -3,7 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/myparsleycat/fairy"
@@ -206,46 +207,16 @@ func uploadViewerScene(
 		}
 	}
 
-	keys := make([]string, 0, len(transport.Textures))
-	for key := range transport.Textures {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(viewerLoadConcurrency)
-	for _, key := range keys {
-		entry := transport.Textures[key]
-		group.Go(func() error {
-			data, err := loadViewerTexture(groupCtx, read, entry, transport.NormalXYReconstruct)
-			if err != nil {
-				if groupCtx.Err() != nil {
-					return groupCtx.Err()
-				}
-				log.Warn(fmt.Sprintf("Model viewer texture %q (%s, %s) could not be loaded: %v",
-					key, entry.Role, entry.Format, err), "ModelViewer.loadTexture")
-				return nil
-			}
-			return fairy.UseDevice(func(g fairy.GPU) error {
-				record(g.Generation)
-				view, err := data.upload(g.Device, g.Context)
-				if err != nil {
-					log.Warn(fmt.Sprintf("Model viewer texture %q could not be uploaded: %v", key, err),
-						"ModelViewer.loadTexture")
-					return nil
-				}
-				mu.Lock()
-				set.textures[key] = viewerTextureGPU{
-					view: view, flags: data.flags, normalMode: data.normalMode, format: data.sourceFormat,
-					outlineMask: data.outlineMask,
-				}
-				mu.Unlock()
-				return nil
-			})
-		})
-	}
-	if err := group.Wait(); err != nil {
+	// The original model loads the face textures with itself, since only its face shows them.
+	entries := maps.Clone(transport.Textures)
+	faceOnly := viewerFaceOnlyTextures(&transport)
+	maps.DeleteFunc(entries, func(key string, _ modelviewer.ModelViewerTextureTransport) bool { return faceOnly[key] })
+	textures, textureGenerations, err := uploadViewerTextures(ctx, read, log, entries, transport.NormalXYReconstruct)
+	if err != nil {
 		return fail(err)
 	}
+	set.textures = textures
+	maps.Copy(generations, textureGenerations)
 	// A set that spans a lost device matches no generation, so the viewer uploads it again.
 	switch len(generations) {
 	case 0:
@@ -256,4 +227,61 @@ func uploadViewerScene(
 		}
 	}
 	return set, nil
+}
+
+// uploadViewerTextures loads entries through read and uploads them. One that fails is logged and left out; the upload
+// fails only when cancelled or the device cannot be used, and then releases what it uploaded.
+func uploadViewerTextures(
+	ctx context.Context,
+	read viewerReader,
+	log *infra.Log,
+	entries map[string]modelviewer.ModelViewerTextureTransport,
+	normalXYReconstruct bool,
+) (map[string]viewerTextureGPU, map[uint64]bool, error) {
+	textures, generations := make(map[string]viewerTextureGPU, len(entries)), map[uint64]bool{}
+	var mu sync.Mutex
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(viewerLoadConcurrency)
+	for _, key := range slices.Sorted(maps.Keys(entries)) {
+		entry := entries[key]
+		group.Go(func() error {
+			data, err := loadViewerTexture(groupCtx, read, entry, normalXYReconstruct)
+			if err != nil {
+				if groupCtx.Err() != nil {
+					return groupCtx.Err()
+				}
+				log.Warn(fmt.Sprintf("Model viewer texture %q (%s, %s) could not be loaded: %v",
+					key, entry.Role, entry.Format, err), "ModelViewer.loadTexture")
+				return nil
+			}
+			return fairy.UseDevice(func(g fairy.GPU) error {
+				mu.Lock()
+				generations[g.Generation] = true
+				mu.Unlock()
+				view, err := data.upload(g.Device, g.Context)
+				if err != nil {
+					log.Warn(fmt.Sprintf("Model viewer texture %q could not be uploaded: %v", key, err),
+						"ModelViewer.loadTexture")
+					return nil
+				}
+				mu.Lock()
+				textures[key] = viewerTextureGPU{
+					view: view, flags: data.flags, normalMode: data.normalMode, format: data.sourceFormat,
+					outlineMask: data.outlineMask,
+				}
+				mu.Unlock()
+				return nil
+			})
+		})
+	}
+	if err := group.Wait(); err != nil {
+		_ = fairy.UseDevice(func(fairy.GPU) error {
+			for _, texture := range textures {
+				texture.view.Release()
+			}
+			return nil
+		})
+		return nil, nil, err
+	}
+	return textures, generations, nil
 }

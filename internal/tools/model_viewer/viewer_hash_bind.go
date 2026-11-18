@@ -110,23 +110,9 @@ func collectFamilyRoleSections(
 		if err != nil {
 			continue
 		}
-		var files []hashImageFile
-		seen := map[string]bool{}
-		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
-			resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
-			if !ok || resource.Filename == "" {
-				continue
-			}
-			key := slashPath(resource.Filename) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			files = append(
-				files,
-				hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)},
-			)
-		}
+		files := sectionThisImages(state, resources, func(resource modelViewerResource) bool {
+			return resource.Filename != ""
+		})
 		if len(files) == 0 {
 			continue
 		}
@@ -598,23 +584,7 @@ func collectHashImageSlots(
 		if err != nil || state.explicitDraw {
 			continue
 		}
-		var files []hashImageFile
-		seen := map[string]bool{}
-		for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
-			resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
-			if !ok || !hashImageExtRE.MatchString(resource.Filename) {
-				continue
-			}
-			key := slashPath(resource.Filename) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			files = append(
-				files,
-				hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)},
-			)
-		}
+		files := sectionThisImages(state, resources, isHashImageResource)
 		if len(files) == 0 {
 			continue
 		}
@@ -628,6 +598,34 @@ func collectHashImageSlots(
 		slots = append(slots, hashImageSlot{files: files, role: hint.role, vars: vars, area: hint.area})
 	}
 	return slots
+}
+
+// sectionThisImages lists the files of the resources a scanned section assigns to `this` that keep passes, once per
+// file and condition.
+func sectionThisImages(
+	state *modelViewerSymbolicSectionState,
+	resources map[string]modelViewerResource,
+	keep func(modelViewerResource) bool,
+) []hashImageFile {
+	var files []hashImageFile
+	seen := map[string]bool{}
+	for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
+		resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
+		if !ok || !keep(resource) {
+			continue
+		}
+		key := slashPath(resource.Filename) + "|" + modelViewerSymbolicDNFKey(assignment.conditions)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		files = append(files, hashImageFile{file: resource.Filename, cond: cloneModelViewerDNF(assignment.conditions)})
+	}
+	return files
+}
+
+func isHashImageResource(resource modelViewerResource) bool {
+	return hashImageExtRE.MatchString(resource.Filename)
 }
 
 func applyHashImageSlot(meshes []*modelViewerDirectMesh, slot *hashImageSlot, light *hashImageSlot) {

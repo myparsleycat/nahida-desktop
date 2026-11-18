@@ -648,11 +648,15 @@ func (t *Service) prepareModelViewerGeometry(
 		}
 		prepared.shapeKeys = append(prepared.shapeKeys, shapeKeys...)
 		prepared.buildMs += time.Since(stageStartedAt).Milliseconds()
+		face := collectModelViewerFaceTextures(folder, sections, resources, domains, meshes, textureBindings)
 		prepared.textures = append(prepared.textures, modelViewerINITextureWork{
 			meshes:   meshes,
 			bindings: textureBindings,
 			shapes:   shapeKeys,
-			jobs:     collectModelViewerTextureJobs(len(prepared.textures), folder, resources, textureBindings, meshes),
+			jobs: collectModelViewerTextureJobs(len(prepared.textures), folder, resources, textureBindings, meshes,
+				modelViewerFaceTextureAssignments(face)),
+			face: face,
+			form: scopes[unit.primary].form,
 		})
 	}
 	if err := ctx.Err(); err != nil {
@@ -704,7 +708,9 @@ func (p *modelViewerPreparedGeometry) scopeMeshes(
 // forms to choose between.
 func (p *modelViewerPreparedGeometry) dropForms() {
 	p.forms = nil
-	for _, work := range p.textures {
+	for workIndex := range p.textures {
+		work := &p.textures[workIndex]
+		work.form = ""
 		for index := range work.meshes {
 			work.meshes[index].form = ""
 		}

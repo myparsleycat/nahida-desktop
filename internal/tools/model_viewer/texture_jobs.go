@@ -27,6 +27,9 @@ type modelViewerINITextureWork struct {
 	bindings []modelViewerTextureBinding
 	shapes   []modelViewerShapeKey
 	jobs     []modelViewerTextureJob
+	// face holds the images the INI puts on the face the game draws, and form the form of the INI's meshes.
+	face []hashImageFile
+	form string
 }
 
 type modelViewerTextureJob struct {
@@ -59,6 +62,7 @@ func collectModelViewerTextureJobs(
 	resources []modelViewerResource,
 	bindings []modelViewerTextureBinding,
 	meshes []modelViewerDirectMesh,
+	extra []modelViewerDirectTextureAssignment,
 ) []modelViewerTextureJob {
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
@@ -122,26 +126,28 @@ func collectModelViewerTextureJobs(
 			canonicalKey: fileKey,
 		})
 	}
+	var assignments []modelViewerDirectTextureAssignment
 	for _, mesh := range meshes {
-		for _, assignment := range mesh.textureAssignments {
-			key := modelViewerAssignmentTextureKey(assignment)
-			if key == "" || seen[key] || assignment.file == "" {
-				continue
-			}
-			texturePath, pathErr := resolveModelViewerResourcePath(modDir, modDir, assignment.file)
-			if pathErr != nil {
-				continue
-			}
-			seen[key] = true
-			jobs = append(jobs, modelViewerTextureJob{
-				batchIndex:   batchIndex,
-				path:         texturePath,
-				resourceName: assignment.resource,
-				keys:         []string{key},
-				role:         assignment.role,
-				canonicalKey: key,
-			})
+		assignments = append(assignments, mesh.textureAssignments...)
+	}
+	for _, assignment := range append(assignments, extra...) {
+		key := modelViewerAssignmentTextureKey(assignment)
+		if key == "" || seen[key] || assignment.file == "" {
+			continue
 		}
+		texturePath, pathErr := resolveModelViewerResourcePath(modDir, modDir, assignment.file)
+		if pathErr != nil {
+			continue
+		}
+		seen[key] = true
+		jobs = append(jobs, modelViewerTextureJob{
+			batchIndex:   batchIndex,
+			path:         texturePath,
+			resourceName: assignment.resource,
+			keys:         []string{key},
+			role:         assignment.role,
+			canonicalKey: key,
+		})
 	}
 	return jobs
 }

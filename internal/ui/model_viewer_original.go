@@ -6,7 +6,6 @@ import (
 	"image"
 	"maps"
 	"slices"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -215,11 +214,20 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter) {
 			sources[i].empty[slot] = own == nil || *own == ""
 		}
 	}
-	profile := string(scene.transport.MaterialProfile)
-	reconstruct := scene.transport.NormalXYReconstruct
+	input := viewerOriginalInput{
+		sources:     sources,
+		faces:       map[string]modelviewer.ModelViewerTextureTransport{},
+		profile:     string(scene.transport.MaterialProfile),
+		reconstruct: scene.transport.NormalXYReconstruct,
+	}
+	for key := range viewerFaceOnlyTextures(&scene.transport) {
+		if entry, ok := scene.transport.Textures[key]; ok {
+			input.faces[key] = entry
+		}
+	}
 	tools, read, log := v.tools, v.read, v.log
 	go func() {
-		o, missing, err := buildViewerOriginal(ctx, tools, read, log, sources, c, profile, reconstruct)
+		o, missing, err := buildViewerOriginal(ctx, tools, read, log, input, c)
 		fairy.Go(func() {
 			current := v.originalLoading == key && ctx.Err() == nil && v.scene == scene && !v.closed
 			if !current || err != nil {
@@ -280,18 +288,26 @@ type viewerOriginalTools interface {
 	LoadCharacterOriginalTexture(context.Context, modelviewer.CharacterOriginalTexture) (*image.NRGBA, error)
 }
 
+// viewerOriginalInput is what building the original model reads of the scene: its meshes, the face textures only the
+// original model's face shows, the material profile, and whether normal maps keep only X and Y.
+type viewerOriginalInput struct {
+	sources     []viewerOriginalSource
+	faces       map[string]modelviewer.ModelViewerTextureTransport
+	profile     string
+	reconstruct bool
+}
+
 // buildViewerOriginal loads the character's original model, matches it against the mod's meshes, and uploads the
-// parts the viewer may draw with the textures they and the mod's empty slots take.
+// parts the viewer may draw with the textures they and the mod's empty slots take, and the mod's face textures.
 func buildViewerOriginal(
 	ctx context.Context,
 	tools viewerOriginalTools,
 	read viewerReader,
 	log *infra.Log,
-	sources []viewerOriginalSource,
+	input viewerOriginalInput,
 	c *viewerCharacter,
-	profile string,
-	reconstruct bool,
 ) (*viewerOriginal, int, error) {
+	sources, profile, reconstruct := input.sources, input.profile, input.reconstruct
 	data, err := tools.LoadCharacterOriginal(ctx, c.game, c.ID)
 	if err != nil {
 		return nil, 0, err
@@ -429,12 +445,37 @@ func buildViewerOriginal(
 		part.gpu, generations[generation] = buffers, true
 	}
 
-	textures, textureGenerations, failed, err := loadOriginalTextures(ctx, tools, log, requests, reconstruct)
-	if err != nil {
+	var textures, faceTextures map[string]viewerTextureGPU
+	var textureGenerations, faceGenerations map[uint64]bool
+	var failed map[string]originalTextureRequest
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		textures, textureGenerations, failed, err = loadOriginalTextures(groupCtx, tools, log, requests, reconstruct)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		faceTextures, faceGenerations, err = uploadViewerTextures(groupCtx, read, log, input.faces, reconstruct)
+		return err
+	})
+	if err := group.Wait(); err != nil {
+		// Each load releases its own uploads when it fails, so only the one that finished holds any.
+		_ = fairy.UseDevice(func(fairy.GPU) error {
+			for _, texture := range textures {
+				texture.view.Release()
+			}
+			for _, texture := range faceTextures {
+				texture.view.Release()
+			}
+			return nil
+		})
 		return fail(err)
 	}
 	o.textures, o.reconstruct = textures, reconstruct
+	maps.Copy(o.textures, faceTextures)
 	maps.Copy(generations, textureGenerations)
+	maps.Copy(generations, faceGenerations)
 	o.generation = fairy.DeviceGeneration()
 	if len(generations) == 1 {
 		for generation := range generations {
@@ -444,6 +485,42 @@ func buildViewerOriginal(
 		o.generation = 0
 	}
 	return o, len(failed), nil
+}
+
+// viewerFaceOnlyTextures lists the face textures of transport that no mesh draws with. Only the original model's face
+// shows them, so they load with it.
+func viewerFaceOnlyTextures(transport *modelviewer.ModelViewerTransport) map[string]bool {
+	faces := map[string]bool{}
+	for _, face := range transport.FaceTextures {
+		if face.TexKey != nil {
+			faces[*face.TexKey] = true
+		}
+		for _, variant := range face.Variants {
+			faces[variant.TexKey] = true
+		}
+	}
+	if len(faces) == 0 {
+		return nil
+	}
+	for _, mesh := range transport.Meshes {
+		for _, key := range []*string{
+			mesh.TexKey, mesh.NormalMapKey, mesh.LightMapKey, mesh.MaterialMapKey, mesh.CutoutMapKey,
+			mesh.HighlightMapKey, mesh.RampMapKey,
+		} {
+			if key != nil {
+				delete(faces, *key)
+			}
+		}
+		for _, variants := range [][]modelviewer.ModelViewerTextureVariant{
+			mesh.TextureVariants, mesh.NormalMapVariants, mesh.LightMapVariants, mesh.MaterialMapVariants,
+			mesh.CutoutMapVariants,
+		} {
+			for _, variant := range variants {
+				delete(faces, variant.TexKey)
+			}
+		}
+	}
+	return faces
 }
 
 // addTextureRequest adds req to into, or widens the request already under key: a texture several slots share takes
@@ -738,10 +815,11 @@ func markOriginalMeshes(parts []*viewerOriginalPart, profile string) {
 	}
 }
 
-// originalDraw is an original part ready to draw: its mesh, buffers and, under a motion, its bone weights and the
-// node turning its face direction.
+// originalDraw is an original part ready to draw: its mesh, the state it draws in, buffers and, under a motion, its
+// bone weights and the node turning its face direction.
 type originalDraw struct {
 	mesh    *viewerMesh
+	state   modelviewer.ViewerMeshState
 	gpu     viewerMeshGPU
 	blend   d3d.ShaderResourceView
 	skinned bool
@@ -759,12 +837,22 @@ func (o *viewerOriginal) draws(dev d3d.Device, skin *viewerMotion, generation ui
 			o.makeSkin(dev, skin)
 		}
 	}
+	// A face texture that did not load leaves the face with the original one.
+	face := ""
+	if s := o.scene; s != nil {
+		if _, ok := s.texture(s.faceTexture); ok {
+			face = s.faceTexture
+		}
+	}
 	var out []originalDraw
 	for i, part := range o.parts {
 		if !part.shown || part.gpu.indexCount == 0 {
 			continue
 		}
-		draw := originalDraw{mesh: part.mesh, gpu: part.gpu, anchor: -1}
+		draw := originalDraw{mesh: part.mesh, state: part.mesh.state, gpu: part.gpu, anchor: -1}
+		if face != "" && part.head && part.mesh.toonFace {
+			draw.state.TexKey = face
+		}
 		if i < len(o.skin) && o.skin[i].view.P != nil {
 			draw.blend, draw.skinned = o.skin[i].view, true
 			draw.anchor = o.anchors[i]
@@ -861,7 +949,7 @@ func (s *viewerScene) texture(key string) (viewerTextureGPU, bool) {
 	if texture, ok := s.gpu.textures[key]; ok {
 		return texture, true
 	}
-	if o := s.original; o != nil && o.generation == s.gpu.generation && strings.HasPrefix(key, "original:") {
+	if o := s.original; o != nil && o.generation == s.gpu.generation {
 		texture, ok := o.textures[key]
 		return texture, ok
 	}

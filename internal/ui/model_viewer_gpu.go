@@ -936,7 +936,7 @@ func (r *viewerRenderer) drawScene(
 			if part.skinned {
 				blend = part.blend
 			}
-			if err := drawOne(part.mesh, part.mesh.state, part.gpu, blend, part.anchor); err != nil {
+			if err := drawOne(part.mesh, part.state, part.gpu, blend, part.anchor); err != nil {
 				return err
 			}
 		}

@@ -25,6 +25,9 @@ type viewerScene struct {
 	genshinFace bool
 	// original is the character's original model shown with the mod, or nil.
 	original *viewerOriginal
+	// faceTexture is the key of the face diffuse the mod replaces by hash in the state shown, or "". The original
+	// model's face draws with it in place of its own.
+	faceTexture string
 	// world turns the mod's space into the viewer's Y-up space.
 	world mat4
 	// minimum and maximum bound every mesh in viewer space.
