@@ -74,7 +74,8 @@ func characterMotionLookup(game, id string) (characterFileEntry, bool) {
 	return entry, ok
 }
 
-// HasCharacterMotion reports whether game motions exist for the character id of game (GIMI, SRMI, ZZMI or EFMI).
+// HasCharacterMotion reports whether game motions exist for the character id of game (GIMI, SRMI, ZZMI, WWMI or
+// EFMI).
 func HasCharacterMotion(game, id string) bool {
 	_, ok := characterMotionLookup(game, id)
 	return ok
@@ -266,7 +267,9 @@ type CharacterMotion struct {
 	restInv []motionAffine
 	// flipX mirrors mod space on X against the mesh space.
 	flipX bool
-	refs  []motionReference
+	// unit is how many mod-space units make a metre; zero counts as one.
+	unit float64
+	refs []motionReference
 	// skins lists the joint nodes of each skin in palette order.
 	skins [][]int
 }
@@ -458,6 +461,7 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 	motion := &CharacterMotion{
 		Game: strings.ToUpper(game), Character: doc.Extras.Character, FPS: doc.Extras.FPS,
 		flipX: strings.EqualFold(game, "GIMI") || strings.EqualFold(game, "SRMI"),
+		unit:  modUnitsPerMetre(game),
 	}
 	if err := motion.readNodes(doc); err != nil {
 		return nil, err
@@ -472,6 +476,23 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 		return nil, err
 	}
 	return motion, nil
+}
+
+// modUnitsPerMetre is how many mod-space units make a metre: WWMI mods keep Unreal's centimetres, the other games'
+// mods use metres.
+func modUnitsPerMetre(game string) float64 {
+	if strings.EqualFold(game, "WWMI") {
+		return 100
+	}
+	return 1
+}
+
+// fromMetres converts a length in metres to mod units.
+func (m *CharacterMotion) fromMetres(length float64) float64 {
+	if m.unit == 0 {
+		return length
+	}
+	return length * m.unit
 }
 
 func (m *CharacterMotion) readNodes(doc *characterGLTF) error {

@@ -280,7 +280,7 @@ func (c *modelViewerSymbolicScanContext) scan(
 			}
 		case "vb0":
 			state.copyBuffer(key, value, conditions, sequence)
-		case "ib", "vb1", "vb2":
+		case "ib", "vb1", "vb2", "vb4":
 			resource := modelViewerTrimResourcePrefix(value)
 			if resource != "" && !strings.EqualFold(resource, "null") {
 				state.buffers[strings.ToLower(key)] = append(
@@ -614,6 +614,12 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 	shaderFiltered := slices.ContainsFunc(stack, func(frame modelViewerSymbolicBranchFrame) bool {
 		return frame.shaderFilter
 	})
+	var blendBuffers []string
+	for _, assignment := range state.bufferAssignments("vb4") {
+		if len(modelViewerDNFAnd(drawConditions, assignment.conditions)) > 0 {
+			blendBuffers = append(blendBuffers, assignment.resource)
+		}
+	}
 	records := make([]modelViewerDirectDrawRecord, 0, len(states))
 	for _, variant := range states {
 		recordDraw := draw
@@ -622,6 +628,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 			sectionName:     c.sectionName,
 			commandForm:     c.commandForm,
 			state:           variant.state,
+			blendBuffers:    blendBuffers,
 			textureHistory:  append([]modelViewerDirectTextureAssignment(nil), textures...),
 			slotTextures:    append([]modelViewerDirectTextureAssignment(nil), slotTextures...),
 			authoredDiffuse: authored,

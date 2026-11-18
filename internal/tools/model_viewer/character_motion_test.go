@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"context"
 	"math"
 	"os"
 	"path/filepath"
@@ -473,3 +474,50 @@ func seamTestPoints(y float32, n int) [][3]float32 {
 }
 
 var viewerMotionTestIdentity = [12]float32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}
+
+// A WWMI draw binds its blend buffer as vb4, eight groups then eight weights per row, of which the four strongest
+// are kept. Without a vb4 binding it is the BlendBuffer beside the PositionBuffer.
+func TestResolveModelViewerBlendSourceWWMI(t *testing.T) {
+	dir := t.TempDir()
+	blendRow := []byte{5, 9, 1, 2, 3, 0, 0, 0, 10, 200, 30, 15, 0, 0, 0, 0}
+	for name, data := range map[string][]byte{
+		"Position.buf": make([]byte, 12),
+		"TexCoord.buf": make([]byte, 16),
+		"Blend.buf":    blendRow,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resources := []modelViewerResource{
+		{Name: "ResourcePositionBuffer", Filename: "Position.buf", Stride: 12},
+		{Name: "ResourceTexcoordBuffer", Filename: "TexCoord.buf", Stride: 16},
+		{Name: "ResourceBlendBuffer", Filename: "Blend.buf", Stride: 16},
+	}
+	resourceMap := map[string]modelViewerResource{}
+	for _, resource := range resources {
+		resourceMap[modelViewerNormalizeKey(resource.Name)] = resource
+	}
+	cache := newModelViewerBufferCache(context.Background())
+
+	source := resolveModelViewerBlendSource(dir, nil, resources[0], 0, true, resourceMap, resources, cache)
+	if source == nil || filepath.Base(source.path) != "Blend.buf" {
+		t.Fatalf("blend source = %+v, want Blend.buf", source)
+	}
+	shapeKeyed := modelViewerResource{Name: "ResourceShapeKeyedPosition", Filename: "Position.buf", Stride: 12}
+	bound := resolveModelViewerBlendSource(dir, []string{"BlendBufferOverride", "ResourceBlendBuffer"}, shapeKeyed,
+		0, true, resourceMap, resources, cache)
+	if bound == nil || filepath.Base(bound.path) != "Blend.buf" {
+		t.Fatalf("vb4 blend source = %+v, want Blend.buf", bound)
+	}
+	blend := readModelViewerMeshBlend(cache, source, nil, 1)
+	sum := 10.0 + 200 + 30 + 15
+	want := []uint16{
+		9, 1, 2, 5,
+		uint16(math.Round(200 / sum * 65535)), uint16(math.Round(30 / sum * 65535)),
+		uint16(math.Round(15 / sum * 65535)), uint16(math.Round(10 / sum * 65535)),
+	}
+	if !slices.Equal(blend, want) {
+		t.Fatalf("blend = %v, want %v", blend, want)
+	}
+}

@@ -2,8 +2,10 @@
 // mod does not ship, keyed by the character catalog's ids, and writes an index with each model file's size and SHA-256.
 //
 // The input batches were extracted with the operators' permission: Genshin Impact, Honkai: Star Rail and Zenless Zone
-// Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki. Each batch holds, per character:
-//   <game>/<key>/model.glb           the source model with every mesh attribute, its materials and (skowt) images
+// Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki; Wuthering Waves batches come from
+// scripts/convert-character-wwmi.mjs. Each batch holds, per character:
+//   <game>/<key>/model.glb           the source model with every mesh attribute, its materials and (skowt, Wuthering
+//                                    Waves) images
 //   <game>/<key>/toon.glb            (skowt) the material textures that model.glb does not embed
 //   <game>/<key>/textures/<hash>     (Warfarin) the external image buffers model.glb references
 //   <game>/<key>/meta.json           source names
@@ -18,6 +20,9 @@
 // both and says which channel holds the alpha.
 //
 // Usage: node scripts/import-character-original.mjs <raw-dir> <out-dir> [index.json]
+//
+// The index goes to <out-dir>/index.json and, when given, to index.json; an index already at index.json keeps the rows
+// of the games this run does not import.
 
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -25,7 +30,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { gzipSync } from 'node:zlib';
 
-import { parseGLB, readAccessor, readBatch, Writer } from './character-gltf.mjs';
+import { parseGLB, readAccessor, readBatch, writeIndex, Writer } from './character-gltf.mjs';
 
 // skowt names both Trailblazers and both March 7th forms alike; their material names tell them apart.
 const ALIASES = [
@@ -63,7 +68,7 @@ function partRole(game, meshName, material) {
   if (name.includes('face')) {
     return 'face';
   }
-  if (name.includes('hair')) {
+  if (name.includes('hair') || (game === 'wwmi' && /bangs?\d*(?:\s|$)/.test(name))) {
     return 'hair';
   }
   return 'body';
@@ -147,7 +152,7 @@ async function convertMaterials(game, model, images, store) {
   const materials = [];
   for (const material of json.materials ?? []) {
     const textures = {};
-    if (game === 'efmi') {
+    if (game === 'efmi' || game === 'wwmi') {
       for (const [slot, index] of Object.entries(material.extras?.textures ?? {})) {
         const texture = json.textures?.[index];
         const source = texture?.source ?? texture?.extensions?.EXT_texture_webp?.source;
@@ -166,7 +171,7 @@ async function convertMaterials(game, model, images, store) {
       }
     }
     const extras = { textures };
-    if (game === 'efmi' && material.extras?.shader) {
+    if ((game === 'efmi' || game === 'wwmi') && material.extras?.shader) {
       extras.shader = material.extras.shader;
     }
     if (game !== 'efmi' && material.extras?.game?.shaderName) {
@@ -324,7 +329,7 @@ function convertMeshes(game, model, writer, stats) {
         }
         out.weights = mesh.weights;
       }
-      const blink = mesh.extras?.skowt?.blink?.filter((name) => names.includes(name));
+      const blink = (mesh.extras?.blink ?? mesh.extras?.skowt?.blink)?.filter((name) => names.includes(name));
       if (blink?.length) {
         out.extras.blink = blink;
       }
@@ -460,17 +465,7 @@ async function main() {
       );
     }
   }
-  const sorted = Object.fromEntries(
-    Object.entries(index)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([game, rows]) => [game, Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)))]),
-  );
-  const text = `${JSON.stringify({ format: 1, characters: sorted }, null, 2)}\n`;
-  await writeFile(path.join(outDir, 'index.json'), text);
-  if (indexPath) {
-    await mkdir(path.dirname(indexPath), { recursive: true });
-    await writeFile(indexPath, text);
-  }
+  await writeIndex(outDir, indexPath, index);
   const count = Object.values(index).reduce((n, rows) => n + Object.keys(rows).length, 0);
   console.log(
     `${count} characters, models ${(total / 1e6).toFixed(1)} MB, ` +

@@ -28,9 +28,13 @@ var (
 type modelViewerDirectBufferState struct{ ib, vb0, vb1, vb2 string }
 
 type modelViewerDirectDrawRecord struct {
-	sectionName     string
-	commandForm     string
-	state           modelViewerDirectBufferState
+	sectionName string
+	commandForm string
+	state       modelViewerDirectBufferState
+	// blendBuffers lists the resources bound as vb4 under the draw's conditions, in binding order. They do not fork
+	// the record the way the slots of state do: WWMI binds its blend buffer there, often as one branch of a runtime
+	// override.
+	blendBuffers    []string
 	textureHistory  []modelViewerDirectTextureAssignment
 	slotTextures    []modelViewerDirectTextureAssignment
 	authoredDiffuse bool
@@ -746,10 +750,18 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				carrierRows: record.draw.BaseVertex - vertexBase,
 			},
 		}
-		if source.kind == modelViewerDrawVertexMihoyo && source.positionData == nil {
+		wwmiDraw := source.kind == modelViewerDrawVertexWWMI
+		if wwmiDraw || source.kind == modelViewerDrawVertexMihoyo && source.positionData == nil {
+			bound := []string{draw.state.vb2}
+			if wwmiDraw {
+				bound = record.blendBuffers
+			}
 			mesh.blend = resolveModelViewerBlendSource(
-				modDir, draw.state.vb2, position, source.carrierStart, resourceMap, resources, cache,
+				modDir, bound, position, source.carrierStart, wwmiDraw, resourceMap, resources, cache,
 			)
+			if wwmiDraw && mesh.blend != nil {
+				mesh.blend.palette = wwmiComponentPalette(mesh.blend.palette, component)
+			}
 		}
 		appendModelViewerDirectTextureHistory(&mesh, record.textureHistory, resourceMap)
 		appendModelViewerSlotTextureCandidates(&mesh, record.slotTextures, resourceMap)

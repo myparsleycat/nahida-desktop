@@ -63,8 +63,8 @@ func characterOriginalLookup(game, id string) (characterFileEntry, bool) {
 	return entry, ok
 }
 
-// HasCharacterOriginal reports whether the original model of the character id of game (GIMI, SRMI, ZZMI or EFMI)
-// is hosted.
+// HasCharacterOriginal reports whether the original model of the character id of game (GIMI, SRMI, ZZMI, WWMI or
+// EFMI) is hosted.
 func HasCharacterOriginal(game, id string) bool {
 	_, ok := characterOriginalLookup(game, id)
 	return ok

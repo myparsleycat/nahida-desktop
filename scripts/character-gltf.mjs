@@ -1,7 +1,9 @@
-// glTF and record-batch helpers shared by the character import scripts.
+// glTF, record-batch and index helpers shared by the character import scripts.
 //
 // A batch is a gzip stream of records (u32 name length, u32 data length, name, data) named <game>/<key>/<file>.
 
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 export const COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
@@ -86,7 +88,8 @@ export class Writer {
     this.length = 0;
   }
 
-  add(typed, accessor) {
+  // view stores typed as a buffer view of its own and returns the view's index.
+  view(typed) {
     const pad = (4 - (this.length % 4)) % 4;
     if (pad) {
       this.chunks.push(new Uint8Array(pad));
@@ -96,7 +99,11 @@ export class Writer {
     this.bufferViews.push({ buffer: 0, byteOffset: this.length, byteLength: bytes.length });
     this.chunks.push(bytes);
     this.length += bytes.length;
-    this.accessors.push({ bufferView: this.bufferViews.length - 1, ...accessor });
+    return this.bufferViews.length - 1;
+  }
+
+  add(typed, accessor) {
+    this.accessors.push({ bufferView: this.view(typed), ...accessor });
     return this.accessors.length - 1;
   }
 
@@ -171,4 +178,32 @@ export function readBatch(bytes) {
     characters.get(id).files.set(rest.join('/'), body);
   }
   return characters;
+}
+
+// writeIndex writes the index of the characters just imported ({game: {id: entry}}) as <out-dir>/index.json, indented,
+// the copy hosted beside the files, and to indexPath, compact, the copy the app embeds. When indexPath already holds
+// an index, each imported game replaces its rows there and the other games keep theirs, in both files.
+export async function writeIndex(outDir, indexPath, index) {
+  let characters = {};
+  if (indexPath) {
+    try {
+      characters = JSON.parse(await readFile(indexPath, 'utf8')).characters ?? {};
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+  Object.assign(characters, index);
+  const sorted = Object.fromEntries(
+    Object.entries(characters)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([game, rows]) => [game, Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)))]),
+  );
+  const document = { format: 1, characters: sorted };
+  await writeFile(path.join(outDir, 'index.json'), `${JSON.stringify(document, null, 2)}\n`);
+  if (indexPath) {
+    await mkdir(path.dirname(indexPath), { recursive: true });
+    await writeFile(indexPath, JSON.stringify(document));
+  }
 }

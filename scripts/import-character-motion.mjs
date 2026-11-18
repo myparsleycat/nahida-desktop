@@ -2,11 +2,12 @@
 // ids, and writes an index with each file's size and SHA-256.
 //
 // The input batches were extracted with the operators' permission: Genshin Impact, Honkai: Star Rail and Zenless Zone
-// Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki. Each batch is a gzip stream of
-// records (u32 name length, u32 data length, name, data) holding, per character:
+// Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki; Wuthering Waves batches come from
+// scripts/convert-character-wwmi.mjs. Each batch is a gzip stream of records (u32 name length, u32 data length,
+// name, data) holding, per character:
 //   <game>/<key>/model.glb  skeleton nodes, skins and the skinned meshes' POSITION, JOINTS_0 and WEIGHTS_0
 //   <game>/<key>/anim.glb   (skowt) every clip as one animation
-//   <game>/<key>/clips/<name>.glb  (Warfarin) one animation per clip
+//   <game>/<key>/clips/<name>.glb  (Warfarin, Wuthering Waves) one animation per clip
 //   <game>/<key>/meta.json  source names and clip metadata
 //
 // Each output file is a gzip-compressed GLB with the skeleton, the skins, the reference meshes (POSITION float32,
@@ -16,6 +17,9 @@
 // shape key at zero, is dropped. The sample rate and the clip metadata are in the root extras.
 //
 // Usage: node scripts/import-character-motion.mjs <raw-dir> <out-dir> [index.json]
+//
+// The index goes to <out-dir>/index.json and, when given, to index.json; an index already at index.json keeps the rows
+// of the games this run does not import.
 
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -23,7 +27,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { gzipSync } from 'node:zlib';
 
-import { parseGLB, readAccessor, readBatch, Writer } from './character-gltf.mjs';
+import { parseGLB, readAccessor, readBatch, writeIndex, Writer } from './character-gltf.mjs';
 
 const FPS = 60;
 const ROTATION_EPSILON = 2 / 32767;
@@ -349,10 +353,10 @@ function convertCharacter(game, id, files) {
   const stats = { droppedChannels: 0, restChannels: 0, weightChannels: 0 };
   const animations = [];
   const clips = [];
-  if (game === 'efmi') {
+  if (game === 'efmi' || game === 'wwmi') {
     for (const clip of meta.clips) {
       const source = parseGLB(files.get(`clips/${clip.name}.glb`));
-      const [group, label] = EFMI_CLIPS[clip.name] ?? ['extras', clip.name];
+      const [group, label] = EFMI_CLIPS[clip.name] ?? [clip.group ?? 'extras', clip.label ?? clip.name];
       const { animation, duration } = convertAnimation(source, source.json.animations[0], nodeIndex, nodes, writer, stats);
       animation.name = label;
       animations.push(animation);
@@ -445,17 +449,7 @@ async function main() {
       );
     }
   }
-  const sorted = Object.fromEntries(
-    Object.entries(index)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([game, rows]) => [game, Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)))]),
-  );
-  const text = `${JSON.stringify({ format: 1, characters: sorted }, null, 2)}\n`;
-  await writeFile(path.join(outDir, 'index.json'), text);
-  if (indexPath) {
-    await mkdir(path.dirname(indexPath), { recursive: true });
-    await writeFile(indexPath, text);
-  }
+  await writeIndex(outDir, indexPath, index);
   console.log(`${Object.values(index).reduce((n, rows) => n + Object.keys(rows).length, 0)} characters, ${(total / 1e6).toFixed(1)} MB`);
 }
 

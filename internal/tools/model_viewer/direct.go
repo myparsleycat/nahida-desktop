@@ -416,12 +416,17 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 			geometry:     geometry,
 			conditions:   conditions,
 		}
-		if group := task.entry.group; len(group.SourceFiles) == 3 && modelViewerBlendStride(group.BlendStride) {
-			if path, ok := cache.modBufferPath(modDir, group.SourceFiles[1]); ok {
+		if group := task.entry.group; group.BlendFile != "" &&
+			modelViewerBlendStride(group.BlendStride, group.BlendWWMI) {
+			if path, ok := cache.modBufferPath(modDir, group.BlendFile); ok {
 				mesh.blend = &modelViewerBlendSource{
 					path:    path,
-					palette: strings.ToLower(filepath.ToSlash(group.SourceFiles[1])) + "#0",
+					palette: strings.ToLower(filepath.ToSlash(group.BlendFile)) + "#0",
 					stride:  group.BlendStride,
+					wwmi:    group.BlendWWMI,
+				}
+				if group.BlendWWMI {
+					mesh.blend.palette = wwmiComponentPalette(mesh.blend.palette, component)
 				}
 			}
 		}

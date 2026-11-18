@@ -25,6 +25,7 @@ var originalTextureSlots = map[string]map[string]string{
 		OriginalTextureLight: "_OtherDataTex", OriginalTextureMaterial: "_OtherDataTex2",
 	},
 	"EFMI": {OriginalTextureDiffuse: "Qy3l", OriginalTextureNormal: "Qzd7"},
+	"WWMI": {OriginalTextureDiffuse: "MainTex", OriginalTextureNormal: "Normal_Roughness_Metallic"},
 }
 
 // originalFaceSlots are the face maps of the face material, which Genshin and Star Rail sample from their own slots.
@@ -59,7 +60,7 @@ func (o *CharacterOriginal) Texture(part int, role string) (CharacterOriginalTex
 }
 
 const (
-	// originalCoverCell is the distance within which a mod vertex covers an original vertex.
+	// originalCoverCell is the distance, in metres, within which a mod vertex covers an original vertex.
 	originalCoverCell = 0.015
 	// originalHeadCell is the tighter cover distance for head parts: the irises and hair that mods draw without
 	// the face lie within originalCoverCell of most of the eye area.
@@ -69,7 +70,7 @@ const (
 	// originalPartAbsent is the share below which another part counts as absent from the mod.
 	originalPartAbsent = 0.1
 	// originalSameVertex and originalSameUV bound how far a mod vertex may sit from an original vertex, in
-	// position and UV, to be the same vertex.
+	// position (metres) and UV, to be the same vertex.
 	originalSameVertex = 0.002
 	originalSameUV     = 0.002
 	// originalUVShare is the share of a mod mesh's vertices that must match one part in position and UV.
@@ -103,15 +104,17 @@ func MatchCharacterOriginal(
 	meshes []OriginalMatchMesh,
 ) (OriginalMatch, error) {
 	match := OriginalMatch{Sources: make([]int, len(meshes))}
+	unit := modUnitsPerMetre(original.Game)
+	coverCell, headCell, sameVertex := originalCoverCell*unit, originalHeadCell*unit, float32(originalSameVertex*unit)
 
 	modGrid, headGrid := map[[3]int32][]int32{}, map[[3]int32][]int32{}
 	var modPositions []float32
 	for _, mesh := range meshes {
 		for v := 0; v+2 < len(mesh.Positions); v += 3 {
 			at, index := mesh.Positions[v:v+3], int32(len(modPositions)/3)
-			cell := motionCell(at[0], at[1], at[2], originalCoverCell)
+			cell := motionCell(at[0], at[1], at[2], coverCell)
 			modGrid[cell] = append(modGrid[cell], index)
-			cell = motionCell(at[0], at[1], at[2], originalHeadCell)
+			cell = motionCell(at[0], at[1], at[2], headCell)
 			headGrid[cell] = append(headGrid[cell], index)
 			modPositions = append(modPositions, at...)
 		}
@@ -124,9 +127,9 @@ func MatchCharacterOriginal(
 			continue
 		}
 		count := len(part.Positions) / 3
-		grid, radius := modGrid, float32(originalCoverCell)
+		grid, radius := modGrid, float32(coverCell)
 		if IsHeadRole(part.Role) {
-			grid, radius = headGrid, originalHeadCell
+			grid, radius = headGrid, float32(headCell)
 		}
 		covered := 0
 		for v := range count {
@@ -159,7 +162,7 @@ func MatchCharacterOriginal(
 		}
 		for v := range len(part.Positions) / 3 {
 			at := part.Positions[v*3 : v*3+3]
-			cell := motionCell(at[0], at[1], at[2], originalCoverCell)
+			cell := motionCell(at[0], at[1], at[2], coverCell)
 			grid[cell] = append(grid[cell], int32(len(vertices)))
 			item := vertex{part: int32(p)}
 			if len(part.UVs) >= v*2+2 {
@@ -188,7 +191,7 @@ func MatchCharacterOriginal(
 			if hasUV {
 				uv = [2]float32{mesh.UVs[v*2], mesh.UVs[v*2+1]}
 			}
-			cell := motionCell(at[0], at[1], at[2], originalCoverCell)
+			cell := motionCell(at[0], at[1], at[2], coverCell)
 			nearest, nearestDistance := int32(-1), float32(math.Inf(1))
 			matched := int32(-1)
 			forNeighbours(grid, cell, func(index int32) {
@@ -198,7 +201,7 @@ func MatchCharacterOriginal(
 				if distance < nearestDistance {
 					nearest, nearestDistance = vertices[index].part, distance
 				}
-				if hasUV && matched < 0 && distance <= originalSameVertex*originalSameVertex &&
+				if hasUV && matched < 0 && distance <= sameVertex*sameVertex &&
 					abs32(vertices[index].uv[0]-uv[0]) <= originalSameUV &&
 					abs32(vertices[index].uv[1]-uv[1]) <= originalSameUV {
 					matched = vertices[index].part
@@ -207,7 +210,7 @@ func MatchCharacterOriginal(
 			if matched >= 0 {
 				same[matched]++
 			}
-			if nearest >= 0 && nearestDistance <= originalCoverCell*originalCoverCell {
+			if nearest >= 0 && float64(nearestDistance) <= coverCell*coverCell {
 				near[nearest]++
 				voted++
 			}

@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	// motionMapCell is the grid cell, in mod units (meters), that reference vertices are bucketed by. A mod vertex
+	// motionMapCell is the grid cell, in metres, that reference vertices are bucketed by. A mod vertex
 	// votes only through a reference vertex in its own or a neighbouring cell.
 	motionMapCell = 0.015
 	// motionMapNeighbours is how many of the nearest reference vertices a mod vertex blends the bone weights of.
 	motionMapNeighbours = 4
-	// motionMapSoftening, in mod units, keeps the inverse squared distance blend finite on a reference vertex.
+	// motionMapSoftening, in metres, keeps the inverse squared distance blend finite on a reference vertex.
 	motionMapSoftening = 0.001
-	// motionMapFalloff is the distance, in mod units, from the nearest reference vertex at which a mod vertex counts
+	// motionMapFalloff is the distance, in metres, from the nearest reference vertex at which a mod vertex counts
 	// half.
 	motionMapFalloff = 0.01
 	// motionCoverageExponent is β in a group's similarity to a node: their overlap divided by the square root of the
@@ -38,14 +38,14 @@ const (
 	motionMapGroups = 4096
 	// motionIdentityShare is the share of the votes that keeps a palette in a skin's joint order.
 	motionIdentityShare = 0.5
-	// motionReachLimit is how far, in mod units (meters), a group's strongly weighted vertices may lie from a joint's
-	// bone for the group to follow that joint in a skin's joint order.
+	// motionReachLimit is how far, in metres, a group's strongly weighted vertices may lie from a joint's bone for the
+	// group to follow that joint in a skin's joint order.
 	motionReachLimit = 0.25
 	// motionIdentityFarShare is the share of a palette's groups within a skin's joint count that may lie beyond
 	// motionReachLimit of their joint for the palette to keep that skin's joint order. Hair longer than the source
 	// model's still roots at its bones, but its strongly weighted vertices can hang far below the bone chain.
 	motionIdentityFarShare = 0.25
-	// motionSeamDistance is how close, in mod units, vertices of two palettes lie to be one seam vertex.
+	// motionSeamDistance is how close, in metres, vertices of two palettes lie to be one seam vertex.
 	motionSeamDistance = 0.0001
 	// motionSeamWeight is how far apart, as a fraction, two bone weights of a seam vertex may be to pair their groups.
 	motionSeamWeight = 0.002
@@ -115,7 +115,7 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 
 	grid := make(map[[3]int32][]int32, len(m.refs))
 	for i, ref := range m.refs {
-		key := motionCell(ref.position[0], ref.position[1], ref.position[2], motionMapCell)
+		key := motionCell(ref.position[0], ref.position[1], ref.position[2], m.fromMetres(motionMapCell))
 		grid[key] = append(grid[key], int32(i))
 	}
 	bones := m.restBones()
@@ -128,7 +128,7 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 		votes[i] = m.votePalette(grid, bones, palette)
 		offsets[i+1] = offsets[i] + len(votes[i].centres)
 	}
-	links, err := motionSeamLinks(ctx, palettes, offsets)
+	links, err := motionSeamLinks(ctx, palettes, offsets, m.fromMetres(motionSeamDistance))
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +371,7 @@ func (m *CharacterMotion) identitySkin(
 	}
 	groups, nodes := len(votes.centres), len(m.nodes)
 	strong := strongVertices(palette, vertices, groups)
-	limit := motionReachLimit
+	limit := m.fromMetres(motionReachLimit)
 	reaches := map[int]float64{}
 	off := func(group, node int) bool {
 		key := group*nodes + node
@@ -502,13 +502,13 @@ func (m *CharacterMotion) gatherVotes(
 		if votes.skinMass != nil && nearestSkin >= 0 {
 			votes.near++
 			if nearestSkin < len(votes.skinMass) {
-				votes.skinMass[nearestSkin] += motionCloseness(nearest)
+				votes.skinMass[nearestSkin] += m.closeness(nearest)
 			}
 		}
 		if len(references) == 0 || count == 0 {
 			continue
 		}
-		confidence := motionCloseness(nearest)
+		confidence := m.closeness(nearest)
 		for _, ref := range references {
 			votes.coverage[ref.node] += confidence * ref.weight * ref.weight
 		}
@@ -524,9 +524,10 @@ func (m *CharacterMotion) gatherVotes(
 	return votes
 }
 
-// motionCloseness is how much a mod vertex counts at a distance, in mod units, from its nearest reference vertex.
-func motionCloseness(distance float64) float64 {
-	return 1 / (1 + (distance/motionMapFalloff)*(distance/motionMapFalloff))
+// closeness is how much a mod vertex counts at a distance, in mod units, from its nearest reference vertex.
+func (m *CharacterMotion) closeness(distance float64) float64 {
+	falloff := m.fromMetres(motionMapFalloff)
+	return 1 / (1 + (distance/falloff)*(distance/falloff))
 }
 
 // paletteSkin returns, from votes gathered through every skin over vertices, the skin whose reference vertices lie
@@ -552,10 +553,15 @@ func (v *motionVotes) paletteSkin(vertices int) int {
 }
 
 // motionSeamLinks returns the pairs of groups, numbered across palettes by offsets, that skin a seam, strongest
-// first: vertices of two palettes at one position whose weights pair one to one, at motionSeamMinPositions distinct
-// positions or more, or at one vertex whose two or more weights all pair. A group links to the group of another palette it shares the most seam weight with, when that
+// first: vertices of two palettes within seamDistance, in mod units, of one position whose weights pair one to one,
+// at motionSeamMinPositions distinct positions or more, or at one vertex whose two or more weights all pair. A group links to the group of another palette it shares the most seam weight with, when that
 // group links back.
-func motionSeamLinks(ctx context.Context, palettes []MotionPalette, offsets []int) ([][2]int, error) {
+func motionSeamLinks(
+	ctx context.Context,
+	palettes []MotionPalette,
+	offsets []int,
+	seamDistance float64,
+) ([][2]int, error) {
 	if len(palettes) < 2 {
 		return nil, nil
 	}
@@ -580,7 +586,7 @@ func motionSeamLinks(ctx context.Context, palettes []MotionPalette, offsets []in
 		}
 		for _, v := range queries {
 			x, y, z := palette.Positions[v*3], palette.Positions[v*3+1], palette.Positions[v*3+2]
-			cell := motionCell(x, y, z, motionSeamDistance)
+			cell := motionCell(x, y, z, seamDistance)
 			for dx := int32(-1); dx <= 1; dx++ {
 				for dy := int32(-1); dy <= 1; dy++ {
 					for dz := int32(-1); dz <= 1; dz++ {
@@ -589,7 +595,7 @@ func motionSeamLinks(ctx context.Context, palettes []MotionPalette, offsets []in
 							ex := o.Positions[other.vertex*3] - x
 							ey := o.Positions[other.vertex*3+1] - y
 							ez := o.Positions[other.vertex*3+2] - z
-							if ex*ex+ey*ey+ez*ez > motionSeamDistance*motionSeamDistance {
+							if float64(ex*ex+ey*ey+ez*ez) > seamDistance*seamDistance {
 								continue
 							}
 							pairSeamGroups(palette.Blend[v*8:v*8+8], o.Blend[other.vertex*8:other.vertex*8+8],
@@ -625,7 +631,7 @@ func motionSeamLinks(ctx context.Context, palettes []MotionPalette, offsets []in
 		}
 		for _, v := range unique {
 			cell := motionCell(palette.Positions[v*3], palette.Positions[v*3+1], palette.Positions[v*3+2],
-				motionSeamDistance)
+				seamDistance)
 			cells[cell] = append(cells[cell], seamVertex{p, v})
 		}
 	}
@@ -780,7 +786,7 @@ func (m *CharacterMotion) eachReference(
 	x, y, z float32,
 	yield func(index int32, distance float32),
 ) {
-	cell := motionCell(x, y, z, motionMapCell)
+	cell := motionCell(x, y, z, m.fromMetres(motionMapCell))
 	for dx := int32(-1); dx <= 1; dx++ {
 		for dy := int32(-1); dy <= 1; dy++ {
 			for dz := int32(-1); dz <= 1; dz++ {
@@ -828,8 +834,9 @@ func (m *CharacterMotion) referenceWeights(
 		return out, 0, -1
 	}
 	total := 0.0
+	softening := m.fromMetres(motionMapSoftening)
 	for _, n := range nearest[:count] {
-		share := 1 / (float64(n.distance) + motionMapSoftening*motionMapSoftening)
+		share := 1 / (float64(n.distance) + softening*softening)
 		ref := m.refs[n.index]
 		for k, node := range ref.nodes {
 			if node < 0 || ref.weights[k] <= 0 {
