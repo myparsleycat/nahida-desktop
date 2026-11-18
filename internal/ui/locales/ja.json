@@ -45,7 +45,7 @@
       "delete_title": "このチャットを削除しますか？",
       "delete_description": "「{{title}}」とすべてのメッセージが完全に削除されます。この操作は取り消せません。",
       "share": "トレーニングデータとして提供",
-      "share_title": "この会話をトレーニングデータとして提供しますか?",
+      "share_title": "この会話をトレーニングデータとして提供しますか？",
       "share_description": "会話は Nahida エージェントの改善に役立ちます。",
       "share_details": "同意すると、この会話は Nahida サーバーに送信され、Nahida エージェント開発者のトレーニングデータとして保存されます。",
       "share_point_messages": "この会話のすべてのメッセージと、モデルの推論、ツール呼び出しの引数と結果が含まれます。",
@@ -75,12 +75,12 @@
       "revert_message": "この時点まで戻す",
       "revert_pending": "{{count}} 件のメッセージを元に戻しました",
       "revert_files_notice": "ファイルの変更は復元されません",
-      "revert_undo": "復元を取り消す",
+      "revert_undo": "元に戻す操作を取り消す",
       "copy_message": "メッセージをコピー",
       "copied": "コピーしました",
       "copy_failed": "メッセージをコピーできませんでした",
       "hunting_title": "手動ハッシュハンティング",
-      "hunting_description": "カテゴリを押すたびに次のキーを1回だけ送信します。ゲーム画面を確認し、対象を見つけたらハッシュ発見を押してください。",
+      "hunting_description": "カテゴリをクリックするたびに次のキーを 1 回送信します。ゲーム画面を確認し、対象が見つかったら [ハッシュ発見] をクリックしてください。",
       "hunting_select_category": "ハンティングするカテゴリを選択してください",
       "hunting_selected": "{{category}} を選択 · {{steps}} ステップ",
       "hunting_found": "ハッシュ発見",
@@ -226,7 +226,7 @@
       },
       "item": {
         "uploading": "アップロード中",
-        "finalizing": "仕上げ中",
+        "finalizing": "完了処理中",
         "downloading": "ダウンロード中",
         "completed": "完了",
         "failed": "失敗",
@@ -262,7 +262,7 @@
           "minutes_other": "{{count}}分",
           "seconds_other": "{{count}}秒"
         },
-        "failed_files": "{{count}}個 失敗",
+        "failed_files": "{{count}} 件失敗",
         "dropdown_menu": {
           "cancel": "キャンセル",
           "retry": "再試行",
@@ -354,7 +354,7 @@
         "search_in_subdirs_placeholder": "サブフォルダー内を検索...",
         "search_include_subdirs": "サブフォルダーを含める",
         "search_no_results": "検索結果がありません",
-        "search_load_more": "もっと見る",
+        "search_load_more": "さらに表示",
         "search_unavailable": "検索を利用できません",
         "import": "共有リンクをインポート",
         "dropdown_menu": {
@@ -376,7 +376,7 @@
         "open": "開く",
         "download": "ダウンロード",
         "rename": "名前を変更",
-        "trash": "ゴミ箱",
+        "trash": "ごみ箱に移動",
         "new_dir": "フォルダー作成",
         "delete": "削除",
         "copy": "コピー",
@@ -397,7 +397,7 @@
       },
       "dialog": {
         "common": {
-          "invalid_dir_name": "無効なディレクトリ名です。",
+          "invalid_dir_name": "無効なフォルダー名です。",
           "invalid_file_name": "無効なファイル名です。",
           "name_leading_space": "名前の先頭に空白は使えません。",
           "name_trailing_space": "名前の末尾に空白は使えません。",
@@ -407,11 +407,11 @@
           "title": "フォルダー作成",
           "name_input_placeholder": "フォルダー名",
           "#": {
-            "0": "ディレクトリ名の形式が無効です",
-            "1": "ディレクトリを作成するパス情報の取得に失敗しました",
+            "0": "フォルダー名の形式が無効です",
+            "1": "フォルダーを作成する場所のパスを取得できませんでした",
             "2": "同じ名前のフォルダーが既に存在します。",
             "toast-promise": {
-              "loading": "ディレクトリを作成しています..."
+              "loading": "フォルダーを作成しています..."
             }
           }
         },
@@ -421,7 +421,7 @@
           "extension": "拡張子",
           "#": {
             "0": "名前は空にできません",
-            "1": "ディレクトリ名の形式が無効です",
+            "1": "フォルダー名の形式が無効です",
             "toast-promise": {
               "loading": "名前を変更しています...",
               "success": "名前が変更されました。"
@@ -446,7 +446,7 @@
         },
         "delete_items": {
           "title": "項目を削除",
-          "description": "リクエストが受け付けられると一覧からすぐに消え、整理はバックグラウンドで続きます。この操作は元に戻せません。",
+          "description": "リクエストが受け付けられると項目は一覧から削除され、残りの処理はバックグラウンドで実行されます。この操作は元に戻せません。",
           "action": "削除",
           "#": {
             "toast": {
@@ -468,7 +468,7 @@
         "title": "{{name}}に追加",
         "description": "圧縮ファイルは自動的に解凍されます"
       },
-      "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
+      "download_completed": "「{{name}}」のダウンロードが完了しました。",
       "fix_needed_toast": {
         "title": "「{{name}}」MODに修正が必要な項目があります。",
         "action": "Fixerを開く"
@@ -492,8 +492,8 @@
         "classifying": "選択したMODを確認しています…",
         "classify_failed": "選択したMODを確認できませんでした。",
         "no_usable_mods": "選択したMODの中に結合可能なMODがありません。",
-        "hash_mismatch": "これらのMODは共通のハッシュを持っていません。続行はできます。",
-        "classic_locked": "通常結合にできないMODが含まれています。",
+        "hash_mismatch": "これらのMODには共通のハッシュがありません。続行は可能です。",
+        "classic_locked": "通常結合を使用できないMODが含まれています。",
         "pack_name": "名前",
         "placement": "保存先",
         "placement_in_place": "現在の場所",
@@ -526,7 +526,7 @@
         "zzmi-mod-fixer": "ZZMI Mod Fixer",
         "download_dialog": {
           "title": "URLからダウンロード",
-          "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
+          "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で解凍します。",
           "url_label": "ダウンロードURL",
           "url_placeholder": "直接ダウンロードURLを入力してください",
           "target_label": "保存先フォルダー",
@@ -564,9 +564,9 @@
         "toggle-layout": "{{mode}}に切り替え",
         "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
-        "expand-subgroups": "サブフォルダーを探索",
-        "unpersist-subgroups": "サブフォルダー指定を解除",
-        "persist-subgroups": "サブフォルダーとして指定",
+        "expand-subgroups": "サブフォルダーを展開",
+        "unpersist-subgroups": "サブフォルダーの常時展開を解除",
+        "persist-subgroups": "サブフォルダーを常に展開",
         "unmark-manual-subgroup": "手動サブグループ指定を解除",
         "classification": {
           "label": "分類基準",
@@ -601,7 +601,7 @@
         }
       },
       "play": {
-        "no_importer": "起動する前に、このゲームの Importer を設定してください。"
+        "no_importer": "起動する前に、このゲームのインポーターを設定してください。"
       },
       "dialog": {
         "extract_archive_path": {
@@ -610,7 +610,7 @@
           "cancel": "キャンセル",
           "flatten_single_root": "最上位フォルダーを除去",
           "flatten_single_root_example": "例: mod.zip/a/b/mod.ini -> b/mod.ini",
-          "keep_archive_root": "圧縮内のパスを維持",
+          "keep_archive_root": "アーカイブ内のパスを維持",
           "keep_archive_root_example": "例: mod.zip/a/b/mod.ini -> a/b/mod.ini"
         },
         "add-game": {
@@ -624,13 +624,13 @@
           "nte_system_folder_warning_description": "Windows の管理者権限確認が表示される場合があります。",
           "nte_custom_mod_folder": "カスタム MOD フォルダー",
           "nte_custom_mod_folder_description": "任意です。ゲームの Mods フォルダーがこのフォルダーにリンクされます。",
-          "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",
-          "open_xxmi_settings": "Importer 設定を開く",
+          "xxmi_path_required": "インポーターを読み込むには、先に XXMI パスを設定してください。",
+          "open_xxmi_settings": "インポーター設定を開く",
           "nte_bootstrap_progress": {
             "checking": "NTE ブートストラップファイルを準備中...",
             "fetching-release": "{{archiveName}} のリリースを確認中...",
             "downloading": "{{archiveName}} をダウンロード中...",
-            "extracting": "{{archiveName}} を展開中...",
+            "extracting": "{{archiveName}} を解凍中...",
             "installing": "ブートストラップファイルをインストール中...",
             "completed": "NTE ブートストラップファイルの準備が完了しました。",
             "failed": "NTE ブートストラップファイルの準備に失敗しました。",
@@ -646,7 +646,7 @@
         "edit-game": {
           "title": "ゲーム設定",
           "path_label": "MODフォルダーのパス",
-          "importer_label": "Importer",
+          "importer_label": "インポーター",
           "no_importer": "なし",
           "order_label": "表示順",
           "order_value": "{{total}} 個中 {{current}} 番目",
@@ -669,7 +669,7 @@
           "ignore": "無視して起動"
         },
         "launch-blockers": {
-          "title": "起動前にオフにする設定があります",
+          "title": "起動前にオフにする必要がある設定があります",
           "description": "キャラクター動的解像度とスムーズモーションがオンのため、MOD が正常に適用されない場合があります。両方をオフにするか、今回の起動ではスムーズモーションを無視して残りの起動前確認を続けてください。",
           "confirm": "オフにして起動"
         },
@@ -701,7 +701,7 @@
           "ignore": "無視して起動",
           "confirm": "圧縮して起動",
           "progress": "圧縮中… {{done}} / {{total}}",
-          "failed": "{{count}} 個のテクスチャを圧縮できなかったため、そのままにしました。"
+          "failed": "{{count}} 個のテクスチャを圧縮できませんでした。これらのテクスチャは変更されていません。"
         },
         "preset-management": {
           "legacy-badge": "旧形式",
@@ -711,11 +711,11 @@
         },
         "delete-game": {
           "title": "ゲーム削除",
-          "description": "本当に '{{name}}' を削除しますか？この操作は元に戻せず、該当ゲームのプリセットも一緒に削除されます。"
+          "description": "「{{name}}」を削除しますか？このゲームのプリセットも削除されます。この操作は元に戻せません。"
         },
         "delete-mod": {
           "title": "このMODを削除しますか？",
-          "description": "削除されたMODはゴミ箱から復元できます。"
+          "description": "削除されたMODはごみ箱から復元できます。"
         },
         "missing-dependencies": {
           "title": "必要な依存関係がありません",
@@ -730,9 +730,9 @@
           "confirm": "名前を変更"
         },
         "find-conflict": {
-          "title": "競合モードを探す",
-          "description": "\"{{name}}\" のフォルダーを無効化対象から除外して二分探索を実行し、このモードと競合する他のモードを特定します。",
-          "mod-disabled-warning": "このモードは現在無効化されています。競合を再現するには先に有効化してください。",
+          "title": "競合する MOD を探す",
+          "description": "「{{name}}」のフォルダーを無効化対象から除外して二分探索を実行し、この MOD と競合する他の MOD を特定します。",
+          "mod-disabled-warning": "この MOD は現在無効になっています。競合を再現するには先に有効にしてください。",
           "session-active": "二分探索はすでに実行中です。現在のセッションをキャンセルまたは完了してから再試行してください。"
         },
         "texture-resize": {
@@ -766,14 +766,14 @@
         },
         "delete-folder": {
           "title": "フォルダーを削除しますか？",
-          "description": "「{{name}}」を削除しますか？削除したフォルダーはゴミ箱から復元できます。",
+          "description": "「{{name}}」を削除しますか？削除したフォルダーはごみ箱から復元できます。",
           "#": {
             "failed": "フォルダーの削除に失敗しました"
           }
         },
         "delete-preview": {
           "title": "プレビューを削除しますか？",
-          "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはゴミ箱から復元できます。"
+          "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはごみ箱から復元できます。"
         },
         "overwrite-preview": {
           "title": "既存のプレビューを上書きしますか？",
@@ -791,11 +791,11 @@
           "title": "新規プリセット作成",
           "conflict": {
             "title": "重複したMOD項目が見つかりました",
-            "description": "DISABLED 接頭辞は同じMODとして扱われるため、このままではプリセットを作成できません。続行すると、無効な重複フォルダーの名前を変更してからプリセットを作成します。",
+            "description": "DISABLED 接頭辞の有無だけが異なるフォルダーは同じMODとして扱われるため、このままではプリセットを作成できません。続行すると、無効な重複フォルダーの名前を変更してからプリセットを作成します。",
             "mod-key-label": "競合キー",
             "enabled": "有効",
             "disabled": "無効",
-            "action": "無効な重複フォルダーをリネームして続行"
+            "action": "無効な重複フォルダーの名前を変更して続行"
           },
           "#": {
             "0": "プリセット名を入力してください"
@@ -834,7 +834,7 @@
             },
             "aemeath_mech": {
               "label": "エイメスのメカ形態を修正",
-              "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用してはいけません。"
+              "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用しないでください。"
             },
             "rendering_33": {
               "label": "MODのメッシュ穴/部位欠損修正",
@@ -849,8 +849,8 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "この問題が実際にある MOD にだけ有効化してください。",
-              "tip": "問題が解決されない場合は、ロールバックしてから別の方法を試してください。"
+              "warning": "この問題が発生している MOD でのみ有効にしてください。",
+              "tip": "問題が解決しない場合は、ロールバックしてから別の方法を試してください。"
             },
             "run": "実行"
           },
@@ -906,7 +906,7 @@
           },
           "hash": {
             "title": "Hash Fix",
-            "description": "選択した MOD パスの古い ZZZ ハッシュを更新し、必要な INI と頂点バッファーの移行を適用します。"
+            "description": "選択した MOD パスの古い ZZZ ハッシュを更新し、必要な INI と頂点バッファの移行を適用します。"
           },
           "jane": {
             "title": "Jane Doe Blend Remap",
@@ -918,7 +918,7 @@
           },
           "run": {
             "action": "Fixer を実行",
-            "warning": "{{count}} 件の警告を伴って完了しました。"
+            "warning": "完了しました（警告 {{count}} 件）。"
           },
           "tool": {
             "hash": "Hash Fix",
@@ -948,12 +948,12 @@
         },
         "character": {
           "title": "キャラクターを設定",
-          "description": "「{{name}}」内のMODは、モデルビューアでこのキャラクターのトゥーンスタイルを使用します。",
+          "description": "「{{name}}」内のMODは、モデルビューアーでこのキャラクターのトゥーンスタイルを使用します。",
           "game": "ゲーム",
           "character": "キャラクター",
           "search-placeholder": "キャラクターを検索",
           "#": {
-            "failed": "フォルダのキャラクターを保存できませんでした。"
+            "failed": "フォルダーのキャラクターを保存できませんでした。"
           },
           "games": {
             "EFMI": "アークナイツ：エンドフィールド",
@@ -979,11 +979,11 @@
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
             "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
             "invalid-mod-folder-path": "MODフォルダーが見つかりません。パスを確認してください",
-            "importer-not-available": "Importer がインストールされていないか、有効になっていません。Importer 設定を確認してください。",
+            "importer-not-available": "インポーターがインストールされていないか、有効になっていません。インポーター設定を確認してください。",
             "failed": "ゲームの追加に失敗しました",
             "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
             "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
-            "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーはゲームの Mods フォルダーパス内、またはその逆の関係にはできません。"
+            "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーとゲームの Mods フォルダーは、一方を他方の中に配置できません。"
           },
           "reorder-games-mutation": {
             "failed": "ゲームの順番を保存できませんでした。"
@@ -993,7 +993,7 @@
             "failed": "ランチャーのパスを保存できませんでした。"
           },
           "start-nte-launcher": {
-            "not-set": "設定されたランチャーのパスがありません。",
+            "not-set": "ランチャーのパスが設定されていません。",
             "not-found": "保存されたランチャーのパスが存在しません。",
             "failed": "ランチャーの起動に失敗しました。"
           },
@@ -1014,7 +1014,7 @@
           "locked-description": "使用中のプロセス: {{processes}}",
           "create-preset-mutation": {
             "duplicate-name": "そのプリセット名は既に存在します",
-            "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした",
+            "conflict-resolve-failed": "一部の重複MODフォルダーの競合を自動で解決できませんでした",
             "failed": "プリセットの作成に失敗しました"
           },
           "apply-preset-mutation": {
@@ -1099,7 +1099,7 @@
         "open-gamebanana": "GameBananaで表示",
         "mark-manual-subgroup": "サブグループとして指定",
         "rename": "名前を変更",
-        "find-conflict": "競合モードを探す",
+        "find-conflict": "競合する MOD を探す",
         "preset": "プリセット",
         "fix_tool": "修正ツール",
         "group-preview": "プレビュー",
@@ -1108,7 +1108,7 @@
         "no_fix_tools": "修正ツールがありません"
       },
       "toast": {
-        "trash-error": "削除失敗",
+        "trash-error": "削除に失敗しました",
         "change-preview-error": "デフォルトのプレビュー画像を変更できませんでした。",
         "value-required": "値を入力してください。",
         "paste-preview": {
@@ -1194,14 +1194,14 @@
         "retry": "再ログイン",
         "manual_rmc": {
           "button": "rmc を入力",
-          "title": "rmc トークンを手動設定",
+          "title": "rmc Cookie を手動設定",
           "description": "ブラウザから取得した GameBanana の rmc Cookie 値を直接入力します。",
           "empty": "rmc 値を入力してください。",
-          "GAMEBANANA_INVALID_RMC": "無効な rmc トークンです。",
+          "GAMEBANANA_INVALID_RMC": "無効な rmc Cookie です。",
           "GAMEBANANA_SERVER_UNREACHABLE": "サーバーが応答していません。",
           "GAMEBANANA_AUTH_CHECK_FAILED": "サーバーの応答からログイン状態を確認できませんでした。しばらくしてから再試行してください。",
           "GAMEBANANA_LOGIN_INIT_FAILED": "ログイン画面を準備できませんでした。しばらくしてから再試行してください。",
-          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc トークンの保存に失敗しました。"
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc Cookie の保存に失敗しました。"
         }
       },
       "supported_games": "対応ゲーム",
@@ -1212,9 +1212,9 @@
       "loading": "読み込み中...",
       "back_to_category": "カテゴリに戻る",
       "category_panel_title": "カテゴリ",
-      "category_panel_description_root": "ゲームのルートカテゴリを探索します。",
-      "category_panel_description_nested": "現在のカテゴリのサブカテゴリを探索します。",
-      "category_panel_description_selected": "\"{{name}}\" のサブカテゴリを探索します。",
+      "category_panel_description_root": "ゲームのルートカテゴリを閲覧します。",
+      "category_panel_description_nested": "現在のカテゴリのサブカテゴリを閲覧します。",
+      "category_panel_description_selected": "「{{name}}」のサブカテゴリを閲覧します。",
       "no_categories": "表示できるカテゴリがありません。",
       "search_categories": "カテゴリを検索...",
       "no_category_results": "一致するカテゴリはありません。",
@@ -1262,7 +1262,7 @@
       "latest_feed": "最新フィード",
       "latest_feed_description": "選択したゲームの最近の投稿です。",
       "category_loading": "カテゴリを読み込み中...",
-      "category_description": "サブカテゴリと MOD を探索します。",
+      "category_description": "サブカテゴリと MOD を閲覧します。",
       "game_page": "ゲームページ",
       "subcategories": "サブカテゴリ",
       "mods": "MOD",
@@ -1307,7 +1307,7 @@
         "tools_label": "ツール",
         "toggle_sidebar": "サイドバーを切り替え",
         "empty_title": "開発者ツール",
-        "empty_description": "サイドバーからツールを選ぶか、下の項目を押して開始してください。",
+        "empty_description": "サイドバーからツールを選択するか、下の項目をクリックして開始してください。",
         "external_page": "外部ページ",
         "inline_tool": "内蔵ツール"
       },
@@ -1333,8 +1333,8 @@
         "select_importer_msg": "対象の GIMI Importer を選択してください。",
         "building": "ビルド中",
         "start_build": "ビルド開始",
-        "obfuscate_description": "選択した Importer の d3d11.dll をバックアップしてから、安全な PE パディングバイトを多様化します。",
-        "restore_description": "pe-padding-diversifier のバックアップがあるため、この Importer はすでにパディング多様化済みとして扱われます。再度適用する前にバックアップを復元してください。",
+        "obfuscate_description": "選択したインポーターの d3d11.dll をバックアップしてから、安全な PE パディングバイトを多様化します。",
+        "restore_description": "pe-padding-diversifier のバックアップがあるため、このインポーターはすでにパディング多様化済みとして扱われます。再度適用する前にバックアップを復元してください。",
         "obfuscating": "パディング多様化中",
         "restoring": "復元中",
         "start_obfuscate": "パディング多様化開始",
@@ -1346,7 +1346,7 @@
           "XXMI_INIT": "初期化中...",
           "XXMI_OBFUSCATE_INIT": "DLL パディング多様化を準備中...",
           "XXMI_RESTORE_INIT": "DLL 復元を準備中...",
-          "XXMI_ERR_GIMI_NOT_FOUND": "Importer が見つかりません。",
+          "XXMI_ERR_GIMI_NOT_FOUND": "インポーターが見つかりません。",
           "XXMI_FIND_VS": "Visual Studio ビルドツールを検索中...",
           "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされていることを確認してください。",
           "XXMI_ERR_SDK_NOT_FOUND": "選択した Visual Studio 環境で Windows SDK/UCRT のヘッダーを使用できません。Visual Studio Installer で C++ によるデスクトップ開発と Windows 10/11 SDK をインストールまたは修復するか、上の欄で別のビルドツールを指定してください。",
@@ -1354,12 +1354,12 @@
           "XXMI_OBFUSCATING": "D3D11 DLL のパディングを多様化中...",
           "XXMI_RESTORING": "バックアップから D3D11 DLL を復元中...",
           "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認するか、管理者権限の要求を許可してください。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "対象インポーターに d3d11.dll を書き込めません。フォルダーの権限を確認するか、管理者権限の要求を許可してください。",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll を置き換えられません。先にゲームを終了してからもう一度お試しください。",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
-          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "選択した Importer が内蔵 XXMI ランタイムで有効になっていないか、フォルダーが一致しません。XXMI 設定を確認してからもう一度お試しください。",
-          "XXMI_ERR_IMPORTER_BUSY": "Importer が起動中か、別の処理で使用中です。完了してからもう一度お試しください。",
-          "XXMI_ERR_LEGACY_RUNTIME": "選択した Importer は 3DMigoto ランタイムを使用しています。XXMI 設定で XXMI ランタイムに切り替えてからもう一度お試しください。",
+          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "選択したインポーターが内蔵 XXMI ランタイムで有効になっていないか、フォルダーが一致しません。XXMI 設定を確認してからもう一度お試しください。",
+          "XXMI_ERR_IMPORTER_BUSY": "インポーターが起動中か、別の処理で使用中です。完了してからもう一度お試しください。",
+          "XXMI_ERR_LEGACY_RUNTIME": "選択したインポーターは 3DMigoto ランタイムを使用しています。XXMI 設定で XXMI ランタイムに切り替えてからもう一度お試しください。",
           "XXMI_ERR_ELEVATION_FAILED": "管理者権限が拒否されたか、昇格後の書き込みに失敗しました。UAC を許可してから再試行してください。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll のパディング多様化が完了しました。",
@@ -1373,7 +1373,7 @@
           "XXMI_ERR_RESTORE_FAILED": "バックアップ復元中に予期しないエラーが発生しました。",
           "XXMI_DOWNLOAD_GIT": "ポータブル版 Git をダウンロード中...",
           "XXMI_DOWNLOAD_REPO": "XXMI ソースコードをダウンロード中...",
-          "XXMI_EXTRACT_REPO": "ソースコードのアーカイブを展開中...",
+          "XXMI_EXTRACT_REPO": "ソースコードのアーカイブを解凍中...",
           "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode を有効化中..."
         }
       },
@@ -1452,14 +1452,14 @@
         "icon_picker": "アイコンを選択",
         "icon_search": "Lucide アイコンをオフライン検索",
         "online_search": "Iconify を検索",
-        "online_policy": "Lucide はオフラインです。Iconify 検索ボタンを押した場合のみ通信します。",
+        "online_policy": "Lucide アイコンはオフラインで検索します。[Iconify を検索] をクリックした場合のみネットワークに接続します。",
         "icon_offline": "Iconify を利用できません。キャッシュと Lucide は引き続き利用できます",
         "icon_cache": "Iconify キャッシュ: {{count}} 件 · {{size}}",
         "clear_cache": "キャッシュを消去",
         "collection_prefix": "アイコンコレクションの接頭辞（例: mdi）",
         "download_collection": "コレクションをダウンロード",
         "collection_cached": "{{count}} 件のアイコンをキャッシュしました",
-        "crop": "画像をクロップ",
+        "crop": "画像をトリミング",
         "crop_hint": "ドラッグで位置を調整し、マウスホイールで拡大します",
         "delete_all": "下書きをすべて削除",
         "original_logic": "元のロジック",
@@ -1491,7 +1491,7 @@
           "description": "設定するキーの組み合わせを押してください"
         },
         "delete_confirm": {
-          "title": "Toggle Viewer ファイルをすべて削除しますか?",
+          "title": "Toggle Viewer ファイルをすべて削除しますか？",
           "description": "Mods フォルダーから生成された toggle-viewer ファイルをすべて削除し、自動生成をオフにします。"
         }
       },
@@ -1536,7 +1536,7 @@
         "upscale_scale": "倍率",
         "upscale_scale_option": "{{scale}}倍",
         "upscale_scale_description": "出力サイズは元サイズに選択した倍率を掛けた値です。一辺が 8192px を超える場合はスキップします。",
-        "upscale_normal_warning": "法線やラフネスなどの Linear テクスチャは、アップスケールでチャンネルが壊れることがあります。カラーテクスチャにだけ使ってください。",
+        "upscale_normal_warning": "法線やラフネスなどの Linear テクスチャは、アップスケールによってチャンネルのデータが破損する場合があります。カラーテクスチャにのみ使用してください。",
         "upscale_progress": {
           "working": "アップスケールランタイムを準備中"
         },
@@ -1794,7 +1794,7 @@
         "builder": {
           "left": {
             "title": "追加されたスクリプト",
-            "description": "ドラッグ&ドロップでスクリプトを追加するか、+ボタンを押して右側に移動できます",
+            "description": "ドラッグ&ドロップでスクリプトを追加するか、+ボタンをクリックして右側に移動できます",
             "noScripts": {
               "title": "利用可能なスクリプトがありません",
               "description": "Pythonファイル(.py)または実行ファイル(.exe)をここにドラッグ&ドロップして追加できます"
@@ -1810,11 +1810,11 @@
             "enterPresetName": "プリセット名を入力してください",
             "noScripts": {
               "title": "追加されたスクリプトがありません",
-              "description": "左側のリストから+ボタンを押してスクリプトを追加できます"
+              "description": "左側のリストで+ボタンをクリックしてスクリプトを追加できます"
             },
             "#": {
               "handleSavePreset": {
-                "success": "プリセットが保存されました",
+                "success": "プリセットを保存しました",
                 "error": "プリセットの保存に失敗しました",
                 "alreadyExists": "既に存在するプリセット名です"
               }
@@ -1886,9 +1886,9 @@
         "no_games": "選択可能なゲームがありません",
         "select_game": "ゲームを選択",
         "nte_unsupported": "NTE未対応",
-        "nte_tooltip": "このゲームのImporterはまだサポートされていません。",
+        "nte_tooltip": "このゲームのインポーターにはまだ対応していません。",
         "round_title": "ラウンド{{round}} · バッチ{{batchSize}} · 残り{{remaining}}",
-        "round_description": "以下のMODが無効化されました。F10でリロードし、問題が解決したか確認してください。",
+        "round_description": "以下のMODが無効化されました。F10 で再読み込みし、問題が解決したか確認してください。",
         "disabled_count": "{{count}}件を無効化",
         "undo": "前のラウンドを取り消す",
         "still_broken": "まだ問題あり",
@@ -1896,7 +1896,7 @@
         "done_title": "二分探索完了",
         "done_description": "{{path}}が原因の可能性があります。",
         "keep_disabled": "このMODを無効のままにする",
-        "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
+        "keep_disabled_hint": "「{{from}}」の名前を「{{to}}」に変更して無効状態を保持します。",
         "re_enable_all": "すべてのMODを再度有効化",
         "new_bisect_hint": "新しい二分探索を開始すると、一時的に無効化したMODをすべて元の状態に戻します。",
         "preserve_d3dx": "d3dx_user.ini を保護",
@@ -1904,7 +1904,7 @@
         "recover_disabled": "無効化MODを復元",
         "recover_disabled_hint": "選択したゲームのMODフォルダーに残った .mod-bisect-disabled ファイルを復元します。",
         "recover_disabled_success": "無効化されたMODファイル {{count}} 件を復元しました。",
-        "recover_disabled_none": "残留した無効化ファイルは見つかりませんでした。",
+        "recover_disabled_none": "残っている無効化ファイルは見つかりませんでした。",
         "recover_disabled_conflict": "無効化されたMODファイル {{count}} 件を復元しました。{{conflicts}} 件は同じ名前のファイルが既に存在するため復元しませんでした。",
         "state_changed": "二分探索はすでに次の状態に進んでいます。現在のラウンドを確認してから再度回答してください。",
         "out_of_sync": "一部のMODファイルの名前を元に戻せませんでした。二分探索をキャンセルして、すべてのMODを元の状態に戻してください。",
@@ -1915,7 +1915,7 @@
         "exclude_paths_remove": "削除",
         "exclude_count": "{{count}}件のパスを無効化から除外しています",
         "exclude_empty": "パスを入力してください。",
-        "exclude_outside": "選択したImporterのMODフォルダー内のパスのみ指定できます。",
+        "exclude_outside": "選択したインポーターのMODフォルダー内のパスのみ指定できます。",
         "exclude_root": "MODフォルダーのルートは除外できません。",
         "exclude_missing": "そのパスは存在しません。",
         "exclude_invalid": "選択したゲームのMODフォルダー内の正しいパスを入力してください。",
@@ -1969,21 +1969,21 @@
           "complete": "完了"
         },
         "toast": {
-          "load_failed": "MOD の解析に失敗",
+          "load_failed": "MOD の解析に失敗しました",
           "created": "Touch MOD を作成しました",
-          "create_failed": "Touch MOD の作成に失敗",
+          "create_failed": "Touch MOD の作成に失敗しました",
           "regenerated": "Touch MOD を再生成しました",
-          "regenerate_failed": "Touch MOD の再生成に失敗",
+          "regenerate_failed": "Touch MOD の再生成に失敗しました",
           "rolled_back": "Touch MOD をロールバックしました",
-          "rollback_failed": "Touch MOD のロールバックに失敗",
+          "rollback_failed": "Touch MOD のロールバックに失敗しました",
           "settings_save_failed": "タッチ設定の保存に失敗しました",
-          "reanalyzed": "LLM 再解析完了（ターン {{turn}}）",
-          "reanalyze_failed": "LLM 再解析失敗",
+          "reanalyzed": "LLM による再解析が完了しました（ターン {{turn}}）",
+          "reanalyze_failed": "LLM による再解析に失敗しました",
           "turn_selected": "ターン {{turn}} を選択しました",
           "turn_select_failed": "ターンの選択に失敗しました",
           "vision_cache_cleared": "Vision キャッシュを消去しました",
           "vision_cache_clear_failed": "Vision キャッシュの消去に失敗しました",
-          "no_components_selected": "分析するメッシュを1つ以上選択してください。"
+          "no_components_selected": "解析するメッシュを1つ以上選択してください。"
         },
         "input_error": {
           "already_touch": {
@@ -2053,7 +2053,7 @@
         "bones_count": "ボーン",
         "add_bone_zone": "ボーンゾーン追加",
         "remove_bone_zone": "ボーンゾーン削除",
-        "weight_threshold": "ウェイト閾値",
+        "weight_threshold": "ウェイトのしきい値",
         "weight_threshold_hint": "この範囲内のウェイトを持つ頂点がタッチゾーンに含まれます。",
         "zone_label_placeholder": "ラベル（任意）",
         "no_blend": "Blendなし",
@@ -2093,9 +2093,9 @@
           "confirm_description": "保存していた元のファイルのバックアップは削除されます。元に戻せません。"
         },
         "error": {
-          "not_efmi": "このツールはアークナイツ：エンドフィールド (EFMI) のMODでのみ使えます。",
+          "not_efmi": "このツールはアークナイツ：エンドフィールド (EFMI) のMODでのみ使用できます。",
           "modified": "{{file}} は適用後に手動で編集されたため、変更しませんでした。",
-          "stale": "MODファイルが変わりました。再読み込みしてからもう一度試してください。",
+          "stale": "MODファイルが変更されました。再読み込みしてからもう一度お試しください。",
           "unsupported": "{{file}} は未対応のエンコーディングです。"
         }
       },
@@ -2116,7 +2116,7 @@
         "mode": {
           "title": "適用方法",
           "in_place": "このMODを編集",
-          "in_place_hint": "このMODのINIに直接フックを入れ、元のINIは .nhd-liquid-orig としてバックアップします。",
+          "in_place_hint": "このMODのINIに直接フックを追加し、元のINIは .nhd-liquid-orig としてバックアップします。",
           "new_mod": "新しいMODとして作成",
           "new_mod_hint": "このMODを「(Liquid)」付きの新しいMODにコピーしてそこに適用し、元のMODは無効にします。"
         },
@@ -2188,11 +2188,11 @@
         },
         "trajectory": {
           "label": "噴射の軌跡をプレビュー",
-          "hint": "選択した噴出点の噴射の強さでの平均的な経路（1/10速度、0.48秒） · 衝突、移動、パルスは再現なし"
+          "hint": "選択した噴射ポイントの噴射の強さでの平均的な経路（1/10 速度、0.48 秒） · 衝突、移動、パルスは再現されません"
         },
         "remove_all": {
           "button": "すべて削除",
-          "title": "このMODの噴射ポイントをすべて削除しますか?",
+          "title": "このMODの噴射ポイントをすべて削除しますか？",
           "description": "INIファイルからフックを取り除き、保存した噴射ポイントを削除します。",
           "confirm": "すべて削除"
         },
@@ -2228,7 +2228,7 @@
               "viscosity": "液体の粘度を調整します。値を上げると液体がまとまりやすく、流下が遅くなり、飛び散りにくくなります。"
             },
             "jet": {
-              "force": "水流の速度を調整します。噴射の強さが1のときは3 m/s、最大5 m/sです。",
+              "force": "水流の速度を調整します。噴射の強さが 1 のときは 3 m/s で、最大 5 m/s です。",
               "amount": "水流の太さを調整します。非常に低い値では水流が液滴に分かれます。",
               "viscosity": "表面に接触した後の付着と飛び散りを調整します。空中の水流には影響しません。"
             },
@@ -2308,8 +2308,8 @@
         "slots": {
           "title": "同時に放出できる数を増やしますか？",
           "description": "この噴射ポイントを追加すると、キャラクターの噴射ポイントは{{count}}個になります。現在の同時噴射上限は、画面内の全キャラクターを合わせて{{current}}個です。すべてのMODに適用される上限を{{next}}個に増やせます。上限を超えると一部のポイントは噴射しません。同時に描画されないフォームのポイントは合算しません。上限を増やすとGPU負荷が増加します。",
-          "keep": "上げずに追加",
-          "confirm": "{{next}}個に上げて追加",
+          "keep": "上限を変更せずに追加",
+          "confirm": "上限を{{next}}個に増やして追加",
           "raised": "噴射ポイント{{count}}個まで同時に放出できるようになりました。"
         }
       },
@@ -2327,8 +2327,8 @@
         "selection_empty_hint": "ブラシを有効にして表面を塗るか、ボーンウェイトを読み込んでください。",
         "selection_controls": "選択範囲の変形",
         "smooth_selection": "境界を滑らかに",
-        "grow_selection": "選択拡張",
-        "shrink_selection": "選択縮小",
+        "grow_selection": "選択範囲を拡大",
+        "shrink_selection": "選択範囲を縮小",
         "undo_selection": "選択を元に戻す",
         "redo_selection": "選択をやり直す",
         "selection_tool": "選択ツール",
@@ -2349,12 +2349,12 @@
         "pick_bones_hint": "↑↓ でウェイトプレビュー · Enter/クリックで確定",
         "no_regions": "一致する部位がありません",
         "no_bones": "一致するボーンがありません",
-        "no_blend_fallback": "Blend バッファーがないため、位置を基準に身体部位を選択します。",
+        "no_blend_fallback": "Blend バッファがないため、位置を基準に身体部位を選択します。",
         "bone_label": "ボーン {{id}} ({{count}})",
         "bone_id": "ボーン {{id}}",
         "segment_bone_label": "{{mesh}} · {{bone}}",
         "unified_controls": "一括調整",
-        "unified_controls_title": "選択 {{count}} 本を一括",
+        "unified_controls_title": "選択した {{count}} 本を一括調整",
         "reset_selected": "選択をリセット",
         "show_weights": "ウェイト色を表示",
         "show_original": "元メッシュを表示",
@@ -2394,8 +2394,8 @@
         "brush_menu": "ブラシ",
         "brush_enable": "選択範囲をペイント",
         "brush_mode": "モード",
-        "brush_mode_paint": "塗り (+)",
-        "brush_mode_erase": "消し (-)",
+        "brush_mode_paint": "ペイント (+)",
+        "brush_mode_erase": "消去 (-)",
         "brush_radius": "半径",
         "brush_strength": "強度",
         "brush_mirror_x": "X軸対称",
@@ -2429,8 +2429,8 @@
           "exported_with_log": "位置バッファを更新し 변경사항.txt を作成しました",
           "exported_as_mod": "元MODを無効化し、新規作成しました: {{path}}",
           "export_failed": "体型変更に失敗しました",
-          "viewer_fallback": "テクスチャプレビューを利用できないため簡易ビューアで表示します",
-          "viewer_error": "モデルビューアエラー"
+          "viewer_fallback": "テクスチャプレビューを利用できないため簡易ビューアーで表示します",
+          "viewer_error": "モデルビューアーエラー"
         }
       }
     },
@@ -2493,10 +2493,10 @@
         "network": "ネットワーク",
         "general": "一般",
         "mod": "MOD",
-        "account": "ID",
+        "account": "アカウント",
         "advanced": "詳細",
         "drive": "ドライブ",
-        "transfer": "Transfer",
+        "transfer": "転送",
         "tools": "ツール",
         "feedback": "問題を報告"
       },
@@ -2514,7 +2514,7 @@
           "title": "タッチプロファイル",
           "llm": {
             "title": "Vision LLM",
-            "description": "タッチ領域の分析に使用するプロトコルとモデルを設定します。",
+            "description": "タッチ領域の解析に使用するプロトコルとモデルを設定します。",
             "protocol": {
               "title": "プロトコル",
               "openai-response": "OpenAI Responses",
@@ -2531,9 +2531,9 @@
             "reasoning": {
               "title": "推論レベル",
               "auto": "自動",
-              "low": "低い",
+              "low": "低",
               "medium": "中",
-              "high": "高い"
+              "high": "高"
             },
             "api_key": {
               "title": "API キー",
@@ -2553,7 +2553,7 @@
       },
       "gen": {
         "update": {
-          "title": "アップデート"
+          "title": "更新"
         },
         "application": {
           "title": "アプリケーション",
@@ -2562,11 +2562,11 @@
           "elevatedHelper": "昇格ヘルパー",
           "elevatedHelperDescription": "管理者権限が必要な操作を処理するため、アプリ起動時に別のヘルパーを管理者権限で起動します。Windows の UAC 確認が表示されます。",
           "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
-          "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
+          "titlebarActivityBadgeClickNavigateDescription": "オンにすると、バッジをクリックして関連画面を開きます。オフにすると、バッジをドラッグしてウィンドウを移動できます。",
           "windowBackdrop": "Mica 背景効果",
           "windowBackdropDescription": "ウィンドウの背景に Windows の Mica 効果を使用します。変更するとウィンドウが開き直されます。",
           "backdropBlur": "ぼかし効果",
-          "backdropBlurDescription": "メニュー、ダイアログ、通知、オーバーレイの背後をぼかして表示します。表示が重い場合はオフにしてください。",
+          "backdropBlurDescription": "メニュー、ダイアログ、通知、オーバーレイの背後をぼかして表示します。動作が重い場合はオフにしてください。",
           "checkUpdate": "更新確認",
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
@@ -2575,7 +2575,7 @@
           "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
           "includePrerelease": "プレリリースを含める",
-          "includePrereleaseDescription": "正式リリースに加えて GitHub の pre-release も更新候補に含めます。下書きリリースは含まれません。",
+          "includePrereleaseDescription": "正式リリースに加えて GitHub のプレリリースも更新候補に含めます。下書きリリースは含まれません。",
           "updateStatus": "更新状態",
           "autoUpdateModes": {
             "auto": {
@@ -2584,7 +2584,7 @@
             },
             "notify": {
               "title": "更新通知",
-              "description": "更新は自動で確認しますが、ダウンロードは自分で開始したときだけ実行します。"
+              "description": "更新を自動で確認しますが、ダウンロードは手動で開始します。"
             },
             "off": {
               "title": "自動更新オフ",
@@ -2601,7 +2601,7 @@
           "select": "テーマ選択",
           "light": "ライト",
           "dark": "ダーク",
-          "system": "システムデフォルト"
+          "system": "システム設定を使用"
         },
         "startPage": {
           "title": "開始ページ",
@@ -2612,10 +2612,10 @@
           "select": "レベルを選択"
         },
         "other": {
-          "moveTransferPageWhenStartTransfer": "転送開始時にページ移動",
-          "moveTransferPageWhenStartTransferDescription": "ファイル転送が始まると自動的に転送管理ページへ移動します。",
-          "powerSaveBlockInTransfer": "スリープモード防止",
-          "powerSaveBlockInTransferDescription": "転送または同期中はシステムが待機状態になるのを防ぎます。"
+          "moveTransferPageWhenStartTransfer": "転送開始時に転送ページを開く",
+          "moveTransferPageWhenStartTransferDescription": "ファイル転送が始まると自動的に転送ページへ移動します。",
+          "powerSaveBlockInTransfer": "スリープを防止",
+          "powerSaveBlockInTransferDescription": "転送または同期中はシステムがスリープ状態になるのを防ぎます。"
         }
       },
       "mod": {
@@ -2628,7 +2628,7 @@
               "description": "無効化したMODの大きなファイルだけを小さく圧縮します。MODを有効にすると、先に元のファイルへ戻します。"
             },
             "xpress4k": {
-              "description": "Windowsのファイル圧縮ですべてのMODファイルを小さくします。圧縮したままでもMODはそのまま使えます。"
+              "description": "Windowsのファイル圧縮機能ですべてのMODファイルを圧縮します。圧縮したままでもMODを使用できます。"
             }
           },
           "threshold": "圧縮サイズのしきい値",
@@ -2638,7 +2638,7 @@
             "idle": "待機中",
             "checking": "ファイルを確認中",
             "compressing": "圧縮中",
-            "decompressing": "復元中",
+            "decompressing": "解凍中",
             "error": "圧縮処理エラー"
           },
           "files": "{{processed}} / {{total}} ファイル",
@@ -2652,7 +2652,7 @@
           "archiveExtractPathModeDescription": "圧縮ファイル内に単一の最上位フォルダーがある場合、どのパスで解凍するかを選択します。",
           "archiveExtractPathModes": {
             "flatten_single_root": "最上位フォルダーを除去",
-            "keep_archive_root": "圧縮内のパスを維持",
+            "keep_archive_root": "アーカイブ内のパスを維持",
             "ask_every_time": "毎回確認"
           },
           "deleteArchiveAfterExtract": "解凍後に削除",
@@ -2660,7 +2660,7 @@
           "moveFolderInsteadOfCopy": "コピーの代わりに移動",
           "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)",
           "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
-          "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
+          "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なインポーターのShaderFixesフォルダーへコピーします。",
           "disabledPrefixStyle": "無効化MOD接頭辞の形式",
           "disabledPrefixStyleDescription": "MOD無効化時に使用する接頭辞を選択します。有効化時は両方の形式が常に認識されます。",
           "disabledPrefixStyles": {
@@ -2668,7 +2668,7 @@
             "underscore": "DISABLED_ (アンダースコア)"
           },
           "searchModPreview": "サブフォルダーからMODプレビューを検索",
-          "searchModPreviewDescription": "キャラクター フォルダーにプレビュー画像がない場合、MOD フォルダー内からプレビュー画像を検索します。",
+          "searchModPreviewDescription": "キャラクターフォルダーにプレビュー画像がない場合、MOD フォルダー内からプレビュー画像を検索します。",
           "togglePresetStore": "トグルプリセットの保存先",
           "togglePresetStoreDescription": "トグルプリセットの保存先です。変更すると既存のプリセットを移動します。",
           "autoInspectFix": "MODに必要な修正を自動検査",
@@ -2829,7 +2829,7 @@
           "importInstalledVersion": "外部ランチャーのバージョン",
           "importLatestVersion": "最新バージョン",
           "importVersionChoice": "インポートするバージョン",
-          "importUpdateLatest": "最新バージョンに更新し、今後のリリースを追従する",
+          "importUpdateLatest": "最新バージョンに更新し、今後のリリースに追従する",
           "importPinInstalled": "外部ランチャーのインストール済みバージョンを維持して固定する",
           "importVersionHint": "インポートするすべてのインポーターと共有XXMIライブラリに適用されます。更新はインポート中にインストールされます。今後の更新はゲーム起動時の更新設定に従い、固定したバージョンは手動で変更するまで維持されます。",
           "importVersionCheckFailed": "一部の最新バージョンを確認できませんでした。再確認するか、現在のインストール済みバージョンに固定してインポートできます。",
@@ -2929,7 +2929,7 @@
             "RESHADE_NOT_INSTALLED": "ReShade を準備できませんでした。ネットワーク接続を確認するか、XXMI の ReShade ページでダウンロードしてください。"
           },
           "launchWarnings": {
-            "GIMI_DCR_UNREADABLE": "動的キャラクター解像度の設定を確認できませんでした。有効になっていると MOD が正しく適用されない可能性があるため、ゲームのグラフィック設定を確認してください。",
+            "GIMI_DCR_UNREADABLE": "キャラクター動的解像度の設定を確認できませんでした。有効になっていると MOD が正しく適用されない可能性があるため、ゲームのグラフィック設定を確認してください。",
             "XXMI_DX12_UNSUPPORTED": "ゲームを DirectX 11 に固定していませんが、現在の XXMI ライブラリは DirectX 11 でのみ MOD を適用します。ゲームが DirectX 12 で起動すると MOD が適用されないため、DirectX 12 に対応した XXMI ライブラリに切り替えるか、レンダラーを DirectX 11 に戻してください。",
             "XXMI_GAME_LAUNCHER_NOT_SKIPPED": "Steam のインストールフォルダーでゲームの実行ファイルが見つからなかったため、ゲーム独自のランチャーをスキップしませんでした。",
             "XXMI_GAME_WINDOW_LATE": "待機時間内にゲームのウィンドウが表示されませんでした。ゲームは実行中です。ウィンドウが開き、MOD が適用されるか確認してください。"
@@ -2959,11 +2959,11 @@
           "renderer": "レンダラー",
           "rendererGameDefault": "ゲームの既定",
           "rendererDescription": "ゲームを起動するレンダラーです。DirectX 12 用の XXMI ライブラリを使う場合以外は DirectX 11 のままにしてください。",
-          "useLaunchOptions": "起動引数を使う",
+          "useLaunchOptions": "起動引数を使用",
           "timeout": "ゲーム起動の制限時間（秒）",
           "browse": "参照",
           "noUpdates": "すべてのパッケージが最新です",
-          "updatesPending": "{{count}} 件のアップデートがあります",
+          "updatesPending": "{{count}} 件の更新があります",
           "unsavedChanges": "保存されていない変更があります。起動に反映するには保存してください。",
           "discard": "元に戻す",
           "packageTab": "パッケージ",
@@ -2981,7 +2981,7 @@
           "leaveConfirm": "破棄して戻る",
           "importerFolderDescription": "このインポーターの Mods、ShaderFixes フォルダーと d3dx.ini を含むフォルダーです。",
           "modFolder": "MODフォルダー",
-          "modFolderDescription": "このインポーターが読み込む Mods フォルダーです。別のフォルダーを選ぶと、MOD をそこに置けます。",
+          "modFolderDescription": "このインポーターが読み込む Mods フォルダーです。別のフォルダーを選択すると、そのフォルダーに MOD を保存できます。",
           "modFolderLinked": "リンク済み",
           "modFolderLinkedDescription": "{{path}} がこのフォルダーにリンクされているため、インポーターはここから MOD を読み込みます。",
           "modFolderTargetMissing": "リンク先のフォルダーが見つかりません。ドライブを再接続するか、別のフォルダーを選ぶかリンクを解除してください。",
@@ -2999,7 +2999,7 @@
             "XXMI_MOD_FOLDER_INVALID_TARGET": "インポーターフォルダーの外にあるローカルドライブのフォルダーを選択してください。",
             "XXMI_IMPORT_NO_SPACE": "選択したドライブの空き容量が足りません。",
             "XXMI_GAME_RUNNING": "MODフォルダーを変更する前にゲームを終了してください。",
-            "XXMI_BUSY": "インポーターが別の処理中です。終わってから再度お試しください。"
+            "XXMI_BUSY": "インポーターが別の処理中です。完了してから再度お試しください。"
           },
           "gameFolderDescription": "ゲームの実行ファイルがあるフォルダーです。",
           "launcherFolderDescription": "GRYPHLINK ランチャーのフォルダーです。ゲームは公式ランチャーを経由しないと終了するため、直接起動ではこのランチャーを通してゲームを起動します。空欄の場合は自動で検出します。",
@@ -3008,10 +3008,10 @@
           "launchOptionsDescriptionWWMI": "Client-Win64-Shipping.exe を指定した引数で直接起動します。ゲームがクラッシュする場合があるため、必要な場合のみ有効にしてください。",
           "startMethodDescription": "Native はゲームの実行ファイルを直接起動します。起動に失敗する場合は Shell を選択してください。",
           "timeoutDescription": "ゲームウィンドウが表示されるまで待つ時間です。時間内に表示されない場合は起動失敗として扱います。",
-          "initDelayDescription": "注入された DLL が動作を開始するまで待つ時間です。起動時にゲームがクラッシュする場合は値を変えてみてください。",
+          "initDelayDescription": "注入された DLL が動作を開始するまで待つ時間です。起動時にゲームがクラッシュする場合は値を変更してください。",
           "overwriteINIDescription": "d3dx.ini をパッケージに合わせて最新の状態に保ちます。自分の編集内容を残したい場合はオフにしてください。",
           "rootDescription": "インポーターは既定でこのフォルダー内の個別のサブフォルダーにインストールされます。",
-          "prereleasesDescription": "不安定な可能性があるテスト版も提供します。",
+          "prereleasesDescription": "不安定な可能性があるテスト版も更新対象に含めます。",
           "configureGameDescriptionWWMI": "起動のたびにレイトレーシングをオフにし、下のテクスチャ品質と負傷エフェクトの設定を適用します。設定が合っていないと MOD が適用されません。",
           "unlockFPSDescriptionGIMI": "GI FPS Unlocker 経由でゲームを起動します。FPS 制限を維持するためバックグラウンドで動作し続けます。",
           "fpsTargetDescriptionGIMI": "120、180、240 など 60 の倍数にすると不具合が最も少なくなります。",
@@ -3025,7 +3025,7 @@
           "preLaunchDescription": "ゲームの起動前に実行する Windows コンソールコマンドです。",
           "postLoadDescription": "ゲームが起動し、DLL の注入が終わった後に実行する Windows コンソールコマンドです。",
           "customLaunchDescription": "ゲームの実行ファイルの代わりにこのコマンドを実行します。起動引数は無視されます。",
-          "injectModeDescription": "Hook はウィンドウフック経由で DLL を読み込みます。Inject は DLL をゲームに直接読み込みます。Bypass はインポーター DLL を飛ばし、追加 DLL のみを注入します。",
+          "injectModeDescription": "Hook はウィンドウフック経由で DLL を読み込みます。Inject は DLL をゲームに直接読み込みます。Bypass はインポーター DLL を読み込まず、追加 DLL のみを注入します。",
           "extraLibrariesDescription": "ReShade など、ゲームに一緒に注入する追加 DLL です。",
           "reshade": {
             "title": "ReShade",
@@ -3057,7 +3057,7 @@
               "presets": "プリセット"
             },
             "toggleDescription": "ゲームの起動時に ReShade も読み込みます。オーバーレイはゲーム内で Home キーを押すと開きます。",
-            "legacyUnsupported": "3DMigoto ランタイムでは、注入方式がネイティブのときだけ ReShade を使用できます。",
+            "legacyUnsupported": "3DMigoto ランタイムでは、注入方式が Native のときだけ ReShade を使用できます。",
             "gameFolder": "設定フォルダーを開く",
             "games": "ゲームごとの使用",
             "gamesEmpty": "インストール済みのインポーターがありません。",
@@ -3078,12 +3078,12 @@
           "enforceRenderingDescription": "d3dx.ini の [Rendering] オプションを、このインポーターに必要な値に保ちます。",
           "enableHuntingDescription": "テンキーの 0 でハンティングモードを切り替えられます。MOD 制作時にシェーダーやバッファのハッシュを調べるために使います。",
           "dumpShadersDescription": "ハンティングモードでシェーダーのハッシュをコピーすると、そのシェーダーを ShaderFixes にも保存します。",
-          "muteWarningsDescription": "F10 での再読み込み後を含め、MOD のエラー警告と警告音を出しません。",
+          "muteWarningsDescription": "MOD のエラー警告を表示せず、警告音も再生しません。F10 で再読み込みした後も同様です。",
           "unsafeModeDescription": "サードパーティ製の 3DMigoto DLL の使用を許可します。信頼できる提供元の DLL のみ使用してください。",
           "optimizeAtLaunchDescription": "起動のたびに、エラー、クラッシュ、性能低下の原因として知られる MOD の INI ファイルを無効化または修正します。",
           "resetOptimizerCacheDescription": "前回の実行以降に変更されたファイルだけでなく、すべての INI ファイルを再チェックします。",
           "repairRuntimeDescription": "ランタイムファイルを再確認し、ライブラリ提供元のファイルを再ダウンロードして、配置済みファイルを置き換えます。変更されたファイルはバックアップします。",
-          "repairPackageDescription": "インストール済みバージョンのインポーターパッケージを再ダウンロードし、インストール済みファイルに上書きします。MOD には触れません。",
+          "repairPackageDescription": "インストール済みバージョンのインポーターパッケージを再ダウンロードし、インストール済みファイルに上書きします。MOD は変更しません。",
           "createShortcutDescription": "MOD を適用した状態でこのゲームを直接起動するデスクトップショートカットを作成します。",
           "gameLaunch": "起動経路",
           "gameLaunchDescription": "直接起動はゲームの実行ファイルを起動します。Steam と Epic Games は各クライアントを使用します。カスタムは指定したコマンドを実行します。手動はユーザーがゲームを起動するまで待機します。",
@@ -3118,7 +3118,7 @@
           "resourceTierDescription": "ゲームがダウンロードしたリソースと一致している必要があり、異なると読み込み中にクラッシュします。Steam と Epic Games 版は HD を使用します。",
           "d3dx": {
             "applyNotice": "このインポーターの d3dx.ini にあるオプションのみ表示されます。変更は保存したときにファイルへ書き込まれます。「パッケージのインストール時に d3dx.ini を上書きする」がオンの場合、パッケージをインストールするとパッケージの値に戻ります。",
-            "busy": "インポーターが別の処理中のため、d3dx.ini に書き込めませんでした。終わってから再度保存してください。",
+            "busy": "インポーターが別の処理中のため、d3dx.ini に書き込めませんでした。完了してから再度保存してください。",
             "empty": "d3dx.ini がまだありません。先にインポーターパッケージをインストールしてください。",
             "loadFailed": "d3dx.ini を読み込めませんでした。",
             "managedHint": "ほかのインポーター設定に従って決まり、保存や起動のたびに上書きされます。",
@@ -3134,12 +3134,12 @@
         },
         "xxmiPath": "XXMIパス",
         "autoScan": "自動検索",
-        "activeImporter": "有効なImporter",
-        "showDisabledImporters": "無効なImporterを表示",
+        "activeImporter": "有効なインポーター",
+        "showDisabledImporters": "無効なインポーターを表示",
         "disableImporter": "無効にする",
         "enableImporter": "有効にする",
         "persistToggles": "トグルの永続保存",
-        "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
+        "persistTogglesDescription": "再読み込み時にMODのINIを変更して、トグル状態を永続的に保存します",
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
         "persistLogs": "ログ",
         "persistLogsEmpty": "まだログはありません。",
@@ -3151,7 +3151,7 @@
         "dllVersionEmpty": "利用可能なバージョンがありません。",
         "dllVersionCurrent": "現在: {{version}}",
         "dllVersionUnknown": "不明",
-        "packageVersion": "Importerパッケージバージョン",
+        "packageVersion": "インポーターパッケージのバージョン",
         "packageVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
         "packageVersionLoading": "バージョンを読み込み中...",
         "packageVersionLoadFailed": "バージョンの読み込みに失敗しました。",
@@ -3164,7 +3164,7 @@
             "xxmiNotFound": "XXMIが見つかりません",
             "alert": {
               "title": "注意",
-              "description": "自動検出されたXXMIランチャーのパスを確認してください。正常でない場合は、手動でパスを入力してください。"
+              "description": "自動検出されたXXMI Launcherのパスを確認してください。正しくない場合は、手動でパスを入力してください。"
             }
           },
           "saveXXMIPath": {
@@ -3175,13 +3175,13 @@
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
           },
           "installImporterPackage": {
-            "failed": "選択したImporterパッケージバージョンの適用に失敗しました",
+            "failed": "選択したインポーターパッケージのバージョンの適用に失敗しました",
             "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
             "errors": {
-              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "Importerフォルダー内のファイル「{{detail}}」へのアクセスが拒否され、アクセス許可を復元できませんでした。もう一度試して管理者権限の要求を許可するか、ファイルの所有権を取得してアクセス許可を手動でリセットしてください。",
+              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "インポーターフォルダー内のファイル「{{detail}}」へのアクセスが拒否され、アクセス許可を復元できませんでした。もう一度試して管理者権限の要求を許可するか、ファイルの所有権を取得してアクセス許可を手動でリセットしてください。",
               "XXMI_IMPORTER_FOLDER_ACCESS_DENIED": "「{{detail}}」を変更する権限がなく、アクセス許可を復元できませんでした。もう一度試して管理者権限の要求を許可するか、所有権を取得してアクセス許可を手動でリセットしてください。",
-              "XXMI_IMPORTER_FOLDER_IN_USE": "Importerフォルダーが他のプログラムで使用されています。ゲーム、XXMI Launcher、フォルダー内のファイルを開いているプログラムを終了してから、もう一度お試しください。",
-              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "ImporterフォルダーがXXMI Launcherのインストールフォルダーです。このImporter専用のフォルダーを選択してください。"
+              "XXMI_IMPORTER_FOLDER_IN_USE": "インポーターフォルダーが他のプログラムで使用されています。ゲーム、XXMI Launcher、フォルダー内のファイルを開いているプログラムを終了してから、もう一度お試しください。",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "インポーターフォルダーがXXMI Launcherのインストールフォルダーです。このインポーター専用のフォルダーを選択してください。"
             }
           }
         },
@@ -3223,10 +3223,10 @@
           "remove": "削除",
           "removed": "{{name}} をごみ箱に移動しました。",
           "removeTitle": "{{name}} を削除しますか？",
-          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体エミッターのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う MOD は再インストールするまで動作しません。一時的に止めるには無効化を使ってください。",
+          "removeDescription": "ランタイムフォルダーをごみ箱に移動します。液体噴射ポイントのプロファイルなど、ツールがその中に保存したデータも一緒に移動し、このランタイムを使う MOD は再インストールするまで動作しません。一時的に停止するには、無効化してください。",
           "foreignDescription": "{{path}} で別の {{name}} のコピーが有効になっています。ゲームが両方を読み込むため、先にそのコピーを無効化または削除してください。",
           "usedBy": {
-            "LiquidGravityProbe": "液体エミッターツールで使用"
+            "LiquidGravityProbe": "液体噴射ポイントツールで使用"
           },
           "errors": {
             "MOD_RUNTIME_UNKNOWN": "このインポーターには {{detail}} というランタイムがありません。",
@@ -3238,7 +3238,7 @@
           },
           "settings": {
             "title": "設定",
-            "hint": "保存するとランタイムファイルにすぐ反映されます。ゲーム起動中は F10 で再読み込みしてください。",
+            "hint": "保存した時点でランタイムファイルに反映されます。ゲームの実行中は F10 で再読み込みしてください。",
             "repairHint": "保存するとランタイムファイルも更新・修復されます。",
             "range": "{{min}}〜{{max}}",
             "keyDescription": "ゲーム内で使うキーの組み合わせを押してください。",
@@ -3331,7 +3331,7 @@
           "frameTimes": "フレーム時間を記録",
           "frameTimesDescription": "遅いフレームの所要時間の内訳と、5秒ごとのフレーム時間の統計を記録します。カクつきや入力遅延の診断に使用します。対応するランタイムが必要です。",
           "hashDumps": "DirectX 12・Vulkan ハッシュダンプ",
-          "hashDumpsDescription": "DirectX 12 または Vulkan のゲームで、シェーダー・テクスチャ・バッファーのハッシュと描画リストを記録し、インストール済みの MOD と一致するハッシュの数を報告します。MOD が適用されないときに使用します。ゲームが遅くなり、対応するランタイムが必要です。",
+          "hashDumpsDescription": "DirectX 12 または Vulkan のゲームで、シェーダー・テクスチャ・バッファのハッシュと描画リストを記録し、インストール済みの MOD と一致するハッシュの数を報告します。MOD が適用されないときに使用します。ゲームが遅くなり、対応するランタイムが必要です。",
           "alwaysOn": "ログモードでは、バッファなしのログ出力とクラッシュダンプが常にオンになります。",
           "reportTitle": "ライブラリの問題を報告",
           "reportDescription": "収集したログを XXMI ライブラリ分類の報告と一緒に送信します。ログ内の PC ユーザー名は匿名化されます。",
@@ -3339,7 +3339,7 @@
           "openFolder": "フォルダーを開く",
           "bundleSummary": "ログ {{log}} · クラッシュダンプ {{dumps}} 件 · Windows のクラッシュ記録 {{events}} 件",
           "logTruncated": "ログが大きすぎるため、先頭と末尾のみを含めました。",
-          "bodyPlaceholder": "どんな問題が起きたか、画面にどのキャラクターや MOD があったか、どうすれば再現できるかを書いてください。",
+          "bodyPlaceholder": "どんな問題が起きたか、画面にどのキャラクターや MOD があったか、どうすれば再現できるかを記入してください。",
           "mods": "添付する MOD",
           "modsDescription": "問題に関係する MOD を選択してください。フォルダーを展開してサブフォルダーだけを選ぶこともできます。報告と一緒に送信されます。",
           "modsSelected": "{{count}} 件選択",
@@ -3391,7 +3391,7 @@
           "filter": "画像、動画、テキスト",
           "remove": "添付を削除",
           "file_count": "{{count}} 個のファイル",
-          "mod_description": "問題のある MOD フォルダーをまるごと添付できます。ドライブにアップロードできない形式のファイルは除外されます。",
+          "mod_description": "問題のある MOD フォルダー全体を添付できます。ドライブにアップロードできない形式のファイルは除外されます。",
           "mod_login_required": "MOD フォルダーを添付するにはログインが必要です。"
         },
         "log": {
@@ -3406,10 +3406,10 @@
         "skipped_mod_files": "対応していない形式の MOD ファイル {{count}} 個は除外されました。",
         "retry_rules": "再試行",
         "error": {
-          "body_too_long": "内容は {{max}} 文字を超えられません。",
+          "body_too_long": "内容は {{max}} 文字以内で入力してください。",
           "FEEDBACK_UNSUPPORTED_FILE": "添付できないファイルです: {{name}}",
           "empty_file": "空のファイルは添付できません: {{name}}",
-          "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキスト・zip の添付は合計 {{size}} を超えられません。",
+          "FEEDBACK_MEDIA_TOO_LARGE": "画像・動画・テキスト・zip の添付ファイルは合計 {{size}} までです。",
           "FEEDBACK_TOO_MANY_MEDIA": "画像・動画・テキスト・zip ファイルは {{count}} 個まで添付できます。",
           "FEEDBACK_TOO_MANY_MOD_FILES": "MOD ファイルは合計 {{count}} 個まで添付できます。",
           "FEEDBACK_EMPTY_MOD": "MOD フォルダーに添付できるファイルがありません。",
@@ -3433,11 +3433,11 @@
           "title": "その他"
         },
         "downloadConcurrency": {
-          "title": "ダウンロード同時転送数",
+          "title": "同時ダウンロード数",
           "description": "ドライブ転送で同時にダウンロードするファイル数を設定します。範囲: 16〜64"
         },
         "uploadConcurrency": {
-          "title": "アップロード同時転送数",
+          "title": "同時アップロード数",
           "description": "ドライブ転送で同時にアップロードするファイル数を設定します。範囲: 4〜16"
         },
         "bandwidth": {
@@ -3451,12 +3451,12 @@
       "drive": {
         "title": "ドライブ",
         "sorting": {
-          "title": "並び替え"
+          "title": "並べ替え"
         },
         "nameSortPolicy": {
-          "title": "名前の並び替えポリシー",
-          "description": "ドライブで名前順に並び替えるときの空白と数字の扱いを選択します。",
-          "select": "並び替えポリシーを選択",
+          "title": "名前の並べ替えポリシー",
+          "description": "ドライブで名前順に並べ替えるときの空白と数字の扱いを選択します。",
+          "select": "並べ替えポリシーを選択",
           "options": {
             "natural_ignore_spacing": "自然順 + 空白を無視",
             "natural": "標準の自然順"
@@ -3502,7 +3502,7 @@
         "scanning": "フォルダーを確認中…",
         "hashing": "ファイルを確認中…",
         "uploading": "アップロード中…",
-        "committing": "仕上げ中…",
+        "committing": "完了処理中…",
         "restoring": "復元中…"
       },
       "outcome": {
@@ -3535,11 +3535,11 @@
         },
         "on_startup": {
           "title": "起動時に未実行のバックアップを実行",
-          "description": "起動時に予約バックアップを逃していればすぐに実行します。"
+          "description": "前回の予約バックアップが実行されなかった場合、起動時に実行します。"
         },
         "watch_changes": {
           "title": "変更時にバックアップ",
-          "description": "バックアップ対象を監視し、変更が落ち着いてから10分後にバックアップします（1時間に最大1回）。"
+          "description": "バックアップ対象を監視し、最後の変更から10分後にバックアップします（1時間に最大1回）。"
         },
         "keep_count": {
           "title": "保持数",
@@ -3596,7 +3596,7 @@
         "BACKUP_UNREADABLE_FILE": "一部のファイルを読み取れないため、今回のバックアップを中止しました。再試行してください。",
         "BACKUP_NOT_DIRECTORY": "フォルダーが存在しません。",
         "BACKUP_UPLOAD_FAILED": "アップロードに失敗したファイルが多すぎます。",
-        "BACKUP_INVALID_DEVICE_NAME": "PC名は1–80文字で入力してください。",
+        "BACKUP_INVALID_DEVICE_NAME": "PC名は1～80文字で入力してください。",
         "RESTORE_DESTINATION_NOT_EMPTY": "復元先には空のフォルダーを選んでください。",
         "RESTORE_HASH_MISMATCH": "復元したファイルがバックアップと一致しません。"
       }
@@ -3649,7 +3649,7 @@
         "downloading": "ダウンロード中",
         "uploading": "アップロード中",
         "transferring": "転送中",
-        "finalizing": "仕上げ中",
+        "finalizing": "完了処理中",
         "paused": "一時停止",
         "download_error": "ダウンロードエラー",
         "upload_error": "アップロードエラー",
@@ -3661,7 +3661,7 @@
         "restoring": "DLLを復元中"
       },
       "modBisect": {
-        "running": "バイセクト中"
+        "running": "二分探索中"
       },
       "xxmi": {
         "updates": "XXMI 更新",
@@ -3673,13 +3673,13 @@
       "textureResizer": {
         "resizing": "テクスチャリサイズ中",
         "upscaling": "テクスチャアップスケール中",
-        "converting": "テクスチャフォーマット変換中",
+        "converting": "テクスチャ形式変換中",
         "resizing_and_converting": "テクスチャリサイズおよび変換中",
         "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
       },
       "modCompression": {
         "compressing": "MODを圧縮中",
-        "decompressing": "MODを復元中",
+        "decompressing": "MODを解凍中",
         "error": "MOD圧縮エラー"
       },
       "modFix": {
@@ -3698,23 +3698,23 @@
   "updater": {
     "titlebar": {
       "action": "更新内容を確認",
-      "downloadAction": "アップデートをダウンロード",
-      "downloading": "アップデートをダウンロード中",
-      "downloadingProgress": "アップデートをダウンロード中 ({{percent}}%)"
+      "downloadAction": "更新をダウンロード",
+      "downloading": "更新をダウンロード中",
+      "downloadingProgress": "更新をダウンロード中 ({{percent}}%)"
     },
     "actions": {
-      "download": "アップデートをダウンロード",
-      "install": "アップデートをインストール",
-      "check": "アップデートを確認"
+      "download": "更新をダウンロード",
+      "install": "更新をインストール",
+      "check": "更新を確認"
     },
     "status": {
       "idle": "最新バージョンを使用しています。",
-      "checking": "アップデートを確認しています...",
-      "downloading": "アップデートをダウンロードしています...",
-      "downloadingProgress": "アップデートをダウンロードしています... ({{percent}}%)",
-      "failed": "アップデートに失敗しました: {{message}}",
-      "available": "新しいアップデートがあります。準備ができたらダウンロードできます。{{versionRangeText}}",
-      "downloaded": "アップデートをインストールする準備ができました。"
+      "checking": "更新を確認しています...",
+      "downloading": "更新をダウンロードしています...",
+      "downloadingProgress": "更新をダウンロードしています... ({{percent}}%)",
+      "failed": "更新に失敗しました: {{message}}",
+      "available": "新しい更新を利用できます。{{versionRangeText}}",
+      "downloaded": "更新をインストールする準備ができました。"
     },
     "toast": {
       "available": {
@@ -3727,7 +3727,7 @@
       },
       "notAvailable": {
         "title": "最新バージョンを使用しています。",
-        "description": "現在利用可能なアップデートはありません。"
+        "description": "現在利用可能な更新はありません。"
       }
     }
   },

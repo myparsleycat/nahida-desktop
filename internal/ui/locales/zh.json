@@ -45,13 +45,13 @@
       "delete_title": "要删除这个对话吗？",
       "delete_description": "\"{{title}}\"及其所有消息将被永久删除，且无法恢复。",
       "share": "作为训练数据提供",
-      "share_title": "将此对话作为训练数据提供?",
-      "share_description": "对话内容有助于改进 Nahida 智能体。",
-      "share_details": "同意后,此对话将发送到 Nahida 服务器,并作为 Nahida 智能体开发者的训练数据保存。",
-      "share_point_messages": "包含此对话中的所有消息,以及模型的推理和工具调用的参数与结果。",
+      "share_title": "将此对话作为训练数据提供？",
+      "share_description": "对话内容有助于改进 Nahida Agent。",
+      "share_details": "同意后，此对话将发送到 Nahida 服务器，并作为 Nahida Agent 开发者的训练数据保存。",
+      "share_point_messages": "包含此对话中的所有消息，以及模型的推理和工具调用的参数与结果。",
       "share_point_images": "对话中的图片和工具返回的截图会以文件形式上传。",
       "share_point_metadata": "包含对话标题、范围、模型、应用版本、平台和区域设置等基本信息。",
-      "share_withdraw": "提供记录会与账户关联,之后可通过联系我们删除。",
+      "share_withdraw": "提供记录将与账户关联，之后可联系我们删除。",
       "share_login_required": "提供前请先登录 Nahida。",
       "share_login": "登录",
       "share_confirm": "同意并提供",
@@ -80,7 +80,7 @@
       "copied": "已复制",
       "copy_failed": "无法复制消息",
       "hunting_title": "手动哈希狩猎",
-      "hunting_description": "每次按下分类按钮只会发送一次下一项按键。观察游戏画面，找到目标后点击找到哈希。",
+      "hunting_description": "每次按下分类按钮只会发送一次下一项按键。观察游戏画面，找到目标后点击“找到哈希”。",
       "hunting_select_category": "请选择要狩猎的分类",
       "hunting_selected": "已选择 {{category}} · {{steps}} 步",
       "hunting_found": "找到哈希",
@@ -141,7 +141,7 @@
       "model": "模型",
       "supports_images": "模型支持图像输入",
       "supports_images_hint": "模型支持图像输入时启用。附件图片和工具返回的截图会作为图像输入发送给模型。",
-      "auto_run_scripts": "无需询问即可运行代理脚本",
+      "auto_run_scripts": "无需询问即可运行智能体脚本",
       "auto_run_scripts_hint": "智能体可以编写并运行 Python 和 PowerShell 脚本。脚本以 Windows 账户权限运行，不受智能体文件夹限制。关闭此选项时，每次运行都会请求批准。",
       "api_key": "API 密钥",
       "api_key_value": "API 密钥值",
@@ -173,7 +173,7 @@
       "skills_hint": "内置和用户技能会在模型请求时逐步加载。",
       "reload": "重新加载",
       "open_skills_folder": "打开用户技能文件夹",
-      "header_name": "标头",
+      "header_name": "请求头",
       "header_value": "值",
       "mcp_name": "名称",
       "mcp_transport": "传输方式",
@@ -226,7 +226,7 @@
       },
       "item": {
         "uploading": "上传中",
-        "finalizing": "收尾中",
+        "finalizing": "正在完成",
         "downloading": "下载中",
         "completed": "已完成",
         "failed": "失败",
@@ -234,7 +234,7 @@
         "queued": "排队中",
         "preparing": "准备中",
         "reading_files": "正在读取文件 ({{processed}}/{{total}})",
-        "discovering": "正在清点文件（{{count}} 个）",
+        "discovering": "正在列出文件（{{count}} 个）",
         "upload_activity": {
           "preparing": "正在读取和压缩文件",
           "waiting": "正在等待服务器响应"
@@ -280,7 +280,7 @@
     "drive": {
       "title": "网盘",
       "title_server_error": "网盘（服务器错误）",
-      "share_drive": "共享云端硬盘",
+      "share_drive": "共享网盘",
       "storing_tooltip": "正在上传到文件服务器",
       "storing_download_excluded": "正在上传到文件服务器的文件已从下载中排除",
       "no_contents_section_message": {
@@ -297,7 +297,7 @@
       },
       "import": {
         "title": "导入到网盘",
-        "description": "输入共享文件夹或收藏集 URL，然后选择网盘中的文件夹。",
+        "description": "输入共享文件夹或合集 URL，然后选择网盘中的文件夹。",
         "url_label": "Nahida URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "目标文件夹",
@@ -311,7 +311,7 @@
         "destination_required": "请选择目标文件夹。",
         "password_label": "密码",
         "password_placeholder": "输入共享链接密码",
-        "create_collection_folder": "按收藏集名称创建文件夹",
+        "create_collection_folder": "按合集名称创建文件夹",
         "authenticate": "验证密码",
         "retry": "重试",
         "action": "导入到网盘",
@@ -323,7 +323,7 @@
         "failed": "导入失败",
         "progress": {
           "preparing": "正在准备导入…",
-          "copying": "正在由服务器导入到云端硬盘…",
+          "copying": "正在由服务器导入到网盘…",
           "downloading": "正在下载项目…",
           "uploading": "正在上传到网盘...",
           "completed": "导入完成。",
@@ -397,7 +397,7 @@
       },
       "dialog": {
         "common": {
-          "invalid_dir_name": "无效的目录名称。",
+          "invalid_dir_name": "无效的文件夹名称。",
           "invalid_file_name": "无效的文件名称。",
           "name_leading_space": "名称不能以空格开头。",
           "name_trailing_space": "名称不能以空格结尾。",
@@ -407,11 +407,11 @@
           "title": "创建文件夹",
           "name_input_placeholder": "文件夹名称",
           "#": {
-            "0": "目录名称格式无效",
-            "1": "获取创建目录的路径信息失败",
+            "0": "文件夹名称格式无效",
+            "1": "无法获取新文件夹的路径信息",
             "2": "已存在同名文件夹。",
             "toast-promise": {
-              "loading": "正在创建目录..."
+              "loading": "正在创建文件夹..."
             }
           }
         },
@@ -421,7 +421,7 @@
           "extension": "扩展名",
           "#": {
             "0": "名称不能为空",
-            "1": "目录名称格式无效",
+            "1": "名称格式无效",
             "toast-promise": {
               "loading": "正在重命名...",
               "success": "重命名成功。"
@@ -446,7 +446,7 @@
         },
         "delete_items": {
           "title": "删除项目",
-          "description": "请求受理后会立即从列表中消失，清理将在后台继续进行。此操作无法撤销。",
+          "description": "项目将立即从列表中移除，清理在后台继续进行。此操作无法撤销。",
           "action": "删除",
           "#": {
             "toast": {
@@ -460,7 +460,7 @@
     "share_drive": {
       "title": "共享网盘",
       "title_server_error": "共享网盘（服务器错误）",
-      "no_accessible_drives": "没有可访问的共享云端硬盘。"
+      "no_accessible_drives": "没有可访问的共享网盘。"
     },
     "mod": {
       "title": "模组管理器",
@@ -564,10 +564,10 @@
         "toggle-layout": "切换到{{mode}}",
         "active-mod-count": "已启用 {{enabled}} 个 / 共 {{total}} 个",
         "collapse-subgroups": "折叠子文件夹",
-        "expand-subgroups": "探索子文件夹",
-        "unpersist-subgroups": "取消子文件夹指定",
-        "persist-subgroups": "指定为子文件夹",
-        "unmark-manual-subgroup": "取消手动子分组指定",
+        "expand-subgroups": "展开子文件夹",
+        "unpersist-subgroups": "取消始终展开子文件夹",
+        "persist-subgroups": "始终展开子文件夹",
+        "unmark-manual-subgroup": "取消指定为子分组",
         "classification": {
           "label": "分类依据",
           "none": "文件夹",
@@ -584,10 +584,10 @@
         "target_path_not_set": "未设置目标路径。",
         "group_path_not_set": "未设置分组路径。",
         "file_path_unavailable": "无法确认文件路径。",
-        "unsupported_file_with_images": "{{fileName}} 不是受支持的文件类型。 (仅支持压缩文件、文件夹和图片文件)",
-        "unsupported_file_archive_only": "{{fileName}} 不是受支持的文件类型。 (仅支持压缩文件或文件夹)",
-        "already_exists_folder": "文件夹已存在: {{folderName}}",
-        "already_exists_item": "项目已存在: {{folderName}}",
+        "unsupported_file_with_images": "{{fileName}} 不是受支持的文件类型。（仅支持压缩文件、文件夹和图片文件）",
+        "unsupported_file_archive_only": "{{fileName}} 不是受支持的文件类型。（仅支持压缩文件或文件夹）",
+        "already_exists_folder": "文件夹已存在：{{folderName}}",
+        "already_exists_item": "项目已存在：{{folderName}}",
         "processing_error": "处理文件时发生错误。",
         "extract": {
           "loading": "正在解压 {{fileName}}...",
@@ -601,7 +601,7 @@
         }
       },
       "play": {
-        "no_importer": "启动前请先为此游戏设置 Importer。"
+        "no_importer": "启动前请先为此游戏设置导入器。"
       },
       "dialog": {
         "extract_archive_path": {
@@ -624,8 +624,8 @@
           "nte_system_folder_warning_description": "Windows 可能会请求管理员权限。",
           "nte_custom_mod_folder": "自定义模组文件夹",
           "nte_custom_mod_folder_description": "可选。游戏的 Mods 文件夹将链接到此文件夹。",
-          "xxmi_path_required": "要加载 Importer，请先设置 XXMI 路径。",
-          "open_xxmi_settings": "打开 Importer 设置",
+          "xxmi_path_required": "要加载导入器，请先设置 XXMI 路径。",
+          "open_xxmi_settings": "打开导入器设置",
           "nte_bootstrap_progress": {
             "checking": "正在准备 NTE 引导文件...",
             "fetching-release": "正在检查 {{archiveName}} 版本...",
@@ -646,7 +646,7 @@
         "edit-game": {
           "title": "游戏设置",
           "path_label": "模组文件夹路径",
-          "importer_label": "Importer",
+          "importer_label": "导入器",
           "no_importer": "无",
           "order_label": "显示顺序",
           "order_value": "第 {{current}} 个，共 {{total}} 个",
@@ -664,7 +664,7 @@
         },
         "smooth-motion": {
           "title": "平滑运动已开启",
-          "description": "使用当前 DLL 时，开启平滑运动可能导致模组无法正常应用。您可以忽略并启动，或关闭平滑运动后启动。",
+          "description": "使用当前 DLL 时，开启平滑运动可能导致模组无法正常应用。你可以忽略并启动，或关闭平滑运动后启动。",
           "confirm": "关闭并启动",
           "ignore": "忽略并启动"
         },
@@ -705,16 +705,16 @@
         },
         "preset-management": {
           "legacy-badge": "旧版",
-          "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。",
+          "legacy-description": "此预设使用旧格式，无法应用。请删除后重新创建。",
           "delete-title": "确定要删除此预设吗？",
-          "delete-description": "「{{name}}」将被永久删除。"
+          "delete-description": "“{{name}}”将被永久删除。"
         },
         "delete-game": {
           "title": "删除游戏",
-          "description": "确定要删除 '{{name}}' 吗？此操作无法撤销，该游戏的预设也将一并删除。"
+          "description": "确定要删除“{{name}}”吗？此操作无法撤销，该游戏的预设也将一并删除。"
         },
         "delete-mod": {
-          "title": "确定要删除这个模组？",
+          "title": "确定要删除这个模组吗？",
           "description": "已删除的模组可以从回收站恢复。"
         },
         "missing-dependencies": {
@@ -791,7 +791,7 @@
           "title": "新建预设",
           "conflict": {
             "title": "发现重复模组项",
-            "description": "由于会忽略 DISABLED 前缀，这些文件夹会被视为同一个模组，因此当前无法创建预设。继续后会先重命名已禁用的重复文件夹，再继续创建预设。",
+            "description": "由于会忽略 DISABLED 前缀，这些文件夹会被视为同一个模组。继续后将重命名已禁用的重复文件夹并创建预设。",
             "mod-key-label": "冲突键",
             "enabled": "启用",
             "disabled": "禁用",
@@ -813,7 +813,7 @@
             "installed": "已安装版本",
             "latest": "最新版本",
             "rate_limited_until": "GitHub API 请求限制将持续到 {{time}}。",
-            "continue_without_update": "不更新继续",
+            "continue_without_update": "不更新并继续",
             "action": "更新"
           },
           "tabs": {
@@ -868,7 +868,7 @@
             "backup_size_label": "备份大小：",
             "success": "回滚已完成。",
             "advanced": "高级",
-            "advanced_hint": "备份恢复与删除",
+            "advanced_hint": "备份还原与删除",
             "restore_all": "还原到最早备份",
             "restore_all_desc": "将所有文件还原到最早记录状态，并移除所有中间备份。",
             "restore_all_action": "还原...",
@@ -979,7 +979,7 @@
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
             "invalid-params": "请输入游戏名称和模组文件夹路径",
             "invalid-mod-folder-path": "找不到模组文件夹，请检查路径",
-            "importer-not-available": "Importer 未安装或未启用。请检查 Importer 设置。",
+            "importer-not-available": "导入器未安装或未启用。请检查导入器设置。",
             "failed": "添加游戏失败",
             "nte_mods_link_conflict": "游戏 Mods 文件夹和自定义模组文件夹都包含文件。链接前请先清空其中一个。",
             "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",
@@ -1011,14 +1011,14 @@
             "2": "请输入有效的模组名称",
             "3": "重命名模组失败"
           },
-          "locked-description": "正在被以下进程使用: {{processes}}",
+          "locked-description": "正在被以下进程使用：{{processes}}",
           "create-preset-mutation": {
             "duplicate-name": "该预设名称已存在",
             "conflict-resolve-failed": "部分重复模组文件夹无法自动整理",
             "failed": "创建预设失败"
           },
           "apply-preset-mutation": {
-            "legacy": "旧版预设无法套用。请删除后重新建立。",
+            "legacy": "旧版预设无法应用。请删除后重新创建。",
             "success": "预设已应用",
             "missing": "预设已应用，但有 {{count}} 个模组缺失",
             "failed": "预设已应用，但有 {{count}} 个模组的状态无法更改"
@@ -1038,7 +1038,7 @@
         "save-current": "保存当前值",
         "empty": "没有预设",
         "delete-title": "删除预设",
-        "delete-description": "「{{name}}」将被永久删除。",
+        "delete-description": "“{{name}}”将被永久删除。",
         "store": {
           "metadata": "模组文件夹 (nhd.json)",
           "database": "应用数据库",
@@ -1066,7 +1066,7 @@
         },
         "toast": {
           "saved": "预设已保存",
-          "saved-from": "来源: {{source}}",
+          "saved-from": "来源：{{source}}",
           "applied": "预设已应用",
           "applied-game": "已写入 INI 文件并应用到正在运行的游戏",
           "applied-files": "已写入 INI 文件",
@@ -1082,7 +1082,7 @@
           "failed": "切换状态预设操作失败"
         }
       },
-      "empty_selection": "请从侧边栏选择群组或角色文件夹。",
+      "empty_selection": "请从侧边栏选择分组或角色文件夹。",
       "no-preview": "无预览",
       "previous-preview": "上一张预览图片",
       "next-preview": "下一张预览图片",
@@ -1121,7 +1121,7 @@
         },
         "preview-drop": {
           "error": "保存预览失败",
-          "unsupported": "侧边栏只接受 1 个图片或视频文件作为预览拖放。",
+          "unsupported": "只能将 1 个图片或视频文件拖放到侧边栏作为预览。",
           "path-error": "无法解析文件路径。"
         },
         "model-viewer-open-failed": "无法打开模型查看器",
@@ -1194,14 +1194,14 @@
         "retry": "重新登录",
         "manual_rmc": {
           "button": "输入 rmc",
-          "title": "手动设置 rmc Token",
+          "title": "手动设置 rmc Cookie",
           "description": "直接输入从浏览器获取的 GameBanana rmc Cookie 值。",
           "empty": "请输入 rmc 值。",
-          "GAMEBANANA_INVALID_RMC": "rmc token 无效。",
+          "GAMEBANANA_INVALID_RMC": "rmc Cookie 无效。",
           "GAMEBANANA_SERVER_UNREACHABLE": "服务器没有响应。",
           "GAMEBANANA_AUTH_CHECK_FAILED": "无法根据服务器响应确认登录状态。请稍后重试。",
           "GAMEBANANA_LOGIN_INIT_FAILED": "无法准备登录窗口。请稍后重试。",
-          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "保存 rmc token 失败。"
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "保存 rmc Cookie 失败。"
         }
       },
       "supported_games": "支持的游戏",
@@ -1232,15 +1232,15 @@
       "open_profile": "在网页中打开",
       "open_mod_url": {
         "button": "打开 URL",
-        "title": "通过 Mod URL 打开",
+        "title": "通过模组 URL 打开",
         "placeholder": "https://gamebanana.com/mods/...",
-        "invalid": "请输入有效的 GameBanana Mod URL。",
+        "invalid": "请输入有效的 GameBanana 模组 URL。",
         "confirm": "打开"
       },
-      "logout": "登出",
+      "logout": "退出登录",
       "logout_confirm": {
-        "title": "要登出 GameBanana 吗？",
-        "description": "登出后，点赞模组或访问需要账号的内容时需要重新登录。"
+        "title": "要退出 GameBanana 登录吗？",
+        "description": "退出登录后，点赞模组或访问需要账号的内容时需要重新登录。"
       },
       "stats": {
         "subscribers": "订阅者",
@@ -1333,20 +1333,20 @@
         "select_importer_msg": "请选择目标 GIMI Importer。",
         "building": "构建中",
         "start_build": "开始构建",
-        "obfuscate_description": "先备份所选 Importer 的 d3d11.dll，然后多样化安全的 PE 填充字节。",
-        "restore_description": "检测到 pe-padding-diversifier 备份，因此此 Importer 会被视为已完成填充多样化。再次应用前请先恢复备份。",
+        "obfuscate_description": "先备份所选导入器的 d3d11.dll，然后多样化安全的 PE 填充字节。",
+        "restore_description": "检测到 pe-padding-diversifier 备份，因此此导入器会被视为已完成填充多样化。再次应用前请先恢复备份。",
         "obfuscating": "填充多样化中",
         "restoring": "恢复中",
         "start_obfuscate": "开始填充多样化",
         "start_restore": "恢复备份",
-        "backup_path": "备份: {{path}}",
+        "backup_path": "备份：{{path}}",
         "system_folder_warning_title": "已选择系统文件夹",
         "system_folder_warning_description": "应用或恢复 DLL 时，Windows 可能会请求管理员权限。",
         "progress": {
           "XXMI_INIT": "正在初始化...",
           "XXMI_OBFUSCATE_INIT": "正在准备 DLL 填充多样化...",
           "XXMI_RESTORE_INIT": "正在准备 DLL 恢复...",
-          "XXMI_ERR_GIMI_NOT_FOUND": "未找到 Importer。",
+          "XXMI_ERR_GIMI_NOT_FOUND": "未找到导入器。",
           "XXMI_FIND_VS": "正在查找 Visual Studio 构建工具...",
           "XXMI_ERR_VS_NOT_FOUND": "未找到 Visual Studio 环境 (vcvars64.bat)。请确认已安装 C++ 构建工具。",
           "XXMI_ERR_SDK_NOT_FOUND": "所选 Visual Studio 环境无法使用 Windows SDK/UCRT 头文件。请在 Visual Studio Installer 中安装或修复“使用 C++ 的桌面开发”和 Windows 10/11 SDK，或在上方指定其他构建工具路径。",
@@ -1354,12 +1354,12 @@
           "XXMI_OBFUSCATING": "正在多样化 D3D11 DLL 填充...",
           "XXMI_RESTORING": "正在从备份恢复 D3D11 DLL...",
           "XXMI_ERR_DLL_NOT_FOUND": "未找到已构建的 d3d11.dll 文件。",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标 Importer。请检查文件夹权限，或允许管理员权限请求。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标导入器。请检查文件夹权限，或允许管理员权限请求。",
           "XXMI_ERR_DLL_IN_USE": "无法替换 d3d11.dll。请先关闭游戏，然后重试。",
           "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "无法关闭 XXMI Launcher。请手动关闭后重试。",
-          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "所选 Importer 未在内置 XXMI 运行时中启用，或其文件夹不匹配。请检查 XXMI 设置后重试。",
-          "XXMI_ERR_IMPORTER_BUSY": "Importer 正在启动或被其他操作使用。请等待其完成后重试。",
-          "XXMI_ERR_LEGACY_RUNTIME": "所选 Importer 使用的是 3DMigoto 运行时。请在 XXMI 设置中切换到 XXMI 运行时后重试。",
+          "XXMI_ERR_IMPORTER_NOT_CONFIGURED": "所选导入器未在内置 XXMI 运行时中启用，或其文件夹不匹配。请检查 XXMI 设置后重试。",
+          "XXMI_ERR_IMPORTER_BUSY": "导入器正在启动或被其他操作使用。请等待其完成后重试。",
+          "XXMI_ERR_LEGACY_RUNTIME": "所选导入器使用的是 3DMigoto 运行时。请在 XXMI 设置中切换到 XXMI 运行时后重试。",
           "XXMI_ERR_ELEVATION_FAILED": "管理员权限被拒绝，或提升权限后写入失败。请批准 UAC 提示后重试。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 填充已成功多样化。",
@@ -1374,7 +1374,7 @@
           "XXMI_DOWNLOAD_GIT": "正在下载便携版 Git...",
           "XXMI_DOWNLOAD_REPO": "正在下载 XXMI 源代码...",
           "XXMI_EXTRACT_REPO": "正在解压源代码压缩包...",
-          "XXMI_ENABLE_UNSAFE_MODE": "正在启用 Unsafe Mode..."
+          "XXMI_ENABLE_UNSAFE_MODE": "正在启用不安全模式..."
         }
       },
       "menu_maker": {
@@ -1384,7 +1384,7 @@
         "draft_restored": "已恢复匹配的草稿",
         "load_failed": "无法加载源文件",
         "no_keys": "未找到可用的 [Key*] 段",
-        "scan_failed": "无法扫描 MOD 文件夹",
+        "scan_failed": "无法扫描模组文件夹",
         "font_failed": "无法加载内置 Inter 字体，已停止导出",
         "source_changed": "源文件已在 Nahida Desktop 外部更改，请重新加载后再应用",
         "apply_failed": "无法应用生成的文件",
@@ -1396,7 +1396,7 @@
         "choose_folder": "选择文件夹",
         "drafts": "草稿历史",
         "compare": "逻辑对比",
-        "apply": "应用到 MOD",
+        "apply": "应用到模组",
         "excluded": "已排除",
         "inspector": "设置",
         "preview": "预览",
@@ -1473,7 +1473,7 @@
         "hotkey": "Toggle Viewer 快捷键",
         "batch_generate": "批量生成",
         "batch_delete": "批量删除",
-        "batch_generate_done_other": "已为 {{count}} 个 Mod 文件夹生成 Toggle Viewer",
+        "batch_generate_done_other": "已为 {{count}} 个模组文件夹生成 Toggle Viewer",
         "batch_delete_done_other": "已删除 {{count}} 个 Toggle Viewer 文件",
         "batch_cancelled": "Toggle Viewer 任务已取消",
         "stop": "停止",
@@ -1486,13 +1486,13 @@
         "logs": "日志",
         "no_logs": "暂无日志。",
         "dialog": {
-          "trigger": "快捷键:",
+          "trigger": "快捷键：",
           "title": "Toggle Viewer 快捷键",
-          "description": "按下键盘组合以设置快捷键"
+          "description": "按下按键组合以设置快捷键"
         },
         "delete_confirm": {
-          "title": "删除所有 Toggle Viewer 文件?",
-          "description": "将从 Mods 文件夹中删除所有已生成的 toggle-viewer 文件,并关闭自动生成。"
+          "title": "删除所有 Toggle Viewer 文件？",
+          "description": "将从 Mods 文件夹中删除所有已生成的 toggle-viewer 文件，并关闭自动生成。"
         }
       },
       "texture_resizer": {
@@ -1632,8 +1632,8 @@
         "overlay_resize": "调整覆盖层大小",
         "toggle_viewer": "切换查看器",
         "toggle_viewer_splitter": "拖动可调整大小。单击可显示或隐藏切换查看器。",
-        "ineffective_blocked_by": "当前组合下无法使用此值: {{variables}}",
-        "ineffective_suggestion": "要使用此值，请更改以下变量:",
+        "ineffective_blocked_by": "当前组合下无法使用此值：{{variables}}",
+        "ineffective_suggestion": "要使用此值，请更改以下变量：",
         "ineffective_apply": "应用此组合",
         "no_preview": "不在查看器中显示",
         "no_preview_hint": "更改查看器不渲染的纹理或效果。数值会保存到预设",
@@ -1797,7 +1797,7 @@
             "description": "拖放以添加脚本或点击+按钮移至右侧",
             "noScripts": {
               "title": "没有可用的脚本",
-              "description": "可以将Python文件(.py)或可执行文件(.exe)拖放到此处添加"
+              "description": "可以将 Python 文件（.py）或可执行文件（.exe）拖放到此处添加"
             },
             "dropToAdd": "拖放以添加",
             "search": "搜索脚本...",
@@ -1829,7 +1829,7 @@
       },
       "blender_link": {
         "title": "Blender 实时预览",
-        "description": "无需导出，按编辑内容在模型查看器中显示正在 Blender 中编辑的 XXMI 模组。需要在 Blender 中安装 Nahida Live Link 插件。",
+        "description": "在模型查看器中实时显示正在 Blender 中编辑的 XXMI 模组，无需导出。需要在 Blender 中安装 Nahida Live Link 插件。",
         "connections": "已连接的 Blender",
         "not_running": "开启 Blender 实时预览以接受来自 Blender 的连接。",
         "empty": "没有已连接的 Blender。请在 Blender 中启用 Nahida Live Link 插件。",
@@ -1838,14 +1838,14 @@
         "game": "游戏",
         "character": "用于游戏动作的角色",
         "addon": {
-          "title": "插件(内置版本 {{version}})",
+          "title": "插件（内置版本 {{version}}）",
           "none": "未找到 Blender 3.6 或更高版本。",
           "refresh": "刷新",
           "load_failed": "无法获取 Blender 安装列表",
           "state_missing": "未安装",
           "state_current": "已安装 {{version}}",
-          "state_outdated": "已安装 {{version}},有可用更新",
-          "state_newer": "已安装 {{version}},比内置版本新",
+          "state_outdated": "已安装 {{version}}，有可用更新",
+          "state_newer": "已安装 {{version}}，比内置版本新",
           "state_modified": "已安装的文件被修改",
           "state_foreign": "由其他方式安装",
           "state_linked": "已链接到其他文件夹",
@@ -1869,7 +1869,7 @@
           "conflict_error": "已安装另一份插件。请先在 Blender 中将其移除。",
           "linked_error": "插件文件夹链接到其他文件夹。请在链接的文件夹中更新。",
           "newer_error": "已安装更新版本的插件。",
-          "link_outdated": "插件 {{version}} 已过时。内置版本:{{bundled}}。"
+          "link_outdated": "插件 {{version}} 已过时。内置版本：{{bundled}}。"
         }
       },
       "mod_bisect": {
@@ -1878,7 +1878,7 @@
         "start": "开始",
         "cancel": "取消",
         "scanning": "正在扫描模组文件夹...",
-        "bisect_inconclusive": "无法确定原因,请检查您的回答。",
+        "bisect_inconclusive": "无法确定原因，请检查你的回答。",
         "no_inis_found": "未找到已启用的 ini 文件。",
         "all_excluded": "所有已启用的 ini 文件均被排除，无法继续二分查找。",
         "cancelled": "二分查找已取消。",
@@ -1898,7 +1898,7 @@
         "keep_disabled": "保持此模组禁用",
         "keep_disabled_hint": "将把 \"{{from}}\" 重命名为 \"{{to}}\" 以保持禁用。",
         "re_enable_all": "重新启用所有模组",
-        "new_bisect_hint": "开始新的二分排查会恢复所有临时禁用的模组。",
+        "new_bisect_hint": "开始新的二分查找会恢复所有临时禁用的模组。",
         "preserve_d3dx": "保护 d3dx_user.ini",
         "preserve_d3dx_description": "在二分查找期间保持 d3dx_user.ini 为原始状态，防止切换值丢失",
         "recover_disabled": "恢复已禁用模组",
@@ -2188,12 +2188,12 @@
         },
         "trajectory": {
           "label": "预览喷射轨迹",
-          "hint": "所选喷出点喷射强度下的平均路径（1/10 速度，0.48 秒） · 不模拟碰撞、移动和脉冲"
+          "hint": "所选喷射点在当前喷射强度下的平均路径（1/10 速度，0.48 秒）· 不模拟碰撞、移动和脉冲"
         },
         "remove_all": {
           "button": "全部移除",
-          "title": "要移除此模组的所有喷射点吗?",
-          "description": "将从 INI 文件中移除钩子,并删除已保存的喷射点。",
+          "title": "要移除此模组的所有喷射点吗？",
+          "description": "将从 INI 文件中移除钩子，并删除已保存的喷射点。",
           "confirm": "全部移除"
         },
         "emitters": {
@@ -2219,7 +2219,7 @@
             "ooze": "渗出",
             "ooze_hint": "液体在出口积聚，拉长为液滴后分离并沿身体流动。不支持空中轨迹预览。",
             "yogurt": "黏性流",
-            "yogurt_hint": "液体沿网格表面流动、聚集并滴落。力度和脉冲不适用。"
+            "yogurt_hint": "液体沿网格表面流动、聚集并滴落。喷射强度和脉冲不适用。"
           },
           "hints": {
             "spray": {
@@ -2270,7 +2270,7 @@
           "emission": {
             "title": "喷射详细设置",
             "enabled": "使用详细设置",
-            "hint": "分别调整喷射间隔和粗细。透明度0%为不透明，100%使用默认材质效果。",
+            "hint": "分别调整喷射间隔和粗细。透明度为 0% 时不透明，为 100% 时使用默认材质效果。",
             "interval": "喷射间隔",
             "width": "液体粗细",
             "transparency": "透明度",
@@ -2285,10 +2285,10 @@
           "runtime_foreign": "{{detail}} 中已安装另一个 LiquidGravityProbe。请先禁用或删除它。",
           "runtime_disabled": "喷射运行时已禁用。请在模组库中启用。",
           "viewer_session": "模型视图已过期。请关闭并重新打开此工具。",
-          "unsupported_draw": "此部件没有自己的绘制调用,且在索引缓冲区之后绑定顶点缓冲区,无法添加喷射点。",
+          "unsupported_draw": "此部件没有自己的绘制调用，且在索引缓冲区之后绑定顶点缓冲区，无法添加喷射点。",
           "draw_mismatch": "所选面与模组文件不一致。请关闭并重新打开此工具。",
-          "draw_not_found": "在 INI 中找不到此部件的绘制调用。它可能使用了变量,或文件已更改。",
-          "shared_draw": "此部件的绘制调用也会用于使用其他索引缓冲区的部件,无法添加喷射点。",
+          "draw_not_found": "在 INI 中找不到此部件的绘制调用。它可能使用了变量，或文件已更改。",
+          "shared_draw": "此部件的绘制调用也会用于使用其他索引缓冲区的部件，无法添加喷射点。",
           "invalid_anchor": "喷射点无效。请重新选取表面。",
           "offset_limit": "喷射点最多只能离开表面 250 mm。",
           "slots_exhausted": "4096 个喷射点槽位已全部使用。请先移除其他模组的喷射点。",
@@ -2308,7 +2308,7 @@
         "slots": {
           "title": "要增加可同时喷射的数量吗？",
           "description": "添加此喷射点后，该角色将有 {{count}} 个喷射点。当前画面内所有角色合计最多可同时使用 {{current}} 个喷射点。可将适用于所有模组的上限提高至 {{next}} 个。超过上限时，部分喷射点不会喷射。不会同时绘制的形态不合并计数。提高上限会增加 GPU 负载。",
-          "keep": "不提高直接添加",
+          "keep": "不提高上限并添加",
           "confirm": "提高到 {{next}} 并添加",
           "raised": "现在最多可同时喷射 {{count}} 个喷射点。"
         }
@@ -2366,7 +2366,7 @@
         "deform_amount": "变形强度",
         "axis_x": "轴向缩放 X",
         "axis_y": "轴向缩放 Y",
-        "axis_z": "轴缩放 Z",
+        "axis_z": "轴向缩放 Z",
         "translate_x": "偏移 X",
         "translate_y": "偏移 Y",
         "translate_z": "偏移 Z",
@@ -2398,7 +2398,7 @@
         "brush_mode_erase": "擦除 (-)",
         "brush_radius": "半径",
         "brush_strength": "强度",
-        "brush_mirror_x": "X轴镜像",
+        "brush_mirror_x": "X 轴镜像",
         "brush_reset": "清除选区",
         "regions": {
           "shoulders": "肩部",
@@ -2411,7 +2411,7 @@
           "arms": "手臂",
           "head": "头部"
         },
-        "export": "体型修改",
+        "export": "应用体型修改",
         "exporting": "应用中",
         "empty": "加载模组文件夹以调节体型。",
         "metrics": {
@@ -2427,7 +2427,7 @@
           "exported": "已创建体型修改模组",
           "exported_description": "写入 {{bytes}} 字节",
           "exported_with_log": "已更新位置缓冲并写入 변경사항.txt",
-          "exported_as_mod": "已禁用原模组并创建: {{path}}",
+          "exported_as_mod": "已禁用原模组并创建：{{path}}",
           "export_failed": "体型修改失败",
           "viewer_fallback": "无法使用贴图预览，已回退到简易查看器",
           "viewer_error": "模型查看器错误"
@@ -2463,9 +2463,9 @@
         "retry": "重试",
         "errors": {
           "host": "请输入不含协议、路径或端口的有效主机。",
-          "port": "请输入1至65535之间的整数端口。",
+          "port": "请输入 1 至 65535 之间的整数端口。",
           "username": "请输入有效的代理用户名。",
-          "credentials": "SOCKS 用户名和密码必须各为1至255字节。",
+          "credentials": "SOCKS 用户名和密码必须各为 1 至 255 字节。",
           "passwordResetRequired": "无法读取已保存的密码。请删除或替换。",
           "passwordAction": "请选择有效的密码操作。",
           "type": "请选择 HTTP、SOCKS5 或 SOCKS5h。",
@@ -2496,7 +2496,7 @@
         "account": "账户",
         "advanced": "高级设置",
         "drive": "网盘",
-        "transfer": "Transfer",
+        "transfer": "传输",
         "tools": "工具",
         "feedback": "问题反馈"
       },
@@ -2575,7 +2575,7 @@
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
           "includePrerelease": "包含预发布版本",
-          "includePrereleaseDescription": "除正式版本外，也将 GitHub pre-release 作为更新候选。草稿版本不会包含在内。",
+          "includePrereleaseDescription": "除正式版本外，也将 GitHub 预发布版本作为更新候选。草稿版本不会包含在内。",
           "updateStatus": "更新状态",
           "autoUpdateModes": {
             "auto": {
@@ -2625,7 +2625,7 @@
           "method": "压缩方式",
           "methods": {
             "zstd": {
-              "description": "只压缩已禁用模组中的大文件，更省空间。启用模组时会先还原原文件。"
+              "description": "只压缩已禁用模组中的大文件，节省更多空间。启用模组时会先还原原文件。"
             },
             "xpress4k": {
               "description": "用 Windows 文件压缩缩小所有模组文件。压缩后仍可直接使用模组。"
@@ -2658,7 +2658,7 @@
           "deleteArchiveAfterExtract": "解压后删除压缩包",
           "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
           "moveFolderInsteadOfCopy": "移动文件夹而非复制",
-          "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
+          "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制（删除源文件）",
           "copyShaderFixesOnEnable": "启用时复制 ShaderFixes",
           "copyShaderFixesOnEnableDescription": "启用模组时，将模组中的 ShaderFixes 文件复制到已激活导入器的 ShaderFixes 文件夹。",
           "disabledPrefixStyle": "禁用模组前缀格式",
@@ -2679,7 +2679,7 @@
             "gamebanana": "GameBanana",
             "nahidaLive": "Nahida Live",
             "hui": "Hui",
-            "drive": "云端硬盘"
+            "drive": "网盘"
           }
         },
         "layout": {
@@ -2735,8 +2735,8 @@
           "detectGame": "检测游戏文件夹",
           "noGameFolders": "未找到游戏文件夹。请手动输入路径。",
           "maintenance": "维护",
-          "repairRuntime": "修复运行库",
-          "runtimeRepaired": "运行库已修复",
+          "repairRuntime": "修复运行时",
+          "runtimeRepaired": "运行时已修复",
           "repairPackage": "修复导入器包",
           "packageRepaired": "导入器包已修复",
           "openImporterFolder": "打开导入器文件夹",
@@ -2765,7 +2765,7 @@
           "launchConfiguring": "正在应用游戏设置",
           "launchStarting": "正在启动游戏",
           "autoUpdateFailed": "{{importer}} 自动更新失败，将尝试使用当前文件启动",
-          "runtimeRepairPrompt": "运行时文件可能已损坏。如果杀毒软件隔离了 DLL，可能是误报；请检查保护历史记录，以及错误中有显示的文件路径。是否重新检查缓存并替换已部署的文件？修改过的文件会被备份。",
+          "runtimeRepairPrompt": "运行时文件可能已损坏。如果杀毒软件隔离了 DLL，可能是误报；请检查保护历史记录，以及错误信息中显示的文件路径。是否重新检查缓存并替换已部署的文件？修改过的文件会被备份。",
           "gameTweaks": "游戏设置",
           "configureGame": "调整游戏设置",
           "unlockFPS": "解除帧率限制",
@@ -2831,7 +2831,7 @@
           "importVersionChoice": "要导入的版本",
           "importUpdateLatest": "更新至最新版本并跟随后续发布",
           "importPinInstalled": "保留并固定外部启动器已安装的版本",
-          "importVersionHint": "此选择适用于所有导入的导入器和共享 XXMI 库。更新会在导入过程中安装。后续更新遵循游戏启动时的更新设置；固定的版本将保持不变，直到您手动更改。",
+          "importVersionHint": "此选择适用于所有导入的导入器和共享 XXMI 库。更新会在导入过程中安装。后续更新遵循游戏启动时的更新设置；固定的版本将保持不变，直到你手动更改。",
           "importVersionCheckFailed": "无法检查部分软件包的最新版本。请重试，或固定当前已安装的版本后导入。",
           "importRetryVersions": "重新检查版本",
           "importErrors": {
@@ -2858,7 +2858,7 @@
           "customDllFallbackProvider": "未开启不安全模式的导入器将使用 {{provider}} 的 DLL，而不是自定义 DLL：{{importers}}",
           "customDllEnableUnsafe": "开启不安全模式",
           "customDllEnableUnsafeTitle": "要开启不安全模式吗？",
-          "customDllEnableUnsafeDescription": "自定义 DLL 仅在不安全模式下生效。此模式允许未签名的运行时 DLL，请只使用您信任的 DLL。",
+          "customDllEnableUnsafeDescription": "自定义 DLL 仅在不安全模式下生效。此模式允许未签名的运行时 DLL，请只使用你信任的 DLL。",
           "customDllEnableUnsafeShared": "共用自定义 DLL 仅在不安全模式下生效。要为以下导入器开启不安全模式吗？{{importers}}",
           "customDllEnableUnsafeConfirm": "开启",
           "customDllErrors": {
@@ -2965,7 +2965,7 @@
           "noUpdates": "所有软件包均为最新版本",
           "updatesPending": "有 {{count}} 个可用更新",
           "unsavedChanges": "有未保存的更改。保存后才会在启动时生效。",
-          "discard": "还原",
+          "discard": "放弃更改",
           "packageTab": "软件包",
           "tools": "工具",
           "signed": "已签名",
@@ -3057,7 +3057,7 @@
               "presets": "预设"
             },
             "toggleDescription": "启动游戏时一并加载 ReShade。在游戏内按 Home 键打开覆盖层。",
-            "legacyUnsupported": "使用 3DMigoto 运行时时，只有注入方式为原生时才能使用 ReShade。",
+            "legacyUnsupported": "使用 3DMigoto 运行时时，只有注入方式为 Native 时才能使用 ReShade。",
             "gameFolder": "打开设置文件夹",
             "games": "按游戏启用",
             "gamesEmpty": "尚未安装任何导入器。",
@@ -3078,11 +3078,11 @@
           "enforceRenderingDescription": "将 d3dx.ini 中的 [Rendering] 选项保持为此导入器所需的值。",
           "enableHuntingDescription": "可用小键盘 0 开关捕获模式。制作模组时用于查找着色器和缓冲区的哈希。",
           "dumpShadersDescription": "在捕获模式下复制着色器哈希时，同时将该着色器保存到 ShaderFixes。",
-          "muteWarningsDescription": "不显示模组错误警告和提示音，包括按 F10 重新加载之后。",
+          "muteWarningsDescription": "隐藏模组错误警告，且不播放警告提示音。按 F10 重新加载后同样适用。",
           "unsafeModeDescription": "允许使用第三方 3DMigoto DLL。请只使用来源可信的 DLL。",
           "optimizeAtLaunchDescription": "每次启动前，禁用或修改已知会导致错误、崩溃或性能下降的模组 INI 文件。",
           "resetOptimizerCacheDescription": "重新检查所有 INI 文件，而不只是上次运行后有改动的文件。",
-          "repairRuntimeDescription": "重新检查运行库文件，重新下载库提供方的文件，并替换已部署的文件。修改过的文件会被备份。",
+          "repairRuntimeDescription": "重新检查运行时文件，重新下载库提供方的文件，并替换已部署的文件。修改过的文件会被备份。",
           "repairPackageDescription": "重新下载已安装版本的导入器包并覆盖已安装的文件。不会改动模组。",
           "createShortcutDescription": "创建桌面快捷方式，可直接以加载模组的方式启动此游戏。",
           "gameLaunch": "启动途径",
@@ -3132,14 +3132,14 @@
             "noMatch": "没有与筛选条件匹配的选项。"
           }
         },
-        "xxmiPath": "XXMI路径",
+        "xxmiPath": "XXMI 路径",
         "autoScan": "自动扫描",
         "activeImporter": "已激活的导入器",
         "showDisabledImporters": "显示已停用的导入器",
         "disableImporter": "停用",
         "enableImporter": "启用",
         "persistToggles": "持久保存切换状态",
-        "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
+        "persistTogglesDescription": "在重新加载时修改模组 INI，以持久保存切换状态",
         "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
         "persistLogs": "日志",
         "persistLogsEmpty": "暂无日志。",
@@ -3151,7 +3151,7 @@
         "dllVersionEmpty": "没有可用版本。",
         "dllVersionCurrent": "当前：{{version}}",
         "dllVersionUnknown": "未知",
-        "packageVersion": "Importer 包版本",
+        "packageVersion": "导入器包版本",
         "packageVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。",
         "packageVersionLoading": "正在加载版本...",
         "packageVersionLoadFailed": "无法加载版本。",
@@ -3161,34 +3161,34 @@
         "packageVersionUnknown": "未知",
         "fn": {
           "findXXMIPath": {
-            "xxmiNotFound": "未找到XXMI",
+            "xxmiNotFound": "未找到 XXMI",
             "alert": {
               "title": "注意",
-              "description": "请确认自动检测到的XXMI启动器路径。如果不正常，请手动输入路径。"
+              "description": "请确认自动检测到的 XXMI 启动器路径。如果路径不正确，请手动输入。"
             }
           },
           "saveXXMIPath": {
-            "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
+            "configNotFound": "在指定路径中找不到 XXMI Launcher Config.json 文件"
           },
           "installDllVersion": {
             "failed": "应用所选 XXMI DLL 版本失败",
             "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
           },
           "installImporterPackage": {
-            "failed": "应用所选 Importer 包版本失败",
+            "failed": "应用所选导入器包版本失败",
             "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。",
             "errors": {
-              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "无法访问 Importer 文件夹中的文件“{{detail}}”，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取该文件的所有权并重置权限。",
+              "XXMI_IMPORTER_FILE_ACCESS_DENIED": "无法访问导入器文件夹中的文件“{{detail}}”，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取该文件的所有权并重置权限。",
               "XXMI_IMPORTER_FOLDER_ACCESS_DENIED": "没有更改“{{detail}}”的权限，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取其所有权并重置权限。",
-              "XXMI_IMPORTER_FOLDER_IN_USE": "Importer 文件夹正被其他程序占用。请关闭游戏、XXMI Launcher 以及打开了该文件夹内文件的程序，然后重试。",
-              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "Importer 文件夹是 XXMI Launcher 的安装文件夹。请为此 Importer 选择单独的文件夹。"
+              "XXMI_IMPORTER_FOLDER_IN_USE": "导入器文件夹正被其他程序占用。请关闭游戏、XXMI Launcher 以及打开了该文件夹内文件的程序，然后重试。",
+              "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "导入器文件夹是 XXMI Launcher 的安装文件夹。请为此导入器选择单独的文件夹。"
             }
           }
         },
         "modRuntimes": {
           "tab": "运行时",
           "title": "运行时",
-          "description": "工具安装到此游戏 Mods 文件夹 {{folder}} 分组中的全局 Mod",
+          "description": "由工具安装到此游戏 Mods 文件夹中 {{folder}} 分组的全局模组",
           "loading": "正在加载运行时…",
           "loadFailed": "无法加载运行时。",
           "noModsFolder": "还没有游戏使用此导入器，因此没有可安装运行时的 Mods 文件夹。",
@@ -3223,7 +3223,7 @@
           "remove": "移除",
           "removed": "已将 {{name}} 移至回收站。",
           "removeTitle": "要移除 {{name}} 吗？",
-          "removeDescription": "运行时文件夹将移至回收站，工具保存在其中的数据（例如液体喷射配置）也会一并移走；使用此运行时的 Mod 在重新安装前将无法工作。如需暂时关闭，请改用禁用。",
+          "removeDescription": "运行时文件夹将移至回收站，工具保存在其中的数据（例如液体喷射配置）也会一并移走；使用此运行时的模组在重新安装前将无法工作。如需暂时关闭，请改用禁用。",
           "foreignDescription": "{{path}} 中启用了另一个 {{name}} 副本。游戏会同时加载两者，请先禁用或移除该副本。",
           "usedBy": {
             "LiquidGravityProbe": "由液体喷射工具使用"
@@ -3368,11 +3368,11 @@
         "server_unreachable": "无法连接到服务器。",
         "retry": "重试",
         "my_account": "我的账户",
-        "logout": "登出"
+        "logout": "退出登录"
       },
       "feedback": {
         "title": "问题反馈",
-        "description": "请告诉我们您遇到的问题。您发送的内容仅用于确认和解决问题。",
+        "description": "请告诉我们你遇到的问题。你发送的内容仅用于确认和解决问题。",
         "category": {
           "label": "分类",
           "desktop": "Desktop 应用问题",
@@ -3401,7 +3401,7 @@
         "submit": "发送",
         "sending": "发送中...",
         "cancel": "取消",
-        "sent": "已收到您的反馈，谢谢。",
+        "sent": "已收到你的反馈，谢谢。",
         "failed": "反馈发送失败。",
         "skipped_mod_files": "已排除 {{count}} 个不支持类型的模组文件。",
         "retry_rules": "重试",
@@ -3479,7 +3479,7 @@
     },
     "backup": {
       "title": "备份",
-      "description": "自动备份已登记游戏的模组文件夹以及您添加的文件夹。仅上传服务器允许的文件类型，未更改的文件不会重复上传。",
+      "description": "自动备份已登记游戏的模组文件夹以及你添加的文件夹。仅上传服务器允许的文件类型，未更改的文件不会重复上传。",
       "loading": "加载中…",
       "nav": {
         "sections": "分区",
@@ -3649,7 +3649,7 @@
         "downloading": "下载中",
         "uploading": "上传中",
         "transferring": "传输中",
-        "finalizing": "收尾中",
+        "finalizing": "正在完成",
         "paused": "已暂停",
         "download_error": "下载出错",
         "upload_error": "上传出错",
@@ -3658,10 +3658,10 @@
       "fixer4001": {
         "building": "正在构建 DLL",
         "diversifying": "正在多样化 DLL 填充",
-        "restoring": "正在还原 DLL"
+        "restoring": "正在恢复 DLL"
       },
       "modBisect": {
-        "running": "二分排查中"
+        "running": "二分查找中"
       },
       "xxmi": {
         "updates": "XXMI 更新",
@@ -3713,7 +3713,7 @@
       "downloading": "正在下载更新...",
       "downloadingProgress": "正在下载更新... ({{percent}}%)",
       "failed": "更新失败：{{message}}",
-      "available": "发现新更新。你可以在方便时下载。{{versionRangeText}}",
+      "available": "有可用更新。{{versionRangeText}}",
       "downloaded": "更新已准备好安装。"
     },
     "toast": {

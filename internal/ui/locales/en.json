@@ -27,7 +27,7 @@
   },
   "page": {
     "auth": {
-      "error": "Login error",
+      "error": "Sign-in error",
       "stop": "Stop"
     },
     "agent": {
@@ -131,7 +131,7 @@
       "login_copy_failed": "Could not copy the sign-in link",
       "login_cancel": "Cancel sign-in",
       "sign_out": "Sign out",
-      "model_hint": "Pick a model from the list or type a model id.",
+      "model_hint": "Select a model from the list or enter a model ID.",
       "catalog_updated": "Model list: {{date}}",
       "catalog_refresh": "Refresh the model list",
       "catalog_refreshed": "Model list updated",
@@ -167,7 +167,7 @@
       "disabled": "Disabled",
       "mcp_connected": "Connected · {{count}} tools",
       "transport_blender": "Blender (built-in)",
-      "blender_hint": "Built in: Nahida talks to the Blender MCP add-on over its local socket. Start the bridge server in Blender's MCP add-on preferences first.",
+      "blender_hint": "Built in: Nahida connects to the Blender MCP add-on through its local socket. Start the bridge server in Blender's MCP add-on preferences first.",
       "add_server": "Add server",
       "skills": "Skills",
       "skills_hint": "Built-in and user skills are loaded progressively when the model requests them.",
@@ -206,7 +206,7 @@
         "download": "Download",
         "clear_completed": "Clear completed",
         "status_filter": {
-          "title": "Status Filter",
+          "title": "Status filter",
           "uploading": "Uploading",
           "downloading": "Downloading",
           "paused": "Paused",
@@ -392,15 +392,15 @@
         "copy_single": "\"{{name}}\" is selected for copying",
         "copy_multiple": "\"{{name}}\" and {{count}} more items are selected for copying",
         "move_loading": "Moving files...",
-        "move_success": "Files moved successfully",
+        "move_success": "Files moved",
         "move_error": "Failed to move files: {{message}}",
         "copy_loading": "Copying files...",
-        "copy_success": "Files copied successfully",
+        "copy_success": "Files copied",
         "copy_error": "Failed to copy files: {{message}}"
       },
       "dialog": {
         "common": {
-          "invalid_dir_name": "Invalid directory name.",
+          "invalid_dir_name": "Invalid folder name.",
           "invalid_file_name": "Invalid file name.",
           "name_leading_space": "The name cannot start with a space.",
           "name_trailing_space": "The name cannot end with a space.",
@@ -410,11 +410,11 @@
           "title": "Create folder",
           "name_input_placeholder": "Folder name",
           "#": {
-            "0": "Invalid directory name format",
-            "1": "Failed to get path info for directory creation",
+            "0": "Invalid folder name",
+            "1": "Could not resolve the path for the new folder",
             "2": "A folder with the same name already exists.",
             "toast-promise": {
-              "loading": "Creating directory..."
+              "loading": "Creating folder..."
             }
           }
         },
@@ -424,18 +424,18 @@
           "extension": "Extension",
           "#": {
             "0": "Name cannot be empty",
-            "1": "Invalid directory name format",
+            "1": "Invalid name",
             "toast-promise": {
               "loading": "Renaming...",
-              "success": "Renamed successfully."
+              "success": "Renamed."
             }
           }
         },
         "conflict_name": {
-          "title": "There are duplicate name items",
-          "description": "Please choose how to handle {{count}} duplicates.",
-          "option_suffix": "Rename: rename in the format name (2) before uploading",
-          "option_skip": "Skip: upload after excluding duplicate items",
+          "title": "Items with duplicate names",
+          "description": "Choose how to handle {{count}} duplicate items.",
+          "option_suffix": "Rename: upload with a numbered name such as name (2)",
+          "option_skip": "Skip: upload without the duplicate items",
           "preview_label": "Duplicate items:",
           "preview_more": "{{count}} more",
           "action_skip": "Skip",
@@ -448,8 +448,8 @@
           "action_proceed": "Exclude and continue"
         },
         "delete_items": {
-          "title": "Delete Items",
-          "description": "Items will disappear from the list immediately, and cleanup continues in the background. This action cannot be undone.",
+          "title": "Delete items",
+          "description": "Items are removed from the list immediately and deleted in the background. This action cannot be undone.",
           "action": "Delete",
           "#": {
             "toast": {
@@ -469,7 +469,7 @@
       "title": "Mod Manager",
       "dad_section": {
         "title": "Add to {{name}}",
-        "description": "Compressed files will be automatically extracted"
+        "description": "Archives are extracted automatically"
       },
       "download_completed": "Downloaded \"{{name}}\".",
       "fix_needed_toast": {
@@ -568,8 +568,8 @@
         "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
-        "unpersist-subgroups": "Unpersist subgroups",
-        "persist-subgroups": "Persist subgroups",
+        "unpersist-subgroups": "Stop keeping subgroups expanded",
+        "persist-subgroups": "Keep subgroups expanded",
         "unmark-manual-subgroup": "Unmark manual subgroup",
         "classification": {
           "label": "Group by",
@@ -641,9 +641,9 @@
             "percent": "{{value}}%"
           },
           "#": {
-            "0": "Please enter a game name",
-            "1": "Please select a mod folder path",
-            "2": "Please select the NTE install folder"
+            "0": "Enter a game name",
+            "1": "Select a mod folder path",
+            "2": "Select the NTE install folder"
           }
         },
         "edit-game": {
@@ -658,7 +658,7 @@
         "nte-launch": {
           "title": "Set launcher path",
           "path_label": "Launcher path",
-          "launch": "Save and launch launcher"
+          "launch": "Save and start launcher"
         },
         "gimi-dcr": {
           "title": "Dynamic Character Resolution is on",
@@ -794,14 +794,14 @@
           "description-placeholder": "Description (optional)",
           "conflict": {
             "title": "Duplicate mod entries found",
-            "description": "These folders are treated as the same mod because the DISABLED prefix is ignored. Continue to rename the disabled duplicates and create the preset.",
+            "description": "Folders whose names differ only by the DISABLED prefix are treated as the same mod. Continue to rename the disabled duplicates and create the preset.",
             "mod-key-label": "Conflict key",
             "enabled": "Enabled",
             "disabled": "Disabled",
             "action": "Rename disabled duplicates and continue"
           },
           "#": {
-            "0": "Please enter a preset name"
+            "0": "Enter a preset name"
           }
         },
         "wuwa-fix-runner": {
@@ -837,7 +837,7 @@
             },
             "aemeath_mech": {
               "label": "Fix Aemeath Mech Form",
-              "description": "Do not enable this option for Aemeath mech mods that are already normal. Do not apply the fix twice."
+              "description": "Do not enable this option for Aemeath mech mods that already display correctly. Do not apply the fix twice."
             },
             "rendering_33": {
               "label": "Fix Mesh Holes / Missing Parts",
@@ -846,35 +846,35 @@
             },
             "aero_fix": {
               "label": "Aero FemaleRover Eye Fix",
-              "description": "Use this when the eyes glitch while resonance energy is full.",
+              "description": "Use when the eyes render incorrectly while Resonance Energy is full.",
               "options": {
                 "none": "None",
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "Enable this only if your mod actually has this issue.",
-              "tip": "If the problem isn't resolved, rollback then try a different method."
+              "warning": "Enable only if the mod has this issue.",
+              "tip": "If the problem persists, roll back and try a different method."
             },
             "run": "Run"
           },
           "rollback": {
             "refresh": "Refresh",
-            "scanning": "Scanning backup histories...",
+            "scanning": "Scanning backups...",
             "no_backups": "No backups found (.BAK)",
             "no_backups_short": "No backups",
             "file_count": "{{n}} files backed up",
             "latest_state": "Latest Restore Point",
-            "restore": "Rollback",
-            "confirm_restore": "Execute Rollback",
+            "restore": "Roll back",
+            "confirm_restore": "Confirm rollback",
             "warn_restore": "Revert mod files to this state?",
-            "warn_clean_newer": "(Wipes {{n}} newer backups ahead)",
+            "warn_clean_newer": "(Deletes {{n}} newer backups)",
             "backup_size_label": "Backup Size:",
             "success": "Rollback completed.",
             "advanced": "Advanced",
-            "advanced_hint": "Backup restore and deletion",
-            "restore_all": "Restore to Oldest Backup",
+            "advanced_hint": "Roll back to the oldest backup or delete backups",
+            "restore_all": "Roll Back to Oldest Backup",
             "restore_all_desc": "Reverts all files to the oldest recorded state and removes all intermediate backups.",
-            "restore_all_action": "Restore...",
+            "restore_all_action": "Roll back...",
             "warn_delete_all": "All {{n}} backups will be removed",
             "clean_backups": "Delete All Backup Files",
             "clean_backups_desc": "Permanently removes all .BAK files from the target folder. This cannot be undone.",
@@ -1011,7 +1011,7 @@
             "0": "The {{name}} folder already exists",
             "1": "The folder is in use by {{processes}} and cannot be renamed",
             "1-fallback": "The folder is locked and cannot be renamed",
-            "2": "Please enter a valid mod name",
+            "2": "Enter a valid mod name",
             "3": "Failed to rename mod"
           },
           "locked-description": "Used by: {{processes}}",
@@ -1085,14 +1085,14 @@
           "failed": "Toggle preset operation failed"
         }
       },
-      "empty_selection": "Please select a group or character folder from the sidebar.",
+      "empty_selection": "Select a group or character folder in the sidebar.",
       "no-preview": "No Preview",
       "previous-preview": "Previous preview image",
       "next-preview": "Next preview image",
       "context-menu": {
         "open-model-viewer": "Open in model viewer",
         "paste-preview": "Paste",
-        "open-preview-lightbox": "View large",
+        "open-preview-lightbox": "View full size",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "group-mod": "Mod",
@@ -1113,7 +1113,7 @@
       "toast": {
         "trash-error": "Failed to delete",
         "change-preview-error": "Failed to change the default preview image.",
-        "value-required": "Please enter a value.",
+        "value-required": "Enter a value.",
         "paste-preview": {
           "copy-error": "Failed to copy preview",
           "downloading": "Downloading preview...",
@@ -1133,7 +1133,7 @@
       "log-dialog": {
         "title": "Log",
         "running": "Running...",
-        "python-required": "Python is required to run Python fix tools. Install Python and make sure the python command is available."
+        "python-required": "Python is required to run Python fix tools. Install Python and add the python command to PATH."
       },
       "card": {
         "collapse_ini_list": "Collapse INI list",
@@ -1179,32 +1179,32 @@
       "title": "GameBanana",
       "back": "Back",
       "auth": {
-        "checking_title": "Checking your GameBanana login",
-        "checking_description": "Verifying the saved login cookie.",
+        "checking_title": "Checking your GameBanana sign-in",
+        "checking_description": "Verifying the saved sign-in cookie.",
         "required_title": "Sign in to GameBanana",
-        "required_description": "This action needs a GameBanana account. You can keep browsing and downloading without signing in.",
+        "required_description": "This action requires a GameBanana account. Browsing and downloading do not require sign-in.",
         "sign_in": "Sign in",
         "signed_in_as": "Signed in as {{name}}",
-        "guest_notice": "Browsing and downloads for mods that do not require sign-in work without signing in. Sign in to like mods.",
-        "unsupported_title": "Automatic GameBanana login is unavailable",
-        "unsupported_description": "This platform cannot open the GameBanana login window. Enter an rmc cookie to continue.",
-        "init_failed_title": "Could not prepare GameBanana login",
-        "init_failed_description": "The login window could not be prepared. Please try again shortly.",
+        "guest_notice": "Mods that do not require sign-in can be browsed and downloaded without signing in. Sign in to like mods.",
+        "unsupported_title": "Automatic GameBanana sign-in is unavailable",
+        "unsupported_description": "This platform cannot open the GameBanana sign-in window. Enter an rmc cookie to continue.",
+        "init_failed_title": "Could not prepare GameBanana sign-in",
+        "init_failed_description": "The sign-in window could not be prepared. Try again later.",
         "check_failed_title": "Could not verify GameBanana authentication",
-        "check_failed_description": "The server response could not confirm your login status. Please try again shortly.",
+        "check_failed_description": "The server response could not confirm your sign-in status. Try again later.",
         "unreachable_title": "GameBanana is unreachable",
         "unreachable_description": "Could not reach GameBanana. Check your connection and try again.",
         "retry": "Sign In Again",
         "manual_rmc": {
           "button": "Enter rmc",
-          "title": "Set rmc Token",
+          "title": "Set rmc Cookie",
           "description": "Enter the GameBanana rmc cookie value from your browser.",
           "empty": "Enter an rmc value.",
-          "GAMEBANANA_INVALID_RMC": "The rmc token is invalid.",
+          "GAMEBANANA_INVALID_RMC": "The rmc cookie is invalid.",
           "GAMEBANANA_SERVER_UNREACHABLE": "The server is not responding.",
-          "GAMEBANANA_AUTH_CHECK_FAILED": "The server response could not confirm your login status. Please try again shortly.",
-          "GAMEBANANA_LOGIN_INIT_FAILED": "The login window could not be prepared. Please try again shortly.",
-          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "Failed to save the rmc token."
+          "GAMEBANANA_AUTH_CHECK_FAILED": "The server response could not confirm your sign-in status. Try again later.",
+          "GAMEBANANA_LOGIN_INIT_FAILED": "The sign-in window could not be prepared. Try again later.",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "Failed to save the rmc cookie."
         }
       },
       "supported_games": "Supported Games",
@@ -1227,7 +1227,7 @@
         "mod": "Mod"
       },
       "error_title": "Failed to load GameBanana data",
-      "error_description_unknown": "The request failed. Check your GameBanana login or try again later.",
+      "error_description_unknown": "The request failed. Check your GameBanana sign-in or try again later.",
       "error_description_auth": "This content requires a GameBanana sign-in.",
       "error_description_http": "GameBanana returned HTTP {{status}}{{statusText}}.",
       "error_description_schema": "GameBanana returned unexpected data for {{context}}.",
@@ -1240,9 +1240,9 @@
         "invalid": "Enter a valid GameBanana mod URL.",
         "confirm": "Open"
       },
-      "logout": "Logout",
+      "logout": "Sign out",
       "logout_confirm": {
-        "title": "Log out of GameBanana?",
+        "title": "Sign out of GameBanana?",
         "description": "You will need to sign in again to like mods or access content that requires an account."
       },
       "stats": {
@@ -1250,7 +1250,7 @@
         "sections": "Sections",
         "top_submissions": "Top Submissions",
         "likes": "Likes",
-        "posts": "Posts",
+        "posts": "Comments",
         "views": "Views",
         "downloads": "Downloads"
       },
@@ -1265,11 +1265,11 @@
       "latest_feed": "Latest Feed",
       "latest_feed_description": "Recent submissions for the selected game.",
       "category_loading": "Loading category...",
-      "category_description": "Explore subcategories and mods from this category.",
+      "category_description": "Browse subcategories and mods in this category.",
       "game_page": "Game Page",
       "subcategories": "Subcategories",
       "mods": "Mods",
-      "mods_description": "Browse paged mod listings for the selected category.",
+      "mods_description": "Browse mods in the selected category.",
       "search_mods": "Search mods...",
       "mod_sort": {
         "label": "Sort mods",
@@ -1283,7 +1283,7 @@
       "retry_later": "Retry later",
       "no_results": "No matching mods found.",
       "mod_details": "Mod Details",
-      "mod_details_description": "Select a mod to inspect files, stats, and links.",
+      "mod_details_description": "Select a mod to view its files, statistics, and links.",
       "no_preview_image": "No preview image.",
       "comments": "Comments",
       "comment_sort": {
@@ -1301,7 +1301,7 @@
       "file_downloads": "{{count}} downloads",
       "narrow_window": {
         "title": "Window is too narrow",
-        "description": "Please widen the window to browse GameBanana content."
+        "description": "Widen the window to browse GameBanana content."
       }
     },
     "tools": {
@@ -1310,7 +1310,7 @@
         "tools_label": "Tools",
         "toggle_sidebar": "Toggle sidebar",
         "empty_title": "Developer Tools",
-        "empty_description": "Select a tool from the sidebar or pick one below to get started.",
+        "empty_description": "Select a tool from the sidebar or from the list below.",
         "external_page": "External page",
         "inline_tool": "Inline tool"
       },
@@ -1333,7 +1333,7 @@
         "no_versions": "No versions available.",
         "target_importer": "Target GIMI Importer",
         "no_importer": "No available GIMI Importer",
-        "select_importer_msg": "Please select a target GIMI Importer.",
+        "select_importer_msg": "Select a target GIMI Importer.",
         "building": "Building",
         "start_build": "Start Build",
         "obfuscate_description": "Creates a backup of the selected importer's d3d11.dll, then diversifies safe PE padding bytes.",
@@ -1351,7 +1351,7 @@
           "XXMI_RESTORE_INIT": "Preparing DLL restore...",
           "XXMI_ERR_GIMI_NOT_FOUND": "Could not find the importer.",
           "XXMI_FIND_VS": "Locating Visual Studio build tools...",
-          "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Please make sure the C++ build tools are installed.",
+          "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Check that the C++ build tools are installed.",
           "XXMI_ERR_SDK_NOT_FOUND": "Windows SDK/UCRT headers are unavailable in the selected Visual Studio environment. Install or repair Desktop development with C++ and a Windows 10/11 SDK in Visual Studio Installer, or select another build tools path above.",
           "XXMI_BUILDING": "Building D3D11 DLL...",
           "XXMI_OBFUSCATING": "Diversifying D3D11 DLL padding...",
@@ -1364,8 +1364,8 @@
           "XXMI_ERR_IMPORTER_BUSY": "The importer is being launched or used by another operation. Wait for it to finish, then try again.",
           "XXMI_ERR_LEGACY_RUNTIME": "The selected importer uses the 3DMigoto runtime. Switch it to XXMI in the XXMI settings and try again.",
           "XXMI_ERR_ELEVATION_FAILED": "Administrator permission was denied or the elevated write failed. Approve the UAC prompt and try again.",
-          "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
-          "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll padding was diversified successfully.",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll was applied.",
+          "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll padding was diversified.",
           "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll padding is already diversified.",
           "XXMI_OBFUSCATE_BACKUP_EXISTS": "A pe-padding-diversifier backup already exists. Restore it before diversifying again.",
           "XXMI_RESTORE_SUCCESS": "d3d11.dll was restored from backup.",
@@ -1387,7 +1387,7 @@
         "draft_restored": "Matching draft restored",
         "load_failed": "Could not load the source file",
         "no_keys": "No usable [Key*] sections were found",
-        "scan_failed": "Could not scan the MOD folder",
+        "scan_failed": "Could not scan the mod folder",
         "font_failed": "The bundled Inter font could not be loaded; export was stopped",
         "source_changed": "The source changed outside Nahida Desktop. Reload it before applying",
         "apply_failed": "Could not apply the generated files",
@@ -1399,13 +1399,13 @@
         "choose_folder": "Choose folder",
         "drafts": "Draft history",
         "compare": "Compare logic",
-        "apply": "Apply to MOD",
+        "apply": "Apply to mod",
         "excluded": "excluded",
         "inspector": "Inspector",
         "preview": "Preview",
         "editor": "Edit keys",
         "ini": "INI",
-        "empty_title": "Choose an INI to begin",
+        "empty_title": "Select an INI file",
         "include_txt": "Include .txt files",
         "slots": "slots",
         "merge": "Merge",
@@ -1472,7 +1472,7 @@
         "title": "Toggle Viewer Generator",
         "not_configured": "XXMI path is not configured. Configure XXMI first.",
         "auto_generate": "Toggle Viewer Auto Generate",
-        "auto_generate_desc": "Auto-generate toggle-viewer files from mod ini toggle sections.",
+        "auto_generate_desc": "Auto-generate toggle-viewer files from mod INI toggle sections.",
         "hotkey": "Toggle Viewer Key",
         "batch_generate": "Batch Generate",
         "batch_delete": "Batch Delete",
@@ -1800,7 +1800,7 @@
         "builder": {
           "left": {
             "title": "Added Scripts",
-            "description": "Drag and drop to add scripts or click the + button to move to the right",
+            "description": "Drag and drop scripts to add them, or click + to add a script to the preset",
             "noScripts": {
               "title": "No available scripts",
               "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
@@ -1813,16 +1813,16 @@
             "title": "Preset Configuration",
             "description": "Drag to change script order",
             "presetName": "Preset Name",
-            "enterPresetName": "Please enter preset name",
+            "enterPresetName": "Enter a preset name",
             "noScripts": {
               "title": "No scripts added",
               "description": "Click the + button from the left list to add scripts"
             },
             "#": {
               "handleSavePreset": {
-                "success": "Preset saved successfully",
+                "success": "Preset saved",
                 "error": "Failed to save preset",
-                "alreadyExists": "Preset name already exists"
+                "alreadyExists": "A preset with that name already exists"
               }
             },
             "remove": "Remove from preset"
@@ -1880,11 +1880,11 @@
       },
       "mod_bisect": {
         "title": "Mod Bisect",
-        "description": "Quickly find the problematic mod by disabling them in batches.",
+        "description": "Finds the mod that causes a problem by disabling mods in batches.",
         "start": "Start",
         "cancel": "Cancel",
         "scanning": "Scanning the mod folder...",
-        "bisect_inconclusive": "Could not determine the cause. Please verify your responses.",
+        "bisect_inconclusive": "Could not determine the cause. Check your responses and try again.",
         "no_inis_found": "No enabled ini files were found.",
         "all_excluded": "All enabled ini files were excluded from bisect.",
         "cancelled": "Bisect has been cancelled.",
@@ -1907,12 +1907,12 @@
         "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
         "preserve_d3dx": "Preserve d3dx_user.ini",
         "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
-        "recover_disabled": "Recover disabled mods",
+        "recover_disabled": "Restore disabled mods",
         "recover_disabled_hint": "Restore .mod-bisect-disabled files left in the selected game's mod folder.",
-        "recover_disabled_success": "Recovered {{count}} disabled mod file(s).",
+        "recover_disabled_success": "Restored {{count}} disabled mod file(s).",
         "recover_disabled_none": "No leftover disabled files found.",
-        "recover_disabled_conflict": "Recovered {{count}} disabled mod file(s). {{conflicts}} file(s) were not recovered because a file with the same name already exists.",
-        "state_changed": "The bisect has already moved on. Check the current round and respond again.",
+        "recover_disabled_conflict": "Restored {{count}} disabled mod file(s). {{conflicts}} file(s) were not restored because a file with the same name already exists.",
+        "state_changed": "The bisect state has changed. Check the current round and respond again.",
         "out_of_sync": "Some mod files could not be renamed back. Cancel the bisect to restore all mods.",
         "exclude_paths": "Paths to keep enabled",
         "exclude_paths_description": "The specified paths and their descendants stay enabled during bisect.",
@@ -1920,13 +1920,13 @@
         "exclude_paths_add": "Add",
         "exclude_paths_remove": "Remove",
         "exclude_count": "{{count}} path(s) excluded from disabling",
-        "exclude_empty": "Please enter a path.",
+        "exclude_empty": "Enter a path.",
         "exclude_outside": "The path must be inside the selected importer's mod folder.",
         "exclude_root": "The mod folder root cannot be excluded.",
         "exclude_missing": "That path does not exist.",
         "exclude_invalid": "Enter a valid path inside the selected game's mod folder.",
         "exclude_duplicate": "That path is already specified.",
-        "exclude_no_game": "Please select a game first.",
+        "exclude_no_game": "Select a game first.",
         "status": {
           "idle": "Idle",
           "scanning": "Scanning",
@@ -1953,7 +1953,7 @@
         "force_create": "Force create",
         "regenerate": "Regenerate with options",
         "open_folder": "Open folder",
-        "rollback": "Rollback",
+        "rollback": "Roll back",
         "rolling_back": "Rolling back",
         "result": "Created Touch mod",
         "source": "Source mod",
@@ -2093,7 +2093,7 @@
         },
         "modified": {
           "title": "This file was edited after applying",
-          "description": "It was left untouched. To apply or revert again, use the current file as the new original.",
+          "description": "The file was not changed. To apply or revert again, use the current file as the new original.",
           "adopt": "Use current file as original",
           "confirm_title": "Use the current file as the original?",
           "confirm_description": "The saved backup of the original file will be deleted. This cannot be undone."
@@ -2127,7 +2127,7 @@
           "new_mod_hint": "Copies this mod into a new \"(Liquid)\" mod, applies there and disables the original."
         },
         "generated": {
-          "title": "Made by this tool",
+          "title": "Generated by this tool",
           "description": "The original mod is kept disabled at {{path}}.",
           "restore": "Restore original",
           "restore_title": "Restore the original mod?",
@@ -2162,7 +2162,7 @@
         },
         "pick": {
           "toggle": "Pick surface",
-          "missed": "No surface there. Show the part alone or turn the model."
+          "missed": "No surface at this point. Show the part alone or rotate the model."
         },
         "selection": {
           "empty": "Click the model surface to place the emitter.",
@@ -2178,11 +2178,11 @@
         },
         "position": {
           "title": "Position",
-          "hint": "Source mesh coordinates in metres ({{axis}} is up)"
+          "hint": "Source mesh coordinates in meters ({{axis}} is up)"
         },
         "offset": {
           "title": "Offset (mm)",
-          "reset": "Back to the surface point"
+          "reset": "Reset to the surface point"
         },
         "direction": {
           "title": "Spray direction",
@@ -2199,7 +2199,7 @@
         "remove_all": {
           "button": "Remove all",
           "title": "Remove every emitter from this mod?",
-          "description": "The hooks are taken out of the INI files and the saved emitter points are deleted.",
+          "description": "The hooks are removed from the INI files and the saved emitter points are deleted.",
           "confirm": "Remove all"
         },
         "emitters": {
@@ -2208,7 +2208,7 @@
           "unsaved": "Not applied",
           "missing_mesh": "This part is no longer in the model.",
           "look_runtime": "runtime liquid",
-          "look_custom": "own liquid"
+          "look_custom": "custom liquid"
         },
         "look": {
           "title": "Emitter liquid settings",
@@ -2234,7 +2234,7 @@
               "viscosity": "Scales liquid viscosity. Higher values keep the liquid together, slow runoff, and reduce splashing."
             },
             "jet": {
-              "force": "Controls jet speed: 3 m/s at force 1, up to 5 m/s.",
+              "force": "Controls jet speed. The speed is 3 m/s at force 1, with a maximum of 5 m/s.",
               "amount": "Controls jet thickness. Very low values produce separate droplets.",
               "viscosity": "Controls adhesion and splashing after contact. Does not affect the airborne jet."
             },
@@ -2291,18 +2291,18 @@
           "runtime_foreign": "Another LiquidGravityProbe is installed at {{detail}}. Disable or remove it first.",
           "runtime_disabled": "The emitter runtime is disabled. Enable it in the mod library.",
           "viewer_session": "The model view is out of date. Close and reopen the tool.",
-          "unsupported_draw": "This part binds vertex buffers after its index buffer and has no draw call of its own, so it cannot take an emitter.",
+          "unsupported_draw": "This part binds vertex buffers after its index buffer and has no draw call of its own, so an emitter cannot be attached to it.",
           "draw_mismatch": "The picked face does not match the mod files. Close and reopen the tool.",
           "draw_not_found": "The draw call of this part was not found in its INI. It may use variables or have changed.",
-          "shared_draw": "This part's draw call also runs for another part with a different index buffer, so it cannot take an emitter.",
+          "shared_draw": "This part's draw call also runs for another part with a different index buffer, so an emitter cannot be attached to it.",
           "invalid_anchor": "The emitter point is invalid. Pick the surface again.",
           "offset_limit": "The emitter can be moved at most 250 mm from the surface.",
           "slots_exhausted": "All 4096 emitter slots are in use. Remove emitters from other mods first.",
           "unsupported_ini": "This mod's INI uses an unsupported encoding.",
           "damaged_hook": "An emitter hook in {{detail}} is missing a begin or end marker, so nothing was changed. Fix the marker or restore the file from its .nhd-liquid-orig backup.",
           "invalid_mode": "Unknown apply mode: {{detail}}",
-          "generated_mod": "This mod was already made by this tool. Its emitters are edited in place.",
-          "not_generated": "This mod was not made by this tool, so there is no original to restore.",
+          "generated_mod": "This mod was already generated by this tool. Its emitters are edited in place.",
+          "not_generated": "This mod was not generated by this tool, so there is no original to restore.",
           "source_missing": "The original mod is no longer at {{detail}}. Enable or move it back first.",
           "invalid_look": "The liquid settings are out of range.",
           "no_emitters": "Apply an emitter before setting its liquid.",
@@ -2352,7 +2352,7 @@
         "select_bones": "Bones (weights)",
         "select_bones_placeholder": "Select bones…",
         "select_bones_hint": "Open the list, preview bones with ↑↓, then press Enter to select.",
-        "pick_bones_hint": "↑↓ highlights preview weights · Enter/click to commit",
+        "pick_bones_hint": "↑↓ previews weights · Enter or click to select",
         "no_regions": "No matching regions",
         "no_bones": "No matching bones",
         "no_blend_fallback": "No Blend buffer found. Select body regions by position instead.",
@@ -2576,8 +2576,8 @@
           "checkUpdate": "Check for updates",
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
-          "runInBackgroundDisableConfirmTitle": "Disable background run?",
-          "runInBackgroundDisableConfirmDescription": "Turning off background execution quits the app when all windows are closed. Toggle Persist and Toggle Viewer will be unavailable until you open the app again.",
+          "runInBackgroundDisableConfirmTitle": "Turn off running in background?",
+          "runInBackgroundDisableConfirmDescription": "With this off, the app quits when all windows are closed. Toggle Persist and Toggle Viewer are unavailable until the app is opened again.",
           "runInBackgroundDisableConfirmAction": "Turn off anyway",
           "autoUpdate": "Auto update",
           "includePrerelease": "Include pre-releases",
@@ -2610,16 +2610,16 @@
           "system": "System default"
         },
         "startPage": {
-          "title": "Start Page",
+          "title": "Start page",
           "select": "Select start page"
         },
         "logLevel": {
-          "title": "Log Level",
-          "select": "Select Level"
+          "title": "Log level",
+          "select": "Select level"
         },
         "other": {
-          "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
-          "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
+          "moveTransferPageWhenStartTransfer": "Open the transfer page when a transfer starts",
+          "moveTransferPageWhenStartTransferDescription": "Opens the transfer page automatically when a file transfer starts.",
           "powerSaveBlockInTransfer": "Prevent sleep mode",
           "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress."
         }
@@ -2631,7 +2631,7 @@
           "method": "Compression method",
           "methods": {
             "zstd": {
-              "description": "Saves more space by compressing large files in disabled mods. Enable a mod and it is restored first."
+              "description": "Compresses large files in disabled mods for greater space savings. The files are decompressed when the mod is enabled."
             },
             "xpress4k": {
               "description": "Uses Windows file compression on all mod files. Mods stay usable while compressed."
@@ -2648,12 +2648,12 @@
             "error": "Compression error"
           },
           "files": "{{processed}} / {{total}} files",
-          "error": "The compression task could not be completed. Toggle the switch to retry.",
+          "error": "The compression task could not be completed. Turn the switch off and on again to retry.",
           "saveFailed": "Failed to save compression settings.",
           "toggleFailed": "Failed to change compression state."
         },
         "mod_management": {
-          "title": "Mod Management",
+          "title": "Mod management",
           "archiveExtractPathMode": "Archive extraction path",
           "archiveExtractPathModeDescription": "Choose how archives with a single top-level folder should be extracted.",
           "archiveExtractPathModes": {
@@ -2673,7 +2673,7 @@
             "space": "DISABLED (space)",
             "underscore": "DISABLED_ (underscore)"
           },
-          "searchModPreview": "Search Preview in Subfolders",
+          "searchModPreview": "Search for previews in subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
           "togglePresetStore": "Toggle preset storage",
           "togglePresetStoreDescription": "Where toggle presets are stored. Changing it moves the existing presets.",
@@ -2790,7 +2790,7 @@
           "texturesDescription": "Asks before starting when the enabled mods contain large uncompressed DDS textures, which can cause stuttering while resources load and use a lot of video memory."
         },
         "builtin": {
-          "checkUpdates": "Check updates",
+          "checkUpdates": "Check for updates",
           "installUpdates": "Install updates",
           "skipVersion": "Skip this version",
           "updateDialogTitle": "Update {{importer}}",
@@ -2873,11 +2873,11 @@
           "extraLibraries": "Extra DLL paths (separated by semicolons)",
           "root": "Importer root folder",
           "externalDetected": "An external XXMI Launcher was found",
-          "externalWarning": "Close the external launcher and its games before importing. Each importer gets its own folder under the root folder with a freshly installed package.",
+          "externalWarning": "Close the external launcher and its games before importing. Each importer gets its own folder under the root folder with a newly installed package.",
           "import": "Import settings",
           "imported": "Launcher settings imported",
           "importUserDataTitle": "Import user data",
-          "importUserDataDescription": "Packages and XXMI libraries are installed fresh under {{root}}. Choose what happens to Mods and d3dx_user.ini. ShaderFixes is not imported.",
+          "importUserDataDescription": "Packages and XXMI libraries are newly installed under {{root}}. Choose what happens to Mods and d3dx_user.ini. ShaderFixes is not imported.",
           "importUserDataKeepHint": "Keep: Mods stays in the external launcher folder and is linked into the new importer folders. d3dx_user.ini is copied, so changes no longer sync between the two launchers.",
           "importUserDataMoveHint": "Move: they move into the new importer folders, and games that used the old Mods folders are updated. Moving to another drive copies the data, which can take a while. The originals are not deleted automatically, and later changes are not synced with the copies. After checking the imported data, delete the originals manually if needed.",
           "importUserDataKeep": "Keep existing location",
@@ -2896,7 +2896,7 @@
             "XXMI_IMPORT_SOURCE_CHANGED": "The external launcher's installed versions changed. Reopen the import dialog to check them again.",
             "XXMI_IMPORT_PREVIEW_REQUIRED": "Check the latest versions again before importing updates.",
             "XXMI_IMPORT_FOLDER_CONFLICT": "The root folder overlaps the external launcher's importer folders. Choose a separate root folder.",
-            "XXMI_IMPORT_TARGET_NOT_EMPTY": "An importer folder under the root folder already has its own user data (Mods). Move it aside or choose another root folder.",
+            "XXMI_IMPORT_TARGET_NOT_EMPTY": "An importer folder under the root folder already has its own user data (Mods). Move it elsewhere or choose another root folder.",
             "XXMI_IMPORT_NO_SPACE": "The drive of the new importer folders does not have enough free space for the user data. Free up space or keep the existing location.",
             "XXMI_IMPORT_VERSION_UNKNOWN": "The installed version of an importer could not be read. Update or reinstall it in the external launcher, then try again.",
             "XXMI_GAME_RUNNING": "Close the game before importing."
@@ -2935,7 +2935,7 @@
           "importedLegacy": "Legacy runtime imported",
           "options": "Global options",
           "reset": "Reset built-in launcher",
-          "resetDescription": "Forget every built-in importer setting, package update state, the root folder, and update preferences. Importer folders, mods, and downloaded packages stay on disk.",
+          "resetDescription": "Clears all built-in importer settings, package update states, the root folder, and update preferences. Importer folders, mods, and downloaded packages stay on disk.",
           "resetTitle": "Reset the built-in launcher?",
           "resetConfirmDescription": "All built-in importer settings will be deleted and cannot be restored. Files on disk, including importer folders and mods, are not deleted.",
           "resetConfirm": "Reset",
@@ -2945,11 +2945,11 @@
           "launchUpdateModes": {
             "auto": "Update automatically",
             "notify": "Ask before updating",
-            "off": "Don't notify"
+            "off": "Do not notify"
           },
           "launchUpdateConfirm": "Update and launch",
           "launchUpdateFailed": "{{importer}} update failed; trying to launch with the current files",
-          "prereleases": "Include prereleases",
+          "prereleases": "Include pre-releases",
           "importers": "Importers",
           "manage": "Manage",
           "updateAvailable": "Update available",
@@ -2982,12 +2982,12 @@
             "GIMI_HDR_CONFIG_FAILED": "Could not enable HDR in Genshin Impact settings. Start the game once and check registry access.",
             "SRMI_FPS_UNLOCK_FAILED": "Could not set Honkai: Star Rail to 120 FPS. Start the game and change its FPS setting once, then retry.",
             "HIMI_FPS_UNLOCK_FAILED": "Could not set the Honkai Impact 3rd FPS target. Start the game and change its FPS setting once, then retry.",
-            "ZZMI_GAME_CONFIG_FAILED": "Could not configure Zenless Zone Zero graphics settings. Check the game folder or disable Configure Game Settings.",
-            "WWMI_GAME_CONFIG_FAILED": "Could not configure Wuthering Waves settings. Check the game folder or disable Configure Game Settings.",
+            "ZZMI_GAME_CONFIG_FAILED": "Could not configure Zenless Zone Zero graphics settings. Check the game folder or turn off Configure game settings.",
+            "WWMI_GAME_CONFIG_FAILED": "Could not configure Wuthering Waves settings. Check the game folder or turn off Configure game settings.",
             "RESHADE_NOT_INSTALLED": "Could not prepare ReShade. Check your network connection or download it on the XXMI ReShade page."
           },
           "launchWarnings": {
-            "GIMI_DCR_UNREADABLE": "Could not read the dynamic character resolution setting. If it is on, mods may not apply correctly; check the game's graphics settings.",
+            "GIMI_DCR_UNREADABLE": "Could not read the Dynamic Character Resolution setting. If it is on, mods may not apply correctly; check the game's graphics settings.",
             "XXMI_DX12_UNSUPPORTED": "The game is not forced to DirectX 11, but the current XXMI library applies mods only with DirectX 11. If the game starts with DirectX 12, mods will not load; switch to an XXMI library that supports DirectX 12 or set the renderer back to DirectX 11.",
             "XXMI_GAME_LAUNCHER_NOT_SKIPPED": "The game executable was not found in the Steam installation, so the game's own launcher was not skipped.",
             "XXMI_GAME_WINDOW_LATE": "The game window did not appear within the wait time. The game is still running; check that it opens and that mods load."
@@ -3065,20 +3065,20 @@
           "windowModeDescription": "Applies only when FPS unlock is on for Genshin Impact (GIMI).",
           "launchOptionsDescriptionWWMI": "Starts Client-Win64-Shipping.exe directly with these arguments. This may cause the game to crash. Leave off unless needed.",
           "startMethodDescription": "Native starts the game executable directly. Try Shell if launching fails.",
-          "timeoutDescription": "How long to wait for the game window. If it doesn't appear in time, the launch is treated as failed.",
+          "timeoutDescription": "How long to wait for the game window. If it does not appear in time, the launch is treated as failed.",
           "initDelayDescription": "How long the injected DLL waits before it starts working. If the game crashes at startup, try a different value.",
           "overwriteINIDescription": "Keeps d3dx.ini in sync with the package. Turn off to keep your own edits.",
           "rootDescription": "By default, each importer is installed in its own subfolder here.",
           "prereleasesDescription": "Also offers test versions, which may be unstable.",
-          "configureGameDescriptionWWMI": "Before each launch, turns off ray tracing and applies the texture detail and wounded effect options below. Mods don't work with the wrong settings.",
+          "configureGameDescriptionWWMI": "Before each launch, turns off ray tracing and applies the texture detail and wounded effect options below. Mods do not work with incorrect settings.",
           "unlockFPSDescriptionGIMI": "Starts the game through GI FPS Unlocker, which keeps running in the background to hold the FPS limit.",
           "fpsTargetDescriptionGIMI": "Multiples of 60 such as 120, 180, or 240 cause the fewest glitches.",
           "unlockFPSDescriptionSRMI": "Sets the FPS limit to 120 on each launch. Works only with the global client.",
           "unlockFPSDescriptionHIMI": "Sets the FPS limit to the target below on each launch.",
-          "unlockFPSDescriptionWWMI": "Sets the FPS limit to 120 on each launch, even on devices without official support. Some hardware still won't reach 120 FPS.",
+          "unlockFPSDescriptionWWMI": "Sets the FPS limit to 120 on each launch, even on devices without official support. Some hardware may still not reach 120 FPS.",
           "enableHDRDescription": "Requires an HDR display with HDR turned on in Windows display settings.",
           "forceMaxLODBiasDescription": "Sets the in-game LOD Bias to Ultra High so modded textures show at full resolution.",
-          "disableWoundedFXDescription": "Most mods don't support the wounded effect, so modded textures break after a few hits. Keep this on unless you use a mod that removes the effect itself.",
+          "disableWoundedFXDescription": "Most mods do not support the wounded effect, so modded textures break after a few hits. Keep this on unless you use a mod that removes the effect itself.",
           "meshLODDistanceBaseFOVDescription": "Camera FOV at which the active character starts switching to a simplified model. The FOV widens as the camera moves away. Default: 165",
           "preLaunchDescription": "A Windows console command to run before the game starts.",
           "postLoadDescription": "A Windows console command to run after the game has started and the DLL is injected.",
@@ -3134,14 +3134,14 @@
             "presetEffectsIgnoreLaunch": "Launch anyway"
           },
           "enforceRenderingDescription": "Keeps the [Rendering] options in d3dx.ini at the values this importer needs.",
-          "enableHuntingDescription": "Lets you toggle hunting mode with Numpad 0. Used to find shader and buffer hashes when making mods.",
+          "enableHuntingDescription": "Numpad 0 toggles hunting mode. Used to find shader and buffer hashes when making mods.",
           "dumpShadersDescription": "In hunting mode, copying a shader's hash also saves the shader to ShaderFixes.",
-          "muteWarningsDescription": "Hides mod error warnings and beeps, including after an F10 reload.",
+          "muteWarningsDescription": "Hides mod error warnings and does not play the warning sound, including after an F10 reload.",
           "unsafeModeDescription": "Allows third-party 3DMigoto DLLs. Use only DLLs from a source you trust.",
           "optimizeAtLaunchDescription": "Before each launch, disables or edits mod INI files known to cause errors, crashes, or slowdowns.",
           "resetOptimizerCacheDescription": "Rechecks every INI file instead of only the ones changed since the last run.",
           "repairRuntimeDescription": "Rechecks the runtime files, downloads the libraries provider's files again, and replaces the deployed ones. Modified files are backed up.",
-          "repairPackageDescription": "Downloads the installed version of the importer package again and writes it over the installed files. Mods are left alone.",
+          "repairPackageDescription": "Downloads the installed version of the importer package again and writes it over the installed files. Mods are not changed.",
           "createShortcutDescription": "Creates a desktop shortcut that starts this game with mods directly.",
           "gameLaunch": "Launch through",
           "gameLaunchDescription": "Direct starts the game executable. Steam and Epic Games use their respective clients. Custom runs the specified command. Manual waits for you to start the game.",
@@ -3165,7 +3165,7 @@
           "clearUnknownSettings": "Clear settings of removed mods",
           "clearUnknownSettingsDescription": "Removes saved settings from d3dx_user.ini once the mods that owned them are gone.",
           "input": "Enable mod key bindings",
-          "inputDescription": "Turning this off disables the key bindings selected below. The hotkey switches it in game.",
+          "inputDescription": "Turning this off disables the key bindings selected below. The hotkey turns it on or off in game.",
           "inputDisableMode": "Disabled key bindings",
           "inputDisableModeDescription": "Which key bindings stop working while key bindings are off.",
           "inputDisableModeMods": "Mods only",
@@ -3198,7 +3198,7 @@
         "enableImporter": "Enable",
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
-        "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "persistNotFoundXXMI": "Set the XXMI Launcher path first.",
         "persistLogs": "Logs",
         "persistLogsEmpty": "No logs yet.",
         "dllVersion": "XXMI DLL Version",
@@ -3222,11 +3222,11 @@
             "xxmiNotFound": "XXMI not found",
             "alert": {
               "title": "Warning",
-              "description": "Please verify the auto-detected XXMI launcher path. If it seems incorrect, please enter the path manually."
+              "description": "Check the auto-detected XXMI Launcher path. If it is incorrect, enter the path manually."
             }
           },
           "saveXXMIPath": {
-            "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+            "configNotFound": "The XXMI Launcher Config.json file was not found in the specified path"
           },
           "installDllVersion": {
             "failed": "Failed to apply the selected XXMI DLL version",
@@ -3372,11 +3372,11 @@
           "started": "Logging mode is on.",
           "ended": "Logging mode is off.",
           "startTitle": "Start logging mode",
-          "startDescription": "Logging options are written to this game's d3dx.ini and taken out again when the logs are collected or logging mode is turned off.",
+          "startDescription": "Logging options are written to this game's d3dx.ini and removed when the logs are collected or logging mode is turned off.",
           "level": {
             "info": {
               "label": "Standard",
-              "description": "Records library calls and writes a dump when the game crashes. Little impact on performance. Fits most problems."
+              "description": "Records library calls and writes a dump when the game crashes. Little impact on performance. Suitable for most problems."
             },
             "debug": {
               "label": "Detailed",
@@ -3413,24 +3413,24 @@
             "XXMI_DIAGNOSTICS_EMPTY": "No logs or crash dumps were written since logging mode started. Launch the game and reproduce the problem first.",
             "XXMI_DIAGNOSTICS_TOO_LARGE": "The collected logs are too large to send even after trimming.",
             "XXMI_GAME_RUNNING": "Close the game first.",
-            "XXMI_BUSY": "Another operation is using this game. Try again shortly."
+            "XXMI_BUSY": "Another operation is using this game. Try again later."
           }
         }
       },
       "acc": {
         "title": "Account",
         "not_logged_in": {
-          "description": "Login required.",
-          "login": "Login"
+          "description": "Sign-in required.",
+          "login": "Sign in"
         },
         "server_unreachable": "Unable to connect to the server.",
         "retry": "Retry",
         "my_account": "My Account",
-        "logout": "Logout"
+        "logout": "Sign out"
       },
       "feedback": {
         "title": "Report a problem",
-        "description": "Tell us about the problem you ran into. What you send is used only to investigate and fix it.",
+        "description": "Describe the problem. The information you send is used only to investigate and fix it.",
         "category": {
           "label": "Category",
           "desktop": "Desktop app problem",
@@ -3454,12 +3454,12 @@
         },
         "log": {
           "label": "Attach logs",
-          "description": "Attaches logs that help solve the problem. Sensitive information such as your PC user name is anonymized."
+          "description": "Attaches logs for troubleshooting. Sensitive information such as your PC user name is anonymized."
         },
         "submit": "Send",
         "sending": "Sending...",
         "cancel": "Cancel",
-        "sent": "Your report was received. Thank you.",
+        "sent": "The report was sent.",
         "failed": "The report could not be sent.",
         "skipped_mod_files": "{{count}} mod files of an unsupported type were left out.",
         "retry_rules": "Retry",
@@ -3472,7 +3472,7 @@
           "FEEDBACK_TOO_MANY_MOD_FILES": "You can attach up to {{count}} mod files in total.",
           "FEEDBACK_EMPTY_MOD": "The mod folder has no files that can be attached.",
           "FEEDBACK_BUSY": "A report is already being sent.",
-          "rules_unavailable": "Could not load the attachment rules. Please try again later."
+          "rules_unavailable": "Could not load the attachment rules. Try again later."
         }
       },
       "adv": {
@@ -3485,7 +3485,7 @@
     },
     "backup": {
       "title": "Backup",
-      "description": "Automatically back up the mod folders of your registered games and any folders you add. Only file types the server accepts are uploaded, and unchanged files are never uploaded twice.",
+      "description": "Automatically back up the mod folders of your registered games and any folders you add. Only file types the server accepts are uploaded, and unchanged files are not uploaded again.",
       "loading": "Loading…",
       "nav": {
         "sections": "Sections",
@@ -3542,7 +3542,7 @@
         },
         "on_startup": {
           "title": "Run missed backups at startup",
-          "description": "When the app starts and a scheduled backup was missed, run it right away."
+          "description": "When the app starts and a scheduled backup was missed, run it immediately."
         },
         "watch_changes": {
           "title": "Back up on changes",
@@ -3646,8 +3646,8 @@
     "server_inactive_badge": "Server inactive",
     "server_inactive_tooltip": "The server is inactive or under maintenance, so nahida.live features are unavailable.",
     "controls": {
-      "minimise": "Minimise",
-      "maximise": "Maximise",
+      "minimise": "Minimize",
+      "maximise": "Maximize",
       "restore": "Restore",
       "close": "Close"
     },
@@ -3682,8 +3682,8 @@
         "resizing": "Resizing texture",
         "upscaling": "Upscaling texture",
         "converting": "Converting texture format",
-        "resizing_and_converting": "Resizing & converting texture",
-        "upscaling_and_converting": "Upscaling & converting texture"
+        "resizing_and_converting": "Resizing and converting texture",
+        "upscaling_and_converting": "Upscaling and converting texture"
       },
       "modCompression": {
         "compressing": "Compressing mods",
@@ -3691,7 +3691,7 @@
         "error": "Mod compression error"
       },
       "modFix": {
-        "label": "Fix Needed",
+        "label": "Fix needed",
         "dismiss": "Dismiss"
       },
       "elevatedHelper": {
@@ -3716,12 +3716,12 @@
       "check": "Check for updates"
     },
     "status": {
-      "idle": "You're using the latest version.",
+      "idle": "You are using the latest version.",
       "checking": "Checking for updates...",
       "downloading": "Downloading the update...",
       "downloadingProgress": "Downloading the update... ({{percent}}%)",
       "failed": "Update failed: {{message}}",
-      "available": "An update is available. Download it when you're ready.{{versionRangeText}}",
+      "available": "An update is available.{{versionRangeText}}",
       "downloaded": "The update is ready to install."
     },
     "toast": {
@@ -3734,8 +3734,8 @@
         "showTranslation": "Show translation"
       },
       "notAvailable": {
-        "title": "You're up to date.",
-        "description": "There are no updates available right now."
+        "title": "You are using the latest version.",
+        "description": "No updates are available."
       }
     }
   },

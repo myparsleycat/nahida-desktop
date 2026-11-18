@@ -45,9 +45,9 @@ func TestCatalogTogglePresetMigrationParticle(t *testing.T) {
 	for _, tc := range []struct {
 		to, want string
 	}{
-		{to: "저장 공간", want: "모든 토글 프리셋을 원래 위치에서 저장 공간으로 옮깁니다."},
-		{to: "앱 데이터베이스", want: "모든 토글 프리셋을 원래 위치에서 앱 데이터베이스로 옮깁니다."},
-		{to: "파일", want: "모든 토글 프리셋을 원래 위치에서 파일로 옮깁니다."},
+		{to: "저장 공간", want: "모든 토글 프리셋을 원래 위치에서 저장 공간으로 이동합니다."},
+		{to: "앱 데이터베이스", want: "모든 토글 프리셋을 원래 위치에서 앱 데이터베이스로 이동합니다."},
+		{to: "파일", want: "모든 토글 프리셋을 원래 위치에서 파일로 이동합니다."},
 	} {
 		t.Run(tc.to, func(t *testing.T) {
 			t.Parallel()
