@@ -216,6 +216,40 @@ func TestCharacterMotion_MapPalettes(t *testing.T) {
 	}
 }
 
+// A palette lying mostly on one skin follows that skin's bones where another skin's mesh lies closer, as a dress's
+// back bow does under long hair.
+func TestCharacterMotion_MapPalettesOwnSkin(t *testing.T) {
+	m := mirroredTestMotion(t)
+	m.skins = [][]int{{1}, {2}}
+	for i := range m.refs {
+		if m.refs[i].nodes[0] == 2 {
+			m.refs[i].skin = 1
+		}
+	}
+	overlap := [3]float32{-0.3, 0.05, 0}
+	m.refs = append(m.refs,
+		motionReference{position: overlap, skin: 1, nodes: [4]int32{2, -1, -1, -1}, weights: [4]float32{1}},
+		motionReference{
+			position: [3]float32{overlap[0], overlap[1], 0.004},
+			nodes:    [4]int32{1, -1, -1, -1},
+			weights:  [4]float32{1},
+		},
+	)
+
+	var palette MotionPalette
+	addTestVertices(&palette, fullTestWeight(0), overlap)
+	for _, y := range []float32{-0.01, -0.006, -0.002, 0.002, 0.006, 0.01} {
+		addTestVertices(&palette, fullTestWeight(1), [3]float32{-0.3, y, 0})
+	}
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{1, 1}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
 func TestCharacterMotion_MapPalettesSeam(t *testing.T) {
 	left := [][3]float32{{-0.3, -0.005, 0}, {-0.3, 0.005, 0}}
 	right := [][3]float32{{0.3, -0.005, 0}, {0.3, 0.005, 0}}

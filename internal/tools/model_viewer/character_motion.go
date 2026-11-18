@@ -324,9 +324,10 @@ type motionChannel struct {
 	values []float32
 }
 
-// motionReference is a vertex of the source model in mod space with its four bone nodes and weights.
+// motionReference is a vertex of the source model in mod space with its skin and its four bone nodes and weights.
 type motionReference struct {
 	position [3]float32
+	skin     int32
 	nodes    [4]int32
 	weights  [4]float32
 }
@@ -562,7 +563,7 @@ func (m *CharacterMotion) readSkins(doc *characterGLTF, accessor func(int, int) 
 		skin := doc.Skins[*node.Skin]
 		toMod := m.toMod.mul(binds[*node.Skin])
 		for _, primitive := range doc.Meshes[*node.Mesh].Primitives {
-			if err := m.readReference(primitive.Attributes, skin.Joints, toMod, accessor); err != nil {
+			if err := m.readReference(primitive.Attributes, *node.Skin, skin.Joints, toMod, accessor); err != nil {
 				return err
 			}
 		}
@@ -641,6 +642,7 @@ func (m *CharacterMotion) bindSkeleton(bind motionAffine) error {
 
 func (m *CharacterMotion) readReference(
 	attributes map[string]int,
+	skin int,
 	joints []int,
 	toMod motionAffine,
 	accessor func(int, int) ([]float32, error),
@@ -669,7 +671,7 @@ func (m *CharacterMotion) readReference(
 	}
 	for v := range count {
 		p := toMod.apply([3]float64{float64(positions[v*3]), float64(positions[v*3+1]), float64(positions[v*3+2])})
-		ref := motionReference{position: [3]float32{float32(p[0]), float32(p[1]), float32(p[2])}}
+		ref := motionReference{position: [3]float32{float32(p[0]), float32(p[1]), float32(p[2])}, skin: int32(skin)}
 		for k := range 4 {
 			ref.nodes[k] = -1
 			joint := int(jointValues[v*4+k])
