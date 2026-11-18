@@ -460,6 +460,7 @@ func (v *ModelViewer) present() {
 	}
 	v.revision++
 	scene.apply(states)
+	v.syncNextFrame()
 	v.refreshLoads()
 }
 
@@ -652,6 +653,7 @@ func (v *ModelViewer) loadVariant(i, index int) {
 			if scene.waitsFor(i, index) {
 				v.present()
 			} else {
+				v.retryNextFrame(i, index)
 				v.refreshLoads()
 			}
 		})
@@ -734,7 +736,7 @@ func (v *ModelViewer) reupload() {
 				case mesh.unloaded && set.meshes[i].indexCount > 0:
 					releaseViewerMeshGPU(&set.meshes[i])
 				}
-				mesh.dirty = mesh.current != nil
+				mesh.dirty, mesh.nextDirty, mesh.swapped = mesh.current != nil, mesh.next != nil, false
 			}
 			v.present()
 		})
@@ -987,6 +989,17 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		if scene != nil && scene.gpu != nil && scene.gpu.generation != f.Generation && v.uploadErr == "" {
 			v.reupload()
 		}
+		now := time.Now()
+		opts.morph = float32(v.interpolation(trackMod, now))
+		opts.interpolating = v.interpolating()
+		if err := v.poseMotion(v.interpolation(trackMotion, now)); err != nil {
+			m := v.activeMotion()
+			v.poster()(func() {
+				if m != nil && v.charMotion == m {
+					v.failMotionPlay(err, "evaluate-pose")
+				}
+			})
+		}
 		err := v.renderer.draw(f, scene, opts)
 		switch message := fmt.Sprint(err); {
 		case err != nil && message != v.drawErr:
@@ -1011,7 +1024,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
 			cx.Window().Update()
 		}
-		return v.motion.running || animated
+		return v.motion.running || animated || opts.interpolating
 	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull().
 		Cursor(fairy.CursorMove).DragButtons(fairy.MouseLeft | fairy.MouseRight | fairy.MouseMiddle).
 		OnDrag(v.drag).

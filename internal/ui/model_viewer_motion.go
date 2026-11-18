@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/myparsleycat/fairy"
@@ -34,9 +35,11 @@ type viewerMotion struct {
 	meshes []viewerMotionMesh
 	cancel context.CancelFunc
 	pose   *modelviewer.CharacterMotionPose
-	// bones holds the pose of the frame shown, and posed numbers it for the GPU copy and the shadow map.
-	bones [][12]float32
-	posed uint64
+	// bones holds the pose shown, and posed numbers it for the GPU copy and the shadow map. posedAt is where in
+	// the clips bones was evaluated.
+	bones   [][12]float32
+	posed   uint64
+	posedAt viewerMotionPoseAt
 	// boxes bounds the rest positions each node moves, the last one those that move with no node. clipBoxes bounds
 	// them over every pose of each clip and clipBox over the clip playing, so the shadow volume stays still while it
 	// plays; restBox bounds the meshes the motion does not pose. All are in the mod's space.
@@ -447,8 +450,8 @@ func (v *ModelViewer) startMotion(clipID string) {
 	if clip != nil {
 		m.clipBox = m.clipBoxes[m.clipNumber(clip.ID)]
 	}
-	v.setMotionFrame(0)
 	v.runTrackClock(trackMotion)
+	v.setMotionFrame(0)
 }
 
 // clipBox bounds boxes over every pose of the motion's clip with frames frames, evaluated with pose into bones, or
@@ -483,19 +486,45 @@ func (m *viewerMotion) clipNumber(id string) int {
 	return max(slices.IndexFunc(m.clips, func(c modelviewer.ModelViewerAnimationClip) bool { return c.ID == id }), 0)
 }
 
-// setMotionFrame poses the skeleton at frame index of the motion's clip.
+// viewerMotionPoseAt is a pose a share t of the way from frame to next of clip.
+type viewerMotionPoseAt struct {
+	clip, frame, next int
+	t                 float64
+}
+
+// setMotionFrame poses the skeleton at frame index of the motion's clip, or past it by the share of the frame
+// already played.
 func (v *ModelViewer) setMotionFrame(index int) {
 	m, clip := v.activeMotion(), v.trackClip(trackMotion)
 	if m == nil || clip == nil || len(clip.Frames) == 0 {
 		return
 	}
 	m.play.frame = min(max(index, 0), len(clip.Frames)-1)
-	if err := m.pose.Evaluate(m.clipNumber(clip.ID), m.play.frame, m.bones); err != nil {
+	if err := v.poseMotion(v.interpolation(trackMotion, time.Now())); err != nil {
 		v.failMotionPlay(err, "evaluate-pose")
-		return
 	}
+}
+
+// poseMotion poses the skeleton a share t of the way from the frame shown to the next, unless it is posed there.
+func (v *ModelViewer) poseMotion(t float64) error {
+	m, clip := v.activeMotion(), v.trackClip(trackMotion)
+	if m == nil || clip == nil || len(clip.Frames) == 0 {
+		return nil
+	}
+	at := viewerMotionPoseAt{clip: m.clipNumber(clip.ID), frame: m.play.frame, next: m.play.frame}
+	if next, ok := v.nextFrame(trackMotion); ok && t > 0 {
+		at.next, at.t = next, t
+	}
+	if m.posed != 0 && at == m.posedAt {
+		return nil
+	}
+	if err := m.pose.EvaluateBetween(at.clip, at.frame, at.next, at.t, m.bones); err != nil {
+		return err
+	}
+	m.posedAt = at
 	v.revision++
 	m.posed = v.revision
+	return nil
 }
 
 // stopMotion ends the motion and its loading, and frees the motion's buffers.

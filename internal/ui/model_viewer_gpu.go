@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/myparsleycat/fairy"
@@ -65,7 +66,10 @@ type viewerGPUSet struct {
 type viewerMeshGPU struct {
 	// vertices interleaves position and normal and follows the mesh's current geometry; uvs never change, and
 	// extra changes only for the body shape editor's colours.
-	vertices   d3d.Buffer
+	vertices d3d.Buffer
+	// next holds the mesh's geometry in the animation's next frame, laid out as vertices. It is made when the
+	// mesh first has one.
+	next       d3d.Buffer
 	uvs        d3d.Buffer
 	extra      d3d.Buffer
 	indices    d3d.Buffer
@@ -84,6 +88,7 @@ type viewerTextureGPU struct {
 
 func (m *viewerMeshGPU) release() {
 	m.vertices.Release()
+	m.next.Release()
 	m.uvs.Release()
 	m.extra.Release()
 	m.indices.Release()
@@ -165,7 +170,7 @@ type viewerMeshConstants struct {
 	flags        uint32
 	normalMode   uint32
 	characterUse uint32
-	_            uint32
+	morphWeight  float32
 	// characterScale.x scales the character's specular values.
 	characterScale [4]float32
 }
@@ -194,6 +199,10 @@ const (
 
 // viewerShadowMapSize is the React viewer's key light shadow map size.
 const viewerShadowMapSize = 4096
+
+// viewerShadowInterval is how long the shadow map keeps the pose it was drawn with while a playback draws between
+// frames, which would otherwise draw it again on every frame.
+const viewerShadowInterval = time.Second / 60
 
 // viewerToonDraw is the toon shading a draw applies, or nil without Toon Shadows.
 type viewerToonDraw struct {
@@ -231,6 +240,10 @@ type viewerDrawOptions struct {
 	overlay *viewerOverlayDraw
 	// skin is the character motion that poses the meshes, or nil.
 	skin *viewerMotion
+	// morph is the share of their next animation frame's geometry the meshes that have one are drawn with.
+	morph float32
+	// interpolating is set while a playback draws between frames, so the meshes move on every draw.
+	interpolating bool
 }
 
 // viewerRing is a circle drawn over the model without depth testing, in model space.
@@ -297,9 +310,11 @@ type viewerRenderer struct {
 	casterScratch []int
 	bufferScratch []d3d.Buffer
 	shadowDrawn   bool
-	depthOn       d3d.DepthStencilState
-	depthRead     d3d.DepthStencilState
-	blend         d3d.BlendState
+	// shadowAt is the surface time the shadow map was last drawn at.
+	shadowAt  time.Duration
+	depthOn   d3d.DepthStencilState
+	depthRead d3d.DepthStencilState
+	blend     d3d.BlendState
 
 	width, height int
 	samples       uint32
@@ -408,6 +423,14 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 			AlignedByteOffset: 16,
 		},
 		{SemanticName: "COLOR", Format: d3d.FORMAT_R8G8B8A8_UNORM, InputSlot: 2, AlignedByteOffset: 28},
+		{SemanticName: "POSITION", SemanticIndex: 1, Format: d3d.FORMAT_R32G32B32_FLOAT, InputSlot: 3},
+		{
+			SemanticName:      "NORMAL",
+			SemanticIndex:     1,
+			Format:            d3d.FORMAT_R32G32B32_FLOAT,
+			InputSlot:         3,
+			AlignedByteOffset: 12,
+		},
 	}, code.vs); err != nil {
 		return err
 	}
@@ -606,6 +629,7 @@ type viewerShadowKey struct {
 	doubleSided     bool
 	// posed is the pose of the character motion that posed the casters, or 0 without one.
 	posed uint64
+	morph float32
 }
 
 func (r *viewerRenderer) releaseShadow() {
@@ -752,14 +776,8 @@ func (r *viewerRenderer) drawScene(
 		if i >= len(gpu.meshes) {
 			break
 		}
-		buffers := gpu.meshes[i]
-		if mesh.dirty && buffers.indexCount > 0 && len(mesh.current) == int(buffers.vertices.Desc().ByteWidth)/4 {
-			d3d.UpdateData(ctx, buffers.vertices, mesh.current)
-			mesh.dirty, r.shadowDrawn = false, false
-		}
-		if mesh.extraDirty && buffers.indexCount > 0 && len(mesh.extra) == int(buffers.extra.Desc().ByteWidth) {
-			d3d.UpdateData(ctx, buffers.extra, mesh.extra)
-			mesh.extraDirty, r.shadowDrawn = false, false
+		if err := r.uploadGeometry(ctx, f.GPU().Device, mesh, &gpu.meshes[i]); err != nil {
+			return err
 		}
 	}
 
@@ -778,7 +796,7 @@ func (r *viewerRenderer) drawScene(
 		}
 	}
 	if shadowed {
-		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, &frame); err != nil {
+		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, &frame, f.Time); err != nil {
 			return err
 		}
 	} else if r.shadowSRV.P != nil {
@@ -859,6 +877,7 @@ func (r *viewerRenderer) drawScene(
 				}
 				ctx.VSSetShaderResources(14, blend)
 			}
+			material.constants.morphWeight = morphWeight(mesh, gpu.meshes[i], opts.morph)
 			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{material.constants}); err != nil {
 				return err
 			}
@@ -894,6 +913,58 @@ func (r *viewerRenderer) drawScene(
 	return nil
 }
 
+// uploadGeometry brings the mesh's buffers up to date with its current and next geometry.
+func (r *viewerRenderer) uploadGeometry(
+	ctx d3d.Context,
+	dev d3d.Device,
+	mesh *viewerMesh,
+	buffers *viewerMeshGPU,
+) error {
+	if buffers.indexCount == 0 {
+		return nil
+	}
+	if mesh.swapped {
+		mesh.swapped = false
+		if buffers.next.P != nil {
+			buffers.vertices, buffers.next = buffers.next, buffers.vertices
+		} else {
+			mesh.dirty, mesh.nextDirty = mesh.current != nil, mesh.next != nil
+		}
+		r.shadowDrawn = false
+	}
+	size := int(buffers.vertices.Desc().ByteWidth) / 4
+	if mesh.dirty && len(mesh.current) == size {
+		d3d.UpdateData(ctx, buffers.vertices, mesh.current)
+		mesh.dirty, r.shadowDrawn = false, false
+	}
+	if mesh.nextDirty && len(mesh.next) == size {
+		if buffers.next.P == nil {
+			next, err := d3d.CreateBufferData(dev, d3d.BIND_VERTEX_BUFFER, d3d.USAGE_DEFAULT, mesh.next)
+			if err != nil {
+				return fmt.Errorf("create model viewer next frame buffer: %w", err)
+			}
+			buffers.next = next
+		} else {
+			d3d.UpdateData(ctx, buffers.next, mesh.next)
+		}
+		mesh.nextDirty, r.shadowDrawn = false, false
+	}
+	if mesh.extraDirty && len(mesh.extra) == int(buffers.extra.Desc().ByteWidth) {
+		d3d.UpdateData(ctx, buffers.extra, mesh.extra)
+		mesh.extraDirty, r.shadowDrawn = false, false
+	}
+	return nil
+}
+
+// morphWeight is the share of its next frame's geometry the mesh draws with: weight once that geometry is on the
+// GPU, and 0 without one.
+func morphWeight(mesh *viewerMesh, buffers viewerMeshGPU, weight float32) float32 {
+	if mesh.next == nil || mesh.nextDirty || buffers.next.P == nil {
+		return 0
+	}
+	return weight
+}
+
 // drawRing draws the ring as a line loop over everything, as three.js draws a LineLoop without depth test.
 func (r *viewerRenderer) drawRing(ctx d3d.Context, rtv d3d.RenderTargetView, ring viewerRing) error {
 	normal := ring.normal.normalize()
@@ -926,7 +997,8 @@ func (r *viewerRenderer) drawRing(ctx d3d.Context, rtv d3d.RenderTargetView, rin
 }
 
 // drawShadowMap renders the depth of the meshes that cast shadows into the key light's map, unless the map already
-// holds them as frame's light sees them.
+// holds them as frame's light sees them. While a playback draws between frames, a map drawn less than
+// viewerShadowInterval before now stays as long as only the pose or the share of the next frame changed.
 func (r *viewerRenderer) drawShadowMap(
 	ctx d3d.Context,
 	dev d3d.Device,
@@ -934,6 +1006,7 @@ func (r *viewerRenderer) drawShadowMap(
 	opts viewerDrawOptions,
 	skin *viewerSkinGPU,
 	frame *viewerFrameConstants,
+	now time.Duration,
 ) error {
 	if err := r.shadowTargets(dev); err != nil {
 		return err
@@ -953,17 +1026,24 @@ func (r *viewerRenderer) drawShadowMap(
 	}
 	key := viewerShadowKey{
 		gpu: gpu, viewProj: frame.shadowViewProj, world: frame.world, doubleSided: opts.doubleSided,
+		morph: opts.morph,
 	}
 	if skin != nil {
 		key.posed = skin.posed
 	}
-	if r.shadowDrawn && key == r.shadowKey && slices.Equal(casters, r.shadowCasters) &&
+	moved := key
+	moved.posed, moved.morph = r.shadowKey.posed, r.shadowKey.morph
+	// The surface's time starts again after a frame that left it out.
+	elapsed := now - r.shadowAt
+	recent := opts.interpolating && moved == r.shadowKey && elapsed >= 0 && elapsed < viewerShadowInterval
+	if r.shadowDrawn && (key == r.shadowKey || recent) && slices.Equal(casters, r.shadowCasters) &&
 		slices.Equal(buffers, r.shadowBuffers) {
 		r.casterScratch, r.bufferScratch = casters, buffers
 		return nil
 	}
 	r.casterScratch, r.bufferScratch = r.shadowCasters, r.shadowBuffers
 	r.shadowKey, r.shadowCasters, r.shadowBuffers, r.shadowDrawn = key, casters, buffers, true
+	r.shadowAt = now
 
 	ctx.PSSetShaderResources(9, d3d.ShaderResourceView{})
 	ctx.OMSetRenderTargets(nil, r.shadowDSV)
@@ -979,7 +1059,8 @@ func (r *viewerRenderer) drawShadowMap(
 	}
 	ctx.VSSetShader(r.shadowVS)
 	ctx.PSSetShader(d3d.PixelShader{})
-	// The shadow's vertex shader reads only whether the mesh is skinned, so the constants change only with that.
+	// The shadow's vertex shader reads only whether the mesh is skinned and how far it morphs, so the constants
+	// change only with those.
 	written := false
 	var constants viewerMeshConstants
 	for _, i := range casters {
@@ -988,8 +1069,9 @@ func (r *viewerRenderer) drawShadowMap(
 			flags = viewerFlagSkinned
 			ctx.VSSetShaderResources(14, blend)
 		}
-		if !written || flags != constants.flags {
-			constants.flags = flags
+		morph := morphWeight(scene.meshes[i], gpu.meshes[i], opts.morph)
+		if !written || flags != constants.flags || morph != constants.morphWeight {
+			constants.flags, constants.morphWeight = flags, morph
 			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{constants}); err != nil {
 				return err
 			}
@@ -1001,8 +1083,12 @@ func (r *viewerRenderer) drawShadowMap(
 }
 
 func (r *viewerRenderer) drawMesh(ctx d3d.Context, buffers viewerMeshGPU) {
-	ctx.IASetVertexBuffers(0, []d3d.Buffer{buffers.vertices, buffers.uvs, buffers.extra},
-		[]uint32{24, 16, viewerVertexExtraStride}, []uint32{0, 0, 0})
+	next := buffers.next
+	if next.P == nil {
+		next = buffers.vertices
+	}
+	ctx.IASetVertexBuffers(0, []d3d.Buffer{buffers.vertices, buffers.uvs, buffers.extra, next},
+		[]uint32{24, 16, viewerVertexExtraStride, 24}, []uint32{0, 0, 0, 0})
 	ctx.IASetIndexBuffer(buffers.indices, d3d.FORMAT_R32_UINT, 0)
 	ctx.DrawIndexed(buffers.indexCount, 0, 0)
 }

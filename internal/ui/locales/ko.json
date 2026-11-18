@@ -1654,6 +1654,7 @@
         "animation_play": "재생",
         "animation_pause": "일시 정지",
         "animation_speed": "재생 속도",
+        "animation_interpolate": "프레임 보간",
         "animation_start": "처음으로",
         "animation_end": "끝으로",
         "animation_time": "{{seconds}}초",

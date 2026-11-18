@@ -36,7 +36,7 @@ cbuffer Mesh : register(b1) {
     uint flags;
     uint normalMode;
     uint characterUse;  // CHARACTER_* bits, 0 without the character's material values
-    uint meshPad;
+    float morphWeight;  // share of the next animation frame's geometry the vertices move towards
     float4 characterScale; // x: scale of the character's specular values
 };
 
@@ -179,6 +179,8 @@ SamplerComparisonState shadowCompare : register(s2);
 struct VSIn {
     float3 pos : POSITION;
     float3 normal : NORMAL;
+    float3 nextPos : POSITION1; // the geometry of the animation's next frame
+    float3 nextNormal : NORMAL1;
     float2 uv : TEXCOORD0;
     float2 uv1 : TEXCOORD2; // the second UV set, or the first where the mesh has none
     float4 tangent : TANGENT;
@@ -200,6 +202,15 @@ struct VSOut {
 
 // The mesh builder flips V for WebGL's bottom-up rows; Direct3D rows run top-down.
 float2 textureUV(float2 uv) { return float2(uv.x, 1 - uv.y); }
+
+// morph moves the vertex morphWeight of the way to the next frame's geometry, before a motion skins it.
+VSIn morph(VSIn i) {
+    if (morphWeight <= 0) return i;
+    i.pos = lerp(i.pos, i.nextPos, morphWeight);
+    float3 normal = lerp(i.normal, i.nextNormal, morphWeight);
+    i.normal = dot(normal, normal) > 0 ? normalize(normal) : i.normal;
+    return i;
+}
 
 // skin poses vertex id of a skinned mesh with linear blend skinning, its weights normalized to their sum, as the
 // game skins the mod's buffers; the tangent and outline direction turn with it.
@@ -234,7 +245,7 @@ VSIn skin(VSIn i, uint id) {
 }
 
 VSOut vs_main(VSIn i, uint id : SV_VertexID) {
-    i = skin(i, id);
+    i = skin(morph(i), id);
     VSOut o;
     float4 worldPos = mul(world, float4(i.pos, 1));
     o.pos = mul(viewProj, worldPos);
@@ -253,7 +264,7 @@ VSOut vs_main(VSIn i, uint id : SV_VertexID) {
 
 // The depth of the shadow map, seen from the key light.
 float4 vs_shadow(VSIn i, uint id : SV_VertexID) : SV_Position {
-    i = skin(i, id);
+    i = skin(morph(i), id);
     return mul(shadowViewProj, mul(world, float4(i.pos, 1)));
 }
 
@@ -1217,7 +1228,7 @@ OutlineOut srmiOutline(VSIn i) {
 // width that grows with distance in two linear pieces and scales with the vertex colour's alpha, and it is
 // pushed slightly away from the camera.
 OutlineOut vs_outline(VSIn i, uint id : SV_VertexID) {
-    i = skin(i, id);
+    i = skin(morph(i), id);
     uint mode = toonMode();
     if (mode == TOON_SRMI) return srmiOutline(i);
     if (mode == TOON_ZZMI) return zzmiOutline(i);

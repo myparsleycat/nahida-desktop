@@ -830,12 +830,22 @@ func (m *CharacterMotion) NewPose() *CharacterMotionPose {
 // Evaluate writes into out, for every node, the 3x4 row-major matrix that moves a mod vertex bound to that node
 // from the rest pose to frame of clip.
 func (p *CharacterMotionPose) Evaluate(clip, frame int, out [][12]float32) error {
+	return p.EvaluateBetween(clip, frame, frame, 0, out)
+}
+
+// EvaluateBetween is Evaluate for the pose a fraction t of the way from frame to next: translations and scales
+// are interpolated linearly and rotations along the shorter arc.
+func (p *CharacterMotionPose) EvaluateBetween(clip, frame, next int, t float64, out [][12]float32) error {
 	m := p.motion
 	if clip < 0 || clip >= len(m.Clips) {
 		return fmt.Errorf("clip %d does not exist", clip)
 	}
 	if len(out) != len(m.nodes) {
 		return errors.New("pose output does not match the skeleton")
+	}
+	t = min(max(t, 0), 1)
+	if math.IsNaN(t) {
+		t = 0
 	}
 	for i := range m.nodes {
 		p.local[i] = m.nodes[i].rest
@@ -845,18 +855,17 @@ func (p *CharacterMotionPose) Evaluate(clip, frame int, out [][12]float32) error
 		if channel.path == motionRotation {
 			components = 4
 		}
-		at := min(max(frame, 0), len(channel.values)/components-1) * components
-		value := channel.values[at : at+components]
+		last := len(channel.values)/components - 1
+		from := channel.values[min(max(frame, 0), last)*components:][:components]
+		to := channel.values[min(max(next, 0), last)*components:][:components]
 		local := &p.local[channel.node]
 		switch channel.path {
 		case motionTranslation:
-			local.t = [3]float64{float64(value[0]), float64(value[1]), float64(value[2])}
+			local.t = lerpMotionVec3(from, to, t)
 		case motionScale:
-			local.s = [3]float64{float64(value[0]), float64(value[1]), float64(value[2])}
+			local.s = lerpMotionVec3(from, to, t)
 		case motionRotation:
-			q := [4]float64{float64(value[0]), float64(value[1]), float64(value[2]), float64(value[3])}
-			if length := math.Sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]); length > 0 {
-				q = [4]float64{q[0] / length, q[1] / length, q[2] / length, q[3] / length}
+			if q, ok := slerpMotionRotation(from, to, t); ok {
 				local.r = q
 			}
 		}
@@ -873,6 +882,55 @@ func (p *CharacterMotionPose) Evaluate(clip, frame int, out [][12]float32) error
 		}
 	}
 	return nil
+}
+
+func lerpMotionVec3(from, to []float32, t float64) [3]float64 {
+	var out [3]float64
+	for i := range out {
+		out[i] = float64(from[i]) + (float64(to[i])-float64(from[i]))*t
+	}
+	return out
+}
+
+// slerpMotionRotation interpolates two quaternions along the shorter arc. A key with no length is left out, and
+// false reports that no key gives the rotation.
+func slerpMotionRotation(from, to []float32, t float64) ([4]float64, bool) {
+	a, okA := normalizeMotionQuaternion(from)
+	b, okB := normalizeMotionQuaternion(to)
+	switch {
+	case t == 0:
+		return a, okA
+	case t == 1:
+		return b, okB
+	case !okA:
+		return b, okB
+	case !okB:
+		return a, true
+	}
+	cos := a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+	if cos < 0 {
+		cos = -cos
+		b = [4]float64{-b[0], -b[1], -b[2], -b[3]}
+	}
+	wa, wb := 1-t, t
+	// Nearly equal rotations divide by a vanishing sine, where the linear blend is as close.
+	if cos < 0.9995 {
+		angle := math.Acos(cos)
+		sin := math.Sin(angle)
+		wa, wb = math.Sin((1-t)*angle)/sin, math.Sin(t*angle)/sin
+	}
+	q := [4]float64{wa*a[0] + wb*b[0], wa*a[1] + wb*b[1], wa*a[2] + wb*b[2], wa*a[3] + wb*b[3]}
+	length := math.Sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
+	return [4]float64{q[0] / length, q[1] / length, q[2] / length, q[3] / length}, true
+}
+
+func normalizeMotionQuaternion(value []float32) ([4]float64, bool) {
+	q := [4]float64{float64(value[0]), float64(value[1]), float64(value[2]), float64(value[3])}
+	length := math.Sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
+	if length == 0 || math.IsNaN(length) || math.IsInf(length, 0) {
+		return q, false
+	}
+	return [4]float64{q[0] / length, q[1] / length, q[2] / length, q[3] / length}, true
 }
 
 // NodeCount is the length of the output Evaluate writes.

@@ -37,3 +37,26 @@ func TestAdvanceAnimationFrame(t *testing.T) {
 		})
 	}
 }
+
+// A speed change keeps the share of the frame already played, so a clip drawn between frames goes on from where it
+// is, and a mod clip waiting for frames to load keeps waiting rather than starting over.
+func TestSetTrackSpeedKeepsFramePhase(t *testing.T) {
+	clip := modelviewer.ModelViewerAnimationClip{
+		ID: "clip", FPS: 10, Loop: true, Frames: make([]modelviewer.ModelViewerAnimationFrame, 10),
+	}
+	v := &ModelViewer{scene: &viewerScene{
+		transport: modelviewer.ModelViewerTransport{Animations: []modelviewer.ModelViewerAnimationClip{clip}},
+	}}
+	warming := time.Now()
+	v.anim.clipID, v.anim.playing, v.anim.warmSince = clip.ID, true, &warming
+	v.anim.applied = time.Now().Add(-50 * time.Millisecond)
+
+	v.setTrackSpeed(trackMod, 0.5)
+
+	if phase := v.anim.phase(v.animationClip(), time.Now()); phase < 0.45 || phase > 0.6 {
+		t.Errorf("phase after the speed change = %v, want about 0.5", phase)
+	}
+	if v.anim.warmSince != &warming {
+		t.Error("the speed change restarted the wait for frames to load")
+	}
+}

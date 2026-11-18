@@ -1,6 +1,9 @@
 package modelviewer
 
-import "math"
+import (
+	"maps"
+	"math"
+)
 
 // ShapeWavePlayback advances the phases of wave shape targets as the mod's accumulators do. They grow only
 // while their wave's condition holds, at the speed the state sets then, so a phase depends on its history:
@@ -66,6 +69,13 @@ func (p *ShapeWavePlayback) Advance(clip string, time, duration float64, state m
 		values[phaseVar] = phase
 	}
 	return values
+}
+
+// Peek returns what Advance would return for the same arguments, leaving the playback as it is.
+func (p *ShapeWavePlayback) Peek(clip string, time, duration float64, state map[string]any) map[string]any {
+	copied := *p
+	copied.phases = maps.Clone(p.phases)
+	return copied.Advance(clip, time, duration, state)
 }
 
 // viewerStateNumber reads a state variable as a number, with zero for a missing or non-numeric one.

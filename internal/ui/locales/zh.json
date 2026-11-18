@@ -1654,6 +1654,7 @@
         "animation_play": "播放",
         "animation_pause": "暂停",
         "animation_speed": "播放速度",
+        "animation_interpolate": "帧插值",
         "animation_start": "跳到开头",
         "animation_end": "跳到结尾",
         "animation_time": "{{seconds}} 秒",

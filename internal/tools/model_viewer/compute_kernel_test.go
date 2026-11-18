@@ -384,6 +384,20 @@ func TestComputePlayback(t *testing.T) {
 		}
 	})
 
+	t.Run("a peek returns what the advance does and leaves the playback as it was", func(t *testing.T) {
+		t.Parallel()
+		peeked, plain := merged(group), merged(group)
+		for frame := range 12 {
+			now := float64(frame) * tick
+			_, ahead := peeked.Peek("clip", now, 10, playing)
+			_, got := peeked.Advance("clip", now, 10, playing)
+			_, want := plain.Advance("clip", now, 10, playing)
+			if fmt.Sprint(ahead, got) != fmt.Sprint(want, want) {
+				t.Fatalf("frame %d: peek %v, advance %v, want %v", frame, ahead, got, want)
+			}
+		}
+	})
+
 	t.Run("EFMI shape passes keep their phase when the pose clip restarts", func(t *testing.T) {
 		t.Parallel()
 		playback := NewComputePlayback(ModelViewerComputeDeformerTransport{

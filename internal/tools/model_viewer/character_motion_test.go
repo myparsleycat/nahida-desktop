@@ -102,6 +102,87 @@ func TestCharacterMotionPose_Evaluate(t *testing.T) {
 	}
 }
 
+func TestCharacterMotionPose_EvaluateBetween(t *testing.T) {
+	// The second key is a quarter turn about Z stored with a negated sign, the same rotation on the far hemisphere.
+	half := math.Sqrt(0.5)
+	m := &CharacterMotion{
+		nodes: []motionNode{{parent: -1, rest: motionTRS{r: [4]float64{0, 0, 0, 1}, s: [3]float64{1, 1, 1}}}},
+		Clips: []CharacterMotionClip{{
+			Name: "turn", Frames: 2,
+			channels: []motionChannel{
+				{node: 0, path: motionRotation, values: []float32{0, 0, 0, 1, 0, 0, float32(-half), float32(-half)}},
+				{node: 0, path: motionTranslation, values: []float32{0, 0, 0, 1, 2, 3}},
+			},
+		}},
+	}
+	m.nodes[0].world = motionIdentity()
+	if err := m.bindSkeleton(motionIdentity()); err != nil {
+		t.Fatal(err)
+	}
+	pose := m.NewPose()
+	evaluate := func(frame, next int, at float64) [12]float32 {
+		t.Helper()
+		out := make([][12]float32, 1)
+		if err := pose.EvaluateBetween(0, frame, next, at, out); err != nil {
+			t.Fatal(err)
+		}
+		return out[0]
+	}
+	near := func(got, want [12]float32) bool {
+		for i := range got {
+			if math.Abs(float64(got[i]-want[i])) > 1e-5 {
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, frame := range []int{0, 1} {
+		out := make([][12]float32, 1)
+		if err := pose.Evaluate(0, frame, out); err != nil {
+			t.Fatal(err)
+		}
+		if got := evaluate(0, 1, float64(frame)); !near(got, out[0]) {
+			t.Errorf("EvaluateBetween at %d = %v, want Evaluate's %v", frame, got, out[0])
+		}
+	}
+	c := float32(half)
+	want := [12]float32{c, -c, 0, 0.5, c, c, 0, 1, 0, 0, 1, 1.5}
+	if got := evaluate(0, 1, 0.5); !near(got, want) {
+		t.Errorf("halfway = %v, want an eighth turn about Z %v", got, want)
+	}
+}
+
+// A rotation key with no length keeps the rest rotation, at the start of a blend as in a whole frame.
+func TestCharacterMotionPose_EvaluateBetweenZeroKey(t *testing.T) {
+	half := math.Sqrt(0.5)
+	rest := motionTRS{r: [4]float64{0, 0, half, half}, s: [3]float64{1, 1, 1}}
+	m := &CharacterMotion{
+		nodes: []motionNode{{parent: -1, rest: rest}},
+		Clips: []CharacterMotionClip{{
+			Name: "turn", Frames: 2,
+			channels: []motionChannel{{node: 0, path: motionRotation, values: []float32{0, 0, 0, 0, 0, 0, 0, 1}}},
+		}},
+	}
+	m.nodes[0].world = rest.affine()
+	if err := m.bindSkeleton(motionIdentity()); err != nil {
+		t.Fatal(err)
+	}
+	pose := m.NewPose()
+	whole, blended := make([][12]float32, 1), make([][12]float32, 1)
+	if err := pose.Evaluate(0, 0, whole); err != nil {
+		t.Fatal(err)
+	}
+	if err := pose.EvaluateBetween(0, 0, 1, 0, blended); err != nil {
+		t.Fatal(err)
+	}
+	for i := range whole[0] {
+		if math.Abs(float64(whole[0][i]-blended[0][i])) > 1e-6 {
+			t.Fatalf("EvaluateBetween at 0 = %v, want Evaluate's %v", blended[0], whole[0])
+		}
+	}
+}
+
 func TestCharacterMotion_MapPalettes(t *testing.T) {
 	tests := []struct {
 		name string

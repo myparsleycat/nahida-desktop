@@ -104,3 +104,48 @@ func TestSceneWaitsForUnloadedMeshesAndKeepsShownOnes(t *testing.T) {
 		t.Fatalf("unloaded %v, want mesh 0", unloaded)
 	}
 }
+
+// A frame whose geometry was the next frame's takes it over without building or uploading it again, and asks the
+// draw to swap the GPU's copies so they keep matching the CPU's.
+func TestSceneShowsNextFrameGeometryWithoutRebuilding(t *testing.T) {
+	t.Parallel()
+	mesh := &viewerMesh{
+		vertexCount: 1, positions: []float32{0, 0, 0}, normals: []float32{0, 0, 1},
+		info: modelviewer.ModelViewerMeshTransport{
+			PositionVariants: make([]modelviewer.ModelViewerPositionVariant, 3),
+		},
+		variants: map[int]*viewerPositionGeometry{},
+	}
+	scene := &viewerScene{meshes: []*viewerMesh{mesh}}
+	for i := range 3 {
+		scene.storeVariant(0, i, &viewerPositionGeometry{current: []float32{float32(i), 0, 0, 0, 1, 0}})
+	}
+	frame := func(variant int) []modelviewer.ViewerMeshState {
+		return []modelviewer.ViewerMeshState{{Visible: true, PositionVariant: variant}}
+	}
+	uploaded := func() {
+		mesh.dirty, mesh.nextDirty, mesh.swapped = false, false, false
+	}
+
+	scene.apply(frame(0))
+	scene.applyNext(frame(1))
+	uploaded()
+	if mesh.next == nil || mesh.next[0] != 1 {
+		t.Fatalf("next = %v, want variant 1", mesh.next)
+	}
+
+	scene.apply(frame(1))
+	if mesh.current[0] != 1 || mesh.dirty || !mesh.swapped {
+		t.Fatalf("current %v, dirty %v, swapped %v; want variant 1 taken over, clean, swapped",
+			mesh.current, mesh.dirty, mesh.swapped)
+	}
+	// Dropping the next frame's geometry before the draw keeps the swap it owes.
+	scene.applyNext(frame(1))
+	if mesh.next != nil || !mesh.swapped {
+		t.Fatalf("next %v, swapped %v; want no next and the swap kept", mesh.next, mesh.swapped)
+	}
+	scene.applyNext(frame(2))
+	if mesh.next == nil || mesh.next[0] != 2 || !mesh.nextDirty {
+		t.Fatalf("next = %v, dirty %v; want variant 2 to upload", mesh.next, mesh.nextDirty)
+	}
+}

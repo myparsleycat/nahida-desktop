@@ -1660,6 +1660,7 @@
         "animation_play": "Play",
         "animation_pause": "Pause",
         "animation_speed": "Playback speed",
+        "animation_interpolate": "Interpolate frames",
         "animation_start": "Go to start",
         "animation_end": "Go to end",
         "animation_time": "{{seconds}} s",

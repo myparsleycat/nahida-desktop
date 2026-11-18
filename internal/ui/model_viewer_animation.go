@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,8 @@ type viewerPlayback struct {
 	playing bool
 	// speed multiplies the clip's rate; zero plays it at its own rate.
 	speed float64
+	// stepped shows whole frames while playing, instead of drawing between them.
+	stepped bool
 	// clock numbers the running timer, so an earlier one stops when playback changes.
 	clock uint64
 	// applied is the time the frame last advanced at.
@@ -65,6 +68,11 @@ func (p *viewerPlayback) fps(clip *modelviewer.ModelViewerAnimationClip) float64
 	return normalizeAnimationFPS(clip.FPS) * p.rate()
 }
 
+// phase is the share of the frame shown that has played at now, from 0 to 1.
+func (p *viewerPlayback) phase(clip *modelviewer.ModelViewerAnimationClip, now time.Time) float64 {
+	return min(max(now.Sub(p.applied).Seconds()*p.fps(clip), 0), 1)
+}
+
 // viewerAnimation is the playback of the transport's animation clips, and where the playback controller sits.
 type viewerAnimation struct {
 	viewerPlayback
@@ -79,6 +87,8 @@ type viewerAnimation struct {
 	waves  *modelviewer.ShapeWavePlayback
 	// warmSince is set while playback waits, from that time, for the frames ahead to load before its clock runs.
 	warmSince *time.Time
+	// nextStates are the mesh states of the frame after the one shown that the meshes move towards, or nil.
+	nextStates []modelviewer.ViewerMeshState
 	// scheduleKey is what the scene's schedule is built, or being built, for; scheduleRevision numbers the builds,
 	// so an earlier one that finishes late is dropped. scheduleCancel stops the build in progress and is nil
 	// when none is.
@@ -229,17 +239,140 @@ func (v *ModelViewer) setTrackPlaying(track viewerTrack, playing bool) {
 		v.trimDevice()
 	}
 	v.runTrackClock(track)
+	if track == trackMod {
+		v.syncNextFrame()
+	}
+}
+
+func (v *ModelViewer) setTrackStepped(track viewerTrack, stepped bool) {
+	if p := v.playback(track); p != nil {
+		p.stepped = stepped
+		if track == trackMod {
+			v.syncNextFrame()
+		}
+		v.revision++
+	}
+}
+
+// nextFrame is the frame track plays after the one shown, and false when playback stops there.
+func (v *ModelViewer) nextFrame(track viewerTrack) (int, bool) {
+	p, clip := v.playback(track), v.trackClip(track)
+	if p == nil || clip == nil || len(clip.Frames) < 2 {
+		return 0, false
+	}
+	if p.frame+1 < len(clip.Frames) {
+		return p.frame + 1, true
+	}
+	if !clip.Loop {
+		return 0, false
+	}
+	return loopAnimationFrame(clip, p.frame+1), true
+}
+
+// interpolates reports whether track draws between its frames: while it plays and has a frame after the one shown.
+// A tool picks and edits the geometry the viewer shows, so a viewer with one shows whole frames.
+func (v *ModelViewer) interpolates(track viewerTrack) bool {
+	p := v.playback(track)
+	if p == nil || !p.playing || p.stepped || v.tool != nil {
+		return false
+	}
+	_, ok := v.nextFrame(track)
+	return ok
+}
+
+// interpolation is the share of the way from the frame track shows to the next that playback has reached at now,
+// or 0 while it shows whole frames. The mod's playback shows whole frames while it waits for frames to load.
+func (v *ModelViewer) interpolation(track viewerTrack, now time.Time) float64 {
+	if !v.interpolates(track) {
+		return 0
+	}
+	if track == trackMod && !v.modClockRunning() {
+		return 0
+	}
+	return v.playback(track).phase(v.trackClip(track), now)
+}
+
+// interpolating reports a playback that draws between frames, which redraws the viewer on every frame. The mod's
+// playback does only while its clock runs and a mesh has a next frame's geometry to move towards.
+func (v *ModelViewer) interpolating() bool {
+	if v.interpolates(trackMotion) {
+		return true
+	}
+	if !v.interpolates(trackMod) || !v.modClockRunning() {
+		return false
+	}
+	return slices.ContainsFunc(v.scene.meshes, func(m *viewerMesh) bool { return m.next != nil })
+}
+
+// modClockRunning reports whether the mod's playback runs in real time, neither waiting for frames ahead to load
+// nor for the frame shown.
+func (v *ModelViewer) modClockRunning() bool {
+	return v.anim.warmSince == nil && v.scene != nil && !v.scene.waiting
+}
+
+// syncNextFrame gives the meshes the geometry of the mod clip's next frame to move towards, or none while the clip
+// shows whole frames.
+func (v *ModelViewer) syncNextFrame() {
+	v.anim.nextStates = nil
+	if v.scene != nil {
+		v.anim.nextStates = v.nextAnimationStates()
+		v.scene.applyNext(v.anim.nextStates)
+	}
+}
+
+// retryNextFrame gives the meshes the next frame's geometry again once position variant index of mesh i, which the
+// next frame shows, is loaded.
+func (v *ModelViewer) retryNextFrame(i, index int) {
+	states := v.anim.nextStates
+	if v.scene != nil && i < len(states) && states[i].Visible && states[i].PositionVariant == index {
+		v.scene.applyNext(states)
+		v.revision++
+	}
+}
+
+// nextAnimationStates returns the mesh states of the mod clip's next frame, or nil while it shows whole frames. The
+// phases of the wave shape targets are those the next frame advances them to.
+func (v *ModelViewer) nextAnimationStates() []modelviewer.ViewerMeshState {
+	clip := v.animationClip()
+	next, ok := v.nextFrame(trackMod)
+	if clip == nil || !ok || !v.interpolates(trackMod) {
+		return nil
+	}
+	frame := clip.Frames[next]
+	state := v.animationFrameState(clip, next)
+	if v.anim.waves != nil {
+		duration := float64(len(clip.Frames)) / v.animationFPS(clip)
+		maps.Copy(state, v.anim.waves.Peek(clip.ID, frame.Time, duration, state))
+	}
+	_, states := modelviewer.EvaluateViewerState(v.scene.transport, state, v.shownForm())
+	return states
 }
 
 func (v *ModelViewer) setAnimationPlaying(playing bool) {
 	v.setTrackPlaying(trackMod, playing)
 }
 
+// setTrackSpeed changes track's speed. Playing, it keeps the share of the frame shown already played, so a clip drawn
+// between frames goes on from where it is, and a mod clip waiting for frames to load keeps waiting.
 func (v *ModelViewer) setTrackSpeed(track viewerTrack, speed float64) {
-	if p := v.playback(track); p != nil {
-		p.speed = speed
-		v.runTrackClock(track)
+	p, clip := v.playback(track), v.trackClip(track)
+	if p == nil {
+		return
 	}
+	now := time.Now()
+	var phase float64
+	if clip != nil {
+		phase = p.phase(clip, now)
+	}
+	p.speed = speed
+	p.clock++
+	if !p.playing || clip == nil {
+		return
+	}
+	frame := time.Duration(float64(time.Second) / p.fps(clip))
+	played := time.Duration(phase * float64(frame))
+	p.applied = now.Add(-played)
+	v.scheduleTrackTick(track, p, p.clock, max(frame-played, time.Millisecond))
 }
 
 // runTrackClock starts the timer of track's playback and stops any earlier one.
@@ -375,6 +508,7 @@ func (v *ModelViewer) setAnimationFrame(index int) {
 	}
 	// A wave clip plays even while every wave is off, which leaves nothing to redraw.
 	if reflect.DeepEqual(values, v.anim.values) {
+		v.syncNextFrame()
 		return
 	}
 	v.anim.values = values
@@ -397,12 +531,20 @@ func (v *ModelViewer) upcomingAnimationStates(form string) [][]modelviewer.Viewe
 			}
 			index = loopAnimationFrame(clip, index)
 		}
-		state := maps.Clone(v.resolved)
-		maps.Copy(state, clip.Frames[index].Values)
-		_, states := modelviewer.EvaluateViewerState(v.scene.transport, state, form)
+		_, states := modelviewer.EvaluateViewerState(v.scene.transport, v.animationFrameState(clip, index), form)
 		upcoming = append(upcoming, states)
 	}
 	return upcoming
+}
+
+// animationFrameState is the toggle state frame index of the mod's clip sets, without its wave phases.
+func (v *ModelViewer) animationFrameState(clip *modelviewer.ModelViewerAnimationClip, index int) map[string]any {
+	state := maps.Clone(v.resolved)
+	if state == nil {
+		state = map[string]any{}
+	}
+	maps.Copy(state, clip.Frames[index].Values)
+	return state
 }
 
 // viewerAnimationBarHeight is the height of one lane of the playback controller, viewerAnimationBarMaxWidth its
@@ -760,12 +902,16 @@ func (v *ModelViewer) animationSpeedMenu(t kit.Theme, track viewerTrack, p *view
 		HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).Role(fairy.RoleButton).Focusable().
 		FocusRing(3, t.Ring.Alpha(0.5)).
 		Label(T("page.tools.model_viewer.animation_speed")).Key("model-viewer.animation-speed-trigger." + track.key())
-	items := make([]kit.MenuItem, len(viewerSpeeds))
+	items := make([]kit.MenuItem, len(viewerSpeeds), len(viewerSpeeds)+2)
 	for i, option := range viewerSpeeds {
 		items[i] = kit.MenuItem{
 			Label: formatViewerNumber(option) + "×", Radio: true, Checked: option == speed,
 			OnClick: func() { v.setTrackSpeed(track, option) },
 		}
 	}
+	items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+		Label: T("page.tools.model_viewer.animation_interpolate"), Checkbox: true, Checked: !p.stepped,
+		OnClick: func() { v.setTrackStepped(track, !p.stepped) },
+	})
 	return kit.DropdownMenu("model-viewer.animation-speed."+track.key(), trigger, items, kit.AlignEnd)
 }

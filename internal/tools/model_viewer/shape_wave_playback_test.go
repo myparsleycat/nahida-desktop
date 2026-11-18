@@ -39,6 +39,15 @@ func TestShapeWavePlayback(t *testing.T) {
 		phase(t, playback.Advance("clip", 0.5, 10, state), 1)
 	})
 
+	t.Run("a peek returns what the advance does and leaves the phases as they were", func(t *testing.T) {
+		t.Parallel()
+		playback := NewShapeWavePlayback(meshes)
+		state := map[string]any{"on": 1, "speed": 1}
+		playback.Advance("clip", 0, 10, state)
+		phase(t, playback.Peek("clip", 2, 10, state), 2)
+		phase(t, playback.Advance("clip", 1, 10, state), 1)
+	})
+
 	t.Run("returns to the same phase when scrubbed back", func(t *testing.T) {
 		t.Parallel()
 		playback := NewShapeWavePlayback(meshes)

@@ -1,6 +1,9 @@
 package modelviewer
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 const computeGameFramesPerSecond = 60
 
@@ -114,6 +117,23 @@ func (p *ComputePlayback) Advance(
 		groupWeights[index] = p.frames[index] / group.FrameEnd
 	}
 	return phaseSeconds, groupWeights
+}
+
+// Peek returns what Advance would return for the same arguments, leaving the playback as it is.
+func (p *ComputePlayback) Peek(
+	clip string,
+	time, duration float64,
+	state map[string]any,
+) (phaseSeconds float64, groupWeights []float64) {
+	copied := *p
+	copied.frames, copied.directions, copied.seen = slices.Clone(
+		p.frames,
+	), slices.Clone(
+		p.directions,
+	), slices.Clone(
+		p.seen,
+	)
+	return copied.Advance(clip, time, duration, state)
 }
 
 func (p *ComputePlayback) step(index int, speed float64) {

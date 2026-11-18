@@ -1654,6 +1654,7 @@
         "animation_play": "再生",
         "animation_pause": "一時停止",
         "animation_speed": "再生速度",
+        "animation_interpolate": "フレーム補間",
         "animation_start": "先頭へ",
         "animation_end": "末尾へ",
         "animation_time": "{{seconds}} 秒",

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"unsafe"
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/kit"
@@ -34,6 +35,25 @@ type viewerCompute struct {
 	wroteExtra bool
 	// latest is the frame to compute next, and last the one asked for most recently.
 	latest, last *viewerComputeRequest
+	// ahead is the frame after last, computed while the clip plays so its meshes can move towards it and show it
+	// without running the kernel again; nil while none is computed or computing.
+	ahead *viewerComputeAhead
+}
+
+// viewerComputeAhead is a frame computed before it is shown, with the times and weights a peek at the playback
+// gave for it. results is nil while the kernel runs.
+type viewerComputeAhead struct {
+	clip    *modelviewer.ModelViewerAnimationClip
+	frame   int
+	phase   float64
+	weights []float64
+	results []viewerComputeResult
+}
+
+// matches reports whether the frame computed ahead is request's at phase and weights.
+func (a *viewerComputeAhead) matches(request *viewerComputeRequest, phase float64, weights []float64) bool {
+	return a != nil && a.results != nil && a.clip == request.clip && a.frame == request.frame && a.phase == phase &&
+		slices.Equal(a.weights, weights)
 }
 
 type viewerComputeRequest struct {
@@ -201,10 +221,15 @@ func (v *ModelViewer) observeCompute() {
 }
 
 // dispatchCompute computes the newest frame asked for, unless the kernel is still reading its sources or
-// running an earlier frame.
+// running an earlier frame. With nothing asked for, it computes the frame after the one shown while the clip draws
+// between frames.
 func (v *ModelViewer) dispatchCompute() {
 	c := v.compute
-	if c == nil || c.failed || c.kernel == nil || c.busy || c.latest == nil {
+	if c == nil || c.failed || c.kernel == nil || c.busy {
+		return
+	}
+	if c.latest == nil {
+		v.computeAhead()
 		return
 	}
 	request := c.latest
@@ -214,11 +239,64 @@ func (v *ModelViewer) dispatchCompute() {
 	}
 	frame := request.clip.Frames[request.frame]
 	phase, weights := c.playback.Advance(request.clip.ID, frame.Time, request.duration, v.resolved)
+	ahead := c.ahead
+	c.ahead = nil
+	if ahead.matches(request, phase, weights) {
+		v.showComputeFrame(c, ahead.results, true)
+		v.dispatchCompute()
+		return
+	}
+	c.clearAhead()
+	v.runCompute(c, frame.Index, phase, weights, func(results []viewerComputeResult) {
+		v.showComputeFrame(c, results, false)
+	}, request)
+}
+
+// computeAhead computes the frame after the one last asked for, as the playback's next advance will see it.
+func (v *ModelViewer) computeAhead() {
+	c := v.compute
+	request := c.last
+	if c.ahead != nil || request == nil || request.clip != v.animationClip() || request.frame != v.anim.frame {
+		return
+	}
+	next, ok := v.nextFrame(trackMod)
+	if !ok || !v.interpolates(trackMod) {
+		return
+	}
+	frame := request.clip.Frames[next]
+	phase, weights := c.playback.Peek(request.clip.ID, frame.Time, request.duration, v.resolved)
+	ahead := &viewerComputeAhead{clip: request.clip, frame: next, phase: phase, weights: weights}
+	c.ahead = ahead
+	v.runCompute(c, frame.Index, phase, weights, func(results []viewerComputeResult) {
+		if c.ahead != ahead {
+			return
+		}
+		ahead.results = results
+		for i, result := range results {
+			mesh := c.scene.meshes[c.meshes[i].index]
+			if mesh.computed && len(result.current) == len(mesh.current) {
+				mesh.next, mesh.nextKey, mesh.nextDirty = result.current, computeGeometryKey, true
+			}
+		}
+		v.revision++
+	}, nil)
+}
+
+// runCompute runs the kernel for one frame on its own goroutine and hands the results to show on the UI thread.
+// request is the frame asked for, which a failure reports, or nil for a frame computed ahead.
+func (v *ModelViewer) runCompute(
+	c *viewerCompute,
+	poseFrame int,
+	phase float64,
+	weights []float64,
+	show func([]viewerComputeResult),
+	request *viewerComputeRequest,
+) {
 	c.busy = true
 	kernel, meshes := c.kernel, c.meshes
 	post := v.poster()
 	go func() {
-		results, err := computeViewerFrame(kernel, meshes, frame.Index, phase, weights)
+		results, err := computeViewerFrame(kernel, meshes, poseFrame, phase, weights)
 		post(func() {
 			if v.compute != c {
 				return
@@ -228,19 +306,41 @@ func (v *ModelViewer) dispatchCompute() {
 				v.failCompute(c, err, request)
 				return
 			}
-			for i, result := range results {
-				mesh := c.scene.meshes[meshes[i].index]
-				mesh.current, mesh.geometryKey = result.current, computeGeometryKey
-				mesh.computed, mesh.dirty = true, true
-				mesh.tangentUsable = result.tangentUsable
-				if result.extra != nil {
-					mesh.extra, mesh.extraDirty, c.wroteExtra = result.extra, true, true
-				}
-			}
-			v.revision++
+			show(results)
 			v.dispatchCompute()
 		})
 	}()
+}
+
+// showComputeFrame makes results the geometry of the deformer's meshes. A frame computed ahead is already the
+// meshes' next geometry, which takes the place of current without being uploaded again.
+func (v *ModelViewer) showComputeFrame(c *viewerCompute, results []viewerComputeResult, ahead bool) {
+	for i, result := range results {
+		mesh := c.scene.meshes[c.meshes[i].index]
+		if ahead && mesh.computed && mesh.next != nil &&
+			unsafe.SliceData(mesh.next) == unsafe.SliceData(result.current) {
+			mesh.promoteNext()
+		} else {
+			mesh.current, mesh.dirty = result.current, true
+		}
+		mesh.clearNext()
+		mesh.geometryKey, mesh.computed = computeGeometryKey, true
+		mesh.tangentUsable = result.tangentUsable
+		if result.extra != nil {
+			mesh.extra, mesh.extraDirty, c.wroteExtra = result.extra, true, true
+		}
+	}
+	v.revision++
+}
+
+// clearAhead drops the frame computed ahead from the deformer's meshes.
+func (c *viewerCompute) clearAhead() {
+	c.ahead = nil
+	for _, baseline := range c.meshes {
+		if mesh := c.scene.meshes[baseline.index]; mesh.computed {
+			mesh.clearNext()
+		}
+	}
 }
 
 // computeViewerFrame runs the kernel and lays its frame out for each mesh. The slices it returns are new, as
@@ -313,6 +413,7 @@ func (v *ModelViewer) stopCompute(restore bool) {
 }
 
 func (c *viewerCompute) restore() {
+	c.clearAhead()
 	for _, baseline := range c.meshes {
 		mesh := c.scene.meshes[baseline.index]
 		if !mesh.computed {
@@ -332,7 +433,7 @@ func (v *ModelViewer) failCompute(c *viewerCompute, err error, request *viewerCo
 	if c.failed {
 		return
 	}
-	c.failed, c.latest = true, nil
+	c.failed, c.latest, c.ahead = true, nil, nil
 	c.cancel()
 	c.restore()
 	v.revision++

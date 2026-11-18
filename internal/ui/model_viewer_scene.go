@@ -102,9 +102,14 @@ type viewerMissing struct {
 
 func (m viewerMissing) empty() bool { return len(m.variants) == 0 && len(m.meshes) == 0 }
 
-// gpuBytes is the size of the mesh's vertex and index buffers.
+// gpuBytes is the size of the mesh's vertex and index buffers, counting the buffer of the next frame's geometry
+// for a mesh whose geometry changes.
 func (m *viewerMesh) gpuBytes() int {
-	return m.vertexCount*(6*4+4*4+viewerVertexExtraStride) + m.info.IndexCount*4
+	vertexBytes := 6*4 + 4*4 + viewerVertexExtraStride
+	if !m.static() {
+		vertexBytes += 6 * 4
+	}
+	return m.vertexCount*vertexBytes + m.info.IndexCount*4
 }
 
 // trackLoaded starts the cache with the meshes loaded so far.
@@ -280,6 +285,14 @@ type viewerMesh struct {
 	computed bool
 	// dirty marks current as newer than the GPU's copy.
 	dirty bool
+	// next is the geometry of the animation's next frame, laid out as current, which the draw moves towards by
+	// the share of the frame played; nil without one. nextKey names it as geometryKey names current, and nextDirty
+	// marks it as newer than the GPU's copy. Like current, it is replaced, never changed in place.
+	next      []float32
+	nextKey   string
+	nextDirty bool
+	// swapped asks the draw to swap the GPU's copies of current and next, after the two traded places.
+	swapped bool
 	// extraDirty marks extra as newer than the GPU's copy; the body shape editor and compute deformers change
 	// extra, by replacing it.
 	extraDirty bool
@@ -316,7 +329,8 @@ func (m *viewerMesh) fill(decoded *viewerMesh) {
 		decoded.hasColors, decoded.hasUV1
 	m.faceForward, m.shapes = decoded.faceForward, decoded.shapes
 	m.current, m.geometryKey = decoded.current, decoded.geometryKey
-	m.computed, m.dirty, m.extraDirty = false, false, false
+	m.computed, m.dirty, m.extraDirty, m.swapped = false, false, false, false
+	m.clearNext()
 	m.unloaded, m.cpuDropped = false, false
 }
 
@@ -324,8 +338,23 @@ func (m *viewerMesh) fill(decoded *viewerMesh) {
 func (m *viewerMesh) unload() {
 	m.positions, m.normals, m.uvs, m.indices, m.extra, m.shapes, m.current = nil, nil, nil, nil, nil, nil, nil
 	m.baseExtra = nil
-	m.geometryKey, m.computed, m.dirty, m.extraDirty = "", false, false, false
+	m.geometryKey, m.computed, m.dirty, m.extraDirty, m.swapped = "", false, false, false, false
+	m.clearNext()
 	m.unloaded, m.cpuDropped = true, false
+}
+
+// clearNext drops the next frame's geometry. The GPU's copy of current stays where swapped says it is.
+func (m *viewerMesh) clearNext() {
+	m.next, m.nextKey, m.nextDirty = nil, "", false
+}
+
+// promoteNext makes the next frame's geometry current, and current the next, without building or uploading
+// either again.
+func (m *viewerMesh) promoteNext() {
+	m.current, m.next = m.next, m.current
+	m.geometryKey, m.nextKey = m.nextKey, m.geometryKey
+	m.dirty, m.nextDirty = m.nextDirty, m.dirty
+	m.swapped = !m.swapped
 }
 
 // static reports a mesh whose drawn geometry never changes: no shape targets, position variants or deformer.
@@ -681,21 +710,62 @@ func (m *viewerMesh) setGeometry() {
 		return
 	}
 	state := m.state
-	if state.PositionVariant >= 0 {
-		key := variantGeometryKey(state.PositionVariant)
-		variant := m.variants[state.PositionVariant]
-		if key == m.geometryKey || variant == nil {
-			return
-		}
-		m.current, m.geometryKey, m.dirty = variant.current, key, true
-		m.extra, m.extraDirty = variant.extra, true
-		return
-	}
-	if len(m.info.PositionVariants) > 0 && m.baseExtra != nil &&
+	if state.PositionVariant < 0 && len(m.info.PositionVariants) > 0 && m.baseExtra != nil &&
 		unsafe.SliceData(m.extra) != unsafe.SliceData(m.baseExtra) {
 		m.extra, m.extraDirty = m.baseExtra, true
 	}
+	key := m.geometryKeyFor(state)
+	if key == m.geometryKey && m.current != nil {
+		return
+	}
+	switch {
+	case m.next != nil && key == m.nextKey:
+		m.promoteNext()
+	default:
+		current := m.geometryFor(state)
+		if current == nil {
+			return
+		}
+		m.current, m.geometryKey, m.dirty = current, key, true
+	}
+	// A variant dropped from the cache since it became the next frame's geometry keeps the extra shown.
+	if variant := m.variants[state.PositionVariant]; state.PositionVariant >= 0 && variant != nil {
+		m.extra, m.extraDirty = variant.extra, true
+	}
+}
 
+// setNext builds the geometry the mesh shows in the animation's next frame, under state, to move towards. The mesh
+// has none when it is hidden in either frame, keeps its geometry, or would show a position variant not loaded yet.
+// A compute deformer sets the next frame of the meshes it writes itself.
+func (m *viewerMesh) setNext(state *modelviewer.ViewerMeshState) {
+	if m.computed {
+		return
+	}
+	if state == nil || !state.Visible || !m.state.Visible || m.unloaded || m.cpuDropped {
+		m.clearNext()
+		return
+	}
+	key := m.geometryKeyFor(*state)
+	if key == m.geometryKey {
+		m.clearNext()
+		return
+	}
+	if m.next != nil && key == m.nextKey {
+		return
+	}
+	next := m.geometryFor(*state)
+	if next == nil || len(next) != len(m.current) {
+		m.clearNext()
+		return
+	}
+	m.next, m.nextKey, m.nextDirty = next, key, true
+}
+
+// geometryKeyFor names the geometry state shows: its position variant, or the base under its shape weights.
+func (m *viewerMesh) geometryKeyFor(state modelviewer.ViewerMeshState) string {
+	if state.PositionVariant >= 0 {
+		return variantGeometryKey(state.PositionVariant)
+	}
 	var key strings.Builder
 	key.WriteString(baseGeometryKey)
 	for i, weight := range state.ShapeWeights {
@@ -703,15 +773,24 @@ func (m *viewerMesh) setGeometry() {
 			key.WriteString(":" + strconv.Itoa(i) + "=" + strconv.FormatFloat(weight, 'g', -1, 64))
 		}
 	}
-	if key.String() == m.geometryKey && m.current != nil {
-		return
+	return key.String()
+}
+
+// geometryFor builds the geometry state shows, laid out as current, or returns nil while its position variant is
+// not loaded.
+func (m *viewerMesh) geometryFor(state modelviewer.ViewerMeshState) []float32 {
+	if state.PositionVariant >= 0 {
+		if variant := m.variants[state.PositionVariant]; variant != nil {
+			return variant.current
+		}
+		return nil
 	}
 	positions, deformed := m.deform(state.ShapeWeights)
 	normals := m.normals
 	if deformed {
 		normals = vertexNormals(positions, m.indices)
 	}
-	m.current, m.geometryKey, m.dirty = interleaveViewerGeometry(positions, normals), key.String(), true
+	return interleaveViewerGeometry(positions, normals)
 }
 
 // deform applies the shape targets at weights to the base positions, as the React viewer's
@@ -866,6 +945,18 @@ func (s *viewerScene) apply(states []modelviewer.ViewerMeshState) viewerMissing 
 		}
 	}
 	return missing
+}
+
+// applyNext sets the geometry each mesh shows in the animation's next frame, under states. While the scene waits
+// to show the frame before, no mesh has one.
+func (s *viewerScene) applyNext(states []modelviewer.ViewerMeshState) {
+	for i, mesh := range s.meshes {
+		if s.waiting || i >= len(states) {
+			mesh.setNext(nil)
+			continue
+		}
+		mesh.setNext(&states[i])
+	}
 }
 
 // readViewerVariant reads position variant index of the mesh info describes over base. It takes copies of the
