@@ -19,11 +19,8 @@ const (
 	downloadTasks
 )
 
-const (
-	// viewerDownloadPostGap is the shortest time between the rebuilds download progress asks for.
-	viewerDownloadPostGap = 100 * time.Millisecond
-	viewerDownloadPanelW  = 240
-)
+// viewerDownloadPostGap is the shortest time between the rebuilds download progress asks for.
+const viewerDownloadPostGap = 100 * time.Millisecond
 
 // viewerDownloads holds the progress of the character data files the viewer's loads read. The loads' goroutines
 // report into it; the UI thread begins and ends the loads and reads it.
@@ -139,40 +136,33 @@ func (d *viewerDownloads) shown() []viewerDownloadProgress {
 	return out
 }
 
-// downloadPanel shows the progress of the character data being downloaded, one row per task, or nil when nothing
-// downloads. A row whose files have all arrived shows a spinner while its load finishes.
-func (v *ModelViewer) downloadPanel(t kit.Theme) *fairy.El {
-	shown := v.downloads.shown()
-	if len(shown) == 0 {
-		return nil
+// downloadChip shows the download of p as the task's icon inside a progress ring and the percentage, with the task
+// and the sizes in its tooltip. Once its files have all arrived a spinner takes the ring's place while its load
+// finishes.
+func downloadChip(t kit.Theme, p viewerDownloadProgress) *fairy.El {
+	icon, label := lucide.PersonStanding, T("page.tools.model_viewer.menu.character_motion")
+	if p.task == downloadOriginal {
+		icon, label = lucide.Database, T("page.tools.model_viewer.menu.original_data")
 	}
-	panel := fairy.Col().Key("model-viewer.downloads").Gap(12).W(viewerDownloadPanelW).PadXY(12, 10).Radius(12).
-		Color(t.PopoverForeground).Border(1, t.Border).Shadow(0, 8, 24, 0, shadowColor(&t)).
-		Label(T("page.tools.model_viewer.asset_downloads"))
-	for _, p := range shown {
-		icon, label := lucide.PersonStanding, T("page.tools.model_viewer.menu.character_motion")
-		if p.task == downloadOriginal {
-			icon, label = lucide.Database, T("page.tools.model_viewer.menu.original_data")
-		}
-		value := 1.0
-		if p.total > 0 {
-			value = float64(p.done) / float64(p.total)
-		}
-		status := kit.Spinner(12)
-		if p.done < p.total {
-			status = fairy.Text(strconv.Itoa(int(value*100)) + "%").FontSize(12).LineHeight(16).Medium().
-				Color(t.MutedForeground)
-		}
-		panel.Child(fairy.Col(
-			fairy.Row(
-				fairy.Icon(icon).Size(14, 14).Shrink(0),
-				fairy.Text(label).FontSize(12).LineHeight(16).Medium().Ellipsis().MinW(0).Grow(1),
-				status.Shrink(0),
-			).Gap(6).Align(fairy.Center),
-			kit.Progress(value),
-			fairy.Text(formatSize(p.done)+" / "+formatSize(p.total)).FontSize(11).LineHeight(14).
-				Color(t.MutedForeground),
-		).Gap(6))
+	value := 1.0
+	if p.total > 0 {
+		value = float64(p.done) / float64(p.total)
 	}
-	return glass(panel, opacity(t.Popover, t.SurfaceAlpha), t.Popover, t.SurfaceBlur)
+
+	const ring = viewerStatusRingSize
+	progress := kit.Spinner(ring).Color(t.MutedForeground)
+	if p.done < p.total {
+		progress = kit.ProgressCircle(value, ring, kit.Label(label)).Color(t.Primary)
+	}
+	return fairy.Row(
+		fairy.Box(progress.Absolute().Inset(0), fairy.Icon(icon).Size(10, 10)).Size(ring, ring).Center().Shrink(0),
+		fairy.Box(viewerStatusText(strconv.Itoa(int(value*100))+"%").Color(t.MutedForeground)).
+			W(viewerStatusPercentWidth).Align(fairy.End),
+	).Key("model-viewer.download."+strconv.Itoa(int(p.task))).W(viewerDownloadChipWidth).Shrink(0).
+		Gap(viewerStatusChipGap).Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0).
+		Tooltip(label + "\n" + formatSize(p.done) + " / " + formatSize(p.total))
+}
+
+func viewerStatusText(text string) *fairy.El {
+	return fairy.Text(text).FontSize(12).LineHeight(16).Medium().NoWrap()
 }

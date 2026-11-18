@@ -1655,7 +1655,6 @@
         "game_textures_one": "{{count}} part uses in-game textures",
         "game_textures_other": "{{count}} parts use in-game textures",
         "game_textures_hint": "Parts that use the original in-game textures are shown in white. Click to highlight them",
-        "asset_downloads": "Downloading assets",
         "animation_clip": "Animation clip",
         "animation_frame": "Frame {{current}} / {{end}}",
         "animation_frame_slider": "Animation frame",

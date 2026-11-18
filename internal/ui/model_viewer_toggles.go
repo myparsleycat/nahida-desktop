@@ -561,61 +561,68 @@ func (v *ModelViewer) gameTextureCount() int {
 	return count
 }
 
-// viewerCornerMargin is the bottom-left stack's distance from the viewer's corner, and viewerGameTextureNoticeHeight
-// the game texture notice's height as a small button.
+// The status chips in the animation bar have fixed widths, so the bar is sized before they are laid out. A chip is
+// viewerStatusChipHeight high with viewerStatusChipPadX at each side and viewerStatusChipGap between its parts. A
+// download chip holds the ring and the percentage, which fits "100%" in viewerStatusPercentWidth; the game texture
+// chip holds the icon and the count, which fits three digits in viewerStatusCountWidth.
 const (
-	viewerCornerMargin            = 12
-	viewerGameTextureNoticeHeight = 28
+	viewerStatusChipHeight     = 28
+	viewerStatusChipPadX       = 6
+	viewerStatusChipGap        = 6
+	viewerStatusRingSize       = 20
+	viewerStatusIconSize       = 14
+	viewerStatusPercentWidth   = 34
+	viewerStatusCountWidth     = 24
+	viewerDownloadChipWidth    = 2*viewerStatusChipPadX + viewerStatusRingSize + viewerStatusChipGap + viewerStatusPercentWidth
+	viewerGameTextureChipWidth = 2*viewerStatusChipPadX + viewerStatusIconSize + viewerStatusChipGap + viewerStatusCountWidth
 )
 
-// cornerStack is the stack over the viewer's bottom-left corner: the download progress above the game texture
-// notice of count parts, or nil when neither shows. When the animation bar is shown over the place it occupies, the
-// stack sits just above the bar.
-func (v *ModelViewer) cornerStack(t kit.Theme, count int, barShown bool) *fairy.El {
-	downloads := v.downloadPanel(t)
-	if downloads == nil && count == 0 {
-		return nil
-	}
-	stack := fairy.Col().Gap(8).Align(fairy.Start)
-	if downloads != nil {
-		stack.Child(downloads)
-	}
-	if count > 0 {
-		stack.Child(v.gameTextureNotice(count))
-	}
-
-	bottom := float32(viewerCornerMargin)
-	if left, top, _, ok := v.animationBarPlace(); barShown && ok {
-		// Before the stack is measured its width is 0, which counts as overlapping until the next layout.
-		width, height := v.cornerSize[0], max(v.cornerSize[1], viewerGameTextureNoticeHeight)
-		overlapsRow := top+v.animationBarHeight() > v.height-viewerCornerMargin-height
-		overlapsColumn := width == 0 || left < viewerCornerMargin+width+8
-		if overlapsRow && overlapsColumn {
-			bottom = v.height - top + 8
-		}
-	}
-	return stack.Absolute().Bottom(bottom).Left(viewerCornerMargin).
-		OnLayout(func(w, h float32) bool {
-			if v.cornerSize == [2]float32{w, h} {
-				return false
-			}
-			v.cornerSize = [2]float32{w, h}
-			return true
-		})
+// viewerStatus is what the animation bar's status chips show: the downloads running and the number of parts drawn
+// with the game's textures.
+type viewerStatus struct {
+	downloads []viewerDownloadProgress
+	gameParts int
 }
 
-// gameTextureNotice counts the parts drawn without a texture and switches their highlight.
-func (v *ModelViewer) gameTextureNotice(count int) *fairy.El {
+func (s viewerStatus) empty() bool { return len(s.downloads) == 0 && s.gameParts == 0 }
+
+// width is the width of the row of status chips.
+func (s viewerStatus) width() float32 {
+	chips := len(s.downloads)
+	width := float32(chips * viewerDownloadChipWidth)
+	if s.gameParts > 0 {
+		chips++
+		width += viewerGameTextureChipWidth
+	}
+	if chips > 1 {
+		width += float32((chips - 1) * viewerAnimationBarGap)
+	}
+	return width
+}
+
+// gameTextureChip shows the number of parts drawn without a texture and switches their highlight. Its tooltip says
+// what the number counts.
+func (v *ModelViewer) gameTextureChip(t kit.Theme, count int) *fairy.El {
 	label := T("page.tools.model_viewer.game_textures", "count", count)
-	button := kit.Button(label, func() {
-		v.highlightGameTextures = !v.highlightGameTextures
-		v.revision++
-	}, kit.Outline, kit.Small, kit.Icon(lucide.Info), kit.Tooltip(T("page.tools.model_viewer.game_textures_hint")))
+	chip := fairy.Row(
+		fairy.Icon(lucide.Info).Size(viewerStatusIconSize, viewerStatusIconSize).Shrink(0),
+		viewerStatusText(strconv.Itoa(count)).W(viewerStatusCountWidth),
+	).Key("model-viewer.game-textures").W(viewerGameTextureChipWidth).Shrink(0).Gap(viewerStatusChipGap).
+		Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0).
+		Radius(viewerStatusChipHeight/2).HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).
+		Role(fairy.RoleButton).Checked(v.highlightGameTextures).Label(label).Focusable().
+		FocusRing(3, t.Ring.Alpha(0.5)).
+		Tooltip(label + "\n" + T("page.tools.model_viewer.game_textures_hint")).
+		Animate(viewerAnimationBarMotion).
+		OnClick(func() {
+			v.highlightGameTextures = !v.highlightGameTextures
+			v.revision++
+		})
 	if v.highlightGameTextures {
 		amber := fairy.Hex(viewerGameTextureHighlight)
-		button.Border(1, amber).Color(amber)
+		chip.Color(amber).Fill(amber.Alpha(0.12))
 	}
-	return button
+	return chip
 }
 
 // sideSplit lays the viewer beside the side column. Without a tool the column is the toggles alone, which a

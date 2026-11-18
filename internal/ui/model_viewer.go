@@ -81,11 +81,9 @@ type ModelViewer struct {
 	overlayMenus    viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
 	highlightGameTextures bool
-	// cornerSize is the measured size of the stack over the viewer's bottom-left corner.
-	cornerSize [2]float32
-	camera     orbitCamera
-	home       orbitCamera
-	normalMaps bool
+	camera                orbitCamera
+	home                  orbitCamera
+	normalMaps            bool
 	// orientation is the user's turn of the model in degrees of roll, pitch and yaw.
 	orientation vec3
 	doubleSided bool
@@ -1038,7 +1036,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	v.syncMotion()
 	v.syncToonAssets(v.toonStyle())
 	gameTextures := v.gameTextureCount()
-	// The notice is the highlight's only switch, so the highlight ends with it.
+	// The chip is the highlight's only switch, so the highlight ends with it.
 	if gameTextures == 0 {
 		v.highlightGameTextures = false
 	}
@@ -1134,10 +1132,8 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		if len(scene.transport.Forms) > 1 {
 			viewport.Child(v.formSwitcher())
 		}
-		bar = v.animationBar(t)
-		if corner := v.cornerStack(t, gameTextures, bar != nil); corner != nil {
-			viewport.Child(corner)
-		}
+		status := viewerStatus{downloads: v.downloads.shown(), gameParts: gameTextures}
+		bar = v.animationBar(t, v.animationTracks(), status)
 	}
 	switch {
 	case v.loading:

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"github.com/myparsleycat/fairy/icons/lucide"
 	"github.com/myparsleycat/fairy/keyboard"
 	"github.com/myparsleycat/fairy/kit"
+	"github.com/myparsleycat/fairy/motion"
 
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -76,12 +78,15 @@ func (p *viewerPlayback) phase(clip *modelviewer.ModelViewerAnimationClip, now t
 // viewerAnimation is the playback of the transport's animation clips, and where the playback controller sits.
 type viewerAnimation struct {
 	viewerPlayback
-	// barAt is where the bar was moved to, as fractions of the viewer's width and height; nil keeps it centered at
-	// the bottom. barDrag is the bar's position when a drag of it started, and barDragFrom the barAt a canceled
-	// drag restores.
-	barAt       *[2]float32
-	barDrag     [2]float32
-	barDragFrom *[2]float32
+	// barAt is where the bar was moved to, as fractions of the viewer's width and height; nil keeps it at the bottom
+	// center. barDrag is the bar's position when a drag of it started, barDragFrom the barAt a canceled drag
+	// restores, and barDragWidth the width the bar keeps until the drag ends, or 0 while no drag runs.
+	barAt        *[2]float32
+	barDrag      [2]float32
+	barDragFrom  *[2]float32
+	barDragWidth float32
+	// barView is the viewer's size when the bar was last built. The bar follows a change of it without animating.
+	barView [2]float32
 	// values are what the current frame sets over the toggles.
 	values map[string]any
 	waves  *modelviewer.ShapeWavePlayback
@@ -557,9 +562,9 @@ func (v *ModelViewer) animationFrameState(clip *modelviewer.ModelViewerAnimation
 	return state
 }
 
-// viewerAnimationBarHeight is the height of one lane of the playback controller, viewerAnimationBarMaxWidth its
-// widest, viewerAnimationBarMargin its default distance from the viewer's edges, and viewerScrubInset how far the
-// scrubber's first and last frames sit from its ends.
+// viewerAnimationBarHeight is the height of one row of the playback controller, viewerAnimationBarMaxWidth the widest
+// its lanes get, viewerAnimationBarMargin its default distance from the viewer's edges, and viewerScrubInset how far
+// the scrubber's first and last frames sit from its ends.
 const (
 	viewerAnimationBarHeight   = 36
 	viewerAnimationBarMaxWidth = 560
@@ -567,14 +572,29 @@ const (
 	viewerScrubInset           = 6
 	// viewerAnimationBarKeyStep is how far an arrow key moves the bar.
 	viewerAnimationBarKeyStep = 16
-	// A bar narrower than viewerAnimationBarFullWidth leaves out the jumps to the clip's ends, one narrower than
-	// viewerAnimationBarCompactWidth the time as well, and one narrower than viewerAnimationBarMinWidth is not shown.
+	// A bar whose lanes are narrower than viewerAnimationBarFullWidth leaves out the jumps to the clip's ends, one
+	// narrower than viewerAnimationBarCompactWidth the time as well, and one narrower than viewerAnimationBarMinWidth
+	// is not shown. The widths count the grip and padding, as when the bar holds the lanes alone.
 	viewerAnimationBarFullWidth    = 360
 	viewerAnimationBarCompactWidth = 300
 	viewerAnimationBarMinWidth     = 232
 	// viewerAnimationClipWidth is the width of the clip names while two lanes show, so their scrubbers line up.
 	viewerAnimationClipWidth = 136
+
+	viewerAnimationBarBorder  = 1
+	viewerAnimationBarPadX    = 4
+	viewerAnimationGripWidth  = 16
+	viewerAnimationBarGap     = 2
+	viewerStatusDividerMargin = 6
+	// viewerAnimationBarChrome is the width of the bar's border, padding, grip and the gap after it, and
+	// viewerStatusDividerWidth that of the divider between the status chips and the lanes with its gaps and margins.
+	viewerAnimationBarChrome = 2*viewerAnimationBarBorder + 2*viewerAnimationBarPadX + viewerAnimationGripWidth +
+		viewerAnimationBarGap
+	viewerStatusDividerWidth = 2*viewerAnimationBarGap + 2*viewerStatusDividerMargin + 1
 )
+
+// viewerAnimationBarMotion is the 220ms ease-out of the bar moving, resizing, appearing and going.
+var viewerAnimationBarMotion = motion.Bezier(0.22, 0.2, 0, 0, 1)
 
 // animationTracks lists the tracks the controller shows, top to bottom. The motion lane goes above the mod's, so
 // while the controller sits in its default place the mod's lane stays put when motions are turned on or off.
@@ -588,57 +608,98 @@ func (v *ModelViewer) animationTracks() []viewerTrack {
 	return tracks
 }
 
-func (v *ModelViewer) animationBarHeight() float32 {
-	return float32(len(v.animationTracks())) * viewerAnimationBarHeight
+// viewerBarPlace is where the bar sits in the viewer, its size, and how its content is arranged. lanes is whether the
+// lanes show, and laneWidth the width they size their controls by. stacked puts the status chips on a row above the
+// lanes instead of before them.
+type viewerBarPlace struct {
+	left, top, width, height float32
+	lanes                    bool
+	laneWidth                float32
+	stacked                  bool
 }
 
-// animationBarPlace is where the animation bar sits in the viewer's measured size, and false while the viewer is
-// too narrow for it.
-func (v *ModelViewer) animationBarPlace() (left, top, width float32, ok bool) {
-	width = min(v.width-2*viewerAnimationBarMargin, viewerAnimationBarMaxWidth)
-	if width < viewerAnimationBarMinWidth {
-		return 0, 0, 0, false
+// animationBarPlace is where the bar holding lanes rows of tracks and the chips of status goes in the viewer's
+// measured size, and false when it shows nothing or the viewer is too narrow for it. The chips go before the lanes
+// while the lanes keep their compact width beside them, and on a row above the lanes otherwise. When the lanes do not
+// fit at all, the bar holds the chips alone.
+func (v *ModelViewer) animationBarPlace(lanes int, status viewerStatus) (viewerBarPlace, bool) {
+	var p viewerBarPlace
+	room := v.width - 2*viewerAnimationBarMargin
+	shown := !status.empty()
+	chips := status.width()
+	rows := lanes
+	switch {
+	case lanes > 0 && shown && room-chips-viewerStatusDividerWidth >= viewerAnimationBarCompactWidth:
+		p.width = min(room, viewerAnimationBarMaxWidth+chips+viewerStatusDividerWidth)
+		p.laneWidth = p.width - chips - viewerStatusDividerWidth
+	case lanes > 0 && min(room, viewerAnimationBarMaxWidth) >= viewerAnimationBarMinWidth:
+		p.width = min(room, viewerAnimationBarMaxWidth)
+		p.laneWidth, p.stacked = p.width, shown
+		if shown {
+			rows++
+		}
+	case shown:
+		p.width, rows = viewerAnimationBarChrome+chips, 1
+	default:
+		return p, false
 	}
+	if p.width > room {
+		return p, false
+	}
+	p.lanes = p.laneWidth > 0
+	p.height = float32(rows) * viewerAnimationBarHeight
+	if p.stacked {
+		// The lanes' top border separates them from the chips.
+		p.height += viewerAnimationBarBorder
+	}
+
 	if at := v.anim.barAt; at != nil {
-		left, top = v.clampAnimationBar(at[0]*v.width, at[1]*v.height, width)
-		return left, top, width, true
+		p.width = cmp.Or(v.anim.barDragWidth, p.width)
+		p.left, p.top = v.clampAnimationBar(at[0]*v.width, at[1]*v.height, p.width, p.height)
+		return p, true
 	}
-	return (v.width - width) / 2, v.height - viewerAnimationBarMargin - v.animationBarHeight(), width, true
+	p.left, p.top = (v.width-p.width)/2, v.height-viewerAnimationBarMargin-p.height
+	return p, true
 }
 
-// clampAnimationBar keeps a bar of width at left, top inside the viewer.
-func (v *ModelViewer) clampAnimationBar(left, top, width float32) (float32, float32) {
-	return min(max(left, 0), max(v.width-width, 0)), min(max(top, 0), max(v.height-v.animationBarHeight(), 0))
+// clampAnimationBar keeps a bar of width and height at left, top inside the viewer.
+func (v *ModelViewer) clampAnimationBar(left, top, width, height float32) (float32, float32) {
+	return min(max(left, 0), max(v.width-width, 0)), min(max(top, 0), max(v.height-height, 0))
 }
 
-// moveAnimationBar places a bar of width at left, top, kept inside the viewer.
-func (v *ModelViewer) moveAnimationBar(left, top, width float32) {
-	left, top = v.clampAnimationBar(left, top, width)
+// moveAnimationBar places a bar of width and height at left, top, kept inside the viewer.
+func (v *ModelViewer) moveAnimationBar(left, top, width, height float32) {
+	left, top = v.clampAnimationBar(left, top, width, height)
 	v.anim.barAt = &[2]float32{left / max(v.width, 1), top / max(v.height, 1)}
 }
 
-// animationBar is the playback controller floating over the viewer: a grip that moves it, and a lane for each track
-// with clips. It is centered at the bottom until moved.
-func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
-	tracks := v.animationTracks()
-	left, top, width, ok := v.animationBarPlace()
-	if len(tracks) == 0 || !ok {
+// animationBar is the controller floating over the viewer: a grip that moves it, the chips of status, and a lane for
+// each of tracks. It sits at the bottom center until moved, and moves and resizes smoothly except while it is dragged
+// or the viewer resizes.
+func (v *ModelViewer) animationBar(t kit.Theme, tracks []viewerTrack, status viewerStatus) *fairy.El {
+	p, ok := v.animationBarPlace(len(tracks), status)
+	if !ok {
 		return nil
 	}
+	left, top, width, height := p.left, p.top, p.width, p.height
 	move := T("page.tools.model_viewer.animation_move")
-	grip := fairy.Box(fairy.Icon(lucide.GripVertical).Size(14, 14)).Size(16, 28).Center().Shrink(0).Radius(4).
+	grip := fairy.Box(fairy.Icon(lucide.GripVertical).Size(14, 14)).Size(viewerAnimationGripWidth, 28).Center().
+		Shrink(0).Radius(4).
 		Color(t.MutedForeground).HoverColor(t.Foreground).Cursor(fairy.CursorMove).Label(move).Tooltip(move).
 		Focusable().FocusRing(3, t.Ring.Alpha(0.5)).
 		OnDoubleClick(func() { v.anim.barAt = nil }).
 		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart {
-				v.anim.barDrag, v.anim.barDragFrom = [2]float32{left, top}, v.anim.barAt
+				v.anim.barDrag, v.anim.barDragFrom, v.anim.barDragWidth = [2]float32{left, top}, v.anim.barAt, width
 			}
 			if d.Canceled {
-				v.anim.barAt = v.anim.barDragFrom
+				v.anim.barAt, v.anim.barDragWidth = v.anim.barDragFrom, 0
 				return true
 			}
-			v.moveAnimationBar(v.anim.barDrag[0]+d.DX, v.anim.barDrag[1]+d.DY, width)
+			v.moveAnimationBar(v.anim.barDrag[0]+d.DX, v.anim.barDrag[1]+d.DY, width, height)
+			if d.Phase == fairy.DragEnd {
+				v.anim.barDragWidth = 0
+			}
 			return true
 		}).
 		OnKey(func(k keyboard.KeyEvent) bool {
@@ -648,13 +709,13 @@ func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 			const step = viewerAnimationBarKeyStep
 			switch k.Key {
 			case keyboard.KeyLeft:
-				v.moveAnimationBar(left-step, top, width)
+				v.moveAnimationBar(left-step, top, width, height)
 			case keyboard.KeyRight:
-				v.moveAnimationBar(left+step, top, width)
+				v.moveAnimationBar(left+step, top, width, height)
 			case keyboard.KeyUp:
-				v.moveAnimationBar(left, top-step, width)
+				v.moveAnimationBar(left, top-step, width, height)
 			case keyboard.KeyDown:
-				v.moveAnimationBar(left, top+step, width)
+				v.moveAnimationBar(left, top+step, width, height)
 			case keyboard.KeyHome:
 				v.anim.barAt = nil
 			default:
@@ -663,15 +724,58 @@ func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 			return true
 		})
 
-	lanes := fairy.Col().Grow(1).MinW(0)
-	for _, track := range tracks {
-		lanes.Child(v.animationLane(t, track, width, len(tracks) > 1))
+	// The chips, the divider and the lanes stay keyed children of one wrapping row in every arrangement, so they keep
+	// their identity, and with it their focus, when the arrangement changes.
+	content := fairy.Row().Key("model-viewer.animation-content").Wrap().Gap(viewerAnimationBarGap).RowGap(0).
+		Align(fairy.Center).Grow(1).MinW(0)
+	if !status.empty() {
+		content.Child(v.statusChips(t, status))
 	}
-	bar := fairy.Row(grip, lanes).Key("model-viewer.animation").Gap(2).Align(fairy.Center).
-		H(float32(len(tracks))*viewerAnimationBarHeight).PadXY(4, 0).
-		Radius(viewerAnimationBarHeight/2).Color(t.PopoverForeground).Border(1, t.Border).
-		Shadow(0, 8, 24, 0, shadowColor(&t)).Absolute().Left(left).Top(top).W(width)
+	if !status.empty() && p.lanes && !p.stacked {
+		content.Child(kit.VSeparator().Key("model-viewer.status-divider").H(20).AlignSelf(fairy.Center).
+			MarginEdges(0, viewerStatusDividerMargin, 0, viewerStatusDividerMargin))
+	}
+	if p.lanes {
+		lanes := fairy.Col().Key("model-viewer.lanes")
+		if p.stacked {
+			lanes.WFull().BorderEdges(viewerAnimationBarBorder, 0, 0, 0, t.Border)
+		} else {
+			lanes.Basis(0).Grow(1).MinW(0)
+		}
+		for _, track := range tracks {
+			lanes.Child(v.animationLane(t, track, p.laneWidth, len(tracks) > 1).
+				Enter(fairy.Fade().With(viewerAnimationBarMotion)))
+		}
+		content.Child(lanes)
+	}
+
+	layout := viewerAnimationBarMotion
+	if v.anim.barDragWidth != 0 || v.anim.barView != [2]float32{v.width, v.height} {
+		layout = motion.Instant
+	}
+	v.anim.barView = [2]float32{v.width, v.height}
+	bar := fairy.Row(grip, content).Key("model-viewer.animation").Gap(viewerAnimationBarGap).Align(fairy.Center).
+		H(height).PadXY(viewerAnimationBarPadX, 0).Radius(viewerAnimationBarHeight/2).Clip().
+		Color(t.PopoverForeground).Border(viewerAnimationBarBorder, t.Border).Shadow(0, 8, 24, 0, shadowColor(&t)).
+		Absolute().Left(left).Top(top).W(width).
+		AnimateLayout(layout).
+		Enter(fairy.SlideY(8).With(viewerAnimationBarMotion)).Exit(fairy.SlideY(8).With(viewerAnimationBarMotion))
 	return glass(bar, opacity(t.Popover, t.SurfaceAlpha), t.Popover, t.SurfaceBlur)
+}
+
+// statusChips shows a chip for each download of status and one for the parts drawn with the game's textures. A chip
+// fades in when it appears and goes at once, while the bar narrowing around it shows the change.
+func (v *ModelViewer) statusChips(t kit.Theme, status viewerStatus) *fairy.El {
+	chips := fairy.Row().Key("model-viewer.status").Gap(viewerAnimationBarGap).Align(fairy.Center).
+		H(viewerAnimationBarHeight).Shrink(0)
+	fade := fairy.Fade().With(viewerAnimationBarMotion)
+	for _, p := range status.downloads {
+		chips.Child(downloadChip(t, p).Enter(fade))
+	}
+	if status.gameParts > 0 {
+		chips.Child(v.gameTextureChip(t, status.gameParts).Enter(fade))
+	}
+	return chips
 }
 
 // animationLane is one track's row of a controller of width: the play button, the clip, a frame scrubber between
