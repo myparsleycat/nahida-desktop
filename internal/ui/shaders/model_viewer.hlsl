@@ -898,13 +898,16 @@ static const float EFMI_FACE_OUTLINE_DEPTH_OFFSET = 0.0236;
 
 float efmiLuma(float3 color) { return dot(color, float3(0.212673, 0.715152, 0.072175)); }
 
-// Without a _DiffRampMap from the mod or the character's stock ramps, the ramp reduces to its coverage step.
+// The ramp's colour from a _DiffRampMap of the mod or the character's stock ramps, and its coverage as a step. The
+// stock _RD ramps fade their alpha over most of N.L, which shades like Lambert, so the step keeps the toon terminator.
 float4 efmiRamp(float cosine) {
     float position = clamp(cosine, -1, 1) * 0.5 + 0.5;
+    float coverage = smoothstep(0.5 - EFMI_SOFTNESS - 0.001, 0.5 + EFMI_SOFTNESS + 0.001, position);
     if ((flags & FLAG_RAMP_MAP) != 0) {
-        return rampMap.SampleLevel(linearClamp, float2(clamp(position, 0.002, 0.998), 0.5), 0);
+        float3 color = rampMap.SampleLevel(linearClamp, float2(clamp(position, 0.002, 0.998), 0.5), 0).rgb;
+        return float4(color, coverage);
     }
-    return float4(1, 1, 1, smoothstep(0.5 - EFMI_SOFTNESS - 0.001, 0.5 + EFMI_SOFTNESS + 0.001, position));
+    return float4(1, 1, 1, coverage);
 }
 
 // The ramp's colour tints the terminator but keeps the luminance.
