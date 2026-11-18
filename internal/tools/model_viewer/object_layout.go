@@ -290,8 +290,9 @@ func lookupModelViewerFamilyTexcoord(
 	modDir string,
 	position modelViewerResource,
 	resources []modelViewerResource,
+	cache *modelViewerBufferCache,
 ) (modelViewerResource, bool) {
-	posCount, _, ok := modelViewerResourceVertexCount(modDir, position, 40)
+	posCount, _, ok := modelViewerResourceVertexCount(modDir, position, 40, cache)
 	if !ok || posCount == 0 {
 		return modelViewerResource{}, false
 	}
@@ -307,6 +308,7 @@ func lookupModelViewerFamilyTexcoord(
 				modDir,
 				resource,
 				resource.Stride,
+				cache,
 			); tcOK &&
 				tcCount == posCount {
 				return resource, true
@@ -318,11 +320,11 @@ func lookupModelViewerFamilyTexcoord(
 		if err != nil || !platform.SameOrChildPath(modDir, path) {
 			continue
 		}
-		info, err := os.Stat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size()%int64(posCount) != 0 {
+		size, err := cache.fileSize(path)
+		if err != nil || size <= 0 || size%int64(posCount) != 0 {
 			continue
 		}
-		stride := int(info.Size() / int64(posCount))
+		stride := int(size / int64(posCount))
 		if stride < 4 || stride > 64 {
 			continue
 		}
@@ -335,7 +337,12 @@ func lookupModelViewerFamilyTexcoord(
 	return modelViewerResource{}, false
 }
 
-func modelViewerResourceVertexCount(modDir string, resource modelViewerResource, defaultStride int) (int, int64, bool) {
+func modelViewerResourceVertexCount(
+	modDir string,
+	resource modelViewerResource,
+	defaultStride int,
+	cache *modelViewerBufferCache,
+) (int, int64, bool) {
 	stride := resource.Stride
 	if stride <= 0 {
 		stride = defaultStride
@@ -347,11 +354,11 @@ func modelViewerResourceVertexCount(modDir string, resource modelViewerResource,
 	if err != nil || !platform.SameOrChildPath(modDir, path) {
 		return 0, 0, false
 	}
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size()%int64(stride) != 0 {
+	size, err := cache.fileSize(path)
+	if err != nil || size <= 0 || size%int64(stride) != 0 {
 		return 0, 0, false
 	}
-	return int(info.Size() / int64(stride)), info.Size(), true
+	return int(size / int64(stride)), size, true
 }
 
 type modelViewerDrawVertexSource struct {
@@ -438,7 +445,7 @@ func resolveModelViewerDrawVertexSource(
 			source.packedStride = packedStride
 			return source
 		}
-		if sibling, ok := lookupModelViewerFamilyTexcoord(modDir, position, resources); ok {
+		if sibling, ok := lookupModelViewerFamilyTexcoord(modDir, position, resources, cache); ok {
 			source.kind = modelViewerDrawVertexMihoyo
 			source.texcoord = sibling
 			return source

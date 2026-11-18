@@ -1,0 +1,42 @@
+{
+  "type": "MeshBegin",
+  "request_id": 3,
+  "message": {
+    "object_key": "OB1a2b",
+    "revision": 7,
+    "scene_rev": 3,
+    "vertex_count": 3,
+    "loop_count": 3,
+    "vertex_groups": [
+      "0",
+      "1",
+      "MASK"
+    ],
+    "attrs": [
+      {
+        "id": 1,
+        "state": 1,
+        "byte_len": 36,
+        "hash": "62b023c5910c963d6160416a0ea81e00"
+      },
+      {
+        "id": 2,
+        "state": 2,
+        "byte_len": 12,
+        "hash": "953221e3def79ccd1f76477e81644e13"
+      },
+      {
+        "id": 3,
+        "state": 0,
+        "byte_len": 0,
+        "hash": "00000000000000000000000000000000"
+      },
+      {
+        "id": 257,
+        "state": 1,
+        "byte_len": 24,
+        "hash": "ffeeddccbbaa99887766554433221100"
+      }
+    ]
+  }
+}

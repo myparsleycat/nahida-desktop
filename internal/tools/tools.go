@@ -136,6 +136,7 @@ func NewWithOptions(opts Options) *Tools {
 		Protocol:               opts.Protocol,
 		FindModelViewerPreview: opts.FindModelViewerPreview,
 		Download:               opts.Download,
+		EventEmit:              opts.EventEmit,
 	})
 	toggleViewerSettings, _ := opts.Settings.(toggleviewer.Settings)
 	var toggleViewerImporters toggleviewer.Importers

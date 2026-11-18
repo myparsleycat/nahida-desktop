@@ -1,0 +1,8 @@
+{
+  "type": "HelloAck",
+  "request_id": 1,
+  "message": {
+    "status": 0,
+    "protocol_version": 1
+  }
+}

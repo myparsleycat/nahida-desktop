@@ -235,6 +235,7 @@ func (v *ModelViewer) menuBar() *fairy.El {
 					Disabled: !linkable,
 					OnClick:  func() { v.setRenderSetting(setting.KeyModelViewerGamePreview, !gamePreview) },
 				})
+
 				if len(v.shownOverlayMenus()) == 0 {
 					return items
 				}

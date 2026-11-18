@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/blenderlink"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
@@ -78,6 +79,9 @@ func bootRuntime(
 	rt.drive.UseAppData(data)
 	rt.tools.UseAppData(data)
 	rt.reshade.UseAppData(data)
+	rt.blenderLink = blenderlink.NewManager(blenderlink.Options{
+		Log: rt.log, EventEmit: rt.emit, AppData: data, Handler: rt.tools.BlenderLink(),
+	})
 	if err := rt.agent.UseAppData(data); err != nil {
 		return runtimePaths{Root: data.Root()}, err
 	}
@@ -153,6 +157,9 @@ func (rt *runtime) Close() error {
 	rt.githubRate.Close()
 	rt.startup.stop()
 	rt.gameLink.Shutdown()
+	if rt.blenderLink != nil {
+		rt.blenderLink.Shutdown()
+	}
 	rt.elevatedLifecycle.shutdown()
 	err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
 	rt.gameBananaLogin.Close()

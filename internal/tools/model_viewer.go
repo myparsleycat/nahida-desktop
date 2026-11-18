@@ -35,6 +35,8 @@ type (
 	ModelViewerResolutionChange         = modelviewer.ModelViewerResolutionChange
 	ModelViewerResolutionSuggestion     = modelviewer.ModelViewerResolutionSuggestion
 	ModelViewerIneffectiveValue         = modelviewer.ModelViewerIneffectiveValue
+	ModelViewerLiveMesh                 = modelviewer.ModelViewerLiveMesh
+	ModelViewerLiveUpdate               = modelviewer.ModelViewerLiveUpdate
 	GenshinToonAssetsTransport          = modelviewer.GenshinToonAssetsTransport
 	GenshinToonRampTransport            = modelviewer.GenshinToonRampTransport
 )
@@ -42,6 +44,9 @@ type (
 func (t *Tools) LoadModViewer(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.modelViewer.LoadModViewer(ctx, modPath)
 }
+
+// BlenderLink handles Blender live link clients for the model viewer.
+func (t *Tools) BlenderLink() *modelviewer.BlenderLink { return t.modelViewer.BlenderLink() }
 
 // ReadModelViewerResource returns the bytes behind a URL of a transport LoadModViewer returned.
 func (t *Tools) ReadModelViewerResource(ctx context.Context, url string) ([]byte, error) {

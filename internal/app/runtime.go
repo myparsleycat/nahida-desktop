@@ -8,6 +8,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/backup"
+	"nahida.live/desktop/internal/blenderlink"
 	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/elevated"
@@ -27,33 +28,35 @@ import (
 )
 
 type runtime struct {
-	startup           *startupWork
-	proxyRelay        *infra.ProxyRelay
-	appData           *appdata.Store
-	log               *infra.Log
-	store             *infra.Store
-	http              *infra.Client
-	cdnTrace          *infra.CDNTrace
-	fs                *platform.FS
-	native            *platform.Native
-	updater           *infra.Updater
-	githubRate        *infra.GitHubRateCoordinator
-	github            *github.Client
-	protocol          *infra.Protocol
-	download          *infra.Download
-	archive           *infra.Archive
-	agent             *agent.Service
-	feedback          *feedback.Service
-	auth              *auth.Auth
-	backup            *backup.Backup
-	setting           *setting.Setting
-	drive             *drive.Drive
-	transfer          *transfer.Transfer
-	gamebanana        *gamebanana.GameBanana
-	gameBananaLogin   *gameBananaLogin
-	mod               *mod.Mod
-	modRuntime        *modruntime.Manager
-	gameLink          *gamelink.Manager
+	startup         *startupWork
+	proxyRelay      *infra.ProxyRelay
+	appData         *appdata.Store
+	log             *infra.Log
+	store           *infra.Store
+	http            *infra.Client
+	cdnTrace        *infra.CDNTrace
+	fs              *platform.FS
+	native          *platform.Native
+	updater         *infra.Updater
+	githubRate      *infra.GitHubRateCoordinator
+	github          *github.Client
+	protocol        *infra.Protocol
+	download        *infra.Download
+	archive         *infra.Archive
+	agent           *agent.Service
+	feedback        *feedback.Service
+	auth            *auth.Auth
+	backup          *backup.Backup
+	setting         *setting.Setting
+	drive           *drive.Drive
+	transfer        *transfer.Transfer
+	gamebanana      *gamebanana.GameBanana
+	gameBananaLogin *gameBananaLogin
+	mod             *mod.Mod
+	modRuntime      *modruntime.Manager
+	gameLink        *gamelink.Manager
+	// blenderLink is made once the app data folder is known; nil before.
+	blenderLink       *blenderlink.Manager
 	xxmi              *xxmi.XXMI
 	reshade           *reshade.ReShade
 	tools             *tools.Tools

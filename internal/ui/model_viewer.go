@@ -128,7 +128,11 @@ type ModelViewer struct {
 	pendingVariants map[[2]int]bool
 	// pendingMeshes holds the meshes being loaded, by index, and meshLoads limits how many read at once.
 	pendingMeshes map[int]bool
-	meshLoads     chan struct{}
+	// blender is set for a viewer of a Blender live link scene instead of a mod folder.
+	blender *viewerBlenderSource
+	// liveWanted holds, by mesh index, the geometry URL of the newest Blender live mesh being loaded.
+	liveWanted map[int]string
+	meshLoads  chan struct{}
 	// untrimmed is the GPU size of the meshes released since the device was last trimmed.
 	untrimmed int
 	// loadFailureShown is set once the scene's first unreadable mesh or position variant was shown.
@@ -169,9 +173,14 @@ type ModelViewer struct {
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
-func (s *Shell) NewModelViewer(path string) *ModelViewer {
+func (s *Shell) NewModelViewer(path string) *ModelViewer { return s.newModelViewer(path, nil) }
+
+// newModelViewer opens a viewer of the mod at path, or of a Blender live link scene when blender is set; path is
+// then only the viewer's name.
+func (s *Shell) newModelViewer(path string, blender *viewerBlenderSource) *ModelViewer {
 	ctx, cancel := context.WithCancel(context.Background())
 	v := &ModelViewer{
+		blender:     blender,
 		shell:       s,
 		tools:       s.deps.Tools,
 		platform:    s.deps.Platform,
@@ -312,7 +321,12 @@ func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err er
 		}
 	}
 	stage = "load-transport"
-	transport, err := v.tools.LoadModViewer(ctx, v.path)
+	var transport modelviewer.ModelViewerTransport
+	if b := v.blender; b != nil {
+		transport, err = v.tools.BlenderLink().OpenScene(ctx, b.link, b.importer)
+	} else {
+		transport, err = v.tools.LoadModViewer(ctx, v.path)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +413,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.preview, v.previewForm, v.previewVars = nil, nil, nil
 	v.form = ""
 	v.highlightGameTextures = false
-	v.pendingVariants, v.pendingMeshes = nil, nil
+	v.pendingVariants, v.pendingMeshes, v.liveWanted = nil, nil, nil
 	v.loadFailureShown = false
 	v.sourceIndices = nil
 	v.orientation = vec3{}
@@ -525,6 +539,14 @@ func (v *ModelViewer) loadMesh(i int) {
 				return
 			}
 			delete(v.pendingMeshes, i)
+			if !skipped && mesh.info.GeometryURL != info.GeometryURL {
+				// A Blender live link replaced the mesh while it loaded.
+				releaseViewerMeshGPU(&buffers)
+				if mesh.unloaded {
+					v.loadMesh(i)
+				}
+				return
+			}
 			if skipped {
 				// A present that wanted the mesh again while it was skipped found it pending.
 				v.retryWanted(viewerScheduleItem{mesh: i, variant: -1})
@@ -1151,7 +1173,7 @@ func (v *ModelViewer) header(t kit.Theme, onClose func()) *fairy.El {
 }
 
 func (v *ModelViewer) openFolder() {
-	if v.platform == nil {
+	if v.platform == nil || v.blender != nil {
 		return
 	}
 	if err := v.platform.OpenPath(v.path); err != nil {
@@ -1166,11 +1188,18 @@ func hasFormPrefix(selected, form string) bool {
 }
 
 // openModelViewer shows the viewer of the mod at path in a dialog over the main window.
-func (s *Shell) openModelViewer(path string) {
+func (s *Shell) openModelViewer(path string) { s.openViewer(path, nil) }
+
+// openBlenderViewer opens the viewer of a Blender live link scene, named name.
+func (s *Shell) openBlenderViewer(name string, blender viewerBlenderSource) {
+	s.openViewer(name, &blender)
+}
+
+func (s *Shell) openViewer(path string, blender *viewerBlenderSource) {
 	if s.mods.viewer != nil {
 		return
 	}
-	v := s.NewModelViewer(path)
+	v := s.newModelViewer(path, blender)
 	v.openFailed = func(err error) {
 		if s.mods.viewer != v {
 			return

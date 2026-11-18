@@ -126,6 +126,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 		{"persist-watcher", rt.tools.StartPersistWatcher},
 		{"toggle-viewer-watcher", rt.tools.StartToggleViewerWatcher},
 		{"game-link", rt.startGameLink},
+		{"blender-link", rt.startBlenderLink},
 	})
 	if ctx.Err() != nil {
 		return

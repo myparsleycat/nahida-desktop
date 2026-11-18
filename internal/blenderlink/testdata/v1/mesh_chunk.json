@@ -1,0 +1,9 @@
+{
+  "type": "MeshChunk",
+  "request_id": 3,
+  "message": {
+    "attr_id": 1,
+    "offset": 12,
+    "data": "AACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA"
+  }
+}

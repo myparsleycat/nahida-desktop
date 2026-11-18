@@ -12,6 +12,7 @@ import (
 	"nahida.live/desktop/internal/agent"
 	"nahida.live/desktop/internal/auth"
 	"nahida.live/desktop/internal/backup"
+	"nahida.live/desktop/internal/blenderlink"
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/feedback"
 	"nahida.live/desktop/internal/gamebanana"
@@ -51,6 +52,8 @@ type Deps struct {
 	Backup *backup.Backup
 	// ModRuntime manages the mod runtimes the importer pages install.
 	ModRuntime *modruntime.Manager
+	// BlenderLink returns the Blender live link server, or nil before the app data folder is known.
+	BlenderLink func() *blenderlink.Manager
 	// Input reports whether the elevated input helper is enabled and running.
 	Input *platform.Input
 	Log   *infra.Log
@@ -157,6 +160,7 @@ func NewShell(deps Deps, font string) *Shell {
 	s.registerXXMIEvents(on)
 	s.registerBackupEvents(on)
 	s.registerToolEvents(on)
+	s.registerBlenderLiveEvents(on)
 	s.registerAgentEvents(on)
 	on("pathSelector:modeSelect", func(data []any) { s.promptPath(first(data)) })
 	on("setting:update", func(data []any) {

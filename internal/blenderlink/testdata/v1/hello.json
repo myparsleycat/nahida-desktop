@@ -1,0 +1,11 @@
+{
+  "type": "Hello",
+  "request_id": 1,
+  "message": {
+    "protocol_version": 1,
+    "addon_version": "0.1.0",
+    "blender_version": "4.2.3",
+    "pid": 4242,
+    "token": "dG9rZW4tdGVzdA"
+  }
+}

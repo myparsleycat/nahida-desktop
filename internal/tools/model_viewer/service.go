@@ -16,6 +16,8 @@ type Options struct {
 	FindModelViewerPreview func(string) *string
 	// Download fetches character motion files.
 	Download *infra.Download
+	// EventEmit reports meshes a Blender live link replaced (EventLiveMeshes).
+	EventEmit func(string, ...any)
 }
 
 type Service struct {
@@ -42,6 +44,7 @@ type Service struct {
 	modelViewerShutdown          bool
 	freeOSMemory                 func()
 	afterFunc                    func(time.Duration, func()) func() bool
+	blenderLink                  *BlenderLink
 }
 
 func New() *Service { return NewWithOptions(Options{}) }
@@ -50,7 +53,7 @@ func NewWithOptions(opts Options) *Service {
 	if opts.Protocol == nil {
 		opts.Protocol = infra.NewProtocol()
 	}
-	return &Service{
+	service := &Service{
 		log:                    opts.Log,
 		protocol:               opts.Protocol,
 		findModelViewerPreview: opts.FindModelViewerPreview,
@@ -64,7 +67,12 @@ func NewWithOptions(opts Options) *Service {
 			return time.AfterFunc(delay, release).Stop
 		},
 	}
+	service.blenderLink = newBlenderLink(service, opts.EventEmit)
+	return service
 }
+
+// BlenderLink is the handler of Blender live link clients, which rebuilds meshes of this service's sessions.
+func (t *Service) BlenderLink() *BlenderLink { return t.blenderLink }
 
 func (t *Service) UseAppData(data *appdata.Store) { t.appData = data }
 

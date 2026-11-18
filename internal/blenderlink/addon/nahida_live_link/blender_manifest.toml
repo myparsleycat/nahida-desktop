@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "nahida_live_link"
+version = "0.1.0"
+name = "Nahida Live Link"
+tagline = "Shows XXMI-Tools exports live in the Nahida Desktop viewer"
+maintainer = "Nahida Desktop"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+platforms = ["windows-x64", "windows-arm64"]
+
+[permissions]
+files = "Read the Nahida Desktop discovery file and named pipe"

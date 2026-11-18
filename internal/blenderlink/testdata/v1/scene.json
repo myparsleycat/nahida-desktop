@@ -1,0 +1,42 @@
+{
+  "type": "Scene",
+  "request_id": 2,
+  "message": {
+    "scene_rev": 3,
+    "exporter": "xxmi",
+    "exporter_version": "1.8.2",
+    "game": "GIMI",
+    "source_folder": "D:\\Dumps\\CitlaliMod",
+    "output_folder": "D:\\Mods\\Citlali — 모드",
+    "settings": "eyJmbGlwX3dpbmRpbmciOmZhbHNlfQ==",
+    "components": [
+      {
+        "name": "CitlaliBody",
+        "parts": [
+          {
+            "name": "CitlaliBodyA",
+            "objects": [
+              {
+                "object_key": "OB1a2b",
+                "name": "CitlaliBodyA",
+                "collection": "CitlaliBody"
+              },
+              {
+                "object_key": "OB3c4d",
+                "name": "CitlaliBodyA.Skirt",
+                "collection": "CitlaliBody"
+              }
+            ]
+          },
+          {
+            "name": "CitlaliBodyB",
+            "objects": []
+          }
+        ]
+      }
+    ],
+    "errors": [
+      "Missing TEXCOORD1 on CitlaliBodyA.Skirt"
+    ]
+  }
+}

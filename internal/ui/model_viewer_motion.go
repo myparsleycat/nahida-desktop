@@ -46,6 +46,8 @@ type viewerMotion struct {
 	boxes            []viewerMotionBox
 	clipBoxes        []viewerMotionBox
 	clipBox, restBox viewerMotionBox
+	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them.
+	palettes map[string][]int32
 	// anchorNodes holds, by scene mesh, the node that turns the mesh's face direction, or -1.
 	anchorNodes []int32
 	// gpu is the motion's buffers on the device the scene draws on, made by the first draw, and gpuErr why they
@@ -277,8 +279,10 @@ func loadViewerMotion(
 	}
 
 	totals := make([]float64, nodes)
+	m.palettes = make(map[string][]int32, len(order))
 	for i, name := range order {
 		palette := mapped[i]
+		m.palettes[name] = palette
 		for _, mesh := range palettes[name] {
 			m.meshes = append(m.meshes, viewerMotionMesh{
 				index: mesh.index, vertices: len(mesh.blend) / 8, blend: packMotionBlend(mesh.blend, palette),

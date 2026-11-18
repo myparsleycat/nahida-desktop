@@ -436,6 +436,9 @@ type modelViewerBufferCache struct {
 	pairs           map[string]modelViewerPairedBuffers
 	fmts            map[string]modelViewerFmtCacheEntry
 	interleaved     map[string]modelViewerInterleavedBuffers
+	// overlay replaces the contents of the files at its paths (lower case), for buffers that exist only in
+	// memory such as a live Blender export.
+	overlay map[string][]byte
 }
 
 type modelViewerResourcePathKey struct {
@@ -650,12 +653,51 @@ func (c *modelViewerBufferCache) read(path string) ([]byte, error) {
 }
 
 func (c *modelViewerBufferCache) readFile(path string) ([]byte, error) {
+	if data, ok := c.overlayFile(path); ok {
+		return data, nil
+	}
 	release, err := diskio.Acquire(c.ctx, path)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 	return os.ReadFile(path)
+}
+
+func (c *modelViewerBufferCache) overlayFile(path string) ([]byte, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	data, ok := c.overlay[strings.ToLower(path)]
+	return data, ok
+}
+
+// setOverlay makes reads of path return data and drops what the cache derived from the previous contents.
+func (c *modelViewerBufferCache) setOverlay(path string, data []byte) {
+	c.mu.Lock()
+	if c.overlay == nil {
+		c.overlay = make(map[string][]byte)
+	}
+	c.overlay[strings.ToLower(path)] = data
+	c.mu.Unlock()
+	c.release(path)
+}
+
+// fileSize is the size of a regular file, or of its overlay contents.
+func (c *modelViewerBufferCache) fileSize(path string) (int64, error) {
+	if data, ok := c.overlayFile(path); ok {
+		return int64(len(data)), nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	if !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("%s is not a regular file", path)
+	}
+	return info.Size(), nil
 }
 
 // resourcePath is resolveModelViewerResourcePath memoized for the load: draws resolve the same filenames many

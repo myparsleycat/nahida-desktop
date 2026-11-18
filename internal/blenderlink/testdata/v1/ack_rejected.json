@@ -1,0 +1,10 @@
+{
+  "type": "Ack",
+  "request_id": 4,
+  "message": {
+    "status": 4,
+    "flags": 0,
+    "needed": [],
+    "message": "attribute 0x0001: 24 bytes, want 36 for 3 vertices"
+  }
+}

@@ -75,6 +75,7 @@ const (
 	KeyModelViewerOverlayInViewer     = "modelViewer.overlayInViewer"
 	KeyModelViewerGamePreview         = "modelViewer.gamePreview"
 	KeyModelViewerOriginalData        = "modelViewer.originalData"
+	KeyModelViewerBlenderLink         = "modelViewer.blenderLink"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -185,6 +186,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
 	{KeyModelViewerGamePreview, ScopeModelViewer, "model_viewer_game_preview"},
 	{KeyModelViewerOriginalData, ScopeModelViewer, "model_viewer_original_data"},
+	{KeyModelViewerBlenderLink, ScopeModelViewer, "model_viewer_blender_link"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},

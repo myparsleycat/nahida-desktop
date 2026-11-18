@@ -23,6 +23,7 @@ require (
 	github.com/rodrigocfd/windigo v0.2.7
 	github.com/samber/lo v1.53.0
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/x448/float16 v0.8.4
 	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/arch v0.30.0
 	golang.org/x/image v0.47.0
@@ -78,7 +79,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/urfave/cli/v2 v2.25.7 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect

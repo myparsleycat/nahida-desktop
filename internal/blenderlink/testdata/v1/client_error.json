@@ -1,0 +1,9 @@
+{
+  "type": "ClientError",
+  "request_id": 6,
+  "message": {
+    "object_key": "OB3c4d",
+    "code": "MISSING_UV_LAYER",
+    "message": "TEXCOORD1 needs a second UV map"
+  }
+}

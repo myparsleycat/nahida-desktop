@@ -1,0 +1,7 @@
+{
+  "type": "Pong",
+  "request_id": 5,
+  "message": {
+    "flags": 2
+  }
+}

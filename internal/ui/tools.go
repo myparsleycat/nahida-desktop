@@ -26,6 +26,7 @@ const (
 	toolBisect       toolID = "mod-bisect"
 	toolBodyShape    toolID = "body-shape"
 	toolTouchProfile toolID = "touch-profile"
+	toolBlenderLink  toolID = "blender-link"
 )
 
 type toolInfo struct {
@@ -48,6 +49,7 @@ var toolList = []toolInfo{
 	{id: toolBisect, nameKey: "page.tools.mod_bisect.title", initials: "MB"},
 	{id: toolBodyShape, nameKey: "page.tools.body_shape.title", initials: "BS", beta: true},
 	{id: toolTouchProfile, nameKey: "page.tools.touch_profile.title", initials: "AT", beta: true},
+	{id: toolBlenderLink, nameKey: "page.tools.blender_link.title", initials: "BL", beta: true},
 }
 
 const toolsSidebarBreakpoint = 768
@@ -85,6 +87,7 @@ type toolsScreen struct {
 	bodyShape       *bodyShapeEditor
 	bodyShapeDialog *bodyShapeEditor
 	touch           touchProfile
+	blenderLink     blenderLinkTool
 	// touchDialog is the Touch Profile dialog the mod menu opened for one mod; nil while closed.
 	touchDialog *touchProfile
 	// liquidDialog is the Liquid Emitter dialog the mod menu opened; nil while closed.
@@ -286,6 +289,8 @@ func (s *Shell) toolBody(cx *fairy.Cx, tool toolInfo) *fairy.El {
 		return s.fixer4001ToolPage(cx)
 	case toolFixTool:
 		return s.fixToolPage(cx)
+	case toolBlenderLink:
+		return s.blenderLinkToolPage(cx)
 	}
 	return notPorted(lucide.Wrench, toolName(tool))
 }

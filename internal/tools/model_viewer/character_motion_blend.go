@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,11 +52,11 @@ func resolveModelViewerBlendSource(
 	if !ok || position.Stride <= 0 {
 		return nil
 	}
-	positionInfo, err := os.Stat(positionPath)
+	positionSize, err := cache.fileSize(positionPath)
 	if err != nil {
 		return nil
 	}
-	rows := int(positionInfo.Size() / int64(position.Stride))
+	rows := int(positionSize / int64(position.Stride))
 	for _, candidate := range candidates {
 		if !modelViewerBlendStride(candidate.Stride) || candidate.Filename == "" {
 			continue
@@ -66,11 +65,11 @@ func resolveModelViewerBlendSource(
 		if !ok {
 			continue
 		}
-		info, err := os.Stat(path)
-		if err != nil || !info.Mode().IsRegular() {
+		size, err := cache.fileSize(path)
+		if err != nil {
 			continue
 		}
-		blendRows := int(info.Size() / int64(candidate.Stride))
+		blendRows := int(size / int64(candidate.Stride))
 		offset := 0
 		if blendRows != rows && carrierStart > 0 && blendRows >= carrierStart+rows {
 			offset = carrierStart
@@ -108,7 +107,21 @@ func readModelViewerMeshBlend(
 	if err != nil {
 		return nil
 	}
-	rows := len(data) / source.stride
+	return decodeModelViewerMeshBlend(data, source.stride, source.rowOffset, sourceIndices, vertexCount)
+}
+
+// decodeModelViewerMeshBlend reads the blend rows of data, in one of the layouts modelViewerBlendStride accepts,
+// into four groups and four UNORM16 weights per mesh vertex; nil when the rows do not cover the mesh.
+func decodeModelViewerMeshBlend(
+	data []byte,
+	stride, rowOffset int,
+	sourceIndices []uint32,
+	vertexCount int,
+) []uint16 {
+	if !modelViewerBlendStride(stride) || vertexCount <= 0 {
+		return nil
+	}
+	rows := len(data) / stride
 	out := make([]uint16, vertexCount*8)
 	for vertex := range vertexCount {
 		row := vertex
@@ -118,15 +131,15 @@ func readModelViewerMeshBlend(
 			}
 			row = int(sourceIndices[vertex])
 		}
-		row += source.rowOffset
+		row += rowOffset
 		if row < 0 || row >= rows {
 			return nil
 		}
-		record := data[row*source.stride:]
+		record := data[row*stride:]
 		var groups [4]int64
 		var weights [4]float64
 		for k := range 4 {
-			switch source.stride {
+			switch stride {
 			case 32:
 				weights[k] = float64(math.Float32frombits(binary.LittleEndian.Uint32(record[k*4:])))
 				groups[k] = int64(int32(binary.LittleEndian.Uint32(record[16+k*4:])))

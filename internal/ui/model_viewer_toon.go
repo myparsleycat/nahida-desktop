@@ -820,6 +820,10 @@ func (c *viewerCharacter) styleKey() string { return c.game + "/" + c.ID }
 // loadCharacter looks up the character assigned to the folders holding the mod.
 func (v *ModelViewer) loadCharacter() {
 	s := v.shell
+	if b := v.blender; b != nil {
+		v.chooseCharacter(b.importer, b.character)
+		return
+	}
 	if s == nil || s.deps.Mod == nil {
 		return
 	}
@@ -854,6 +858,22 @@ func (v *ModelViewer) loadCharacter() {
 			v.revision++
 		})
 	})
+}
+
+// chooseCharacter shows the character the user chose for a Blender scene, or none for an empty id.
+func (v *ModelViewer) chooseCharacter(game, id string) {
+	entry, ok := character.Lookup(game, id)
+	if !ok {
+		v.character = nil
+		return
+	}
+	toon, err := loadCharacterToon(game, id)
+	if err != nil {
+		_ = infra.ReportError(v.log, err, "ModelViewer.loadCharacter", infra.Diagnostic{
+			Operation: "load-character-toon", Fields: map[string]any{"game": game, "character": id},
+		})
+	}
+	v.character = &viewerCharacter{game: game, Character: entry, characterToon: toon}
 }
 
 // toonCharacter is the mod's character when its game draws with the model's toon profile, or nil.

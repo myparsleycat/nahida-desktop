@@ -18,6 +18,8 @@ type modelViewerSession struct {
 	drawSources map[string]DrawSource
 	// spool holds the session's mesh buffers, or is nil when they stay in memory.
 	spool *modelViewerSpool
+	// blender is set for a session built from a Blender live link instead of a mod folder.
+	blender *blenderSceneSource
 }
 
 // closeSpool deletes a session's spool after its protocol entries are gone.

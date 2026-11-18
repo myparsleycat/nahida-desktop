@@ -16,9 +16,11 @@ import (
 	"github.com/myparsleycat/fairy/dialog"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/blenderlink"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/selfupdate"
+	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/ui"
 )
 
@@ -89,6 +91,7 @@ func Run(icon []byte) (runErr error) {
 		Backup:       rt.backup,
 		ModRuntime:   rt.modRuntime,
 		Input:        rt.input,
+		BlenderLink:  func() *blenderlink.Manager { return rt.blenderLink },
 		Log:          rt.log,
 		Restart:      func() error { return restartApp(rt.log, rt.quit) },
 		Ready:        rt.startup.wait,
@@ -227,6 +230,14 @@ func (rt *runtime) useSettingHooks() {
 		rt.configureElevatedHelper,
 	)
 	hooks.AfterWindowBackdropChanged = rt.window.SetBackdropEnabled
+	afterSet := hooks.AfterSet
+	hooks.AfterSet = func(key string, value any) {
+		afterSet(key, value)
+		if key == setting.KeyModelViewerBlenderLink {
+			enabled, _ := value.(bool)
+			rt.configureBlenderLink(enabled)
+		}
+	}
 	rt.setting.UseHooks(rt.githubTokenHooks(hooks))
 
 	if language, err := rt.setting.GetLanguage(context.Background()); err == nil {
