@@ -265,6 +265,45 @@ func TestCharacterMotion_MapPalettes(t *testing.T) {
 	}
 }
 
+// A palette weighted mostly to a joint that two skins hold at the same index keeps the order of the skin its other
+// groups agree with, as a hair palette whose head group alone would also agree with the cloak skin.
+func TestCharacterMotion_MapPalettesSharedJointOrder(t *testing.T) {
+	m := mirroredTestMotion(t)
+	m.skins = [][]int{{1, 0}, {1, 2}}
+
+	var palette MotionPalette
+	for _, y := range []float32{-0.01, -0.006, -0.002, 0.002, 0.006, 0.01} {
+		addTestVertices(&palette, fullTestWeight(0), [3]float32{-0.3, y, 0})
+	}
+	addTestVertices(&palette, fullTestWeight(1), [3]float32{0.3, -0.005, 0}, [3]float32{0.3, 0.005, 0})
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{1, 2}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
+// A palette whose dominant group agrees with a skin's joint order does not keep that order when its other groups lie
+// far from their joints in it, as hair bangs did with a cloak skin that also starts with the head.
+func TestCharacterMotion_MapPalettesFarJointOrder(t *testing.T) {
+	m := mirroredTestMotion(t)
+
+	var palette MotionPalette
+	for _, y := range []float32{-0.01, -0.006, -0.002, 0.002, 0.006, 0.01} {
+		addTestVertices(&palette, fullTestWeight(0), [3]float32{-0.3, y, 0})
+	}
+	addTestVertices(&palette, fullTestWeight(1), [3]float32{-0.3, -0.004, 0}, [3]float32{-0.3, 0.004, 0})
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{1, 1}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
 // A palette lying mostly on one skin follows that skin's bones where another skin's mesh lies closer, as a dress's
 // back bow does under long hair.
 func TestCharacterMotion_MapPalettesOwnSkin(t *testing.T) {

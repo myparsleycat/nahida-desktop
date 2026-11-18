@@ -38,6 +38,13 @@ const (
 	motionMapGroups = 4096
 	// motionIdentityShare is the share of the votes that keeps a palette in a skin's joint order.
 	motionIdentityShare = 0.5
+	// motionReachLimit is how far, in mod units (meters), a group's strongly weighted vertices may lie from a joint's
+	// bone for the group to follow that joint in a skin's joint order.
+	motionReachLimit = 0.25
+	// motionIdentityFarShare is the share of a palette's groups within a skin's joint count that may lie beyond
+	// motionReachLimit of their joint for the palette to keep that skin's joint order. Hair longer than the source
+	// model's still roots at its bones, but its strongly weighted vertices can hang far below the bone chain.
+	motionIdentityFarShare = 0.25
 	// motionSeamDistance is how close, in mod units, vertices of two palettes lie to be one seam vertex.
 	motionSeamDistance = 0.0001
 	// motionSeamWeight is how far apart, as a fraction, two bone weights of a seam vertex may be to pair their groups.
@@ -84,10 +91,10 @@ type motionReferenceWeight struct {
 //
 // Each mod vertex takes the bone weights of the reference vertices at its position, blended from the nearest of
 // them, and counts less the farther it lies from them. A palette whose votes mostly agree with a skin's own joint
-// order keeps that order, as GIMI mods share the game's palette. A mod palette indexes the bones of one game draw,
-// so any other palette is matched to one skin of the source model (see paletteSkin) and votes again through only
-// that skin's reference vertices, however close another skin's mesh lies, as long hair rests over a dress's back
-// bow.
+// order, and whose groups lie on that skin's bones (see identitySkin), keeps that order, as GIMI mods share the game's
+// palette. A mod palette indexes the bones of one game draw, so any other palette is matched to one skin of the
+// source model (see paletteSkin) and votes again through only that skin's reference vertices, however close another
+// skin's mesh lies, as long hair rests over a dress's back bow.
 //
 // A group takes the node most similar to it over the mod vertices (see motionCoverageExponent), so a large
 // neighbouring bone that also covers the group's vertices does not outweigh the group's own bone. Within a palette
@@ -111,13 +118,14 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 		key := motionCell(ref.position[0], ref.position[1], ref.position[2], motionMapCell)
 		grid[key] = append(grid[key], int32(i))
 	}
+	bones := m.restBones()
 	votes := make([]motionVotes, len(palettes))
 	offsets := make([]int, len(palettes)+1)
 	for i, palette := range palettes {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		votes[i] = m.votePalette(grid, palette)
+		votes[i] = m.votePalette(grid, bones, palette)
 		offsets[i+1] = offsets[i] + len(votes[i].centres)
 	}
 	links, err := motionSeamLinks(ctx, palettes, offsets)
@@ -286,9 +294,14 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 }
 
 // votePalette gathers the votes of one palette's vertices through the reference vertices bucketed in grid. Votes
-// through every skin's vertices that mostly agree with a skin's joint order keep that order; otherwise the palette
-// votes again through only the vertices of its skin (see paletteSkin), when one is known.
-func (m *CharacterMotion) votePalette(grid map[[3]int32][]int32, palette MotionPalette) motionVotes {
+// through every skin's vertices that mostly agree with the joint order of a skin whose bones the groups lie on keep
+// that order (see identitySkin); otherwise the palette votes again through only the vertices of its skin (see
+// paletteSkin), when one is known.
+func (m *CharacterMotion) votePalette(
+	grid map[[3]int32][]int32,
+	bones []motionBone,
+	palette MotionPalette,
+) motionVotes {
 	vertices := min(len(palette.Positions)/3, len(palette.Blend)/8)
 	groups := 0
 	for v := range vertices {
@@ -306,6 +319,7 @@ func (m *CharacterMotion) votePalette(grid map[[3]int32][]int32, palette MotionP
 	for _, score := range votes.scores {
 		total += score
 	}
+	var agreeing []int
 	for s, joints := range m.skins {
 		if total == 0 {
 			break
@@ -314,9 +328,12 @@ func (m *CharacterMotion) votePalette(grid map[[3]int32][]int32, palette MotionP
 		for group := range min(groups, len(joints)) {
 			agreed += votes.scores[group*nodes+joints[group]]
 		}
-		if agreed < total*motionIdentityShare {
-			continue
+		if agreed >= total*motionIdentityShare {
+			agreeing = append(agreeing, s)
 		}
+	}
+	if s := m.identitySkin(&votes, bones, palette, vertices, agreeing); s >= 0 {
+		joints := m.skins[s]
 		votes.skin = s
 		for group := range min(groups, len(joints)) {
 			if votes.centres[group][3] > 0 {
@@ -330,6 +347,100 @@ func (m *CharacterMotion) votePalette(grid map[[3]int32][]int32, palette MotionP
 		return m.gatherVotes(grid, palette, vertices, groups, skin)
 	}
 	return votes
+}
+
+// identitySkin returns, of the skins whose joint order a palette's votes agree with, the one whose joints its groups
+// lie on, or -1 when none fits. Votes alone do not show it: skins of one character often share joints at the same
+// index, such as the head at index 0 of both the hair and the cloak skin, and a palette weighted mostly to that joint
+// agrees with all of them, however far its other groups lie from those skins' other joints.
+//
+// A group lies on a joint when its strongly weighted vertices come within motionReachLimit of the joint's bone. A
+// skin fits unless more than motionIdentityFarShare of the groups it indexes lie off their joints. Of the fitting
+// skins, those leaving the fewest groups unexplained, off their joints or beyond the joint count, compete on the
+// votes for their own joint over the groups where they hold different joints, and on a tie the one whose joint count
+// is nearest the palette's group count wins.
+func (m *CharacterMotion) identitySkin(
+	votes *motionVotes,
+	bones []motionBone,
+	palette MotionPalette,
+	vertices int,
+	skins []int,
+) int {
+	if len(skins) == 0 {
+		return -1
+	}
+	groups, nodes := len(votes.centres), len(m.nodes)
+	strong := strongVertices(palette, vertices, groups)
+	limit := motionReachLimit
+	reaches := map[int]float64{}
+	off := func(group, node int) bool {
+		key := group*nodes + node
+		reach, ok := reaches[key]
+		if !ok {
+			reach = boneReach(&bones[node], palette.Positions, strong[group])
+			reaches[key] = reach
+		}
+		return reach > limit
+	}
+	var fitting []int
+	fewest := math.MaxInt
+	for _, s := range skins {
+		joints := m.skins[s]
+		far, inside, outside := 0, 0, 0
+		for group, centre := range votes.centres {
+			switch {
+			case centre[3] == 0:
+			case group >= len(joints):
+				outside++
+			default:
+				inside++
+				if off(group, joints[group]) {
+					far++
+				}
+			}
+		}
+		if inside == 0 || float64(far) > motionIdentityFarShare*float64(inside) {
+			continue
+		}
+		switch unexplained := far + outside; {
+		case unexplained < fewest:
+			fitting, fewest = []int{s}, unexplained
+		case unexplained == fewest:
+			fitting = append(fitting, s)
+		}
+	}
+	if len(fitting) == 0 {
+		return -1
+	}
+
+	jointAt := func(skin, group int) int {
+		if group < len(m.skins[skin]) {
+			return m.skins[skin][group]
+		}
+		return -1
+	}
+	best, bestAgreed := fitting[0], -1.0
+	for _, s := range fitting {
+		agreed := 0.0
+		for group := range min(groups, len(m.skins[s])) {
+			joint := jointAt(s, group)
+			if slices.ContainsFunc(fitting, func(other int) bool { return jointAt(other, group) != joint }) {
+				agreed += votes.scores[group*nodes+joint]
+			}
+		}
+		closer := absInt(len(m.skins[s])-groups) < absInt(len(m.skins[best])-groups)
+		if agreed > bestAgreed || agreed == bestAgreed && closer {
+			best, bestAgreed = s, agreed
+		}
+	}
+	return best
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // gatherVotes adds up the votes of a palette's first vertices for its first groups through the reference vertices
@@ -748,11 +859,99 @@ func (m *CharacterMotion) nearestJoint(x, y, z float64, holds func(node int) boo
 			if holds != nil && !holds(node) {
 				continue
 			}
-			p := m.toMod.apply([3]float64{m.nodes[node].world[3], m.nodes[node].world[7], m.nodes[node].world[11]})
+			p := m.restPosition(node)
 			if distance := (p[0]-x)*(p[0]-x) + (p[1]-y)*(p[1]-y) + (p[2]-z)*(p[2]-z); distance < bestDistance {
 				best, bestDistance = node, distance
 			}
 		}
+	}
+	return best
+}
+
+// restPosition returns a node's rest position in mod space.
+func (m *CharacterMotion) restPosition(node int) [3]float64 {
+	w := m.nodes[node].world
+	return m.toMod.apply([3]float64{w[3], w[7], w[11]})
+}
+
+// motionBone is a node's rest position in mod space and the rest positions of its children, where its bone ends.
+type motionBone struct {
+	joint [3]float64
+	ends  [][3]float64
+}
+
+// restBones returns the bone of every node.
+func (m *CharacterMotion) restBones() []motionBone {
+	bones := make([]motionBone, len(m.nodes))
+	for i := range m.nodes {
+		bones[i].joint = m.restPosition(i)
+	}
+	for i, node := range m.nodes {
+		if node.parent >= 0 {
+			bones[node.parent].ends = append(bones[node.parent].ends, bones[i].joint)
+		}
+	}
+	return bones
+}
+
+// distance returns how far a point lies from the bone: from the segments between the joint and each of its children,
+// or from the joint of a node without children.
+func (b *motionBone) distance(p [3]float64) float64 {
+	best := math.Sqrt(squaredDistance(p, b.joint))
+	for _, end := range b.ends {
+		var d, ap [3]float64
+		length := 0.0
+		for k := range 3 {
+			d[k], ap[k] = end[k]-b.joint[k], p[k]-b.joint[k]
+			length += d[k] * d[k]
+		}
+		if length == 0 {
+			continue
+		}
+		t := min(max((ap[0]*d[0]+ap[1]*d[1]+ap[2]*d[2])/length, 0), 1)
+		closest := [3]float64{b.joint[0] + t*d[0], b.joint[1] + t*d[1], b.joint[2] + t*d[2]}
+		best = min(best, math.Sqrt(squaredDistance(p, closest)))
+	}
+	return best
+}
+
+func squaredDistance(a, b [3]float64) float64 {
+	return (a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) + (a[2]-b[2])*(a[2]-b[2])
+}
+
+// strongVertices returns, per group of a palette's first groups, the vertices that weight it at least half as much
+// as its heaviest vertex does.
+func strongVertices(palette MotionPalette, vertices, groups int) [][]int32 {
+	heaviest := make([]uint16, groups)
+	for v := range vertices {
+		for k := range 4 {
+			if group := int(palette.Blend[v*8+k]); group < groups {
+				heaviest[group] = max(heaviest[group], palette.Blend[v*8+4+k])
+			}
+		}
+	}
+	strong := make([][]int32, groups)
+	for v := range vertices {
+		for k := range 4 {
+			group, weight := int(palette.Blend[v*8+k]), palette.Blend[v*8+4+k]
+			if group >= groups || weight == 0 || 2*int(weight) < int(heaviest[group]) {
+				continue
+			}
+			if n := len(strong[group]); n == 0 || strong[group][n-1] != int32(v) {
+				strong[group] = append(strong[group], int32(v))
+			}
+		}
+	}
+	return strong
+}
+
+// boneReach returns how far, in mod units, the nearest of a group's strong vertices lies from a node's bone, or
+// +Inf for a group without vertices.
+func boneReach(bone *motionBone, positions []float32, strong []int32) float64 {
+	best := math.Inf(1)
+	for _, v := range strong {
+		p := [3]float64{float64(positions[v*3]), float64(positions[v*3+1]), float64(positions[v*3+2])}
+		best = min(best, bone.distance(p))
 	}
 	return best
 }
