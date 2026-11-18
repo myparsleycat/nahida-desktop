@@ -50,7 +50,7 @@ func collectModelViewerFaceTextures(
 			continue
 		}
 
-		files := sectionThisImages(state, resourceMap, isHashImageResource)
+		files := sectionReplacedImages(state, resourceMap, isHashImageResource, "diffuse")
 		claimed := slices.ContainsFunc(files, func(entry hashImageFile) bool {
 			file := modelViewerFacePath(modDir, entry.file)
 			return slices.ContainsFunc(used, func(other string) bool { return platform.SamePathFold(other, file) })

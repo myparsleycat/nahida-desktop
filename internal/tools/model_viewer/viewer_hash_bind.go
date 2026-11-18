@@ -110,9 +110,9 @@ func collectFamilyRoleSections(
 		if err != nil {
 			continue
 		}
-		files := sectionThisImages(state, resources, func(resource modelViewerResource) bool {
+		files := sectionReplacedImages(state, resources, func(resource modelViewerResource) bool {
 			return resource.Filename != ""
-		})
+		}, role)
 		if len(files) == 0 {
 			continue
 		}
@@ -607,9 +607,39 @@ func sectionThisImages(
 	resources map[string]modelViewerResource,
 	keep func(modelViewerResource) bool,
 ) []hashImageFile {
+	return symbolicImageFiles(effectiveModelViewerSymbolicAssignments(state.thisHistory), resources, keep)
+}
+
+// sectionReplacedImages lists the images a scanned hash override replaces its texture with for role: those it
+// assigns to `this`, or else those it binds to ps-t slots under role, as mods that write the replacement as
+// `ps-t0 = Resource` do. A section that binds an index or vertex buffer is a mesh override, so its slot bindings are
+// not taken as a replacement.
+func sectionReplacedImages(
+	state *modelViewerSymbolicSectionState,
+	resources map[string]modelViewerResource,
+	keep func(modelViewerResource) bool,
+	role string,
+) []hashImageFile {
+	if files := sectionThisImages(state, resources, keep); len(files) != 0 || len(state.buffers) != 0 {
+		return files
+	}
+	var slotted []modelViewerSymbolicAssignment
+	for _, assignment := range state.textures[role] {
+		if assignment.textureSlot >= 0 {
+			slotted = append(slotted, assignment)
+		}
+	}
+	return symbolicImageFiles(effectiveModelViewerSymbolicAssignments(slotted), resources, keep)
+}
+
+func symbolicImageFiles(
+	assignments []modelViewerSymbolicAssignment,
+	resources map[string]modelViewerResource,
+	keep func(modelViewerResource) bool,
+) []hashImageFile {
 	var files []hashImageFile
 	seen := map[string]bool{}
-	for _, assignment := range effectiveModelViewerSymbolicAssignments(state.thisHistory) {
+	for _, assignment := range assignments {
 		resource, ok := resources[modelViewerNormalizeKey(assignment.resource)]
 		if !ok || !keep(resource) {
 			continue

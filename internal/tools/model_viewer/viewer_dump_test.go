@@ -1800,6 +1800,89 @@ filename = .\Tex\face.png
 	}
 }
 
+func TestLoadModViewerKeepsPsSlotFaceDiffuseForTheGameFace(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"head.png", "face_a.png", "face_b.png", "face_mesh.png"} {
+		writeTextureFile(t, dir, name, encodeTinyPNG())
+	}
+	result := loadViewerMod(t, dir, `[Constants]
+global persist $swapvar = 0
+[KeySwap]
+key = [
+type = cycle
+$swapvar = 0,1
+[TextureOverrideHeadA]
+ib = ResourceHeadIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceHeadDiffuse
+drawindexed = 3, 0, 0
+[TextureOverrideCharFace]
+hash = e6f05165
+match_first_index = 0
+run = CommandListCharFace
+[CommandListCharFace]
+ib = ResourceFaceIB
+ps-t0 = ResourceFaceMesh
+[TextureOverrideCharFaceHeadDiffuse]
+hash = e6f05166
+run = CommandListCharFaceHeadDiffuse
+[CommandListCharFaceHeadDiffuse]
+if $swapvar == 0
+	ps-t0 = ResourceFaceA
+else if $swapvar == 1
+	ps-t0 = ResourceFaceB
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceHeadIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceFaceIB]
+filename = missing.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceHeadDiffuse]
+filename = head.png
+[ResourceFaceMesh]
+filename = face_mesh.png
+[ResourceFaceA]
+filename = face_a.png
+[ResourceFaceB]
+filename = face_b.png
+`)
+	if len(result.FaceTextures) != 1 || result.FaceTextures[0].TexKey != nil ||
+		len(result.FaceTextures[0].Variants) != 2 {
+		t.Fatalf("face textures = %#v", result.FaceTextures)
+	}
+	for _, variant := range result.FaceTextures[0].Variants {
+		if strings.Contains(variant.TexKey, "face_mesh.png") {
+			t.Fatalf("face variant %q comes from a section that binds an index buffer", variant.TexKey)
+		}
+	}
+
+	var swap ModelViewerVariable
+	for _, variable := range result.Variables {
+		if strings.Contains(strings.ToLower(variable.ID), "swapvar") {
+			swap = variable
+		}
+	}
+	if swap.ID == "" {
+		t.Fatalf("variables = %#v", result.Variables)
+	}
+	resolved, _ := EvaluateViewerState(result, nil, "")
+	if got := ViewerFaceTexture(result, resolved, ""); !strings.Contains(got, "face_a.png") {
+		t.Fatalf("default face texture = %q", got)
+	}
+	resolved, _ = EvaluateViewerState(result, ApplyViewerVariableSelection(resolved, swap, "1"), "")
+	if got := ViewerFaceTexture(result, resolved, ""); !strings.Contains(got, "face_b.png") {
+		t.Fatalf("swapped face texture = %q", got)
+	}
+}
+
 func TestLoadModViewerFallsBackToIBStemDiffuseResources(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "bodyb.png", encodeTinyPNG())
@@ -1912,6 +1995,57 @@ filename = light.png
 		if !strings.Contains(joined, "body.png") || !strings.Contains(joined, "womb.png") ||
 			!strings.Contains(joined, "ult.png") {
 			t.Fatalf("bodyB textures = %q variants=%#v", joined, mesh.TextureVariants)
+		}
+	}
+}
+
+func TestLoadModViewerBindsSiblingBodyALightMapPsSlotOverride(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "body.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "light.png", encodeTinyPNG())
+	result := loadViewerMod(t, dir, `[TextureOverrideBodyA]
+hash = beef0024
+match_first_index = 0
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyDiffuse
+drawindexed = 3, 0, 0
+[TextureOverrideBodyB]
+hash = beef0024
+match_first_index = 62376
+ib = ResourceBodyBIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyDiffuse
+drawindexed = 3, 0, 0
+[TextureOverrideBodyALightMap]
+hash = beef0025
+ps-t1 = ResourceSkinLightMap
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyBIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyDiffuse]
+filename = body.png
+[ResourceSkinLightMap]
+filename = light.png
+`)
+	bodyB := meshesNamed(result, "BodyB")
+	if len(bodyB) < 1 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range bodyB {
+		if !strings.Contains(lightMapKey(mesh), "light.png") {
+			t.Fatalf("bodyB light map = %q", lightMapKey(mesh))
 		}
 	}
 }
