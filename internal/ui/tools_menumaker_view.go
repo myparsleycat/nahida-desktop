@@ -613,7 +613,7 @@ func (s *Shell) menuMakerSlotCard(index, columns int, slot menuMakerSlot) *fairy
 	}
 
 	size := fairy.Local[[2]float32]("menu-maker.slot-size:" + id)
-	blockDrag := func(fairy.DragEvent) {}
+	blockDrag := func(fairy.DragEvent) bool { return false }
 	top := fairy.Row(
 		kit.Checkbox(slices.Contains(m.selected, id), func(on bool) {
 			m.selected = slices.DeleteFunc(m.selected, func(other string) bool { return other == id })
@@ -661,7 +661,7 @@ func (s *Shell) menuMakerSlotCard(index, columns int, slot menuMakerSlot) *fairy
 			*size = [2]float32{w, h}
 			return false
 		}).
-		OnDrag(func(e fairy.DragEvent) { s.menuMakerDragSlot(index, columns, *size, e) })
+		OnDrag(func(e fairy.DragEvent) bool { s.menuMakerDragSlot(index, columns, *size, e); return true })
 	if slot.Skip {
 		row.Opacity(0.4)
 	}

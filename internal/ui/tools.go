@@ -193,7 +193,7 @@ func (s *Shell) toolNavItem(tool toolInfo, active bool) *fairy.El {
 	).Key("tools.nav."+string(tool.id)).PadXY(8, 8).Gap(10).Align(fairy.Center).Radius(t.RadiusMd()).
 		HoverFill(t.SidebarAccent).Color(t.SidebarForeground).Animate(motion.Fast).
 		Cursor(fairy.CursorPointer).Role(fairy.RoleButton).Focusable().Label(name).Selected(active).
-		OnHover(func(in bool) { *hovered = in }).
+		OnHover(func(in bool) bool { *hovered = in; return true }).
 		OnClick(func() { s.openTool(tool.id) })
 	switch {
 	case active:
@@ -255,7 +255,7 @@ func (s *Shell) toolsGrid(width float32) *fairy.El {
 			Radius(t.RadiusLg()).HoverFill(t.Muted.Alpha(0.5)).Animate(motion.Fast).
 			Cursor(fairy.CursorPointer).Label(name).
 			Role(fairy.RoleButton).Focusable().
-			OnHover(func(in bool) { *hovered = in }).
+			OnHover(func(in bool) bool { *hovered = in; return true }).
 			OnClick(func() { s.openTool(tool.id) })
 		if trailing != nil {
 			card.Child(trailing.Shrink(0).Opacity(toolHoverOpacity(*hovered)).Animate(motion.Fast))

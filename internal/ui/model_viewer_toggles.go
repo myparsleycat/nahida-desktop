@@ -411,12 +411,13 @@ func (v *ModelViewer) listControl(t kit.Theme, variable modelviewer.ModelViewerV
 			}
 			item.Trailing = kit.IconButton(lucide.Check, func() { v.applyResolution(first) }, kit.Ghost, kit.Small,
 				kit.Tooltip(actionHint)).Label(T("page.tools.model_viewer.ineffective_apply")).
-				OnHover(func(in bool) {
+				OnHover(func(in bool) bool {
 					if in {
 						v.previewResolution(first)
 					} else {
 						v.clearPreview()
 					}
+					return true
 				})
 		}
 		items = append(items, item)
@@ -655,7 +656,7 @@ func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth flo
 	splitter := fairy.Box(grip).Key("model-viewer.splitter").W(12).HFull().Shrink(0).Center().
 		Cursor(fairy.CursorResizeEW).Role(fairy.RoleSeparator).Label(title).Focusable().
 		OnClick(func() { v.sideClosed = !v.sideClosed }).
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart {
 				v.sideDragStart = shown
 			}
@@ -663,7 +664,7 @@ func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth flo
 			if start == 0 {
 				// Dragging a closed panel away from the viewer has nothing to open.
 				if d.DX >= 0 {
-					return
+					return true
 				}
 				start = viewerSideMinWidth
 			}
@@ -672,6 +673,7 @@ func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth flo
 				resize(max(v.sideDragStart, viewerSideMinWidth))
 				v.sideClosed = v.sideDragStart == 0
 			}
+			return true
 		}).
 		OnKey(func(k keyboard.KeyEvent) bool {
 			switch {

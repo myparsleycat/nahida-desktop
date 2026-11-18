@@ -198,7 +198,7 @@ func (v *sculptViewport) resetView() {
 }
 
 // drag orbits with the left button and pans with the others or with Shift, as the model viewer does.
-func (v *sculptViewport) drag(d fairy.DragEvent) {
+func (v *sculptViewport) drag(d fairy.DragEvent) bool {
 	if d.Phase == fairy.DragStart {
 		v.dragStart = v.camera
 		v.dragPanning = d.Button != 0 || d.Mods&keyboard.ModShift != 0
@@ -213,6 +213,7 @@ func (v *sculptViewport) drag(d fairy.DragEvent) {
 		c = v.dragStart
 	}
 	v.camera = c
+	return true
 }
 
 // modelRay returns the ray under a point of the surface in the mesh's own space, with x and y in logical

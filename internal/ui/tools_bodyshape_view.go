@@ -148,7 +148,7 @@ func (e *bodyShapeEditor) viewport(t *kit.Theme) *fairy.El {
 				e.dab(p.LocalX, p.LocalY)
 			}
 		}).
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if e.painting {
 				if d.Phase != fairy.DragStart {
 					e.dab(d.LocalX, d.LocalY)
@@ -156,10 +156,11 @@ func (e *bodyShapeEditor) viewport(t *kit.Theme) *fairy.El {
 				if d.Phase == fairy.DragEnd {
 					e.endStroke()
 				}
-				return
+				return true
 			}
 			e.view.setRing(nil)
 			e.view.drag(d)
+			return true
 		}).
 		OnClick(func() {
 			if e.painting {
@@ -170,10 +171,11 @@ func (e *bodyShapeEditor) viewport(t *kit.Theme) *fairy.El {
 			e.hover(p.LocalX, p.LocalY)
 			return e.brushOn
 		}).
-		OnHover(func(in bool) {
+		OnHover(func(in bool) bool {
 			if !in {
 				e.view.setRing(nil)
 			}
+			return true
 		}).
 		OnWheel(func(w fairy.WheelEvent) bool {
 			if e.brushOn && w.Mods&keyboard.ModCtrl != 0 {
@@ -353,12 +355,13 @@ func (e *bodyShapeEditor) boneSection(t *kit.Theme) *fairy.El {
 				keys = append(keys, item.key)
 			}
 			e.selectBones(keys)
-		}).OnHover(func(in bool) {
+		}).OnHover(func(in bool) bool {
 			if in {
 				e.setHighlight(item.key)
 			} else if e.highlight == item.key {
 				e.setHighlight("")
 			}
+			return true
 		}))
 	}
 	if shown == 0 {
@@ -367,10 +370,11 @@ func (e *bodyShapeEditor) boneSection(t *kit.Theme) *fairy.El {
 	search := kit.TextField(e.boneQuery, func(value string) { e.boneQuery = value },
 		kit.Placeholder(T(bodyShapePrefix+"import_bones_placeholder"))).Key(e.key("bones.search"))
 	return section.Child(fairy.Col(search, list).Gap(4).Pad(4).Radius(6).Border(1, t.Border).
-		OnHover(func(in bool) {
+		OnHover(func(in bool) bool {
 			if !in {
 				e.setHighlight("")
 			}
+			return true
 		}))
 }
 

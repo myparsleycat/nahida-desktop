@@ -866,8 +866,9 @@ func (v *ModelViewer) modelBounds(skin *viewerMotion, world mat4) (vec3, vec3) {
 
 // drag orbits with the left button and pans with the others or with Shift. The camera follows with the
 // damping of the React viewer's OrbitControls.
-func (v *ModelViewer) drag(d fairy.DragEvent) {
+func (v *ModelViewer) drag(d fairy.DragEvent) bool {
 	v.dragAt(d, time.Now())
+	return true
 }
 
 func (v *ModelViewer) dragAt(d fairy.DragEvent, now time.Time) {

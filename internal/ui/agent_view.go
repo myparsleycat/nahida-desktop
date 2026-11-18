@@ -152,7 +152,9 @@ func (s *Shell) agentSessionRow(session agent.AgentSessionSummary) *fairy.El {
 		row.Fill(t.Foreground.Alpha(0.07))
 	}
 	// The menu trigger stays in the layout while hidden, so an open menu keeps its anchor when the pointer leaves.
-	return fairy.Box(row, menu.Absolute().Right(5).Top(5)).WFull().OnHover(func(in bool) { *hovered = in })
+	return fairy.Box(row, menu.Absolute().Right(5).Top(5)).
+		WFull().
+		OnHover(func(in bool) bool { *hovered = in; return true })
 }
 
 func (s *Shell) openAgentRename(session agent.AgentSessionSummary) {

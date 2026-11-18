@@ -328,13 +328,14 @@ func (v *ModelViewer) overlayMenuPanel(index int, width float32) *fairy.El {
 		}
 		el := fairy.Box().Key(fmt.Sprintf("model-viewer.overlay:%d:%d:%d", index, pageIndex, buttonIndex)).
 			Role(fairy.RoleButton).Label(label).Cursor(fairy.CursorPointer).
-			OnHover(func(in bool) {
+			OnHover(func(in bool) bool {
 				o := &v.overlayMenus
 				if in {
 					o.hoverMenu, o.hoverButton = index, buttonIndex
 				} else if o.hoverMenu == index && o.hoverButton == buttonIndex {
 					o.hoverButton = -1
 				}
+				return true
 			}).
 			OnClick(func() {
 				if button.Page != nil {
@@ -376,15 +377,16 @@ func (v *ModelViewer) overlayMenuPanel(index int, width float32) *fairy.El {
 			Label(mode.Label).
 			Cursor(fairy.CursorResizeEW).
 			Focusable().
-			OnDrag(func(d fairy.DragEvent) {
+			OnDrag(func(d fairy.DragEvent) bool {
 				if d.Phase == fairy.DragStart {
 					v.overlayMenus.sliderStart = position
 				}
 				if d.Canceled {
 					choose(v.overlayMenus.sliderStart)
-					return
+					return true
 				}
 				choose(v.overlayMenus.sliderStart + float64(d.DX)/scale/travel)
+				return true
 			}).
 			OnKey(func(k keyboard.KeyEvent) bool {
 				switch k.Key {
@@ -465,7 +467,7 @@ func (v *ModelViewer) floatingOverlayMenu(t kit.Theme, index int, viewW, viewH f
 		Absolute().Right(0).Bottom(0).Size(viewerOverlayMenuHandle, viewerOverlayMenuHandle).Pad(2).
 		Align(fairy.End).Justify(fairy.JustifyEnd).Fill(t.Background.Alpha(0.7)).
 		Role(fairy.RoleSlider).Label(resizeLabel).Cursor(fairy.CursorResizeNS).Focusable().
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart {
 				o.dragSize = size
 			}
@@ -480,6 +482,7 @@ func (v *ModelViewer) floatingOverlayMenu(t kit.Theme, index int, viewW, viewH f
 			default:
 				draft(next)
 			}
+			return true
 		}).
 		OnKey(func(k keyboard.KeyEvent) bool {
 			switch k.Key {
@@ -499,14 +502,15 @@ func (v *ModelViewer) floatingOverlayMenu(t kit.Theme, index int, viewW, viewH f
 	return fairy.Box(v.overlayMenuPanel(index, float32(width)), corner).
 		Key(fmt.Sprintf("model-viewer.overlay-menu:%d", index)).
 		Absolute().Left(float32(left)).Top(float32(top)).W(float32(width)).Cursor(fairy.CursorMove).
-		OnHover(func(in bool) {
+		OnHover(func(in bool) bool {
 			if in {
 				o.over = index
 			} else if o.over == index {
 				o.over = -1
 			}
+			return true
 		}).
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart {
 				o.dragLeft, o.dragTop = left, top
 			}
@@ -519,6 +523,7 @@ func (v *ModelViewer) floatingOverlayMenu(t kit.Theme, index int, viewW, viewH f
 			default:
 				draft(next)
 			}
+			return true
 		}).
 		OnWheel(func(e fairy.WheelEvent) bool {
 			if e.Mods&keyboard.ModCtrl == 0 {

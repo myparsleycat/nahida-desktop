@@ -342,13 +342,14 @@ func (s *Shell) touchAssignmentRow(
 			})
 		}, kit.Placeholder(T(touchPrefix+"zone_label_placeholder")), kit.Small).W(112).Grow(0).Shrink(0),
 	).Key(key).Gap(8).Align(fairy.Center).PadXY(8, 6).Radius(6).Fill(t.Background.Alpha(0.6)).
-		OnHover(func(in bool) {
+		OnHover(func(in bool) bool {
 			switch {
 			case in:
 				tp.hoverBone = bone
 			case tp.hoverBone == bone:
 				tp.hoverBone = -1
 			}
+			return true
 		})
 }
 

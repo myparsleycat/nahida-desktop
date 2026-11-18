@@ -505,7 +505,7 @@ func (s *Shell) gbPreviewCard(item gbSubmission, width float32) *fairy.El {
 			zoom = 1.02
 		}
 		media.Child(fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitCover).Scale(zoom).
-			ScaleMotion(motion.Bezier(0.2, 0.4, 0, 0.2, 1)).OnHover(func(in bool) { *hover = in }))
+			ScaleMotion(motion.Bezier(0.2, 0.4, 0, 0.2, 1)).OnHover(func(in bool) bool { *hover = in; return true }))
 	} else if previewURL == "" {
 		// A preview that is loading leaves the box empty, as the React card only marked a missing one.
 		media.Child(

@@ -191,7 +191,8 @@ func (s *Shell) gbGallery(data *gbModOverview, mainWidth float32) *fairy.El {
 		box := fairy.Box().W(w).H(h).Radius(16).Clip().Fill(t.Muted.Alpha(0.3)).HoverFill(t.Muted.Alpha(0.4)).
 			Animate(motion.Fast).Cursor(fairy.CursorPointer).Label(previews[index].alt).
 			Role(fairy.RoleButton).Focusable().FocusRing(2, t.Ring).
-			OnHover(func(in bool) { *hover = in }).OnClick(func() { g.lightbox, g.lightboxKey = index, key })
+			OnHover(func(in bool) bool { *hover = in; return true }).
+			OnClick(func() { g.lightbox, g.lightboxKey = index, key })
 		if img := s.gbImage(previews[index].url, w, h, fairy.FitCover); img != nil {
 			box.Child(fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitCover))
 		}

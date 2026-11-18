@@ -247,7 +247,7 @@ func (s *Shell) fixPresetBuilder() *fairy.El {
 			}, kit.Outline, kit.Label(T(prefix+"remove"))).Color(t.Destructive),
 		).Key("tools.fix.picked."+script.ID).H(fixToolRowStep-8).PadXY(16, 0).Gap(12).Align(fairy.Center).
 			Radius(6).Fill(t.Muted.Alpha(0.5)).HoverFill(t.Muted).Animate(motion.Fast).Cursor(fairy.CursorMove).
-			OnDrag(func(e fairy.DragEvent) { s.dragFixScript(i, e) })
+			OnDrag(func(e fairy.DragEvent) bool { s.dragFixScript(i, e); return true })
 		if f.dragging && f.drag == i {
 			row.Fill(t.Muted).Border(1, t.Accent)
 		}

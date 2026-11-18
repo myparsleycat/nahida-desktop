@@ -504,7 +504,7 @@ func (s *Shell) modCard(info mod.ModInfo) *fairy.El {
 		Focusable().
 		Label(info.Name).
 		Checked(info.IsEnabled).
-		OnHover(func(on bool) { s.hoverMod(info.Path, on) }).
+		OnHover(func(on bool) bool { s.hoverMod(info.Path, on); return true }).
 		OnClick(func() { s.clickMod(info) }).
 		OnKey(func(k keyboard.KeyEvent) bool { return s.modKey(info, k) })
 

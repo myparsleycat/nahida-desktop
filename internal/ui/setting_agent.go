@@ -649,7 +649,7 @@ func (s *Shell) agentProviderSettings() *fairy.El {
 		// The React field was an input with a datalist, whose picker arrow shows inside the field only while
 		// the pointer is over it.
 		hovered := fairy.Local[bool]("settings.agent.model-hover")
-		model.OnHover(func(h bool) { *hovered = h })
+		model.OnHover(func(h bool) bool { *hovered = h; return true })
 		picker := kit.IconButton(lucide.ChevronDown, nil, kit.Ghost, kit.XS, kit.Tooltip(T("page.agent.model")))
 		if !*hovered {
 			picker.Opacity(0)

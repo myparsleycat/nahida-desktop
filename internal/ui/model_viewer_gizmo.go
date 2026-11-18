@@ -69,12 +69,13 @@ func (v *ModelViewer) axisHead(axis viewerAxis, sign string, view [2]float64, x,
 		Left(x-viewerGizmoHead/2).Top(y-viewerGizmoHead/2).Size(viewerGizmoHead, viewerGizmoHead).Center().
 		Role(fairy.RoleButton).Label(T("page.tools.model_viewer.axis_view", "axis", id)).
 		Cursor(fairy.CursorPointer).
-		OnHover(func(in bool) {
+		OnHover(func(in bool) bool {
 			if in {
 				v.axisHover = id
 			} else if v.axisHover == id {
 				v.axisHover = ""
 			}
+			return true
 		}).
 		OnClick(func() { v.viewAlong(view) })
 }

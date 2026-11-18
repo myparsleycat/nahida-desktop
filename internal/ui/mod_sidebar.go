@@ -289,9 +289,9 @@ func (s *Shell) modSidebar(cx *fairy.Cx) *fairy.El {
 		Absolute().Top(0).Bottom(0).Right(-2).W(5).Center().Cursor(fairy.CursorResizeEW).
 		Role(fairy.RoleSeparator).Label(T("page.mod.sidebar.resize")).Focusable().
 		RangeValue(float64(width), float64(modSidebarWidthMin), float64(modSidebarWidthMax), 16, nil).
-		OnHover(func(on bool) { *handleHover = on }).
+		OnHover(func(on bool) bool { *handleHover = on; return true }).
 		OnKey(s.resizeModSidebarKey).
-		OnDrag(func(e fairy.DragEvent) { s.resizeModSidebar(e) })
+		OnDrag(func(e fairy.DragEvent) bool { s.resizeModSidebar(e); return true })
 
 	return fairy.Col(
 		s.folderToolbar(),

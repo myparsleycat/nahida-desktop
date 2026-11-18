@@ -151,7 +151,7 @@ func (s *Shell) menuMakerCropDialog(cx *fairy.Cx) {
 			Size(float32(w), float32(h)).PassThrough(),
 	).Size(menuMakerCropPreviewSize, menuMakerCropPreviewSize).Clip().Radius(t.RadiusMd()).
 		Fill(fairy.RGBA(0, 0, 0, 1)).Border(1, t.Border).Cursor(fairy.CursorMove).
-		OnDrag(func(e fairy.DragEvent) {
+		OnDrag(func(e fairy.DragEvent) bool {
 			switch e.Phase {
 			case fairy.DragStart:
 				c.dragX, c.dragY = c.offsetX, c.offsetY
@@ -162,6 +162,7 @@ func (s *Shell) menuMakerCropDialog(cx *fairy.Cx) {
 					c.offsetX, c.offsetY = c.dragX, c.dragY
 				}
 			}
+			return true
 		}).
 		OnWheel(func(e fairy.WheelEvent) bool {
 			c.zoom = max(1, min(4, c.zoom-float64(e.DY)*0.1))

@@ -478,15 +478,16 @@ func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 		Color(t.MutedForeground).HoverColor(t.Foreground).Cursor(fairy.CursorMove).Label(move).Tooltip(move).
 		Focusable().FocusRing(3, t.Ring.Alpha(0.5)).
 		OnDoubleClick(func() { v.anim.barAt = nil }).
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart {
 				v.anim.barDrag, v.anim.barDragFrom = [2]float32{left, top}, v.anim.barAt
 			}
 			if d.Canceled {
 				v.anim.barAt = v.anim.barDragFrom
-				return
+				return true
 			}
 			v.moveAnimationBar(v.anim.barDrag[0]+d.DX, v.anim.barDrag[1]+d.DY, width)
+			return true
 		}).
 		OnKey(func(k keyboard.KeyEvent) bool {
 			if k.Mods != 0 {
@@ -674,7 +675,7 @@ func (v *ModelViewer) animationScrubber(
 		Cursor(fairy.CursorPointer).
 		Focusable().
 		OnPointerDown(func(e fairy.PointerEvent) { seek(e.LocalX, e.W) }).
-		OnDrag(func(d fairy.DragEvent) {
+		OnDrag(func(d fairy.DragEvent) bool {
 			if d.Phase == fairy.DragStart && p.resume == nil {
 				playing := p.playing
 				p.resume = &playing
@@ -686,6 +687,7 @@ func (v *ModelViewer) animationScrubber(
 				p.resume = nil
 				v.setTrackPlaying(track, resume)
 			}
+			return true
 		}).
 		OnKey(func(k keyboard.KeyEvent) bool {
 			if k.Mods != 0 {
