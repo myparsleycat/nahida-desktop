@@ -17,7 +17,7 @@ import (
 // exporter's object space, with corner attributes per loop and vertex groups in Blender's own order.
 type blenderExportMesh struct {
 	Name string
-	// Polygons counts the faces of the object's own mesh data; the exporters skip objects without any.
+	// Polygons counts the faces of the object's own mesh data.
 	Polygons int
 	// Positions holds vertex.undeformed_co, three values per vertex.
 	Positions []float32
@@ -36,6 +36,13 @@ type blenderExportMesh struct {
 	GroupWeights []float32
 	// GroupNames are the object's vertex group names by index.
 	GroupNames []string
+}
+
+// hasTriangles reports whether the exporters export the object. XXMI-Tools skips objects whose own data has no
+// faces. In Edit mode Blender keeps reporting the faces of the object's own data after they are all deleted, while
+// the evaluated mesh the add-on sends has no triangles and no layers.
+func (m *blenderExportMesh) hasTriangles() bool {
+	return m.Polygons > 0 && len(m.LoopVertices) > 0
 }
 
 func (m *blenderExportMesh) validate() error {

@@ -148,10 +148,20 @@ func (v *ModelViewer) syncOriginal() {
 		return
 	}
 	key := viewerOriginalKey{scene: scene, character: want}
-	if scene.original != nil || v.originalLoading == key || v.originalFailed == key {
+	if v.originalLoading == key {
 		return
 	}
-	v.loadOriginal(key, v.character)
+	// A stale original keeps drawing until its replacement is ready.
+	if o := scene.original; o != nil {
+		if scene.originalStale {
+			v.loadOriginal(key, v.character, o)
+		}
+		return
+	}
+	if v.originalFailed == key {
+		return
+	}
+	v.loadOriginal(key, v.character, nil)
 }
 
 // viewerOriginalKey names the original model of a character for a scene.
@@ -176,14 +186,37 @@ func (v *ModelViewer) dropOriginal(scene *viewerScene) {
 		return
 	}
 	scene.original = nil
-	if string(scene.transport.MaterialProfile) == gimiProfile {
-		scene.genshinFace = slices.ContainsFunc(scene.meshes, func(m *viewerMesh) bool { return m.toonFace })
-	}
+	refreshGenshinFace(scene)
 	_ = fairy.UseDevice(func(fairy.GPU) error {
 		o.release()
 		return nil
 	})
 	v.revision++
+}
+
+// rematchOriginal marks the scene's original model stale after a mesh gained or lost all of its triangles, which
+// changes the parts it covers, and cancels a build that read the meshes before. The next syncOriginal builds a
+// replacement.
+func (v *ModelViewer) rematchOriginal(scene *viewerScene) {
+	v.cancelOriginal()
+	scene.originalStale = true
+	refreshGenshinFace(scene)
+}
+
+// refreshGenshinFace sets whether a GIMI scene draws a face: a mesh with triangles or a shown part of the original
+// model marked as one.
+func refreshGenshinFace(scene *viewerScene) {
+	if string(scene.transport.MaterialProfile) != gimiProfile {
+		return
+	}
+	scene.genshinFace = slices.ContainsFunc(scene.meshes, func(m *viewerMesh) bool {
+		return m.toonFace && m.info.IndexCount > 0
+	})
+	if o := scene.original; o != nil && !scene.genshinFace {
+		scene.genshinFace = slices.ContainsFunc(o.parts, func(part *viewerOriginalPart) bool {
+			return part.shown && part.mesh.toonFace
+		})
+	}
 }
 
 // viewerOriginalSource is what the original model's match reads of a scene mesh: its base positions and UVs when
@@ -196,12 +229,25 @@ type viewerOriginalSource struct {
 	empty     [fillSlots]bool
 }
 
-func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter) {
+// loadOriginal builds the original model of key on a background goroutine. previous is the scene's stale original,
+// or nil: it keeps drawing until the build replaces it, lends its model data, and the parts the user showed stay
+// shown.
+func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, previous *viewerOriginal) {
 	scene := key.scene
 	ctx, cancel := context.WithCancel(v.ctx)
 	v.cancelOriginal()
 	v.originalCancel, v.originalLoading = cancel, key
+	scene.originalStale = false
 	v.revision++
+
+	var shown []int
+	if previous != nil {
+		for _, part := range previous.parts {
+			if !part.head && part.shown {
+				shown = append(shown, part.index)
+			}
+		}
+	}
 
 	sources := make([]viewerOriginalSource, len(scene.meshes))
 	for i, mesh := range scene.meshes {
@@ -221,6 +267,9 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter) {
 		faces:       map[string]modelviewer.ModelViewerTextureTransport{},
 		profile:     string(scene.transport.MaterialProfile),
 		reconstruct: scene.transport.NormalXYReconstruct,
+	}
+	if previous != nil && previous.character == key.character {
+		input.data = previous.data
 	}
 	for key := range viewerFaceOnlyTextures(&scene.transport) {
 		if entry, ok := scene.transport.Textures[key]; ok {
@@ -251,8 +300,19 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter) {
 			cancel()
 			o.ctx, o.cancel = context.WithCancel(v.ctx)
 			o.scene = scene
+			if old := scene.original; old != nil {
+				_ = fairy.UseDevice(func(fairy.GPU) error {
+					old.release()
+					return nil
+				})
+			}
 			scene.original = o
-			v.applyOriginalMarks(scene)
+			for _, part := range o.parts {
+				if !part.head && slices.Contains(shown, part.index) {
+					v.toggleOriginalPart(o, part)
+				}
+			}
+			refreshGenshinFace(scene)
 			if missing > 0 {
 				v.showOriginalTexturesMissing()
 			}
@@ -272,19 +332,6 @@ func (v *ModelViewer) reportOriginalError(err error, c *viewerCharacter) {
 	v.toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.original_error"), err.Error())
 }
 
-// applyOriginalMarks lets the toon request the face maps of a Genshin face the original model adds.
-func (v *ModelViewer) applyOriginalMarks(scene *viewerScene) {
-	o := scene.original
-	if o == nil || string(scene.transport.MaterialProfile) != gimiProfile {
-		return
-	}
-	for _, part := range o.parts {
-		if part.shown && part.mesh.toonFace {
-			scene.genshinFace = true
-		}
-	}
-}
-
 type viewerOriginalTools interface {
 	LoadCharacterOriginal(context.Context, string, string) (*modelviewer.CharacterOriginal, error)
 	LoadCharacterOriginalTexture(context.Context, modelviewer.CharacterOriginalTexture) (*image.NRGBA, error)
@@ -297,6 +344,8 @@ type viewerOriginalInput struct {
 	faces       map[string]modelviewer.ModelViewerTextureTransport
 	profile     string
 	reconstruct bool
+	// data is the character's original model when an earlier build loaded it, or nil.
+	data *modelviewer.CharacterOriginal
 }
 
 // buildViewerOriginal loads the character's original model, matches it against the mod's meshes, and uploads the
@@ -309,10 +358,12 @@ func buildViewerOriginal(
 	input viewerOriginalInput,
 	c *viewerCharacter,
 ) (*viewerOriginal, int, error) {
-	sources, profile, reconstruct := input.sources, input.profile, input.reconstruct
-	data, err := tools.LoadCharacterOriginal(ctx, c.game, c.ID)
-	if err != nil {
-		return nil, 0, err
+	sources, profile, reconstruct, data := input.sources, input.profile, input.reconstruct, input.data
+	if data == nil {
+		var err error
+		if data, err = tools.LoadCharacterOriginal(ctx, c.game, c.ID); err != nil {
+			return nil, 0, err
+		}
 	}
 	meshes := make([]modelviewer.OriginalMatchMesh, len(sources))
 	for i, source := range sources {

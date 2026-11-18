@@ -23,8 +23,10 @@ type viewerScene struct {
 	// genshinFace is set when a GIMI mod draws a face, of its own or from the original model. Most replace only the
 	// body, hair and dress, and the game draws its face.
 	genshinFace bool
-	// original is the character's original model shown with the mod, or nil.
-	original *viewerOriginal
+	// original is the character's original model shown with the mod, or nil. originalStale reports that a mesh
+	// gained or lost all of its triangles since it was matched.
+	original      *viewerOriginal
+	originalStale bool
 	// faceTexture is the key of the face diffuse the mod replaces by hash in the state shown, or "". The original
 	// model's face draws with it in place of its own.
 	faceTexture string

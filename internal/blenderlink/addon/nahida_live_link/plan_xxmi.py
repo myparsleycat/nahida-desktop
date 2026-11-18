@@ -156,8 +156,11 @@ def _empty_message(game="", source="", output=""):
     }
 
 
-def build(scene):
-    """Plans the export of scene. Never raises for user data problems; they end up in message["errors"]."""
+def build(scene, listed=frozenset()):
+    """Plans the export of scene. Never raises for user data problems; they end up in message["errors"].
+
+    listed holds the object keys of the connection's previous plan. Without a dump, an object without faces stays
+    in the plan only while it is among them."""
     plan = Plan()
     xxmi = getattr(scene, "xxmi", None)
     notes, errors = [], []
@@ -201,8 +204,8 @@ def build(scene):
     if hashes is not None:
         _plan_dump(plan, hashes, mod_name, candidates, xxmi, errors)
     else:
-        _plan_objects(plan, candidates, xxmi)
-        if not plan.entries:
+        _plan_objects(plan, candidates, xxmi, listed)
+        if not any(len(entry.obj.data.polygons) for entry in plan.entries):
             errors = notes + errors + ["No visible mesh object with faces."]
 
     plan.polygons = {entry.key: len(entry.obj.data.polygons) for entry in plan.entries}
@@ -211,9 +214,14 @@ def build(scene):
     return plan
 
 
-def _plan_objects(plan, candidates, xxmi):
-    """One component and one part per mesh object with faces, named after the object."""
-    objs = [obj for obj in candidates if obj.type == "MESH" and len(obj.data.polygons) > 0]
+def _plan_objects(plan, candidates, xxmi, listed):
+    """One component and one part per mesh object with faces, named after the object. An object listed before keeps
+    its place after losing every face, so deleting its faces or adding them back leaves the scene's objects
+    unchanged."""
+    objs = [
+        obj for obj in candidates
+        if obj.type == "MESH" and (len(obj.data.polygons) > 0 or object_key(obj) in listed)
+    ]
     for obj in sorted(objs, key=lambda obj: obj.name):
         key = object_key(obj)
         plan.entries.append(Entry(key, obj, obj, ""))

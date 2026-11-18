@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -905,7 +906,11 @@ func (v *ModelViewer) modelBounds(skin *viewerMotion, world mat4) (vec3, vec3) {
 		}
 	}
 	if !found {
-		minimum, maximum, _ = viewerBounds(meshes, world)
+		minimum, maximum, found = viewerBounds(meshes, world)
+	}
+	if !found {
+		// No mesh has geometry, as in a Blender scene whose objects are all empty.
+		return vec3{-1, -1, -1}, vec3{1, 1, 1}
 	}
 	return minimum, maximum
 }
@@ -1139,6 +1144,12 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 				Wrap(),
 			kit.Button(T("page.tools.model_viewer.retry"), v.retryDraw),
 		).Absolute().Inset(0).Center().Gap(10).Pad(24))
+	case scene != nil && v.blender != nil && !slices.ContainsFunc(scene.transport.Meshes,
+		func(mesh modelviewer.ModelViewerMeshTransport) bool { return mesh.IndexCount > 0 }):
+		viewport.Child(fairy.Col(
+			fairy.Text(T("page.tools.model_viewer.blender_no_meshes")).FontSize(14).LineHeight(20).
+				Color(t.MutedForeground),
+		).Absolute().Inset(0).Center().Pad(24).PassThrough())
 	}
 	// The bar goes over the error messages so playback stays usable while they show.
 	if bar != nil {

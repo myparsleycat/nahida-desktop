@@ -7,7 +7,7 @@ Blender 4.2 and later read blender_manifest.toml and ignore bl_info.
 bl_info = {
     "name": "Nahida Live Link",
     "author": "Nahida Desktop",
-    "version": (0, 2, 0),
+    "version": (0, 2, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Nahida",
     "description": "Shows XXMI-Tools exports of the open mod live in the Nahida Desktop model viewer",

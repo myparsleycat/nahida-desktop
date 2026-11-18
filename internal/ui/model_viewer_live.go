@@ -39,8 +39,9 @@ type viewerBlenderSource struct {
 
 // applyLiveMeshes shows meshes and textures a Blender live link rebuilt in place of the scene's. A mesh that is
 // not loaded takes the new buffers when it next loads; a loaded mesh or a texture keeps drawing until its
-// replacement is uploaded. A mesh the scene does not have, or an update that asks for it, opens the scene again.
-// While a Blender scene loads, the updates wait for install, since the session they name may be the one loading.
+// replacement is uploaded. A mesh with geometry the scene does not have, or an update that asks for it, opens the
+// scene again; an empty one the scene does not have is ignored. While a Blender scene loads, the updates wait for
+// install, since the session they name may be the one loading.
 func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) {
 	scene := v.scene
 	if v.loading && v.blender != nil {
@@ -50,15 +51,21 @@ func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) 
 	if scene == nil || scene.transport.MemorySessionID != update.MemorySessionID {
 		return
 	}
+	index := func(id string) int {
+		return slices.IndexFunc(scene.meshes, func(mesh *viewerMesh) bool { return mesh.info.ID == id })
+	}
 	unknown := slices.ContainsFunc(update.Meshes, func(live modelviewer.ModelViewerLiveMesh) bool {
-		return !slices.ContainsFunc(scene.meshes, func(mesh *viewerMesh) bool { return mesh.info.ID == live.ID })
+		return live.IndexCount > 0 && index(live.ID) < 0
 	})
 	if update.Reload || unknown {
 		v.load()
 		return
 	}
 	for _, live := range update.Meshes {
-		i := slices.IndexFunc(scene.meshes, func(mesh *viewerMesh) bool { return mesh.info.ID == live.ID })
+		i := index(live.ID)
+		if i < 0 {
+			continue
+		}
 		mesh := scene.meshes[i]
 		info := mesh.info
 		info.GeometryURL, info.BlendURL, info.BlendPalette = live.GeometryURL, live.BlendURL, live.BlendPalette
@@ -67,8 +74,12 @@ func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) 
 		info.ShapeTargets, info.PositionVariants = nil, nil
 		scene.transport.Meshes[i] = info
 		if mesh.unloaded {
+			coverageChanged := (mesh.info.IndexCount > 0) != (info.IndexCount > 0)
 			mesh.info, mesh.failed = info, false
 			mesh.variants, mesh.unreadable = map[int]*viewerPositionGeometry{}, nil
+			if coverageChanged {
+				v.rematchOriginal(scene)
+			}
 			continue
 		}
 		v.loadLiveMesh(scene, i, info)
@@ -168,6 +179,7 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 				scene.forgetMesh(i)
 			}
 			scene.gpu.meshes[i] = buffers
+			coverageChanged := (mesh.info.IndexCount > 0) != (info.IndexCount > 0)
 			mesh.info, mesh.failed = info, false
 			mesh.variants, mesh.unreadable = map[int]*viewerPositionGeometry{}, nil
 			mesh.fill(decoded)
@@ -182,6 +194,10 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 			})
 			if m := v.activeMotion(); m != nil && blend != nil {
 				m.replaceBlend(i, info.BlendPalette, blend)
+			}
+			// The original model's match reads the new positions, so it runs after the swap.
+			if coverageChanged {
+				v.rematchOriginal(scene)
 			}
 			v.revision++
 			v.present()

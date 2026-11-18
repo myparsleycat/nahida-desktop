@@ -1642,6 +1642,7 @@
         "retry": "다시 시도",
         "draw_error": "모델을 그리지 못했습니다.",
         "loading": "모델을 불러오는 중…",
+        "blender_no_meshes": "Blender 씬에 표시할 삼각형이 없습니다.",
         "convert_first": "먼저 모드를 GLB로 변환한 뒤 여기에서 여세요.",
         "generating_selected_state": "선택한 상태 생성 중",
         "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",

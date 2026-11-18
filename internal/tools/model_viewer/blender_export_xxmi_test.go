@@ -329,6 +329,118 @@ func TestBlenderSceneShowsWhatALoadOfTheExportShows(t *testing.T) {
 	compareBlenderScene(t, protocol, "edited", shown, edited.Meshes)
 }
 
+// An object whose triangles are all deleted must reach the viewer as an empty mesh under its ID, not drop out of
+// the update and leave its last geometry on screen. A scene without any triangles still opens.
+func TestBlenderSceneEmptiesAnObjectWithoutTriangles(t *testing.T) {
+	protocol := infra.NewProtocol()
+	var updates []ModelViewerLiveUpdate
+	service := NewWithOptions(Options{Protocol: protocol, EventEmit: func(name string, data ...any) {
+		if update, ok := data[0].(ModelViewerLiveUpdate); ok && name == EventLiveMeshes {
+			updates = append(updates, update)
+		}
+	}})
+	ctx := context.Background()
+	link, client := service.BlenderLink(), blenderlink.Link{Session: 1}
+	scene, objects := blenderLinkCapture(
+		t,
+		filepath.Join("testdata", "blender_live", "xxmi", "gimi", "capture.json"),
+		1,
+	)
+	if _, err := link.Scene(ctx, client, scene); err != nil {
+		t.Fatal(err)
+	}
+	for _, object := range objects {
+		if _, err := link.Object(ctx, client, object); err != nil {
+			t.Fatalf("object %s: %v", object.ObjectKey, err)
+		}
+	}
+	opened, err := link.OpenScene(ctx, client.Session, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The second object (ExtraA1) shares its component with others. Its settings keep the face count, as
+	// Blender reports while the object is in Edit mode.
+	target := objects[1]
+	id := "blender:" + target.ObjectKey
+	index := slices.IndexFunc(opened.Meshes, func(mesh ModelViewerMeshTransport) bool { return mesh.ID == id })
+	if index < 0 {
+		t.Fatalf("mesh %s is not in the opened scene", id)
+	}
+	sent := func(object blenderlink.ObjectUpdate) ModelViewerLiveMesh {
+		t.Helper()
+		updates = nil
+		if _, err := link.Object(ctx, client, object); err != nil {
+			t.Fatalf("object %s: %v", object.ObjectKey, err)
+		}
+		for _, update := range updates {
+			for _, mesh := range update.Meshes {
+				if mesh.ID == id && update.MemorySessionID == opened.MemorySessionID {
+					return mesh
+				}
+			}
+		}
+		t.Fatalf("no update carries mesh %s", id)
+		return ModelViewerLiveMesh{}
+	}
+	empty := blenderlink.ObjectUpdate{
+		SceneRev: target.SceneRev, ObjectKey: target.ObjectKey, Revision: target.Revision + 1,
+		VertexGroups: target.VertexGroups,
+	}
+
+	cleared := sent(empty)
+	if cleared.IndexCount != 0 || cleared.VertexCount != 0 || cleared.Bounds != nil {
+		t.Fatalf("emptied mesh = %+v, want no vertices, indices or bounds", cleared)
+	}
+	geometry := readModelViewerProtocolBytes(t, protocol, cleared.GeometryURL)
+	if len(geometry) != 32 || string(geometry[:4]) != "MVG3" || slices.ContainsFunc(geometry[4:], func(b byte) bool {
+		return b != 0
+	}) {
+		t.Fatalf("emptied mesh geometry = %v, want an MVG3 header with zero counts", geometry)
+	}
+
+	restored := sent(target)
+	if restored.IndexCount != opened.Meshes[index].IndexCount {
+		t.Fatalf("restored mesh has %d indices, want %d", restored.IndexCount, opened.Meshes[index].IndexCount)
+	}
+
+	for _, object := range objects {
+		if _, err := link.Object(ctx, client, blenderlink.ObjectUpdate{
+			SceneRev: object.SceneRev, ObjectKey: object.ObjectKey, Revision: object.Revision + 2,
+		}); err != nil {
+			t.Fatalf("object %s: %v", object.ObjectKey, err)
+		}
+	}
+	reopened, err := link.OpenScene(ctx, client.Session, "")
+	if err != nil {
+		t.Fatalf("open a scene without triangles: %v", err)
+	}
+	if len(reopened.Meshes) != 0 {
+		t.Fatalf("scene without triangles opened with %d meshes", len(reopened.Meshes))
+	}
+}
+
+// Settings whose components do not follow the Scene's would leave every object without a component and the viewer
+// empty, so the Scene is rejected, and the objects sent for it report why.
+func TestBlenderSceneRejectsSettingsOfOtherComponents(t *testing.T) {
+	ctx, client := context.Background(), blenderlink.Link{Session: 1}
+	link := NewWithOptions(Options{Protocol: infra.NewProtocol()}).BlenderLink()
+	scene, objects := blenderLinkCapture(
+		t,
+		filepath.Join("testdata", "blender_live", "xxmi", "gimi", "capture.json"),
+		1,
+	)
+	scene.Components[0].Name += "Renamed"
+	rejected, err := link.Scene(ctx, client, scene)
+	if err == nil {
+		t.Fatalf("a Scene whose settings name other components was accepted: %+v", rejected)
+	}
+	if _, objectErr := link.Object(ctx, client, objects[0]); objectErr == nil ||
+		!strings.Contains(objectErr.Error(), err.Error()) {
+		t.Fatalf("object of the rejected scene: %v, want the scene's error %q", objectErr, err)
+	}
+}
+
 type blenderShownMesh struct {
 	id, component, geometry, blend string
 }

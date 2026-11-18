@@ -1642,6 +1642,7 @@
         "retry": "重试",
         "draw_error": "无法绘制模型",
         "loading": "正在加载模型…",
+        "blender_no_meshes": "Blender 场景中没有可显示的三角形。",
         "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
         "generating_selected_state": "正在生成所选状态",
         "model_data_unavailable": "模型数据不可用。",

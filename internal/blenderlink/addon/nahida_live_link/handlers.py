@@ -283,7 +283,8 @@ class Link:
             or since >= REPLAN_IDLE
             or (self.plan_dirty and since >= REPLAN_INTERVAL)
         ):
-            self.plan = plan_xxmi.build(bpy.context.scene)
+            listed = frozenset(entry.key for entry in self.plan.entries) if self.plan is not None else frozenset()
+            self.plan = plan_xxmi.build(bpy.context.scene, listed)
             self.plan_dirty, self.last_plan = False, now
             keys = {entry.key for entry in self.plan.entries}
             self.objects = {key: state for key, state in self.objects.items() if key in keys}

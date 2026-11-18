@@ -31,9 +31,11 @@ type ModelViewerLiveMesh struct {
 }
 
 type ModelViewerLiveUpdate struct {
-	MemorySessionID string                   `json:"memorySessionId"`
-	Meshes          []ModelViewerLiveMesh    `json:"meshes"`
-	Textures        []ModelViewerLiveTexture `json:"textures,omitempty"`
+	MemorySessionID string `json:"memorySessionId"`
+	// Meshes holds every object of a rebuilt component. An object without triangles comes with IndexCount 0, and
+	// the session may not have its mesh.
+	Meshes   []ModelViewerLiveMesh    `json:"meshes"`
+	Textures []ModelViewerLiveTexture `json:"textures,omitempty"`
 	// Reload reports that objects were added or removed or an object's images changed role, which the session's
 	// meshes cannot show.
 	Reload bool `json:"reload,omitempty"`
@@ -106,6 +108,9 @@ type BlenderLink struct {
 
 	mu     sync.Mutex
 	scenes map[uint64]*blenderLinkScene
+	// rejected holds, by connection, the newest Scene that was rejected, so the objects and images sent for it
+	// report why.
+	rejected map[uint64]rejectedScene
 	// apply serializes rebuilds and texture replacements, so the buffers of one session are replaced in the order
 	// updates arrive. It guards serial, buffers and applied.
 	apply  sync.Mutex
@@ -117,14 +122,44 @@ type BlenderLink struct {
 	applied map[string]*blenderAppliedTextures
 }
 
+type rejectedScene struct {
+	rev uint32
+	err error
+}
+
 func newBlenderLink(service *Service, emit func(string, ...any)) *BlenderLink {
 	return &BlenderLink{
-		service: service, emit: emit, scenes: map[uint64]*blenderLinkScene{},
+		service: service, emit: emit, scenes: map[uint64]*blenderLinkScene{}, rejected: map[uint64]rejectedScene{},
 		buffers: map[string]map[string][][]string{}, applied: map[string]*blenderAppliedTextures{},
 	}
 }
 
 func (b *BlenderLink) Scene(
+	ctx context.Context,
+	link blenderlink.Link,
+	scene blenderlink.Scene,
+) (blenderlink.Result, error) {
+	result, err := b.applyScene(ctx, link, scene)
+	b.mu.Lock()
+	if err != nil {
+		b.rejected[link.Session] = rejectedScene{rev: scene.SceneRev, err: err}
+	} else {
+		delete(b.rejected, link.Session)
+	}
+	b.mu.Unlock()
+	return result, err
+}
+
+// staleSceneError explains an object or image sent for scene rev that is not the connection's current scene. The
+// caller holds b.mu.
+func (b *BlenderLink) staleSceneError(link uint64, rev uint32, what string) error {
+	if rejected, ok := b.rejected[link]; ok && rejected.rev == rev {
+		return fmt.Errorf("scene %d was rejected: %w", rev, rejected.err)
+	}
+	return fmt.Errorf("%s does not belong to the current scene", what)
+}
+
+func (b *BlenderLink) applyScene(
 	ctx context.Context,
 	link blenderlink.Link,
 	scene blenderlink.Scene,
@@ -141,6 +176,18 @@ func (b *BlenderLink) Scene(
 		if settings.Game != "" {
 			if _, err := parseXXMIExportGame(settings.Game); err != nil {
 				return blenderlink.Result{}, err
+			}
+		}
+		// component pairs each scene component with the settings entry at its index.
+		if len(settings.Components) != len(scene.Components) {
+			return blenderlink.Result{}, fmt.Errorf(
+				"xxmi settings describe %d components, the scene has %d", len(settings.Components),
+				len(scene.Components))
+		}
+		for index, component := range scene.Components {
+			if name := settings.Components[index].FullName; name != component.Name {
+				return blenderlink.Result{}, fmt.Errorf(
+					"xxmi settings component %d is %q, the scene names %q", index, name, component.Name)
 			}
 		}
 	}
@@ -195,8 +242,9 @@ func (b *BlenderLink) Texture(
 	b.mu.Lock()
 	state := b.scenes[link.Session]
 	if state == nil || state.scene.SceneRev != update.SceneRev {
+		err := b.staleSceneError(link.Session, update.SceneRev, "image")
 		b.mu.Unlock()
-		return blenderlink.Result{}, errors.New("image does not belong to the current scene")
+		return blenderlink.Result{}, err
 	}
 	previous, seen := state.pixels[update.Image]
 	shown := state.showsPixels(update.Image)
@@ -231,8 +279,9 @@ func (b *BlenderLink) Object(
 	b.mu.Lock()
 	state := b.scenes[link.Session]
 	if state == nil || state.scene.SceneRev != update.SceneRev {
+		err := b.staleSceneError(link.Session, update.SceneRev, "object")
 		b.mu.Unlock()
-		return blenderlink.Result{}, errors.New("object does not belong to the current scene")
+		return blenderlink.Result{}, err
 	}
 	state.objects[update.ObjectKey] = update
 	b.mu.Unlock()
@@ -272,6 +321,7 @@ func (b *BlenderLink) ClientError(_ context.Context, _ blenderlink.Link, report 
 func (b *BlenderLink) Disconnected(link blenderlink.Link) {
 	b.mu.Lock()
 	delete(b.scenes, link.Session)
+	delete(b.rejected, link.Session)
 	b.mu.Unlock()
 	b.apply.Lock()
 	maps.DeleteFunc(b.applied, func(_ string, applied *blenderAppliedTextures) bool {
@@ -349,9 +399,6 @@ func (b *BlenderLink) OpenScene(ctx context.Context, link uint64, importer strin
 	slots := state.textureSlots()
 	pixels := maps.Clone(state.pixels)
 	b.mu.Unlock()
-	if len(components) == 0 {
-		return ModelViewerTransport{}, errors.New("the Blender scene has no meshes to show yet")
-	}
 	transport, shown, err := b.service.openBlenderScene(
 		ctx, blenderSceneSource{link: link, game: game, contents: contents}, name, components, slots, pixels,
 	)
@@ -451,7 +498,7 @@ func (s *blenderLinkScene) component(key string, game xxmiExportGame) (blenderSc
 		if !holds {
 			continue
 		}
-		if index >= len(s.settings.Components) || s.settings.Components[index].FullName != source.Name {
+		if index >= len(s.settings.Components) {
 			return blenderSceneComponent{}, false, false
 		}
 		settings := &s.settings.Components[index]
@@ -542,7 +589,7 @@ func defaultXXMILayout(component *xxmiExportComponent) []xxmiLayoutElement {
 	every := func(has func(*blenderExportMesh) bool) bool {
 		for _, part := range component.Parts {
 			for index := range part.Objects {
-				if mesh := &part.Objects[index]; mesh.Polygons > 0 && !has(mesh) {
+				if mesh := &part.Objects[index]; mesh.hasTriangles() && !has(mesh) {
 					return false
 				}
 			}

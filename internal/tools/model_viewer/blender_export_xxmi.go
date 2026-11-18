@@ -618,7 +618,7 @@ func exportXXMIComponent(component *xxmiExportComponent) (xxmiExportResult, erro
 		for objectIndex := range part.Objects {
 			mesh := &part.Objects[objectIndex]
 			draw := xxmiObjectDraw{Name: mesh.Name}
-			if mesh.Polygons == 0 {
+			if !mesh.hasTriangles() {
 				draws.Draws = append(draws.Draws, draw)
 				continue
 			}

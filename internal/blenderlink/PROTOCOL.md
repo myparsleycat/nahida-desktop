@@ -326,8 +326,11 @@ the selected game. Otherwise it groups them per object.
   selected", becomes its own Component with one Part, both named after the object, holding only that object
   with an empty `collection`. Components are sorted by object name. Each object is extracted in its own
   object space.
+- An object that loses all of its faces stays in the Scene while the connection lasts, so deleting its faces or
+  adding them back does not change the Scene's objects. After a reconnect or a file load, objects without faces
+  are left out again.
 - "Dump path not set" and "Please select a valid game before continuing." are not errors here. They are
-  listed, with "No visible mesh object with faces.", only when no object qualifies. An unreadable
+  listed, with "No visible mesh object with faces.", only when no listed object has faces. An unreadable
   `hash.json` and an unsupported game stay errors.
 
 #### Both groupings

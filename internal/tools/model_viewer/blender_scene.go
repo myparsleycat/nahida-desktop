@@ -149,7 +149,8 @@ func (t *Service) openBlenderScene(
 	return transport, shown, nil
 }
 
-// rebuildBlenderSceneComponent rebuilds the meshes of one component, encoded as openBlenderScene stores them.
+// rebuildBlenderSceneComponent rebuilds the meshes of one component, encoded as openBlenderScene stores them, one
+// per object. An object without triangles gets an empty mesh, so a viewer stops drawing the geometry it had.
 func (t *Service) rebuildBlenderSceneComponent(
 	ctx context.Context,
 	component *blenderSceneComponent,
@@ -162,20 +163,45 @@ func (t *Service) rebuildBlenderSceneComponent(
 		return nil, err
 	}
 	encoded := make([]blenderLiveMesh, 0, len(meshes))
+	built := map[string]bool{}
 	for _, mesh := range meshes {
 		live, err := encodeBlenderLiveMesh(ctx, mesh, cache)
 		if err != nil {
 			return nil, err
 		}
 		encoded = append(encoded, live)
+		built[live.ID] = true
+	}
+
+	// The empty meshes share one encoding, which the stored buffers only read.
+	var empty []byte
+	for _, keys := range component.keys {
+		for _, key := range keys {
+			id := blenderMeshID(key)
+			if built[id] {
+				continue
+			}
+			if empty == nil {
+				var geometry bytes.Buffer
+				if err := writeModelViewerMeshBytes(&geometry, modelViewerMeshPayload{}); err != nil {
+					return nil, fmt.Errorf("mesh %s encode: %w", id, err)
+				}
+				empty = geometry.Bytes()
+			}
+			encoded = append(encoded, blenderLiveMesh{ID: id, Geometry: empty})
+		}
 	}
 	return encoded, nil
 }
 
+// blenderMeshID names the mesh of a Blender object after its key, so it keeps its ID while the object is edited.
+func blenderMeshID(key string) string {
+	return "blender:" + key
+}
+
 // buildBlenderSceneMeshes exports a component and decodes one mesh per object that has faces, as the mod loader
 // decodes the draws of the exported INI: the vertex buffers through extractModelViewerGeometry with the V axis
-// flipped, the blend buffer through the bone weight decoder. The mesh of an object is named after its key, so
-// it keeps its ID while the object is edited.
+// flipped, the blend buffer through the bone weight decoder. Each mesh is named with blenderMeshID.
 func buildBlenderSceneMeshes(
 	component *blenderSceneComponent,
 	cache *modelViewerBufferCache,
@@ -241,7 +267,7 @@ func buildBlenderSceneMeshes(
 			}
 			key := component.keys[partIndex][drawIndex]
 			meshes = append(meshes, modelViewerDirectMesh{
-				id:                 "blender:" + key,
+				id:                 blenderMeshID(key),
 				component:          part.FullName,
 				geometry:           geometry,
 				blend:              blend,

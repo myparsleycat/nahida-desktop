@@ -1647,6 +1647,7 @@
         "retry": "Try Again",
         "draw_error": "Failed to draw the model",
         "loading": "Loading model…",
+        "blender_no_meshes": "The Blender scene has no triangles to show.",
         "convert_first": "Convert a mod to GLB first, then open it here.",
         "generating_selected_state": "Generating selected state",
         "model_data_unavailable": "Model data is not available.",

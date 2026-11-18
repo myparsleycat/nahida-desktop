@@ -8,7 +8,7 @@ It rebuilds the gimi, srmi and zzmi scenes of internal/tools/model_viewer/testda
 make_fixture.py, plans and extracts them with the add-on, sends them through the transport to an in-memory
 server, and requires the decoded Scene, settings and attributes to equal capture.json (and edited.json for the
 edited gimi scene) exactly. A last case plans the gimi scene without a dump folder or game, with material
-textures on one object.
+textures on one object, and again after one object loses every face.
 """
 
 import json
@@ -19,6 +19,7 @@ import traceback
 from pathlib import Path
 
 import addon_utils
+import bmesh
 import bpy
 import numpy
 
@@ -388,7 +389,22 @@ def run_fallback(fixture, scratch):
     link._send_scene(scene_msg)
     link._send_texture(transport.Texture(packed.name, *textures.read_pixels(packed)))
     assert server.textures[packed.name]["version"] == 2, server.textures[packed.name]
-    print("fallback: %d objects, textures match" % len(names))
+
+    # An object that loses every face stays planned while the previous plan listed it, and only then.
+    extra = bpy.data.objects["ExtraA1"]
+    bm = bmesh.new()
+    bm.from_mesh(extra.data)
+    bmesh.ops.delete(bm, geom=bm.faces[:], context="FACES_ONLY")
+    bm.to_mesh(extra.data)
+    bm.free()
+    assert len(extra.data.polygons) == 0
+    listed = frozenset(entry.key for entry in plan.entries)
+    kept = plan_xxmi.build(scene, listed)
+    assert [c["name"] for c in kept.message["components"]] == names, kept.message["components"]
+    assert kept.message["errors"] == [], kept.message["errors"]
+    fresh = plan_xxmi.build(scene)
+    assert [c["name"] for c in fresh.message["components"]] == ["FixBodyA", "FixBodyB"], fresh.message["components"]
+    print("fallback: %d objects, textures match, faceless objects kept" % len(names))
 
 
 def main():
