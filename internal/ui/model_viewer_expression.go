@@ -255,10 +255,15 @@ func (o *viewerOriginal) readMotionMorphs(m *viewerMotion) {
 			o.mapMotionMorphs(m)
 		}
 	}
-	if m == nil || len(o.morph.weights) == 0 || (o.morph.valid && o.morph.at == m.posedAt) {
+	if m == nil || len(o.morph.weights) == 0 {
 		return
 	}
+	// The shape keys follow the clip alone, not the fade of the pose into it.
 	at := m.posedAt
+	at.hold = 0
+	if o.morph.valid && o.morph.at == at {
+		return
+	}
 	o.morph.at, o.morph.valid = at, true
 	if err := m.motion.MorphWeights(at.clip, at.frame, at.next, at.t, o.morph.weights, o.morph.driven); err != nil {
 		clear(o.morph.driven)

@@ -42,10 +42,14 @@ type viewerMotion struct {
 	posedAt viewerMotionPoseAt
 	// boxes bounds the rest positions each node moves, the last one those that move with no node. clipBoxes bounds
 	// them over every pose of each clip and clipBox over the clip playing, so the shadow volume stays still while it
-	// plays; restBox bounds the meshes the motion does not pose. All are in the mod's space.
+	// plays, widened to the poses shown while it fades in; restBox bounds the meshes the motion does not pose. All
+	// are in the mod's space.
 	boxes            []viewerMotionBox
 	clipBoxes        []viewerMotionBox
 	clipBox, restBox viewerMotionBox
+	// fadeStart is when the pose shown at the last change of clip began fading into the new clip, or zero once the
+	// fade is over.
+	fadeStart time.Time
 	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them.
 	palettes map[string][]int32
 	// anchorNodes holds, by scene mesh, the node that turns the mesh's face direction, or -1.
@@ -448,7 +452,11 @@ func (v *ModelViewer) activeMotion() *viewerMotion {
 	return nil
 }
 
-// startMotion selects a motion clip and plays it from its first frame when it has more than one.
+// viewerMotionFade is how long the pose shown takes to blend into a newly selected clip played at its own rate.
+const viewerMotionFade = 250 * time.Millisecond
+
+// startMotion selects a motion clip and plays it from its first frame when it has more than one, blending into it
+// from the pose shown.
 func (v *ModelViewer) startMotion(clipID string) {
 	m := v.activeMotion()
 	if m == nil {
@@ -462,8 +470,37 @@ func (v *ModelViewer) startMotion(clipID string) {
 	if clip != nil {
 		m.clipBox = m.clipBoxes[m.clipNumber(clip.ID)]
 	}
+	m.fadeStart = time.Time{}
+	if m.posed != 0 && m.pose.Hold() {
+		m.fadeStart = time.Now()
+	}
 	v.runTrackClock(trackMotion)
 	v.setMotionFrame(0)
+}
+
+// fadeProgress is the share of the fade played at now, at the motion's playback speed.
+func (m *viewerMotion) fadeProgress(now time.Time) float64 {
+	return now.Sub(m.fadeStart).Seconds() * m.play.rate() / viewerMotionFade.Seconds()
+}
+
+// motionHold is the share of the pose held at the last change of clip that the pose at now keeps, easing from 1 to
+// 0 over the fade, and ends the fade once it reaches 0.
+func (m *viewerMotion) motionHold(now time.Time) float64 {
+	if m.fadeStart.IsZero() {
+		return 0
+	}
+	elapsed := m.fadeProgress(now)
+	if elapsed >= 1 {
+		m.fadeStart = time.Time{}
+		return 0
+	}
+	elapsed = max(elapsed, 0)
+	return 1 - elapsed*elapsed*(3-2*elapsed)
+}
+
+// fading reports whether the pose is still blending into the clip selected last.
+func (m *viewerMotion) fading() bool {
+	return m != nil && !m.fadeStart.IsZero()
 }
 
 // clipBox bounds boxes over every pose of the motion's clip with frames frames, evaluated with pose into bones, or
@@ -498,10 +535,11 @@ func (m *viewerMotion) clipNumber(id string) int {
 	return max(slices.IndexFunc(m.clips, func(c modelviewer.ModelViewerAnimationClip) bool { return c.ID == id }), 0)
 }
 
-// viewerMotionPoseAt is a pose a share t of the way from frame to next of clip.
+// viewerMotionPoseAt is a pose a share t of the way from frame to next of clip, mixed with the share hold of the pose
+// held at the last change of clip.
 type viewerMotionPoseAt struct {
 	clip, frame, next int
-	t                 float64
+	t, hold           float64
 }
 
 // setMotionFrame poses the skeleton at frame index of the motion's clip, or past it by the share of the frame
@@ -512,25 +550,30 @@ func (v *ModelViewer) setMotionFrame(index int) {
 		return
 	}
 	m.play.frame = min(max(index, 0), len(clip.Frames)-1)
-	if err := v.poseMotion(v.interpolation(trackMotion, time.Now())); err != nil {
+	if err := v.poseMotion(time.Now()); err != nil {
 		v.failMotionPlay(err, "evaluate-pose")
 	}
 }
 
-// poseMotion poses the skeleton a share t of the way from the frame shown to the next, unless it is posed there.
-func (v *ModelViewer) poseMotion(t float64) error {
+// poseMotion poses the skeleton as playback has it at now, between the frame shown and the next and blending from
+// the pose held at the last change of clip, unless it is posed there.
+func (v *ModelViewer) poseMotion(now time.Time) error {
 	m, clip := v.activeMotion(), v.trackClip(trackMotion)
 	if m == nil || clip == nil || len(clip.Frames) == 0 {
 		return nil
 	}
-	at := viewerMotionPoseAt{clip: m.clipNumber(clip.ID), frame: m.play.frame, next: m.play.frame}
-	if next, ok := v.nextFrame(trackMotion); ok && t > 0 {
-		at.next, at.t = next, t
+	at := viewerMotionPoseAt{
+		clip: m.clipNumber(clip.ID), frame: m.play.frame, next: m.play.frame, hold: m.motionHold(now),
+	}
+	if next, ok := v.nextFrame(trackMotion); ok {
+		if t := v.interpolation(trackMotion, now); t > 0 {
+			at.next, at.t = next, t
+		}
 	}
 	if m.posed != 0 && at == m.posedAt {
 		return nil
 	}
-	if err := m.pose.EvaluateBetween(at.clip, at.frame, at.next, at.t, m.bones); err != nil {
+	if err := m.pose.EvaluateFrom(at.hold, at.clip, at.frame, at.next, at.t, m.bones); err != nil {
 		return err
 	}
 	m.posedAt = at

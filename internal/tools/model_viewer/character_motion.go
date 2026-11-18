@@ -495,6 +495,12 @@ func (m *CharacterMotion) readNodes(doc *characterGLTF) error {
 		if node.Scale != nil {
 			rest.s = *node.Scale
 		}
+		// The pose blends rotations as unit quaternions. affine() turns a zero one into no rotation, so it becomes
+		// the identity.
+		var ok bool
+		if rest.r, ok = unitMotionQuaternion(rest.r); !ok {
+			rest.r = [4]float64{0, 0, 0, 1}
+		}
 		m.nodes[i].rest = rest
 		for _, child := range node.Children {
 			if child < 0 || child >= len(m.nodes) || child == i || m.nodes[child].parent >= 0 {
@@ -829,12 +835,26 @@ type CharacterMotionPose struct {
 	motion *CharacterMotion
 	local  []motionTRS
 	world  []motionAffine
+	// held is the local pose Hold kept, and evaluated reports that local holds an evaluated pose.
+	held      []motionTRS
+	evaluated bool
 }
 
 func (m *CharacterMotion) NewPose() *CharacterMotionPose {
 	return &CharacterMotionPose{
 		motion: m, local: make([]motionTRS, len(m.nodes)), world: make([]motionAffine, len(m.nodes)),
+		held: make([]motionTRS, len(m.nodes)),
 	}
+}
+
+// Hold keeps the pose last evaluated, blend included, for EvaluateFrom to fade from. It reports false before the
+// first evaluation.
+func (p *CharacterMotionPose) Hold() bool {
+	if !p.evaluated {
+		return false
+	}
+	copy(p.held, p.local)
+	return true
 }
 
 // Evaluate writes into out, for every node, the 3x4 row-major matrix that moves a mod vertex bound to that node
@@ -846,6 +866,12 @@ func (p *CharacterMotionPose) Evaluate(clip, frame int, out [][12]float32) error
 // EvaluateBetween is Evaluate for the pose a fraction t of the way from frame to next: translations and scales
 // are interpolated linearly and rotations along the shorter arc.
 func (p *CharacterMotionPose) EvaluateBetween(clip, frame, next int, t float64, out [][12]float32) error {
+	return p.EvaluateFrom(0, clip, frame, next, t, out)
+}
+
+// EvaluateFrom is EvaluateBetween with the pose Hold kept mixed in by the share hold, from 0 for none to 1 for the
+// held pose alone, node by node in the same way frames are interpolated.
+func (p *CharacterMotionPose) EvaluateFrom(hold float64, clip, frame, next int, t float64, out [][12]float32) error {
 	m := p.motion
 	if clip < 0 || clip >= len(m.Clips) {
 		return fmt.Errorf("clip %d does not exist", clip)
@@ -880,6 +906,17 @@ func (p *CharacterMotionPose) EvaluateBetween(clip, frame, next int, t float64, 
 			}
 		}
 	}
+	if hold = min(max(hold, 0), 1); hold > 0 {
+		for i := range p.local {
+			local, held := &p.local[i], &p.held[i]
+			for k := range 3 {
+				local.t[k] += (held.t[k] - local.t[k]) * hold
+				local.s[k] += (held.s[k] - local.s[k]) * hold
+			}
+			local.r = slerpMotionQuaternion(local.r, held.r, hold)
+		}
+	}
+	p.evaluated = true
 	worlds, err := m.worlds(p.local, p.world)
 	if err != nil {
 		return err
@@ -917,6 +954,11 @@ func slerpMotionRotation(from, to []float32, t float64) ([4]float64, bool) {
 	case !okB:
 		return a, true
 	}
+	return slerpMotionQuaternion(a, b, t), true
+}
+
+// slerpMotionQuaternion interpolates two unit quaternions along the shorter arc.
+func slerpMotionQuaternion(a, b [4]float64, t float64) [4]float64 {
 	cos := a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
 	if cos < 0 {
 		cos = -cos
@@ -931,11 +973,14 @@ func slerpMotionRotation(from, to []float32, t float64) ([4]float64, bool) {
 	}
 	q := [4]float64{wa*a[0] + wb*b[0], wa*a[1] + wb*b[1], wa*a[2] + wb*b[2], wa*a[3] + wb*b[3]}
 	length := math.Sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
-	return [4]float64{q[0] / length, q[1] / length, q[2] / length, q[3] / length}, true
+	return [4]float64{q[0] / length, q[1] / length, q[2] / length, q[3] / length}
 }
 
 func normalizeMotionQuaternion(value []float32) ([4]float64, bool) {
-	q := [4]float64{float64(value[0]), float64(value[1]), float64(value[2]), float64(value[3])}
+	return unitMotionQuaternion([4]float64{float64(value[0]), float64(value[1]), float64(value[2]), float64(value[3])})
+}
+
+func unitMotionQuaternion(q [4]float64) ([4]float64, bool) {
 	length := math.Sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
 	if length == 0 || math.IsNaN(length) || math.IsInf(length, 0) {
 		return q, false

@@ -153,6 +153,55 @@ func TestCharacterMotionPose_EvaluateBetween(t *testing.T) {
 	}
 }
 
+func TestCharacterMotionPose_EvaluateFrom(t *testing.T) {
+	m := mirroredTestMotion(t)
+	m.Clips = append(m.Clips, CharacterMotionClip{Name: "rest", Frames: 1})
+	pose := m.NewPose()
+	if pose.Hold() {
+		t.Fatal("Hold before any evaluation = true")
+	}
+	evaluate := func(hold float64, clip int) [][12]float32 {
+		t.Helper()
+		out := make([][12]float32, m.NodeCount())
+		if err := pose.EvaluateFrom(hold, clip, 0, 0, 0, out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	near := func(got, want [][12]float32) bool {
+		for i := range got {
+			for k := range got[i] {
+				if math.Abs(float64(got[i][k]-want[i][k])) > 1e-6 {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
+	reach := evaluate(0, 0)
+	if !pose.Hold() {
+		t.Fatal("Hold after an evaluation = false")
+	}
+	if got := evaluate(1, 1); !near(got, reach) {
+		t.Errorf("fully held = %v, want the held pose %v", got, reach)
+	}
+	rest := evaluate(0, 1)
+	if got := rest[1][3]; got != 0 {
+		t.Errorf("unheld rest moves the left joint by %v, want 0", got)
+	}
+
+	// A change of clip mid-fade holds the blended pose shown, not the clip it was fading from.
+	halfway := evaluate(0.5, 1)
+	if got := halfway[1][3]; math.Abs(float64(got)+0.05) > 1e-6 {
+		t.Errorf("halfway moves the left joint by %v, want -0.05", got)
+	}
+	pose.Hold()
+	if got := evaluate(1, 0); !near(got, halfway) {
+		t.Errorf("held mid-fade = %v, want the blend shown %v", got, halfway)
+	}
+}
+
 // A rotation key with no length keeps the rest rotation, at the start of a blend as in a whole frame.
 func TestCharacterMotionPose_EvaluateBetweenZeroKey(t *testing.T) {
 	half := math.Sqrt(0.5)

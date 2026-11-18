@@ -293,9 +293,10 @@ func (v *ModelViewer) interpolation(track viewerTrack, now time.Time) float64 {
 }
 
 // interpolating reports a playback that draws between frames, which redraws the viewer on every frame. The mod's
-// playback does only while its clock runs and a mesh has a next frame's geometry to move towards.
+// playback does only while its clock runs and a mesh has a next frame's geometry to move towards; the motion's also
+// while it blends into a newly selected clip.
 func (v *ModelViewer) interpolating() bool {
-	if v.interpolates(trackMotion) {
+	if v.interpolates(trackMotion) || v.activeMotion().fading() {
 		return true
 	}
 	if !v.interpolates(trackMod) || !v.modClockRunning() {
@@ -353,7 +354,8 @@ func (v *ModelViewer) setAnimationPlaying(playing bool) {
 }
 
 // setTrackSpeed changes track's speed. Playing, it keeps the share of the frame shown already played, so a clip drawn
-// between frames goes on from where it is, and a mod clip waiting for frames to load keeps waiting.
+// between frames goes on from where it is, and a mod clip waiting for frames to load keeps waiting. A motion fading
+// into its clip keeps the share of the fade played.
 func (v *ModelViewer) setTrackSpeed(track viewerTrack, speed float64) {
 	p, clip := v.playback(track), v.trackClip(track)
 	if p == nil {
@@ -364,8 +366,16 @@ func (v *ModelViewer) setTrackSpeed(track viewerTrack, speed float64) {
 	if clip != nil {
 		phase = p.phase(clip, now)
 	}
+	var fading *viewerMotion
+	var faded float64
+	if m := v.activeMotion(); track == trackMotion && m.fading() {
+		fading, faded = m, m.fadeProgress(now)
+	}
 	p.speed = speed
 	p.clock++
+	if fading != nil {
+		fading.fadeStart = now.Add(-time.Duration(faded * float64(viewerMotionFade) / p.rate()))
+	}
 	if !p.playing || clip == nil {
 		return
 	}

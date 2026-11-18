@@ -1042,13 +1042,19 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		now := time.Now()
 		opts.morph = float32(v.interpolation(trackMod, now))
 		opts.interpolating = v.interpolating()
-		if err := v.poseMotion(v.interpolation(trackMotion, now)); err != nil {
+		if err := v.poseMotion(now); err != nil {
 			m := v.activeMotion()
 			v.poster()(func() {
 				if m != nil && v.charMotion == m {
 					v.failMotionPlay(err, "evaluate-pose")
 				}
 			})
+		}
+		// A blend between clips can pass through poses neither clip's bounds hold.
+		if skin := opts.skin; opts.toon != nil && skin.fading() {
+			if lo, hi, ok := motionBounds(skin.boxes, skin.bones); ok {
+				extendBounds(&opts.minimum, &opts.maximum, lo, hi, opts.world)
+			}
 		}
 		expressing := v.expressOriginal(now)
 		err := v.renderer.draw(f, scene, opts)
