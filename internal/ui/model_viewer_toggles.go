@@ -578,7 +578,7 @@ func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int, barShown bool) *
 	bottom := float32(viewerGameTextureNoticeMargin)
 	if left, top, _, ok := v.animationBarPlace(); barShown && ok {
 		// Before the notice is measured its width is 0, which counts as overlapping until the next layout.
-		overlapsRow := top+viewerAnimationBarHeight > v.height-viewerGameTextureNoticeMargin-viewerGameTextureNoticeHeight
+		overlapsRow := top+v.animationBarHeight() > v.height-viewerGameTextureNoticeMargin-viewerGameTextureNoticeHeight
 		overlapsColumn := v.gameTextureNoticeWidth == 0 ||
 			left < viewerGameTextureNoticeMargin+v.gameTextureNoticeWidth+8
 		if overlapsRow && overlapsColumn {

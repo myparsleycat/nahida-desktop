@@ -113,8 +113,7 @@ func (v *ModelViewer) syncSchedule() {
 		return
 	}
 	clip := v.animationClip()
-	// Motion clips skin the meshes the toggle state shows and change no state, so they need no schedule.
-	if clip == nil || len(clip.Frames) < 2 || v.anim.waves != nil || isMotionClip(clip) {
+	if clip == nil || len(clip.Frames) < 2 || v.anim.waves != nil {
 		v.cancelSchedule()
 		v.anim.scheduleKey, scene.schedule = viewerScheduleKey{}, nil
 		v.anim.scheduleRevision++

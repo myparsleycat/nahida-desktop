@@ -795,27 +795,27 @@ func viewerBounds(meshes []modelviewer.ModelViewerMeshTransport, world mat4) (ve
 		if mesh.Bounds == nil {
 			continue
 		}
-		lo, hi := mesh.Bounds.Min, mesh.Bounds.Max
-		for corner := range 8 {
-			p := vec3{lo[0], lo[1], lo[2]}
-			if corner&1 != 0 {
-				p[0] = hi[0]
-			}
-			if corner&2 != 0 {
-				p[1] = hi[1]
-			}
-			if corner&4 != 0 {
-				p[2] = hi[2]
-			}
-			p = world.point(p)
-			for axis := range 3 {
-				minimum[axis] = min(minimum[axis], p[axis])
-				maximum[axis] = max(maximum[axis], p[axis])
-			}
-			found = true
-		}
+		extendBounds(&minimum, &maximum, mesh.Bounds.Min, mesh.Bounds.Max, world)
+		found = true
 	}
 	return minimum, maximum, found
+}
+
+// extendBounds grows minimum and maximum over the box from lo to hi as world places it.
+func extendBounds(minimum, maximum *vec3, lo, hi vec3, world mat4) {
+	for corner := range 8 {
+		p := lo
+		for axis := range 3 {
+			if corner&(1<<axis) != 0 {
+				p[axis] = hi[axis]
+			}
+		}
+		p = world.point(p)
+		for axis := range 3 {
+			minimum[axis] = min(minimum[axis], p[axis])
+			maximum[axis] = max(maximum[axis], p[axis])
+		}
+	}
 }
 
 // waitsFor reports a position variant the wanted states select that its mesh has not built its geometry from.

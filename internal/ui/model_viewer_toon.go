@@ -848,6 +848,8 @@ func (v *ModelViewer) loadCharacter() {
 			}
 			// Shading being changed belongs to the style it was changed in.
 			v.flushToonDraft()
+			// The motion's skeleton and palette mapping belong to the previous character.
+			v.stopMotion()
 			v.character = next
 			v.revision++
 		})

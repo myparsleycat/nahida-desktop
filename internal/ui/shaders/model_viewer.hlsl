@@ -80,6 +80,8 @@ static const uint FLAG_LIGHT_SIGNED = 4194304;
 // The light map has the channels of WWMI's packed mask, not one or two.
 static const uint FLAG_PACKED_MASK = 8388608;
 static const uint FLAG_OUTLINE_MASK = 16777216;
+// A character motion poses the mesh with skinBlend and skinBones.
+static const uint FLAG_SKINNED = 33554432;
 
 // The body shape editor's brush cursor: a circle around centre spanned by u and v, in model space.
 cbuffer Ring : register(b2) {
@@ -161,6 +163,15 @@ Texture2D dataMap : register(t11);
 Texture2D highlightMap : register(t12);
 // EFMI's outline width mask, read by the outline hull's vertex shader.
 Texture2D outlineWidthMap : register(t13);
+// A posed mesh's bone weights by vertex, x and y holding four 16-bit skeleton nodes (0xffff for none) and z and w
+// their four 16-bit unorm weights, and the skeleton's 3x4 matrices from the rest pose to the motion's frame.
+struct SkinBone {
+    float4 r0;
+    float4 r1;
+    float4 r2;
+};
+StructuredBuffer<uint4> skinBlend : register(t14);
+StructuredBuffer<SkinBone> skinBones : register(t15);
 SamplerState linearWrap : register(s0);
 SamplerState linearClamp : register(s1);
 SamplerComparisonState shadowCompare : register(s2);
@@ -190,7 +201,40 @@ struct VSOut {
 // The mesh builder flips V for WebGL's bottom-up rows; Direct3D rows run top-down.
 float2 textureUV(float2 uv) { return float2(uv.x, 1 - uv.y); }
 
-VSOut vs_main(VSIn i) {
+// skin poses vertex id of a skinned mesh with linear blend skinning, its weights normalized to their sum, as the
+// game skins the mod's buffers; the tangent and outline direction turn with it.
+VSIn skin(VSIn i, uint id) {
+    if ((flags & FLAG_SKINNED) == 0) return i;
+    uint4 blend = skinBlend[id];
+    uint nodes[4] = { blend.x & 0xffff, blend.x >> 16, blend.y & 0xffff, blend.y >> 16 };
+    float weights[4] = {
+        (blend.z & 0xffff) / 65535.0, (blend.z >> 16) / 65535.0, (blend.w & 0xffff) / 65535.0, (blend.w >> 16) / 65535.0
+    };
+    float3x4 identity = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+    float3x4 m = 0;
+    float total = 0;
+    [unroll] for (uint k = 0; k < 4; k++) {
+        if (weights[k] == 0) continue;
+        float3x4 bone = identity;
+        if (nodes[k] != 0xffff) {
+            SkinBone b = skinBones[nodes[k]];
+            bone = float3x4(b.r0, b.r1, b.r2);
+        }
+        m += weights[k] * bone;
+        total += weights[k];
+    }
+    m = total > 0 ? m / total : identity;
+    float3x3 rotation = (float3x3)m;
+    i.pos = mul(m, float4(i.pos, 1));
+    float3 normal = mul(rotation, i.normal);
+    i.normal = dot(normal, normal) > 0 ? normalize(normal) : 0;
+    i.tangent.xyz = mul(rotation, i.tangent.xyz);
+    i.outline = mul(rotation, i.outline);
+    return i;
+}
+
+VSOut vs_main(VSIn i, uint id : SV_VertexID) {
+    i = skin(i, id);
     VSOut o;
     float4 worldPos = mul(world, float4(i.pos, 1));
     o.pos = mul(viewProj, worldPos);
@@ -208,7 +252,8 @@ VSOut vs_main(VSIn i) {
 }
 
 // The depth of the shadow map, seen from the key light.
-float4 vs_shadow(VSIn i) : SV_Position {
+float4 vs_shadow(VSIn i, uint id : SV_VertexID) : SV_Position {
+    i = skin(i, id);
     return mul(shadowViewProj, mul(world, float4(i.pos, 1)));
 }
 
@@ -1168,7 +1213,8 @@ OutlineOut srmiOutline(VSIn i) {
 // HoyoToon's Genshin hull: it extrudes in view space along the smoothed normal, flattened onto the screen, by a
 // width that grows with distance in two linear pieces and scales with the vertex colour's alpha, and it is
 // pushed slightly away from the camera.
-OutlineOut vs_outline(VSIn i) {
+OutlineOut vs_outline(VSIn i, uint id : SV_VertexID) {
+    i = skin(i, id);
     uint mode = toonMode();
     if (mode == TOON_SRMI) return srmiOutline(i);
     if (mode == TOON_ZZMI) return zzmiOutline(i);

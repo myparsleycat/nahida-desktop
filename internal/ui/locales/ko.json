@@ -1658,7 +1658,7 @@
         "animation_end": "끝으로",
         "animation_time": "{{seconds}}초",
         "animation_duration": "/ {{total}}",
-        "animation_mod_clips": "모드 애니메이션",
+        "animation_motion_off": "캐릭터 모션 끄기",
         "animation_move": "컨트롤러 이동",
         "menu": {
           "model": "모델",
@@ -1758,6 +1758,7 @@
           "capture_not_ready": "모델을 불러오는 중입니다.",
           "load_error": "모델을 불러오지 못했습니다.",
           "motion_error": "캐릭터 모션을 불러오지 못했습니다.",
+          "motion_play_error": "캐릭터 모션을 재생하지 못했습니다.",
           "motion_no_blend": "모드에 모션을 적용할 본 가중치가 없습니다."
         },
         "rotate_actions": {

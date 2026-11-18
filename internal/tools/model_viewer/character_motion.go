@@ -877,3 +877,6 @@ func (p *CharacterMotionPose) Evaluate(clip, frame int, out [][12]float32) error
 
 // NodeCount is the length of the output Evaluate writes.
 func (m *CharacterMotion) NodeCount() int { return len(m.nodes) }
+
+// NodeParent is the parent of node i in the skeleton, or -1 for a root.
+func (m *CharacterMotion) NodeParent(i int) int { return m.nodes[i].parent }

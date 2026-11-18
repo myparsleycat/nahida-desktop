@@ -189,6 +189,7 @@ const (
 	viewerFlagLightSigned   = 1 << 22
 	viewerFlagPackedMask    = 1 << 23
 	viewerFlagOutlineMask   = 1 << 24
+	viewerFlagSkinned       = 1 << 25
 )
 
 // viewerShadowMapSize is the React viewer's key light shadow map size.
@@ -228,6 +229,8 @@ type viewerDrawOptions struct {
 	ring *viewerRing
 	// overlay is a tool's markers over the model, or nil.
 	overlay *viewerOverlayDraw
+	// skin is the character motion that poses the meshes, or nil.
+	skin *viewerMotion
 }
 
 // viewerRing is a circle drawn over the model without depth testing, in model space.
@@ -601,6 +604,8 @@ type viewerShadowKey struct {
 	gpu             *viewerGPUSet
 	viewProj, world [16]float32
 	doubleSided     bool
+	// posed is the pose of the character motion that posed the casters, or 0 without one.
+	posed uint64
 }
 
 func (r *viewerRenderer) releaseShadow() {
@@ -765,8 +770,15 @@ func (r *viewerRenderer) drawScene(
 	ctx.PSSetConstantBuffers(3, r.characterCB)
 	// A mod's meshes share a few stock materials, so the character constants are written only when they change.
 	var written *characterMaterial
+	// Without its buffers the motion leaves the meshes unposed; the viewer turns it off once the draw returns.
+	var skin *viewerSkinGPU
+	if opts.skin != nil {
+		if skin = opts.skin.skinGPU(ctx, f.GPU().Device, f.Generation); skin != nil {
+			ctx.VSSetShaderResources(15, skin.bonesView)
+		}
+	}
 	if shadowed {
-		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, &frame); err != nil {
+		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, &frame); err != nil {
 			return err
 		}
 	} else if r.shadowSRV.P != nil {
@@ -836,6 +848,16 @@ func (r *viewerRenderer) drawScene(
 			coverage := material.constants.flags&viewerFlagCoverage != 0
 			if coverage != (pass == "blended") {
 				continue
+			}
+			if blend, ok := skin.blend(i, mesh.vertexCount); ok {
+				material.constants.flags |= viewerFlagSkinned
+				if material.constants.flags&viewerFlagFace != 0 {
+					forward := opts.skin.turn(i, mesh.faceForward)
+					material.constants.faceForward = [4]float32{
+						float32(forward[0]), float32(forward[1]), float32(forward[2]),
+					}
+				}
+				ctx.VSSetShaderResources(14, blend)
 			}
 			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{material.constants}); err != nil {
 				return err
@@ -910,6 +932,7 @@ func (r *viewerRenderer) drawShadowMap(
 	dev d3d.Device,
 	scene *viewerScene,
 	opts viewerDrawOptions,
+	skin *viewerSkinGPU,
 	frame *viewerFrameConstants,
 ) error {
 	if err := r.shadowTargets(dev); err != nil {
@@ -930,6 +953,9 @@ func (r *viewerRenderer) drawShadowMap(
 	}
 	key := viewerShadowKey{
 		gpu: gpu, viewProj: frame.shadowViewProj, world: frame.world, doubleSided: opts.doubleSided,
+	}
+	if skin != nil {
+		key.posed = skin.posed
 	}
 	if r.shadowDrawn && key == r.shadowKey && slices.Equal(casters, r.shadowCasters) &&
 		slices.Equal(buffers, r.shadowBuffers) {
@@ -953,7 +979,22 @@ func (r *viewerRenderer) drawShadowMap(
 	}
 	ctx.VSSetShader(r.shadowVS)
 	ctx.PSSetShader(d3d.PixelShader{})
+	// The shadow's vertex shader reads only whether the mesh is skinned, so the constants change only with that.
+	written := false
+	var constants viewerMeshConstants
 	for _, i := range casters {
+		var flags uint32
+		if blend, ok := skin.blend(i, scene.meshes[i].vertexCount); ok {
+			flags = viewerFlagSkinned
+			ctx.VSSetShaderResources(14, blend)
+		}
+		if !written || flags != constants.flags {
+			constants.flags = flags
+			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{constants}); err != nil {
+				return err
+			}
+			written = true
+		}
 		r.drawMesh(ctx, gpu.meshes[i])
 	}
 	return nil

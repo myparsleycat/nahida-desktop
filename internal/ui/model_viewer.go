@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"math"
 	"strings"
 	"time"
 
@@ -235,7 +236,7 @@ func (v *ModelViewer) Close() {
 
 func (v *ModelViewer) releaseScene() {
 	v.stopCompute(false)
-	v.stopMotion(false)
+	v.stopMotion()
 	scene := v.scene
 	v.scene = nil
 	if scene == nil {
@@ -401,7 +402,10 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	}
 	v.overlayMenus = newViewerOverlayMenus()
 	v.cancelSchedule()
+	// The clock keeps counting, so a tick the previous scene scheduled never matches the new playback.
+	clock := v.anim.clock
 	v.anim = viewerAnimation{waves: modelviewer.NewShapeWavePlayback(scene.transport.Meshes)}
+	v.anim.clock = clock
 	v.evaluate()
 	v.startAnimation("")
 	v.refreshIneffective()
@@ -530,7 +534,6 @@ func (v *ModelViewer) loadMesh(i int) {
 			scene.gpu.meshes[i] = buffers
 			mesh.fill(decoded)
 			v.dropCPU(mesh)
-			v.motionMeshLoaded(i)
 			unloaded := scene.storeMesh(i)
 			if len(unloaded) > 0 {
 				_ = fairy.UseDevice(func(fairy.GPU) error {
@@ -815,6 +818,9 @@ func (v *ModelViewer) drawOptions(background [4]float32) viewerDrawOptions {
 	if v.scene == nil {
 		return opts
 	}
+	if m := v.activeMotion(); m != nil && m.gpuErr == nil {
+		opts.skin = m
+	}
 	opts.profile = string(v.scene.transport.MaterialProfile)
 	opts.metalness, opts.roughness = viewerBaseMaterial(v.scene.transport.MaterialProfile)
 	if v.toonActive() {
@@ -825,9 +831,37 @@ func (v *ModelViewer) drawOptions(background [4]float32) viewerDrawOptions {
 			opts.toon.characterUse, opts.toon.characterScale = characterMaterialUse(opts.toon.profile,
 				style.characterShading, style.Shading)
 		}
-		opts.minimum, opts.maximum, _ = viewerBounds(v.scene.transport.Meshes, opts.world)
+		opts.minimum, opts.maximum = v.modelBounds(opts.skin, opts.world)
 	}
 	return opts
+}
+
+// modelBounds bounds the model as world places it. The meshes skin poses are bounded by every pose of its clip, and
+// those whose geometry no longer fits their bone weights, which draw unposed, by their own bounds.
+func (v *ModelViewer) modelBounds(skin *viewerMotion, world mat4) (vec3, vec3) {
+	meshes := v.scene.transport.Meshes
+	minimum, maximum, found := vec3{}, vec3{}, false
+	if skin != nil {
+		minimum = vec3{math.Inf(1), math.Inf(1), math.Inf(1)}
+		maximum = vec3{math.Inf(-1), math.Inf(-1), math.Inf(-1)}
+		for _, box := range []viewerMotionBox{skin.restBox, skin.clipBox} {
+			if box.ok {
+				extendBounds(&minimum, &maximum, box.minimum, box.maximum, world)
+				found = true
+			}
+		}
+		for _, mesh := range skin.meshes {
+			bounds := meshes[mesh.index].Bounds
+			if bounds != nil && v.scene.meshes[mesh.index].vertexCount != mesh.vertices {
+				extendBounds(&minimum, &maximum, bounds.Min, bounds.Max, world)
+				found = true
+			}
+		}
+	}
+	if !found {
+		minimum, maximum, _ = viewerBounds(meshes, world)
+	}
+	return minimum, maximum
 }
 
 // drag orbits with the left button and pans with the others or with Shift. The camera follows with the
@@ -963,6 +997,14 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		case err == nil && v.drawErr != "":
 			v.drawErr = ""
 			cx.Window().Update()
+		}
+		if m := v.activeMotion(); m != nil && m.gpuErr != nil {
+			failed, stage := m.gpuErr, m.gpuStage
+			v.poster()(func() {
+				if v.charMotion == m {
+					v.failMotionPlay(failed, stage)
+				}
+			})
 		}
 		if v.motion.running {
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.

@@ -1658,7 +1658,7 @@
         "animation_end": "末尾へ",
         "animation_time": "{{seconds}} 秒",
         "animation_duration": "/ {{total}}",
-        "animation_mod_clips": "MOD アニメーション",
+        "animation_motion_off": "キャラクターモーションをオフ",
         "animation_move": "コントローラーを移動",
         "menu": {
           "model": "モデル",
@@ -1758,6 +1758,7 @@
           "capture_not_ready": "モデルを読み込み中です",
           "load_error": "モデルの読み込みに失敗しました",
           "motion_error": "キャラクターモーションの読み込みに失敗しました",
+          "motion_play_error": "キャラクターモーションの再生に失敗しました",
           "motion_no_blend": "MOD にモーションを適用するボーンウェイトがありません"
         },
         "rotate_actions": {

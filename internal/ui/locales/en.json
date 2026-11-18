@@ -1664,7 +1664,7 @@
         "animation_end": "Go to end",
         "animation_time": "{{seconds}} s",
         "animation_duration": "of {{total}}",
-        "animation_mod_clips": "Mod animations",
+        "animation_motion_off": "Turn off character motion",
         "animation_move": "Move controller",
         "menu": {
           "model": "Model",
@@ -1764,6 +1764,7 @@
           "capture_not_ready": "The model is still loading",
           "load_error": "Failed to load the model",
           "motion_error": "Failed to load the character motion",
+          "motion_play_error": "Failed to play the character motion",
           "motion_no_blend": "The mod has no bone weights to animate"
         },
         "rotate_actions": {
