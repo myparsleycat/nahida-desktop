@@ -556,8 +556,16 @@ func (v *ModelViewer) gameTextureCount() int {
 	return count
 }
 
-// gameTextureNotice counts the parts drawn without a texture and switches their highlight.
-func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int) *fairy.El {
+// viewerGameTextureNoticeMargin is the game texture notice's distance from the viewer's bottom-left corner, and
+// viewerGameTextureNoticeHeight its height as a small button.
+const (
+	viewerGameTextureNoticeMargin = 12
+	viewerGameTextureNoticeHeight = 28
+)
+
+// gameTextureNotice counts the parts drawn without a texture and switches their highlight. When the animation bar
+// is shown over the place it occupies, the notice sits just above the bar.
+func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int, barShown bool) *fairy.El {
 	label := T("page.tools.model_viewer.game_textures", "count", count)
 	button := kit.Button(label, func() {
 		v.highlightGameTextures = !v.highlightGameTextures
@@ -567,7 +575,24 @@ func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int) *fairy.El {
 		amber := fairy.Hex(viewerGameTextureHighlight)
 		button.Border(1, amber).Color(amber)
 	}
-	return fairy.Box(button).Absolute().Bottom(12).Left(12)
+	bottom := float32(viewerGameTextureNoticeMargin)
+	if left, top, _, ok := v.animationBarPlace(); barShown && ok {
+		// Before the notice is measured its width is 0, which counts as overlapping until the next layout.
+		overlapsRow := top+viewerAnimationBarHeight > v.height-viewerGameTextureNoticeMargin-viewerGameTextureNoticeHeight
+		overlapsColumn := v.gameTextureNoticeWidth == 0 ||
+			left < viewerGameTextureNoticeMargin+v.gameTextureNoticeWidth+8
+		if overlapsRow && overlapsColumn {
+			bottom = v.height - top + 8
+		}
+	}
+	return fairy.Box(button).Absolute().Bottom(bottom).Left(viewerGameTextureNoticeMargin).
+		OnLayout(func(w, _ float32) bool {
+			if v.gameTextureNoticeWidth == w {
+				return false
+			}
+			v.gameTextureNoticeWidth = w
+			return true
+		})
 }
 
 // sideSplit lays the viewer beside the side column. Without a tool the column is the toggles alone, which a

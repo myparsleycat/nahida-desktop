@@ -67,9 +67,11 @@ type ModelViewer struct {
 	overlayMenus viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
 	highlightGameTextures bool
-	camera                orbitCamera
-	home                  orbitCamera
-	normalMaps            bool
+	// gameTextureNoticeWidth is the measured width of the game texture notice.
+	gameTextureNoticeWidth float32
+	camera                 orbitCamera
+	home                   orbitCamera
+	normalMaps             bool
 	// orientation is the user's turn of the model in degrees of roll, pitch and yaw.
 	orientation vec3
 	doubleSided bool
@@ -993,6 +995,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	}
 
 	viewport := fairy.Box(surface).Grow(1).MinH(320).MinW(0).Radius(6).Clip()
+	var bar *fairy.El
 	if scene != nil && !v.loading {
 		viewport.Child(v.axisGizmo(t))
 		if v.overlayInViewer() {
@@ -1005,8 +1008,9 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		if len(scene.transport.Forms) > 1 {
 			viewport.Child(v.formSwitcher())
 		}
+		bar = v.animationBar(t)
 		if count := v.gameTextureCount(); count > 0 {
-			viewport.Child(v.gameTextureNotice(t, count))
+			viewport.Child(v.gameTextureNotice(t, count, bar != nil))
 		}
 	}
 	switch {
@@ -1034,6 +1038,10 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			kit.Button(T("page.tools.model_viewer.retry"), v.retryDraw),
 		).Absolute().Inset(0).Center().Gap(10).Pad(24))
 	}
+	// The bar goes over the error messages so playback stays usable while they show.
+	if bar != nil {
+		viewport.Child(bar)
+	}
 
 	main := fairy.Col().Gap(12).WFull().HFull().Fill(t.Background).Color(t.Foreground)
 	if header != nil {
@@ -1045,9 +1053,6 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	main.Child(v.menuBar().Shrink(0))
 	width, _ := cx.Size()
 	main.Child(v.sideSplit(t, viewport, width))
-	if bar := v.animationBar(t); bar != nil {
-		main.Child(bar)
-	}
 	return main
 }
 

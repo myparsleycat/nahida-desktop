@@ -5,29 +5,37 @@ import (
 	"maps"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/icons/lucide"
+	"github.com/myparsleycat/fairy/keyboard"
 	"github.com/myparsleycat/fairy/kit"
 
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
-const (
-	viewerMinFPS = 1
-	viewerMaxFPS = 1000
-)
+// viewerSpeeds are the playback rates the speed menu offers, as multiples of the clip's rate.
+var viewerSpeeds = []float64{0.25, 0.5, 1, 1.5, 2}
 
 // viewerAnimation is the playback of the transport's animation clips.
 type viewerAnimation struct {
 	clipID  string
 	frame   int
 	playing bool
-	// fps replaces the clip's rate; zero keeps it.
-	fps float64
+	// speed multiplies the clip's rate; zero plays it at its own rate.
+	speed float64
+	// scrubWidth is the measured width of the frame scrubber.
+	scrubWidth float32
+	// barAt is where the bar was moved to, as fractions of the viewer's width and height; nil keeps it centered at
+	// the bottom. barDrag is the bar's position when a drag of it started, and barDragFrom the barAt a canceled
+	// drag restores.
+	barAt       *[2]float32
+	barDrag     [2]float32
+	barDragFrom *[2]float32
 	// values are what the current frame sets over the toggles.
 	values map[string]any
 	waves  *modelviewer.ShapeWavePlayback
@@ -37,8 +45,6 @@ type viewerAnimation struct {
 	applied time.Time
 	// resume holds whether playback continues once a drag of the frame slider ends.
 	resume *bool
-	// fpsDraft is the rate being typed while its popover is open.
-	fpsDraft *string
 	// warmSince is set while playback waits, from that time, for the frames ahead to load before its clock runs.
 	warmSince *time.Time
 	// scheduleKey is what the scene's schedule is built, or being built, for; scheduleRevision numbers the builds,
@@ -79,10 +85,19 @@ func normalizeAnimationFPS(fps float64) float64 {
 
 // animationFPS is the rate the clip plays at.
 func (v *ModelViewer) animationFPS(clip *modelviewer.ModelViewerAnimationClip) float64 {
-	if v.anim.fps > 0 {
-		return v.anim.fps
+	return normalizeAnimationFPS(clip.FPS) * v.animationSpeed()
+}
+
+func (v *ModelViewer) animationSpeed() float64 {
+	if v.anim.speed > 0 {
+		return v.anim.speed
 	}
-	return normalizeAnimationFPS(clip.FPS)
+	return 1
+}
+
+func (v *ModelViewer) setAnimationSpeed(speed float64) {
+	v.anim.speed = speed
+	v.runAnimationClock()
 }
 
 // advanceAnimationFrame steps a clip from current by the whole frames that fit in elapsed. It returns the time
@@ -124,7 +139,7 @@ func loopAnimationFrame(clip *modelviewer.ModelViewerAnimationClip, index int) i
 // first frame when it has more than one.
 func (v *ModelViewer) startAnimation(clipID string) {
 	v.anim.clipID = clipID
-	v.anim.frame, v.anim.fps, v.anim.resume, v.anim.fpsDraft = 0, 0, nil, nil
+	v.anim.frame, v.anim.resume = 0, nil
 	clip := v.animationClip()
 	v.anim.playing = clip != nil && len(clip.Frames) > 1
 	v.syncCompute()
@@ -296,55 +311,237 @@ func (v *ModelViewer) upcomingAnimationStates(form string) [][]modelviewer.Viewe
 	return upcoming
 }
 
-func clampViewerFPS(value float64) float64 {
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return viewerMinFPS
+// viewerAnimationBarHeight and viewerAnimationBarMaxWidth size the playback controller, viewerAnimationBarMargin
+// is its default distance from the viewer's edges, and viewerScrubInset how far the scrubber's first and last frames
+// sit from its ends.
+const (
+	viewerAnimationBarHeight   = 36
+	viewerAnimationBarMaxWidth = 560
+	viewerAnimationBarMargin   = 12
+	viewerScrubInset           = 6
+	// viewerAnimationBarKeyStep is how far an arrow key moves the bar.
+	viewerAnimationBarKeyStep = 16
+	// A bar narrower than viewerAnimationBarFullWidth leaves out the jumps to the clip's ends, one narrower than
+	// viewerAnimationBarCompactWidth the time as well, and one narrower than viewerAnimationBarMinWidth is not shown.
+	viewerAnimationBarFullWidth    = 360
+	viewerAnimationBarCompactWidth = 300
+	viewerAnimationBarMinWidth     = 232
+)
+
+// animationBarPlace is where the animation bar sits in the viewer's measured size, and false while the viewer is
+// too narrow for it.
+func (v *ModelViewer) animationBarPlace() (left, top, width float32, ok bool) {
+	width = min(v.width-2*viewerAnimationBarMargin, viewerAnimationBarMaxWidth)
+	if width < viewerAnimationBarMinWidth {
+		return 0, 0, 0, false
 	}
-	return min(max(math.Round(value), viewerMinFPS), viewerMaxFPS)
+	if at := v.anim.barAt; at != nil {
+		left, top = v.clampAnimationBar(at[0]*v.width, at[1]*v.height, width)
+		return left, top, width, true
+	}
+	return (v.width - width) / 2, v.height - viewerAnimationBarMargin - viewerAnimationBarHeight, width, true
 }
 
-// animationBar is the playback row under the viewer: the clip, its rate and frame, a frame slider and the
-// play button.
+// clampAnimationBar keeps a bar of width at left, top inside the viewer.
+func (v *ModelViewer) clampAnimationBar(left, top, width float32) (float32, float32) {
+	return min(max(left, 0), max(v.width-width, 0)), min(max(top, 0), max(v.height-viewerAnimationBarHeight, 0))
+}
+
+// moveAnimationBar places a bar of width at left, top, kept inside the viewer.
+func (v *ModelViewer) moveAnimationBar(left, top, width float32) {
+	left, top = v.clampAnimationBar(left, top, width)
+	v.anim.barAt = &[2]float32{left / max(v.width, 1), top / max(v.height, 1)}
+}
+
+// animationBar is the playback controller floating over the viewer: a grip that moves it, the play button, the
+// clip, a frame scrubber between jumps to the clip's ends, the time and the speed. It is centered at the bottom
+// until moved.
 func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 	clip := v.animationClip()
-	if clip == nil {
+	left, top, width, ok := v.animationBarPlace()
+	if clip == nil || !ok {
 		return nil
 	}
-	clips := v.animationClips()
+	move := T("page.tools.model_viewer.animation_move")
+	grip := fairy.Box(fairy.Icon(lucide.GripVertical).Size(14, 14)).Size(16, 28).Center().Shrink(0).Radius(4).
+		Color(t.MutedForeground).HoverColor(t.Foreground).Cursor(fairy.CursorMove).Label(move).Tooltip(move).
+		Focusable().FocusRing(3, t.Ring.Alpha(0.5)).
+		OnDoubleClick(func() { v.anim.barAt = nil }).
+		OnDrag(func(d fairy.DragEvent) {
+			if d.Phase == fairy.DragStart {
+				v.anim.barDrag, v.anim.barDragFrom = [2]float32{left, top}, v.anim.barAt
+			}
+			if d.Canceled {
+				v.anim.barAt = v.anim.barDragFrom
+				return
+			}
+			v.moveAnimationBar(v.anim.barDrag[0]+d.DX, v.anim.barDrag[1]+d.DY, width)
+		}).
+		OnKey(func(k keyboard.KeyEvent) bool {
+			if k.Mods != 0 {
+				return false
+			}
+			const step = viewerAnimationBarKeyStep
+			switch k.Key {
+			case keyboard.KeyLeft:
+				v.moveAnimationBar(left-step, top, width)
+			case keyboard.KeyRight:
+				v.moveAnimationBar(left+step, top, width)
+			case keyboard.KeyUp:
+				v.moveAnimationBar(left, top-step, width)
+			case keyboard.KeyDown:
+				v.moveAnimationBar(left, top+step, width)
+			case keyboard.KeyHome:
+				v.anim.barAt = nil
+			default:
+				return false
+			}
+			return true
+		})
+
 	last := max(len(clip.Frames)-1, 0)
+	still := len(clip.Frames) <= 1
+
+	icon, label := lucide.Play, T("page.tools.model_viewer.animation_play")
+	if v.anim.playing {
+		icon, label = lucide.Pause, T("page.tools.model_viewer.animation_pause")
+	}
+	full := width >= viewerAnimationBarFullWidth
+	pill := fairy.Row(
+		grip,
+		kit.IconButton(icon, func() { v.setAnimationPlaying(!v.anim.playing) }, kit.Ghost, kit.Small,
+			kit.Disabled(still)).Label(label),
+		v.animationClipMenu(t, clip),
+	).Key("model-viewer.animation").Gap(2).Align(fairy.Center).H(viewerAnimationBarHeight).PadXY(4, 0).
+		Radius(viewerAnimationBarHeight/2).Color(t.PopoverForeground).Border(1, t.Border).
+		Shadow(0, 8, 24, 0, shadowColor(&t)).Absolute().Left(left).Top(top).W(width)
+	if full {
+		start := T("page.tools.model_viewer.animation_start")
+		pill.Child(kit.IconButton(lucide.SkipBack, func() { v.setAnimationFrame(0) }, kit.Ghost, kit.Small,
+			kit.Disabled(still), kit.Tooltip(start)).Label(start))
+	}
+	pill.Child(v.animationScrubber(t, clip, last))
+	if full {
+		end := T("page.tools.model_viewer.animation_end")
+		pill.Child(kit.IconButton(lucide.SkipForward, func() { v.setAnimationFrame(last) }, kit.Ghost, kit.Small,
+			kit.Disabled(still), kit.Tooltip(end)).Label(end))
+	}
+	if width >= viewerAnimationBarCompactWidth {
+		pill.Child(v.animationTime(t, clip))
+	}
+	pill.Child(v.animationSpeedMenu(t))
+	return glass(pill, opacity(t.Popover, t.SurfaceAlpha), t.Popover, t.SurfaceBlur)
+}
+
+// animationClipMenu names the clip shown and, when there are others, opens a menu to pick one.
+func (v *ModelViewer) animationClipMenu(t kit.Theme, clip *modelviewer.ModelViewerAnimationClip) *fairy.El {
+	icon := lucide.Clapperboard
+	if strings.HasPrefix(clip.ID, motionClipPrefix) {
+		icon = lucide.PersonStanding
+	}
+	trigger := fairy.Row(
+		fairy.Icon(icon).Size(14, 14).Shrink(0),
+		fairy.Text(clip.Label).FontSize(12).LineHeight(16).Medium().Ellipsis().MinW(0),
+	).Gap(5).Align(fairy.Center).H(28).PadXY(8, 0).MinW(0).MaxW(160).Radius(14)
+	clips := v.animationClips()
+	if len(clips) <= 1 {
+		return trigger
+	}
+
+	trigger.Child(fairy.Icon(lucide.ChevronUp).Size(12, 12).Shrink(0).Color(t.MutedForeground)).
+		HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).Role(fairy.RoleButton).Focusable().
+		FocusRing(3, t.Ring.Alpha(0.5)).
+		Label(T("page.tools.model_viewer.animation_clip")).Key("model-viewer.animation-clip-trigger")
+	items := func() []kit.MenuItem {
+		var mod, motion []kit.MenuItem
+		for _, entry := range clips {
+			item := kit.MenuItem{
+				Label: entry.Label, Radio: true, Checked: entry.ID == clip.ID,
+				OnClick: func() { v.startAnimation(entry.ID) },
+			}
+			if strings.HasPrefix(entry.ID, motionClipPrefix) {
+				motion = append(motion, item)
+			} else {
+				mod = append(mod, item)
+			}
+		}
+		if len(mod) == 0 || len(motion) == 0 {
+			return slices.Concat(mod, motion)
+		}
+		return slices.Concat(
+			[]kit.MenuItem{{Heading: true, Label: T("page.tools.model_viewer.animation_mod_clips")}},
+			mod,
+			[]kit.MenuItem{
+				{Separator: true},
+				{Heading: true, Label: T("page.tools.model_viewer.menu.character_motion")},
+			},
+			motion,
+		)
+	}
+	return kit.DropdownMenuFunc("model-viewer.animation-clip", trigger, items, kit.MaxHeight(320))
+}
+
+// animationScrubber shows the clip's frames as ticks with the frame shown as a playhead. A press or drag seeks,
+// and playback pauses while it is dragged and continues from where it is let go.
+func (v *ModelViewer) animationScrubber(t kit.Theme, clip *modelviewer.ModelViewerAnimationClip, last int) *fairy.El {
+	const height = 22
+	usable := v.anim.scrubWidth - 2*viewerScrubInset
+	at := func(frame int) float32 {
+		if last == 0 || usable <= 0 {
+			return viewerScrubInset
+		}
+		return viewerScrubInset + float32(frame)/float32(last)*usable
+	}
+	seek := func(x, width float32) {
+		fraction := min(max(float64((x-viewerScrubInset)/max(width-2*viewerScrubInset, 1)), 0), 1)
+		v.setAnimationFrame(int(math.Round(fraction * float64(last))))
+	}
+
+	scrub := fairy.Box().Key("model-viewer.animation-frame").Grow(1).MinW(80).H(height).
+		OnLayout(func(w, _ float32) bool {
+			if v.anim.scrubWidth == w {
+				return false
+			}
+			v.anim.scrubWidth = w
+			return true
+		})
+	if usable > 0 && last > 0 {
+		type tickVersion struct {
+			last   int
+			usable float32
+			color  fairy.Color
+		}
+		color := t.MutedForeground.Alpha(0.5)
+		scrub.Child(fairy.Memo("model-viewer.animation-ticks", tickVersion{last, usable, color}, func() *fairy.El {
+			ticks := fairy.Box().Absolute().Inset(0).PassThrough()
+			step := animationTickStep(last, usable)
+			for i := 0; i*step <= last; i++ {
+				size := float32(5)
+				if i%5 == 0 {
+					size = 10
+				}
+				ticks.Child(fairy.Box().Absolute().Left(at(i*step)-0.5).Top((height-size)/2).Size(1, size).
+					Fill(color).PassThrough())
+			}
+			return ticks
+		}))
+	}
+	scrub.Child(fairy.Box().Absolute().Left(at(v.anim.frame)-1.5).Top(4).Size(3, height-8).Radius(1.5).
+		Fill(t.Primary).FocusRing(3, t.Ring.Alpha(0.5)).FocusFromParent().PassThrough())
+
 	current := clip.FrameStart
 	if v.anim.frame < len(clip.Frames) {
 		current = clip.Frames[v.anim.frame].Index
 	}
-
-	var title *fairy.El
-	if len(clips) > 1 {
-		items := make([]kit.Item, len(clips))
-		for i, entry := range clips {
-			items[i] = kit.Item{Value: entry.ID, Label: entry.Label}
-		}
-		title = kit.Select("model-viewer.animation-clip", clip.ID, items, v.startAnimation,
-			kit.Small, kit.Label(T("page.tools.model_viewer.animation_clip"))).WFull()
-	} else {
-		title = fairy.Text(clip.Label).FontSize(14).LineHeight(20).Medium().Ellipsis()
-	}
-	info := fairy.Row(
-		v.fpsControl(t, clip),
-		fairy.Text(" · "+T("page.tools.model_viewer.animation_frame", "current", current, "end", clip.FrameEnd)).
-			FontSize(12).LineHeight(16),
-	).FontSize(12).Color(t.MutedForeground).Align(fairy.Center)
-
-	seek := func(x, width float32) {
-		const thumb = 12
-		fraction := min(max(float64((x-thumb/2)/max(width-thumb, 1)), 0), 1)
-		v.setAnimationFrame(int(math.Round(fraction * float64(last))))
-	}
-	slider := kit.Slider(float64(v.anim.frame), 0, float64(last), 1, func(frame float64) {
-		v.setAnimationFrame(int(frame))
-	}, kit.Label(T("page.tools.model_viewer.animation_frame_slider"))).Key("model-viewer.animation-frame").
-		Grow(1).MinW(0).
+	return scrub.Role(fairy.RoleSlider).
+		RangeValue(float64(v.anim.frame), 0, float64(last), 1, func(frame float64) {
+			v.setAnimationFrame(int(math.Round(frame)))
+		}).
+		Label(T("page.tools.model_viewer.animation_frame_slider")).
+		Tooltip(T("page.tools.model_viewer.animation_frame", "current", current, "end", clip.FrameEnd)).
+		Cursor(fairy.CursorPointer).
+		Focusable().
 		OnPointerDown(func(p fairy.PointerEvent) { seek(p.LocalX, p.W) }).
-		// Playback pauses while the slider is dragged and continues from where it is let go.
 		OnDrag(func(d fairy.DragEvent) {
 			if d.Phase == fairy.DragStart && v.anim.resume == nil {
 				playing := v.anim.playing
@@ -357,71 +554,80 @@ func (v *ModelViewer) animationBar(t kit.Theme) *fairy.El {
 				v.anim.resume = nil
 				v.setAnimationPlaying(resume)
 			}
+		}).
+		OnKey(func(k keyboard.KeyEvent) bool {
+			if k.Mods != 0 {
+				return false
+			}
+			switch k.Key {
+			case keyboard.KeyLeft, keyboard.KeyDown:
+				v.setAnimationFrame(v.anim.frame - 1)
+			case keyboard.KeyRight, keyboard.KeyUp:
+				v.setAnimationFrame(v.anim.frame + 1)
+			case keyboard.KeyHome:
+				v.setAnimationFrame(0)
+			case keyboard.KeyEnd:
+				v.setAnimationFrame(last)
+			default:
+				return false
+			}
+			return true
 		})
-
-	icon, label := lucide.Play, T("page.tools.model_viewer.animation_play")
-	if v.anim.playing {
-		icon, label = lucide.Pause, T("page.tools.model_viewer.animation_pause")
-	}
-	return fairy.Row(
-		fairy.Col(title, info).W(144).MinW(0).Shrink(0),
-		fairy.Row(
-			fairy.Text(strconv.Itoa(clip.FrameStart)).FontSize(12).LineHeight(16).Color(t.MutedForeground),
-			slider,
-			fairy.Text(strconv.Itoa(clip.FrameEnd)).FontSize(12).LineHeight(16).Color(t.MutedForeground),
-		).Gap(12).Align(fairy.Center).Grow(1).MinW(0),
-		kit.IconButton(icon, func() { v.setAnimationPlaying(!v.anim.playing) },
-			kit.Ghost, kit.Disabled(len(clip.Frames) <= 1)).Label(label),
-	).Key("model-viewer.animation").Gap(8).Align(fairy.Center).PadXY(8, 0).Shrink(0)
 }
 
-// fpsControl shows the playback rate and opens a field to change it.
-func (v *ModelViewer) fpsControl(t kit.Theme, clip *modelviewer.ModelViewerAnimationClip) *fairy.El {
-	fps := v.animationFPS(clip)
-	text := formatViewerNumber(fps)
-	trigger := fairy.Text(text + " FPS").
-		FontSize(12).
-		LineHeight(16).
-		HoverColor(t.Foreground).
-		Cursor(fairy.CursorPointer).
-		Role(fairy.RoleButton).
-		Label(T("page.tools.model_viewer.fps_control")).
-		Focusable().
-		OnClick(func() {
-			if v.anim.fpsDraft != nil {
-				v.anim.fpsDraft = nil
-				return
+// animationTickStep is the number of frames between the scrubber's ticks: the smallest of 1, 2, 5, 10, 20, 50 and
+// so on that keeps ticks at least 6 pixels apart over width.
+func animationTickStep(last int, width float32) int {
+	for scale := 1; ; scale *= 10 {
+		for _, step := range []int{scale, 2 * scale, 5 * scale} {
+			if step >= last || float32(step)/float32(last)*width >= 6 {
+				return step
 			}
-			v.anim.fpsDraft = &text
-		})
-	if v.anim.fpsDraft == nil {
-		return trigger
-	}
-
-	closePopover := func() { v.anim.fpsDraft = nil }
-	commit := func() {
-		draft := strings.TrimSpace(*v.anim.fpsDraft)
-		closePopover()
-		value, err := strconv.ParseFloat(draft, 64)
-		if draft == "" || err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
-			return
 		}
-		v.anim.fps = clampViewerFPS(value)
-		v.runAnimationClock()
 	}
-	panel := fairy.Col(
-		fairy.Row(
-			kit.TextField(*v.anim.fpsDraft, func(value string) { v.anim.fpsDraft = &value },
-				kit.Label(T("page.tools.model_viewer.fps_control")), kit.OnSubmit(func(string) { commit() })).
-				Key("model-viewer.fps").Grow(1).MinW(0),
-			kit.Button(T("page.tools.model_viewer.fps_apply"), commit, kit.Small),
-		).Gap(6).Align(fairy.Center),
-		fairy.Text(T("page.tools.model_viewer.fps_default", "fps", formatViewerNumber(normalizeAnimationFPS(clip.FPS)))).
-			FontSize(12).
-			LineHeight(16).
-			Color(t.MutedForeground),
-	).Gap(8).Pad(10).W(176).Radius(t.RadiusLg()).Color(t.PopoverForeground).
-		Border(1, t.Border).Shadow(0, 8, 24, 0, shadowColor(&t))
-	t.Surface(panel, t.Popover)
-	return trigger.Popover(panel, fairy.PopoverOptions{Align: fairy.AlignStart, Gap: 6, OnDismiss: closePopover})
+}
+
+// animationTime shows the time of the frame shown and the clip's length at the clip's own rate.
+func (v *ModelViewer) animationTime(t kit.Theme, clip *modelviewer.ModelViewerAnimationClip) *fairy.El {
+	fps := normalizeAnimationFPS(clip.FPS)
+	seconds := func(frames int) string { return strconv.FormatFloat(float64(frames)/fps, 'f', 2, 64) }
+	total := seconds(len(clip.Frames))
+	timeText := func(value string) *fairy.El {
+		return fairy.Text(T("page.tools.model_viewer.animation_time", "seconds", value)).
+			FontSize(12).LineHeight(14).Medium()
+	}
+	// The hidden text widest for the clip's length holds the column's width, so the scrubber beside it keeps its
+	// size while the time gains digits.
+	widest := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return '0'
+		}
+		return r
+	}, total)
+	return fairy.Col(
+		fairy.Box(
+			timeText(widest).Opacity(0).Role(fairy.RoleNone).PassThrough(),
+			timeText(seconds(v.anim.frame)).Color(t.Primary).Absolute().Right(0).Top(0),
+		),
+		fairy.Text(T("page.tools.model_viewer.animation_duration", "total", total)).
+			FontSize(10).LineHeight(12).Color(t.MutedForeground),
+	).Align(fairy.End).MinW(48).Shrink(0).PadXY(4, 0)
+}
+
+// animationSpeedMenu shows the playback speed and opens a menu to change it.
+func (v *ModelViewer) animationSpeedMenu(t kit.Theme) *fairy.El {
+	speed := v.animationSpeed()
+	trigger := fairy.Box(fairy.Text(formatViewerNumber(speed)+"×").FontSize(12).LineHeight(16).Medium()).
+		H(28).MinW(36).PadXY(8, 0).Center().Radius(14).Shrink(0).
+		HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).Role(fairy.RoleButton).Focusable().
+		FocusRing(3, t.Ring.Alpha(0.5)).
+		Label(T("page.tools.model_viewer.animation_speed")).Key("model-viewer.animation-speed-trigger")
+	items := make([]kit.MenuItem, len(viewerSpeeds))
+	for i, option := range viewerSpeeds {
+		items[i] = kit.MenuItem{
+			Label: formatViewerNumber(option) + "×", Radio: true, Checked: option == speed,
+			OnClick: func() { v.setAnimationSpeed(option) },
+		}
+	}
+	return kit.DropdownMenu("model-viewer.animation-speed", trigger, items, kit.AlignEnd)
 }
