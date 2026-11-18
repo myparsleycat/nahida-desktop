@@ -62,24 +62,30 @@ type ModelViewer struct {
 	anim         viewerAnimation
 	// compute is the deformer of the clip being played, or nil for a clip without one.
 	compute *viewerCompute
-	// charMotion plays the character's game motions; motionCancel stops them loading.
-	charMotion   *viewerMotion
-	motionCancel context.CancelFunc
+	// charMotion plays the character's game motions; motionCancel stops them loading. motionFailed names the last
+	// motions that failed to load or play, which start again only for another scene or character, or after the
+	// setting is toggled. motionDismissed turns the motions off in this viewer only.
+	charMotion      *viewerMotion
+	motionCancel    context.CancelFunc
+	motionFailed    viewerCharacterKey
+	motionDismissed bool
+	// downloads holds the progress of the character data the motions and the original model download.
+	downloads viewerDownloads
 	// originalCancel stops the original model named by originalLoading loading; originalFailed names the last one
 	// that failed, which loads again only for another scene or character, or after the setting is toggled.
 	originalCancel  context.CancelFunc
-	originalLoading viewerOriginalKey
-	originalFailed  viewerOriginalKey
+	originalLoading viewerCharacterKey
+	originalFailed  viewerCharacterKey
 	expression      viewerExpression
 	ineffective     viewerIneffective
 	overlayMenus    viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
 	highlightGameTextures bool
-	// gameTextureNoticeWidth is the measured width of the game texture notice.
-	gameTextureNoticeWidth float32
-	camera                 orbitCamera
-	home                   orbitCamera
-	normalMaps             bool
+	// cornerSize is the measured size of the stack over the viewer's bottom-left corner.
+	cornerSize [2]float32
+	camera     orbitCamera
+	home       orbitCamera
+	normalMaps bool
 	// orientation is the user's turn of the model in degrees of roll, pitch and yaw.
 	orientation vec3
 	doubleSided bool
@@ -258,8 +264,9 @@ func (v *ModelViewer) releaseScene() {
 	v.pendingLive = nil
 	v.stopCompute(false)
 	v.stopMotion()
+	v.motionFailed = viewerCharacterKey{}
 	v.cancelOriginal()
-	v.originalFailed = viewerOriginalKey{}
+	v.originalFailed = viewerCharacterKey{}
 	scene := v.scene
 	v.scene = nil
 	if scene == nil {
@@ -1028,7 +1035,13 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	v.syncFieldOfView()
 	v.advanceCamera(time.Now())
 	v.syncOriginal()
+	v.syncMotion()
 	v.syncToonAssets(v.toonStyle())
+	gameTextures := v.gameTextureCount()
+	// The notice is the highlight's only switch, so the highlight ends with it.
+	if gameTextures == 0 {
+		v.highlightGameTextures = false
+	}
 	opts := v.drawOptions([4]float32{background.R, background.G, background.B, 1})
 	if v.tool != nil && v.tool.overlay != nil {
 		opts.overlay = v.tool.overlay()
@@ -1122,8 +1135,8 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			viewport.Child(v.formSwitcher())
 		}
 		bar = v.animationBar(t)
-		if count := v.gameTextureCount(); count > 0 {
-			viewport.Child(v.gameTextureNotice(t, count, bar != nil))
+		if corner := v.cornerStack(t, gameTextures, bar != nil); corner != nil {
+			viewport.Child(corner)
 		}
 	}
 	switch {

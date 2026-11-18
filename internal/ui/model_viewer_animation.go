@@ -710,7 +710,7 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 	switch {
 	case track == trackMotion:
 		off := T("page.tools.model_viewer.animation_motion_off")
-		lane.Child(kit.IconButton(lucide.X, v.stopMotion, kit.Ghost, kit.Small,
+		lane.Child(kit.IconButton(lucide.X, v.dismissMotion, kit.Ghost, kit.Small,
 			kit.Tooltip(off)).Label(off))
 	case paired:
 		lane.Child(fairy.Box().Size(28, 28).Shrink(0))

@@ -81,9 +81,17 @@ func HasCharacterMotion(game, id string) bool {
 	return ok
 }
 
+// CharacterFileProgress receives the progress of a character data file: done of its size bytes, which falls back
+// when a download restarts. cached marks a file read from the cache without a download.
+type CharacterFileProgress func(file string, done, size int64, cached bool)
+
 // LoadCharacterMotion returns the motions of the character id of game, downloading its file into the app data
-// cache when the cache does not hold it yet.
-func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*CharacterMotion, error) {
+// cache when the cache does not hold it yet. progress may be nil.
+func (t *Service) LoadCharacterMotion(
+	ctx context.Context,
+	game, id string,
+	progress CharacterFileProgress,
+) (*CharacterMotion, error) {
 	entry, ok := characterMotionLookup(game, id)
 	if !ok {
 		return nil, fmt.Errorf("no character motion for %s/%s", game, id)
@@ -103,7 +111,7 @@ func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*Ch
 	if err != nil {
 		return nil, err
 	}
-	data, err := t.cachedCharacterFile(ctx, t.motionFiles, characterMotionBaseURL, entry, destination)
+	data, err := t.cachedCharacterFile(ctx, t.motionFiles, characterMotionBaseURL, entry, destination, progress)
 	if err != nil {
 		return nil, infra.AnnotateError(err, infra.Diagnostic{
 			Operation: "load-character-motion",
@@ -121,16 +129,24 @@ func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*Ch
 }
 
 // cachedCharacterFile returns the verified file of entry below baseURL, downloading it to destination when the
-// cached copy is missing or does not match the entry. gate admits one download at a time per cache. A download
-// replaces the cached file atomically, so the cache is read without waiting for downloads.
+// cached copy is missing or does not match the entry, and reports its progress to progress when that is not nil.
+// gate admits one download at a time per cache. A download replaces the cached file atomically, so the cache is
+// read without waiting for downloads.
 func (t *Service) cachedCharacterFile(
 	ctx context.Context,
 	gate chan struct{},
 	baseURL string,
 	entry characterFileEntry,
 	destination string,
+	progress CharacterFileProgress,
 ) ([]byte, error) {
+	report := func(done int64, cached bool) {
+		if progress != nil {
+			progress(entry.File, done, entry.Size, cached)
+		}
+	}
 	if data, err := readCachedCharacterFile(ctx, destination, entry); err == nil {
+		report(entry.Size, true)
 		return data, nil
 	}
 	if t.download == nil {
@@ -145,10 +161,17 @@ func (t *Service) cachedCharacterFile(
 	defer func() { <-gate }()
 	// Another viewer may have downloaded the file while this one waited.
 	if data, err := readCachedCharacterFile(ctx, destination, entry); err == nil {
+		report(entry.Size, true)
 		return data, nil
 	}
+	var done int64
+	report(0, false)
 	err := t.download.File(ctx, infra.DownloadRequest{
 		URL: baseURL + entry.File, Destination: destination, Size: entry.Size, MaxSize: entry.Size,
+		Progress: func(bytes int64) {
+			done += bytes
+			report(done, false)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", entry.File, err)
@@ -160,6 +183,7 @@ func (t *Service) cachedCharacterFile(
 		}
 		return nil, err
 	}
+	report(entry.Size, false)
 	return data, nil
 }
 

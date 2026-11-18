@@ -138,10 +138,12 @@ func (v *ModelViewer) menuBar() *fairy.El {
 				Label: T("page.tools.model_viewer.menu.reset"), Icon: lucide.RotateCcw, OnClick: v.resetView,
 			})
 			if v.characterMotionAvailable() {
+				wanted, _ := v.motionWanted()
+				checked := wanted && v.motionFailed != v.motionKey()
 				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
 					Label: T("page.tools.model_viewer.menu.character_motion"), Checkbox: true,
-					Checked: v.activeMotion() != nil, Loading: v.motionCancel != nil,
-					OnClick: v.toggleCharacterMotion,
+					Checked: checked, Loading: v.motionCancel != nil,
+					OnClick: func() { v.setCharacterMotion(!checked) },
 				})
 			}
 			items = append(items, v.originalMenuItems()...)

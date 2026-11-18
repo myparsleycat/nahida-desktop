@@ -158,7 +158,11 @@ type originalTextureReference struct {
 
 // LoadCharacterOriginal returns the original model of the character id of game, downloading its file into the app
 // data cache when the cache does not hold it yet.
-func (t *Service) LoadCharacterOriginal(ctx context.Context, game, id string) (*CharacterOriginal, error) {
+func (t *Service) LoadCharacterOriginal(
+	ctx context.Context,
+	game, id string,
+	progress CharacterFileProgress,
+) (*CharacterOriginal, error) {
 	entry, ok := characterOriginalLookup(game, id)
 	if !ok {
 		return nil, fmt.Errorf("no original model for %s/%s", game, id)
@@ -178,7 +182,7 @@ func (t *Service) LoadCharacterOriginal(ctx context.Context, game, id string) (*
 	if err != nil {
 		return nil, err
 	}
-	data, err := t.cachedCharacterFile(ctx, t.originalFiles, characterOriginalBaseURL, entry, destination)
+	data, err := t.cachedCharacterFile(ctx, t.originalFiles, characterOriginalBaseURL, entry, destination, progress)
 	if err != nil {
 		return nil, infra.AnnotateError(err, infra.Diagnostic{
 			Operation: "load-character-original",
@@ -201,14 +205,15 @@ func (t *Service) LoadCharacterOriginal(ctx context.Context, game, id string) (*
 func (t *Service) LoadCharacterOriginalTexture(
 	ctx context.Context,
 	texture CharacterOriginalTexture,
+	progress CharacterFileProgress,
 ) (*image.NRGBA, error) {
-	colorData, err := t.characterOriginalTextureFile(ctx, texture.Color)
+	colorData, err := t.characterOriginalTextureFile(ctx, texture.Color, progress)
 	if err != nil {
 		return nil, err
 	}
 	var alphaData []byte
 	if texture.Alpha != nil {
-		if alphaData, err = t.characterOriginalTextureFile(ctx, *texture.Alpha); err != nil {
+		if alphaData, err = t.characterOriginalTextureFile(ctx, *texture.Alpha, progress); err != nil {
 			return nil, err
 		}
 	}
@@ -231,7 +236,11 @@ func flipRows(img *image.NRGBA) {
 	}
 }
 
-func (t *Service) characterOriginalTextureFile(ctx context.Context, entry characterFileEntry) ([]byte, error) {
+func (t *Service) characterOriginalTextureFile(
+	ctx context.Context,
+	entry characterFileEntry,
+	progress CharacterFileProgress,
+) ([]byte, error) {
 	if !entry.valid() || entry.Size > characterOriginalMaxTexture || !strings.HasPrefix(entry.File, "textures/") {
 		return nil, fmt.Errorf("invalid character original texture %q", entry.File)
 	}
@@ -242,7 +251,7 @@ func (t *Service) characterOriginalTextureFile(ctx context.Context, entry charac
 	if err != nil {
 		return nil, err
 	}
-	data, err := t.cachedCharacterFile(ctx, t.originalFiles, characterOriginalBaseURL, entry, destination)
+	data, err := t.cachedCharacterFile(ctx, t.originalFiles, characterOriginalBaseURL, entry, destination, progress)
 	if err != nil {
 		return nil, infra.AnnotateError(err, infra.Diagnostic{
 			Operation: "load-character-original",

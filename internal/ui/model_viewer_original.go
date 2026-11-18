@@ -149,7 +149,7 @@ func (v *ModelViewer) syncOriginal() {
 		v.cancelOriginal()
 		return
 	}
-	key := viewerOriginalKey{scene: scene, character: want}
+	key := viewerCharacterKey{scene: scene, character: want}
 	if v.originalLoading == key {
 		return
 	}
@@ -166,8 +166,8 @@ func (v *ModelViewer) syncOriginal() {
 	v.loadOriginal(key, v.character, nil)
 }
 
-// viewerOriginalKey names the original model of a character for a scene.
-type viewerOriginalKey struct {
+// viewerCharacterKey names a character's data, its original model or motions, for a scene.
+type viewerCharacterKey struct {
 	scene     *viewerScene
 	character string
 }
@@ -176,7 +176,7 @@ func (v *ModelViewer) cancelOriginal() {
 	if v.originalCancel != nil {
 		v.originalCancel()
 		v.originalCancel = nil
-		v.originalLoading = viewerOriginalKey{}
+		v.originalLoading = viewerCharacterKey{}
 		v.revision++
 	}
 }
@@ -234,7 +234,7 @@ type viewerOriginalSource struct {
 // loadOriginal builds the original model of key on a background goroutine. previous is the scene's stale original,
 // or nil: it keeps drawing until the build replaces it, lends its model data, and the parts the user showed or hid
 // stay so.
-func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, previous *viewerOriginal) {
+func (v *ModelViewer) loadOriginal(key viewerCharacterKey, c *viewerCharacter, previous *viewerOriginal) {
 	scene := key.scene
 	ctx, cancel := context.WithCancel(v.ctx)
 	v.cancelOriginal()
@@ -278,10 +278,12 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, pr
 			input.faces[key] = entry
 		}
 	}
+	run := v.downloads.begin(downloadOriginal, v.poster())
 	tools, read, log := v.tools, v.read, v.log
 	go func() {
-		o, missing, err := buildViewerOriginal(ctx, tools, read, log, input, c)
+		o, missing, err := buildViewerOriginal(ctx, tools, read, log, input, c, run)
 		fairy.Go(func() {
+			run.end()
 			current := v.originalLoading == key && ctx.Err() == nil && v.scene == scene && !v.closed
 			if !current || err != nil {
 				if o != nil {
@@ -291,14 +293,14 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter, pr
 					})
 				}
 				if current {
-					v.originalCancel, v.originalLoading, v.originalFailed = nil, viewerOriginalKey{}, key
+					v.originalCancel, v.originalLoading, v.originalFailed = nil, viewerCharacterKey{}, key
 					cancel()
 					v.reportOriginalError(err, c)
 					v.revision++
 				}
 				return
 			}
-			v.originalCancel, v.originalLoading = nil, viewerOriginalKey{}
+			v.originalCancel, v.originalLoading = nil, viewerCharacterKey{}
 			cancel()
 			o.ctx, o.cancel = context.WithCancel(v.ctx)
 			o.scene = scene
@@ -335,8 +337,12 @@ func (v *ModelViewer) reportOriginalError(err error, c *viewerCharacter) {
 }
 
 type viewerOriginalTools interface {
-	LoadCharacterOriginal(context.Context, string, string) (*modelviewer.CharacterOriginal, error)
-	LoadCharacterOriginalTexture(context.Context, modelviewer.CharacterOriginalTexture) (*image.NRGBA, error)
+	LoadCharacterOriginal(
+		context.Context, string, string, modelviewer.CharacterFileProgress,
+	) (*modelviewer.CharacterOriginal, error)
+	LoadCharacterOriginalTexture(
+		context.Context, modelviewer.CharacterOriginalTexture, modelviewer.CharacterFileProgress,
+	) (*image.NRGBA, error)
 }
 
 // viewerOriginalInput is what building the original model reads of the scene: its meshes, the face textures only the
@@ -351,7 +357,8 @@ type viewerOriginalInput struct {
 }
 
 // buildViewerOriginal loads the character's original model, matches it against the mod's meshes, and uploads the
-// parts the viewer may draw with the textures they and the mod's empty slots take, and the mod's face textures.
+// parts the viewer may draw with the textures they and the mod's empty slots take, and the mod's face textures. run
+// receives the progress of the files it downloads.
 func buildViewerOriginal(
 	ctx context.Context,
 	tools viewerOriginalTools,
@@ -359,11 +366,12 @@ func buildViewerOriginal(
 	log *infra.Log,
 	input viewerOriginalInput,
 	c *viewerCharacter,
+	run viewerDownloadRun,
 ) (*viewerOriginal, int, error) {
 	sources, profile, reconstruct, data := input.sources, input.profile, input.reconstruct, input.data
 	if data == nil {
 		var err error
-		if data, err = tools.LoadCharacterOriginal(ctx, c.game, c.ID); err != nil {
+		if data, err = tools.LoadCharacterOriginal(ctx, c.game, c.ID, run.report); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -511,7 +519,14 @@ func buildViewerOriginal(
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		var err error
-		textures, textureGenerations, failed, err = loadOriginalTextures(groupCtx, tools, log, requests, reconstruct)
+		textures, textureGenerations, failed, err = loadOriginalTextures(
+			groupCtx,
+			tools,
+			log,
+			requests,
+			reconstruct,
+			run,
+		)
 		return err
 	})
 	group.Go(func() error {
@@ -599,18 +614,25 @@ const originalDecodeJobs = 2
 
 // loadOriginalTextures loads and uploads the requested textures. Those that cannot be loaded are left out, logged
 // together and returned as failed; the load fails only when cancelled or the device cannot be used, and then
-// releases what it uploaded.
+// releases what it uploaded. run receives the progress of the files it downloads.
 func loadOriginalTextures(
 	ctx context.Context,
 	tools viewerOriginalTools,
 	log *infra.Log,
 	requests map[string]originalTextureRequest,
 	reconstruct bool,
+	run viewerDownloadRun,
 ) (textures map[string]viewerTextureGPU, generations map[uint64]bool, failed map[string]originalTextureRequest,
 	err error,
 ) {
 	textures, generations = make(map[string]viewerTextureGPU, len(requests)), map[uint64]bool{}
 	failed = map[string]originalTextureRequest{}
+	for _, req := range requests {
+		run.expect(req.texture.Color.File, req.texture.Color.Size)
+		if alpha := req.texture.Alpha; alpha != nil {
+			run.expect(alpha.File, alpha.Size)
+		}
+	}
 	var batch infra.DiagnosticBatch
 	var mu sync.Mutex
 	fail := func(key string, req originalTextureRequest, err error) {
@@ -623,7 +645,7 @@ func loadOriginalTextures(
 	group.SetLimit(originalDecodeJobs)
 	for key, req := range requests {
 		group.Go(func() error {
-			image, err := tools.LoadCharacterOriginalTexture(groupCtx, req.texture)
+			image, err := tools.LoadCharacterOriginalTexture(groupCtx, req.texture, run.report)
 			if err != nil {
 				if groupCtx.Err() != nil {
 					return groupCtx.Err()
@@ -690,9 +712,11 @@ func (v *ModelViewer) toggleOriginalPart(o *viewerOriginal, part *viewerOriginal
 		o.inflight[key] = true
 	}
 	ctx, tools, log, reconstruct := o.ctx, v.tools, v.log, o.reconstruct
+	run := v.downloads.begin(downloadOriginal, v.poster())
 	go func() {
-		textures, generations, failed, err := loadOriginalTextures(ctx, tools, log, requests, reconstruct)
+		textures, generations, failed, err := loadOriginalTextures(ctx, tools, log, requests, reconstruct, run)
 		fairy.Go(func() {
+			run.end()
 			for key := range requests {
 				delete(o.inflight, key)
 			}
@@ -1006,6 +1030,15 @@ func (o *viewerOriginal) fillState(
 	return state
 }
 
+// fillsDiffuse reports whether an original texture that has loaded fills the diffuse slot scene mesh i leaves empty.
+func (o *viewerOriginal) fillsDiffuse(i int) bool {
+	if o == nil || o.scene == nil {
+		return false
+	}
+	_, ok := o.scene.texture(o.fills[i][fillDiffuse])
+	return ok
+}
+
 // texture looks a texture up among the scene's and then the original model's, while both belong to one device.
 func (s *viewerScene) texture(key string) (viewerTextureGPU, bool) {
 	if key == "" {
@@ -1032,7 +1065,7 @@ func (v *ModelViewer) originalMenuItems() []kit.MenuItem {
 		Label: T("page.tools.model_viewer.menu.original_data"), Checkbox: true, Checked: enabled,
 		Loading: v.originalCancel != nil,
 		OnClick: func() {
-			v.originalFailed = viewerOriginalKey{}
+			v.originalFailed = viewerCharacterKey{}
 			v.setRenderSetting(setting.KeyModelViewerOriginalData, !enabled)
 		},
 	}}

@@ -545,28 +545,67 @@ func (v *ModelViewer) formSwitcher() *fairy.El {
 	return fairy.Box(list).Absolute().Top(12).Left(12).MaxW(280)
 }
 
-// gameTextureCount counts the drawn meshes the mod binds no diffuse texture to. The game draws them with its
-// own textures, which the viewer cannot read.
+// gameTextureCount counts the drawn meshes the mod binds no diffuse texture to and the original model does not
+// fill. The game draws them with its own textures, which the viewer cannot read.
 func (v *ModelViewer) gameTextureCount() int {
+	var original *viewerOriginal
+	if v.scene != nil {
+		original = v.scene.original
+	}
 	count := 0
-	for _, state := range v.toggleStates {
-		if state.Visible && state.TexKey == "" {
+	for i, state := range v.toggleStates {
+		if state.Visible && state.TexKey == "" && !original.fillsDiffuse(i) {
 			count++
 		}
 	}
 	return count
 }
 
-// viewerGameTextureNoticeMargin is the game texture notice's distance from the viewer's bottom-left corner, and
-// viewerGameTextureNoticeHeight its height as a small button.
+// viewerCornerMargin is the bottom-left stack's distance from the viewer's corner, and viewerGameTextureNoticeHeight
+// the game texture notice's height as a small button.
 const (
-	viewerGameTextureNoticeMargin = 12
+	viewerCornerMargin            = 12
 	viewerGameTextureNoticeHeight = 28
 )
 
-// gameTextureNotice counts the parts drawn without a texture and switches their highlight. When the animation bar
-// is shown over the place it occupies, the notice sits just above the bar.
-func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int, barShown bool) *fairy.El {
+// cornerStack is the stack over the viewer's bottom-left corner: the download progress above the game texture
+// notice of count parts, or nil when neither shows. When the animation bar is shown over the place it occupies, the
+// stack sits just above the bar.
+func (v *ModelViewer) cornerStack(t kit.Theme, count int, barShown bool) *fairy.El {
+	downloads := v.downloadPanel(t)
+	if downloads == nil && count == 0 {
+		return nil
+	}
+	stack := fairy.Col().Gap(8).Align(fairy.Start)
+	if downloads != nil {
+		stack.Child(downloads)
+	}
+	if count > 0 {
+		stack.Child(v.gameTextureNotice(count))
+	}
+
+	bottom := float32(viewerCornerMargin)
+	if left, top, _, ok := v.animationBarPlace(); barShown && ok {
+		// Before the stack is measured its width is 0, which counts as overlapping until the next layout.
+		width, height := v.cornerSize[0], max(v.cornerSize[1], viewerGameTextureNoticeHeight)
+		overlapsRow := top+v.animationBarHeight() > v.height-viewerCornerMargin-height
+		overlapsColumn := width == 0 || left < viewerCornerMargin+width+8
+		if overlapsRow && overlapsColumn {
+			bottom = v.height - top + 8
+		}
+	}
+	return stack.Absolute().Bottom(bottom).Left(viewerCornerMargin).
+		OnLayout(func(w, h float32) bool {
+			if v.cornerSize == [2]float32{w, h} {
+				return false
+			}
+			v.cornerSize = [2]float32{w, h}
+			return true
+		})
+}
+
+// gameTextureNotice counts the parts drawn without a texture and switches their highlight.
+func (v *ModelViewer) gameTextureNotice(count int) *fairy.El {
 	label := T("page.tools.model_viewer.game_textures", "count", count)
 	button := kit.Button(label, func() {
 		v.highlightGameTextures = !v.highlightGameTextures
@@ -576,24 +615,7 @@ func (v *ModelViewer) gameTextureNotice(t kit.Theme, count int, barShown bool) *
 		amber := fairy.Hex(viewerGameTextureHighlight)
 		button.Border(1, amber).Color(amber)
 	}
-	bottom := float32(viewerGameTextureNoticeMargin)
-	if left, top, _, ok := v.animationBarPlace(); barShown && ok {
-		// Before the notice is measured its width is 0, which counts as overlapping until the next layout.
-		overlapsRow := top+v.animationBarHeight() > v.height-viewerGameTextureNoticeMargin-viewerGameTextureNoticeHeight
-		overlapsColumn := v.gameTextureNoticeWidth == 0 ||
-			left < viewerGameTextureNoticeMargin+v.gameTextureNoticeWidth+8
-		if overlapsRow && overlapsColumn {
-			bottom = v.height - top + 8
-		}
-	}
-	return fairy.Box(button).Absolute().Bottom(bottom).Left(viewerGameTextureNoticeMargin).
-		OnLayout(func(w, _ float32) bool {
-			if v.gameTextureNoticeWidth == w {
-				return false
-			}
-			v.gameTextureNoticeWidth = w
-			return true
-		})
+	return button
 }
 
 // sideSplit lays the viewer beside the side column. Without a tool the column is the toggles alone, which a

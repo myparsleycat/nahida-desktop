@@ -27,7 +27,7 @@ func TestApplyLiveMeshesTakesEmptyMeshesInPlace(t *testing.T) {
 	building := true
 	v := &ModelViewer{
 		ctx: ctx, scene: scene, blender: &viewerBlenderSource{link: 1},
-		originalCancel: func() { building = false }, originalLoading: viewerOriginalKey{scene: scene, character: "c"},
+		originalCancel: func() { building = false }, originalLoading: viewerCharacterKey{scene: scene, character: "c"},
 	}
 
 	v.applyLiveMeshes(modelviewer.ModelViewerLiveUpdate{

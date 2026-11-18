@@ -16,6 +16,7 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -115,24 +116,76 @@ func packMotionBlend(blend []uint16, palette []int32) []uint32 {
 	return packed
 }
 
-// characterMotionAvailable reports whether game motions exist for the mod's character. A tool edits and picks the
-// geometry the mod shows, so a viewer with one plays none.
+// characterMotionAvailable reports whether game motions exist for the mod's character and a mesh of the scene has
+// bone weights to play them with. A tool edits and picks the geometry the mod shows, so a viewer with one plays none.
 func (v *ModelViewer) characterMotionAvailable() bool {
 	c := v.character
-	return c != nil && v.tools != nil && v.tool == nil && modelviewer.HasCharacterMotion(c.game, c.ID)
+	if c == nil || v.scene == nil || v.tools == nil || v.tool != nil || !modelviewer.HasCharacterMotion(c.game, c.ID) {
+		return false
+	}
+	return slices.ContainsFunc(v.scene.transport.Meshes, func(mesh modelviewer.ModelViewerMeshTransport) bool {
+		return mesh.BlendURL != "" && mesh.BlendPalette != ""
+	})
 }
 
-// toggleCharacterMotion loads the character's motions into their own lane of the playback controller, or removes
-// them.
-func (v *ModelViewer) toggleCharacterMotion() {
-	if v.charMotion != nil || v.motionCancel != nil {
+// motionWanted reports whether the viewer plays the character's motions: the setting, unless they were dismissed
+// in this viewer. known is false while the setting loads. Settings that cannot be read leave the motions on.
+func (v *ModelViewer) motionWanted() (wanted, known bool) {
+	if v.motionDismissed {
+		return false, true
+	}
+	s := v.shell
+	if s == nil {
+		return true, true
+	}
+	if s.settingsLoaded(setting.KeyModelViewerCharacterMotion) {
+		return s.boolSetting(setting.KeyModelViewerCharacterMotion), true
+	}
+	return s.settings.loadErr != nil, s.settings.loadErr != nil
+}
+
+// motionKey names the motions of the character shown for the scene shown. Call it while both are set.
+func (v *ModelViewer) motionKey() viewerCharacterKey {
+	return viewerCharacterKey{scene: v.scene, character: v.character.styleKey()}
+}
+
+// setCharacterMotion turns the character's motions on or off for every viewer. Turning them on also retries
+// motions that failed and shows them again where they were dismissed.
+func (v *ModelViewer) setCharacterMotion(enabled bool) {
+	v.motionFailed, v.motionDismissed = viewerCharacterKey{}, false
+	v.setRenderSetting(setting.KeyModelViewerCharacterMotion, enabled)
+	if !enabled {
+		v.stopMotion()
+	}
+}
+
+// dismissMotion turns the character's motions off in this viewer only.
+func (v *ModelViewer) dismissMotion() {
+	v.motionDismissed = true
+	v.stopMotion()
+}
+
+// syncMotion starts the character's motions for the scene shown when they are wanted, or stops them when they are
+// not or no longer apply. Call it on each build.
+func (v *ModelViewer) syncMotion() {
+	wanted, known := v.motionWanted()
+	if !known {
+		return
+	}
+	if !wanted || !v.characterMotionAvailable() {
 		v.stopMotion()
 		return
 	}
-	scene, c := v.scene, v.character
-	if scene == nil || c == nil || v.tools == nil {
+	if v.charMotion != nil || v.motionCancel != nil || v.motionFailed == v.motionKey() {
 		return
 	}
+	v.startCharacterMotion(v.motionKey())
+}
+
+// startCharacterMotion loads the character's motions into their own lane of the playback controller. A load that
+// fails marks key so that it does not load again by itself.
+func (v *ModelViewer) startCharacterMotion(key viewerCharacterKey) {
+	scene, c := v.scene, v.character
 	bases := map[int][]float32{}
 	for i, mesh := range scene.meshes {
 		if mesh.info.BlendURL != "" && !mesh.unloaded && !mesh.cpuDropped && mesh.positions != nil {
@@ -143,10 +196,12 @@ func (v *ModelViewer) toggleCharacterMotion() {
 	v.motionCancel = cancel
 	v.revision++
 	post := v.poster()
+	run := v.downloads.begin(downloadMotion, post)
 	tools, read := v.tools, v.read
 	go func() {
-		m, err := loadViewerMotion(ctx, tools, read, scene, bases, c.game, c.ID)
+		m, err := loadViewerMotion(ctx, tools, read, scene, bases, c.game, c.ID, run.report)
 		post(func() {
+			run.end()
 			if v.motionCancel == nil || ctx.Err() != nil || v.scene != scene {
 				cancel()
 				return
@@ -155,6 +210,7 @@ func (v *ModelViewer) toggleCharacterMotion() {
 			v.revision++
 			if err != nil {
 				cancel()
+				v.motionFailed = key
 				v.reportMotionError(err, c)
 				return
 			}
@@ -194,18 +250,21 @@ func (v *ModelViewer) reportMotionError(err error, c *viewerCharacter) {
 
 // loadViewerMotion reads the character's motion and the bone weights of every mesh that has them, and maps each
 // bone palette onto the skeleton by the meshes' base positions. bases holds the base positions of meshes already
-// loaded.
+// loaded. progress receives the motion file's download progress.
 func loadViewerMotion(
 	ctx context.Context,
 	tools interface {
-		LoadCharacterMotion(context.Context, string, string) (*modelviewer.CharacterMotion, error)
+		LoadCharacterMotion(
+			context.Context, string, string, modelviewer.CharacterFileProgress,
+		) (*modelviewer.CharacterMotion, error)
 	},
 	read viewerReader,
 	scene *viewerScene,
 	bases map[int][]float32,
 	game, id string,
+	progress modelviewer.CharacterFileProgress,
 ) (*viewerMotion, error) {
-	motion, err := tools.LoadCharacterMotion(ctx, game, id)
+	motion, err := tools.LoadCharacterMotion(ctx, game, id, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -616,6 +675,9 @@ func (v *ModelViewer) failMotionPlay(err error, stage string) {
 		if clip := v.trackClip(trackMotion); clip != nil {
 			fields["clip"] = clip.Label
 		}
+	}
+	if v.scene != nil && v.character != nil {
+		v.motionFailed = v.motionKey()
 	}
 	v.stopMotion()
 	err = infra.ReportError(v.log, err, "ModelViewer.characterMotion", infra.Diagnostic{

@@ -84,11 +84,18 @@ func (t *Tools) shutdownModelViewer() error {
 	return t.modelViewer.Shutdown()
 }
 
-type CharacterMotion = modelviewer.CharacterMotion
+type (
+	CharacterMotion       = modelviewer.CharacterMotion
+	CharacterFileProgress = modelviewer.CharacterFileProgress
+)
 
 // LoadCharacterMotion returns the game motions of the character id of game, downloading them when needed.
-func (t *Tools) LoadCharacterMotion(ctx context.Context, game, id string) (*CharacterMotion, error) {
-	return t.modelViewer.LoadCharacterMotion(ctx, game, id)
+func (t *Tools) LoadCharacterMotion(
+	ctx context.Context,
+	game, id string,
+	progress CharacterFileProgress,
+) (*CharacterMotion, error) {
+	return t.modelViewer.LoadCharacterMotion(ctx, game, id, progress)
 }
 
 type (
@@ -97,14 +104,19 @@ type (
 )
 
 // LoadCharacterOriginal returns the original model of the character id of game, downloading it when needed.
-func (t *Tools) LoadCharacterOriginal(ctx context.Context, game, id string) (*CharacterOriginal, error) {
-	return t.modelViewer.LoadCharacterOriginal(ctx, game, id)
+func (t *Tools) LoadCharacterOriginal(
+	ctx context.Context,
+	game, id string,
+	progress CharacterFileProgress,
+) (*CharacterOriginal, error) {
+	return t.modelViewer.LoadCharacterOriginal(ctx, game, id, progress)
 }
 
 // LoadCharacterOriginalTexture returns a texture of an original model, downloading it when needed.
 func (t *Tools) LoadCharacterOriginalTexture(
 	ctx context.Context,
 	texture CharacterOriginalTexture,
+	progress CharacterFileProgress,
 ) (*image.NRGBA, error) {
-	return t.modelViewer.LoadCharacterOriginalTexture(ctx, texture)
+	return t.modelViewer.LoadCharacterOriginalTexture(ctx, texture, progress)
 }
