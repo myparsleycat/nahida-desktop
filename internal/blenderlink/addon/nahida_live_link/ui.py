@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""N panel of the live link: connection state, scene and per-object status, resync and connect buttons."""
+"""N panel of the live link: connection state, scene and per-object status, resync and connect buttons, and the
+viewer slot of each image of the active object's materials."""
 
 import bpy
 
-from . import handlers, transport
+from . import handlers, plan_xxmi, textures, transport
 
 STATE_LABELS = {
     transport.STATE_STOPPED: ("Stopped", "CANCEL"),
@@ -83,6 +84,32 @@ class NAHIDA_PT_live_link(bpy.types.Panel):
                     row.label(text=status)
                     if state and state.message:
                         box.label(text=state.message)
+        _draw_viewer_slots(layout, context, link, plan)
+
+
+def _draw_viewer_slots(layout, context, link, plan):
+    """Lists the images of the active object's materials with their viewer slot."""
+    obj = context.active_object
+    if obj is None:
+        return
+    # Keys, not plan objects: those may be freed by an undo until the next replan.
+    entries = plan.textures.get(plan_xxmi.object_key(obj))
+    if not entries:
+        return
+    box = layout.box()
+    box.label(text="Viewer slots", icon="TEXTURE")
+    for entry in entries:
+        image = bpy.data.images.get(entry["name"])
+        if image is None:
+            continue
+        row = box.row()
+        row.label(text=image.name, icon="IMAGE_DATA")
+        row.prop(image, textures.ROLE_PROPERTY, text="")
+        state = link.textures.images.get(image.name)
+        if state is not None and state.status == "rejected":
+            box.label(text=state.message, icon="ERROR")
+        elif state is not None and state.status == "unmatched":
+            box.label(text=state.message, icon="INFO")
 
 
 def _addon_version():

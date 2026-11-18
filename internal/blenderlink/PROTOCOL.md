@@ -68,11 +68,12 @@ because a synchronous pipe handle in Python serializes reads and writes. The
 server never sends a frame on its own. Server notifications ride on Ack and
 Pong as flags, and an idle client sends Ping every 500 ms to receive them.
 
-A mesh transfer is the one exception to strict alternation: MeshBegin and its
-MeshChunk frames have no reply and are written back to back, and the
-MeshCommit that ends them is answered with Ack. All frames of one transfer carry
-the same `request_id`. Between MeshBegin and MeshCommit only MeshChunk is
-allowed; anything else closes the connection.
+Mesh and texture transfers are the exceptions to strict alternation: MeshBegin
+and its MeshChunk frames, or TextureBegin and its TextureChunk frames, have no
+reply and are written back to back, and the MeshCommit or TextureCommit that
+ends them is answered with Ack. All frames of one transfer carry the same
+`request_id`. Between a Begin and its Commit only the chunks of that transfer
+are allowed; anything else closes the connection.
 
 | Type | Name | Direction | Reply |
 |---|---|---|---|
@@ -81,6 +82,9 @@ allowed; anything else closes the connection.
 | `0x10` | MeshBegin | client to server | none |
 | `0x11` | MeshChunk | client to server | none |
 | `0x12` | MeshCommit | client to server | Ack |
+| `0x13` | TextureBegin | client to server | none |
+| `0x14` | TextureChunk | client to server | none |
+| `0x15` | TextureCommit | client to server | Ack |
 | `0x20` | Ping | client to server | Pong |
 | `0x30` | ClientError | client to server | Ack |
 | `0x81` | HelloAck | server to client | |
@@ -195,6 +199,35 @@ MeshCommit            empty payload
   or not at all.
 - Unknown or repeated IDs reject the transfer.
 
+### Texture transfer
+
+```
+TextureBegin
+str image             the Blender image name
+u32 version           grows with each transfer of the image on the connection
+u32 scene_rev         must equal the last Scene's
+u32 width
+u32 height
+u8  format            1 RGBA8
+u32 byte_len          width * height * 4
+
+TextureChunk
+u32 offset
+bytes[u32] data       at most 1 MiB
+
+TextureCommit         empty payload
+```
+
+- The pixels are the image's RGBA8 rows from the top. Each chunk's `offset`
+  equals the bytes received so far.
+- `width` and `height` are at most 16384.
+- The server hands the committed pixels to the viewer and keeps none of them.
+  The viewer keeps the newest pixels of each image the Scene describes as
+  `"pixels"`, and forgets them when the image leaves the Scene.
+- An image that fills no viewer slot, such as a second image of a role, is
+  answered `UNMATCHED` and its pixels are not kept. The client sends it again
+  only after its next Scene.
+
 ### Ack
 
 ```
@@ -206,8 +239,9 @@ str message
 
 - `APPLIED`: the viewer shows the update.
 - `QUEUED`: accepted and kept, but no viewer shows it yet.
-- `UNMATCHED`: accepted and kept, but the object has no draw in the exported
-  mod. It needs one export.
+- `UNMATCHED`: for an object, accepted and kept, but the object has no draw in
+  the exported mod. It needs one export. For a texture, the image fills no
+  viewer slot.
 - `NEED_FULL`: an `UNCHANGED` hash in MeshBegin is unknown to the server.
   `needed` lists those attributes. The server discards the transfer; the
   client sends the object again with them inline.
@@ -243,9 +277,9 @@ The server shows the error to the user and answers Ack `APPLIED`.
 - An `INLINE` attribute's `byte_len` must equal its element size times its
   count. For `VG_INDEX` and `VG_WEIGHT` the count is checked when the transfer
   commits.
-- The bytes a connection holds, committed attributes plus the `INLINE` bytes of
-  the transfer in progress, are at most 512 MiB. MeshBegin over the limit
-  rejects the transfer.
+- The bytes a connection holds, committed attributes plus the `INLINE` or pixel
+  bytes of the transfer in progress, are at most 512 MiB. MeshBegin or
+  TextureBegin over the limit rejects the transfer.
 
 ## XXMI scenes
 
@@ -331,9 +365,9 @@ the selected game. Otherwise it groups them per object.
       "uv": ["TEXCOORD.xy", "TEXCOORD1.xy"],
       "color": ["COLOR"],
       "textures": [
-        {"name": "FixBodyADiffuse.png", "path": "C:\\mods\\Fix\\FixBodyADiffuse.png", "role": "diffuse"},
-        {"name": "FixBodyANormalMap.png", "path": "C:\\Users\\me\\AppData\\Local\\Temp\\nahida-live-link\\0f3c...e1.png", "role": "normal_map"},
-        {"name": "FixBodyALightMap.png", "path": "C:\\mods\\Fix\\FixBodyALightMap.png", "role": ""}
+        {"name": "FixBodyADiffuse.png", "role": "diffuse", "source": "file", "path": "C:\\mods\\Fix\\FixBodyADiffuse.png", "version": "133701234567890000:1048704"},
+        {"name": "FixBodyANormalMap.png", "role": "normal_map", "source": "pixels", "path": "", "version": ""},
+        {"name": "FixBodyALightMap.png", "role": "light_map", "source": "file", "path": "C:\\mods\\Fix\\FixBodyALightMap.png", "version": "133701234567890000:524416"}
       ]
     }
   }
@@ -365,16 +399,26 @@ the selected game. Otherwise it groups them per object.
   - `textures`: one entry per distinct image of an Image Texture node in the object's material slots,
     including node groups, in slot and node order:
     - `name`: the image datablock name.
-    - `path`: an absolute, normalized path of an existing file. An external image is its file. A packed
-      image is written once to `%TEMP%\nahida-live-link\<BLAKE2b-128 of its bytes, hex><extension>`, the
-      extension of its file path in lowercase or `.png`. Generated images, image sequences, movies, tiled
-      images and images whose file is missing are left out.
-    - `role`: `"diffuse"` when a node of the image is linked to a Principled BSDF Base Color, `"normal_map"`
-      when one is linked to a Normal Map node, else `""`.
+    - `role`: the image's "Viewer slot" in the add-on panel (`"diffuse"`, `"normal_map"`, `"light_map"` or
+      `"material_map"`) when it is not Auto. Otherwise `"diffuse"` when a node of the image is linked to a
+      Principled BSDF Base Color, `"normal_map"` when one is linked to a Normal Map node, else `""`, and the
+      viewer chooses a role from the name.
+    - `source`: `"file"` for an external PNG, JPEG, WebP or DDS file that is neither packed nor edited
+      since it was loaded or saved. `path` is its absolute, normalized path and `version` is its
+      modification time in nanoseconds and its size, `"<mtime_ns>:<size>"`. Every other image that has
+      pixels is `"pixels"`, with `path` and `version` empty: edited and unsaved images, packed and generated
+      images, and files in other formats. Its pixels arrive in texture transfers. Image sequences, movies,
+      tiled images and clean images whose file is missing are left out.
 - The add-on sends a new Scene whenever any of this changes, including layer names and textures. It
   replans after an object, collection, material, image or node tree update and at least once a second, which
-  catches image files that appear or disappear. A packed image is rewritten only when its name, file path or
-  packed size changes.
+  catches image files that appear, disappear or change.
+- While a viewer is attached, the add-on sends the pixels of each `"pixels"` image after a change of the image
+  and during and after an image paint stroke, at most every 0.2 s per image and less often for images whose
+  pixels take longer to read. It skips pixels equal to the last ones the server kept for the image, and sends
+  every image again after `RESYNC_ALL`.
+- The viewer keeps the texture of an image under a key made from its name and role. A change of `source`,
+  `path`, `version` or pixels replaces that texture in an open viewer; a change of an object's images or their
+  roles opens the viewer again.
 
 ### Meshes
 

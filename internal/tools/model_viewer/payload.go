@@ -92,6 +92,9 @@ type modelViewerTexturePayload struct {
 	InvertAlpha  bool
 	CoverageMask bool
 	OutlineMask  bool
+	// Width and Height are set when Bytes holds RGBA8 rows from the top rather than an encoded image.
+	Width  uint32
+	Height uint32
 }
 
 type modelViewerMeshPayload struct {
@@ -161,6 +164,179 @@ func modelViewerMeshUVArea(mesh modelViewerMeshPayload) float64 {
 	return area
 }
 
+// storeModelViewerTexture stores one texture under the session's buffer ID id and returns its transport entry
+// and the IDs of the buffers it stored. coverage allows the texture's coverage mask, which only effect cards use.
+func (t *Service) storeModelViewerTexture(
+	sessionID, id string,
+	profile ModelViewerMaterialProfile,
+	texture modelViewerTexturePayload,
+	options modelViewerPayloadOptions,
+	coverage bool,
+) (ModelViewerTextureTransport, []string, error) {
+	var ids []string
+	if texture.DDS == nil {
+		bufferID, mimeType, encoding := "tex:"+id, texture.MIMEType, "image"
+		if texture.Width > 0 {
+			mimeType, encoding = "application/octet-stream", "rgba8"
+		}
+		url, err := t.protocol.StoreMemoryBuffer(sessionID, bufferID, texture.Bytes, mimeType)
+		if err != nil {
+			return ModelViewerTextureTransport{}, nil, err
+		}
+		return ModelViewerTextureTransport{
+			URL: url, Role: texture.Role, Encoding: encoding, Width: texture.Width, Height: texture.Height,
+		}, []string{bufferID}, nil
+	}
+
+	traits := profile.traits()
+	directURL := t.protocol.LocalFileURL(texture.Path, true)
+	directMetadata := *texture.DDS
+	previewLimit, resample := modelViewerDDSPreviewLimit(*texture.DDS, options)
+
+	// Compressed uploads cannot generate mipmaps, and minified normal and light
+	// maps without them turn toon shading into speckles. Dumped EFMI textures are
+	// usually mipless, so they take the decoded fallback, which does.
+	if traits.resampleMiplessDDS && texture.DDS.MipCount == 1 {
+		resample = true
+	}
+	if plan, needed := modelViewerDDSPreviewPlanFor(
+		*texture.DDS,
+		previewLimit,
+	); needed && texture.DDS.Format != "" && !resample {
+		previewID := "tex-dds-preview:" + id
+		previewURL, previewErr := t.protocol.StoreMemoryLoader(
+			sessionID,
+			previewID,
+			func(loadCtx context.Context) ([]byte, error) {
+				startedAt := time.Now()
+				data, loadErr := prepareModelViewerDDSPreviewWithLimit(
+					loadCtx,
+					texture.Path,
+					*texture.DDS,
+					previewLimit,
+				)
+				if loadErr != nil {
+					if infra.IsCancellationError(loadErr) {
+						return nil, loadErr
+					}
+					t.log.Warn(
+						fmt.Sprintf(
+							"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
+							texture.Path,
+							texture.Role,
+							texture.DDS.Format,
+							time.Since(startedAt).Milliseconds(),
+							loadErr,
+						),
+						"StaticGlb.loadForViewer",
+					)
+					return nil, fmt.Errorf(
+						"prepare DDS preview path=%q role=%q format=%q: %w",
+						texture.Path,
+						texture.Role,
+						texture.DDS.Format,
+						loadErr,
+					)
+				}
+				t.log.Info(
+					fmt.Sprintf(
+						"DDS preview prepared path=%q role=%q format=%q dimensions=%dx%d elapsed=%dms",
+						texture.Path,
+						texture.Role,
+						texture.DDS.Format,
+						plan.width,
+						plan.height,
+						time.Since(startedAt).Milliseconds(),
+					),
+					"StaticGlb.loadForViewer",
+				)
+				return data, nil
+			},
+		)
+		if previewErr != nil {
+			return ModelViewerTextureTransport{}, ids, previewErr
+		}
+		ids = append(ids, previewID)
+		directURL = previewURL
+		directMetadata.Width = plan.width
+		directMetadata.Height = plan.height
+		directMetadata.MipCount = 1
+	}
+	fallbackID := "tex-fallback:" + id
+	fallbackURL, err := t.protocol.StoreMemoryLoaderWithContentType(
+		sessionID,
+		fallbackID,
+		"image/png",
+		func(loadCtx context.Context) ([]byte, error) {
+			startedAt := time.Now()
+			data, loadErr := prepareModelViewerDDSFallback(
+				loadCtx,
+				texture.Path,
+				options.ddsPreviewPreferredDimension,
+			)
+			if loadErr != nil {
+				if infra.IsCancellationError(loadErr) {
+					return nil, loadErr
+				}
+				t.log.Warn(
+					fmt.Sprintf(
+						"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",
+						texture.Path,
+						texture.Role,
+						texture.DDS.Format,
+						profile,
+						time.Since(startedAt).Milliseconds(),
+						loadErr,
+					),
+					"StaticGlb.loadForViewer",
+				)
+				return nil, fmt.Errorf(
+					"prepare DDS fallback path=%q role=%q format=%q: %w",
+					texture.Path,
+					texture.Role,
+					texture.DDS.Format,
+					loadErr,
+				)
+			}
+			t.log.Info(
+				fmt.Sprintf(
+					"DDS fallback prepared path=%q role=%q format=%q materialProfile=%q elapsed=%dms",
+					texture.Path,
+					texture.Role,
+					texture.DDS.Format,
+					profile,
+					time.Since(startedAt).Milliseconds(),
+				),
+				"StaticGlb.loadForViewer",
+			)
+			return data, nil
+		},
+	)
+	if err != nil {
+		return ModelViewerTextureTransport{}, ids, err
+	}
+	ids = append(ids, fallbackID)
+	if resample {
+		// Without dimensions the renderer skips the compressed upload and
+		// loads the scaled fallback, while Format still drives its shader.
+		directURL = fallbackURL
+		directMetadata.Width, directMetadata.Height, directMetadata.MipCount = 0, 0, 0
+	}
+	return ModelViewerTextureTransport{
+		URL:          directURL,
+		FallbackURL:  fallbackURL,
+		Role:         texture.Role,
+		Encoding:     "dds",
+		Format:       directMetadata.Format,
+		Width:        directMetadata.Width,
+		Height:       directMetadata.Height,
+		MipCount:     directMetadata.MipCount,
+		InvertAlpha:  texture.InvertAlpha,
+		CoverageMask: texture.CoverageMask && coverage,
+		OutlineMask:  texture.OutlineMask && traits.outlineMasks,
+	}, ids, nil
+}
+
 func writeModelViewerPayload(
 	ctx context.Context,
 	t *Service,
@@ -183,158 +359,13 @@ func writeModelViewerPayload(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		texture := textures[key]
-		if texture.DDS != nil {
-			traits := transport.MaterialProfile.traits()
-			directURL := t.protocol.LocalFileURL(texture.Path, true)
-			directMetadata := *texture.DDS
-			previewLimit, resample := modelViewerDDSPreviewLimit(*texture.DDS, options)
-
-			// Compressed uploads cannot generate mipmaps, and minified normal and light
-			// maps without them turn toon shading into speckles. Dumped EFMI textures are
-			// usually mipless, so they take the decoded fallback, which does.
-			if traits.resampleMiplessDDS && texture.DDS.MipCount == 1 {
-				resample = true
-			}
-			if plan, needed := modelViewerDDSPreviewPlanFor(
-				*texture.DDS,
-				previewLimit,
-			); needed && texture.DDS.Format != "" && !resample {
-				previewURL, previewErr := t.protocol.StoreMemoryLoader(
-					sessionID,
-					"tex-dds-preview:"+key,
-					func(loadCtx context.Context) ([]byte, error) {
-						startedAt := time.Now()
-						data, loadErr := prepareModelViewerDDSPreviewWithLimit(
-							loadCtx,
-							texture.Path,
-							*texture.DDS,
-							previewLimit,
-						)
-						if loadErr != nil {
-							if infra.IsCancellationError(loadErr) {
-								return nil, loadErr
-							}
-							t.log.Warn(
-								fmt.Sprintf(
-									"DDS preview failed path=%q role=%q format=%q elapsed=%dms error=%v",
-									texture.Path,
-									texture.Role,
-									texture.DDS.Format,
-									time.Since(startedAt).Milliseconds(),
-									loadErr,
-								),
-								"StaticGlb.loadForViewer",
-							)
-							return nil, fmt.Errorf(
-								"prepare DDS preview path=%q role=%q format=%q: %w",
-								texture.Path,
-								texture.Role,
-								texture.DDS.Format,
-								loadErr,
-							)
-						}
-						t.log.Info(
-							fmt.Sprintf(
-								"DDS preview prepared path=%q role=%q format=%q dimensions=%dx%d elapsed=%dms",
-								texture.Path,
-								texture.Role,
-								texture.DDS.Format,
-								plan.width,
-								plan.height,
-								time.Since(startedAt).Milliseconds(),
-							),
-							"StaticGlb.loadForViewer",
-						)
-						return data, nil
-					},
-				)
-				if previewErr != nil {
-					return previewErr
-				}
-				directURL = previewURL
-				directMetadata.Width = plan.width
-				directMetadata.Height = plan.height
-				directMetadata.MipCount = 1
-			}
-			fallbackURL, err := t.protocol.StoreMemoryLoaderWithContentType(
-				sessionID,
-				"tex-fallback:"+key,
-				"image/png",
-				func(loadCtx context.Context) ([]byte, error) {
-					startedAt := time.Now()
-					data, loadErr := prepareModelViewerDDSFallback(
-						loadCtx,
-						texture.Path,
-						options.ddsPreviewPreferredDimension,
-					)
-					if loadErr != nil {
-						if infra.IsCancellationError(loadErr) {
-							return nil, loadErr
-						}
-						t.log.Warn(
-							fmt.Sprintf(
-								"DDS fallback failed path=%q role=%q format=%q materialProfile=%q elapsed=%dms error=%v",
-								texture.Path,
-								texture.Role,
-								texture.DDS.Format,
-								transport.MaterialProfile,
-								time.Since(startedAt).Milliseconds(),
-								loadErr,
-							),
-							"StaticGlb.loadForViewer",
-						)
-						return nil, fmt.Errorf(
-							"prepare DDS fallback path=%q role=%q format=%q: %w",
-							texture.Path,
-							texture.Role,
-							texture.DDS.Format,
-							loadErr,
-						)
-					}
-					t.log.Info(
-						fmt.Sprintf(
-							"DDS fallback prepared path=%q role=%q format=%q materialProfile=%q elapsed=%dms",
-							texture.Path,
-							texture.Role,
-							texture.DDS.Format,
-							transport.MaterialProfile,
-							time.Since(startedAt).Milliseconds(),
-						),
-						"StaticGlb.loadForViewer",
-					)
-					return data, nil
-				},
-			)
-			if err != nil {
-				return err
-			}
-			if resample {
-				// Without dimensions the renderer skips the compressed upload and
-				// loads the scaled fallback, while Format still drives its shader.
-				directURL = fallbackURL
-				directMetadata.Width, directMetadata.Height, directMetadata.MipCount = 0, 0, 0
-			}
-			transport.Textures[key] = ModelViewerTextureTransport{
-				URL:          directURL,
-				FallbackURL:  fallbackURL,
-				Role:         texture.Role,
-				Encoding:     "dds",
-				Format:       directMetadata.Format,
-				Width:        directMetadata.Width,
-				Height:       directMetadata.Height,
-				MipCount:     directMetadata.MipCount,
-				InvertAlpha:  texture.InvertAlpha,
-				CoverageMask: texture.CoverageMask && effectCardTextures[key],
-				OutlineMask:  texture.OutlineMask && traits.outlineMasks,
-			}
-			continue
-		}
-		url, err := t.protocol.StoreMemoryBuffer(sessionID, "tex:"+key, texture.Bytes, texture.MIMEType)
+		entry, _, err := t.storeModelViewerTexture(
+			sessionID, key, transport.MaterialProfile, textures[key], options, effectCardTextures[key],
+		)
 		if err != nil {
 			return err
 		}
-		transport.Textures[key] = ModelViewerTextureTransport{URL: url, Role: texture.Role, Encoding: "image"}
+		transport.Textures[key] = entry
 	}
 	positionCache := &modelViewerPositionCache{limit: modelViewerPositionCacheBytes}
 	if err := t.prepareModelViewerComputeSources(ctx, sessionID, transport, meshes, positionCache); err != nil {

@@ -45,12 +45,14 @@ type Result struct {
 	Message        string
 }
 
-// Handler receives complete scenes and objects. Its methods run on the connection's goroutine, and
-// the client waits for each to return before it sends the next request. ctx ends when the client
-// disconnects or the server shuts down. An error rejects the request; the client keeps streaming.
+// Handler receives complete scenes, objects and image pixels. Its methods run on the connection's
+// goroutine, and the client waits for each to return before it sends the next request. ctx ends when
+// the client disconnects or the server shuts down. An error rejects the request; the client keeps
+// streaming.
 type Handler interface {
 	Scene(ctx context.Context, link Link, scene Scene) (Result, error)
 	Object(ctx context.Context, link Link, update ObjectUpdate) (Result, error)
+	Texture(ctx context.Context, link Link, update TextureUpdate) (Result, error)
 	ClientError(ctx context.Context, link Link, report ClientError)
 	Disconnected(link Link)
 }
@@ -360,6 +362,10 @@ func (queueHandler) Scene(context.Context, Link, Scene) (Result, error) {
 }
 
 func (queueHandler) Object(context.Context, Link, ObjectUpdate) (Result, error) {
+	return Result{Status: AckQueued}, nil
+}
+
+func (queueHandler) Texture(context.Context, Link, TextureUpdate) (Result, error) {
 	return Result{Status: AckQueued}, nil
 }
 

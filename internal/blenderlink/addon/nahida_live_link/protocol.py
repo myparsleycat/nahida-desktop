@@ -19,6 +19,9 @@ SCENE = 0x02
 MESH_BEGIN = 0x10
 MESH_CHUNK = 0x11
 MESH_COMMIT = 0x12
+TEXTURE_BEGIN = 0x13
+TEXTURE_CHUNK = 0x14
+TEXTURE_COMMIT = 0x15
 PING = 0x20
 CLIENT_ERROR = 0x30
 HELLO_ACK = 0x81
@@ -37,6 +40,8 @@ ACK_REJECTED = 4
 
 FLAG_RESYNC_ALL = 1 << 0
 FLAG_VIEWER_ATTACHED = 1 << 1
+
+PIXEL_RGBA8 = 1
 
 ATTR_ABSENT = 0
 ATTR_INLINE = 1
@@ -286,6 +291,32 @@ def _dec_mesh_chunk(r):
     return {"attr_id": r.u16(), "offset": r.u32(), "data": r.bytes32()}
 
 
+def _enc_texture_begin(w, m):
+    w.str(m["image"])
+    w.u32(m["version"])
+    w.u32(m["scene_rev"])
+    w.u32(m["width"])
+    w.u32(m["height"])
+    w.u8(m["format"])
+    w.u32(m["byte_len"])
+
+
+def _dec_texture_begin(r):
+    return {
+        "image": r.str(), "version": r.u32(), "scene_rev": r.u32(), "width": r.u32(), "height": r.u32(),
+        "format": r.u8(), "byte_len": r.u32(),
+    }
+
+
+def _enc_texture_chunk(w, m):
+    w.u32(m["offset"])
+    w.bytes32(m["data"])
+
+
+def _dec_texture_chunk(r):
+    return {"offset": r.u32(), "data": r.bytes32()}
+
+
 def _enc_empty(w, m):
     pass
 
@@ -332,6 +363,9 @@ _CODECS = {
     MESH_BEGIN: (_enc_mesh_begin, _dec_mesh_begin),
     MESH_CHUNK: (_enc_mesh_chunk, _dec_mesh_chunk),
     MESH_COMMIT: (_enc_empty, _dec_empty),
+    TEXTURE_BEGIN: (_enc_texture_begin, _dec_texture_begin),
+    TEXTURE_CHUNK: (_enc_texture_chunk, _dec_texture_chunk),
+    TEXTURE_COMMIT: (_enc_empty, _dec_empty),
     PING: (_enc_empty, _dec_empty),
     CLIENT_ERROR: (_enc_client_error, _dec_client_error),
     HELLO_ACK: (_enc_hello_ack, _dec_hello_ack),

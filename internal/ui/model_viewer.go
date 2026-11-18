@@ -132,7 +132,11 @@ type ModelViewer struct {
 	blender *viewerBlenderSource
 	// liveWanted holds, by mesh index, the geometry URL of the newest Blender live mesh being loaded.
 	liveWanted map[int]string
-	meshLoads  chan struct{}
+	// liveTextureWanted holds, by texture key, the URL of the newest Blender live texture being loaded.
+	liveTextureWanted map[string]string
+	// pendingLive holds the Blender live updates that arrived while the scene loaded, which install applies.
+	pendingLive []modelviewer.ModelViewerLiveUpdate
+	meshLoads   chan struct{}
 	// untrimmed is the GPU size of the meshes released since the device was last trimmed.
 	untrimmed int
 	// loadFailureShown is set once the scene's first unreadable mesh or position variant was shown.
@@ -250,6 +254,7 @@ func (v *ModelViewer) Close() {
 }
 
 func (v *ModelViewer) releaseScene() {
+	v.pendingLive = nil
 	v.stopCompute(false)
 	v.stopMotion()
 	v.cancelOriginal()
@@ -413,7 +418,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.preview, v.previewForm, v.previewVars = nil, nil, nil
 	v.form = ""
 	v.highlightGameTextures = false
-	v.pendingVariants, v.pendingMeshes, v.liveWanted = nil, nil, nil
+	v.pendingVariants, v.pendingMeshes, v.liveWanted, v.liveTextureWanted = nil, nil, nil, nil
 	v.loadFailureShown = false
 	v.sourceIndices = nil
 	v.orientation = vec3{}
@@ -433,6 +438,12 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.evaluate()
 	v.startAnimation("")
 	v.refreshIneffective()
+
+	pending := v.pendingLive
+	v.pendingLive = nil
+	for _, update := range pending {
+		v.applyLiveMeshes(update)
+	}
 }
 
 func (v *ModelViewer) defaultState() map[string]any {

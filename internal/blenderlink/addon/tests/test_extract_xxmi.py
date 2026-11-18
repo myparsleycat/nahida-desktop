@@ -11,7 +11,6 @@ edited gimi scene) exactly. A last case plans the gimi scene without a dump fold
 textures on one object.
 """
 
-import hashlib
 import json
 import os
 import sys
@@ -29,7 +28,7 @@ REPO = HERE.parents[3]
 FIXTURES = REPO / "internal" / "tools" / "model_viewer" / "testdata" / "blender_live" / "xxmi"
 
 sys.path.insert(0, str(ADDON_DIR))
-from nahida_live_link import extract, plan_xxmi, protocol, transport  # noqa: E402
+from nahida_live_link import extract, plan_xxmi, protocol, textures, transport  # noqa: E402
 
 
 def load_fixture_builder():
@@ -51,6 +50,8 @@ class FakeServer:
         self.begin = None
         self.chunks = {}
         self.store = {}
+        self.texture = None
+        self.textures = {}
 
     def write(self, data):
         self.buffer += bytes(data)
@@ -90,6 +91,16 @@ class FakeServer:
                 assert transport.content_hash(attrs[header["id"]]) == header["hash"]
                 self.store[header["hash"]] = attrs[header["id"]]
             self.objects[begin["object_key"]] = dict(begin, attrs=attrs)
+            self.ack(request_id)
+        elif msg_type == protocol.TEXTURE_BEGIN:
+            assert message["scene_rev"] == self.scene["scene_rev"]
+            self.texture = dict(message, data=bytearray())
+        elif msg_type == protocol.TEXTURE_CHUNK:
+            assert message["offset"] == len(self.texture["data"])
+            self.texture["data"] += message["data"]
+        elif msg_type == protocol.TEXTURE_COMMIT:
+            assert len(self.texture["data"]) == self.texture["byte_len"]
+            self.textures[self.texture["image"]] = self.texture
             self.ack(request_id)
         else:
             raise AssertionError("unexpected message %#x" % msg_type)
@@ -273,7 +284,7 @@ def run_case(fixture, case, scratch):
 
 def add_textures(obj, scratch):
     """Gives obj a material with an external diffuse image, a packed normal map whose file is gone, and an
-    unlinked light map. Returns the expected textures entries."""
+    unlinked light map whose viewer slot is set. Returns the expected textures entries and the packed image."""
     def image_file(name):
         path = scratch / (name + ".png")
         generated = bpy.data.images.new(name + "_source", 4, 4)
@@ -287,6 +298,7 @@ def add_textures(obj, scratch):
     normal.pack()
     os.remove(normal_path)
     light, light_path = image_file("FixBodyALightMap")
+    setattr(light, textures.ROLE_PROPERTY, "light_map")
 
     material = bpy.data.materials.new("FixBodyA")
     if bpy.app.version < (5, 0, 0):
@@ -304,14 +316,16 @@ def add_textures(obj, scratch):
             links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
     obj.data.materials.append(material)
 
-    packed = normal.packed_file.data
-    packed_path = os.path.join(tempfile.gettempdir(), "nahida-live-link",
-                               hashlib.blake2b(packed, digest_size=16).hexdigest() + ".png")
+    def file_entry(image, path, role):
+        stat = os.stat(path)
+        return {"name": image.name, "role": role, "source": "file", "path": os.path.normpath(str(path)),
+                "version": "%d:%d" % (stat.st_mtime_ns, stat.st_size)}
+
     return [
-        {"name": diffuse.name, "path": os.path.normpath(str(diffuse_path)), "role": "diffuse"},
-        {"name": normal.name, "path": packed_path, "role": "normal_map"},
-        {"name": light.name, "path": os.path.normpath(str(light_path)), "role": ""},
-    ], packed
+        file_entry(diffuse, diffuse_path, "diffuse"),
+        {"name": normal.name, "role": "normal_map", "source": "pixels", "path": "", "version": ""},
+        file_entry(light, light_path, "light_map"),
+    ], normal
 
 
 def run_fallback(fixture, scratch):
@@ -320,6 +334,7 @@ def run_fallback(fixture, scratch):
     scene = bpy.context.scene
     configure_xxmi(scene, None, "", normalize, outline)
     assert scene.xxmi.game == ""
+    textures.register()
     want_textures, packed = add_textures(bpy.data.objects["FixBodyA"], scratch)
 
     plan = plan_xxmi.build(scene)
@@ -350,8 +365,29 @@ def run_fallback(fixture, scratch):
             check_object(want_objects[name], server.objects[sent["object_key"]], info)
         assert setting == want, (setting, want)
         assert info["textures"] == (want_textures if name == "FixBodyA" else []), info["textures"]
-    with open(want_textures[1]["path"], "rb") as f:
-        assert f.read() == packed
+
+    # The packed normal map goes as pixels, as the bytes Blender holds with the top row first. Each row gets its
+    # own value so that the order shows.
+    packed.pixels = [row / 4 for row in range(4) for _ in range(16)]
+    stored = numpy.round(numpy.array(packed.pixels[:]) * 255).astype(numpy.uint8).reshape(4, 16)
+    link = new_link(server)
+    link._scene_rev = scene_msg["scene_rev"]
+    link._send_texture(transport.Texture(packed.name, *textures.read_pixels(packed)))
+    sent = server.textures[packed.name]
+    assert (sent["width"], sent["height"], sent["format"], sent["version"]) == (4, 4, protocol.PIXEL_RGBA8, 1), sent
+    assert bytes(sent["data"]) == stored[::-1].tobytes(), bytes(sent["data"])
+    assert len(set(stored[:, 0])) == 4, stored
+    # Equal pixels are not sent again.
+    link._send_texture(transport.Texture(packed.name, *textures.read_pixels(packed)))
+    assert server.textures[packed.name] is sent
+    # The desktop forgets the pixels once a scene no longer lists the image, so the same pixels go again after it.
+    bare = json.loads(scene_msg["settings"].decode("utf-8"))
+    for info in bare["objects"].values():
+        info["textures"] = []
+    link._send_scene(dict(scene_msg, settings=json.dumps(bare).encode("utf-8")))
+    link._send_scene(scene_msg)
+    link._send_texture(transport.Texture(packed.name, *textures.read_pixels(packed)))
+    assert server.textures[packed.name]["version"] == 2, server.textures[packed.name]
     print("fallback: %d objects, textures match" % len(names))
 
 

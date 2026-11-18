@@ -18,9 +18,12 @@ import (
 )
 
 const (
-	// maxSessionBytes bounds the committed attribute bytes plus the inline bytes of the transfer in
-	// progress on one connection.
-	maxSessionBytes  = 512 << 20
+	// maxSessionBytes bounds the committed attribute bytes plus the inline or pixel bytes of the
+	// transfer in progress on one connection.
+	maxSessionBytes = 512 << 20
+	// maxTextureDimension is the largest 2D texture Direct3D 11 creates.
+	maxTextureDimension = 16384
+
 	handshakeTimeout = 5 * time.Second
 	idleTimeout      = 15 * time.Second
 	writeTimeout     = 10 * time.Second
@@ -48,6 +51,7 @@ type session struct {
 	blobs        map[Hash][]byte
 	held         int64
 	transfer     *transfer
+	texture      *textureTransfer
 
 	viewerAttached bool
 	resync         atomic.Bool
@@ -72,6 +76,16 @@ type inbound struct {
 	data   []byte
 	filled int
 	hash   Hash
+}
+
+type textureTransfer struct {
+	requestID uint32
+	begin     TextureBegin
+	data      []byte
+	filled    int
+	// rejected is the first rule the transfer broke; its remaining chunks are discarded.
+	rejected string
+	resync   bool
 }
 
 func newSession(ctx context.Context, m *Manager, conn net.Conn, id uint64, clientPID uint32) *session {
@@ -172,16 +186,20 @@ func (s *session) handle(frame Frame) (Message, error) {
 		return nil, s.chunk(frame)
 	case TypeMeshCommit:
 		return s.commit(frame)
+	case TypeTextureChunk:
+		return nil, s.textureChunk(frame)
+	case TypeTextureCommit:
+		return s.textureCommit(frame)
 	default:
 	}
-	if s.transfer != nil {
-		return nil, fmt.Errorf("%w: %#04x during a mesh transfer", errProtocol, uint16(frame.Type))
+	if s.transfer != nil || s.texture != nil {
+		return nil, fmt.Errorf("%w: %#04x during a transfer", errProtocol, uint16(frame.Type))
 	}
 
 	switch frame.Type {
 	case TypeHello:
 		return nil, fmt.Errorf("%w: second hello", errProtocol)
-	case TypeScene, TypeMeshBegin, TypePing, TypeClientError:
+	case TypeScene, TypeMeshBegin, TypeTextureBegin, TypePing, TypeClientError:
 	default:
 		return Ack{Status: AckRejected, Flags: s.flags(), Message: "unsupported message type"}, nil
 	}
@@ -194,6 +212,9 @@ func (s *session) handle(frame Frame) (Message, error) {
 		return s.applyScene(msg), nil
 	case MeshBegin:
 		s.begin(frame.RequestID, msg)
+		return nil, nil
+	case TextureBegin:
+		s.beginTexture(frame.RequestID, msg)
 		return nil, nil
 	case Ping:
 		return Pong{Flags: s.flags()}, nil
@@ -462,6 +483,112 @@ func (s *session) apply(t *transfer) Ack {
 	}
 	s.objects[t.begin.ObjectKey] = committedObject{revision: t.begin.Revision, attrs: hashes}
 	s.collect()
+	s.viewerAttached = result.ViewerAttached
+	return s.ack(result)
+}
+
+func (s *session) beginTexture(requestID uint32, begin TextureBegin) {
+	t := &textureTransfer{requestID: requestID, begin: begin}
+	s.texture = t
+	want := uint64(begin.Width) * uint64(begin.Height) * 4
+	switch {
+	case s.scene == nil || begin.SceneRev != s.scene.SceneRev:
+		t.resync = true
+		t.rejected = fmt.Sprintf("scene revision %d is not the current scene", begin.SceneRev)
+	case begin.Image == "":
+		t.rejected = "empty image name"
+	case begin.Format != PixelRGBA8:
+		t.rejected = fmt.Sprintf("image %q has pixel format %d", begin.Image, begin.Format)
+	case begin.Width == 0 || begin.Height == 0 || begin.Width > maxTextureDimension ||
+		begin.Height > maxTextureDimension:
+		t.rejected = fmt.Sprintf("image %q is %dx%d", begin.Image, begin.Width, begin.Height)
+	case uint64(begin.ByteLen) != want:
+		t.rejected = fmt.Sprintf("image %q has %d bytes, want %d for %dx%d RGBA8",
+			begin.Image, begin.ByteLen, want, begin.Width, begin.Height)
+	case s.held+int64(begin.ByteLen) > maxSessionBytes:
+		t.rejected = fmt.Sprintf("%d held and %d new bytes exceed the %d MiB connection limit",
+			s.held, begin.ByteLen, maxSessionBytes>>20)
+	default:
+		t.data = make([]byte, begin.ByteLen)
+	}
+}
+
+func (s *session) textureChunk(frame Frame) error {
+	t := s.texture
+	if t == nil || frame.RequestID != t.requestID {
+		return fmt.Errorf("%w: texture chunk outside its transfer", errProtocol)
+	}
+	m, err := Decode(frame)
+	if err != nil {
+		return err
+	}
+	chunk, ok := m.(TextureChunk)
+	if !ok {
+		return fmt.Errorf("%w: texture chunk decoded as %T", errProtocol, m)
+	}
+	if t.rejected != "" {
+		return nil
+	}
+
+	fail := func(format string, args ...any) {
+		t.rejected = fmt.Sprintf(format, args...)
+		t.data = nil
+	}
+	switch {
+	case len(chunk.Data) > MaxChunkData:
+		fail("chunk of %d bytes", len(chunk.Data))
+	case int(chunk.Offset) != t.filled:
+		fail("image %q chunk at %d, expected %d", t.begin.Image, chunk.Offset, t.filled)
+	case t.filled+len(chunk.Data) > len(t.data):
+		fail("image %q chunks pass its %d bytes", t.begin.Image, len(t.data))
+	default:
+		t.filled += copy(t.data[t.filled:], chunk.Data)
+	}
+	return nil
+}
+
+func (s *session) textureCommit(frame Frame) (Message, error) {
+	t := s.texture
+	if t == nil || frame.RequestID != t.requestID {
+		return nil, fmt.Errorf("%w: texture commit outside its transfer", errProtocol)
+	}
+	if _, err := Decode(frame); err != nil {
+		return nil, err
+	}
+	s.texture = nil
+	return s.applyTexture(t), nil
+}
+
+// applyTexture answers a completed texture transfer and, unless it is rejected, hands the pixels to the
+// handler. The session keeps none of them.
+func (s *session) applyTexture(t *textureTransfer) Ack {
+	if t.rejected != "" {
+		flags := s.flags()
+		if t.resync {
+			flags |= FlagResyncAll
+		}
+		return Ack{Status: AckRejected, Flags: flags, Message: t.rejected}
+	}
+	if t.filled != len(t.data) {
+		return Ack{
+			Status:  AckRejected,
+			Flags:   s.flags(),
+			Message: fmt.Sprintf("image %q has %d of %d bytes", t.begin.Image, t.filled, len(t.data)),
+		}
+	}
+
+	update := TextureUpdate{
+		SceneRev: t.begin.SceneRev, Image: t.begin.Image, Version: t.begin.Version,
+		Width: int(t.begin.Width), Height: int(t.begin.Height), Pixels: t.data,
+	}
+	result, err := s.manager.handler().Texture(s.ctx, s.link, update)
+	if err != nil {
+		s.manager.reportHandlerError(err, "BlenderLink.Texture", map[string]any{
+			"session": s.id, "image": t.begin.Image, "version": t.begin.Version, "scene_rev": t.begin.SceneRev,
+			"width": t.begin.Width, "height": t.begin.Height,
+		})
+		return Ack{Status: AckRejected, Flags: s.flags(), Message: err.Error()}
+	}
 	s.viewerAttached = result.ViewerAttached
 	return s.ack(result)
 }

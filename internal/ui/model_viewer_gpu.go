@@ -925,7 +925,7 @@ func (r *viewerRenderer) drawScene(
 			blend, _ := skin.blend(i, mesh.vertexCount)
 			state := mesh.state
 			if opts.untextured == nil {
-				state = scene.original.fillState(i, state)
+				state = scene.original.fillState(i, state, gpu.textures)
 			}
 			if err := drawOne(mesh, state, gpu.meshes[i], blend, opts.skin.anchor(i)); err != nil {
 				return err

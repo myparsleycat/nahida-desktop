@@ -1,0 +1,13 @@
+{
+  "type": "TextureBegin",
+  "request_id": 4,
+  "message": {
+    "image": "BodyDiffuse.png",
+    "version": 3,
+    "scene_rev": 2,
+    "width": 2,
+    "height": 1,
+    "format": 1,
+    "byte_len": 8
+  }
+}

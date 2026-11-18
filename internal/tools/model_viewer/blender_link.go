@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,8 +14,8 @@ import (
 	"nahida.live/desktop/internal/blenderlink"
 )
 
-// EventLiveMeshes carries a ModelViewerLiveUpdate whenever a Blender live link replaces meshes of a viewer
-// session, or changes it so that the viewer has to open it again.
+// EventLiveMeshes carries a ModelViewerLiveUpdate whenever a Blender live link replaces meshes or textures of a
+// viewer session, or changes it so that the viewer has to open it again.
 const EventLiveMeshes = "model-viewer:live-meshes"
 
 // ModelViewerLiveMesh is a session mesh rebuilt from a Blender live link. Its buffers are stored under the
@@ -30,9 +31,11 @@ type ModelViewerLiveMesh struct {
 }
 
 type ModelViewerLiveUpdate struct {
-	MemorySessionID string                `json:"memorySessionId"`
-	Meshes          []ModelViewerLiveMesh `json:"meshes"`
-	// Reload reports that objects or textures were added or removed, which the session's meshes cannot show.
+	MemorySessionID string                   `json:"memorySessionId"`
+	Meshes          []ModelViewerLiveMesh    `json:"meshes"`
+	Textures        []ModelViewerLiveTexture `json:"textures,omitempty"`
+	// Reload reports that objects were added or removed or an object's images changed role, which the session's
+	// meshes cannot show.
 	Reload bool `json:"reload,omitempty"`
 }
 
@@ -75,19 +78,24 @@ type blenderXXMIObject struct {
 	Textures []blenderTexture `json:"textures"`
 }
 
-// blenderTexture is an image an object's materials use. Role is "diffuse" or "normal_map" when the material
-// wires it as one, or empty.
+// blenderTexture is an image an object's materials use. Role is the viewer slot the image's settings or its
+// material wiring give it, or empty. Source is "file", with the file's Path and a Version that changes with its
+// content, or "pixels", which the add-on sends in texture transfers.
 type blenderTexture struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-	Role string `json:"role"`
+	Name    string `json:"name"`
+	Role    string `json:"role"`
+	Source  string `json:"source"`
+	Path    string `json:"path"`
+	Version string `json:"version"`
 }
 
-// blenderLinkScene is the newest scene of one connection and the newest revision of each of its objects.
+// blenderLinkScene is the newest scene of one connection, the newest revision of each of its objects and the
+// newest pixels of each image it describes as "pixels".
 type blenderLinkScene struct {
 	scene    blenderlink.Scene
 	settings blenderXXMISettings
 	objects  map[string]blenderlink.ObjectUpdate
+	pixels   map[string]blenderPixels
 }
 
 // BlenderLink turns what Blender live link clients send into model viewer sessions. It implements
@@ -98,23 +106,26 @@ type BlenderLink struct {
 
 	mu     sync.Mutex
 	scenes map[uint64]*blenderLinkScene
-	// apply serializes rebuilds, so the buffers of one session are replaced in the order updates arrive.
+	// apply serializes rebuilds and texture replacements, so the buffers of one session are replaced in the order
+	// updates arrive. It guards serial, buffers and applied.
 	apply  sync.Mutex
 	serial uint64
-	// buffers holds, by session and mesh, the buffer IDs of the revisions still stored: the newest, and the one
-	// before it, which a viewer may still be reading.
+	// buffers holds, by session and mesh or texture, the buffer IDs of the revisions still stored: the newest, and
+	// the one before it, which a viewer may still be reading.
 	buffers map[string]map[string][][]string
+	// applied holds, by session, what each texture of the session shows.
+	applied map[string]*blenderAppliedTextures
 }
 
 func newBlenderLink(service *Service, emit func(string, ...any)) *BlenderLink {
 	return &BlenderLink{
 		service: service, emit: emit, scenes: map[uint64]*blenderLinkScene{},
-		buffers: map[string]map[string][][]string{},
+		buffers: map[string]map[string][][]string{}, applied: map[string]*blenderAppliedTextures{},
 	}
 }
 
 func (b *BlenderLink) Scene(
-	_ context.Context,
+	ctx context.Context,
 	link blenderlink.Link,
 	scene blenderlink.Scene,
 ) (blenderlink.Result, error) {
@@ -137,10 +148,13 @@ func (b *BlenderLink) Scene(
 	b.mu.Lock()
 	state := b.scenes[link.Session]
 	if state == nil {
-		state = &blenderLinkScene{objects: map[string]blenderlink.ObjectUpdate{}}
+		state = &blenderLinkScene{
+			objects: map[string]blenderlink.ObjectUpdate{}, pixels: map[string]blenderPixels{},
+		}
 		b.scenes[link.Session] = state
 	}
 	state.scene, state.settings = scene, settings
+	state.dropUnusedPixels()
 	keys := map[string]bool{}
 	for _, component := range scene.Components {
 		for _, part := range component.Parts {
@@ -158,14 +172,54 @@ func (b *BlenderLink) Scene(
 	b.mu.Unlock()
 
 	sessions := b.service.blenderSceneSessions(link.Session)
+	var current []blenderSceneSession
 	for _, session := range sessions {
-		if session.contents != contents && b.emit != nil {
+		if session.contents == contents {
+			current = append(current, session)
+		} else if b.emit != nil {
 			b.emit(EventLiveMeshes, ModelViewerLiveUpdate{MemorySessionID: session.id, Reload: true})
 		}
 	}
 	if len(sessions) == 0 {
 		return blenderlink.Result{Status: blenderlink.AckQueued}, nil
 	}
+	b.syncTextures(ctx, link.Session, current)
+	return blenderlink.Result{Status: blenderlink.AckApplied, ViewerAttached: true}, nil
+}
+
+func (b *BlenderLink) Texture(
+	ctx context.Context,
+	link blenderlink.Link,
+	update blenderlink.TextureUpdate,
+) (blenderlink.Result, error) {
+	b.mu.Lock()
+	state := b.scenes[link.Session]
+	if state == nil || state.scene.SceneRev != update.SceneRev {
+		b.mu.Unlock()
+		return blenderlink.Result{}, errors.New("image does not belong to the current scene")
+	}
+	previous, seen := state.pixels[update.Image]
+	shown := state.showsPixels(update.Image)
+	b.mu.Unlock()
+
+	sessions := b.service.blenderSceneSessions(link.Session)
+	if !shown {
+		return blenderlink.Result{
+			Status: blenderlink.AckUnmatched, ViewerAttached: len(sessions) > 0,
+			Message: "no viewer slot shows the image",
+		}, nil
+	}
+
+	// A connection sends one request at a time, so nothing else changes the image's pixels meanwhile.
+	pixels := newBlenderPixels(update, previous, seen)
+	b.mu.Lock()
+	state.pixels[update.Image] = pixels
+	b.mu.Unlock()
+
+	if len(sessions) == 0 {
+		return blenderlink.Result{Status: blenderlink.AckQueued}, nil
+	}
+	b.syncTextures(ctx, link.Session, sessions)
 	return blenderlink.Result{Status: blenderlink.AckApplied, ViewerAttached: true}, nil
 }
 
@@ -219,6 +273,11 @@ func (b *BlenderLink) Disconnected(link blenderlink.Link) {
 	b.mu.Lock()
 	delete(b.scenes, link.Session)
 	b.mu.Unlock()
+	b.apply.Lock()
+	maps.DeleteFunc(b.applied, func(_ string, applied *blenderAppliedTextures) bool {
+		return applied.link == link.Session
+	})
+	b.apply.Unlock()
 }
 
 // SceneGame returns the importer key (GIMI, SRMI or ZZMI) of the XXMI-Tools game a connection's scene uses, or
@@ -287,12 +346,26 @@ func (b *BlenderLink) OpenScene(ctx context.Context, link uint64, importer strin
 		}
 	}
 	contents := state.contents()
+	slots := state.textureSlots()
+	pixels := maps.Clone(state.pixels)
 	b.mu.Unlock()
 	if len(components) == 0 {
 		return ModelViewerTransport{}, errors.New("the Blender scene has no meshes to show yet")
 	}
-	return b.service.openBlenderScene(ctx, blenderSceneSource{link: link, game: game, contents: contents}, name,
-		components)
+	transport, shown, err := b.service.openBlenderScene(
+		ctx, blenderSceneSource{link: link, game: game, contents: contents}, name, components, slots, pixels,
+	)
+	if err != nil {
+		return ModelViewerTransport{}, err
+	}
+
+	// Images that changed while the session opened are replaced at once; the viewer applies the update when it
+	// installs the session.
+	b.apply.Lock()
+	b.applied[transport.MemorySessionID] = &blenderAppliedTextures{link: link, slots: shown}
+	b.apply.Unlock()
+	b.syncTextures(ctx, link, b.service.blenderSceneSessions(link))
+	return transport, nil
 }
 
 func (b *BlenderLink) rebuild(ctx context.Context, sessionID string, component *blenderSceneComponent) error {
@@ -348,8 +421,8 @@ func (s *blenderLinkScene) game(importer string) (xxmiExportGame, error) {
 	return parseXXMIExportGame(importer)
 }
 
-// contents identifies the objects of the scene and the textures they use, which a session cannot change
-// without opening again.
+// contents identifies the objects of the scene and the texture keys they refer to, which a session cannot change
+// without opening again. The content behind a key changes in place.
 func (s *blenderLinkScene) contents() string {
 	var builder strings.Builder
 	for _, component := range s.scene.Components {
@@ -357,8 +430,8 @@ func (s *blenderLinkScene) contents() string {
 			for _, object := range part.Objects {
 				builder.WriteString(object.ObjectKey)
 				builder.WriteByte(0)
-				for _, texture := range s.settings.Objects[object.ObjectKey].Textures {
-					builder.WriteString(texture.Path + "\x01" + texture.Role + "\x01")
+				for _, choice := range blenderTextureChoices(s.settings.Objects[object.ObjectKey].Textures) {
+					builder.WriteString(choice.key + "\x01")
 				}
 			}
 		}

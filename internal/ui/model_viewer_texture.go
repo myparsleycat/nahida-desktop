@@ -79,6 +79,15 @@ func loadViewerTexture(
 		}
 		directErr = err
 	}
+	if entry.Encoding == "rgba8" {
+		data, err := read(ctx, entry.URL)
+		if err != nil {
+			return nil, err
+		}
+		if texture, err = rawViewerImage(data, entry.Width, entry.Height); err != nil {
+			return nil, err
+		}
+	}
 	if texture == nil {
 		url := entry.URL
 		if entry.Encoding == "dds" {
@@ -160,6 +169,24 @@ func decodeViewerImage(data []byte) (*viewerTextureData, error) {
 		height:       uint32(bounds.Dy()),
 		mips:         [][]byte{rgba.Pix},
 		pitches:      []uint32{uint32(rgba.Stride)},
+		generateMips: true,
+	}, nil
+}
+
+// rawViewerImage takes RGBA8 rows from the top as an image of width by height.
+func rawViewerImage(data []byte, width, height uint32) (*viewerTextureData, error) {
+	if width == 0 || height == 0 || width > modelViewerMaxTextureSize || height > modelViewerMaxTextureSize {
+		return nil, fmt.Errorf("texture image size %dx%d is unsupported", width, height)
+	}
+	if uint64(len(data)) != uint64(width)*uint64(height)*4 {
+		return nil, fmt.Errorf("texture of %d bytes is not %dx%d RGBA8", len(data), width, height)
+	}
+	return &viewerTextureData{
+		format:       d3d.FORMAT_R8G8B8A8_UNORM,
+		width:        width,
+		height:       height,
+		mips:         [][]byte{data},
+		pitches:      []uint32{width * 4},
 		generateMips: true,
 	}, nil
 }

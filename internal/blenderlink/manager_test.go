@@ -27,6 +27,7 @@ type recordingHandler struct {
 	result       Result
 	scenes       []Scene
 	updates      []ObjectUpdate
+	textures     []TextureUpdate
 	errors       []ClientError
 	disconnected chan Link
 }
@@ -47,6 +48,19 @@ func (h *recordingHandler) Object(_ context.Context, _ Link, update ObjectUpdate
 	defer h.mu.Unlock()
 	h.updates = append(h.updates, update)
 	return h.result, nil
+}
+
+func (h *recordingHandler) Texture(_ context.Context, _ Link, update TextureUpdate) (Result, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.textures = append(h.textures, update)
+	return h.result, nil
+}
+
+func (h *recordingHandler) textureUpdates() []TextureUpdate {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Clone(h.textures)
 }
 
 func (h *recordingHandler) ClientError(_ context.Context, _ Link, report ClientError) {
@@ -453,6 +467,87 @@ func TestManagerRejectsTransfersAndKeepsConnection(t *testing.T) {
 
 	if ack := c.sendMesh(tr.begin(1), tr.data(), 4); ack.Status != AckApplied {
 		t.Fatalf("valid transfer after rejections answered %+v", ack)
+	}
+}
+
+// sendTexture streams pixels in chunks of at most chunkSize bytes.
+func (c *testClient) sendTexture(begin TextureBegin, pixels []byte, chunkSize int) Ack {
+	c.t.Helper()
+	c.nextID++
+	c.send(c.nextID, begin)
+	for offset := 0; offset < len(pixels); offset += chunkSize {
+		end := min(offset+chunkSize, len(pixels))
+		c.send(c.nextID, TextureChunk{Offset: uint32(offset), Data: pixels[offset:end]})
+	}
+	c.send(c.nextID, TextureCommit{})
+	ack, ok := c.receive(c.nextID).(Ack)
+	if !ok {
+		c.t.Fatal("texture commit answered with something else than an ack")
+	}
+	return ack
+}
+
+func TestManagerStreamsTextures(t *testing.T) {
+	handler := newRecordingHandler(Result{Status: AckApplied, ViewerAttached: true})
+	_, _, found := startManager(t, handler)
+	c := connect(t, found)
+	c.ack(testScene)
+
+	pixels := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	begin := TextureBegin{
+		Image: "Diffuse", Version: 1, SceneRev: testScene.SceneRev, Width: 2, Height: 2, Format: PixelRGBA8,
+		ByteLen: uint32(len(pixels)),
+	}
+	if ack := c.sendTexture(begin, pixels, 6); ack.Status != AckApplied || ack.Flags != FlagViewerAttached {
+		t.Fatalf("texture answered %+v", ack)
+	}
+	want := []TextureUpdate{{SceneRev: 1, Image: "Diffuse", Version: 1, Width: 2, Height: 2, Pixels: pixels}}
+	if got := handler.textureUpdates(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("texture updates\n got %+v\nwant %+v", got, want)
+	}
+
+	cases := []struct {
+		name   string
+		begin  func() TextureBegin
+		resync bool
+		reason string
+	}{
+		{"length disagrees with size", func() TextureBegin { b := begin; b.Height = 3; return b }, false, "want 24"},
+		{"stale scene revision", func() TextureBegin { b := begin; b.SceneRev = 9; return b }, true, "current scene"},
+		{"unknown pixel format", func() TextureBegin { b := begin; b.Format = 7; return b }, false, "pixel format"},
+		{"connection byte limit", func() TextureBegin {
+			b := begin
+			b.Width, b.Height = maxTextureDimension, maxTextureDimension/2+1
+			b.ByteLen = b.Width * b.Height * 4
+			return b
+		}, false, "connection limit"},
+	}
+	for _, tc := range cases {
+		ack := c.sendTexture(tc.begin(), pixels, 6)
+		if ack.Status != AckRejected || !strings.Contains(ack.Message, tc.reason) ||
+			(ack.Flags&FlagResyncAll != 0) != tc.resync {
+			t.Fatalf("%s answered %+v", tc.name, ack)
+		}
+	}
+
+	// Chunks out of order are rejected at commit.
+	c.nextID++
+	c.send(c.nextID, begin)
+	c.send(c.nextID, TextureChunk{Offset: 8, Data: pixels[8:]})
+	c.send(c.nextID, TextureCommit{})
+	if ack, ok := c.receive(c.nextID).(Ack); !ok || ack.Status != AckRejected {
+		t.Fatalf("out of order chunk answered %+v", ack)
+	}
+	if got := handler.textureUpdates(); len(got) != 1 {
+		t.Fatalf("%d texture updates after rejections, want 1", len(got))
+	}
+
+	// Any other request inside a texture transfer breaks the protocol and closes the connection.
+	c.nextID++
+	c.send(c.nextID, begin)
+	c.send(c.nextID, Ping{})
+	if _, err := ReadFrame(c.conn); err == nil {
+		t.Fatal("connection stayed open after a ping inside a texture transfer")
 	}
 }
 

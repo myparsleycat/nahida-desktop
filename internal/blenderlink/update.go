@@ -36,6 +36,17 @@ type ObjectUpdate struct {
 	Changed []AttrID
 }
 
+// TextureUpdate is one committed transfer of an image's pixels, RGBA8 with rows from the top. Pixels is owned by
+// the receiver.
+type TextureUpdate struct {
+	SceneRev uint32
+	Image    string
+	Version  uint32
+	Width    int
+	Height   int
+	Pixels   []byte
+}
+
 type Layer struct {
 	Index int
 	Data  []float32

@@ -82,8 +82,9 @@ func readVector(t *testing.T, path string) (uint32, Message) {
 
 	targets := map[string]Message{
 		"Hello": &Hello{}, "HelloAck": &HelloAck{}, "Scene": &Scene{}, "MeshBegin": &MeshBegin{},
-		"MeshChunk": &MeshChunk{}, "MeshCommit": &MeshCommit{}, "Ack": &Ack{}, "Ping": &Ping{}, "Pong": &Pong{},
-		"ClientError": &ClientError{},
+		"MeshChunk": &MeshChunk{}, "MeshCommit": &MeshCommit{}, "TextureBegin": &TextureBegin{},
+		"TextureChunk": &TextureChunk{}, "TextureCommit": &TextureCommit{}, "Ack": &Ack{}, "Ping": &Ping{},
+		"Pong": &Pong{}, "ClientError": &ClientError{},
 	}
 	target, ok := targets[vector.Type]
 	if !ok {

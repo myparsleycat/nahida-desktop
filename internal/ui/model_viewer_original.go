@@ -211,7 +211,9 @@ func (v *ModelViewer) loadOriginal(key viewerOriginalKey, c *viewerCharacter) {
 			sources[i].positions, sources[i].uvs = mesh.positions, mesh.uvs
 		}
 		for slot, own := range []*string{info.TexKey, info.NormalMapKey, info.LightMapKey, info.MaterialMapKey} {
-			sources[i].empty[slot] = own == nil || *own == ""
+			// A Blender scene names images whose pixels may not have arrived; a mod's missing texture failed to load.
+			_, loaded := scene.transport.Textures[deref(own)]
+			sources[i].empty[slot] = deref(own) == "" || v.blender != nil && !loaded
 		}
 	}
 	input := viewerOriginalInput{
@@ -928,13 +930,18 @@ func (o *viewerOriginal) makeSkin(dev d3d.Device, m *viewerMotion) {
 	}
 }
 
-// fillState returns the state of scene mesh i with the original textures in the slots it leaves empty.
-func (o *viewerOriginal) fillState(i int, state modelviewer.ViewerMeshState) modelviewer.ViewerMeshState {
+// fillState returns the state of scene mesh i with the original textures in the slots it fills that have no scene
+// texture, such as Blender pixels that have not arrived yet.
+func (o *viewerOriginal) fillState(
+	i int,
+	state modelviewer.ViewerMeshState,
+	textures map[string]viewerTextureGPU,
+) modelviewer.ViewerMeshState {
 	if o == nil {
 		return state
 	}
 	for slot, key := range o.fills[i] {
-		if key != "" && *stateKey(&state, slot) == "" {
+		if _, shown := textures[*stateKey(&state, slot)]; key != "" && !shown {
 			*stateKey(&state, slot) = key
 		}
 	}

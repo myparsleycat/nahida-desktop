@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -40,13 +41,17 @@ type blenderLiveMesh struct {
 }
 
 // openBlenderScene exports the components as XXMI-Tools would, reads the buffers back with the mod loader's
-// decoders and stores the result as a viewer session, with no mod folder behind it.
+// decoders and stores the result as a viewer session, with no mod folder behind it. slots and pixels describe the
+// scene's textures; shown returns the slots of the texture keys the session's meshes refer to. A "pixels" slot
+// whose pixels have not arrived keeps its key on the meshes without a texture.
 func (t *Service) openBlenderScene(
 	ctx context.Context,
 	source blenderSceneSource,
 	name string,
 	components []blenderSceneComponent,
-) (transport ModelViewerTransport, err error) {
+	slots map[string]blenderTextureSlot,
+	pixels map[string]blenderPixels,
+) (transport ModelViewerTransport, shown map[string]blenderTextureSlot, err error) {
 	sessionID := t.protocol.CreateMemorySession()
 	keep := false
 	defer func() {
@@ -67,33 +72,37 @@ func (t *Service) openBlenderScene(
 	for index := range components {
 		built, err := buildBlenderSceneMeshes(&components[index], cache)
 		if err != nil {
-			return ModelViewerTransport{}, err
+			return ModelViewerTransport{}, nil, err
 		}
 		meshes = append(meshes, built...)
 	}
 
 	profile := source.game.materialProfile()
-	settings := modelViewerTextureSettings{TextureFormat: "jpeg-safe", JPEGQuality: 85, MaterialProfile: profile}
-	var jobs []modelViewerTextureJob
-	seen := map[string]bool{}
+	shown = map[string]blenderTextureSlot{}
 	for _, mesh := range meshes {
 		for _, assignment := range mesh.textureAssignments {
 			key := modelViewerAssignmentTextureKey(assignment)
-			if key == "" || seen[key] {
-				continue
+			if slot, ok := slots[key]; ok {
+				shown[key] = slot
 			}
-			seen[key] = true
-			jobs = append(jobs, modelViewerTextureJob{
-				path: assignment.file, resourceName: assignment.resource, keys: []string{key},
-				role: assignment.role, canonicalKey: key,
-			})
 		}
 	}
-	outputs, _, err := runModelViewerTextureJobs(ctx, settings, 1, jobs)
+	textures, err := t.loadBlenderFileTextures(ctx, profile, shown)
 	if err != nil {
-		return ModelViewerTransport{}, err
+		return ModelViewerTransport{}, nil, err
 	}
-	textures := outputs[0]
+	available := maps.Clone(textures)
+	for key, slot := range shown {
+		if slot.source != blenderTexturePixels {
+			continue
+		}
+		if update, ok := pixels[slot.name]; ok && update.Version == slot.pixels && len(update.Pixels) > 0 {
+			textures[key] = blenderPixelsPayload(key, slot, update)
+			available[key] = textures[key]
+		} else {
+			available[key] = modelViewerTexturePayload{Key: key, Role: slot.role}
+		}
+	}
 
 	transport = ModelViewerTransport{
 		MemorySessionID:     sessionID,
@@ -112,14 +121,14 @@ func (t *Service) openBlenderScene(
 	}
 	payloads := make([]modelViewerMeshPayload, 0, len(meshes))
 	for _, mesh := range meshes {
-		item, payload := buildModelViewerDirectMeshPayload(mesh, nil, textures, nil, cache)
+		item, payload := buildModelViewerDirectMeshPayload(mesh, nil, available, nil, cache)
 		transport.Meshes = append(transport.Meshes, item)
 		payloads = append(payloads, payload)
 	}
 	if err := writeModelViewerPayload(
 		ctx, t, sessionID, &transport, payloads, textures, modelViewerPayloadOptions{},
 	); err != nil {
-		return ModelViewerTransport{}, err
+		return ModelViewerTransport{}, nil, err
 	}
 
 	sessionContext, sessionCancel := context.WithCancel(context.Background())
@@ -127,7 +136,7 @@ func (t *Service) openBlenderScene(
 	if err := ctx.Err(); err != nil {
 		t.modelViewerMu.Unlock()
 		sessionCancel()
-		return ModelViewerTransport{}, err
+		return ModelViewerTransport{}, nil, err
 	}
 	t.modelViewerSessions[sessionID] = &modelViewerSession{
 		modPath:   "blender:" + name,
@@ -137,7 +146,7 @@ func (t *Service) openBlenderScene(
 	}
 	t.modelViewerMu.Unlock()
 	keep = true
-	return transport, nil
+	return transport, shown, nil
 }
 
 // rebuildBlenderSceneComponent rebuilds the meshes of one component, encoded as openBlenderScene stores them.
@@ -298,25 +307,15 @@ func blenderSceneVertexLayout(component *xxmiExportComponent, strides map[string
 	return layout, nil
 }
 
-// blenderTextureAssignments assigns each image a material uses to the role its material wiring or its name
-// gives it.
+// blenderTextureAssignments assigns the image of each role to the object's meshes. The file of an assignment
+// names the image rather than a path, so its key is blenderTextureKey.
 func blenderTextureAssignments(textures []blenderTexture) []modelViewerDirectTextureAssignment {
-	var assignments []modelViewerDirectTextureAssignment
-	taken := map[string]bool{}
-	for _, texture := range textures {
-		if texture.Path == "" {
-			continue
-		}
-		role := texture.Role
-		if role == "" {
-			role = classifyModelViewerTextureRole(texture.Name)
-		}
-		if taken[role] {
-			continue
-		}
-		taken[role] = true
+	choices := blenderTextureChoices(textures)
+	assignments := make([]modelViewerDirectTextureAssignment, 0, len(choices))
+	for _, choice := range choices {
 		assignments = append(assignments, modelViewerDirectTextureAssignment{
-			role: role, resource: texture.Name, file: texture.Path, authored: true, conditions: modelViewerDNFTrue(),
+			role: choice.role, resource: choice.texture.Name, file: "blender-image/" + choice.texture.Name,
+			authored: true, conditions: modelViewerDNFTrue(),
 		})
 	}
 	return assignments

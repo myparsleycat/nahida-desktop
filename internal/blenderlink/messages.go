@@ -8,17 +8,25 @@ import (
 type MessageType uint16
 
 const (
-	TypeHello       MessageType = 0x01
-	TypeScene       MessageType = 0x02
-	TypeMeshBegin   MessageType = 0x10
-	TypeMeshChunk   MessageType = 0x11
-	TypeMeshCommit  MessageType = 0x12
-	TypePing        MessageType = 0x20
-	TypeClientError MessageType = 0x30
-	TypeHelloAck    MessageType = 0x81
-	TypeAck         MessageType = 0x82
-	TypePong        MessageType = 0xA0
+	TypeHello         MessageType = 0x01
+	TypeScene         MessageType = 0x02
+	TypeMeshBegin     MessageType = 0x10
+	TypeMeshChunk     MessageType = 0x11
+	TypeMeshCommit    MessageType = 0x12
+	TypeTextureBegin  MessageType = 0x13
+	TypeTextureChunk  MessageType = 0x14
+	TypeTextureCommit MessageType = 0x15
+	TypePing          MessageType = 0x20
+	TypeClientError   MessageType = 0x30
+	TypeHelloAck      MessageType = 0x81
+	TypeAck           MessageType = 0x82
+	TypePong          MessageType = 0xA0
 )
+
+type PixelFormat uint8
+
+// PixelRGBA8 is four bytes per pixel in R, G, B, A order, rows from the top.
+const PixelRGBA8 PixelFormat = 1
 
 type HelloStatus uint8
 
@@ -159,6 +167,25 @@ type MeshChunk struct {
 
 type MeshCommit struct{}
 
+// TextureBegin opens the transfer of the pixels of one Blender image. Version grows with each transfer of
+// the image on a connection.
+type TextureBegin struct {
+	Image    string      `json:"image"`
+	Version  uint32      `json:"version"`
+	SceneRev uint32      `json:"scene_rev"`
+	Width    uint32      `json:"width"`
+	Height   uint32      `json:"height"`
+	Format   PixelFormat `json:"format"`
+	ByteLen  uint32      `json:"byte_len"`
+}
+
+type TextureChunk struct {
+	Offset uint32 `json:"offset"`
+	Data   []byte `json:"data"`
+}
+
+type TextureCommit struct{}
+
 type Ack struct {
 	Status  AckStatus `json:"status"`
 	Flags   AckFlags  `json:"flags"`
@@ -179,16 +206,19 @@ type ClientError struct {
 	Message   string `json:"message"`
 }
 
-func (Hello) Type() MessageType       { return TypeHello }
-func (HelloAck) Type() MessageType    { return TypeHelloAck }
-func (Scene) Type() MessageType       { return TypeScene }
-func (MeshBegin) Type() MessageType   { return TypeMeshBegin }
-func (MeshChunk) Type() MessageType   { return TypeMeshChunk }
-func (MeshCommit) Type() MessageType  { return TypeMeshCommit }
-func (Ack) Type() MessageType         { return TypeAck }
-func (Ping) Type() MessageType        { return TypePing }
-func (Pong) Type() MessageType        { return TypePong }
-func (ClientError) Type() MessageType { return TypeClientError }
+func (Hello) Type() MessageType         { return TypeHello }
+func (HelloAck) Type() MessageType      { return TypeHelloAck }
+func (Scene) Type() MessageType         { return TypeScene }
+func (MeshBegin) Type() MessageType     { return TypeMeshBegin }
+func (MeshChunk) Type() MessageType     { return TypeMeshChunk }
+func (MeshCommit) Type() MessageType    { return TypeMeshCommit }
+func (TextureBegin) Type() MessageType  { return TypeTextureBegin }
+func (TextureChunk) Type() MessageType  { return TypeTextureChunk }
+func (TextureCommit) Type() MessageType { return TypeTextureCommit }
+func (Ack) Type() MessageType           { return TypeAck }
+func (Ping) Type() MessageType          { return TypePing }
+func (Pong) Type() MessageType          { return TypePong }
+func (ClientError) Type() MessageType   { return TypeClientError }
 
 func (m Hello) encode(e *encoder) {
 	e.u16(m.ProtocolVersion)
@@ -258,6 +288,23 @@ func (m MeshChunk) encode(e *encoder) {
 
 func (MeshCommit) encode(*encoder) {}
 
+func (m TextureBegin) encode(e *encoder) {
+	e.str(m.Image)
+	e.u32(m.Version)
+	e.u32(m.SceneRev)
+	e.u32(m.Width)
+	e.u32(m.Height)
+	e.u8(uint8(m.Format))
+	e.u32(m.ByteLen)
+}
+
+func (m TextureChunk) encode(e *encoder) {
+	e.u32(m.Offset)
+	e.bytes32(m.Data)
+}
+
+func (TextureCommit) encode(*encoder) {}
+
 func (m Ack) encode(e *encoder) {
 	e.u8(uint8(m.Status))
 	e.u16(uint16(m.Flags))
@@ -313,6 +360,15 @@ func Decode(frame Frame) (Message, error) {
 		m = MeshChunk{AttrID: AttrID(d.u16()), Offset: d.u32(), Data: d.bytes32()}
 	case TypeMeshCommit:
 		m = MeshCommit{}
+	case TypeTextureBegin:
+		m = TextureBegin{
+			Image: d.str(), Version: d.u32(), SceneRev: d.u32(), Width: d.u32(), Height: d.u32(),
+			Format: PixelFormat(d.u8()), ByteLen: d.u32(),
+		}
+	case TypeTextureChunk:
+		m = TextureChunk{Offset: d.u32(), Data: d.bytes32()}
+	case TypeTextureCommit:
+		m = TextureCommit{}
 	case TypeAck:
 		status, flags := AckStatus(d.u8()), AckFlags(d.u16())
 		needed := make([]AttrID, d.count16(2))

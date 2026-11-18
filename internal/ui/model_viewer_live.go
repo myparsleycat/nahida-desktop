@@ -37,11 +37,16 @@ type viewerBlenderSource struct {
 	character string
 }
 
-// applyLiveMeshes shows meshes a Blender live link rebuilt in place of the scene's. A mesh that is not loaded
-// takes the new buffers when it next loads; a loaded one keeps drawing until its replacement is uploaded. A mesh
-// the scene does not have, or an update that asks for it, opens the scene again.
+// applyLiveMeshes shows meshes and textures a Blender live link rebuilt in place of the scene's. A mesh that is
+// not loaded takes the new buffers when it next loads; a loaded mesh or a texture keeps drawing until its
+// replacement is uploaded. A mesh the scene does not have, or an update that asks for it, opens the scene again.
+// While a Blender scene loads, the updates wait for install, since the session they name may be the one loading.
 func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) {
 	scene := v.scene
+	if v.loading && v.blender != nil {
+		v.pendingLive = append(v.pendingLive, update)
+		return
+	}
 	if scene == nil || scene.transport.MemorySessionID != update.MemorySessionID {
 		return
 	}
@@ -68,6 +73,57 @@ func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) 
 		}
 		v.loadLiveMesh(scene, i, info)
 	}
+	for _, live := range update.Textures {
+		if scene.transport.Textures == nil {
+			scene.transport.Textures = map[string]modelviewer.ModelViewerTextureTransport{}
+		}
+		scene.transport.Textures[live.Key] = live.Texture
+		v.loadLiveTexture(scene, live.Key, live.Texture)
+	}
+}
+
+// loadLiveTexture reads and uploads a texture a Blender live link replaced, then swaps it in, unless a newer one
+// was asked for meanwhile.
+func (v *ModelViewer) loadLiveTexture(scene *viewerScene, key string, entry modelviewer.ModelViewerTextureTransport) {
+	if v.liveTextureWanted == nil {
+		v.liveTextureWanted = map[string]string{}
+	}
+	v.liveTextureWanted[key] = entry.URL
+	ctx, read, log, normalXY := v.ctx, v.read, v.log, scene.transport.NormalXYReconstruct
+	entries := map[string]modelviewer.ModelViewerTextureTransport{key: entry}
+	go func() {
+		textures, generations, err := uploadViewerTextures(ctx, read, log, entries, normalXY)
+		fairy.Go(func() {
+			texture, uploaded := textures[key]
+			current := v.scene == scene && v.liveTextureWanted[key] == entry.URL
+			if !current || !uploaded || len(generations) != 1 || scene.gpu == nil ||
+				!generations[scene.gpu.generation] ||
+				v.uploading {
+				if uploaded {
+					_ = fairy.UseDevice(func(fairy.GPU) error {
+						texture.view.Release()
+						return nil
+					})
+				}
+				if current && err != nil && ctx.Err() == nil {
+					v.log.Warn(fmt.Sprintf("Model viewer could not show live texture %s: %v", key, err),
+						"ModelViewer.loadLiveTexture")
+				}
+				return
+			}
+			delete(v.liveTextureWanted, key)
+			old, replaced := scene.gpu.textures[key]
+			scene.gpu.textures[key] = texture
+			if replaced {
+				_ = fairy.UseDevice(func(fairy.GPU) error {
+					old.view.Release()
+					return nil
+				})
+			}
+			v.revision++
+			v.present()
+		})
+	}()
 }
 
 // loadLiveMesh reads and uploads the new geometry of loaded mesh i, then swaps it in, unless a newer one was

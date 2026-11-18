@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "nahida_live_link"
-version = "0.1.0"
+version = "0.2.0"
 name = "Nahida Live Link"
 tagline = "Shows XXMI-Tools exports live in the Nahida Desktop viewer"
 maintainer = "Nahida Desktop"

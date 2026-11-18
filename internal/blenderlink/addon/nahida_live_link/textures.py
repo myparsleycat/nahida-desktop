@@ -1,25 +1,34 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Lists the image files an object's materials use, so the desktop can load them by path.
+"""Lists the images an object's materials use and reads their pixels.
 
-Packed images are written once to %TEMP%\\nahida-live-link under the BLAKE2b-128 of their bytes. Generated
-images and images without a file or packed data are skipped.
+A clean external PNG, JPEG, WebP or DDS file is described by path, and the desktop reads the file. Any other
+image that has pixels (edited and unsaved, packed, generated, or in a format the desktop does not decode) is
+described as "pixels", and the add-on sends what Blender holds for it in TextureBegin transfers.
 """
 
-import hashlib
 import os
-import tempfile
 
 import bpy
+import numpy
 
-PACKED_DIR = os.path.join(tempfile.gettempdir(), "nahida-live-link")
-
-_packed_paths = {}
+ROLE_PROPERTY = "nahida_role"
+ROLE_AUTO = "AUTO"
+ROLE_ITEMS = (
+    (ROLE_AUTO, "Auto", "Use the material wiring or the image name"),
+    ("diffuse", "Diffuse", ""),
+    ("normal_map", "Normal map", ""),
+    ("light_map", "Light map", ""),
+    ("material_map", "Material map", ""),
+)
+FILE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".dds"}
 
 
 def object_textures(obj):
-    """Returns [{"name", "path", "role"}], one entry per distinct image of an Image Texture node in the
-    object's material slots, in slot and node order. role is "diffuse" for an image linked to a Principled
-    BSDF Base Color, "normal_map" for one linked to a Normal Map node, else ""."""
+    """Returns [{"name", "role", "source", "path", "version"}], one entry per distinct image of an Image Texture
+    node in the object's material slots, in slot and node order. role is the image's Viewer slot when set, else
+    "diffuse" for an image linked to a Principled BSDF Base Color, "normal_map" for one linked to a Normal Map
+    node, else "". source is "file" with the file's path and "mtime_ns:size" as version, or "pixels" with both
+    empty. Images without pixels are left out."""
     found = {}
     visited = set()
     for slot in obj.material_slots:
@@ -27,11 +36,62 @@ def object_textures(obj):
         if material is not None and _uses_nodes(material) and material.node_tree is not None:
             _scan(material.node_tree, found, visited)
     textures = []
-    for image, role in found.values():
-        path = _image_path(image)
-        if path:
-            textures.append({"name": image.name, "path": path, "role": role})
+    for image, wired in found.values():
+        entry = describe(image, wired)
+        if entry is not None:
+            textures.append(entry)
     return textures
+
+
+def describe(image, wired_role):
+    if image.source not in ("FILE", "GENERATED"):
+        return None
+    entry = {"name": image.name, "role": image_role(image, wired_role), "source": "pixels", "path": "",
+             "version": ""}
+    if image.source == "GENERATED" or image.packed_file is not None or image.is_dirty:
+        return entry
+    path = _file_path(image)
+    if not path:
+        return None
+    if os.path.splitext(path)[1].lower() not in FILE_EXTENSIONS:
+        return entry
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    entry.update(source="file", path=path, version="%d:%d" % (stat.st_mtime_ns, stat.st_size))
+    return entry
+
+
+def image_role(image, wired_role):
+    role = getattr(image, ROLE_PROPERTY, ROLE_AUTO)
+    return wired_role if role == ROLE_AUTO else role
+
+
+def read_pixels(image):
+    """Returns (width, height, channels, values, encode_srgb) with Image.pixels in a float32 array, or None for
+    an image without pixels. encode_srgb is set for a float buffer that holds color, which Blender keeps in
+    scene linear."""
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return None
+    count = len(image.pixels)
+    channels = count // (width * height)
+    if channels <= 0 or channels > 4 or channels * width * height != count:
+        return None
+    values = numpy.empty(count, dtype=numpy.float32)
+    image.pixels.foreach_get(values)
+    encode_srgb = image.is_float and not image.colorspace_settings.is_data
+    return width, height, channels, values, encode_srgb
+
+
+def signature(image):
+    """Changes when what read_pixels returns may have changed without a depsgraph update."""
+    packed = image.packed_file
+    return (
+        tuple(image.size), image.is_dirty, image.source, image.is_float, image.colorspace_settings.name,
+        packed.as_pointer() if packed is not None else 0, image.filepath,
+    )
 
 
 def _uses_nodes(material):
@@ -63,31 +123,29 @@ def _role(node):
     return ""
 
 
-def _image_path(image):
-    if image.source != "FILE":
-        return ""
-    packed = image.packed_file
-    if packed is not None:
-        return _write_packed(image, packed)
+def _file_path(image):
     if not image.filepath:
         return ""
     path = os.path.normpath(bpy.path.abspath(image.filepath, library=image.library))
     return path if os.path.isfile(path) else ""
 
 
-def _write_packed(image, packed):
-    key = (image.name, image.filepath, packed.size)
-    path = _packed_paths.get(key)
-    if path is not None and os.path.isfile(path):
-        return path
-    data = packed.data
-    extension = os.path.splitext(image.filepath)[1] or ".png"
-    path = os.path.join(PACKED_DIR, hashlib.blake2b(data, digest_size=16).hexdigest() + extension.lower())
-    if not os.path.isfile(path):
-        os.makedirs(PACKED_DIR, exist_ok=True)
-        temporary = "%s.%d.tmp" % (path, os.getpid())
-        with open(temporary, "wb") as f:
-            f.write(data)
-        os.replace(temporary, path)
-    _packed_paths[key] = path
-    return path
+def _role_changed(image, context):
+    from . import handlers
+
+    handlers.link.plan_dirty = True
+
+
+def register():
+    setattr(bpy.types.Image, ROLE_PROPERTY, bpy.props.EnumProperty(
+        name="Viewer slot",
+        description="Texture slot of the Nahida Desktop viewer that shows this image",
+        items=ROLE_ITEMS,
+        default=ROLE_AUTO,
+        update=_role_changed,
+    ))
+
+
+def unregister():
+    if hasattr(bpy.types.Image, ROLE_PROPERTY):
+        delattr(bpy.types.Image, ROLE_PROPERTY)

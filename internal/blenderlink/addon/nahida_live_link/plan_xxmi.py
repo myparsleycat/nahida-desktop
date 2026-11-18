@@ -309,8 +309,8 @@ def _walk(collection, main, xxmi, members):
 
 def encode_settings(plan, layers):
     """Returns the Scene settings block: the component settings plus, per object key, the polygon count of the
-    object's own mesh, the names of the UV and color layers that extraction sends as layer k, and the image
-    files of its materials."""
+    object's own mesh, the names of the UV and color layers that extraction sends as layer k, and the images of
+    its materials."""
     objects = {}
     for key, polygons in plan.polygons.items():
         names = layers.get(key, {})
