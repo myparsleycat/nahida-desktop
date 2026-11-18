@@ -11,8 +11,9 @@
 //
 // Each output file is a gzip-compressed GLB with the skeleton, the skins, the reference meshes (POSITION float32,
 // JOINTS_0 u8/u16, WEIGHTS_0 normalized u8) and the clips resampled to 60 fps, the sources' key rate (rotations as
-// normalized int16, translations and scales as float32). A channel that never leaves the joint's rest value is
-// dropped. The sample rate and the clip metadata are in the root extras.
+// normalized int16, translations and scales as float32, shape key weights as normalized int16 on the mesh's node,
+// whose extras name the mesh and its keys). A channel that never leaves the joint's rest value, or holds every
+// shape key at zero, is dropped. The sample rate and the clip metadata are in the root extras.
 //
 // Usage: node scripts/import-character-motion.mjs <raw-dir> <out-dir> [index.json]
 
@@ -20,7 +21,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gzipSync } from 'node:zlib';
+
+import { parseGLB, readAccessor, readBatch, Writer } from './character-gltf.mjs';
 
 const FPS = 60;
 const ROTATION_EPSILON = 2 / 32767;
@@ -53,137 +56,6 @@ const EFMI_CLIPS = {
   gacha_ani_loop: ['extras', 'Showcase loop'],
   interact_sit_loop: ['extras', 'Sit'],
 };
-
-const COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
-const BYTES = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
-const NORMALIZE = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 };
-
-function parseGLB(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, true) !== 0x46546c67) {
-    throw new Error('not a GLB');
-  }
-  const jsonLength = view.getUint32(12, true);
-  const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength)));
-  const binStart = 20 + jsonLength;
-  const bin = binStart + 8 <= bytes.length ? bytes.subarray(binStart + 8, binStart + 8 + view.getUint32(binStart, true)) : null;
-  return { json, bin };
-}
-
-function readAccessor({ json, bin }, index) {
-  const accessor = json.accessors[index];
-  const components = COMPONENTS[accessor.type];
-  const size = BYTES[accessor.componentType];
-  const out = new Float64Array(accessor.count * components);
-  if (accessor.bufferView == null) {
-    return out;
-  }
-  const bufferView = json.bufferViews[accessor.bufferView];
-  const stride = bufferView.byteStride || components * size;
-  const view = new DataView(bin.buffer, bin.byteOffset + (bufferView.byteOffset || 0) + (accessor.byteOffset || 0));
-  const scale = accessor.normalized ? NORMALIZE[accessor.componentType] : 1;
-  for (let i = 0; i < accessor.count; i++) {
-    for (let c = 0; c < components; c++) {
-      const offset = i * stride + c * size;
-      let value;
-      switch (accessor.componentType) {
-        case 5126:
-          value = view.getFloat32(offset, true);
-          break;
-        case 5125:
-          value = view.getUint32(offset, true);
-          break;
-        case 5123:
-          value = view.getUint16(offset, true);
-          break;
-        case 5122:
-          value = view.getInt16(offset, true);
-          break;
-        case 5121:
-          value = view.getUint8(offset);
-          break;
-        default:
-          value = view.getInt8(offset);
-      }
-      out[i * components + c] = accessor.normalized ? Math.max(value / scale, -1) : value;
-    }
-  }
-  return out;
-}
-
-class Writer {
-  constructor() {
-    this.accessors = [];
-    this.bufferViews = [];
-    this.chunks = [];
-    this.length = 0;
-  }
-
-  add(typed, accessor) {
-    const pad = (4 - (this.length % 4)) % 4;
-    if (pad) {
-      this.chunks.push(new Uint8Array(pad));
-      this.length += pad;
-    }
-    const bytes = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
-    this.bufferViews.push({ buffer: 0, byteOffset: this.length, byteLength: bytes.length });
-    this.chunks.push(bytes);
-    this.length += bytes.length;
-    this.accessors.push({ bufferView: this.bufferViews.length - 1, ...accessor });
-    return this.accessors.length - 1;
-  }
-
-  floats(values, type, withBounds) {
-    const data = Float32Array.from(values);
-    const accessor = { componentType: 5126, count: data.length / COMPONENTS[type], type };
-    if (withBounds) {
-      const components = COMPONENTS[type];
-      accessor.min = [];
-      accessor.max = [];
-      for (let c = 0; c < components; c++) {
-        let min = Infinity;
-        let max = -Infinity;
-        for (let i = c; i < data.length; i += components) {
-          min = Math.min(min, data[i]);
-          max = Math.max(max, data[i]);
-        }
-        accessor.min.push(min);
-        accessor.max.push(max);
-      }
-    }
-    return this.add(data, accessor);
-  }
-
-  glb(json) {
-    const bin = new Uint8Array(this.length);
-    let offset = 0;
-    for (const chunk of this.chunks) {
-      bin.set(chunk, offset);
-      offset += chunk.length;
-    }
-    json.accessors = this.accessors;
-    json.bufferViews = this.bufferViews;
-    json.buffers = [{ byteLength: bin.length }];
-    const text = new TextEncoder().encode(JSON.stringify(json));
-    const jsonPad = (4 - (text.length % 4)) % 4;
-    const binPad = (4 - (bin.length % 4)) % 4;
-    const total = 28 + text.length + jsonPad + bin.length + binPad;
-    const out = new Uint8Array(total);
-    const view = new DataView(out.buffer);
-    view.setUint32(0, 0x46546c67, true);
-    view.setUint32(4, 2, true);
-    view.setUint32(8, total, true);
-    view.setUint32(12, text.length + jsonPad, true);
-    view.setUint32(16, 0x4e4f534a, true);
-    out.set(text, 20);
-    out.fill(0x20, 20 + text.length, 20 + text.length + jsonPad);
-    const binHeader = 20 + text.length + jsonPad;
-    view.setUint32(binHeader, bin.length + binPad, true);
-    view.setUint32(binHeader + 4, 0x004e4942, true);
-    out.set(bin, binHeader + 8);
-    return out;
-  }
-}
 
 // sampleChannel reads the channel at t; cursor carries the key search forward, so t must not decrease between calls.
 function sampleChannel(times, values, components, interpolation, path, t, cursor) {
@@ -269,6 +141,22 @@ function convertAnimation(source, animation, nodeIndex, nodes, writer, stats) {
     }
     const sampler = animation.samplers[channel.sampler];
     const path = channel.target.path;
+    if (path === 'weights') {
+      const kept = convertWeights(source, channel, sampler, times, target, nodes, writer, stats);
+      if (kept) {
+        let input;
+        if (kept.constant) {
+          singleAccessor ??= writer.floats([0], 'SCALAR', true);
+          input = singleAccessor;
+        } else {
+          timeAccessor ??= writer.floats(times, 'SCALAR', true);
+          input = timeAccessor;
+        }
+        out.samplers.push({ input, output: kept.output, interpolation: 'LINEAR' });
+        out.channels.push({ sampler: out.samplers.length - 1, target: { node: target, path } });
+      }
+      continue;
+    }
     const components = path === 'rotation' ? 4 : 3;
     const input = readAccessor(source, sampler.input);
     const output = readAccessor(source, sampler.output);
@@ -310,6 +198,46 @@ function convertAnimation(source, animation, nodeIndex, nodes, writer, stats) {
     out.channels.push({ sampler: out.samplers.length - 1, target: { node: target, path } });
   }
   return { animation: out, duration };
+}
+
+// convertWeights resamples a shape key channel to times as normalized int16 weights, and names the keys on the
+// output node. It returns null for a channel that holds every key at zero.
+function convertWeights(source, channel, sampler, times, target, nodes, writer, stats) {
+  const sourceNode = source.json.nodes[channel.target.node];
+  const names = sourceNode.extras?.targetNames;
+  const mesh = sourceNode.extras?.mesh;
+  if (!Array.isArray(names) || names.length === 0 || !mesh) {
+    stats.droppedChannels++;
+    return null;
+  }
+  const count = names.length;
+  const input = readAccessor(source, sampler.input);
+  const output = readAccessor(source, sampler.output);
+  const interpolation = sampler.interpolation || 'LINEAR';
+  const cursor = { hi: 1 };
+  const samples = times.map((t) => sampleChannel(input, output, count, interpolation, 'weights', t, cursor));
+  if (samples.every((frame) => frame.every((v) => Math.abs(v) < 1 / 32767))) {
+    stats.restChannels++;
+    return null;
+  }
+  const morph = { mesh, targets: names };
+  const existing = nodes[target].extras?.morph;
+  if (existing && (existing.mesh !== mesh || JSON.stringify(existing.targets) !== JSON.stringify(names))) {
+    throw new Error(`${sourceNode.name}: shape keys differ between clips`);
+  }
+  nodes[target].extras = { ...nodes[target].extras, morph };
+  const constant = samples.every((frame) => nearlyEqual(frame, samples[0], 1 / 32767));
+  const values = (constant ? [samples[0]] : samples).flat();
+  stats.weightChannels++;
+  // Weights may be negative; ones past [-1, 1] keep float precision.
+  if (values.some((v) => Math.abs(v) > 1)) {
+    return { constant, output: writer.floats(values, 'SCALAR', false) };
+  }
+  const data = Int16Array.from(values, (v) => Math.round(v * 32767));
+  return {
+    constant,
+    output: writer.add(data, { componentType: 5122, normalized: true, count: data.length, type: 'SCALAR' }),
+  };
 }
 
 function convertMeshes(model, writer) {
@@ -418,7 +346,7 @@ function convertCharacter(game, id, files) {
     return out;
   });
 
-  const stats = { droppedChannels: 0, restChannels: 0 };
+  const stats = { droppedChannels: 0, restChannels: 0, weightChannels: 0 };
   const animations = [];
   const clips = [];
   if (game === 'efmi') {
@@ -486,27 +414,6 @@ function resolveId(game, key, files) {
   return match.id;
 }
 
-function readBatch(bytes) {
-  const data = gunzipSync(bytes);
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const characters = new Map();
-  let offset = 0;
-  while (offset < data.length) {
-    const nameLength = view.getUint32(offset, true);
-    const dataLength = view.getUint32(offset + 4, true);
-    const name = new TextDecoder().decode(data.subarray(offset + 8, offset + 8 + nameLength));
-    const body = data.subarray(offset + 8 + nameLength, offset + 8 + nameLength + dataLength);
-    offset += 8 + nameLength + dataLength;
-    const [game, key, ...rest] = name.split('/');
-    const id = `${game}/${key}`;
-    if (!characters.has(id)) {
-      characters.set(id, { game, key, files: new Map() });
-    }
-    characters.get(id).files.set(rest.join('/'), body);
-  }
-  return characters;
-}
-
 async function main() {
   const [rawDir, outDir, indexPath] = process.argv.slice(2);
   if (!rawDir || !outDir) {
@@ -534,7 +441,7 @@ async function main() {
       total += packed.length;
       console.log(
         `${game}/${id}: ${clips} clips, ${(glb.length / 1e6).toFixed(2)} MB -> ${(packed.length / 1e6).toFixed(2)} MB` +
-          ` (rest ${stats.restChannels}, unmatched ${stats.droppedChannels})`,
+          ` (rest ${stats.restChannels}, unmatched ${stats.droppedChannels}, shape keys ${stats.weightChannels})`,
       );
     }
   }

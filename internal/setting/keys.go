@@ -74,6 +74,7 @@ const (
 	KeyModelViewerCharacterToonStyles = "modelViewer.characterToonStyles"
 	KeyModelViewerOverlayInViewer     = "modelViewer.overlayInViewer"
 	KeyModelViewerGamePreview         = "modelViewer.gamePreview"
+	KeyModelViewerOriginalData        = "modelViewer.originalData"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -183,6 +184,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerCharacterToonStyles, ScopeModelViewer, "model_viewer_character_toon_styles"},
 	{KeyModelViewerOverlayInViewer, ScopeModelViewer, "model_viewer_overlay_in_viewer"},
 	{KeyModelViewerGamePreview, ScopeModelViewer, "model_viewer_game_preview"},
+	{KeyModelViewerOriginalData, ScopeModelViewer, "model_viewer_original_data"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},

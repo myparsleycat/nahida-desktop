@@ -1730,7 +1730,18 @@
           "environment_soft": "ソフト",
           "exposure": "露出",
           "toon_shadows": "トゥーンシャドウ",
-          "character_motion": "キャラクターモーション"
+          "character_motion": "キャラクターモーション",
+          "original_data": "ゲームの元データ",
+          "original_parts": "不足しているパーツ",
+          "expression": "表情",
+          "expression_default": "デフォルト",
+          "expression_smile": "笑顔",
+          "expression_angry": "怒り",
+          "expression_troubled": "困り顔",
+          "expression_surprised": "驚き",
+          "expression_wink": "ウインク",
+          "expression_closed": "目を閉じる",
+          "expression_blink": "まばたき"
         },
         "dialog": {
           "save_preset": {
@@ -1759,6 +1770,8 @@
           "capture_not_ready": "モデルを読み込み中です",
           "load_error": "モデルの読み込みに失敗しました",
           "motion_error": "キャラクターモーションの読み込みに失敗しました",
+          "original_error": "ゲームの元データの読み込みに失敗しました",
+          "original_textures_missing": "一部の元テクスチャの読み込みに失敗しました",
           "motion_play_error": "キャラクターモーションの再生に失敗しました",
           "motion_no_blend": "MOD にモーションを適用するボーンウェイトがありません"
         },

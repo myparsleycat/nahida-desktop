@@ -25,10 +25,12 @@ const (
 	ModelViewerSpoolDir = "model-viewer-spool"
 	// CharacterMotionDir caches the character motion files the model viewer plays.
 	CharacterMotionDir = "character-motion"
-	AgentDir           = "agent"
-	AgentSkillsDir     = AgentDir + string(filepath.Separator) + "skills"
-	ElevatedDir        = "elevated"
-	WebViewDir         = "webview"
+	// CharacterOriginalDir caches the original character models and textures the model viewer fills mods with.
+	CharacterOriginalDir = "character-original"
+	AgentDir             = "agent"
+	AgentSkillsDir       = AgentDir + string(filepath.Separator) + "skills"
+	ElevatedDir          = "elevated"
+	WebViewDir           = "webview"
 	// NotificationIcon is the image Windows shows on the app's toast notifications.
 	NotificationIcon = "notification-icon.png"
 )

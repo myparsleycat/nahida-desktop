@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -22,6 +21,7 @@ import (
 	"sync"
 
 	"nahida.live/desktop/internal/appdata"
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
@@ -39,16 +39,22 @@ const (
 	characterMotionMaxFPS = 240
 )
 
-type characterMotionEntry struct {
+type characterFileEntry struct {
 	File   string `json:"file"`
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
 }
 
-var characterMotionIndex = sync.OnceValues(func() (map[string]map[string]characterMotionEntry, error) {
+// valid reports whether the entry names a file below its cache folder with a size.
+func (e characterFileEntry) valid() bool {
+	clean := path.Clean(e.File)
+	return clean == e.File && !path.IsAbs(clean) && !strings.HasPrefix(clean, "../") && clean != ".." && e.Size > 0
+}
+
+var characterMotionIndex = sync.OnceValues(func() (map[string]map[string]characterFileEntry, error) {
 	var index struct {
-		Format     int                                        `json:"format"`
-		Characters map[string]map[string]characterMotionEntry `json:"characters"`
+		Format     int                                      `json:"format"`
+		Characters map[string]map[string]characterFileEntry `json:"characters"`
 	}
 	if err := json.Unmarshal(characterMotionIndexJSON, &index); err != nil {
 		return nil, fmt.Errorf("parse character motion index: %w", err)
@@ -59,10 +65,10 @@ var characterMotionIndex = sync.OnceValues(func() (map[string]map[string]charact
 	return index.Characters, nil
 })
 
-func characterMotionLookup(game, id string) (characterMotionEntry, bool) {
+func characterMotionLookup(game, id string) (characterFileEntry, bool) {
 	index, err := characterMotionIndex()
 	if err != nil {
-		return characterMotionEntry{}, false
+		return characterFileEntry{}, false
 	}
 	entry, ok := index[strings.ToLower(game)][id]
 	return entry, ok
@@ -81,8 +87,7 @@ func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*Ch
 	if !ok {
 		return nil, fmt.Errorf("no character motion for %s/%s", game, id)
 	}
-	clean := path.Clean(entry.File)
-	if clean != entry.File || path.IsAbs(clean) || strings.HasPrefix(clean, "../") || entry.Size <= 0 {
+	if !entry.valid() {
 		return nil, fmt.Errorf("invalid character motion entry %q", entry.File)
 	}
 	if t.appData == nil {
@@ -93,17 +98,17 @@ func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*Ch
 		defer func() { <-t.motionFiles }()
 		t.pruneCharacterMotionCache()
 	})
-	destination, err := t.appData.Resolve(filepath.Join(appdata.CharacterMotionDir, filepath.FromSlash(clean)))
+	destination, err := t.appData.Resolve(filepath.Join(appdata.CharacterMotionDir, filepath.FromSlash(entry.File)))
 	if err != nil {
 		return nil, err
 	}
-	data, err := t.characterMotionFile(ctx, entry, destination)
+	data, err := t.cachedCharacterFile(ctx, t.motionFiles, characterMotionBaseURL, entry, destination)
 	if err != nil {
 		return nil, infra.AnnotateError(err, infra.Diagnostic{
 			Operation: "load-character-motion",
 			Fields: map[string]any{
 				"game": game, "character": id, "path": destination,
-				"url": infra.SanitizeLogURL(characterMotionBaseURL + clean),
+				"url": infra.SanitizeLogURL(characterMotionBaseURL + entry.File),
 			},
 		})
 	}
@@ -114,43 +119,61 @@ func (t *Service) LoadCharacterMotion(ctx context.Context, game, id string) (*Ch
 	return motion, nil
 }
 
-// characterMotionFile returns the verified compressed file, downloading it when the cached copy is missing or
-// does not match the index. A download replaces the cached file atomically, so the cache is read without waiting
-// for downloads.
-func (t *Service) characterMotionFile(
+// cachedCharacterFile returns the verified file of entry below baseURL, downloading it to destination when the
+// cached copy is missing or does not match the entry. gate admits one download at a time per cache. A download
+// replaces the cached file atomically, so the cache is read without waiting for downloads.
+func (t *Service) cachedCharacterFile(
 	ctx context.Context,
-	entry characterMotionEntry,
+	gate chan struct{},
+	baseURL string,
+	entry characterFileEntry,
 	destination string,
 ) ([]byte, error) {
-	if data, err := os.ReadFile(destination); err == nil && verifyCharacterMotion(data, entry) == nil {
+	if data, err := readCachedCharacterFile(ctx, destination, entry); err == nil {
 		return data, nil
 	}
 	if t.download == nil {
-		return nil, errors.New("character motion download is not available")
+		return nil, errors.New("character data download is not available")
 	}
 
 	select {
-	case t.motionFiles <- struct{}{}:
+	case gate <- struct{}{}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	defer func() { <-t.motionFiles }()
+	defer func() { <-gate }()
 	// Another viewer may have downloaded the file while this one waited.
-	if data, err := os.ReadFile(destination); err == nil && verifyCharacterMotion(data, entry) == nil {
+	if data, err := readCachedCharacterFile(ctx, destination, entry); err == nil {
 		return data, nil
 	}
 	err := t.download.File(ctx, infra.DownloadRequest{
-		URL: characterMotionBaseURL + entry.File, Destination: destination, Size: entry.Size, MaxSize: entry.Size,
+		URL: baseURL + entry.File, Destination: destination, Size: entry.Size, MaxSize: entry.Size,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("download character motion: %w", err)
+		return nil, fmt.Errorf("download %s: %w", entry.File, err)
 	}
+	data, err := readCachedCharacterFile(ctx, destination, entry)
+	if err != nil {
+		if ctx.Err() == nil {
+			_ = os.Remove(destination)
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+// readCachedCharacterFile reads destination under a disk slot and checks it against entry.
+func readCachedCharacterFile(ctx context.Context, destination string, entry characterFileEntry) ([]byte, error) {
+	release, err := diskio.Acquire(ctx, destination)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	data, err := os.ReadFile(destination)
 	if err != nil {
-		return nil, fmt.Errorf("read character motion: %w", err)
+		return nil, fmt.Errorf("read %s: %w", entry.File, err)
 	}
-	if err := verifyCharacterMotion(data, entry); err != nil {
-		_ = os.Remove(destination)
+	if err := verifyCharacterFile(data, entry); err != nil {
 		return nil, err
 	}
 	return data, nil
@@ -172,15 +195,15 @@ func (t *Service) pruneCharacterMotionCache() {
 			keep = append(keep, filepath.Join(dir, filepath.FromSlash(entry.File)))
 		}
 	}
-	if err := pruneCharacterMotionCache(dir, keep); err != nil {
+	if err := pruneCharacterCache(dir, keep); err != nil {
 		t.log.Warn(fmt.Sprintf("Character motion cache %s was not fully pruned: %v", dir, err),
 			"ModelViewer.characterMotion")
 	}
 }
 
-// pruneCharacterMotionCache removes the files in the game folders of dir that keep does not name: the motions of
-// an earlier index and unfinished downloads. It must not run while a motion downloads.
-func pruneCharacterMotionCache(dir string, keep []string) error {
+// pruneCharacterCache removes the files in the folders of dir that keep does not name: the files of an earlier index
+// and unfinished downloads. It must not run while a file of the cache downloads.
+func pruneCharacterCache(dir string, keep []string) error {
 	games, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -213,13 +236,13 @@ func pruneCharacterMotionCache(dir string, keep []string) error {
 	return errors.Join(errs...)
 }
 
-func verifyCharacterMotion(data []byte, entry characterMotionEntry) error {
+func verifyCharacterFile(data []byte, entry characterFileEntry) error {
 	if int64(len(data)) != entry.Size {
-		return fmt.Errorf("character motion size is %d, expected %d", len(data), entry.Size)
+		return fmt.Errorf("%s size is %d, expected %d", entry.File, len(data), entry.Size)
 	}
 	sum := sha256.Sum256(data)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), entry.SHA256) {
-		return errors.New("character motion SHA-256 does not match the index")
+		return fmt.Errorf("%s SHA-256 does not match its index entry", entry.File)
 	}
 	return nil
 }
@@ -231,8 +254,12 @@ type CharacterMotion struct {
 	// FPS is the rate every clip is sampled at.
 	FPS   float64
 	Clips []CharacterMotionClip
+	// Morphs lists the meshes whose shape keys some clip drives, with their keys in order.
+	Morphs []CharacterMotionMorph
 
 	nodes []motionNode
+	// names holds each node's name, or "" for one without.
+	names []string
 	// toMod takes the skeleton's mesh space to mod space and fromMod back.
 	toMod, fromMod motionAffine
 	// restInv is each node's rest world matrix inverted and followed by the mesh-to-world bind.
@@ -254,6 +281,22 @@ type CharacterMotionClip struct {
 	Frames    int
 
 	channels []motionChannel
+	morphs   []motionMorphChannel
+}
+
+// CharacterMotionMorph names a mesh whose shape keys a motion drives, and those keys in the order the clips give
+// their weights.
+type CharacterMotionMorph struct {
+	Mesh    string
+	Targets []string
+}
+
+// motionMorphChannel holds the weights of every key of Morphs[morph] per frame, or for a single frame, and how far
+// each key moves over the frames.
+type motionMorphChannel struct {
+	morph  int
+	values []float32
+	ranges []float32
 }
 
 type motionNode struct {
@@ -387,65 +430,6 @@ func motionTRSFromMatrix(m [16]float64) motionTRS {
 	return trs
 }
 
-type motionGLTF struct {
-	Extras struct {
-		Format    int     `json:"format"`
-		FPS       float64 `json:"fps"`
-		Character string  `json:"character"`
-		Clips     []struct {
-			Name  string `json:"name"`
-			Group string `json:"group"`
-			Mode  string `json:"mode"`
-			// LoopFrom is the second a clip that plays once repeats from after its last frame.
-			LoopFrom *float64 `json:"loopFrom"`
-		} `json:"clips"`
-	} `json:"extras"`
-	Nodes []struct {
-		Translation *[3]float64  `json:"translation"`
-		Rotation    *[4]float64  `json:"rotation"`
-		Scale       *[3]float64  `json:"scale"`
-		Matrix      *[16]float64 `json:"matrix"`
-		Children    []int        `json:"children"`
-		Mesh        *int         `json:"mesh"`
-		Skin        *int         `json:"skin"`
-	} `json:"nodes"`
-	Meshes []struct {
-		Primitives []struct {
-			Attributes map[string]int `json:"attributes"`
-		} `json:"primitives"`
-	} `json:"meshes"`
-	Skins []struct {
-		Joints              []int `json:"joints"`
-		InverseBindMatrices *int  `json:"inverseBindMatrices"`
-	} `json:"skins"`
-	Animations []struct {
-		Name     string `json:"name"`
-		Channels []struct {
-			Sampler int `json:"sampler"`
-			Target  struct {
-				Node int    `json:"node"`
-				Path string `json:"path"`
-			} `json:"target"`
-		} `json:"channels"`
-		Samplers []struct {
-			Output int `json:"output"`
-		} `json:"samplers"`
-	} `json:"animations"`
-	Accessors []struct {
-		BufferView    *int   `json:"bufferView"`
-		ByteOffset    int    `json:"byteOffset"`
-		ComponentType int    `json:"componentType"`
-		Normalized    bool   `json:"normalized"`
-		Count         int    `json:"count"`
-		Type          string `json:"type"`
-	} `json:"accessors"`
-	BufferViews []struct {
-		ByteOffset int `json:"byteOffset"`
-		ByteLength int `json:"byteLength"`
-		ByteStride int `json:"byteStride"`
-	} `json:"bufferViews"`
-}
-
 // parseCharacterMotion reads a gzip-compressed motion GLB written by scripts/import-character-motion.mjs.
 func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(compressed))
@@ -459,7 +443,7 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 	if len(glb) > characterMotionMaxGLB {
 		return nil, errors.New("character motion is too large")
 	}
-	doc, bin, err := splitMotionGLB(glb)
+	doc, bin, err := splitCharacterGLB(glb)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +462,7 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 		return nil, err
 	}
 	accessor := func(index, components int) ([]float32, error) {
-		return readMotionAccessor(doc, bin, index, components)
+		return readCharacterAccessor(doc, bin, index, components)
 	}
 	if err := motion.readSkins(doc, accessor); err != nil {
 		return nil, err
@@ -489,97 +473,12 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 	return motion, nil
 }
 
-func splitMotionGLB(glb []byte) (*motionGLTF, []byte, error) {
-	if len(glb) < 20 || string(glb[:4]) != "glTF" || binary.LittleEndian.Uint32(glb[4:]) != 2 {
-		return nil, nil, errors.New("not a glTF 2 binary")
-	}
-	jsonLength := int(binary.LittleEndian.Uint32(glb[12:]))
-	if binary.LittleEndian.Uint32(glb[16:]) != 0x4e4f534a || jsonLength > len(glb)-20 {
-		return nil, nil, errors.New("invalid glTF JSON chunk")
-	}
-	var doc motionGLTF
-	if err := json.Unmarshal(glb[20:20+jsonLength], &doc); err != nil {
-		return nil, nil, fmt.Errorf("decode glTF JSON: %w", err)
-	}
-	rest := glb[20+jsonLength:]
-	if len(rest) < 8 || binary.LittleEndian.Uint32(rest[4:]) != 0x004e4942 {
-		return nil, nil, errors.New("missing glTF binary chunk")
-	}
-	binLength := int(binary.LittleEndian.Uint32(rest))
-	if binLength > len(rest)-8 {
-		return nil, nil, errors.New("invalid glTF binary chunk")
-	}
-	return &doc, rest[8 : 8+binLength], nil
-}
-
-// readMotionAccessor decodes an accessor of components values per element into floats.
-func readMotionAccessor(doc *motionGLTF, bin []byte, index, components int) ([]float32, error) {
-	if index < 0 || index >= len(doc.Accessors) {
-		return nil, fmt.Errorf("accessor %d does not exist", index)
-	}
-	accessor := doc.Accessors[index]
-	width := map[string]int{"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}[accessor.Type]
-	size := map[int]int{5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}[accessor.ComponentType]
-	if width != components || size == 0 || accessor.BufferView == nil || accessor.Count < 0 {
-		return nil, fmt.Errorf("accessor %d has an unexpected layout", index)
-	}
-	if *accessor.BufferView < 0 || *accessor.BufferView >= len(doc.BufferViews) {
-		return nil, fmt.Errorf("accessor %d buffer view does not exist", index)
-	}
-	view := doc.BufferViews[*accessor.BufferView]
-	stride := view.ByteStride
-	if stride == 0 {
-		stride = width * size
-	}
-	start := view.ByteOffset + accessor.ByteOffset
-	if accessor.Count > 0 {
-		end := start + (accessor.Count-1)*stride + width*size
-		if view.ByteOffset < 0 || start < view.ByteOffset || end > view.ByteOffset+view.ByteLength || end > len(bin) {
-			return nil, fmt.Errorf("accessor %d exceeds its buffer", index)
-		}
-	}
-	out := make([]float32, accessor.Count*width)
-	for element := range accessor.Count {
-		at := start + element*stride
-		for component := range width {
-			raw := bin[at+component*size:]
-			var value float32
-			switch accessor.ComponentType {
-			case 5126:
-				value = math.Float32frombits(binary.LittleEndian.Uint32(raw))
-			case 5125:
-				value = float32(binary.LittleEndian.Uint32(raw))
-			case 5123:
-				value = float32(binary.LittleEndian.Uint16(raw))
-				if accessor.Normalized {
-					value /= 65535
-				}
-			case 5122:
-				value = float32(int16(binary.LittleEndian.Uint16(raw)))
-				if accessor.Normalized {
-					value = max(value/32767, -1)
-				}
-			case 5121:
-				value = float32(raw[0])
-				if accessor.Normalized {
-					value /= 255
-				}
-			case 5120:
-				value = float32(int8(raw[0]))
-				if accessor.Normalized {
-					value = max(value/127, -1)
-				}
-			}
-			out[element*width+component] = value
-		}
-	}
-	return out, nil
-}
-
-func (m *CharacterMotion) readNodes(doc *motionGLTF) error {
+func (m *CharacterMotion) readNodes(doc *characterGLTF) error {
 	m.nodes = make([]motionNode, len(doc.Nodes))
+	m.names = make([]string, len(doc.Nodes))
 	for i := range m.nodes {
 		m.nodes[i].parent = -1
+		m.names[i] = doc.Nodes[i].Name
 	}
 	for i, node := range doc.Nodes {
 		rest := motionTRS{r: [4]float64{0, 0, 0, 1}, s: [3]float64{1, 1, 1}}
@@ -650,44 +549,11 @@ func (m *CharacterMotion) worlds(local []motionTRS, out []motionAffine) ([]motio
 	return out, nil
 }
 
-func (m *CharacterMotion) readSkins(doc *motionGLTF, accessor func(int, int) ([]float32, error)) error {
-	binds := make([]motionAffine, len(doc.Skins))
-	jointIBMs := make([][]motionAffine, len(doc.Skins))
-	for s, skin := range doc.Skins {
-		if len(skin.Joints) == 0 || skin.InverseBindMatrices == nil {
-			return fmt.Errorf("skin %d has no joints", s)
-		}
-		values, err := accessor(*skin.InverseBindMatrices, 16)
-		if err != nil {
-			return err
-		}
-		if len(values) != len(skin.Joints)*16 {
-			return fmt.Errorf("skin %d has %d bind matrices for %d joints", s, len(values)/16, len(skin.Joints))
-		}
-		jointIBMs[s] = make([]motionAffine, len(skin.Joints))
-		for j, node := range skin.Joints {
-			if node < 0 || node >= len(m.nodes) {
-				return fmt.Errorf("skin %d joint %d does not exist", s, node)
-			}
-			var ibm motionAffine
-			for row := range 3 {
-				for col := range 4 {
-					ibm[row*4+col] = float64(values[j*16+col*4+row])
-				}
-			}
-			jointIBMs[s][j] = ibm
-		}
-		// Every joint of a skin shares one mesh-to-world bind, its rest world times its inverse bind.
-		binds[s] = m.nodes[skin.Joints[0]].world.mul(jointIBMs[s][0])
-		m.skins = append(m.skins, skin.Joints)
-	}
-	if len(binds) == 0 {
-		return errors.New("character motion has no skin")
-	}
-	if err := m.bindSkeleton(binds[0]); err != nil {
+func (m *CharacterMotion) readSkins(doc *characterGLTF, accessor func(int, int) ([]float32, error)) error {
+	binds, err := m.readSkinBinds(doc, accessor)
+	if err != nil {
 		return err
 	}
-
 	for _, node := range doc.Nodes {
 		if node.Mesh == nil || node.Skin == nil || *node.Mesh < 0 || *node.Mesh >= len(doc.Meshes) ||
 			*node.Skin < 0 || *node.Skin >= len(doc.Skins) {
@@ -702,6 +568,51 @@ func (m *CharacterMotion) readSkins(doc *motionGLTF, accessor func(int, int) ([]
 		}
 	}
 	return nil
+}
+
+// readSkinBinds reads the skins' joints and binds the skeleton to mod space. It returns each skin's mesh-to-world
+// bind.
+func (m *CharacterMotion) readSkinBinds(
+	doc *characterGLTF,
+	accessor func(int, int) ([]float32, error),
+) ([]motionAffine, error) {
+	binds := make([]motionAffine, len(doc.Skins))
+	jointIBMs := make([][]motionAffine, len(doc.Skins))
+	for s, skin := range doc.Skins {
+		if len(skin.Joints) == 0 || skin.InverseBindMatrices == nil {
+			return nil, fmt.Errorf("skin %d has no joints", s)
+		}
+		values, err := accessor(*skin.InverseBindMatrices, 16)
+		if err != nil {
+			return nil, err
+		}
+		if len(values) != len(skin.Joints)*16 {
+			return nil, fmt.Errorf("skin %d has %d bind matrices for %d joints", s, len(values)/16, len(skin.Joints))
+		}
+		jointIBMs[s] = make([]motionAffine, len(skin.Joints))
+		for j, node := range skin.Joints {
+			if node < 0 || node >= len(m.nodes) {
+				return nil, fmt.Errorf("skin %d joint %d does not exist", s, node)
+			}
+			var ibm motionAffine
+			for row := range 3 {
+				for col := range 4 {
+					ibm[row*4+col] = float64(values[j*16+col*4+row])
+				}
+			}
+			jointIBMs[s][j] = ibm
+		}
+		// Every joint of a skin shares one mesh-to-world bind, its rest world times its inverse bind.
+		binds[s] = m.nodes[skin.Joints[0]].world.mul(jointIBMs[s][0])
+		m.skins = append(m.skins, skin.Joints)
+	}
+	if len(binds) == 0 {
+		return nil, errors.New("character motion has no skin")
+	}
+	if err := m.bindSkeleton(binds[0]); err != nil {
+		return nil, err
+	}
+	return binds, nil
 }
 
 // bindSkeleton sets the transforms between the skeleton's mesh space, where bind takes it to world space, and
@@ -771,7 +682,7 @@ func (m *CharacterMotion) readReference(
 	return nil
 }
 
-func (m *CharacterMotion) readClips(doc *motionGLTF, accessor func(int, int) ([]float32, error)) error {
+func (m *CharacterMotion) readClips(doc *characterGLTF, accessor func(int, int) ([]float32, error)) error {
 	for a, animation := range doc.Animations {
 		clip := CharacterMotionClip{Name: animation.Name, Frames: 1}
 		var loopFrom *float64
@@ -792,6 +703,17 @@ func (m *CharacterMotion) readClips(doc *motionGLTF, accessor func(int, int) ([]
 			case "scale":
 				path = motionScale
 			case "translation":
+			case "weights":
+				morph, err := m.readMorphChannel(doc, channel.Target.Node, animation.Samplers[channel.Sampler].Output,
+					accessor)
+				if err != nil {
+					return fmt.Errorf("clip %s: %w", clip.Name, err)
+				}
+				if morph.values != nil {
+					clip.Frames = max(clip.Frames, len(morph.values)/len(m.Morphs[morph.morph].Targets))
+					clip.morphs = append(clip.morphs, morph)
+				}
+				continue
 			default:
 				continue
 			}
@@ -810,6 +732,92 @@ func (m *CharacterMotion) readClips(doc *motionGLTF, accessor func(int, int) ([]
 			clip.LoopStart = min(int(math.Round(*loopFrom*m.FPS)), clip.Frames-1)
 		}
 		m.Clips = append(m.Clips, clip)
+	}
+	return nil
+}
+
+// readMorphChannel reads a channel of shape key weights, adding the mesh its node names to Morphs.
+func (m *CharacterMotion) readMorphChannel(
+	doc *characterGLTF,
+	node, output int,
+	accessor func(int, int) ([]float32, error),
+) (motionMorphChannel, error) {
+	morph := doc.Nodes[node].Extras.Morph
+	if morph == nil || morph.Mesh == "" || len(morph.Targets) == 0 || len(morph.Targets) > characterOriginalMaxTargets {
+		return motionMorphChannel{}, fmt.Errorf("node %d drives shape keys it does not name", node)
+	}
+	index := slices.IndexFunc(m.Morphs, func(known CharacterMotionMorph) bool { return known.Mesh == morph.Mesh })
+	if index < 0 {
+		m.Morphs = append(m.Morphs, CharacterMotionMorph{Mesh: morph.Mesh, Targets: morph.Targets})
+		index = len(m.Morphs) - 1
+	} else if !slices.Equal(m.Morphs[index].Targets, morph.Targets) {
+		// Another node names the mesh with other keys; its weights cannot be told apart, so they are left out.
+		return motionMorphChannel{}, nil
+	}
+	values, err := accessor(output, 1)
+	if err != nil {
+		return motionMorphChannel{}, err
+	}
+	count := len(morph.Targets)
+	if len(values)%count != 0 {
+		return motionMorphChannel{}, fmt.Errorf("mesh %s weights do not fill whole frames", morph.Mesh)
+	}
+	if len(values) == 0 {
+		return motionMorphChannel{}, nil
+	}
+	low, high := slices.Clone(values[:count]), slices.Clone(values[:count])
+	for frame := count; frame < len(values); frame += count {
+		for k, w := range values[frame : frame+count] {
+			low[k], high[k] = min(low[k], w), max(high[k], w)
+		}
+	}
+	for k := range high {
+		high[k] -= low[k]
+	}
+	return motionMorphChannel{morph: index, values: values, ranges: high}, nil
+}
+
+// MorphRange is how far the clip moves key of Morphs[morph] over its frames, or 0 when it does not drive it.
+func (m *CharacterMotion) MorphRange(clip, morph, key int) float32 {
+	if clip < 0 || clip >= len(m.Clips) {
+		return 0
+	}
+	for _, channel := range m.Clips[clip].morphs {
+		if channel.morph == morph && key >= 0 && key < len(channel.ranges) {
+			return channel.ranges[key]
+		}
+	}
+	return 0
+}
+
+// MorphWeights writes into weights[i], for each of Morphs the clip drives, the weights of its keys a fraction t of
+// the way from frame to next, and reports in driven which morphs the clip drives. Both slices are indexed like
+// Morphs, and weights[i] must hold one value per key.
+func (m *CharacterMotion) MorphWeights(clip, frame, next int, t float64, weights [][]float32, driven []bool) error {
+	if clip < 0 || clip >= len(m.Clips) {
+		return fmt.Errorf("clip %d does not exist", clip)
+	}
+	if len(weights) != len(m.Morphs) || len(driven) != len(m.Morphs) {
+		return errors.New("morph output does not match the motion")
+	}
+	clear(driven)
+	t = min(max(t, 0), 1)
+	if math.IsNaN(t) {
+		t = 0
+	}
+	for _, channel := range m.Clips[clip].morphs {
+		count := len(m.Morphs[channel.morph].Targets)
+		out := weights[channel.morph]
+		if len(out) != count {
+			return errors.New("morph output does not match the motion")
+		}
+		last := len(channel.values)/count - 1
+		from := channel.values[min(max(frame, 0), last)*count:][:count]
+		to := channel.values[min(max(next, 0), last)*count:][:count]
+		for k := range out {
+			out[k] = from[k] + (to[k]-from[k])*float32(t)
+		}
+		driven[channel.morph] = true
 	}
 	return nil
 }
@@ -935,6 +943,14 @@ func normalizeMotionQuaternion(value []float32) ([4]float64, bool) {
 
 // NodeCount is the length of the output Evaluate writes.
 func (m *CharacterMotion) NodeCount() int { return len(m.nodes) }
+
+// NodeName is the name of node i in the skeleton, or "" for one without.
+func (m *CharacterMotion) NodeName(i int) string {
+	if i < 0 || i >= len(m.names) {
+		return ""
+	}
+	return m.names[i]
+}
 
 // NodeParent is the parent of node i in the skeleton, or -1 for a root.
 func (m *CharacterMotion) NodeParent(i int) int { return m.nodes[i].parent }

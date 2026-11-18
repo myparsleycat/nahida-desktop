@@ -64,8 +64,14 @@ type ModelViewer struct {
 	// charMotion plays the character's game motions; motionCancel stops them loading.
 	charMotion   *viewerMotion
 	motionCancel context.CancelFunc
-	ineffective  viewerIneffective
-	overlayMenus viewerOverlayMenus
+	// originalCancel stops the original model named by originalLoading loading; originalFailed names the last one
+	// that failed, which loads again only for another scene or character, or after the setting is toggled.
+	originalCancel  context.CancelFunc
+	originalLoading viewerOriginalKey
+	originalFailed  viewerOriginalKey
+	expression      viewerExpression
+	ineffective     viewerIneffective
+	overlayMenus    viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
 	highlightGameTextures bool
 	// gameTextureNoticeWidth is the measured width of the game texture notice.
@@ -237,12 +243,16 @@ func (v *ModelViewer) Close() {
 func (v *ModelViewer) releaseScene() {
 	v.stopCompute(false)
 	v.stopMotion()
+	v.cancelOriginal()
+	v.originalFailed = viewerOriginalKey{}
 	scene := v.scene
 	v.scene = nil
 	if scene == nil {
 		return
 	}
 	scene.gpu.release()
+	scene.original.release()
+	scene.original = nil
 	if id := scene.transport.MemorySessionID; id != "" && v.tools != nil {
 		go func() { _, _ = v.tools.CleanupModelViewer(context.Background(), id) }()
 	}
@@ -978,6 +988,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	scene := v.scene
 	v.syncFieldOfView()
 	v.advanceCamera(time.Now())
+	v.syncOriginal()
 	v.syncToonAssets(v.toonStyle())
 	opts := v.drawOptions([4]float32{background.R, background.G, background.B, 1})
 	if v.tool != nil && v.tool.overlay != nil {
@@ -1000,6 +1011,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 				}
 			})
 		}
+		expressing := v.expressOriginal(now)
 		err := v.renderer.draw(f, scene, opts)
 		switch message := fmt.Sprint(err); {
 		case err != nil && message != v.drawErr:
@@ -1024,7 +1036,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
 			cx.Window().Update()
 		}
-		return v.motion.running || animated || opts.interpolating
+		return v.motion.running || animated || opts.interpolating || expressing
 	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull().
 		Cursor(fairy.CursorMove).DragButtons(fairy.MouseLeft | fairy.MouseRight | fairy.MouseMiddle).
 		OnDrag(v.drag).

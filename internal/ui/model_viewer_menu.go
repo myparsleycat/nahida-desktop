@@ -144,6 +144,7 @@ func (v *ModelViewer) menuBar() *fairy.El {
 					OnClick: v.toggleCharacterMotion,
 				})
 			}
+			items = append(items, v.originalMenuItems()...)
 			return items
 		}},
 		{Label: T("page.tools.model_viewer.menu.texture"), Items: func() []kit.MenuItem {

@@ -1736,7 +1736,18 @@
           "environment_soft": "Soft",
           "exposure": "Exposure",
           "toon_shadows": "Toon Shadows",
-          "character_motion": "Character Motion"
+          "character_motion": "Character Motion",
+          "original_data": "Original Game Data",
+          "original_parts": "Missing Parts",
+          "expression": "Expression",
+          "expression_default": "Default",
+          "expression_smile": "Smile",
+          "expression_angry": "Angry",
+          "expression_troubled": "Troubled",
+          "expression_surprised": "Surprised",
+          "expression_wink": "Wink",
+          "expression_closed": "Eyes Closed",
+          "expression_blink": "Blinking"
         },
         "dialog": {
           "save_preset": {
@@ -1765,6 +1776,8 @@
           "capture_not_ready": "The model is still loading",
           "load_error": "Failed to load the model",
           "motion_error": "Failed to load the character motion",
+          "original_error": "Failed to load the original game data",
+          "original_textures_missing": "Failed to load some original textures",
           "motion_play_error": "Failed to play the character motion",
           "motion_no_blend": "The mod has no bone weights to animate"
         },

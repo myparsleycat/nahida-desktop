@@ -411,12 +411,20 @@ func motionBounds(boxes []viewerMotionBox, bones [][12]float32) (minimum, maximu
 	return all.minimum, all.maximum, all.ok
 }
 
-// turn turns forward, a direction of scene mesh i in the mod's space, by the mesh's anchor node.
-func (m *viewerMotion) turn(i int, forward vec3) vec3 {
-	if i >= len(m.anchorNodes) || m.anchorNodes[i] < 0 {
+// anchor is the node that turns the face direction of scene mesh i, or -1.
+func (m *viewerMotion) anchor(i int) int32 {
+	if m == nil || i < 0 || i >= len(m.anchorNodes) {
+		return -1
+	}
+	return m.anchorNodes[i]
+}
+
+// turnBy turns forward, a direction in the mod's space, by node, or leaves it for -1.
+func (m *viewerMotion) turnBy(node int32, forward vec3) vec3 {
+	if node < 0 || int(node) >= len(m.bones) {
 		return forward
 	}
-	bone := &m.bones[m.anchorNodes[i]]
+	bone := &m.bones[node]
 	var turned vec3
 	for row := range 3 {
 		turned[row] = float64(bone[row*4])*forward[0] + float64(bone[row*4+1])*forward[1] +

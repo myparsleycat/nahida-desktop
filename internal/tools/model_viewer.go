@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"image"
 
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
@@ -83,4 +84,22 @@ type CharacterMotion = modelviewer.CharacterMotion
 // LoadCharacterMotion returns the game motions of the character id of game, downloading them when needed.
 func (t *Tools) LoadCharacterMotion(ctx context.Context, game, id string) (*CharacterMotion, error) {
 	return t.modelViewer.LoadCharacterMotion(ctx, game, id)
+}
+
+type (
+	CharacterOriginal        = modelviewer.CharacterOriginal
+	CharacterOriginalTexture = modelviewer.CharacterOriginalTexture
+)
+
+// LoadCharacterOriginal returns the original model of the character id of game, downloading it when needed.
+func (t *Tools) LoadCharacterOriginal(ctx context.Context, game, id string) (*CharacterOriginal, error) {
+	return t.modelViewer.LoadCharacterOriginal(ctx, game, id)
+}
+
+// LoadCharacterOriginalTexture returns a texture of an original model, downloading it when needed.
+func (t *Tools) LoadCharacterOriginalTexture(
+	ctx context.Context,
+	texture CharacterOriginalTexture,
+) (*image.NRGBA, error) {
+	return t.modelViewer.LoadCharacterOriginalTexture(ctx, texture)
 }

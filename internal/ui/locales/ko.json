@@ -1730,7 +1730,18 @@
           "environment_soft": "부드러움",
           "exposure": "노출",
           "toon_shadows": "툰 그림자",
-          "character_motion": "캐릭터 모션"
+          "character_motion": "캐릭터 모션",
+          "original_data": "원본 게임 데이터",
+          "original_parts": "누락된 부위",
+          "expression": "표정",
+          "expression_default": "기본",
+          "expression_smile": "미소",
+          "expression_angry": "화남",
+          "expression_troubled": "곤란",
+          "expression_surprised": "놀람",
+          "expression_wink": "윙크",
+          "expression_closed": "눈 감기",
+          "expression_blink": "눈 깜빡임"
         },
         "dialog": {
           "save_preset": {
@@ -1759,6 +1770,8 @@
           "capture_not_ready": "모델을 불러오는 중입니다.",
           "load_error": "모델을 불러오지 못했습니다.",
           "motion_error": "캐릭터 모션을 불러오지 못했습니다.",
+          "original_error": "원본 게임 데이터를 불러오지 못했습니다.",
+          "original_textures_missing": "일부 원본 텍스처를 불러오지 못했습니다.",
           "motion_play_error": "캐릭터 모션을 재생하지 못했습니다.",
           "motion_no_blend": "모드에 모션을 적용할 본 가중치가 없습니다."
         },

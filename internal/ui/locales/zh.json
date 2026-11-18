@@ -1730,7 +1730,18 @@
           "environment_soft": "柔和",
           "exposure": "曝光",
           "toon_shadows": "卡通阴影",
-          "character_motion": "角色动作"
+          "character_motion": "角色动作",
+          "original_data": "游戏原始数据",
+          "original_parts": "缺失部位",
+          "expression": "表情",
+          "expression_default": "默认",
+          "expression_smile": "微笑",
+          "expression_angry": "生气",
+          "expression_troubled": "困扰",
+          "expression_surprised": "惊讶",
+          "expression_wink": "单眼眨眼",
+          "expression_closed": "闭眼",
+          "expression_blink": "眨眼"
         },
         "dialog": {
           "save_preset": {
@@ -1759,6 +1770,8 @@
           "capture_not_ready": "模型仍在加载中",
           "load_error": "无法加载模型",
           "motion_error": "无法加载角色动作",
+          "original_error": "无法加载游戏原始数据",
+          "original_textures_missing": "无法加载部分原始纹理",
           "motion_play_error": "无法播放角色动作",
           "motion_no_blend": "模组没有可用于动作的骨骼权重"
         },

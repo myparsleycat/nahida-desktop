@@ -28,6 +28,9 @@ type Service struct {
 	motionFiles chan struct{}
 	// motionPrune clears the motion cache of files the index no longer names, once per process.
 	motionPrune sync.Once
+	// originalFiles and originalPrune do the same for the original model cache.
+	originalFiles chan struct{}
+	originalPrune sync.Once
 	// appData holds the mesh spool; without it, viewer sessions keep mesh buffers in memory.
 	appData             *appdata.Store
 	modelViewerMu       sync.Mutex
@@ -53,6 +56,7 @@ func NewWithOptions(opts Options) *Service {
 		findModelViewerPreview: opts.FindModelViewerPreview,
 		download:               opts.Download,
 		motionFiles:            make(chan struct{}, 1),
+		originalFiles:          make(chan struct{}, 1),
 		modelViewerSessions:    make(map[string]*modelViewerSession),
 		modelViewerLoads:       make(map[*modelViewerLoad]struct{}),
 		freeOSMemory:           debug.FreeOSMemory,

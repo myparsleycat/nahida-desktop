@@ -1198,6 +1198,15 @@ func (v *ModelViewer) toonTextures(style viewerToonStyle) viewerToonTextures {
 		textures = viewerToonTextures{
 			bodyRamp: views[0], hairRamp: views[1], metalMap: views[2], faceLightMap: views[3], faceShadow: views[4],
 		}
+		// The face maps of an original face belong to that face.
+		if o := v.scene.original; o != nil && o.generation == assets.generation {
+			if texture, ok := o.textures[o.faceLight]; ok {
+				textures.faceLightMap = texture.view
+			}
+			if texture, ok := o.textures[o.faceShadow]; ok {
+				textures.faceShadow = texture.view
+			}
+		}
 	}
 	if c := v.toonCharacter(); c != nil && c.ramps != nil && v.toonProfile() != gimiProfile {
 		textures.character, textures.ramps = c.ramps, make([]d3d.ShaderResourceView, len(c.ramps.keys))

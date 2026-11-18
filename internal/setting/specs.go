@@ -535,6 +535,7 @@ func buildSpecs() map[string]spec {
 		KeyModelViewerToonShadows:     boolSpec(definitionsByKey[KeyModelViewerToonShadows], true),
 		KeyModelViewerOverlayInViewer: boolSpec(definitionsByKey[KeyModelViewerOverlayInViewer], true),
 		KeyModelViewerGamePreview:     boolSpec(definitionsByKey[KeyModelViewerGamePreview], true),
+		KeyModelViewerOriginalData:    boolSpec(definitionsByKey[KeyModelViewerOriginalData], true),
 		// JSON object keyed by material profile; the renderer owns each style's fields.
 		KeyModelViewerToonStyles: {
 			def:        definitionsByKey[KeyModelViewerToonStyles],

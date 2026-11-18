@@ -71,7 +71,7 @@ func TestPruneCharacterMotionCache(t *testing.T) {
 	outside := write("file.txt")
 	keep := []string{indexed, filepath.Join(dir, "srmi", "kafka.new.glb.gz")}
 
-	if err := pruneCharacterMotionCache(dir, keep); err != nil {
+	if err := pruneCharacterCache(dir, keep); err != nil {
 		t.Fatal(err)
 	}
 	for file, want := range map[string]bool{
@@ -81,7 +81,7 @@ func TestPruneCharacterMotionCache(t *testing.T) {
 			t.Errorf("%s exists = %v, want %v", file, err == nil, want)
 		}
 	}
-	if err := pruneCharacterMotionCache(filepath.Join(dir, "missing"), nil); err != nil {
+	if err := pruneCharacterCache(filepath.Join(dir, "missing"), nil); err != nil {
 		t.Errorf("missing cache: %v", err)
 	}
 }

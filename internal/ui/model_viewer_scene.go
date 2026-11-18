@@ -20,9 +20,11 @@ import (
 type viewerScene struct {
 	transport modelviewer.ModelViewerTransport
 	meshes    []*viewerMesh
-	// genshinFace is set when a GIMI mod draws a face of its own. Most replace only the body, hair and dress, and
-	// the game draws its face.
+	// genshinFace is set when a GIMI mod draws a face, of its own or from the original model. Most replace only the
+	// body, hair and dress, and the game draws its face.
 	genshinFace bool
+	// original is the character's original model shown with the mod, or nil.
+	original *viewerOriginal
 	// world turns the mod's space into the viewer's Y-up space.
 	world mat4
 	// minimum and maximum bound every mesh in viewer space.

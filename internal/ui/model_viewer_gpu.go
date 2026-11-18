@@ -12,6 +12,8 @@ import (
 
 	"github.com/myparsleycat/fairy"
 	"github.com/myparsleycat/fairy/d3d"
+
+	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
 //go:embed shaders/model_viewer.hlsl
@@ -795,8 +797,18 @@ func (r *viewerRenderer) drawScene(
 			ctx.VSSetShaderResources(15, skin.bonesView)
 		}
 	}
+	var skinMotion *viewerMotion
+	if skin != nil {
+		skinMotion = opts.skin
+	}
+	originals := scene.original.draws(f.GPU().Device, skinMotion, f.Generation)
+	for i := range originals {
+		if err := r.uploadGeometry(ctx, f.GPU().Device, originals[i].mesh, &originals[i].gpu); err != nil {
+			return err
+		}
+	}
 	if shadowed {
-		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, &frame, f.Time); err != nil {
+		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, originals, &frame, f.Time); err != nil {
 			return err
 		}
 	} else if r.shadowSRV.P != nil {
@@ -854,30 +866,34 @@ func (r *viewerRenderer) drawScene(
 				ctx.RSSetState(r.culled)
 			}
 		}
-		for i, mesh := range scene.meshes {
-			if !mesh.drawn(opts.untextured != nil) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
-				continue
-			}
+		textures := scene.texture
+		drawOne := func(
+			mesh *viewerMesh,
+			state modelviewer.ViewerMeshState,
+			buffers viewerMeshGPU,
+			blend d3d.ShaderResourceView,
+			anchor int32,
+		) error {
 			// EFMI draws no hull around eyes and overlay shadows.
 			if pass == "outline" && opts.toon.profile == efmiProfile && (mesh.toonEye || mesh.overlayShadow) {
-				continue
+				return nil
 			}
-			material := meshMaterial(mesh, gpu.textures, opts)
+			material := meshMaterial(mesh, state, textures, opts)
 			coverage := material.constants.flags&viewerFlagCoverage != 0
 			if coverage != (pass == "blended") {
-				continue
+				return nil
 			}
-			if blend, ok := skin.blend(i, mesh.vertexCount); ok {
+			if blend.P != nil {
 				material.constants.flags |= viewerFlagSkinned
 				if material.constants.flags&viewerFlagFace != 0 {
-					forward := opts.skin.turn(i, mesh.faceForward)
+					forward := opts.skin.turnBy(anchor, mesh.faceForward)
 					material.constants.faceForward = [4]float32{
 						float32(forward[0]), float32(forward[1]), float32(forward[2]),
 					}
 				}
 				ctx.VSSetShaderResources(14, blend)
 			}
-			material.constants.morphWeight = morphWeight(mesh, gpu.meshes[i], opts.morph)
+			material.constants.morphWeight = morphWeight(mesh, buffers, opts.morph)
 			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{material.constants}); err != nil {
 				return err
 			}
@@ -899,7 +915,30 @@ func (r *viewerRenderer) drawScene(
 				ctx.PSSetShaderResources(4, material.views[3])
 				ctx.PSSetShaderResources(10, material.views[5])
 			}
-			r.drawMesh(ctx, gpu.meshes[i])
+			r.drawMesh(ctx, buffers)
+			return nil
+		}
+		for i, mesh := range scene.meshes {
+			if !mesh.drawn(opts.untextured != nil) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
+				continue
+			}
+			blend, _ := skin.blend(i, mesh.vertexCount)
+			state := mesh.state
+			if opts.untextured == nil {
+				state = scene.original.fillState(i, state)
+			}
+			if err := drawOne(mesh, state, gpu.meshes[i], blend, opts.skin.anchor(i)); err != nil {
+				return err
+			}
+		}
+		for _, part := range originals {
+			blend := d3d.ShaderResourceView{}
+			if part.skinned {
+				blend = part.blend
+			}
+			if err := drawOne(part.mesh, part.mesh.state, part.gpu, blend, part.anchor); err != nil {
+				return err
+			}
 		}
 	}
 	if opts.overlay != nil {
@@ -1005,6 +1044,7 @@ func (r *viewerRenderer) drawShadowMap(
 	scene *viewerScene,
 	opts viewerDrawOptions,
 	skin *viewerSkinGPU,
+	originals []originalDraw,
 	frame *viewerFrameConstants,
 	now time.Duration,
 ) error {
@@ -1018,11 +1058,14 @@ func (r *viewerRenderer) drawShadowMap(
 			continue
 		}
 		// Coverage cards are flat ink decals that block no light.
-		if texture, ok := gpu.textures[mesh.state.TexKey]; ok && texture.flags&viewerFlagCoverage != 0 {
+		if texture, ok := scene.texture(mesh.state.TexKey); ok && texture.flags&viewerFlagCoverage != 0 {
 			continue
 		}
 		casters = append(casters, i)
 		buffers = append(buffers, gpu.meshes[i].vertices)
+	}
+	for _, part := range originals {
+		buffers = append(buffers, part.gpu.vertices)
 	}
 	key := viewerShadowKey{
 		gpu: gpu, viewProj: frame.shadowViewProj, world: frame.world, doubleSided: opts.doubleSided,
@@ -1079,6 +1122,21 @@ func (r *viewerRenderer) drawShadowMap(
 		}
 		r.drawMesh(ctx, gpu.meshes[i])
 	}
+	for _, part := range originals {
+		var flags uint32
+		if part.skinned {
+			flags = viewerFlagSkinned
+			ctx.VSSetShaderResources(14, part.blend)
+		}
+		if !written || flags != constants.flags || constants.morphWeight != 0 {
+			constants.flags, constants.morphWeight = flags, 0
+			if err := d3d.WriteData(ctx, r.meshCB, []viewerMeshConstants{constants}); err != nil {
+				return err
+			}
+			written = true
+		}
+		r.drawMesh(ctx, part.gpu)
+	}
 	return nil
 }
 
@@ -1115,12 +1173,17 @@ type viewerMeshMaterial struct {
 	outlineMask d3d.ShaderResourceView
 }
 
-// meshMaterial picks the textures and shader flags the mesh's state selects.
-func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts viewerDrawOptions) viewerMeshMaterial {
+// meshMaterial picks the textures and shader flags state selects for mesh, looking them up with textures.
+func meshMaterial(
+	mesh *viewerMesh,
+	state modelviewer.ViewerMeshState,
+	textures func(string) (viewerTextureGPU, bool),
+	opts viewerDrawOptions,
+) viewerMeshMaterial {
 	m := viewerMeshMaterial{constants: viewerMeshConstants{tint: [4]float32{1, 1, 1, 1}}}
 	c := &m.constants
-	diffuse, hasDiffuse := textures[mesh.state.TexKey]
-	if hasDiffuse && mesh.state.TexKey != "" {
+	diffuse, hasDiffuse := textures(state.TexKey)
+	if hasDiffuse && state.TexKey != "" {
 		m.views[0] = diffuse.view
 		c.flags |= viewerFlagDiffuse | diffuse.flags
 	} else {
@@ -1128,8 +1191,8 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 	}
 	// A normal map needs a frame: the mesh's tangents, or one derived in the shader for profiles that allow it.
 	usable := mesh.tangentUsable || slices.Contains(derivativeTangentProfiles, opts.profile)
-	if texture, ok := textures[mesh.state.NormalMapKey]; ok && opts.normalMaps && usable &&
-		mesh.state.NormalMapKey != "" && !mesh.normalMapUnused {
+	if texture, ok := textures(state.NormalMapKey); ok && opts.normalMaps && usable &&
+		state.NormalMapKey != "" && !mesh.normalMapUnused {
 		m.views[1] = texture.view
 		c.flags |= viewerFlagNormalMap
 		c.normalMode = texture.normalMode
@@ -1137,7 +1200,7 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 			c.flags |= viewerFlagVertexTangent
 		}
 	}
-	if texture, ok := textures[mesh.state.CutoutMapKey]; ok && mesh.state.CutoutMapKey != "" {
+	if texture, ok := textures(state.CutoutMapKey); ok && state.CutoutMapKey != "" {
 		m.views[2] = texture.view
 		c.flags |= viewerFlagCutout
 	}
@@ -1151,18 +1214,18 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 		}
 	}
 	lookup := func(key string) (viewerTextureGPU, bool) {
-		texture, ok := textures[key]
+		texture, ok := textures(key)
 		return texture, ok && key != ""
 	}
 	if opts.toon == nil {
 		// Without toon shading ZZMI's packed maps drive the standard material: green of the light map is
 		// metalness and green of the material map smoothness.
 		if opts.profile == zzmiProfile {
-			if texture, ok := lookup(mesh.state.LightMapKey); ok {
+			if texture, ok := lookup(state.LightMapKey); ok {
 				m.views[3] = texture.view
 				c.flags |= viewerFlagLightMap
 			}
-			if texture, ok := lookup(mesh.state.MaterialMapKey); ok {
+			if texture, ok := lookup(state.MaterialMapKey); ok {
 				m.views[5] = texture.view
 				c.flags |= viewerFlagMaterialMap
 			}
@@ -1192,7 +1255,7 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 		}
 	}
 
-	light, hasLight := lookup(mesh.state.LightMapKey)
+	light, hasLight := lookup(state.LightMapKey)
 	// One- and two-channel light maps have no material ID or specular mask.
 	packed := hasLight && !strings.HasPrefix(light.format, "bc4-") && !strings.HasPrefix(light.format, "bc5-")
 	switch mode {
@@ -1271,15 +1334,15 @@ func meshMaterial(mesh *viewerMesh, textures map[string]viewerTextureGPU, opts v
 				c.flags |= flag
 			}
 		}
-		data(mesh.state.MaterialMapKey, 5, viewerFlagMaterialMap)
-		data(mesh.state.NormalMapKey, 6, viewerFlagDataMap)
+		data(state.MaterialMapKey, 5, viewerFlagMaterialMap)
+		data(state.NormalMapKey, 6, viewerFlagDataMap)
 	case toonModeEFMI:
 		for _, slot := range []struct {
 			key  string
 			view int
 			flag uint32
 		}{
-			{mesh.state.MaterialMapKey, 5, viewerFlagMaterialMap},
+			{state.MaterialMapKey, 5, viewerFlagMaterialMap},
 			{optional(mesh.info.HighlightMapKey), 7, viewerFlagHighlightMap},
 			{optional(mesh.info.RampMapKey), 4, viewerFlagRampMap},
 		} {
