@@ -339,6 +339,47 @@ func TestCharacterMotion_MapPalettesOwnSkin(t *testing.T) {
 	}
 }
 
+// A group no reference vertex lies near follows a bone that no skin holds below a skin joint, as a tail whose mesh the
+// source model lacks, but not a node outside the skinned hierarchy.
+func TestCharacterMotion_MapPalettesUnskinnedBone(t *testing.T) {
+	m := mirroredTestMotion(t)
+	rest := func(x, y float64) motionTRS {
+		return motionTRS{t: [3]float64{x, y, 0}, r: [4]float64{0, 0, 0, 1}, s: [3]float64{1, 1, 1}}
+	}
+	m.nodes = append(m.nodes, motionNode{parent: 2, rest: rest(0, 0.4)}, motionNode{parent: 0, rest: rest(-0.1, -0.4)})
+	locals := make([]motionTRS, len(m.nodes))
+	for i, node := range m.nodes {
+		locals[i] = node.rest
+	}
+	worlds, err := m.worlds(locals, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range m.nodes {
+		m.nodes[i].world = worlds[i]
+	}
+	if err := m.bindSkeleton(motionIdentity()); err != nil {
+		t.Fatal(err)
+	}
+
+	var palette MotionPalette
+	for group, node := range []int{3, 4} {
+		p := m.restPosition(node)
+		for _, dy := range []float64{-0.005, 0.005} {
+			addTestVertices(&palette, fullTestWeight(uint16(group)), [3]float32{
+				float32(p[0]), float32(p[1] + dy), float32(p[2]),
+			})
+		}
+	}
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{3, 2}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
 func TestCharacterMotion_MapPalettesSeam(t *testing.T) {
 	left := [][3]float32{{-0.3, -0.005, 0}, {-0.3, 0.005, 0}}
 	right := [][3]float32{{0.3, -0.005, 0}, {0.3, 0.005, 0}}

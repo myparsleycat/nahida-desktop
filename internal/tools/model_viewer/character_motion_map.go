@@ -101,7 +101,8 @@ type motionReferenceWeight struct {
 // each node goes to one group, the most similar pairs first. A group whose best node another group holds takes its
 // next free node only when that node reaches motionAlternateShare of its best similarity, and otherwise shares the
 // best node, as for a bone the source skeleton lacks. A group no reference vertex lies near takes the joint nearest
-// the centre of its vertices, of its palette's skin when one is known.
+// the centre of its vertices, of its palette's skin when one is known; otherwise a node no skin holds below a skin
+// joint (see fallbackJoints) also counts, as a tail's bones whose mesh the source model lacks.
 //
 // Groups of different palettes linked by seam vertices (see motionSeamLinks), as the upper and lower body of a ZZMI
 // mod are at the waist, pool their votes and take one node, preferring the nodes that the skins of all of them hold.
@@ -119,6 +120,7 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 		grid[key] = append(grid[key], int32(i))
 	}
 	bones := m.restBones()
+	fallback := m.fallbackJoints()
 	votes := make([]motionVotes, len(palettes))
 	offsets := make([]int, len(palettes)+1)
 	for i, palette := range palettes {
@@ -249,9 +251,9 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 		}
 		if bestNode[root] < 0 {
 			x, y, z := centre[0]/centre[3], centre[1]/centre[3], centre[2]/centre[3]
-			joint := m.nearestJoint(x, y, z, holds)
+			joint := m.nearestJoint(fallback, x, y, z, holds)
 			if joint < 0 {
-				joint = m.nearestJoint(x, y, z, nil)
+				joint = m.nearestJoint(fallback, x, y, z, nil)
 			}
 			chosen[root] = int32(joint)
 		}
@@ -857,19 +859,39 @@ func (m *CharacterMotion) referenceWeights(
 	return out, math.Sqrt(float64(nearest[0].distance)), int(m.refs[nearest[0].index].skin)
 }
 
-// nearestJoint returns the skin joint, of those holds accepts or of all when it is nil, whose rest position in mod
-// space is nearest to a point, or -1 when holds accepts none.
-func (m *CharacterMotion) nearestJoint(x, y, z float64, holds func(node int) bool) int {
-	best, bestDistance := -1, math.Inf(1)
+// fallbackJoints returns the skin joints and the nodes no skin holds below a skin joint. The latter are the bones of
+// meshes the source model lacks, such as a tail, which a mod's groups lying far from every reference vertex may
+// follow; nodes above the skin joints, such as the root, are left out.
+func (m *CharacterMotion) fallbackJoints() []int {
+	inSkin := make([]bool, len(m.nodes))
 	for _, joints := range m.skins {
 		for _, node := range joints {
-			if holds != nil && !holds(node) {
-				continue
+			inSkin[node] = true
+		}
+	}
+	var out []int
+	for node := range m.nodes {
+		for ancestor := node; ancestor >= 0; ancestor = m.nodes[ancestor].parent {
+			if inSkin[ancestor] {
+				out = append(out, node)
+				break
 			}
-			p := m.restPosition(node)
-			if distance := (p[0]-x)*(p[0]-x) + (p[1]-y)*(p[1]-y) + (p[2]-z)*(p[2]-z); distance < bestDistance {
-				best, bestDistance = node, distance
-			}
+		}
+	}
+	return out
+}
+
+// nearestJoint returns the node of joints, of those holds accepts or of all when it is nil, whose rest position in
+// mod space is nearest to a point, or -1 when holds accepts none.
+func (m *CharacterMotion) nearestJoint(joints []int, x, y, z float64, holds func(node int) bool) int {
+	best, bestDistance := -1, math.Inf(1)
+	for _, node := range joints {
+		if holds != nil && !holds(node) {
+			continue
+		}
+		p := m.restPosition(node)
+		if distance := (p[0]-x)*(p[0]-x) + (p[1]-y)*(p[1]-y) + (p[2]-z)*(p[2]-z); distance < bestDistance {
+			best, bestDistance = node, distance
 		}
 	}
 	return best
