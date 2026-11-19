@@ -164,7 +164,9 @@ Texture2D highlightMap : register(t12);
 // EFMI's outline width mask, read by the outline hull's vertex shader.
 Texture2D outlineWidthMap : register(t13);
 // A posed mesh's bone weights by vertex, x and y holding four 16-bit skeleton nodes (0xffff for none) and z and w
-// their four 16-bit unorm weights, and the skeleton's 3x4 matrices from the rest pose to the motion's frame.
+// their four 16-bit unorm weights, and the skeleton's 3x4 matrices from the rest pose to the motion's frame. An
+// all-zero matrix marks a node the motion puts out of sight: skin drops a vertex that such nodes carry more than half
+// of, and skins the others by their remaining nodes.
 struct SkinBone {
     float4 r0;
     float4 r1;
@@ -224,15 +226,25 @@ VSIn skin(VSIn i, uint id) {
     float3x4 identity = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
     float3x4 m = 0;
     float total = 0;
+    float hiddenWeight = 0;
     [unroll] for (uint k = 0; k < 4; k++) {
         if (weights[k] == 0) continue;
         float3x4 bone = identity;
         if (nodes[k] != 0xffff) {
             SkinBone b = skinBones[nodes[k]];
+            if (!any(b.r0) && !any(b.r1) && !any(b.r2)) {
+                hiddenWeight += weights[k];
+                continue;
+            }
             bone = float3x4(b.r0, b.r1, b.r2);
         }
         m += weights[k] * bone;
         total += weights[k];
+    }
+    // The rasterizer discards a primitive with a NaN vertex position.
+    if (hiddenWeight > total) {
+        i.pos = asfloat(0x7fc00000).xxx;
+        return i;
     }
     m = total > 0 ? m / total : identity;
     float3x3 rotation = (float3x3)m;

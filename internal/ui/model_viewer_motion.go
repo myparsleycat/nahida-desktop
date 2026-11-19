@@ -49,8 +49,9 @@ type viewerMotion struct {
 	clipBoxes        []viewerMotionBox
 	clipBox, restBox viewerMotionBox
 	// fadeStart is when the pose shown at the last change of clip began fading into the new clip, or zero once the
-	// fade is over.
-	fadeStart time.Time
+	// fade is over. fadeStowed marks the nodes the clips faded from put out of sight, hidden until the fade ends.
+	fadeStart  time.Time
+	fadeStowed []bool
 	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them.
 	palettes map[string][]int32
 	// anchorNodes holds, by scene mesh, the node that turns the mesh's face direction, or -1.
@@ -88,6 +89,34 @@ func (b *viewerMotionBox) add(p vec3) {
 }
 
 var viewerMotionIdentity = [12]float32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}
+
+// viewerMotionHidden is the bone matrix of a node put out of sight; the shaders drop the vertices it mostly carries
+// (see skin in model_viewer.hlsl).
+var viewerMotionHidden [12]float32
+
+// hideStowed sets the bones of the nodes stowed marks to viewerMotionHidden.
+func hideStowed(bones [][12]float32, stowed []bool) {
+	for i, hidden := range stowed {
+		if hidden && i < len(bones) {
+			bones[i] = viewerMotionHidden
+		}
+	}
+}
+
+// unionStowed marks the nodes a or b marks; it returns a or b itself when the other marks none.
+func unionStowed(a, b []bool) []bool {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	out := make([]bool, max(len(a), len(b)))
+	for i := range out {
+		out[i] = i < len(a) && a[i] || i < len(b) && b[i]
+	}
+	return out
+}
 
 // motionNode is the skeleton node palette maps a bone weight's group to, or viewerMotionNoNode.
 func motionNode(group uint16, palette []int32) uint32 {
@@ -366,7 +395,7 @@ func loadViewerMotion(
 
 	pose, bones := motion.NewPose(), make([][12]float32, nodes)
 	for i, clip := range motion.Clips {
-		box, err := clipBox(pose, m.boxes, bones, i, clip.Frames)
+		box, err := clipBox(pose, m.boxes, bones, i, clip.Frames, motion.StowedNodes(i))
 		if err != nil {
 			return nil, fmt.Errorf("clip %q: %w", clip.Name, err)
 		}
@@ -448,8 +477,9 @@ func anchorNode(totals []float64, parents []int32) int32 {
 	return anchor
 }
 
-// motionBounds bounds the boxes as bones moves them, boxes[i] by bones[i] and the last box as it is. A vertex skins
-// to a weighted mean of its nodes' moves, so it lies within the box around all the moved boxes this returns.
+// motionBounds bounds the boxes as bones moves them, boxes[i] by bones[i] and the last box as it is, leaving out
+// the boxes of hidden nodes. A vertex skins to a weighted mean of its nodes' moves, so it lies within the box around
+// all the moved boxes this returns.
 func motionBounds(boxes []viewerMotionBox, bones [][12]float32) (minimum, maximum vec3, ok bool) {
 	var all viewerMotionBox
 	for i, box := range boxes {
@@ -459,6 +489,9 @@ func motionBounds(boxes []viewerMotionBox, bones [][12]float32) (minimum, maximu
 		bone := &viewerMotionIdentity
 		if i < len(bones) {
 			bone = &bones[i]
+		}
+		if *bone == viewerMotionHidden {
+			continue
 		}
 		for corner := range 8 {
 			p := box.minimum
@@ -529,9 +562,14 @@ func (v *ModelViewer) startMotion(clipID string) {
 	if clip != nil {
 		m.clipBox = m.clipBoxes[m.clipNumber(clip.ID)]
 	}
-	m.fadeStart = time.Time{}
+	held := m.fadeStowed
+	if !m.fading() {
+		held = nil
+	}
+	m.fadeStart, m.fadeStowed = time.Time{}, nil
 	if m.posed != 0 && m.pose.Hold() {
 		m.fadeStart = time.Now()
+		m.fadeStowed = unionStowed(held, m.motion.StowedNodes(m.posedAt.clip))
 	}
 	v.runTrackClock(trackMotion)
 	v.setMotionFrame(0)
@@ -562,13 +600,14 @@ func (m *viewerMotion) fading() bool {
 	return m != nil && !m.fadeStart.IsZero()
 }
 
-// clipBox bounds boxes over every pose of the motion's clip with frames frames, evaluated with pose into bones, or
-// over the rest pose for a clip with no frames.
+// clipBox bounds boxes over every pose of the motion's clip with frames frames, evaluated with pose into bones
+// without the nodes stowed marks, or over the rest pose for a clip with no frames.
 func clipBox(
 	pose *modelviewer.CharacterMotionPose,
 	boxes []viewerMotionBox,
 	bones [][12]float32,
 	clip, frames int,
+	stowed []bool,
 ) (viewerMotionBox, error) {
 	for i := range bones {
 		bones[i] = viewerMotionIdentity
@@ -580,6 +619,7 @@ func clipBox(
 			if err := pose.Evaluate(clip, frame, bones); err != nil {
 				return box, fmt.Errorf("frame %d: %w", frame, err)
 			}
+			hideStowed(bones, stowed)
 		}
 		if minimum, maximum, ok := motionBounds(boxes, bones); ok {
 			box.add(minimum)
@@ -634,6 +674,10 @@ func (v *ModelViewer) poseMotion(now time.Time) error {
 	}
 	if err := m.pose.EvaluateFrom(at.hold, at.clip, at.frame, at.next, at.t, m.bones); err != nil {
 		return err
+	}
+	hideStowed(m.bones, m.motion.StowedNodes(at.clip))
+	if at.hold > 0 {
+		hideStowed(m.bones, m.fadeStowed)
 	}
 	m.posedAt = at
 	v.revision++

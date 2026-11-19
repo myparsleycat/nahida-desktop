@@ -309,6 +309,8 @@ type CharacterMotionClip struct {
 
 	channels []motionChannel
 	morphs   []motionMorphChannel
+	// stowed marks, by node, the nodes the clip puts out of sight, or is nil when it puts none away.
+	stowed []bool
 }
 
 // CharacterMotionMorph names a mesh whose shape keys a motion drives, and those keys in the order the clips give
@@ -497,6 +499,9 @@ func parseCharacterMotion(compressed []byte, game string) (*CharacterMotion, err
 		return nil, err
 	}
 	if err := motion.readClips(doc, accessor); err != nil {
+		return nil, err
+	}
+	if err := motion.markStowed(); err != nil {
 		return nil, err
 	}
 	return motion, nil
