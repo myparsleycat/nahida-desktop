@@ -56,6 +56,7 @@ export default defineConfig({
                             },
                         ],
                     },
+                    { text: "Settings", link: "/settings" },
                 ],
             },
             {
@@ -144,6 +145,7 @@ export default defineConfig({
                                     },
                                 ],
                             },
+                            { text: "설정", link: "/settings" },
                         ],
                     },
                     {
@@ -218,6 +220,7 @@ export default defineConfig({
                                     },
                                 ],
                             },
+                            { text: "設定", link: "/settings" },
                         ],
                     },
                     {
@@ -292,6 +295,7 @@ export default defineConfig({
                                     },
                                 ],
                             },
+                            { text: "设置", link: "/settings" },
                         ],
                     },
                     {

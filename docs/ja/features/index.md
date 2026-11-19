@@ -2,9 +2,9 @@
 
 左側のナビゲーションレールから開ける各画面を説明します。
 
-## 転送
+## 転送 {#transfers}
 
-ダウンロードとアップロードの状態を表示します。転送の一時停止、再開、再試行ができます。同時実行数とダウンロード帯域幅の制限は、設定 → Transfer で設定します。
+ダウンロードとアップロードの状態を表示します。転送の一時停止、再開、再試行ができます。同時実行数とダウンロード帯域幅の制限は、[設定 → 転送](/ja/features/settings#transfer) で設定します。
 
 ## [GameBanana](/ja/features/gamebanana)
 
@@ -32,12 +32,16 @@ Web ブラウザを開かずに GameBanana の MOD を閲覧してダウンロ�
 
 ## Nahida Agent
 
-MOD を扱うアプリ内アシスタントです。設定 → Nahida Agent でプロバイダーとモデルを設定すると、ナビゲーションレールに表示されます。
+MOD を扱うアプリ内アシスタントです。[設定 → Nahida Agent](/ja/features/settings#nahida-agent) でプロバイダーとモデルを設定すると、ナビゲーションレールに表示されます。
 
 ## [XXMI](/ja/others/set-up-xxmi)
 
 ゲームを内蔵ランチャーとインストール済みの XXMI Launcher のどちらで起動するかを選択し、Importer パッケージ、XXMI ライブラリ、ReShade、ゲームごとの設定を管理します。
 
-## ドライブ、共有ドライブ、バックアップ
+## ドライブ、共有ドライブ、バックアップ {#drive}
 
 Nahida Drive へのファイルのアップロードと Nahida Drive からのダウンロード、共有ドライブのリンクを自分のドライブへ取り込む操作、MOD フォルダーの定期バックアップを行います。これらの画面は nahida.live アカウントでログインすると表示されます。
+
+## [設定](/ja/features/settings)
+
+アプリの動作、更新、ドライブ、転送、ネットワークプロキシ、GitHub トークン、Nahida Agent、問題の報告を設定します。MODマネージャーの設定は [MOD 設定](/ja/features/mod-manager/settings) にあります。

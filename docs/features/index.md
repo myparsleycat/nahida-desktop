@@ -2,9 +2,9 @@
 
 This section describes the screens in the navigation rail on the left.
 
-## Transfers
+## Transfers {#transfers}
 
-Shows the status of downloads and uploads. You can pause, resume, and retry transfers. Concurrency and the download bandwidth limit are set in Settings → Transfer.
+Shows the status of downloads and uploads. You can pause, resume, and retry transfers. Concurrency and the download bandwidth limit are set in [Settings → Transfer](/features/settings#transfer).
 
 ## [GameBanana](/features/gamebanana)
 
@@ -32,12 +32,16 @@ Lists the tools that work across mods:
 
 ## Nahida Agent
 
-An in-app assistant that works with your mods. It appears in the navigation rail after a provider and model are configured in Settings → Nahida Agent.
+An in-app assistant that works with your mods. It appears in the navigation rail after a provider and model are configured in [Settings → Nahida Agent](/features/settings#nahida-agent).
 
 ## [XXMI](/others/set-up-xxmi)
 
 Chooses whether games start through the built-in launcher or an installed XXMI Launcher, and manages importer packages, XXMI libraries, ReShade, and per-game settings.
 
-## Drive, Shared Drive, and Backup
+## Drive, Shared Drive, and Backup {#drive}
 
 Uploads files to and downloads files from Nahida Drive, imports Shared Drive links into your drive, and backs up mod folders on a schedule. These screens appear after you sign in with a nahida.live account.
+
+## [Settings](/features/settings)
+
+Sets app behavior, updates, Drive, transfers, the network proxy, the GitHub token, Nahida Agent, and problem reports. Mod Manager settings are in [Mod Settings](/features/mod-manager/settings).

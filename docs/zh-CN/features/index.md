@@ -2,9 +2,9 @@
 
 本节介绍左侧导航栏中的各个页面。
 
-## 传输
+## 传输 {#transfers}
 
-显示下载和上传任务的状态，支持暂停、继续和重试传输。并发数和下载带宽限制可在 设置 → Transfer 中设置。
+显示下载和上传任务的状态，支持暂停、继续和重试传输。并发数和下载带宽限制可在 [设置 → 传输](/zh-CN/features/settings#transfer) 中设置。
 
 ## [GameBanana](/zh-CN/features/gamebanana)
 
@@ -32,12 +32,16 @@
 
 ## Nahida Agent
 
-与你的模组配合使用的应用内助手。在 设置 → Nahida Agent 中配置提供方和模型后，它会显示在导航栏中。
+与你的模组配合使用的应用内助手。在 [设置 → Nahida Agent](/zh-CN/features/settings#nahida-agent) 中配置提供方和模型后，它会显示在导航栏中。
 
 ## [XXMI](/zh-CN/others/set-up-xxmi)
 
 选择通过内置启动器还是已安装的 XXMI Launcher 启动游戏，并管理 Importer 包、XXMI 库、ReShade 以及各游戏的设置。
 
-## 网盘、共享网盘和备份
+## 网盘、共享网盘和备份 {#drive}
 
 向 Nahida Drive 上传文件或从中下载文件，将共享网盘链接导入你的网盘，并按计划备份模组文件夹。使用 nahida.live 账号登录后才会显示这些页面。
+
+## [设置](/zh-CN/features/settings)
+
+设置应用行为、更新、网盘、传输、网络代理、GitHub 令牌、Nahida Agent 和问题反馈。模组管理器的设置见 [模组设置](/zh-CN/features/mod-manager/settings)。
