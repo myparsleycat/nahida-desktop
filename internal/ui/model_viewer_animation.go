@@ -225,6 +225,15 @@ func (v *ModelViewer) startAnimation(clipID string) {
 	v.runTrackClock(trackMod)
 }
 
+func (v *ModelViewer) seekTrackFrame(track viewerTrack, index int) {
+	if track == trackMotion {
+		if m := v.activeMotion(); m != nil {
+			m.fadeStart, m.fadeStowed = time.Time{}, nil
+		}
+	}
+	v.setTrackFrame(track, index)
+}
+
 func (v *ModelViewer) setTrackFrame(track viewerTrack, index int) {
 	if track == trackMotion {
 		v.setMotionFrame(index)
@@ -239,13 +248,25 @@ func (v *ModelViewer) setTrackPlaying(track viewerTrack, playing bool) {
 		return
 	}
 	clip := v.trackClip(track)
+	wasPlaying := p.playing
 	p.playing = playing && clip != nil && len(clip.Frames) > 1
+	restart := p.playing && !clip.Loop && p.frame >= len(clip.Frames)-1
 	if track == trackMod && !p.playing && v.untrimmed > 0 {
 		v.trimDevice()
 	}
 	v.runTrackClock(track)
-	if track == trackMod {
+	if restart {
+		v.seekTrackFrame(track, 0)
+	} else if track == trackMod {
 		v.syncNextFrame()
+	} else if track == trackMotion && !p.playing {
+		if err := v.poseMotion(time.Now()); err != nil {
+			v.failMotionPlay(err, "evaluate-pose")
+			return
+		}
+	}
+	if p.playing != wasPlaying || restart {
+		v.revision++
 	}
 }
 
@@ -798,13 +819,13 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 	).Key("model-viewer.animation-lane." + track.key()).Gap(2).Align(fairy.Center).H(viewerAnimationBarHeight)
 	if full {
 		start := T("page.tools.model_viewer.animation_start")
-		lane.Child(kit.IconButton(lucide.SkipBack, func() { v.setTrackFrame(track, 0) }, kit.Ghost, kit.Small,
+		lane.Child(kit.IconButton(lucide.SkipBack, func() { v.seekTrackFrame(track, 0) }, kit.Ghost, kit.Small,
 			kit.Disabled(still), kit.Tooltip(start)).Label(start))
 	}
 	lane.Child(v.animationScrubber(t, track, p, last))
 	if full {
 		end := T("page.tools.model_viewer.animation_end")
-		lane.Child(kit.IconButton(lucide.SkipForward, func() { v.setTrackFrame(track, last) }, kit.Ghost, kit.Small,
+		lane.Child(kit.IconButton(lucide.SkipForward, func() { v.seekTrackFrame(track, last) }, kit.Ghost, kit.Small,
 			kit.Disabled(still), kit.Tooltip(end)).Label(end))
 	}
 	if width >= viewerAnimationBarCompactWidth {
@@ -876,7 +897,7 @@ func (v *ModelViewer) animationScrubber(t kit.Theme, track viewerTrack, p *viewe
 	}
 	seek := func(x, width float32) {
 		fraction := min(max(float64((x-viewerScrubInset)/max(width-2*viewerScrubInset, 1)), 0), 1)
-		v.setTrackFrame(track, int(math.Round(fraction*float64(last))))
+		v.seekTrackFrame(track, int(math.Round(fraction*float64(last))))
 	}
 
 	scrub := fairy.Box().Key("model-viewer.animation-frame." + track.key()).Grow(1).MinW(80).H(height).
@@ -914,7 +935,7 @@ func (v *ModelViewer) animationScrubber(t kit.Theme, track viewerTrack, p *viewe
 
 	return scrub.Role(fairy.RoleSlider).
 		RangeValue(float64(p.frame), 0, float64(last), 1, func(frame float64) {
-			v.setTrackFrame(track, int(math.Round(frame)))
+			v.seekTrackFrame(track, int(math.Round(frame)))
 		}).
 		Label(T("page.tools.model_viewer.animation_frame_slider")).
 		Cursor(fairy.CursorPointer).
@@ -930,6 +951,9 @@ func (v *ModelViewer) animationScrubber(t kit.Theme, track viewerTrack, p *viewe
 			if d.Phase == fairy.DragEnd && p.resume != nil {
 				resume := *p.resume
 				p.resume = nil
+				if clip := v.trackClip(track); resume && clip != nil && !clip.Loop && p.frame >= len(clip.Frames)-1 {
+					resume = false
+				}
 				v.setTrackPlaying(track, resume)
 			}
 			return true
@@ -940,13 +964,13 @@ func (v *ModelViewer) animationScrubber(t kit.Theme, track viewerTrack, p *viewe
 			}
 			switch k.Key {
 			case keyboard.KeyLeft, keyboard.KeyDown:
-				v.setTrackFrame(track, p.frame-1)
+				v.seekTrackFrame(track, p.frame-1)
 			case keyboard.KeyRight, keyboard.KeyUp:
-				v.setTrackFrame(track, p.frame+1)
+				v.seekTrackFrame(track, p.frame+1)
 			case keyboard.KeyHome:
-				v.setTrackFrame(track, 0)
+				v.seekTrackFrame(track, 0)
 			case keyboard.KeyEnd:
-				v.setTrackFrame(track, last)
+				v.seekTrackFrame(track, last)
 			default:
 				return false
 			}

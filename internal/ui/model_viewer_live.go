@@ -1,13 +1,13 @@
 package ui
 
 import (
-	"encoding/binary"
 	"fmt"
 	"slices"
 
 	"github.com/myparsleycat/fairy"
 
 	"nahida.live/desktop/internal/blenderlink"
+	"nahida.live/desktop/internal/infra"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -77,6 +77,12 @@ func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) 
 			coverageChanged := (mesh.info.IndexCount > 0) != (info.IndexCount > 0)
 			mesh.info, mesh.failed = info, false
 			mesh.variants, mesh.unreadable = map[int]*viewerPositionGeometry{}, nil
+			// A live load started while the mesh was loaded would otherwise swap the older geometry in.
+			delete(v.liveWanted, i)
+			if m := v.activeMotion(); m != nil {
+				m.replaceBlend(i, "", nil, nil)
+				v.reloadMotionBlend(scene, m, i)
+			}
 			if coverageChanged {
 				v.rematchOriginal(scene)
 			}
@@ -149,14 +155,13 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 		var buffers viewerMeshGPU
 		var generation uint64
 		var blend []uint16
+		var blendErr error
 		decoded, err := readViewerMesh(ctx, read, info, averagedOutline)
 		if err == nil && info.BlendURL != "" {
+			// Bone weights that cannot be read leave the mesh unposed rather than holding back its new geometry.
 			var data []byte
-			if data, err = read(ctx, info.BlendURL); err == nil {
-				blend = make([]uint16, len(data)/2)
-				for k := range blend {
-					blend[k] = binary.LittleEndian.Uint16(data[k*2:])
-				}
+			if data, blendErr = read(ctx, info.BlendURL); blendErr == nil {
+				blend, blendErr = decodeMotionBlend(info.ID, data, decoded.vertexCount)
 			}
 		}
 		if err == nil {
@@ -192,8 +197,11 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 				}
 				return nil
 			})
-			if m := v.activeMotion(); m != nil && blend != nil {
-				m.replaceBlend(i, info.BlendPalette, blend)
+			if info.BlendURL != "" {
+				v.reportLiveBlend(blendErr, "ModelViewer.loadLiveMesh", "read-blend", info)
+			}
+			if m := v.activeMotion(); m != nil {
+				v.applyMotionBlend(scene, m, i, info, decoded.positions, blend)
 			}
 			// The original model's match reads the new positions, so it runs after the swap.
 			if coverageChanged {
@@ -205,16 +213,204 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 	}()
 }
 
-// replaceBlend poses scene mesh i with new bone weights through the palette mapping made when the motion
-// loaded. A palette the motion did not map leaves the mesh unposed.
-func (m *viewerMotion) replaceBlend(i int, palette string, blend []uint16) {
-	mapping, ok := m.palettes[palette]
-	m.meshes = slices.DeleteFunc(m.meshes, func(mesh viewerMotionMesh) bool { return mesh.index == i })
-	if ok {
-		m.meshes = append(m.meshes, viewerMotionMesh{
-			index: i, vertices: len(blend) / 8, blend: packMotionBlend(blend, mapping),
-		})
+// applyMotionBlend poses scene mesh i with bone weights blend through its palette. When blend weights groups the
+// palette has not mapped to more vertices than MapPalettes has seen for them, the mesh draws unposed while they are
+// mapped onto the skeleton off the UI thread.
+func (v *ModelViewer) applyMotionBlend(
+	scene *viewerScene,
+	m *viewerMotion,
+	i int,
+	info modelviewer.ModelViewerMeshTransport,
+	positions []float32,
+	blend []uint16,
+) {
+	m.cancelBlendLoad(i)
+	palette := info.BlendPalette
+	if palette == "" || len(blend) == 0 || m.motion == nil || m.motion.NodeCount() == 0 ||
+		!paletteNeedsMapping(blend, m.palettes[palette], m.paletteEvidence[palette]) {
+		m.replaceBlend(i, palette, positions, blend)
+		return
 	}
+
+	m.replaceBlend(i, "", nil, nil)
+	ctx, post, motion := m.beginBlendLoad(v.ctx, i), v.poster(), m.motion
+	go func() {
+		palettes, err := motion.MapPalettes(ctx, []modelviewer.MotionPalette{{Positions: positions, Blend: blend}})
+		post(func() {
+			// A cancelled mapping records nothing, so the next update maps again.
+			if ctx.Err() != nil {
+				return
+			}
+			m.cancelBlendLoad(i)
+			if !v.motionBlendCurrent(scene, m, i, info) {
+				return
+			}
+			v.reportLiveBlend(err, "ModelViewer.applyMotionBlend", "map-palette", info)
+			if err == nil && len(palettes) > 0 {
+				if m.palettes == nil {
+					m.palettes = map[string][]int32{}
+				}
+				m.palettes[palette] = mergeMotionPalette(m.palettes[palette], palettes[0])
+			}
+			m.recordMappingEvidence(palette, blend)
+			m.replaceBlend(i, palette, positions, blend)
+			v.revision++
+		})
+	}()
+}
+
+// reloadMotionBlend reads the bone weights scene mesh i now names, and its base positions when the mesh holds none
+// on the CPU, then poses the mesh with them.
+func (v *ModelViewer) reloadMotionBlend(scene *viewerScene, m *viewerMotion, i int) {
+	m.cancelBlendLoad(i)
+	mesh := scene.meshes[i]
+	info := mesh.info
+	if info.BlendURL == "" || info.BlendPalette == "" {
+		return
+	}
+	var held []float32
+	if !mesh.unloaded && !mesh.cpuDropped {
+		held = mesh.positions
+	}
+	if v.meshLoads == nil {
+		v.meshLoads = make(chan struct{}, viewerLoadConcurrency)
+	}
+	ctx, loads, read, post, averaged := m.beginBlendLoad(v.ctx, i), v.meshLoads, v.read, v.poster(),
+		mesh.averagedOutline
+	go func() {
+		positions := held
+		var err error
+		if positions == nil {
+			select {
+			case loads <- struct{}{}:
+				var decoded *viewerMesh
+				if decoded, err = readViewerMesh(ctx, read, info, averaged); err == nil {
+					positions = decoded.positions
+				}
+				<-loads
+			case <-ctx.Done():
+				err = ctx.Err()
+			}
+		}
+		var blend []uint16
+		if err == nil {
+			var data []byte
+			if data, err = read(ctx, info.BlendURL); err == nil {
+				blend, err = decodeMotionBlend(info.ID, data, len(positions)/3)
+			}
+		}
+		post(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			m.cancelBlendLoad(i)
+			if !v.motionBlendCurrent(scene, m, i, info) {
+				return
+			}
+			v.reportLiveBlend(err, "ModelViewer.reloadMotionBlend", "reload-blend", info)
+			if err != nil {
+				return
+			}
+			v.applyMotionBlend(scene, m, i, info, positions, blend)
+			v.revision++
+		})
+	}()
+}
+
+// reportLiveBlend logs bone weights of a Blender live mesh that could not be read or mapped at stage, once per
+// episode of the same failure for the mesh. A nil err ends the mesh's episode.
+func (v *ModelViewer) reportLiveBlend(err error, where, stage string, info modelviewer.ModelViewerMeshTransport) {
+	throttle := v.liveBlendFailures[info.ID]
+	if throttle == nil {
+		if err == nil {
+			return
+		}
+		throttle = &infra.DiagnosticThrottle{}
+		if v.liveBlendFailures == nil {
+			v.liveBlendFailures = map[string]*infra.DiagnosticThrottle{}
+		}
+		v.liveBlendFailures[info.ID] = throttle
+	}
+	throttle.Report(v.log, err, where, infra.Diagnostic{
+		Severity:  infra.DiagnosticWarn,
+		Operation: "live-motion-blend",
+		Stage:     stage,
+		Fields: map[string]any{
+			"path": info.ID, "modPath": v.path, "blendURL": infra.SanitizeLogURL(info.BlendURL),
+		},
+	})
+}
+
+// motionBlendCurrent reports whether motion m still plays on scene and scene mesh i still has the geometry and bone
+// weights info names.
+func (v *ModelViewer) motionBlendCurrent(
+	scene *viewerScene,
+	m *viewerMotion,
+	i int,
+	info modelviewer.ModelViewerMeshTransport,
+) bool {
+	if v.closed || v.scene != scene || v.activeMotion() != m || i >= len(scene.meshes) {
+		return false
+	}
+	now := scene.meshes[i].info
+	return now.GeometryURL == info.GeometryURL && now.BlendURL == info.BlendURL &&
+		now.BlendPalette == info.BlendPalette
+}
+
+// paletteNeedsMapping reports whether blend weights a group that mapping maps to no node to more vertices than
+// evidence records MapPalettes has seen for it.
+func paletteNeedsMapping(blend []uint16, mapping, evidence []int32) bool {
+	for group, count := range motionGroupVertices(blend) {
+		if count == 0 || group < len(mapping) && mapping[group] >= 0 {
+			continue
+		}
+		if group >= len(evidence) || count > evidence[group] {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeMotionPalette keeps the groups existing maps and takes the rest from mapped.
+func mergeMotionPalette(existing, mapped []int32) []int32 {
+	out := make([]int32, max(len(existing), len(mapped)))
+	for i := range out {
+		out[i] = -1
+		if i < len(existing) && existing[i] >= 0 {
+			out[i] = existing[i]
+		} else if i < len(mapped) && mapped[i] >= 0 {
+			out[i] = mapped[i]
+		}
+	}
+	return out
+}
+
+// replaceBlend poses scene mesh i with new bone weights through the palette mapping, or clears its skinning state
+// when no weights remain, then updates anchorNodes and bounds.
+func (m *viewerMotion) replaceBlend(i int, palette string, positions []float32, blend []uint16) {
+	m.meshes = slices.DeleteFunc(m.meshes, func(mesh viewerMotionMesh) bool { return mesh.index == i })
+	if i >= 0 && i < len(m.anchorNodes) {
+		m.anchorNodes[i] = -1
+	}
+
+	mapping := m.palettes[palette]
+	vertices := len(blend) / 8
+	if palette != "" && len(mapping) > 0 && vertices > 0 && len(blend) == vertices*8 {
+		nodes := len(m.bones)
+		if m.motion != nil {
+			nodes = m.motion.NodeCount()
+		}
+		totals := make([]float64, nodes)
+		boxes := buildMotionMeshBoxes(nodes, totals, positions, blend, mapping)
+		m.meshes = append(m.meshes, viewerMotionMesh{
+			index: i, vertices: vertices, blend: packMotionBlend(blend, mapping), boxes: boxes,
+		})
+		if i >= 0 && i < len(m.anchorNodes) && len(m.parents) == nodes {
+			m.anchorNodes[i] = anchorNode(totals, m.parents)
+		}
+	}
+	m.rebuildBoxes()
+
 	if m.gpu != nil {
 		_ = fairy.UseDevice(func(fairy.GPU) error {
 			m.gpu.release()

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,19 +42,26 @@ type viewerMotion struct {
 	bones   [][12]float32
 	posed   uint64
 	posedAt viewerMotionPoseAt
+	parents []int32
 	// boxes bounds the rest positions each node moves, the last one those that move with no node. clipBoxes bounds
 	// them over every pose of each clip and clipBox over the clip playing, so the shadow volume stays still while it
 	// plays, widened to the poses shown while it fades in; restBox bounds the meshes the motion does not pose. All
 	// are in the mod's space.
 	boxes            []viewerMotionBox
 	clipBoxes        []viewerMotionBox
+	clipBoxesValid   []bool
 	clipBox, restBox viewerMotionBox
 	// fadeStart is when the pose shown at the last change of clip began fading into the new clip, or zero once the
 	// fade is over. fadeStowed marks the nodes the clips faded from put out of sight, hidden until the fade ends.
 	fadeStart  time.Time
 	fadeStowed []bool
-	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them.
-	palettes map[string][]int32
+	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them; a negative entry
+	// maps a group to no node. paletteEvidence counts, by palette and group, the most weighted vertices MapPalettes has
+	// seen for the group.
+	palettes        map[string][]int32
+	paletteEvidence map[string][]int32
+	// blendLoads cancels, by scene mesh, the bone weight read or palette mapping still running for it.
+	blendLoads map[int]context.CancelFunc
 	// anchorNodes holds, by scene mesh, the node that turns the mesh's face direction, or -1.
 	anchorNodes []int32
 	// gpu is the motion's buffers on the device the scene draws on, made by the first draw, and gpuErr why they
@@ -63,12 +71,19 @@ type viewerMotion struct {
 	gpuStage string
 }
 
+// viewerMotionNodeBox holds a mesh's bounding box for one skeleton node, or -1 for vertices weighted to no node.
+type viewerMotionNodeBox struct {
+	node int32
+	box  viewerMotionBox
+}
+
 // viewerMotionMesh is a mesh the motion poses: its bone weights as the shaders read them, four uint32 per vertex
-// (see skinBlend in model_viewer.hlsl).
+// (see skinBlend in model_viewer.hlsl), and its per-node rest boxes.
 type viewerMotionMesh struct {
 	index    int
 	vertices int
 	blend    []uint32
+	boxes    []viewerMotionNodeBox
 }
 
 // viewerMotionBox is an axis-aligned box; ok is false while it holds no point.
@@ -86,6 +101,14 @@ func (b *viewerMotionBox) add(p vec3) {
 		b.minimum[axis] = min(b.minimum[axis], p[axis])
 		b.maximum[axis] = max(b.maximum[axis], p[axis])
 	}
+}
+
+func (b *viewerMotionBox) merge(other viewerMotionBox) {
+	if !other.ok {
+		return
+	}
+	b.add(other.minimum)
+	b.add(other.maximum)
 }
 
 var viewerMotionIdentity = [12]float32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}
@@ -143,6 +166,88 @@ func packMotionBlend(blend []uint16, palette []int32) []uint32 {
 		packed[vertex*4+3] = uint32(weights[2]) | uint32(weights[3])<<16
 	}
 	return packed
+}
+
+// decodeMotionBlend reads a mesh's bone weights file, eight little-endian uint16 per vertex.
+func decodeMotionBlend(id string, data []byte, vertices int) ([]uint16, error) {
+	if len(data) != vertices*16 {
+		return nil, fmt.Errorf("mesh %s bone weights do not match its %d vertices", id, vertices)
+	}
+	blend := make([]uint16, len(data)/2)
+	for i := range blend {
+		blend[i] = binary.LittleEndian.Uint16(data[i*2:])
+	}
+	return blend, nil
+}
+
+// motionGroupVertices counts, by palette group, the vertices blend weights to the group.
+func motionGroupVertices(blend []uint16) []int32 {
+	var counts []int32
+	for vertex := range len(blend) / 8 {
+		slots := blend[vertex*8 : vertex*8+8]
+		for k := range 4 {
+			group := int(slots[k])
+			if slots[4+k] == 0 || group >= viewerMotionNoNode {
+				continue
+			}
+			repeated := false
+			for j := range k {
+				repeated = repeated || slots[4+j] != 0 && int(slots[j]) == group
+			}
+			if repeated {
+				continue
+			}
+			for len(counts) <= group {
+				counts = append(counts, 0)
+			}
+			counts[group]++
+		}
+	}
+	return counts
+}
+
+// recordMappingEvidence notes that one MapPalettes call has seen the vertices blends weight to each group of palette,
+// so that a group it could not place is mapped again only once more vertices are weighted to it.
+func (m *viewerMotion) recordMappingEvidence(palette string, blends ...[]uint16) {
+	var seen []int32
+	for _, blend := range blends {
+		for group, count := range motionGroupVertices(blend) {
+			for len(seen) <= group {
+				seen = append(seen, 0)
+			}
+			seen[group] += count
+		}
+	}
+
+	if m.paletteEvidence == nil {
+		m.paletteEvidence = map[string][]int32{}
+	}
+	evidence := m.paletteEvidence[palette]
+	for group, count := range seen {
+		for len(evidence) <= group {
+			evidence = append(evidence, 0)
+		}
+		evidence[group] = max(evidence[group], count)
+	}
+	m.paletteEvidence[palette] = evidence
+}
+
+// beginBlendLoad cancels the bone weight work still running for scene mesh i and returns the context of the next.
+func (m *viewerMotion) beginBlendLoad(parent context.Context, i int) context.Context {
+	m.cancelBlendLoad(i)
+	ctx, cancel := context.WithCancel(parent)
+	if m.blendLoads == nil {
+		m.blendLoads = map[int]context.CancelFunc{}
+	}
+	m.blendLoads[i] = cancel
+	return ctx
+}
+
+func (m *viewerMotion) cancelBlendLoad(i int) {
+	if cancel, ok := m.blendLoads[i]; ok {
+		cancel()
+		delete(m.blendLoads, i)
+	}
 }
 
 // characterMotionAvailable reports whether game motions exist for the mod's character and a mesh of the scene has
@@ -211,14 +316,38 @@ func (v *ModelViewer) syncMotion() {
 	v.startCharacterMotion(v.motionKey())
 }
 
+// viewerMotionSource is a UI-thread snapshot of a scene mesh used when loading character motions off-thread.
+type viewerMotionSource struct {
+	info      modelviewer.ModelViewerMeshTransport
+	averaged  bool
+	positions []float32
+}
+
+// changedMotionSources lists the meshes whose geometry or bone weights differ from sources; ok is false when the
+// scene has another number of meshes.
+func changedMotionSources(meshes []*viewerMesh, sources []viewerMotionSource) (changed []int, ok bool) {
+	if len(meshes) != len(sources) {
+		return nil, false
+	}
+	for i, mesh := range meshes {
+		if mesh.info.GeometryURL != sources[i].info.GeometryURL ||
+			mesh.info.BlendURL != sources[i].info.BlendURL ||
+			mesh.info.BlendPalette != sources[i].info.BlendPalette {
+			changed = append(changed, i)
+		}
+	}
+	return changed, true
+}
+
 // startCharacterMotion loads the character's motions into their own lane of the playback controller. A load that
 // fails marks key so that it does not load again by itself.
 func (v *ModelViewer) startCharacterMotion(key viewerCharacterKey) {
 	scene, c := v.scene, v.character
-	bases := map[int][]float32{}
+	sources := make([]viewerMotionSource, len(scene.meshes))
 	for i, mesh := range scene.meshes {
+		sources[i] = viewerMotionSource{info: mesh.info, averaged: mesh.averagedOutline}
 		if mesh.info.BlendURL != "" && !mesh.unloaded && !mesh.cpuDropped && mesh.positions != nil {
-			bases[i] = mesh.positions
+			sources[i].positions = mesh.positions
 		}
 	}
 	ctx, cancel := context.WithCancel(v.ctx)
@@ -228,7 +357,7 @@ func (v *ModelViewer) startCharacterMotion(key viewerCharacterKey) {
 	run := v.downloads.begin(downloadMotion, post)
 	tools, read := v.tools, v.read
 	go func() {
-		m, err := loadViewerMotion(ctx, tools, read, scene, bases, c.game, c.ID, run.report)
+		m, err := loadViewerMotion(ctx, tools, read, sources, c.game, c.ID, run.report)
 		post(func() {
 			run.end()
 			if v.motionCancel == nil || ctx.Err() != nil || v.scene != scene {
@@ -237,15 +366,28 @@ func (v *ModelViewer) startCharacterMotion(key viewerCharacterKey) {
 			}
 			v.motionCancel = nil
 			v.revision++
-			if err != nil {
+			changed, sameMeshes := changedMotionSources(scene.meshes, sources)
+			if err != nil || !sameMeshes {
 				cancel()
-				v.motionFailed = key
-				v.reportMotionError(err, c)
+				if (len(changed) > 0 || !sameMeshes) && v.characterMotionAvailable() {
+					v.startCharacterMotion(key)
+					return
+				}
+				if err != nil {
+					v.motionFailed = key
+					v.reportMotionError(err, c)
+				}
 				return
 			}
+			m.scene = scene
 			m.cancel = cancel
 			v.charMotion = m
 			v.startMotion(m.defaultClip())
+			// A Blender live link replaced these meshes while the motion loaded.
+			for _, i := range changed {
+				m.replaceBlend(i, "", nil, nil)
+				v.reloadMotionBlend(scene, m, i)
+			}
 		})
 	}()
 }
@@ -278,8 +420,8 @@ func (v *ModelViewer) reportMotionError(err error, c *viewerCharacter) {
 }
 
 // loadViewerMotion reads the character's motion and the bone weights of every mesh that has them, and maps each
-// bone palette onto the skeleton by the meshes' base positions. bases holds the base positions of meshes already
-// loaded. progress receives the motion file's download progress.
+// bone palette onto the skeleton by the meshes' base positions from sources. progress receives the motion file's
+// download progress.
 func loadViewerMotion(
 	ctx context.Context,
 	tools interface {
@@ -288,8 +430,7 @@ func loadViewerMotion(
 		) (*modelviewer.CharacterMotion, error)
 	},
 	read viewerReader,
-	scene *viewerScene,
-	bases map[int][]float32,
+	sources []viewerMotionSource,
 	game, id string,
 	progress modelviewer.CharacterFileProgress,
 ) (*viewerMotion, error) {
@@ -308,8 +449,8 @@ func loadViewerMotion(
 	}
 	palettes := map[string][]weighted{}
 	var order []string
-	for index, mesh := range scene.meshes {
-		info := mesh.info
+	for index, source := range sources {
+		info := source.info
 		if info.BlendURL == "" || info.BlendPalette == "" {
 			continue
 		}
@@ -317,21 +458,17 @@ func loadViewerMotion(
 		if err != nil {
 			return nil, fmt.Errorf("mesh %s bone weights: %w", info.ID, err)
 		}
-		positions, ok := bases[index]
-		if !ok {
-			decoded, err := readViewerMesh(ctx, read, info, mesh.averagedOutline)
+		positions := source.positions
+		if positions == nil {
+			decoded, err := readViewerMesh(ctx, read, info, source.averaged)
 			if err != nil {
 				return nil, fmt.Errorf("mesh %s: %w", info.ID, err)
 			}
 			positions = decoded.positions
 		}
-		vertices := len(positions) / 3
-		if len(data) != vertices*16 {
-			return nil, fmt.Errorf("mesh %s bone weights do not match its %d vertices", info.ID, vertices)
-		}
-		blend := make([]uint16, len(data)/2)
-		for i := range blend {
-			blend[i] = binary.LittleEndian.Uint16(data[i*2:])
+		blend, err := decodeMotionBlend(info.ID, data, len(positions)/3)
+		if err != nil {
+			return nil, err
 		}
 		if _, ok := palettes[info.BlendPalette]; !ok {
 			order = append(order, info.BlendPalette)
@@ -344,9 +481,14 @@ func loadViewerMotion(
 	}
 
 	nodes := motion.NodeCount()
+	parents := make([]int32, nodes)
+	for i := range parents {
+		parents[i] = int32(motion.NodeParent(i))
+	}
 	m := &viewerMotion{
-		scene: scene, motion: motion, pose: motion.NewPose(), bones: make([][12]float32, nodes),
-		boxes: make([]viewerMotionBox, nodes+1), anchorNodes: make([]int32, len(scene.meshes)),
+		motion: motion, pose: motion.NewPose(), bones: make([][12]float32, nodes), parents: parents,
+		boxes: make([]viewerMotionBox, nodes+1), clipBoxes: make([]viewerMotionBox, len(motion.Clips)),
+		clipBoxesValid: make([]bool, len(motion.Clips)), anchorNodes: make([]int32, len(sources)),
 	}
 	for i := range m.bones {
 		m.bones[i] = viewerMotionIdentity
@@ -354,18 +496,14 @@ func loadViewerMotion(
 	for i := range m.anchorNodes {
 		m.anchorNodes[i] = -1
 	}
-	parents := make([]int32, nodes)
-	for i := range parents {
-		parents[i] = int32(motion.NodeParent(i))
-	}
-	sources := make([]modelviewer.MotionPalette, len(order))
+	paletteSources := make([]modelviewer.MotionPalette, len(order))
 	for i, name := range order {
 		for _, mesh := range palettes[name] {
-			sources[i].Positions = append(sources[i].Positions, mesh.positions...)
-			sources[i].Blend = append(sources[i].Blend, mesh.blend...)
+			paletteSources[i].Positions = append(paletteSources[i].Positions, mesh.positions...)
+			paletteSources[i].Blend = append(paletteSources[i].Blend, mesh.blend...)
 		}
 	}
-	mapped, err := motion.MapPalettes(ctx, sources)
+	mapped, err := motion.MapPalettes(ctx, paletteSources)
 	if err != nil {
 		return nil, err
 	}
@@ -375,21 +513,28 @@ func loadViewerMotion(
 	for i, name := range order {
 		palette := mapped[i]
 		m.palettes[name] = palette
+		blends := make([][]uint16, len(palettes[name]))
+		for k, mesh := range palettes[name] {
+			blends[k] = mesh.blend
+		}
+		m.recordMappingEvidence(name, blends...)
 		for _, mesh := range palettes[name] {
+			clear(totals)
+			meshBoxes := buildMotionMeshBoxes(nodes, totals, mesh.positions, mesh.blend, palette)
+			mergeMotionBoxes(m.boxes, nodes, meshBoxes)
 			m.meshes = append(m.meshes, viewerMotionMesh{
 				index: mesh.index, vertices: len(mesh.blend) / 8, blend: packMotionBlend(mesh.blend, palette),
+				boxes: meshBoxes,
 			})
-			clear(totals)
-			addMotionBoxes(m.boxes, totals, mesh.positions, mesh.blend, palette)
 			m.anchorNodes[mesh.index] = anchorNode(totals, parents)
 		}
 	}
 
-	for i, mesh := range scene.transport.Meshes {
+	for i, source := range sources {
 		posed := slices.ContainsFunc(m.meshes, func(posed viewerMotionMesh) bool { return posed.index == i })
-		if !posed && mesh.Bounds != nil {
-			m.restBox.add(mesh.Bounds.Min)
-			m.restBox.add(mesh.Bounds.Max)
+		if !posed && source.info.Bounds != nil {
+			m.restBox.add(source.info.Bounds.Min)
+			m.restBox.add(source.info.Bounds.Max)
 		}
 	}
 
@@ -402,7 +547,7 @@ func loadViewerMotion(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		m.clipBoxes = append(m.clipBoxes, box)
+		m.clipBoxes[i], m.clipBoxesValid[i] = box, true
 
 		frames := make([]modelviewer.ModelViewerAnimationFrame, clip.Frames)
 		for f := range frames {
@@ -419,11 +564,18 @@ func loadViewerMotion(
 	return m, nil
 }
 
-// addMotionBoxes adds each vertex of a mesh to the box of every node that moves it and sums the weights of each node
-// into totals.
+// addMotionBoxes adds each finite vertex of a mesh to the box of every node that moves it and sums the weights of
+// each node into totals. Vertices with no valid mapped node go into the last box.
 func addMotionBoxes(boxes []viewerMotionBox, totals []float64, positions []float32, blend []uint16, palette []int32) {
 	for vertex := range min(len(positions)/3, len(blend)/8) {
-		p := vec3{float64(positions[vertex*3]), float64(positions[vertex*3+1]), float64(positions[vertex*3+2])}
+		x, y, z := positions[vertex*3], positions[vertex*3+1], positions[vertex*3+2]
+		if math.IsNaN(float64(x)) || math.IsInf(float64(x), 0) ||
+			math.IsNaN(float64(y)) || math.IsInf(float64(y), 0) ||
+			math.IsNaN(float64(z)) || math.IsInf(float64(z), 0) {
+			continue
+		}
+		p := vec3{float64(x), float64(y), float64(z)}
+		mapped := false
 		for k := range 4 {
 			weight := blend[vertex*8+4+k]
 			if weight == 0 {
@@ -431,12 +583,48 @@ func addMotionBoxes(boxes []viewerMotionBox, totals []float64, positions []float
 			}
 			node := motionNode(blend[vertex*8+k], palette)
 			if node == viewerMotionNoNode || int(node) >= len(totals) {
-				boxes[len(boxes)-1].add(p)
 				continue
 			}
 			boxes[node].add(p)
 			totals[node] += float64(weight)
+			mapped = true
 		}
+		if !mapped {
+			boxes[len(boxes)-1].add(p)
+		}
+	}
+}
+
+func buildMotionMeshBoxes(
+	nodes int,
+	totals []float64,
+	positions []float32,
+	blend []uint16,
+	palette []int32,
+) []viewerMotionNodeBox {
+	local := make([]viewerMotionBox, nodes+1)
+	addMotionBoxes(local, totals, positions, blend, palette)
+	var out []viewerMotionNodeBox
+	for i, box := range local {
+		if !box.ok {
+			continue
+		}
+		node := int32(i)
+		if i == nodes {
+			node = -1
+		}
+		out = append(out, viewerMotionNodeBox{node: node, box: box})
+	}
+	return out
+}
+
+func mergeMotionBoxes(dst []viewerMotionBox, nodes int, entries []viewerMotionNodeBox) {
+	for _, entry := range entries {
+		index := len(dst) - 1
+		if entry.node >= 0 && int(entry.node) < nodes {
+			index = int(entry.node)
+		}
+		dst[index].merge(entry.box)
 	}
 }
 
@@ -560,7 +748,7 @@ func (v *ModelViewer) startMotion(clipID string) {
 	m.play.playing = clip != nil && len(clip.Frames) > 1
 	m.clipBox = viewerMotionBox{}
 	if clip != nil {
-		m.clipBox = m.clipBoxes[m.clipNumber(clip.ID)]
+		m.clipBox = m.clipBoxFor(m.clipNumber(clip.ID))
 	}
 	held := m.fadeStowed
 	if !m.fading() {
@@ -627,6 +815,65 @@ func clipBox(
 		}
 	}
 	return box, nil
+}
+
+// clipBoxFor returns the cached clip bounds of index, computing them on demand without disturbing m.pose.
+func (m *viewerMotion) clipBoxFor(index int) viewerMotionBox {
+	if m.motion == nil || index < 0 || index >= len(m.motion.Clips) {
+		return viewerMotionBox{}
+	}
+	if index < len(m.clipBoxesValid) && m.clipBoxesValid[index] {
+		return m.clipBoxes[index]
+	}
+	if len(m.clipBoxes) != len(m.motion.Clips) {
+		m.clipBoxes = make([]viewerMotionBox, len(m.motion.Clips))
+	}
+	if len(m.clipBoxesValid) != len(m.motion.Clips) {
+		m.clipBoxesValid = make([]bool, len(m.motion.Clips))
+	}
+	clip := m.motion.Clips[index]
+	pose, bones := m.motion.NewPose(), make([][12]float32, m.motion.NodeCount())
+	box, err := clipBox(pose, m.boxes, bones, index, clip.Frames, m.motion.StowedNodes(index))
+	if err != nil {
+		return viewerMotionBox{}
+	}
+	m.clipBoxes[index], m.clipBoxesValid[index] = box, true
+	return box
+}
+
+// rebuildBoxes recomputes m.boxes and m.restBox after mesh blend weights change, and the clip bounds only when
+// m.boxes changed, since evaluating a clip's every pose is the costly part.
+func (m *viewerMotion) rebuildBoxes() {
+	nodes := len(m.bones)
+	if m.motion != nil {
+		nodes = m.motion.NodeCount()
+	}
+	boxes := make([]viewerMotionBox, nodes+1)
+	for _, mesh := range m.meshes {
+		mergeMotionBoxes(boxes, nodes, mesh.boxes)
+	}
+	boxesChanged := !slices.Equal(boxes, m.boxes)
+	m.boxes = boxes
+
+	m.restBox = viewerMotionBox{}
+	if m.scene != nil {
+		for i, mesh := range m.scene.meshes {
+			posed := slices.ContainsFunc(m.meshes, func(posed viewerMotionMesh) bool { return posed.index == i })
+			if !posed && mesh.info.Bounds != nil {
+				m.restBox.add(mesh.info.Bounds.Min)
+				m.restBox.add(mesh.info.Bounds.Max)
+			}
+		}
+	}
+
+	if !boxesChanged {
+		return
+	}
+	clear(m.clipBoxesValid)
+	m.clipBox = viewerMotionBox{}
+	if len(m.clips) > 0 {
+		m.clipBox = m.clipBoxFor(m.clipNumber(m.play.clipID))
+	}
 }
 
 // clipNumber is the index in the motion of the clip with id.
@@ -698,6 +945,9 @@ func (v *ModelViewer) stopMotion() {
 	}
 	v.charMotion = nil
 	m.cancel()
+	for i := range m.blendLoads {
+		m.cancelBlendLoad(i)
+	}
 	if m.gpu != nil {
 		_ = fairy.UseDevice(func(fairy.GPU) error {
 			m.gpu.release()

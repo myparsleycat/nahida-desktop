@@ -623,3 +623,47 @@ func TestResolveModelViewerBlendSourceWWMI(t *testing.T) {
 		t.Fatalf("blend = %v, want %v", blend, want)
 	}
 }
+
+func TestCharacterMotion_MapPalettesNonFiniteVertex(t *testing.T) {
+	t.Run("nearestJoint fallback ignores non-finite vertices", func(t *testing.T) {
+		m := mirroredTestMotion(t)
+		var palette MotionPalette
+		addTestVertices(
+			&palette,
+			fullTestWeight(0),
+			[3]float32{0.3, 0.5, 0},
+			[3]float32{0.3, 0.51, 0},
+			[3]float32{float32(math.NaN()), 0.5, 0},
+			[3]float32{float32(math.Inf(1)), 0.5, 0},
+		)
+		got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []int32{2}; !slices.Equal(got[0], want) {
+			t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+		}
+	})
+
+	t.Run("identitySkin rejects wrong order despite non-finite vertex", func(t *testing.T) {
+		m := mirroredTestMotion(t)
+		var palette MotionPalette
+		for _, y := range []float32{-0.01, -0.006, -0.002, 0.002, 0.006, 0.01} {
+			addTestVertices(&palette, fullTestWeight(0), [3]float32{-0.3, y, 0})
+		}
+		addTestVertices(
+			&palette,
+			fullTestWeight(1),
+			[3]float32{-0.3, -0.004, 0},
+			[3]float32{-0.3, 0.004, 0},
+			[3]float32{float32(math.NaN()), 0, 0},
+		)
+		got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []int32{1, 1}; !slices.Equal(got[0], want) {
+			t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+		}
+	})
+}

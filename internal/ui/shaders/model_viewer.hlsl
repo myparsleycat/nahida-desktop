@@ -227,22 +227,23 @@ VSIn skin(VSIn i, uint id) {
     float3x4 m = 0;
     float total = 0;
     float hiddenWeight = 0;
+    float unmappedWeight = 0;
     [unroll] for (uint k = 0; k < 4; k++) {
         if (weights[k] == 0) continue;
-        float3x4 bone = identity;
-        if (nodes[k] != 0xffff) {
-            SkinBone b = skinBones[nodes[k]];
-            if (!any(b.r0) && !any(b.r1) && !any(b.r2)) {
-                hiddenWeight += weights[k];
-                continue;
-            }
-            bone = float3x4(b.r0, b.r1, b.r2);
+        if (nodes[k] == 0xffff) {
+            unmappedWeight += weights[k];
+            continue;
         }
-        m += weights[k] * bone;
+        SkinBone b = skinBones[nodes[k]];
+        if (!any(b.r0) && !any(b.r1) && !any(b.r2)) {
+            hiddenWeight += weights[k];
+            continue;
+        }
+        m += weights[k] * float3x4(b.r0, b.r1, b.r2);
         total += weights[k];
     }
     // The rasterizer discards a primitive with a NaN vertex position.
-    if (hiddenWeight > total) {
+    if (hiddenWeight > total + unmappedWeight) {
         i.pos = asfloat(0x7fc00000).xxx;
         return i;
     }

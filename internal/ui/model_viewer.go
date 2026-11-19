@@ -109,8 +109,11 @@ type ModelViewer struct {
 	window *fairy.Window
 	// imageFailures logs each menu or toggle picture that cannot be read once, not on every request for it.
 	imageFailures infra.DiagnosticThrottle
-	dragStart     orbitCamera
-	dragPanning   bool
+	// liveBlendFailures logs, by mesh ID, a Blender live mesh's bone weights that cannot be read or mapped once per
+	// episode, not on every update.
+	liveBlendFailures map[string]*infra.DiagnosticThrottle
+	dragStart         orbitCamera
+	dragPanning       bool
 	// dragLast is the movement of the drag already handed to motion.
 	dragLast [2]float32
 	motion   cameraMotion
@@ -432,6 +435,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.form = ""
 	v.highlightGameTextures, v.textureInfoOpen = false, false
 	v.pendingVariants, v.pendingMeshes, v.liveWanted, v.liveTextureWanted = nil, nil, nil, nil
+	v.liveBlendFailures = nil
 	v.loadFailureShown = false
 	v.sourceIndices = nil
 	v.orientation = vec3{}

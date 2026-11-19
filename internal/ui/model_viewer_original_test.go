@@ -43,3 +43,36 @@ func TestOriginalLUTWhite(t *testing.T) {
 		t.Error("a 4x4 image passed as a LUT")
 	}
 }
+
+func TestOriginalMotionNodeMapDuplicates(t *testing.T) {
+	t.Run("different layout uses first duplicate node", func(t *testing.T) {
+		motionNames := []string{"Root", "Head", "Neck", "Head"}
+		originalNames := []string{"Root", "Head", "Other"}
+		byName, sameLayout := originalMotionNodeMap(originalNames, len(motionNames), func(i int) string {
+			return motionNames[i]
+		})
+		if sameLayout {
+			t.Fatal("sameLayout = true for differing node lists")
+		}
+		target, ok := resolveOriginalMotionNode(1, originalNames, byName, sameLayout)
+		if !ok || target != 1 {
+			t.Errorf("resolved (%d, %v), want (1, true)", target, ok)
+		}
+	})
+
+	t.Run("identical layout preserves exact node indices", func(t *testing.T) {
+		names := []string{"Root", "End", "End"}
+		byName, sameLayout := originalMotionNodeMap(names, len(names), func(i int) string {
+			return names[i]
+		})
+		if !sameLayout {
+			t.Fatal("sameLayout = false for identical node lists")
+		}
+		for _, want := range []int32{1, 2} {
+			got, ok := resolveOriginalMotionNode(want, names, byName, sameLayout)
+			if !ok || got != int(want) {
+				t.Errorf("node %d resolved (%d, %v), want (%d, true)", want, got, ok, want)
+			}
+		}
+	})
+}

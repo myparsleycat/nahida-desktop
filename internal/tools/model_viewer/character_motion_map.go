@@ -123,6 +123,9 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 
 	grid := make(map[[3]int32][]int32, len(m.refs))
 	for i, ref := range m.refs {
+		if !finiteMotionPosition(ref.position[0], ref.position[1], ref.position[2]) {
+			continue
+		}
 		key := motionCell(ref.position[0], ref.position[1], ref.position[2], m.fromMetres(motionMapCell))
 		grid[key] = append(grid[key], int32(i))
 	}
@@ -516,6 +519,9 @@ func (m *CharacterMotion) gatherVotes(
 	references := make([]motionReferenceWeight, 0, motionMapNeighbours*4)
 	for v := range vertices {
 		px, py, pz := positions[v*3], positions[v*3+1], positions[v*3+2]
+		if !finiteMotionPosition(px, py, pz) {
+			continue
+		}
 		// A group repeated in a vertex's slots is one entry of the group's weight vector.
 		var vertexGroups [4]int
 		var vertexWeights [4]float64
@@ -738,13 +744,7 @@ func uniqueSeamVertices(palette MotionPalette) []int {
 	var unique []int
 	for v := range min(len(palette.Positions)/3, len(palette.Blend)/8) {
 		position := [3]float32(palette.Positions[v*3 : v*3+3])
-		finite := true
-		for _, c := range position {
-			if math.IsNaN(float64(c)) || math.IsInf(float64(c), 0) {
-				finite = false
-			}
-		}
-		if !finite {
+		if !finiteMotionPosition(position[0], position[1], position[2]) {
 			continue
 		}
 		k := key{position, [8]uint16(palette.Blend[v*8 : v*8+8])}
@@ -813,6 +813,12 @@ func pairSeamGroups(a, b []uint16, yield func(groupA, groupB uint16, weight floa
 		i, j := pair[0], pair[1]
 		yield(a[i], b[j], float64(min(a[4+i], b[4+j]))/65535, whole)
 	}
+}
+
+func finiteMotionPosition(x, y, z float32) bool {
+	return !math.IsNaN(float64(x)) && !math.IsInf(float64(x), 0) &&
+		!math.IsNaN(float64(y)) && !math.IsInf(float64(y), 0) &&
+		!math.IsNaN(float64(z)) && !math.IsInf(float64(z), 0)
 }
 
 func motionCell(x, y, z float32, size float64) [3]int32 {
@@ -995,6 +1001,9 @@ func squaredDistance(a, b [3]float64) float64 {
 func strongVertices(palette MotionPalette, vertices, groups int) [][]int32 {
 	heaviest := make([]uint16, groups)
 	for v := range vertices {
+		if !finiteMotionPosition(palette.Positions[v*3], palette.Positions[v*3+1], palette.Positions[v*3+2]) {
+			continue
+		}
 		for k := range 4 {
 			if group := int(palette.Blend[v*8+k]); group < groups {
 				heaviest[group] = max(heaviest[group], palette.Blend[v*8+4+k])
@@ -1003,6 +1012,9 @@ func strongVertices(palette MotionPalette, vertices, groups int) [][]int32 {
 	}
 	strong := make([][]int32, groups)
 	for v := range vertices {
+		if !finiteMotionPosition(palette.Positions[v*3], palette.Positions[v*3+1], palette.Positions[v*3+2]) {
+			continue
+		}
 		for k := range 4 {
 			group, weight := int(palette.Blend[v*8+k]), palette.Blend[v*8+4+k]
 			if group >= groups || weight == 0 || 2*int(weight) < int(heaviest[group]) {

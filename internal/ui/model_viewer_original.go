@@ -976,17 +976,51 @@ func (o *viewerOriginal) draws(dev d3d.Device, skin *viewerMotion, generation ui
 	return out
 }
 
+// originalMotionNodeMap indexes the motion skeleton's nodes by name (first node wins, matching
+// import-character-motion.mjs) and reports whether originalNames matches the skeleton's node layout verbatim.
+func originalMotionNodeMap(
+	originalNames []string,
+	nodes int,
+	nodeName func(int) string,
+) (map[string]int, bool) {
+	byName := make(map[string]int, nodes)
+	sameLayout := len(originalNames) == nodes
+	for i := range nodes {
+		name := nodeName(i)
+		if sameLayout && name != originalNames[i] {
+			sameLayout = false
+		}
+		if name != "" {
+			if _, ok := byName[name]; !ok {
+				byName[name] = i
+			}
+		}
+	}
+	return byName, sameLayout
+}
+
+func resolveOriginalMotionNode(
+	node int32,
+	originalNames []string,
+	byName map[string]int,
+	sameLayout bool,
+) (int, bool) {
+	if node < 0 || int(node) >= len(originalNames) {
+		return -1, false
+	}
+	if sameLayout {
+		return int(node), true
+	}
+	target, ok := byName[originalNames[node]]
+	return target, ok
+}
+
 // makeSkin makes the parts' bone weights for the motion's skeleton, matching nodes by name. Parts whose buffers
 // cannot be made draw unposed.
 func (o *viewerOriginal) makeSkin(dev d3d.Device, m *viewerMotion) {
 	o.skinFor = m
 	nodes := m.motion.NodeCount()
-	byName := make(map[string]int, nodes)
-	for i := range nodes {
-		if name := m.motion.NodeName(i); name != "" {
-			byName[name] = i
-		}
-	}
+	byName, sameLayout := originalMotionNodeMap(o.data.NodeNames, nodes, m.motion.NodeName)
 	parents := make([]int32, nodes)
 	for i := range parents {
 		parents[i] = int32(m.motion.NodeParent(i))
@@ -1009,10 +1043,9 @@ func (o *viewerOriginal) makeSkin(dev d3d.Device, m *viewerMotion) {
 			for k := range 4 {
 				ids[k] = viewerMotionNoNode
 				node := source.Nodes[v*4+k]
-				if node < 0 || int(node) >= len(o.data.NodeNames) {
-					continue
-				}
-				if target, ok := byName[o.data.NodeNames[node]]; ok && target < viewerMotionNoNode {
+				if target, ok := resolveOriginalMotionNode(
+					node, o.data.NodeNames, byName, sameLayout,
+				); ok && target < viewerMotionNoNode {
 					ids[k] = uint32(target)
 					weight := source.Weights[v*4+k]
 					weights[k] = uint32(min(max(weight, 0), 1)*65535 + 0.5)
