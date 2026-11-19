@@ -81,9 +81,15 @@ type ModelViewer struct {
 	overlayMenus    viewerOverlayMenus
 	// highlightGameTextures tints the meshes the mod binds no diffuse texture to.
 	highlightGameTextures bool
-	camera                orbitCamera
-	home                  orbitCamera
-	normalMaps            bool
+	// textureInfoOpen shows the popover of the animation bar's texture chip.
+	textureInfoOpen bool
+	// choicePending holds the texture choices by part that wait to be written to nhd.json while choiceSaving
+	// reports a write running.
+	choicePending map[string]string
+	choiceSaving  bool
+	camera        orbitCamera
+	home          orbitCamera
+	normalMaps    bool
 	// orientation is the user's turn of the model in degrees of roll, pitch and yaw.
 	orientation vec3
 	doubleSided bool
@@ -423,7 +429,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.state = v.defaultState()
 	v.preview, v.previewForm, v.previewVars = nil, nil, nil
 	v.form = ""
-	v.highlightGameTextures = false
+	v.highlightGameTextures, v.textureInfoOpen = false, false
 	v.pendingVariants, v.pendingMeshes, v.liveWanted, v.liveTextureWanted = nil, nil, nil, nil
 	v.loadFailureShown = false
 	v.sourceIndices = nil
@@ -444,6 +450,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.evaluate()
 	v.startAnimation("")
 	v.refreshIneffective()
+	v.loadTextureChoices(scene)
 
 	pending := v.pendingLive
 	v.pendingLive = nil
@@ -1036,7 +1043,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	v.syncMotion()
 	v.syncToonAssets(v.toonStyle())
 	gameTextures := v.gameTextureCount()
-	// The chip is the highlight's only switch, so the highlight ends with it.
+	// The highlight's switch shows only while such parts exist, so the highlight ends with them.
 	if gameTextures == 0 {
 		v.highlightGameTextures = false
 	}
@@ -1132,7 +1139,12 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		if len(scene.transport.Forms) > 1 {
 			viewport.Child(v.formSwitcher())
 		}
-		status := viewerStatus{downloads: v.downloads.shown(), gameParts: gameTextures}
+		status := viewerStatus{
+			downloads: v.downloads.shown(), gameParts: gameTextures, choices: len(scene.textureChoices) > 0,
+		}
+		if !status.textureInfo() {
+			v.textureInfoOpen = false
+		}
 		bar = v.animationBar(t, v.animationTracks(), status)
 	}
 	switch {

@@ -40,8 +40,10 @@ type modelViewerDirectMesh struct {
 	nonDiffuseTextureFiles []string
 	otherStateTextures     []string
 	slotTextureCandidates  []modelViewerDirectTextureAssignment
-	indexCount             int
-	drawSource             *DrawSource
+	// textureChoices are the sibling texture sets the user may pick for a mesh the INI leaves without textures.
+	textureChoices []modelViewerDirectTextureChoice
+	indexCount     int
+	drawSource     *DrawSource
 }
 
 type modelViewerDirectTextureAssignment struct {
@@ -50,6 +52,13 @@ type modelViewerDirectTextureAssignment struct {
 	file       string
 	authored   bool
 	conditions ModelViewerDNF
+	// borrowed marks a texture of a sibling part that releaseBorrowedSiblingTextures takes off again.
+	borrowed bool
+}
+
+type modelViewerDirectTextureChoice struct {
+	source      string
+	assignments []modelViewerDirectTextureAssignment
 }
 
 type modelViewerDirectPositionAssignment struct {
@@ -70,13 +79,7 @@ func modelViewerDirectGatingVariables(transport *ModelViewerTransport) map[strin
 	}
 	for _, mesh := range transport.Meshes {
 		addDNF(mesh.Conditions)
-		for _, variants := range [][]ModelViewerTextureVariant{
-			mesh.TextureVariants,
-			mesh.NormalMapVariants,
-			mesh.LightMapVariants,
-			mesh.MaterialMapVariants,
-			mesh.CutoutMapVariants,
-		} {
+		for _, variants := range mesh.textureVariantLists() {
 			for _, variant := range variants {
 				addDNF(variant.Conditions)
 			}
@@ -504,17 +507,13 @@ func buildModelViewerLegacyMeshes(build modelViewerLegacyBuild) ([]modelViewerDi
 	attachIbComponentDumpTextures(output, resources)
 	bindHashImageTextures(output, sections, resources, modDir, conditionVariables)
 	attachWwmiDumpTextures(output, resources, modDir)
+	releaseBorrowedSiblingTextures(output)
 	for meshIndex := range output {
 		output[meshIndex].conditions = normalizeModelViewerDNFWithDomains(
 			output[meshIndex].conditions,
 			conditionVariables,
 		)
-		for assignmentIndex := range output[meshIndex].textureAssignments {
-			output[meshIndex].textureAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
-				output[meshIndex].textureAssignments[assignmentIndex].conditions,
-				conditionVariables,
-			)
-		}
+		normalizeModelViewerTextureAssignments(&output[meshIndex], conditionVariables)
 		for assignmentIndex := range output[meshIndex].positionAssignments {
 			output[meshIndex].positionAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
 				output[meshIndex].positionAssignments[assignmentIndex].conditions,
@@ -811,75 +810,19 @@ func buildModelViewerDirectMeshPayload(
 			payload.PositionSources = append(payload.PositionSources, assignment)
 		}
 	}
-	authoredRoles := make(map[string]bool)
-	var firstDiffuseKey string
-	skippedMissingDiffuse := false
-	for _, assignment := range mesh.textureAssignments {
-		key := modelViewerAssignmentTextureKey(assignment)
-		if key == "" {
+	authoredRoles := applyModelViewerTextureAssignments(&item, mesh.textureAssignments, availableTextures)
+	for _, choice := range mesh.textureChoices {
+		var set ModelViewerMeshTransport
+		applyModelViewerTextureAssignments(&set, choice.assignments, availableTextures)
+		if set.TexKey == nil && len(set.TextureVariants) == 0 {
 			continue
 		}
-		availableTexture, available := availableTextures[key]
-		if !available {
-			if fallback := modelViewerNormalizeKey(assignment.resource); fallback != "" {
-				if availableTexture, available = availableTextures[fallback]; available {
-					key = availableTexture.Key
-				} else {
-					if assignment.role == "diffuse" {
-						skippedMissingDiffuse = true
-					}
-					continue
-				}
-			} else {
-				if assignment.role == "diffuse" {
-					skippedMissingDiffuse = true
-				}
-				continue
-			}
-		} else {
-			key = availableTexture.Key
-		}
-		authoredRoles[assignment.role] = true
-		if assignment.role == "diffuse" && firstDiffuseKey == "" {
-			firstDiffuseKey = key
-		}
-		if modelViewerDNFIsTrue(assignment.conditions) {
-			switch assignment.role {
-			case "diffuse":
-				item.TexKey = lo.ToPtr(key)
-			case "normal_map":
-				item.NormalMapKey = lo.ToPtr(key)
-			case "light_map":
-				item.LightMapKey = lo.ToPtr(key)
-			case "material_map":
-				item.MaterialMapKey = lo.ToPtr(key)
-			case modelViewerCutoutMapRole:
-				item.CutoutMapKey = lo.ToPtr(key)
-			case modelViewerHighlightMapRole:
-				item.HighlightMapKey = lo.ToPtr(key)
-			case modelViewerRampMapRole:
-				item.RampMapKey = lo.ToPtr(key)
-			}
-			continue
-		}
-		variant := ModelViewerTextureVariant{Conditions: assignment.conditions, TexKey: key}
-		switch assignment.role {
-		case "diffuse":
-			item.TextureVariants = append(item.TextureVariants, variant)
-		case "normal_map":
-			item.NormalMapVariants = append(item.NormalMapVariants, variant)
-		case "light_map":
-			item.LightMapVariants = append(item.LightMapVariants, variant)
-		case "material_map":
-			item.MaterialMapVariants = append(item.MaterialMapVariants, variant)
-		case modelViewerCutoutMapRole:
-			item.CutoutMapVariants = append(item.CutoutMapVariants, variant)
-		}
-	}
-	if item.TexKey == nil && firstDiffuseKey != "" && !skippedMissingDiffuse {
-		// Electron uses the mesh default file as texKey. If that file is missing,
-		// remaining conditional variants stay variants only (load.test.ts).
-		item.TexKey = lo.ToPtr(firstDiffuseKey)
+		item.TextureChoices = append(item.TextureChoices, ModelViewerTextureChoice{
+			Source: choice.source, TexKey: set.TexKey, TextureVariants: set.TextureVariants,
+			NormalMapKey: set.NormalMapKey, NormalMapVariants: set.NormalMapVariants,
+			LightMapKey: set.LightMapKey, LightMapVariants: set.LightMapVariants,
+			MaterialMapKey: set.MaterialMapKey, MaterialMapVariants: set.MaterialMapVariants,
+		})
 	}
 	for _, binding := range textures {
 		if modelViewerNormalizeKey(binding.IBResourceName) != modelViewerNormalizeKey(mesh.ibName) {
@@ -924,6 +867,13 @@ func buildModelViewerDirectMeshPayload(
 			}
 		}
 		break
+	}
+	ownDiffuse := item.TexKey != nil || len(item.TextureVariants) > 0
+	if !ownDiffuse && len(item.TextureChoices) == 1 {
+		ApplyTextureChoice(&item, TextureChoiceOf(&item), &item.TextureChoices[0])
+	}
+	if ownDiffuse || len(item.TextureChoices) < 2 {
+		item.TextureChoices = nil
 	}
 	for _, shapeKey := range shapeKeys {
 		matched := false
@@ -995,6 +945,86 @@ func buildModelViewerDirectMeshPayload(
 		}
 	}
 	return item, payload
+}
+
+// applyModelViewerTextureAssignments puts the textures of assignments that loaded into item's slots and returns the
+// roles they fill.
+func applyModelViewerTextureAssignments(
+	item *ModelViewerMeshTransport,
+	assignments []modelViewerDirectTextureAssignment,
+	availableTextures map[string]modelViewerTexturePayload,
+) map[string]bool {
+	authoredRoles := make(map[string]bool)
+	var firstDiffuseKey string
+	skippedMissingDiffuse := false
+	for _, assignment := range assignments {
+		key := modelViewerAssignmentTextureKey(assignment)
+		if key == "" {
+			continue
+		}
+		availableTexture, available := availableTextures[key]
+		if !available {
+			if fallback := modelViewerNormalizeKey(assignment.resource); fallback != "" {
+				if availableTexture, available = availableTextures[fallback]; available {
+					key = availableTexture.Key
+				} else {
+					if assignment.role == "diffuse" {
+						skippedMissingDiffuse = true
+					}
+					continue
+				}
+			} else {
+				if assignment.role == "diffuse" {
+					skippedMissingDiffuse = true
+				}
+				continue
+			}
+		} else {
+			key = availableTexture.Key
+		}
+		authoredRoles[assignment.role] = true
+		if assignment.role == "diffuse" && firstDiffuseKey == "" {
+			firstDiffuseKey = key
+		}
+		if modelViewerDNFIsTrue(assignment.conditions) {
+			switch assignment.role {
+			case "diffuse":
+				item.TexKey = lo.ToPtr(key)
+			case "normal_map":
+				item.NormalMapKey = lo.ToPtr(key)
+			case "light_map":
+				item.LightMapKey = lo.ToPtr(key)
+			case "material_map":
+				item.MaterialMapKey = lo.ToPtr(key)
+			case modelViewerCutoutMapRole:
+				item.CutoutMapKey = lo.ToPtr(key)
+			case modelViewerHighlightMapRole:
+				item.HighlightMapKey = lo.ToPtr(key)
+			case modelViewerRampMapRole:
+				item.RampMapKey = lo.ToPtr(key)
+			}
+			continue
+		}
+		variant := ModelViewerTextureVariant{Conditions: assignment.conditions, TexKey: key}
+		switch assignment.role {
+		case "diffuse":
+			item.TextureVariants = append(item.TextureVariants, variant)
+		case "normal_map":
+			item.NormalMapVariants = append(item.NormalMapVariants, variant)
+		case "light_map":
+			item.LightMapVariants = append(item.LightMapVariants, variant)
+		case "material_map":
+			item.MaterialMapVariants = append(item.MaterialMapVariants, variant)
+		case modelViewerCutoutMapRole:
+			item.CutoutMapVariants = append(item.CutoutMapVariants, variant)
+		}
+	}
+	if item.TexKey == nil && firstDiffuseKey != "" && !skippedMissingDiffuse {
+		// Electron uses the mesh default file as texKey. If that file is missing,
+		// remaining conditional variants stay variants only (load.test.ts).
+		item.TexKey = lo.ToPtr(firstDiffuseKey)
+	}
+	return authoredRoles
 }
 
 func modelViewerSourceIndicesAreIdentity(indices []uint32) bool {

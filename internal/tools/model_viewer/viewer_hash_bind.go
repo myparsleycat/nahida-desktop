@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"encoding/binary"
+	"fmt"
 	"maps"
 	"regexp"
 	"slices"
@@ -65,16 +66,35 @@ func attachFamilyAndStemTextures(
 		section := &roleSections[index]
 		byName[strings.ToLower(section.name)] = section
 	}
+	overrides := map[string]bool{}
+	for _, section := range sections {
+		if strings.EqualFold(section.Header, "TextureOverride") {
+			overrides[strings.ToLower(section.Name)] = true
+		}
+	}
 	for meshIndex := range meshes {
 		mesh := &meshes[meshIndex]
+		choices := familySiblingChoices(mesh, byName, overrides)
+		lend := func(first int) {
+			if len(choices) == 0 {
+				return
+			}
+			for index := first; index < len(mesh.textureAssignments); index++ {
+				mesh.textureAssignments[index].borrowed = true
+			}
+		}
 		for _, role := range []string{"diffuse", "light_map", "normal_map", "material_map"} {
 			if meshHasRole(mesh, role) {
 				continue
 			}
 			suffix := familyRoleSuffix(role)
+			first := len(mesh.textureAssignments)
 			source := lookupFamilyRoleSection(byName, mesh.sectionName, suffix)
 			if source != nil && len(source.files) > 0 {
+				// familySiblingChoices offers choices only when neither the mesh's nor the family's section exists,
+				// so the section is a sibling's.
 				applyFamilyRoleFiles(mesh, source.files, role, true)
+				lend(first)
 				continue
 			}
 			if role != "diffuse" && role != "light_map" && role != "normal_map" && role != "material_map" {
@@ -86,8 +106,103 @@ func attachFamilyAndStemTextures(
 					continue
 				}
 				applyFamilyRoleFiles(mesh, []hashImageFile{{file: file, cond: modelViewerDNFTrue()}}, role, true)
+				if siblingRoleResource(mesh.ibName, suffix, found) {
+					lend(first)
+				}
 			}
 		}
+		if len(choices) > 0 {
+			mesh.textureChoices = choices
+		}
+	}
+}
+
+// familySiblingChoices returns the texture sets of the other parts of mesh's draw family when the mesh has no
+// texture of its own and two or more siblings replace different textures. Such an INI replaces textures by hash, so
+// it does not say which of them the game binds to the mesh.
+func familySiblingChoices(
+	mesh *modelViewerDirectMesh,
+	byName map[string]*familyRoleSection,
+	overrides map[string]bool,
+) []modelViewerDirectTextureChoice {
+	name := mesh.sectionName
+	if len(mesh.textureAssignments) > 0 || mesh.textureDefaultFile != "" || mesh.textureAuthored ||
+		name == "" || !isASCIIUpper(name[len(name)-1]) {
+		return nil
+	}
+	family := name[:len(name)-1]
+	roles := []string{"diffuse", "light_map", "normal_map", "material_map"}
+	for _, role := range roles {
+		suffix := familyRoleSuffix(role)
+		if byName[strings.ToLower(name+suffix)] != nil || byName[strings.ToLower(family+suffix)] != nil {
+			return nil
+		}
+	}
+
+	var choices []modelViewerDirectTextureChoice
+	seen := map[string]bool{}
+	for letter := byte('A'); letter <= 'Z'; letter++ {
+		sibling := family + string(letter)
+		if sibling == name || !overrides[strings.ToLower(sibling)] {
+			continue
+		}
+		diffuse := byName[strings.ToLower(sibling+familyRoleSuffix("diffuse"))]
+		if diffuse == nil || len(diffuse.files) == 0 {
+			continue
+		}
+		key := fmt.Sprint(diffuse.files)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		var scratch modelViewerDirectMesh
+		for _, role := range roles {
+			if section := byName[strings.ToLower(sibling+familyRoleSuffix(role))]; section != nil {
+				applyFamilyRoleFiles(&scratch, section.files, role, true)
+			}
+		}
+		choices = append(
+			choices,
+			modelViewerDirectTextureChoice{source: sibling, assignments: scratch.textureAssignments},
+		)
+	}
+	if len(choices) < 2 {
+		return nil
+	}
+	return choices
+}
+
+// releaseBorrowedSiblingTextures empties the slots of a mesh whose only textures are those a sibling lent it while
+// the INI leaves the choice between several siblings open. The binding passes ran with the lent textures in place,
+// so none of them filled the mesh by a guess of its own. A mesh that gained a texture of its own keeps the lent ones
+// and offers no choice.
+func releaseBorrowedSiblingTextures(meshes []modelViewerDirectMesh) {
+	for index := range meshes {
+		mesh := &meshes[index]
+		if len(mesh.textureChoices) == 0 {
+			continue
+		}
+		if slices.ContainsFunc(mesh.textureAssignments, func(a modelViewerDirectTextureAssignment) bool {
+			return !a.borrowed
+		}) {
+			mesh.textureChoices = nil
+			continue
+		}
+		mesh.textureAssignments = nil
+		mesh.textureDefaultFile, mesh.textureAuthored = "", false
+	}
+}
+
+func normalizeModelViewerTextureAssignments(mesh *modelViewerDirectMesh, variables map[string]any) {
+	normalize := func(assignments []modelViewerDirectTextureAssignment) {
+		for index := range assignments {
+			assignments[index].conditions = normalizeModelViewerDNFWithDomains(assignments[index].conditions, variables)
+		}
+	}
+	normalize(mesh.textureAssignments)
+	for _, choice := range mesh.textureChoices {
+		normalize(choice.assignments)
 	}
 }
 
@@ -177,31 +292,48 @@ func lookupRoleResource(ibRes, role string, resources []modelViewerResource) str
 	if ibRes == "" {
 		return ""
 	}
-	stem := ibRes
+	stem, family := roleResourceStem(ibRes)
+	candidates := []string{stem + role}
+	if family != stem {
+		candidates = append(candidates, family+"A"+role, family+role)
+	}
+	for _, candidate := range candidates {
+		for _, resource := range resources {
+			if roleResourceNamed(resource.Name, candidate) {
+				return resource.Name
+			}
+		}
+	}
+	return ""
+}
+
+// siblingRoleResource reports whether name, which lookupRoleResource found for ibRes, is the resource of the family's
+// part A rather than the mesh's own or the family's.
+func siblingRoleResource(ibRes, role, name string) bool {
+	stem, family := roleResourceStem(ibRes)
+	return family != stem && roleResourceNamed(name, family+"A"+role) && !roleResourceNamed(name, stem+role)
+}
+
+// roleResourceStem returns the resource name ibRes shares with its role resources, without its IB suffix and
+// numbered copy suffix, and that name without its part letter.
+func roleResourceStem(ibRes string) (stem, family string) {
+	stem = ibRes
 	if dot := strings.LastIndex(stem, "."); dot >= 0 && isAllDigits(stem[dot+1:]) {
 		stem = stem[:dot]
 	}
 	if len(stem) >= 2 && strings.EqualFold(stem[len(stem)-2:], "IB") {
 		stem = stem[:len(stem)-2]
 	}
-	family := stem
+	family = stem
 	if stem != "" && isASCIIUpper(stem[len(stem)-1]) {
 		family = stem[:len(stem)-1]
 	}
-	candidates := []string{stem + role}
-	if family != stem {
-		candidates = append(candidates, family+"A"+role, family+role)
-	}
-	for _, candidate := range candidates {
-		want := strings.ToLower(candidate)
-		for _, resource := range resources {
-			lowered := strings.ToLower(resource.Name)
-			if lowered == want || strings.HasPrefix(lowered, want+".") {
-				return resource.Name
-			}
-		}
-	}
-	return ""
+	return stem, family
+}
+
+func roleResourceNamed(name, candidate string) bool {
+	lowered, want := strings.ToLower(name), strings.ToLower(candidate)
+	return lowered == want || strings.HasPrefix(lowered, want+".")
 }
 
 func sectionMatchMeta(section modINISection) (meta struct {

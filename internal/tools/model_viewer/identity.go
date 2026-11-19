@@ -22,13 +22,7 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 	for meshIndex := range transport.Meshes {
 		mesh := &transport.Meshes[meshIndex]
 		remapDNF(mesh.Conditions)
-		for _, variants := range [][]ModelViewerTextureVariant{
-			mesh.TextureVariants,
-			mesh.NormalMapVariants,
-			mesh.LightMapVariants,
-			mesh.MaterialMapVariants,
-			mesh.CutoutMapVariants,
-		} {
+		for _, variants := range mesh.textureVariantLists() {
 			for variantIndex := range variants {
 				remapDNF(variants[variantIndex].Conditions)
 			}

@@ -327,6 +327,8 @@ func foldModelViewerFrames(
 		for role, slot := range modelViewerMeshTextureSlots(target) {
 			*slot.variants = textures[role]
 		}
+		// Choices are not folded with the frames' conditions, so frames whose textures differ offer none.
+		target.TextureChoices = nil
 	}
 	// A variant must match for the mesh to draw, so the frames' own conditions still decide which one shows.
 	target.Conditions = conditions
@@ -358,6 +360,15 @@ func modelViewerMeshTextureKey(mesh ModelViewerMeshTransport) string {
 	}
 	key.WriteString(modelViewerOptionalKey(mesh.HighlightMapKey))
 	key.WriteString(modelViewerOptionalKey(mesh.RampMapKey))
+	for _, choice := range mesh.TextureChoices {
+		key.WriteString(choice.Source)
+		for _, slot := range []*string{choice.TexKey, choice.NormalMapKey, choice.LightMapKey, choice.MaterialMapKey} {
+			key.WriteString(modelViewerOptionalKey(slot))
+		}
+		fmt.Fprint(&key, choice.TextureVariants, choice.NormalMapVariants, choice.LightMapVariants,
+			choice.MaterialMapVariants)
+		key.WriteByte(0)
+	}
 	return key.String()
 }
 

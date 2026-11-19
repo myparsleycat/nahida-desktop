@@ -15,6 +15,84 @@ type ModelViewerTextureVariant struct {
 	TexKey     string         `json:"texKey"`
 }
 
+// ModelViewerTextureChoice is the texture set of Source, another part of a mesh's draw family. A mesh lists choices
+// when its INI replaces the textures of several such parts and none of its own: the INI does not say which the game
+// binds, so the mesh's slots stay empty until ApplyTextureChoice puts one in.
+type ModelViewerTextureChoice struct {
+	Source              string                      `json:"source"`
+	TexKey              *string                     `json:"texKey"`
+	TextureVariants     []ModelViewerTextureVariant `json:"textureVariants"`
+	NormalMapKey        *string                     `json:"normalMapKey"`
+	NormalMapVariants   []ModelViewerTextureVariant `json:"normalMapVariants"`
+	LightMapKey         *string                     `json:"lightMapKey"`
+	LightMapVariants    []ModelViewerTextureVariant `json:"lightMapVariants"`
+	MaterialMapKey      *string                     `json:"materialMapKey"`
+	MaterialMapVariants []ModelViewerTextureVariant `json:"materialMapVariants"`
+}
+
+// TextureChoiceOf returns the textures in mesh's diffuse, normal, light and material map slots.
+func TextureChoiceOf(mesh *ModelViewerMeshTransport) ModelViewerTextureChoice {
+	return ModelViewerTextureChoice{
+		TexKey: mesh.TexKey, TextureVariants: mesh.TextureVariants,
+		NormalMapKey: mesh.NormalMapKey, NormalMapVariants: mesh.NormalMapVariants,
+		LightMapKey: mesh.LightMapKey, LightMapVariants: mesh.LightMapVariants,
+		MaterialMapKey: mesh.MaterialMapKey, MaterialMapVariants: mesh.MaterialMapVariants,
+	}
+}
+
+// ApplyTextureChoice puts base's textures in mesh's diffuse, normal, light and material map slots, then choice's in
+// the slots choice fills. base is the mesh's own textures, as TextureChoiceOf took them before any choice; a nil
+// choice restores them.
+func ApplyTextureChoice(
+	mesh *ModelViewerMeshTransport,
+	base ModelViewerTextureChoice,
+	choice *ModelViewerTextureChoice,
+) {
+	slots := textureChoiceSlots(mesh)
+	for i, from := range base.slots() {
+		*slots[i].key, *slots[i].variants = *from.key, *from.variants
+	}
+	if choice == nil {
+		return
+	}
+	for i, from := range choice.slots() {
+		if *from.key != nil || len(*from.variants) > 0 {
+			*slots[i].key, *slots[i].variants = *from.key, *from.variants
+		}
+	}
+}
+
+func (c *ModelViewerTextureChoice) slots() [4]modelViewerTextureSlot {
+	return [4]modelViewerTextureSlot{
+		{&c.TexKey, &c.TextureVariants},
+		{&c.NormalMapKey, &c.NormalMapVariants},
+		{&c.LightMapKey, &c.LightMapVariants},
+		{&c.MaterialMapKey, &c.MaterialMapVariants},
+	}
+}
+
+// textureChoiceSlots returns the slots of mesh a texture choice fills, in the order of ModelViewerTextureChoice.slots.
+func textureChoiceSlots(mesh *ModelViewerMeshTransport) [4]modelViewerTextureSlot {
+	all := modelViewerMeshTextureSlots(mesh)
+	return [4]modelViewerTextureSlot(all[:4])
+}
+
+// textureVariantLists returns the mesh's conditional texture lists, its texture choices' included.
+func (m *ModelViewerMeshTransport) textureVariantLists() [][]ModelViewerTextureVariant {
+	lists := [][]ModelViewerTextureVariant{
+		m.TextureVariants,
+		m.NormalMapVariants,
+		m.LightMapVariants,
+		m.MaterialMapVariants,
+		m.CutoutMapVariants,
+	}
+	for _, choice := range m.TextureChoices {
+		lists = append(lists,
+			choice.TextureVariants, choice.NormalMapVariants, choice.LightMapVariants, choice.MaterialMapVariants)
+	}
+	return lists
+}
+
 // ModelViewerShapeTargetMode selects how the renderer blends a shape target.
 // The empty mode adds the target scaled by its weight.
 type ModelViewerShapeTargetMode string
@@ -79,6 +157,7 @@ type ModelViewerMeshTransport struct {
 	MaterialMapVariants []ModelViewerTextureVariant  `json:"materialMapVariants"`
 	CutoutMapKey        *string                      `json:"cutoutMapKey"`
 	CutoutMapVariants   []ModelViewerTextureVariant  `json:"cutoutMapVariants"`
+	TextureChoices      []ModelViewerTextureChoice   `json:"textureChoices,omitempty"`
 	HighlightMapKey     *string                      `json:"highlightMapKey,omitempty"`
 	RampMapKey          *string                      `json:"rampMapKey,omitempty"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
@@ -353,13 +432,7 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 	for meshIndex := range transport.Meshes {
 		mesh := &transport.Meshes[meshIndex]
 		mesh.Conditions = normalizeModelViewerDNFWithTracked(mesh.Conditions, tracked)
-		for _, variants := range [][]ModelViewerTextureVariant{
-			mesh.TextureVariants,
-			mesh.NormalMapVariants,
-			mesh.LightMapVariants,
-			mesh.MaterialMapVariants,
-			mesh.CutoutMapVariants,
-		} {
+		for _, variants := range mesh.textureVariantLists() {
 			for variantIndex := range variants {
 				variants[variantIndex].Conditions = normalizeModelViewerDNFWithTracked(
 					variants[variantIndex].Conditions,

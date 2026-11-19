@@ -258,7 +258,13 @@ func (v *ModelViewer) loadOriginal(key viewerCharacterKey, c *viewerCharacter, p
 		if !mesh.unloaded && !mesh.cpuDropped && mesh.positions != nil {
 			sources[i].positions, sources[i].uvs = mesh.positions, mesh.uvs
 		}
-		for slot, own := range []*string{info.TexKey, info.NormalMapKey, info.LightMapKey, info.MaterialMapKey} {
+		keys := []*string{info.TexKey, info.NormalMapKey, info.LightMapKey, info.MaterialMapKey}
+		// A part that offers texture choices takes fills where its game textures leave a slot empty, whichever
+		// choice it shows now; fillState draws a chosen texture over the fill.
+		if game, ok := scene.gameTextures(i); ok {
+			keys = []*string{game.TexKey, game.NormalMapKey, game.LightMapKey, game.MaterialMapKey}
+		}
+		for slot, own := range keys {
 			// A Blender scene names images whose pixels may not have arrived; a mod's missing texture failed to load.
 			_, loaded := scene.transport.Textures[deref(own)]
 			sources[i].empty[slot] = deref(own) == "" || v.blender != nil && !loaded

@@ -129,6 +129,9 @@ func collectModelViewerTextureJobs(
 	var assignments []modelViewerDirectTextureAssignment
 	for _, mesh := range meshes {
 		assignments = append(assignments, mesh.textureAssignments...)
+		for _, choice := range mesh.textureChoices {
+			assignments = append(assignments, choice.assignments...)
+		}
 	}
 	for _, assignment := range append(assignments, extra...) {
 		key := modelViewerAssignmentTextureKey(assignment)

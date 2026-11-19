@@ -27,6 +27,8 @@ type viewerScene struct {
 	// gained or lost all of its triangles since it was matched.
 	original      *viewerOriginal
 	originalStale bool
+	// textureChoices are the parts whose texture the user picks among their siblings'.
+	textureChoices []viewerTextureChoiceGroup
 	// faceTexture is the key of the face diffuse the mod replaces by hash in the state shown, or "". The original
 	// model's face draws with it in place of its own.
 	faceTexture string

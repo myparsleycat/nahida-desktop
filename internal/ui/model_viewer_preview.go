@@ -365,6 +365,12 @@ func (s *Shell) renderModelPreview(
 	if id := transport.MemorySessionID; id != "" {
 		defer func() { _, _ = tools.CleanupModelViewer(context.Background(), id) }()
 	}
+	// Choices that cannot be read leave the parts with the game's textures.
+	if mods := s.deps.Mod; mods != nil {
+		if saved, err := mods.GetViewerTextureChoices(ctx, job.info.Path); err == nil {
+			applySavedTextureChoices(&transport, saved)
+		}
+	}
 	loaded := time.Now()
 
 	stage = "read-meshes"

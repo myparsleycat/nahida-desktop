@@ -579,14 +579,17 @@ const (
 	viewerGameTextureChipWidth = 2*viewerStatusChipPadX + viewerStatusIconSize + viewerStatusChipGap + viewerStatusCountWidth
 )
 
-// viewerStatus is what the animation bar's status chips show: the loads running and the number of parts drawn
-// with the game's textures.
+// viewerStatus is what the animation bar's status chips show: the loads running, the number of parts drawn with
+// the game's textures, and whether some parts offer a choice of textures.
 type viewerStatus struct {
 	downloads []viewerDownloadProgress
 	gameParts int
+	choices   bool
 }
 
-func (s viewerStatus) empty() bool { return len(s.downloads) == 0 && s.gameParts == 0 }
+func (s viewerStatus) textureInfo() bool { return s.gameParts > 0 || s.choices }
+
+func (s viewerStatus) empty() bool { return len(s.downloads) == 0 && !s.textureInfo() }
 
 // width is the width of the row of status chips.
 func (s viewerStatus) width() float32 {
@@ -595,39 +598,14 @@ func (s viewerStatus) width() float32 {
 	for _, p := range s.downloads {
 		width += p.width()
 	}
-	if s.gameParts > 0 {
+	if s.textureInfo() {
 		chips++
-		width += viewerGameTextureChipWidth
+		width += viewerTextureInfoChipWidth(s.gameParts)
 	}
 	if chips > 1 {
 		width += float32((chips - 1) * viewerAnimationBarGap)
 	}
 	return width
-}
-
-// gameTextureChip shows the number of parts drawn without a texture and switches their highlight. Its tooltip says
-// what the number counts.
-func (v *ModelViewer) gameTextureChip(t kit.Theme, count int) *fairy.El {
-	label := T("page.tools.model_viewer.game_textures", "count", count)
-	chip := fairy.Row(
-		fairy.Icon(lucide.Info).Size(viewerStatusIconSize, viewerStatusIconSize).Shrink(0),
-		viewerStatusText(strconv.Itoa(count)).W(viewerStatusCountWidth),
-	).Key("model-viewer.game-textures").W(viewerGameTextureChipWidth).Shrink(0).Gap(viewerStatusChipGap).
-		Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0).
-		Radius(viewerStatusChipHeight/2).HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).
-		Role(fairy.RoleButton).Checked(v.highlightGameTextures).Label(label).Focusable().
-		FocusRing(3, t.Ring.Alpha(0.5)).
-		Tooltip(label + "\n" + T("page.tools.model_viewer.game_textures_hint")).
-		Animate(viewerAnimationBarMotion).
-		OnClick(func() {
-			v.highlightGameTextures = !v.highlightGameTextures
-			v.revision++
-		})
-	if v.highlightGameTextures {
-		amber := fairy.Hex(viewerGameTextureHighlight)
-		chip.Color(amber).Fill(amber.Alpha(0.12))
-	}
-	return chip
 }
 
 // sideSplit lays the viewer beside the side column. Without a tool the column is the toggles alone, which a

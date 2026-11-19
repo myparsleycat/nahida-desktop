@@ -30,6 +30,10 @@ func buildViewerScene(
 	states []modelviewer.ViewerMeshState,
 ) (*viewerScene, error) {
 	scene := &viewerScene{transport: transport, meshes: make([]*viewerMesh, len(transport.Meshes))}
+	// The backend session evaluates toggles on its own goroutines over the meshes it returned; the scene changes
+	// its meshes' textures on the UI thread, so it keeps its own copies.
+	scene.transport.Meshes = slices.Clone(transport.Meshes)
+	scene.textureChoices = viewerTextureChoiceGroups(&scene.transport)
 	scene.world, scene.minimum, scene.maximum = viewerWorld(transport)
 	averagedOutline := averagedOutlineProfiles[string(transport.MaterialProfile)]
 	deformed := map[string]bool{}

@@ -792,6 +792,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	if efmi {
 		attachEFMIMaterialMaps(output, resources, modDir)
 	}
+	releaseBorrowedSiblingTextures(output)
 	for meshIndex := range output {
 		output[meshIndex].slotTextureCandidates = nil
 	}
@@ -804,12 +805,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			output[meshIndex].conditions,
 			conditionVariables,
 		)
-		for assignmentIndex := range output[meshIndex].textureAssignments {
-			output[meshIndex].textureAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
-				output[meshIndex].textureAssignments[assignmentIndex].conditions,
-				conditionVariables,
-			)
-		}
+		normalizeModelViewerTextureAssignments(&output[meshIndex], conditionVariables)
 		for assignmentIndex := range output[meshIndex].positionAssignments {
 			output[meshIndex].positionAssignments[assignmentIndex].conditions = normalizeModelViewerDNFWithDomains(
 				output[meshIndex].positionAssignments[assignmentIndex].conditions,
@@ -1108,6 +1104,7 @@ func mergeModelViewerTextureAssignment(
 		}
 		existing.conditions = modelViewerDNFOr(existing.conditions, assignment.conditions)
 		existing.authored = existing.authored || assignment.authored
+		existing.borrowed = existing.borrowed && assignment.borrowed
 		if existing.file == "" {
 			existing.file = assignment.file
 		}

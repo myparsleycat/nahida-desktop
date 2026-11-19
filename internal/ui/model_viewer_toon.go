@@ -669,6 +669,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 		height, indices := b.Max[2]-b.Min[2], mesh.info.IndexCount
 		mesh.efmiHead = true
 		mesh.overlayShadow = !present(mesh.info.TexKey) && len(mesh.info.TextureVariants) == 0 &&
+			len(mesh.info.TextureChoices) == 0 &&
 			(indices <= efmiEyeShadowMaxIndices ||
 				(indices <= efmiHairShadowMaxIndices && height >= efmiHairShadowMinHeight))
 		mesh.toonEye = !mesh.overlayShadow && height <= efmiIrisMaxHeight

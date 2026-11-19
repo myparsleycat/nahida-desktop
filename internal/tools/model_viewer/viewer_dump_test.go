@@ -1999,6 +1999,122 @@ filename = light.png
 	}
 }
 
+const viewerSiblingTexturesINI = `[TextureOverrideBodyPosition]
+vb0 = ResourcePos
+[TextureOverrideBodyTexcoord]
+vb1 = ResourceTc
+[TextureOverrideBodyA]
+hash = beef0020
+match_first_index = 0
+ib = ResourceBodyAIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyB]
+hash = beef0020
+match_first_index = 300
+ib = ResourceBodyBIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyC]
+hash = beef0020
+match_first_index = 600
+ib = null
+[TextureOverrideBodyADiffuse]
+hash = beef0021
+this = ResourceBodyADiffuse
+[TextureOverrideBodyCDiffuse]
+hash = beef0022
+this = ResourceBodyCDiffuse
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyBIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyADiffuse]
+filename = bodya.png
+[ResourceBodyCDiffuse]
+filename = bodyc.png
+`
+
+func TestLoadModViewerOffersSiblingTexturesWhenSeveralCouldApply(t *testing.T) {
+	dir := t.TempDir()
+	writeTextureFile(t, dir, "bodya.png", encodeTinyPNG())
+	writeTextureFile(t, dir, "bodyc.png", encodeTinyPNG())
+	result := loadViewerMod(t, dir, viewerSiblingTexturesINI)
+	bodyB := meshesNamed(result, "BodyB")
+	if len(bodyB) == 0 {
+		t.Fatalf("meshes = %#v", result.Meshes)
+	}
+	for _, mesh := range bodyB {
+		if texKey(mesh) != "" || len(mesh.TextureVariants) != 0 {
+			t.Fatalf("bodyB bound %q %#v, want no texture", texKey(mesh), mesh.TextureVariants)
+		}
+		var sources []string
+		for _, choice := range mesh.TextureChoices {
+			if choice.TexKey == nil {
+				t.Fatalf("choice %s has no diffuse", choice.Source)
+			}
+			if _, ok := result.Textures[*choice.TexKey]; !ok {
+				t.Fatalf("choice %s texture %q not loaded", choice.Source, *choice.TexKey)
+			}
+			sources = append(sources, choice.Source)
+		}
+		if strings.Join(sources, ",") != "BodyA,BodyC" {
+			t.Fatalf("choices = %v", sources)
+		}
+	}
+}
+
+// A part keeps the sibling texture its family lends it, and offers no choice, when it has a texture resource of its
+// own or only one sibling texture loads.
+func TestLoadModViewerLendsSiblingTextureWithoutChoice(t *testing.T) {
+	tests := []struct {
+		name     string
+		bodyC    []byte
+		extra    string
+		lightMap string
+	}{
+		{
+			name:     "own light map resource",
+			bodyC:    encodeTinyPNG(),
+			extra:    "[ResourceBodyBLightMap]\nfilename = bodyblight.png\n",
+			lightMap: "bodyblight.png",
+		},
+		{name: "one sibling texture loads", bodyC: []byte("not an image")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTextureFile(t, dir, "bodya.png", encodeTinyPNG())
+			writeTextureFile(t, dir, "bodyc.png", tt.bodyC)
+			writeTextureFile(t, dir, "bodyblight.png", encodeTinyPNG2x2())
+			result := loadViewerMod(t, dir, viewerSiblingTexturesINI+tt.extra)
+			bodyB := meshesNamed(result, "BodyB")
+			if len(bodyB) == 0 {
+				t.Fatalf("meshes = %#v", result.Meshes)
+			}
+			for _, mesh := range bodyB {
+				if !strings.Contains(texKey(mesh), "bodya.png") || len(mesh.TextureChoices) != 0 {
+					t.Fatalf("bodyB bound %q with %d choices, want bodya.png and none", texKey(mesh),
+						len(mesh.TextureChoices))
+				}
+				if !strings.Contains(lightMapKey(mesh), tt.lightMap) {
+					t.Fatalf("bodyB light map = %q, want %s", lightMapKey(mesh), tt.lightMap)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadModViewerBindsSiblingBodyALightMapPsSlotOverride(t *testing.T) {
 	dir := t.TempDir()
 	writeTextureFile(t, dir, "body.png", encodeTinyPNG())

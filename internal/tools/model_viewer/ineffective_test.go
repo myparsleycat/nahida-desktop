@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/samber/lo"
 )
 
 func TestModelViewerMenuNumericGuardsMatchRendererCoercion(t *testing.T) {
@@ -143,6 +145,41 @@ func TestModelViewerIneffectiveValuesIgnoreMeshesOutsideForm(t *testing.T) {
 		}
 		if cape != (test.form == "") {
 			t.Errorf("form %q: other form's variable reported=%t (result=%+v)", test.form, cape, result)
+		}
+	}
+}
+
+func TestModelViewerIneffectiveValuesCountTextureChoices(t *testing.T) {
+	// The UI applies a choice over the mesh's slots, so a variable that switches only a choice's texture still
+	// changes what the viewer draws once that choice is picked.
+	payload := ModelViewerTransport{
+		DefaultState: map[string]any{"swap": "0"},
+		Variables: []ModelViewerVariable{{
+			ID:           "swap",
+			Label:        "Swap",
+			DefaultValue: "0",
+			Values:       []ModelViewerVariableValue{{Value: "0"}, {Value: "1"}},
+		}},
+		Meshes: []ModelViewerMeshTransport{{
+			ID:         "body-c",
+			Conditions: modelViewerDNFTrue(),
+			TextureChoices: []ModelViewerTextureChoice{{
+				Source: "BodyA",
+				TexKey: lo.ToPtr("a"),
+				TextureVariants: []ModelViewerTextureVariant{
+					{Conditions: ModelViewerDNF{{{Var: "swap", Value: "1"}}}, TexKey: "a-swapped"},
+				},
+			}, {Source: "BodyB", TexKey: lo.ToPtr("b")}},
+		}},
+	}
+	result, err := newModelViewerEvaluator(context.Background(), payload).
+		evaluate(context.Background(), "", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range result {
+		if entry.VariableID == "swap" {
+			t.Errorf("swap=%s reported ineffective though it switches a texture choice", entry.Value)
 		}
 	}
 }

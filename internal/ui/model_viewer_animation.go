@@ -763,7 +763,7 @@ func (v *ModelViewer) animationBar(t kit.Theme, tracks []viewerTrack, status vie
 	return glass(bar, opacity(t.Popover, t.SurfaceAlpha), t.Popover, t.SurfaceBlur)
 }
 
-// statusChips shows a chip for each download of status and one for the parts drawn with the game's textures. A chip
+// statusChips shows a chip for each download of status and one for the textures of the parts. A chip
 // fades in when it appears and goes at once, while the bar narrowing around it shows the change.
 func (v *ModelViewer) statusChips(t kit.Theme, status viewerStatus) *fairy.El {
 	chips := fairy.Row().Key("model-viewer.status").Gap(viewerAnimationBarGap).Align(fairy.Center).
@@ -772,8 +772,8 @@ func (v *ModelViewer) statusChips(t kit.Theme, status viewerStatus) *fairy.El {
 	for _, p := range status.downloads {
 		chips.Child(downloadChip(t, p).Enter(fade))
 	}
-	if status.gameParts > 0 {
-		chips.Child(v.gameTextureChip(t, status.gameParts).Enter(fade))
+	if status.textureInfo() {
+		chips.Child(v.textureInfoChip(t, status).Enter(fade))
 	}
 	return chips
 }

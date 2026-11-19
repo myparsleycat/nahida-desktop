@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -15,6 +16,8 @@ type viewerEvalMesh struct {
 	MaterialMapKey       string
 	CutoutMapKey         string
 	PositionVariantIndex *int
+	// ChoiceKeys holds the resolved keys of the mesh's texture choices, which the UI may draw in place of its own.
+	ChoiceKeys []string
 }
 
 type viewerEvalState struct {
@@ -170,9 +173,20 @@ func evaluateViewerTransportInForm(payload ModelViewerTransport, state map[strin
 			MaterialMapKey:       viewerEvalResolveTexture(mesh.MaterialMapVariants, mesh.MaterialMapKey, resolved),
 			CutoutMapKey:         viewerEvalResolveTexture(mesh.CutoutMapVariants, mesh.CutoutMapKey, resolved),
 			PositionVariantIndex: positionIndex,
+			ChoiceKeys:           viewerEvalChoiceKeys(mesh.TextureChoices, resolved),
 		}
 	}
 	return evaluated
+}
+
+func viewerEvalChoiceKeys(choices []ModelViewerTextureChoice, resolved map[string]any) []string {
+	var keys []string
+	for i := range choices {
+		for _, slot := range choices[i].slots() {
+			keys = append(keys, viewerEvalResolveTexture(*slot.variants, *slot.key, resolved))
+		}
+	}
+	return keys
 }
 
 // ViewerMeshState is how one mesh of a transport draws in a viewer state.
@@ -282,6 +296,7 @@ func viewerEvalStatesDiffer(left, right viewerEvalState) bool {
 			left.Meshes[index].LightMapKey != right.Meshes[index].LightMapKey ||
 			left.Meshes[index].MaterialMapKey != right.Meshes[index].MaterialMapKey ||
 			left.Meshes[index].CutoutMapKey != right.Meshes[index].CutoutMapKey ||
+			!slices.Equal(left.Meshes[index].ChoiceKeys, right.Meshes[index].ChoiceKeys) ||
 			viewerEvalIndexValue(
 				left.Meshes[index].PositionVariantIndex,
 			) != viewerEvalIndexValue(
@@ -327,13 +342,7 @@ func buildViewerBlockingVars(payload ModelViewerTransport, testedVar string, sta
 		for _, variant := range mesh.PositionVariants {
 			addDNF(variant.Conditions)
 		}
-		for _, variants := range [][]ModelViewerTextureVariant{
-			mesh.TextureVariants,
-			mesh.NormalMapVariants,
-			mesh.LightMapVariants,
-			mesh.MaterialMapVariants,
-			mesh.CutoutMapVariants,
-		} {
+		for _, variants := range mesh.textureVariantLists() {
 			for _, variant := range variants {
 				addDNF(variant.Conditions)
 			}
