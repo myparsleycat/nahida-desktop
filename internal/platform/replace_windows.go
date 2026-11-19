@@ -3,6 +3,7 @@ package platform
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -44,6 +45,15 @@ func ReplaceAtomicAt(dir *os.Root, temporary, name string) error {
 // WriteFileAtomic writes content to a temporary file next to path and replaces path with it, so a reader
 // sees either the old or the new content. reports receives cleanup failures that do not fail the write.
 func WriteFileAtomic(path string, content []byte, mode os.FileMode, reports ...func(error)) error {
+	return WriteFileAtomicFunc(path, mode, func(w io.Writer) error {
+		_, err := w.Write(content)
+		return err
+	}, reports...)
+}
+
+// WriteFileAtomicFunc is WriteFileAtomic for content that write streams into the temporary file, so large
+// content need not be held in memory first.
+func WriteFileAtomicFunc(path string, mode os.FileMode, write func(io.Writer) error, reports ...func(error)) error {
 	report := func(err error) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			for _, callback := range reports {
@@ -59,7 +69,7 @@ func WriteFileAtomic(path string, content []byte, mode os.FileMode, reports ...f
 	}
 	temporaryPath := temporary.Name()
 	defer func() { report(os.Remove(temporaryPath)) }()
-	if _, err := temporary.Write(content); err != nil {
+	if err := write(temporary); err != nil {
 		report(temporary.Close())
 		return err
 	}
