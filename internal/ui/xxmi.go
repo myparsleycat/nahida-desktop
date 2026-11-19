@@ -1186,7 +1186,7 @@ func plainItems(values ...string) []kit.Item {
 func (s *Shell) xxmiSettingsLoaded() bool {
 	return s.settingsLoaded(setting.KeyXXMIAutoUpdate, setting.KeyXXMIIncludePrereleases, setting.KeyXXMILaunchGuard,
 		setting.KeyXXMILaunchGuardDcr, setting.KeyXXMILaunchGuardSmoothMotion, setting.KeyXXMILaunchGuardLogging,
-		setting.KeyXXMILaunchGuardTextures)
+		setting.KeyXXMILaunchGuardTextures, setting.KeyXXMILaunchGuardShaderCache)
 }
 
 func (s *Shell) launchGuardSettings() *fairy.El {
@@ -1194,13 +1194,18 @@ func (s *Shell) launchGuardSettings() *fairy.El {
 		return fairy.Box()
 	}
 	const prefix = "page.setting.xxmi.launchGuard."
-	var guards []*fairy.El
-	for _, guard := range []struct{ key, name string }{
+	rows := []struct{ key, name string }{
 		{setting.KeyXXMILaunchGuardDcr, "dcr"},
 		{setting.KeyXXMILaunchGuardSmoothMotion, "smoothMotion"},
 		{setting.KeyXXMILaunchGuardLogging, "logging"},
 		{setting.KeyXXMILaunchGuardTextures, "textures"},
-	} {
+	}
+	// Launches through XXMI Launcher do not check the shader cache.
+	if !s.xxmiExternal() {
+		rows = append(rows, struct{ key, name string }{setting.KeyXXMILaunchGuardShaderCache, "shaderCache"})
+	}
+	var guards []*fairy.El
+	for _, guard := range rows {
 		guards = append(guards, toggleRow(T(prefix+guard.name), T(prefix+guard.name+"Description"),
 			s.boolSetting(guard.key), func(on bool) { s.setSetting(guard.key, on) }, false).Pad(0))
 	}

@@ -243,16 +243,23 @@ func migotoINISupport(cfg ImporterConfig, libsVersion string) migotoSupport {
 
 // deployedDesktopChannel reports whether the provider d3d11.dll a deployment wrote serves the desktop channel.
 func deployedDesktopChannel(manifest runtimeManifest) bool {
+	spec, version, ok := deployedOverlayProvider(manifest)
+	return ok && providerFeatureAt(spec, version, spec.desktopChannelSince)
+}
+
+// deployedOverlayProvider returns the provider whose d3d11.dll, and d3dx.ini, a deployment wrote over the signed
+// one, with its version.
+func deployedOverlayProvider(manifest runtimeManifest) (libsProviderSpec, string, bool) {
 	overlay, version, ok := strings.Cut(manifest.Provider, "@")
 	if !ok {
-		return false
+		return libsProviderSpec{}, "", false
 	}
 	for _, spec := range libsProviders {
 		if spec.overlayPackage != "" && spec.overlayPackage == overlay {
-			return providerFeatureAt(spec, version, spec.desktopChannelSince)
+			return spec, version, true
 		}
 	}
-	return false
+	return libsProviderSpec{}, "", false
 }
 
 // updateLaunchINI writes the options this launch decides into the importer's d3dx.ini. providerINI is the

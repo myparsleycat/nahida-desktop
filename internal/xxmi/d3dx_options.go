@@ -1,6 +1,7 @@
 package xxmi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,8 +10,10 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
+	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -157,6 +160,154 @@ func (x *XXMI) MigrateD3DXOverrides(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// shaderCacheSection and shaderCacheKey name the d3dx.ini option that makes 3DMigoto keep compiled custom shaders
+// as .bin files beside their source instead of compiling them again at every launch and config reload.
+const (
+	shaderCacheSection = "Rendering"
+	shaderCacheKey     = "cache_shaders"
+	shaderCacheOption  = shaderCacheSection + "." + shaderCacheKey
+)
+
+// shaderCacheOff reports whether a cache_shaders value turns the cache off, as 3DMigoto parses booleans. The DLL
+// turns the cache off when the option is not set. A value that is not a boolean word is an expression this does not
+// evaluate, so it counts as on.
+func shaderCacheOff(value string, set bool) bool {
+	if !set {
+		return true
+	}
+	switch strings.ToLower(value) {
+	case "0", "false", "no", "off":
+		return true
+	}
+	return false
+}
+
+// shaderCacheSetting returns the cache_shaders value a d3dx.ini sets.
+func shaderCacheSetting(data []byte) (string, bool) {
+	return parseINI(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))).Option(shaderCacheSection, shaderCacheKey)
+}
+
+// EnableShaderCache turns cache_shaders on in the importer's d3dx.ini.
+func (x *XXMI) EnableShaderCache(ctx context.Context, importer string) error {
+	return x.SetD3DXOptions(ctx, importer, map[string]string{shaderCacheOption: "1"})
+}
+
+// MigrateShaderCache turns cache_shaders on again where the importer's d3dx.ini still holds the 0 of the upstream
+// XXMI package while the d3dx.ini of the deployed provider sets 1. Rebuilds before bases were recorded kept every
+// value of the file, so that 0 stayed, and later rebuilds take a value that differs from the base for the user's
+// own. Each importer is examined once its deployment uses such a provider and is then recorded as done, as after
+// that the same difference is the user's choice. An importer that is running, busy, or fails stays open for the
+// next start.
+func (x *XXMI) MigrateShaderCache(ctx context.Context) error {
+	x.mu.RLock()
+	client := x.client
+	x.mu.RUnlock()
+	if client == nil {
+		return errors.New("XXMI settings store is not configured")
+	}
+	state, err := client.SchemaState.Get(ctx, db.SchemaKeyXXMIShaderCacheRestored)
+	if err != nil {
+		return err
+	}
+	done := map[string]bool{}
+	if state != nil && state.Value != "" {
+		for _, key := range strings.Split(state.Value, ",") {
+			done[key] = true
+		}
+	}
+	rows, err := client.XXMIImporters.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+	finished := 0
+	frozen := map[string][]string{}
+	for _, row := range rows {
+		if done[row.Key] {
+			continue
+		}
+		cfg, err := x.GetImporterConfig(ctx, row.Key)
+		var eligible, off bool
+		if err == nil {
+			eligible, off, err = x.shaderCacheState(row.Key, cfg)
+		}
+		switch {
+		case err != nil:
+			errs = append(errs, infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "migrate-shader-cache", Stage: "read-ini", Fields: map[string]any{"importer": row.Key},
+			}))
+		case off:
+			frozen[row.Key] = cfg.gameProcessNames(row.Key)
+		case eligible:
+			done[row.Key] = true
+			finished++
+		}
+	}
+
+	running, err := x.runningImporters(ctx, frozen)
+	if err != nil {
+		errs = append(errs, err)
+		frozen = nil
+	}
+	for _, key := range slices.Sorted(maps.Keys(frozen)) {
+		if running[key] {
+			continue
+		}
+		err := x.EnableShaderCache(ctx, key)
+		switch {
+		case err == nil:
+			x.log.Info(map[string]any{"importer": key, "option": shaderCacheOption, "value": "1"},
+				"XXMI.MigrateShaderCache")
+			done[key] = true
+			finished++
+		case err.Error() != "XXMI_BUSY":
+			errs = append(errs, infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "migrate-shader-cache", Stage: "write-ini", Fields: map[string]any{"importer": key},
+			}))
+		}
+	}
+
+	if finished > 0 {
+		value := strings.Join(slices.Sorted(maps.Keys(done)), ",")
+		if err := client.SchemaState.Upsert(ctx, db.SchemaKeyXXMIShaderCacheRestored, value,
+			time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// shaderCacheState reports whether the migration applies to the importer and whether its d3dx.ini turns
+// cache_shaders off while its base, the provider d3dx.ini of the last rebuild, turns it on. It applies to importers
+// whose last deployment wrote the d3d11.dll of a provider that ships its own d3dx.ini, not a user-provided DLL, and
+// whose d3dx.ini and base exist.
+func (x *XXMI) shaderCacheState(key string, cfg ImporterConfig) (eligible, frozen bool, err error) {
+	if cfg.Mode != RuntimeXXMI || strings.TrimSpace(cfg.ImporterFolder) == "" {
+		return false, false, nil
+	}
+	manifest, ok := readXXMIRuntimeManifest(cfg.ImporterFolder)
+	if !ok || manifest.UserManaged[customDLLName] != "" {
+		return false, false, nil
+	}
+	if _, _, ok := deployedOverlayProvider(manifest); !ok {
+		return false, false, nil
+	}
+	data, err := readImporterINI(cfg.ImporterFolder)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	base := x.readINIBase(key, cfg.ImporterFolder)
+	if len(base) == 0 {
+		return false, false, nil
+	}
+
+	return true, shaderCacheOff(shaderCacheSetting(data)) && !shaderCacheOff(shaderCacheSetting(base)), nil
 }
 
 // applyStoredD3DXOverrides writes the overrides of the options the d3dx.ini tab lists as editable, as a launch

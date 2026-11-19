@@ -647,6 +647,7 @@ func buildSpecs() map[string]spec {
 		KeyXXMILaunchGuardSmoothMotion: boolSpec(definitionsByKey[KeyXXMILaunchGuardSmoothMotion], true),
 		KeyXXMILaunchGuardLogging:      boolSpec(definitionsByKey[KeyXXMILaunchGuardLogging], true),
 		KeyXXMILaunchGuardTextures:     boolSpec(definitionsByKey[KeyXXMILaunchGuardTextures], false),
+		KeyXXMILaunchGuardShaderCache:  boolSpec(definitionsByKey[KeyXXMILaunchGuardShaderCache], true),
 	}
 	return specs
 }

@@ -42,7 +42,7 @@ func TestLaunchOptionsKeepSmoothMotionWithoutBypassingOtherGuards(t *testing.T) 
 	if err == nil || !strings.Contains(err.Error(), "XXMI Launcher not found at") {
 		t.Fatalf("expected to reach the missing fixture launcher after the guards: %v", err)
 	}
-	if err := service.StartGameWithLogging(ctx, "GIMI"); !errors.Is(err, errSmoothMotionEnabled) {
+	if err := service.StartGameUnattended(ctx, "GIMI"); !errors.Is(err, errSmoothMotionEnabled) {
 		t.Fatalf("the next launch should check Smooth Motion again: %v", err)
 	}
 	guards, err := service.launchGuards(ctx)
@@ -74,5 +74,49 @@ func TestConfiguredGameExecutableFallsBackToBasenameWithoutAbsoluteFolder(t *tes
 	t.Parallel()
 	if got := configuredGameExecutable("", []string{"Game.exe"}); got != "" {
 		t.Fatalf("configuredGameExecutable = %q, want empty", got)
+	}
+}
+
+func TestStartGameAsksAboutShaderCacheUnlessAnswered(t *testing.T) {
+	ctx := t.Context()
+	client := newXXMITestClient(t)
+	service := New()
+	service.UseClient(client)
+	service.findProcess = noGameProcess
+	useBuiltinLauncher(t, service)
+	store := func(key, value string) {
+		t.Helper()
+		if err := client.Settings.Upsert(ctx, key, &value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store("xxmi_root", t.TempDir())
+	// The Epic DirectX 11 notice stops the launch before it touches the host, past the shader cache check.
+	if err := client.XXMIImporters.Upsert(ctx, "EFMI",
+		`{"schemaVersion":2,"enabled":true,"gameLaunch":"Epic"}`); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "EFMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Rendering]\ncache_shaders = 0\n"))
+
+	if err := service.StartGame(ctx, "EFMI"); !errors.Is(err, errShaderCacheDisabled) {
+		t.Fatalf("StartGame = %v, want the shader cache question", err)
+	}
+	for name, start := range map[string]func() error{
+		"unattended": func() error { return service.StartGameUnattended(ctx, "EFMI") },
+		"answered": func() error {
+			return service.StartGameWithOptions(ctx, "EFMI", LaunchOptions{KeepShaderCacheOff: true})
+		},
+	} {
+		if err := start(); !errors.Is(err, errD3D11ModeNoticeRequired) {
+			t.Errorf("%s launch = %v, want it past the shader cache check", name, err)
+		}
+	}
+	store(launchGuardShaderCacheKey, "false")
+	if err := service.StartGame(ctx, "EFMI"); !errors.Is(err, errD3D11ModeNoticeRequired) {
+		t.Fatalf("StartGame with the guard off = %v, want it past the shader cache check", err)
 	}
 }

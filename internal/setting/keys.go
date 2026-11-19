@@ -91,6 +91,7 @@ const (
 	KeyXXMILaunchGuardSmoothMotion = "xxmi.launchGuardSmoothMotion"
 	KeyXXMILaunchGuardLogging      = "xxmi.launchGuardLogging"
 	KeyXXMILaunchGuardTextures     = "xxmi.launchGuardTextures"
+	KeyXXMILaunchGuardShaderCache  = "xxmi.launchGuardShaderCache"
 )
 
 const (
@@ -202,6 +203,7 @@ var allDefinitions = []Definition{
 	{KeyXXMILaunchGuardSmoothMotion, ScopeXXMI, "xxmi_launch_guard_smooth_motion"},
 	{KeyXXMILaunchGuardLogging, ScopeXXMI, "xxmi_launch_guard_logging"},
 	{KeyXXMILaunchGuardTextures, ScopeXXMI, "xxmi_launch_guard_textures"},
+	{KeyXXMILaunchGuardShaderCache, ScopeXXMI, "xxmi_launch_guard_shader_cache"},
 }
 
 type storageKeyMigration struct {

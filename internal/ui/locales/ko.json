@@ -695,6 +695,12 @@
           "confirm": "끄고 실행",
           "keep": "켠 채로 실행"
         },
+        "xxmi-shader-cache": {
+          "title": "셰이더 캐시가 꺼져 있습니다",
+          "description": "{{importer}}의 d3dx.ini에서 셰이더 캐시가 꺼져 있어 게임 시작과 다시 불러오기(F10)가 느려집니다. 모드 셰이더를 매번 다시 컴파일하므로 셰이더가 많은 모드는 수십 초가 걸릴 수 있습니다.",
+          "confirm": "켜고 실행",
+          "keep": "끈 채로 실행"
+        },
         "uncompressed-textures": {
           "title": "압축되지 않은 텍스처가 있습니다",
           "description": "활성화된 {{importer}} 모드에 압축되지 않은 DDS 텍스처가 {{count}}개 있습니다. 압축되지 않은 텍스처는 리소스를 불러올 때 끊김을 일으킬 수 있고 VRAM을 많이 사용합니다. BC7으로 압축한 뒤 실행하거나 압축하지 않고 실행하세요.",
@@ -2738,7 +2744,9 @@
           "logging": "3DMigoto 로그",
           "loggingDescription": "3DMigoto 로그가 켜져 있으면 실행 전에 끌지 확인합니다. 로그를 기록하면 게임 성능이 심각하게 저하될 수 있습니다.",
           "textures": "압축되지 않은 텍스처",
-          "texturesDescription": "활성화된 모드에 압축되지 않은 큰 DDS 텍스처가 있으면 실행 전에 확인 창을 표시합니다. 리소스를 불러올 때 끊김이 발생할 수 있고 VRAM을 많이 사용합니다."
+          "texturesDescription": "활성화된 모드에 압축되지 않은 큰 DDS 텍스처가 있으면 실행 전에 확인 창을 표시합니다. 리소스를 불러올 때 끊김이 발생할 수 있고 VRAM을 많이 사용합니다.",
+          "shaderCache": "셰이더 캐시 꺼짐",
+          "shaderCacheDescription": "d3dx.ini의 cache_shaders가 꺼져 있으면 실행 전에 확인 창을 표시합니다. 캐시가 꺼져 있으면 모드 셰이더를 매번 다시 컴파일하므로 게임 시작과 다시 불러오기가 느려집니다."
         },
         "builtin": {
           "detectGame": "게임 폴더 감지",

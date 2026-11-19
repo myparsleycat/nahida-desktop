@@ -698,6 +698,12 @@
           "confirm": "Turn off and start",
           "keep": "Keep on and start"
         },
+        "xxmi-shader-cache": {
+          "title": "Shader cache is off",
+          "description": "{{importer}}'s d3dx.ini turns the shader cache off, so starting the game and reloading (F10) are slower. Mod shaders are compiled again each time, which can take tens of seconds for mods with many shaders.",
+          "confirm": "Turn on and start",
+          "keep": "Keep off and start"
+        },
         "uncompressed-textures": {
           "title": "Uncompressed textures found",
           "description": "The enabled {{importer}} mods contain {{count}} uncompressed DDS texture(s). Uncompressed textures can cause stuttering while resources load and use a lot of video memory. Compress them to BC7 before starting, or start anyway?",
@@ -2796,7 +2802,9 @@
           "logging": "3DMigoto logging",
           "loggingDescription": "Asks to turn 3DMigoto logging off before starting. Logging can slow the game down severely.",
           "textures": "Uncompressed textures",
-          "texturesDescription": "Asks before starting when the enabled mods contain large uncompressed DDS textures, which can cause stuttering while resources load and use a lot of video memory."
+          "texturesDescription": "Asks before starting when the enabled mods contain large uncompressed DDS textures, which can cause stuttering while resources load and use a lot of video memory.",
+          "shaderCache": "Shader cache off",
+          "shaderCacheDescription": "Asks before starting when cache_shaders is off in d3dx.ini. Without the cache, mod shaders are compiled again at every start and reload, which slows both down."
         },
         "builtin": {
           "checkUpdates": "Check for updates",

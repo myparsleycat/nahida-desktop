@@ -27,6 +27,7 @@ const (
 	launchGuardSmoothMotionKey = "xxmi_launch_guard_smooth_motion"
 	launchGuardLoggingKey      = "xxmi_launch_guard_logging"
 	launchGuardTexturesKey     = "xxmi_launch_guard_textures"
+	launchGuardShaderCacheKey  = "xxmi_launch_guard_shader_cache"
 )
 
 var (
@@ -35,8 +36,11 @@ var (
 	errGimiDCREnabled      = errors.New("GIMI_DCR_ENABLED")
 	errSmoothMotionEnabled = errors.New("NVIDIA_SMOOTH_MOTION_ENABLED")
 	// errLoggingEnabled asks before a launch with 3DMigoto logging on, which can slow the game down
-	// severely. Unlike the blockers above, the user may launch anyway through StartGameWithLogging.
+	// severely. Unlike the blockers above, the user may launch anyway through LaunchOptions.KeepLogging.
 	errLoggingEnabled = errors.New("XXMI_LOGGING_ENABLED")
+	// errShaderCacheDisabled asks before a launch whose d3dx.ini turns cache_shaders off, which compiles every
+	// custom shader of the mods again at each launch and config reload. The user may launch anyway.
+	errShaderCacheDisabled = errors.New("XXMI_SHADER_CACHE_DISABLED")
 
 	// errSmoothMotionUnreadable marks a failed NVIDIA settings read. The reference launcher has no such check,
 	// so a launch only warns about it instead of failing.
@@ -80,7 +84,7 @@ func (dcrAllowed) gimiDCREnabled(context.Context) (bool, error) {
 // launchGuards is the launch guards the user left on. A guard that is off neither stops the launch nor
 // changes the setting it watches.
 type launchGuards struct {
-	dcr, smoothMotion, logging, textures bool
+	dcr, smoothMotion, logging, textures, shaderCache bool
 }
 
 // launchGuards reads the guard settings. All are on until the user turns them off, except the texture
@@ -106,6 +110,7 @@ func (x *XXMI) launchGuards(ctx context.Context) (launchGuards, error) {
 		launchGuardDCRKey:          &guards.dcr,
 		launchGuardSmoothMotionKey: &guards.smoothMotion,
 		launchGuardLoggingKey:      &guards.logging,
+		launchGuardShaderCacheKey:  &guards.shaderCache,
 	} {
 		if *guard, err = enabled(key, true); err != nil {
 			return launchGuards{}, err
@@ -421,6 +426,38 @@ func (x *XXMI) loggingEnabled(ctx context.Context, importer string, external boo
 	}
 	_, statErr := os.Stat(filepath.Join(cfg.ImporterFolder, "d3dx.ini"))
 	return statErr == nil && validateInstalledImporterPackage(importer, cfg) == nil, nil
+}
+
+// rejectShaderCache fails a built-in launch of cfg while its d3dx.ini turns cache_shaders off. A launch that will
+// stop at the importer setup, does not load the XXMI DLL, or whose d3dx.ini cannot be read is not held back: the
+// launch itself reports those failures.
+func (x *XXMI) rejectShaderCache(ctx context.Context, importer string, cfg ImporterConfig) error {
+	installed := validateInstalledImporterPackage(importer, cfg) == nil
+	if !cfg.Enabled || !installed {
+		return nil
+	}
+	if used, err := x.migotoDLLUsed(ctx, cfg); err != nil || !used {
+		return nil //nolint:nilerr // launchBuiltinGameLocked resolves the DLL again and reports the failure.
+	}
+	data, err := readImporterINI(cfg.ImporterFolder)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			_ = infra.ReportError(x.log, err, xxmiLaunchGuardWhere, infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "check-shader-cache", Stage: "read-ini",
+				Fields: map[string]any{"importer": importer, "importerFolder": cfg.ImporterFolder},
+			})
+		}
+		return nil
+	}
+	if !shaderCacheOff(shaderCacheSetting(data)) {
+		return nil
+	}
+	x.log.Info(fmt.Sprintf("Rejected StartGame for importer %s: %s", importer, errShaderCacheDisabled),
+		xxmiLaunchGuardWhere)
+	return infra.AnnotateError(errShaderCacheDisabled, infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "start-game", Stage: "launch-guard",
+		Fields: map[string]any{"importer": importer, "importerFolder": cfg.ImporterFolder},
+	})
 }
 
 // migoto returns the importer's Migoto section of the launcher config, or nil when it has none.

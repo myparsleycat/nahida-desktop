@@ -14,16 +14,17 @@ import (
 type LaunchOptions struct {
 	KeepLogging        bool `json:"keepLogging"`
 	IgnoreSmoothMotion bool `json:"ignoreSmoothMotion"`
+	KeepShaderCacheOff bool `json:"keepShaderCacheOff"`
 }
 
 func (x *XXMI) StartGame(ctx context.Context, importer string) error {
 	return x.startGame(ctx, importer, LaunchOptions{})
 }
 
-// StartGameWithLogging starts the game without asking about 3DMigoto logging: the user chose to
-// keep it on, or the caller has no dialog to ask with.
-func (x *XXMI) StartGameWithLogging(ctx context.Context, importer string) error {
-	return x.startGame(ctx, importer, LaunchOptions{KeepLogging: true})
+// StartGameUnattended starts the game without the questions a caller with no dialog cannot ask: about 3DMigoto
+// logging and about a disabled shader cache.
+func (x *XXMI) StartGameUnattended(ctx context.Context, importer string) error {
+	return x.startGame(ctx, importer, LaunchOptions{KeepLogging: true, KeepShaderCacheOff: true})
 }
 
 func (x *XXMI) StartGameWithOptions(ctx context.Context, importer string, options LaunchOptions) error {
@@ -68,6 +69,12 @@ func (x *XXMI) startGame(ctx context.Context, importer string, options LaunchOpt
 	cfg, err := x.GetImporterConfig(ctx, importer)
 	if err != nil {
 		return err
+	}
+	if !options.KeepShaderCacheOff && guards.shaderCache {
+		watch.Stage("check-shader-cache")
+		if err := x.rejectShaderCache(ctx, importer, cfg); err != nil {
+			return err
+		}
 	}
 	return x.launchBuiltinGameLocked(ctx, importer, cfg, options, watch)
 }

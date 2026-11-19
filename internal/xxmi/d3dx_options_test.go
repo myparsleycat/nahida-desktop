@@ -413,6 +413,91 @@ func TestMigrateD3DXOverridesWritesStoredOverrides(t *testing.T) {
 	}
 }
 
+func TestMigrateShaderCacheRestoresLegacyDefaultPerImporter(t *testing.T) {
+	ctx := context.Background()
+	service, _, _ := newProviderTestService(t, nil)
+	running := true
+	service.processSnapshot = func(context.Context) (map[string]bool, error) {
+		processes := map[string]bool{}
+		for _, name := range (ImporterConfig{}).gameProcessNames("GIMI") {
+			processes[strings.ToLower(name)] = running
+		}
+		return processes, nil
+	}
+	const (
+		off      = "[Rendering]\ncache_shaders = 0\n"
+		on       = "[Rendering]\ncache_shaders = 1\n"
+		provider = `"provider":"xxmi-libs-myparsleycat@0.2.0"`
+	)
+	paths := map[string]string{}
+	for key, manifest := range map[string]string{
+		"GIMI": `{"mode":"xxmi",` + provider + `}`,
+		// The signed provider ships no d3dx.ini, so a base it left is not the deployed provider's.
+		"SRMI": `{"mode":"xxmi"}`,
+		"ZZMI": `{"mode":"xxmi",` + provider + `,"userManaged":{"d3d11.dll":"0123"}}`,
+	} {
+		cfg, err := DefaultImporterConfig(key, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Mode, cfg.XXMIVersion = RuntimeXXMI, VersionPin{Follow: "latest"}
+		if err := service.SaveImporterConfig(ctx, key, cfg); err != nil {
+			t.Fatal(err)
+		}
+		paths[key] = filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+		writeTestFile(t, paths[key], []byte(off))
+		writeTestFile(t, filepath.Join(cfg.ImporterFolder, iniBaseName), []byte(on))
+		writeTestFile(t, filepath.Join(cfg.ImporterFolder, runtimeManifestName), []byte(manifest))
+	}
+	read := func(key string) string {
+		t.Helper()
+		data, err := os.ReadFile(paths[key])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	// A running game keeps the importer open for the next start.
+	if err := service.MigrateShaderCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := read("GIMI"); got != off {
+		t.Fatalf("d3dx.ini of a running game = %q, want it left alone", got)
+	}
+
+	running = false
+	if err := service.MigrateShaderCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{"GIMI": on, "SRMI": off, "ZZMI": off} {
+		if got := read(key); got != want {
+			t.Errorf("%s d3dx.ini = %q, want %q", key, got, want)
+		}
+	}
+
+	// After the run, a 0 against the base's 1 is the user's choice. The next launch stores the provider's d3dx.ini
+	// as the base again, with the option the write took out of it.
+	writeTestFile(t, paths["GIMI"], []byte(off))
+	writeTestFile(t, filepath.Join(filepath.Dir(paths["GIMI"]), iniBaseName), []byte(on))
+	if err := service.MigrateShaderCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := read("GIMI"); got != off {
+		t.Fatalf("d3dx.ini after the user turned the cache off again = %q, want %q", got, off)
+	}
+
+	// An importer that moves to a provider shipping a d3dx.ini is examined then.
+	writeTestFile(t, filepath.Join(filepath.Dir(paths["SRMI"]), runtimeManifestName),
+		[]byte(`{"mode":"xxmi",`+provider+`}`))
+	if err := service.MigrateShaderCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := read("SRMI"); got != on {
+		t.Fatalf("SRMI d3dx.ini after moving to the fork provider = %q, want %q", got, on)
+	}
+}
+
 func TestINIOptionDropsTrailingComment(t *testing.T) {
 	t.Parallel()
 	doc := parseINI([]byte("[Hunting]\n;hunting = 1\nhunting = 2 ; soft disabled\nrepeat_rate=6\n"))

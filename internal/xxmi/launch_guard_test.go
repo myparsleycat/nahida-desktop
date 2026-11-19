@@ -379,6 +379,59 @@ func TestBuiltinLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 	}
 }
 
+func TestBuiltinLaunchAsksAboutShaderCacheUntilEnabled(t *testing.T) {
+	ctx := t.Context()
+	client := newXXMITestClient(t)
+	service := New()
+	service.UseClient(client)
+	service.findProcess = noGameProcess
+	useBuiltinLauncher(t, service)
+	root := t.TempDir()
+	if err := client.Settings.Upsert(ctx, "xxmi_root", &root); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIImporters.Upsert(ctx, "GIMI", `{"schemaVersion":2,"enabled":true}`); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := service.GetImporterConfig(ctx, "GIMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name, ini string
+		asked     bool
+	}{
+		// 3DMigoto turns the cache off when the option is not set.
+		{"unset", "[Rendering]\n", true},
+		{"on", "[Rendering]\ncache_shaders = 1\n", false},
+		{"commented out", "[Rendering]\n;cache_shaders = 1\n", true},
+		{"off", "[Rendering]\ncache_shaders = 0\n", true},
+		{"off as word", "[rendering]\nCACHE_SHADERS = Off ; slow\n", true},
+	} {
+		writeTestFile(t, path, []byte(tc.ini))
+		err := service.rejectShaderCache(ctx, "GIMI", cfg)
+		if errors.Is(err, errShaderCacheDisabled) != tc.asked ||
+			tc.asked && !strings.Contains(err.Error(), "XXMI_SHADER_CACHE_DISABLED") {
+			t.Fatalf("%s: error = %v, asked = %t", tc.name, err, tc.asked)
+		}
+	}
+
+	if err := service.EnableShaderCache(ctx, "GIMI"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.rejectShaderCache(ctx, "GIMI", cfg); err != nil {
+		t.Fatalf("after enabling = %v", err)
+	}
+	if data, err := os.ReadFile(path); err != nil || !strings.Contains(string(data), "= 1") {
+		t.Fatalf("d3dx.ini after enabling = %q, %v", data, err)
+	}
+}
+
 func TestExternalLaunchAsksAboutLoggingUntilDisabled(t *testing.T) {
 	ctx := t.Context()
 	for _, tc := range []struct {
@@ -467,14 +520,14 @@ func TestDisabledLaunchGuardsLeaveSettingsAlone(t *testing.T) {
 	}
 
 	guards, err := service.launchGuards(ctx)
-	if err != nil || guards != (launchGuards{dcr: true, smoothMotion: true, logging: true}) {
+	if err != nil || guards != (launchGuards{dcr: true, smoothMotion: true, logging: true, shaderCache: true}) {
 		t.Fatalf("default guards = %+v, %v", guards, err)
 	}
 
 	store(launchGuardTexturesKey, "true")
 	store(launchGuardDCRKey, "false")
 	guards, err = service.launchGuards(ctx)
-	if err != nil || guards != (launchGuards{smoothMotion: true, logging: true, textures: true}) {
+	if err != nil || guards != (launchGuards{smoothMotion: true, logging: true, textures: true, shaderCache: true}) {
 		t.Fatalf("guards without DCR = %+v, %v", guards, err)
 	}
 	fake := &fakeLaunch{dcr: true, smooth: true}

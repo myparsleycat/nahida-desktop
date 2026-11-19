@@ -89,7 +89,8 @@ func testLegacyLaunchPipeline(t *testing.T, restore, logging string) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, "d3dx.ini"), []byte("[Loader]\n"), 0o600); err != nil {
+	d3dx := []byte("[Loader]\n[Rendering]\ncache_shaders = 1\n")
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, "d3dx.ini"), d3dx, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	packageFile := filepath.Join(cfg.ImporterFolder, "Core", "EFMI", "main.ini")

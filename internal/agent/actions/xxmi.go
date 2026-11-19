@@ -37,8 +37,8 @@ func registerXXMIActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			// The agent cannot answer the logging dialog, so the game launches as configured.
-			return actionOK(deps.XXMI.StartGameWithLogging(ctx, input.Importer))
+			// The agent cannot answer the logging or shader cache dialog, so the game launches as configured.
+			return actionOK(deps.XXMI.StartGameUnattended(ctx, input.Importer))
 		}))
 	registry.add(
 		simpleAction("xxmi.set_xxmi_version",

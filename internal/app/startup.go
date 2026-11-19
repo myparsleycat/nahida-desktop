@@ -121,6 +121,7 @@ func (rt *runtime) runStartupWork(ctx context.Context) {
 	})
 	rt.runStartupSteps(ctx, []startupStep{
 		{"d3dx-overrides", rt.xxmi.MigrateD3DXOverrides},
+		{"d3dx-shader-cache", rt.xxmi.MigrateShaderCache},
 		{"bisect-recovery", rt.tools.RecoverBisects},
 		{"compression", rt.runCompressionMaintenance},
 		{"persist-watcher", rt.tools.StartPersistWatcher},

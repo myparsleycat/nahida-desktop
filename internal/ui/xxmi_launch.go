@@ -25,6 +25,7 @@ const (
 	blockerResourceTier  = "WWMI_RESOURCE_TIER_DECISION_REQUIRED"
 	blockerD3D11Mode     = "XXMI_D3D11_MODE_NOTICE_REQUIRED"
 	blockerLogging       = "XXMI_LOGGING_ENABLED"
+	blockerShaderCache   = "XXMI_SHADER_CACHE_DISABLED"
 	blockerGameFolder    = "XXMI_GAME_FOLDER_NOT_CONFIGURED"
 	blockerRuntime       = "XXMI_RUNTIME_CORRUPTED"
 	dialogGameFolder     = "game-folder"
@@ -32,6 +33,7 @@ const (
 	dialogResourceTier   = "wwmi-resource-tier"
 	dialogD3D11Mode      = "d3d11-mode"
 	dialogLogging        = "xxmi-logging"
+	dialogShaderCache    = "xxmi-shader-cache"
 	dialogWWMIWounded    = "wwmi-wounded"
 	dialogLaunchBlockers = "launch-blockers"
 	dialogDCR            = "gimi-dcr"
@@ -83,9 +85,8 @@ type launchGuard struct {
 	detected     *[]xxmi.GameFolderCandidate
 	// generation drops a confirmation still running when its dialog was dismissed, so it does not launch.
 	generation int
-	// keepLogging and ignoreSmoothMotion are the answers given earlier in the same launch.
-	keepLogging        bool
-	ignoreSmoothMotion bool
+	// options holds the answers given earlier in the same launch.
+	options xxmi.LaunchOptions
 
 	update      *pendingUpdate
 	effects     *pendingEffects
@@ -144,6 +145,8 @@ func launchDialog(message string) string {
 		return dialogD3D11Mode
 	case strings.Contains(message, blockerLogging):
 		return dialogLogging
+	case strings.Contains(message, blockerShaderCache):
+		return dialogShaderCache
 	case strings.Contains(message, blockerWWMIWounded):
 		return dialogWWMIWounded
 	}
@@ -157,17 +160,6 @@ func launchDialog(message string) string {
 		return dialogSmoothMotion
 	}
 	return ""
-}
-
-func (s *Shell) startGame(ctx context.Context, importer string, keepLogging, ignoreSmoothMotion bool) error {
-	switch {
-	case ignoreSmoothMotion:
-		return s.deps.XXMI.StartGameWithOptions(ctx, importer,
-			xxmi.LaunchOptions{KeepLogging: keepLogging, IgnoreSmoothMotion: true})
-	case keepLogging:
-		return s.deps.XXMI.StartGameWithLogging(ctx, importer)
-	}
-	return s.deps.XXMI.StartGame(ctx, importer)
 }
 
 // startImporter launches an importer through the launch guard: pending updates, missing ReShade effects and
@@ -229,17 +221,17 @@ func (s *Shell) launchWithTextures(key string) {
 				g.textures = &pendingTextures{importer: key, textures: textures}
 				return
 			}
-			s.launch(key, false, false)
+			s.launch(key, xxmi.LaunchOptions{})
 		})
 	})
 }
 
-func (s *Shell) launch(key string, keepLogging, ignoreSmoothMotion bool) {
+func (s *Shell) launch(key string, options xxmi.LaunchOptions) {
 	g := &s.xxmi.guard
-	g.keepLogging, g.ignoreSmoothMotion = keepLogging, ignoreSmoothMotion
+	g.options = options
 	g.starting[key] = true
 	s.background(func(ctx context.Context) {
-		err := s.startGame(ctx, key, keepLogging, ignoreSmoothMotion)
+		err := s.deps.XXMI.StartGameWithOptions(ctx, key, options)
 		fairy.Go(func() {
 			delete(g.starting, key)
 			if err != nil {
@@ -297,13 +289,13 @@ func (s *Shell) confirmBlocker() {
 		return
 	}
 	importer, dialog, folder, tier := g.importer, g.dialog, g.gameFolder, g.resourceTier
-	keepLogging, ignoreSmoothMotion := g.keepLogging, g.ignoreSmoothMotion
+	options := g.options
 	g.generation++
 	generation := g.generation
 	g.confirming = true
 	s.background(func(ctx context.Context) {
 		var warnings []string
-		err := s.applyBlockerFix(ctx, importer, dialog, folder, tier, keepLogging, ignoreSmoothMotion, &warnings)
+		err := s.applyBlockerFix(ctx, importer, dialog, folder, tier, options, &warnings)
 		fairy.Go(func() {
 			if g.generation != generation {
 				return
@@ -325,13 +317,14 @@ func (s *Shell) confirmBlocker() {
 				return
 			}
 			g.importer = ""
-			if dialog == dialogResourceTier || dialog == dialogD3D11Mode || dialog == dialogLogging {
-				s.launch(importer, keepLogging, ignoreSmoothMotion)
+			if dialog == dialogResourceTier || dialog == dialogD3D11Mode || dialog == dialogLogging ||
+				dialog == dialogShaderCache {
+				s.launch(importer, options)
 				return
 			}
 			g.starting[importer] = true
 			s.background(func(ctx context.Context) {
-				err := s.startGame(ctx, importer, keepLogging, ignoreSmoothMotion)
+				err := s.deps.XXMI.StartGameWithOptions(ctx, importer, options)
 				fairy.Go(func() {
 					delete(g.starting, importer)
 					if err != nil {
@@ -344,7 +337,7 @@ func (s *Shell) confirmBlocker() {
 }
 
 func (s *Shell) applyBlockerFix(ctx context.Context, importer, dialog, folder, tier string,
-	keepLogging, ignoreSmoothMotion bool, warnings *[]string,
+	options xxmi.LaunchOptions, warnings *[]string,
 ) error {
 	x := s.deps.XXMI
 	update := func(change func(*xxmi.ImporterConfig) error) error {
@@ -394,12 +387,10 @@ func (s *Shell) applyBlockerFix(ctx context.Context, importer, dialog, folder, t
 		})
 	case dialogLogging:
 		return x.DisableLogging(ctx, importer)
+	case dialogShaderCache:
+		return x.EnableShaderCache(ctx, importer)
 	}
-	if ignoreSmoothMotion {
-		return x.ClearLaunchBlockersWithOptions(ctx, importer,
-			xxmi.LaunchOptions{KeepLogging: keepLogging, IgnoreSmoothMotion: true})
-	}
-	return x.ClearLaunchBlockers(ctx, importer)
+	return x.ClearLaunchBlockersWithOptions(ctx, importer, options)
 }
 
 func (s *Shell) keepWoundedFX() {
@@ -407,7 +398,7 @@ func (s *Shell) keepWoundedFX() {
 	if g.importer == "" || g.confirming {
 		return
 	}
-	importer, keepLogging, ignoreSmoothMotion := g.importer, g.keepLogging, g.ignoreSmoothMotion
+	importer, options := g.importer, g.options
 	g.generation++
 	generation := g.generation
 	g.confirming, g.keeping = true, true
@@ -432,7 +423,7 @@ func (s *Shell) keepWoundedFX() {
 			g.importer = ""
 			g.starting[importer] = true
 			s.background(func(ctx context.Context) {
-				err := s.startGame(ctx, importer, keepLogging, ignoreSmoothMotion)
+				err := s.deps.XXMI.StartGameWithOptions(ctx, importer, options)
 				fairy.Go(func() {
 					delete(g.starting, importer)
 					if err != nil {
@@ -527,7 +518,7 @@ func (s *Shell) launchPendingTextures(ignored []string) {
 		g.ignored[path] = true
 	}
 	g.textures = nil
-	s.launch(p.importer, false, false)
+	s.launch(p.importer, xxmi.LaunchOptions{})
 }
 
 // compressTextures compresses the offered textures and launches. A texture that could not be compressed launches
@@ -770,19 +761,25 @@ func (s *Shell) blockerDialog(cx *fairy.Cx) {
 	} else {
 		actions = append(actions, kit.Button(T("g.cancel"), g.closeDialog, kit.Outline, kit.Disabled(g.confirming)))
 	}
-	if dialog == dialogLogging {
-		actions = append(actions, kit.Button(T("page.mod.dialog.xxmi-logging.keep"), func() {
-			ignore := g.ignoreSmoothMotion
+	// An answer that launches without the dialog's fix, adding to those given earlier in the same launch.
+	launchAnyway := func(label string, answer func(*xxmi.LaunchOptions)) *fairy.El {
+		return kit.Button(label, func() {
+			options := g.options
+			answer(&options)
 			g.closeDialog()
-			s.launch(importer, true, ignore)
-		}, kit.Outline, kit.Disabled(g.confirming)))
+			s.launch(importer, options)
+		}, kit.Outline, kit.Disabled(g.confirming))
 	}
-	if dialog == dialogSmoothMotion || dialog == dialogLaunchBlockers {
-		actions = append(actions, kit.Button(T("page.mod.dialog.smooth-motion.ignore"), func() {
-			keep := g.keepLogging
-			g.closeDialog()
-			s.launch(importer, keep, true)
-		}, kit.Outline, kit.Disabled(g.confirming)))
+	switch dialog {
+	case dialogLogging:
+		actions = append(actions, launchAnyway(T("page.mod.dialog.xxmi-logging.keep"),
+			func(options *xxmi.LaunchOptions) { options.KeepLogging = true }))
+	case dialogShaderCache:
+		actions = append(actions, launchAnyway(T("page.mod.dialog.xxmi-shader-cache.keep"),
+			func(options *xxmi.LaunchOptions) { options.KeepShaderCacheOff = true }))
+	case dialogSmoothMotion, dialogLaunchBlockers:
+		actions = append(actions, launchAnyway(T("page.mod.dialog.smooth-motion.ignore"),
+			func(options *xxmi.LaunchOptions) { options.IgnoreSmoothMotion = true }))
 	}
 	actions = append(actions, kit.Button(confirm, s.confirmBlocker, kit.Loading(g.confirming && !g.keeping),
 		kit.Disabled(g.keeping || dialog == dialogGameFolder && strings.TrimSpace(g.gameFolder) == "")))

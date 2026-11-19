@@ -11,6 +11,7 @@ const (
 	SchemaKeyXXMILibsProviderPinned      = "xxmi_libs_provider_pinned"
 	SchemaKeyImageCacheRemoved           = "image_cache_removed"
 	SchemaKeyModelViewerToonStylesMerged = "model_viewer_toon_styles_merged"
+	SchemaKeyXXMIShaderCacheRestored     = "xxmi_shader_cache_restored_importers"
 	NTEImporter                          = "NTE"
 	NTEGameExeKeepSuffix                 = "%htgame.exe"
 	// BlenderMCPTransport names the built-in Blender compatibility layer. It is the transport value

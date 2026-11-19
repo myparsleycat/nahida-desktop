@@ -292,8 +292,8 @@ func (rt *runtime) quickStart(key string, first bool) {
 			Operation: "launch-game", Stage: "startup", Fields: map[string]any{"importer": key},
 		})
 	} else {
-		// A quick start has no dialog to ask about logging with, so it launches as configured.
-		err = rt.xxmi.StartGameWithLogging(context.Background(), key)
+		// A quick start has no dialog to ask about logging or the shader cache with, so it launches as configured.
+		err = rt.xxmi.StartGameUnattended(context.Background(), key)
 	}
 	if err != nil {
 		rt.window.Focus()
