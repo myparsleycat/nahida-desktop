@@ -21,6 +21,8 @@ type InstallImporterPackageInput struct {
 }
 
 func (x *XXMI) InstallImporterPackage(ctx context.Context, input InstallImporterPackageInput) error {
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	if err := x.installImporterPackage(ctx, input, nil); err != nil {
 		return err
 	}

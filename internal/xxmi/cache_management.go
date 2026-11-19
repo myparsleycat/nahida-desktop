@@ -64,6 +64,8 @@ func (x *XXMI) ListCachedLibs(ctx context.Context) ([]CachedLibs, error) {
 }
 
 func (x *XXMI) PruneLibsCache(ctx context.Context) ([]string, error) {
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()
 

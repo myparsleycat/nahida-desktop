@@ -342,6 +342,8 @@ func (x *XXMI) SetSharedLibsProvider(ctx context.Context, provider string) (retu
 	}
 	provider = strings.TrimSpace(provider)
 
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	// The download can take a while, and a later selection must not be overwritten when it finishes.
 	x.libsProviderMu.Lock()
 	defer x.libsProviderMu.Unlock()

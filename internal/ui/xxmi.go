@@ -165,6 +165,7 @@ type xxmiScreen struct {
 	busy            map[string]bool
 	showUninstalled bool
 	updateTarget    string
+	updateRun       *updateRun
 	launchWarned    map[string]bool
 	// launchFailures holds, by importer, the launch stages that failed since its last launch started: "auto-update"
 	// and "mod-runtimes".
@@ -175,6 +176,20 @@ type xxmiScreen struct {
 	importer importerPage
 	reshade  reshadePage
 	guard    launchGuard
+}
+
+// updateRun is an update install in progress, from the xxmi:update-progress events and the xxmi:package-progress
+// events of the same run. Downloads count toward the current package whatever package they name, as a provider
+// update downloads the signed libraries and its overlay.
+type updateRun struct {
+	id               int64
+	importers        []string
+	packages         []string
+	done             []string
+	pkg              string
+	index            int
+	downloaded, size float64
+	downloading      bool
 }
 
 func newXXMIScreen() xxmiScreen {
@@ -194,6 +209,17 @@ func newXXMIScreen() xxmiScreen {
 		reshade:        reshadePage{pending: map[string]bool{}},
 		guard:          newLaunchGuard(),
 	}
+}
+
+// installingUpdates reports an update install in progress, including the one a launch runs on its own. The busy
+// flags cover the update check an install makes before its run starts.
+func (x *xxmiScreen) installingUpdates() bool {
+	return x.busy["install-all-updates"] || x.busy["install-updates"] ||
+		x.guard.update != nil && x.guard.update.busy || x.updateRun != nil
+}
+
+func (x *xxmiScreen) updatingImporter(key string) bool {
+	return x.updateRun != nil && slices.Contains(x.updateRun.importers, key)
 }
 
 // refresh reads every XXMI value again, as the React screens invalidated every "xxmi:" query after a change.
@@ -237,12 +263,43 @@ func (s *Shell) registerXXMIEvents(on func(string, func([]any))) {
 		payload, _ := first(data).(map[string]any)
 		s.xxmiLaunchProgress(payload)
 	})
+	on("xxmi:update-progress", func(data []any) {
+		progress, ok := first(data).(xxmi.UpdateProgress)
+		if !ok {
+			return
+		}
+		if progress.Stage == "start" {
+			x.updateRun = &updateRun{id: progress.Run, importers: progress.Importers, packages: progress.Packages}
+			return
+		}
+		run := x.updateRun
+		if run == nil || run.id != progress.Run {
+			return
+		}
+		switch progress.Stage {
+		case "package":
+			if run.pkg != "" {
+				run.done = append(run.done, run.pkg)
+			}
+			run.pkg, run.index, run.downloaded, run.size, run.downloading = progress.Package, progress.Index, 0, 0, false
+		case "end":
+			x.updateRun = nil
+		}
+	})
 	on("xxmi:package-progress", func(data []any) {
 		payload, _ := first(data).(map[string]any)
 		pkg, _ := payload["package"].(string)
 		stage, _ := payload["stage"].(string)
 		if pkg == "" || stage == "" {
 			return
+		}
+		if id, ok := number(payload["run"]); ok && x.updateRun != nil && int64(id) == x.updateRun.id {
+			run := x.updateRun
+			run.downloading = stage == "download"
+			if run.downloading {
+				run.downloaded, _ = number(payload["downloaded"])
+				run.size, _ = number(payload["total"])
+			}
 		}
 		key := "xxmi-package:" + pkg
 		// Applying a shared libraries choice downloads "xxmi-libs" and the provider overlay packages, which share
@@ -932,7 +989,9 @@ func (s *Shell) xxmiImporterRow(key string) *fairy.El {
 	if len(importerUpdates(x.updates.value, key)) > 0 {
 		label := T("page.setting.xxmi.builtin.updateAvailable")
 		row.Child(kit.IconButton(lucide.CircleArrowUp, func() { x.updateTarget = key }, kit.Ghost, kit.Small,
-			kit.Disabled(importer.Running), kit.Tooltip(label)).Label(label).Color(t.Primary).HoverColor(t.Primary))
+			kit.Disabled(importer.Running || x.installingUpdates() || x.guard.starting[key]),
+			kit.Loading(x.updatingImporter(key)), kit.Tooltip(label)).Label(label).Color(t.Primary).
+			HoverColor(t.Primary))
 	}
 	launch := T("page.setting.xxmi.builtin.launch")
 	return row.Child(kit.IconButton(lucide.Play, func() { s.startImporter(key) }, kit.Ghost, kit.Small,
@@ -980,7 +1039,10 @@ func (s *Shell) xxmiDialogs(cx *fairy.Cx) {
 		key := x.updateTarget
 		updates := importerUpdates(x.updates.value, key)
 		s.xxmiUpdateDialog(cx, key, updates, T("page.setting.xxmi.builtin.installUpdates"), x.busy["install-updates"],
-			func() {
+			x.installingUpdates(), func() {
+				if x.installingUpdates() {
+					return
+				}
 				packages := packagesOf(updates)
 				s.xxmiAction("install-updates", func(ctx context.Context) error {
 					_, err := s.deps.XXMI.InstallUpdates(ctx, key, packages)
@@ -1005,9 +1067,10 @@ func packagesOf(updates []xxmi.UpdateStatus) []string {
 	return packages
 }
 
-// xxmiUpdateDialog lists an importer's updates with their release notes before installing them.
+// xxmiUpdateDialog lists an importer's updates with their release notes before installing them. busy is this
+// dialog's own install; blocked is any other install, which only disables the confirm button.
 func (s *Shell) xxmiUpdateDialog(cx *fairy.Cx, importer string, updates []xxmi.UpdateStatus, confirmLabel string,
-	busy bool, onConfirm, onClose func(),
+	busy, blocked bool, onConfirm, onClose func(),
 ) {
 	t := kit.T()
 	list := fairy.Col().Gap(12).MaxH(384).ScrollY()
@@ -1034,7 +1097,8 @@ func (s *Shell) xxmiUpdateDialog(cx *fairy.Cx, importer string, updates []xxmi.U
 		Description: T("page.setting.xxmi.builtin.updateDialogDescription"),
 		Body: fairy.Col(list, xxmiDialogButtons(
 			kit.Button(T("g.cancel"), onClose, kit.Outline, kit.Disabled(busy)),
-			kit.Button(confirmLabel, onConfirm, kit.Icon(lucide.Download), kit.Loading(busy)),
+			kit.Button(confirmLabel, onConfirm, kit.Icon(lucide.Download), kit.Disabled(blocked && !busy),
+				kit.Loading(busy)),
 		)).Gap(16),
 		Width: 448,
 		OnClose: func() {

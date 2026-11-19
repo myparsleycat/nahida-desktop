@@ -125,6 +125,11 @@ type externalImporter struct {
 type XXMI struct {
 	mu        sync.RWMutex
 	packageMu sync.Mutex
+	// updateMu runs update installs, and the package operations that change what they install (package versions,
+	// the shared libraries choice, the libraries cache), one at a time. An update install holds it from its update
+	// check on, so one waiting for another picks its packages from the other's result. It is taken before
+	// libsProviderMu, customDLLMu and packageMu.
+	updateMu sync.Mutex
 	// disabledMu serializes read-modify-write updates of the disabled external importer list.
 	disabledMu sync.Mutex
 	// externalConfigMu serializes read-modify-write updates of the external launcher's Config.json.
@@ -147,6 +152,7 @@ type XXMI struct {
 	launcherScan    *string
 	// importedCustomDLLs protects this session's imports, including drafts that have not been saved yet.
 	importedCustomDLLs map[string]bool
+	updateRunSeq       atomic.Int64
 
 	// appData is atomic so cache path lookups never take x.mu.
 	appData     atomic.Pointer[appdata.Store]

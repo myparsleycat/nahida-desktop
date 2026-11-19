@@ -812,12 +812,31 @@ func TestCheckUpdatesTracksProviderDLL(t *testing.T) {
 	}
 
 	// The signed libraries the release deploys over cannot be downloaded here, so nothing is installed.
+	var progress []UpdateProgress
+	service.eventEmit = func(name string, data ...any) {
+		if name != "xxmi:update-progress" || len(data) == 0 {
+			return
+		}
+		if event, ok := data[0].(UpdateProgress); ok {
+			progress = append(progress, event)
+		}
+	}
 	if installed, err := service.InstallUpdates(
 		ctx,
 		"GIMI",
 		[]string{providerTestPackage},
 	); err == nil || len(installed) != 0 || downloads.Load() != 0 {
 		t.Fatalf("installed = %v, downloads = %d, err = %v", installed, downloads.Load(), err)
+	}
+	service.eventEmit = nil
+
+	// A failed install still ends its run, or the UI would show it as installing until the next one.
+	if len(progress) != 3 || progress[0].Stage != "start" || progress[1].Stage != "package" ||
+		progress[2].Stage != "end" || progress[1].Package != providerTestPackage || progress[1].Index != 1 ||
+		!slices.Equal(progress[0].Importers, []string{"GIMI"}) ||
+		!slices.Equal(progress[0].Packages, []string{providerTestPackage}) ||
+		progress[1].Run != progress[0].Run || progress[2].Run != progress[0].Run {
+		t.Fatalf("update progress = %+v", progress)
 	}
 	spec, _ := lookupOverlayPackage(providerTestPackage)
 	if err := service.ensureProviderDLL(ctx, spec, "0.2.0"); err != nil {

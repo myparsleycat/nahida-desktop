@@ -451,7 +451,7 @@ func (s *Shell) launchGuardDialogs(cx *fairy.Cx) {
 	}
 	if u := g.update; u != nil {
 		s.xxmiUpdateDialog(cx, u.importer, u.updates, T("page.setting.xxmi.builtin.launchUpdateConfirm"), u.busy,
-			func() { s.installLaunchUpdates(u) }, func() {
+			s.xxmi.installingUpdates(), func() { s.installLaunchUpdates(u) }, func() {
 				if !u.busy {
 					g.update = nil
 				}
@@ -475,7 +475,7 @@ func (s *Shell) launchGuardDialogs(cx *fairy.Cx) {
 // launches with the current files.
 func (s *Shell) installLaunchUpdates(u *pendingUpdate) {
 	x := &s.xxmi
-	if u.busy {
+	if u.busy || x.installingUpdates() {
 		return
 	}
 	u.busy = true

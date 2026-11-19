@@ -55,6 +55,13 @@ func (x *XXMI) ListCachedFPSUnlocker(ctx context.Context) ([]string, error) {
 }
 
 func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) error {
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
+	return x.ensureFPSUnlockerVersion(ctx, version)
+}
+
+// ensureFPSUnlockerVersion is EnsureFPSUnlockerVersion for a caller that holds updateMu.
+func (x *XXMI) ensureFPSUnlockerVersion(ctx context.Context, version string) error {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-install-fps-unlocker")
 	x.packageMu.Lock()
 	defer x.packageMu.Unlock()

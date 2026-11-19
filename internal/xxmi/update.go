@@ -34,6 +34,26 @@ type UpdateStatus struct {
 	Shared bool `json:"shared"`
 }
 
+// UpdateProgress is the xxmi:update-progress payload. An install of one or more updates reports "start" with the
+// importers and packages it covers, "package" as it moves to each package, and "end" when it stops for any reason.
+// Package downloads made during the install carry the same Run in their xxmi:package-progress payload. Installs
+// run one at a time, so the events of two runs never interleave.
+type UpdateProgress struct {
+	Run       int64    `json:"run"`
+	Stage     string   `json:"stage"`
+	Importers []string `json:"importers,omitempty"`
+	Packages  []string `json:"packages,omitempty"`
+	Package   string   `json:"package,omitempty"`
+	Index     int      `json:"index,omitempty"`
+}
+
+type updateRunKey struct{}
+
+func updateRunOf(ctx context.Context) (int64, bool) {
+	run, ok := ctx.Value(updateRunKey{}).(int64)
+	return run, ok
+}
+
 func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, error) {
 	ctx = infra.WithGitHubOperation(ctx, "xxmi-check-updates")
 	x.mu.RLock()
@@ -336,9 +356,12 @@ func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
 // InstallUpdates installs the requested packages' available updates. A non-empty importer limits the install
 // to that importer's packages; an empty one covers every importer.
 func (x *XXMI) InstallUpdates(ctx context.Context, importer string, targets []string) ([]string, error) {
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	return x.installUpdates(ctx, importer, targets, nil)
 }
 
+// installUpdates is InstallUpdates for a caller that holds updateMu.
 func (x *XXMI) installUpdates(
 	ctx context.Context, importer string, targets []string, lease *elevated.FileLease,
 ) ([]string, error) {
@@ -354,14 +377,50 @@ func (x *XXMI) installUpdates(
 	for _, target := range targets {
 		requested[target] = true
 	}
+	installable := func(status UpdateStatus) bool {
+		return requested[status.Package] && status.Available && !status.Pinned &&
+			(importer == "" || status.Importer == importer)
+	}
+	var order, importers []string
+	for _, status := range statuses {
+		if !installable(status) {
+			continue
+		}
+		if !slices.Contains(order, status.Package) {
+			order = append(order, status.Package)
+		}
+		if !slices.Contains(importers, status.Importer) {
+			importers = append(importers, status.Importer)
+		}
+	}
+
+	run, reporting := int64(0), len(order) > 0 && x.eventEmit != nil
+	if reporting {
+		run = x.updateRunSeq.Add(1)
+		ctx = context.WithValue(ctx, updateRunKey{}, run)
+		x.eventEmit("xxmi:update-progress", UpdateProgress{
+			Run: run, Stage: "start", Importers: importers, Packages: order,
+		})
+		defer x.eventEmit("xxmi:update-progress", UpdateProgress{Run: run, Stage: "end"})
+	}
+	var started []string
 	installed := []string{}
 	for _, status := range statuses {
 		if err := ctx.Err(); err != nil {
 			return installed, err
 		}
-		if !requested[status.Package] || !status.Available || status.Pinned ||
-			importer != "" && status.Importer != importer {
+		if !installable(status) {
 			continue
+		}
+		// The shared libraries report one status per importer between the importers' own packages, so only the
+		// first one reports the package; the later ones count toward the package reported last.
+		if !slices.Contains(started, status.Package) {
+			started = append(started, status.Package)
+			if reporting {
+				x.eventEmit("xxmi:update-progress", UpdateProgress{
+					Run: run, Stage: "package", Package: status.Package, Index: len(started),
+				})
+			}
 		}
 		provider, overlay := lookupOverlayPackage(status.Package)
 		switch {
@@ -374,7 +433,7 @@ func (x *XXMI) installUpdates(
 		case status.Package == "xxmi-libs":
 			err = x.installLibsUpdate(ctx, status.Importer, status.LatestVersion)
 		case status.Package == "gi-fps-unlocker":
-			err = x.EnsureFPSUnlockerVersion(ctx, status.LatestVersion)
+			err = x.ensureFPSUnlockerVersion(ctx, status.LatestVersion)
 		default:
 			err = fmt.Errorf("unknown XXMI package %q", status.Package)
 		}
@@ -490,6 +549,8 @@ func (x *XXMI) autoUpdateForLaunch(ctx context.Context, importer string, lease *
 	if err != nil || mode != launchUpdateAuto {
 		return err
 	}
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	statuses, err := x.CheckUpdates(ctx, false)
 	if err != nil {
 		return err

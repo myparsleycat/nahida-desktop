@@ -144,27 +144,64 @@ func (s *Shell) builtinDashboard() *fairy.El {
 
 	sections := []*fairy.El{}
 	if pending := installableUpdates(s.xxmiUpdates()); len(pending) > 0 {
+		installing := x.installingUpdates()
+		run := x.updateRun
 		rows := []*fairy.El{}
 		for _, entry := range pending {
 			pkg, version := entry.Package, entry.LatestVersion
-			rows = append(rows, fairy.Row(
-				fairy.Text(updateLine(entry)).Font(monoFont).FontSize(12).LineHeight(16).
-					Color(t.MutedForeground).Grow(1).MinW(0).Wrap(),
-				kit.Button(T(prefix+"skipVersion"), func() {
+			line := fairy.Row(fairy.Text(updateLine(entry)).Font(monoFont).FontSize(12).LineHeight(16).
+				Color(t.MutedForeground).Grow(1).MinW(0).Wrap()).Gap(12).Align(fairy.Center)
+			if !installing {
+				rows = append(rows, line.Child(kit.Button(T(prefix+"skipVersion"), func() {
 					s.xxmiAction("skip:"+pkg, func(ctx context.Context) error {
 						return s.deps.XXMI.SkipVersion(ctx, pkg, version)
 					}, x.refresh, nil)
-				}, kit.Ghost, kit.XS, kit.Loading(x.busy["skip:"+pkg]))).Gap(12).Align(fairy.Center).PadXY(0, 8))
+				}, kit.Ghost, kit.XS, kit.Loading(x.busy["skip:"+pkg]))).PadXY(0, 8))
+				continue
+			}
+
+			// Until the install reports its run, and for packages another run leaves out, the row shows no status.
+			if run == nil || !slices.Contains(run.packages, pkg) {
+				rows = append(rows, line.PadXY(0, 8))
+				continue
+			}
+			current := run.pkg == pkg
+			status := T(prefix + "updateQueued")
+			switch {
+			case current && run.downloading:
+				status = T(prefix+"downloadingPackage") + " " + downloadProgress(run.downloaded, run.size)
+			case current:
+				status = T(prefix + "updateInstalling")
+			case slices.Contains(run.done, pkg):
+				status = T(prefix + "updateDone")
+			}
+			text := fairy.Text(status).FontSize(12).LineHeight(16).Color(t.MutedForeground).NoWrap().Shrink(0)
+			if current {
+				text.Medium().Color(t.Foreground)
+			}
+			item := fairy.Col(line.Child(text)).Gap(6).PadXY(0, 8)
+			if current && run.downloading && run.size > 0 {
+				item.Child(kit.Progress(min(1, run.downloaded/run.size)))
+			}
+			rows = append(rows, item)
 		}
 		install := kit.Button(T(prefix+"installUpdates"), func() {
+			if x.installingUpdates() {
+				return
+			}
 			packages := packagesOf(pending)
 			s.xxmiAction("install-all-updates", func(ctx context.Context) error {
 				_, err := s.deps.XXMI.InstallUpdates(ctx, "", packages)
 				return err
 			}, x.refresh, nil)
-		}, kit.Small, kit.Icon(lucide.Download), kit.Loading(x.busy["install-all-updates"]))
+		}, kit.Small, kit.Icon(lucide.Download), kit.Disabled(installing && !x.busy["install-all-updates"]),
+			kit.Loading(x.busy["install-all-updates"]))
+		heading := T(prefix+"updatesPending", "count", len(pending))
+		if run != nil && run.index > 0 {
+			heading = T(prefix+"updatesInstalling", "index", run.index, "total", len(run.packages))
+		}
 		sections = append(sections, fairy.Col(
-			fairy.Row(fairy.Text(T(prefix+"updatesPending", "count", len(pending))).FontSize(14).LineHeight(20).
+			fairy.Row(fairy.Text(heading).FontSize(14).LineHeight(20).
 				Medium().Color(t.MutedForeground).Grow(1).AlignSelf(fairy.Start), install).
 				Gap(16).Align(fairy.Center).PadEdges(0, 4, 8, 4),
 			fairy.Col(rows...).Gap(4).PadEdges(0, 14, 0, 30).BorderEdges(0, 0, 0, 1, t.Primary),
@@ -239,6 +276,7 @@ func (s *Shell) builtinOptions() []*fairy.El {
 
 	applyingProvider, applyingVersion := x.busy["set-shared-provider"], x.busy["set-shared-version"]
 	applying := applyingProvider || applyingVersion
+	updating := x.installingUpdates()
 	// A failure leaves the overview as it was, so the stored choices show again; a success reads it anew.
 	if !applying && (x.overview.current || x.overview.err != nil) {
 		m.sharedProvider, m.sharedVersion = "", ""
@@ -279,7 +317,7 @@ func (s *Shell) builtinOptions() []*fairy.El {
 				return s.deps.XXMI.SetSharedLibsProvider(ctx, value)
 			}, x.refresh, nil)
 			x.overview.invalidate()
-		}, kit.Disabled(applying)))
+		}, kit.Disabled(applying || updating)))
 
 	if sharedSource {
 		name := ""
@@ -348,7 +386,7 @@ func (s *Shell) builtinOptions() []*fairy.El {
 				s.xxmiAction("set-shared-version", func(ctx context.Context) error {
 					return s.deps.XXMI.SetSharedLibsVersion(ctx, value)
 				}, x.refresh, nil)
-			}, kit.Disabled(applying)))
+			}, kit.Disabled(applying || updating)))
 	}
 	return rows
 }
@@ -441,7 +479,7 @@ func (s *Shell) builtinPackages() []*fairy.El {
 			x.refresh()
 			s.toasts.Show(kit.ToastSuccess, T(prefix+"pruned", "count", len(removed)), "")
 		}, nil)
-	}, kit.Outline, kit.Small, kit.Icon(lucide.Trash), kit.Disabled(!prunable), kit.Loading(x.busy["prune-libs"]))))
+	}, kit.Outline, kit.Small, kit.Icon(lucide.Trash), kit.Disabled(!prunable || x.installingUpdates()), kit.Loading(x.busy["prune-libs"]))))
 
 	var legacy []packageVersion
 	for _, entry := range ov.LegacyRuntimes {
@@ -486,7 +524,8 @@ func (s *Shell) builtinPackages() []*fairy.El {
 			return s.deps.XXMI.EnsureFPSUnlockerVersion(ctx, latest)
 		}, x.refresh, nil)
 	}, kit.Outline, kit.Small, kit.Icon(lucide.Download),
-		kit.Disabled(latest == "" || slices.Contains(ov.FPSVersions, latest)), kit.Loading(x.busy["download-fps"]))))
+		kit.Disabled(latest == "" || slices.Contains(ov.FPSVersions, latest) || x.installingUpdates()),
+		kit.Loading(x.busy["download-fps"]))))
 	return rows
 }
 

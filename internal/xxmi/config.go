@@ -539,6 +539,8 @@ func (x *XXMI) SetImporterVersions(ctx context.Context, key string, versions Imp
 // SetSharedLibsVersion selects the XXMI libraries version for importers that follow the shared version: a
 // release of the shared provider. An empty version follows the latest release.
 func (x *XXMI) SetSharedLibsVersion(ctx context.Context, version string) error {
+	x.updateMu.Lock()
+	defer x.updateMu.Unlock()
 	client, err := x.settingsClient()
 	if err != nil {
 		return err
