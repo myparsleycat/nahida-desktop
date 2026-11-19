@@ -419,8 +419,11 @@ float toonStep(float edge, float x) {
 }
 
 // The game's rims compare scene depth a few pixels outward along the normal. Without a depth texture this is
-// 1 within a band of that many pixels inside the silhouette, measured as N.V over its screen derivative.
-float toonSilhouetteBand(float NoV, float pixels) {
+// 1 within a band of that many pixels inside the silhouette, measured as N.V over its screen derivative. N.V uses
+// the interpolated geometry normal, from either side: a normal map's detail would inflate the derivative and fill
+// the whole surface.
+float toonSilhouetteBand(VSOut i, float3 v, float pixels) {
+    float NoV = abs(dot(normalize(i.normal), v));
     float distance = NoV / max(fwidth(NoV), 1e-4);
     return 1 - smoothstep(pixels - 1, pixels, distance);
 }
@@ -563,13 +566,12 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
 
     // The 4.0+ rim: a thin band inside the silhouette, brightest where the normal turns away from the
     // camera-to-light direction, fading with distance.
-    float NoV = saturate(dot(n, v));
     float3 rimDirection = v - l;
     rimDirection = dot(rimDirection, rimDirection) > 1e-6 ? normalize(rimDirection) : v;
     float rimFacing = dot(n, rimDirection);
     float rimLight = saturate(pow(max(1 - rimFacing, 0), 7.5)) + saturate(pow(max(rimFacing, 0), 7.5));
     float viewDepth = abs(mul(view, float4(i.worldPos, 1)).z) * toonState.x;
-    float rimBand = toonSilhouetteBand(NoV, 2.5) * saturate(1 - viewDepth / 5);
+    float rimBand = toonSilhouetteBand(i, v, 2.5) * saturate(1 - viewDepth / 5);
     toon += saturate(albedo * 5 * rimLight * rimBand) * GIMI_RIM_STRENGTH * (1 - face);
 
     if ((flags & FLAG_EMISSION) != 0) toon += albedo * emissionMask * GIMI_EMISSION;
@@ -633,7 +635,6 @@ float3 srmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     // rate: HoyoToon's with the character's colour, shininess, roughness and intensity of the material ID, else with
     // its default shininess and a filtered edge.
     float3 halfDirection = normalize(l + v);
-    float NoV = saturate(dot(n, v));
     float NoH = max(0.01, dot(n, halfDirection));
     float3 specular;
     float3 rimColor = 1;
@@ -652,7 +653,7 @@ float3 srmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     specular *= 1 - face;
 
     // The depth rim, masked by the light map's red and fading with distance.
-    float rim = toonSilhouetteBand(NoV, 2) * lightTexel.r;
+    float rim = toonSilhouetteBand(i, v, 2) * lightTexel.r;
     rim *= SRMI_RIM_STRENGTH * max(0.5, saturate(1 / length(eye.xyz - i.worldPos))) * (1 - face);
 
     return albedo * shade + specular + rim * rimColor;
@@ -823,8 +824,7 @@ float3 zzmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     color += face ? 0 : specular * (skin ? 0.1 : 1);
 
     // HoyoToon's rim covers the band whose depth steps away past the silhouette, on the lit side.
-    float NoV = saturate(dot(n, v));
-    color += zzmiRim(n, v, l, skin) * ZZMI_RIM_STRENGTH * toonSilhouetteBand(NoV, 4) * saturate(NoL * 10);
+    color += zzmiRim(n, v, l, skin) * ZZMI_RIM_STRENGTH * toonSilhouetteBand(i, v, 4) * saturate(NoL * 10);
 
     // The material map's blue above 0.2 marks emission; below it is the matcap mask, and the game's matcaps are not
     // in mods.
@@ -902,8 +902,7 @@ float3 wwmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     }
 
     // HoyoToon's rim covers the band whose depth steps away past the silhouette, on the lit side.
-    float NoV = saturate(dot(n, v));
-    float3 rim = WWMI_RIM_STRENGTH * toonSilhouetteBand(NoV, 4) * smoothstep(0, 0.5, saturate(NoL));
+    float3 rim = WWMI_RIM_STRENGTH * toonSilhouetteBand(i, v, 4) * smoothstep(0, 0.5, saturate(NoL));
     float3 color = albedo + rim;
     return lerp(color * shadowColor, color, shadowArea) + specular;
 }
