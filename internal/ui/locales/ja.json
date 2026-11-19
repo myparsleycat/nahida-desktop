@@ -1650,7 +1650,6 @@
         "game_textures_other": "ゲーム本来のテクスチャを使う部位 {{count}} 個",
         "game_textures_hint": "ゲーム内の元のテクスチャを使う部位は白で表示されます。クリックで強調表示できます",
         "animation_clip": "アニメーションクリップ",
-        "animation_frame": "フレーム {{current}} / {{end}}",
         "animation_frame_slider": "アニメーションフレーム",
         "animation_play": "再生",
         "animation_pause": "一時停止",

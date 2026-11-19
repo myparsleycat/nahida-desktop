@@ -801,7 +801,7 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 		lane.Child(kit.IconButton(lucide.SkipBack, func() { v.setTrackFrame(track, 0) }, kit.Ghost, kit.Small,
 			kit.Disabled(still), kit.Tooltip(start)).Label(start))
 	}
-	lane.Child(v.animationScrubber(t, track, p, clip, last))
+	lane.Child(v.animationScrubber(t, track, p, last))
 	if full {
 		end := T("page.tools.model_viewer.animation_end")
 		lane.Child(kit.IconButton(lucide.SkipForward, func() { v.setTrackFrame(track, last) }, kit.Ghost, kit.Small,
@@ -865,13 +865,7 @@ func (v *ModelViewer) animationClipMenu(
 
 // animationScrubber shows the clip's frames as ticks with the frame shown as a playhead. A press or drag seeks,
 // and playback pauses while it is dragged and continues from where it is let go.
-func (v *ModelViewer) animationScrubber(
-	t kit.Theme,
-	track viewerTrack,
-	p *viewerPlayback,
-	clip *modelviewer.ModelViewerAnimationClip,
-	last int,
-) *fairy.El {
+func (v *ModelViewer) animationScrubber(t kit.Theme, track viewerTrack, p *viewerPlayback, last int) *fairy.El {
 	const height = 22
 	usable := p.scrubWidth - 2*viewerScrubInset
 	at := func(frame int) float32 {
@@ -918,16 +912,11 @@ func (v *ModelViewer) animationScrubber(
 	scrub.Child(fairy.Box().Absolute().Left(at(p.frame)-1.5).Top(4).Size(3, height-8).Radius(1.5).
 		Fill(t.Primary).FocusRing(3, t.Ring.Alpha(0.5)).FocusFromParent().PassThrough())
 
-	current := clip.FrameStart
-	if p.frame < len(clip.Frames) {
-		current = clip.Frames[p.frame].Index
-	}
 	return scrub.Role(fairy.RoleSlider).
 		RangeValue(float64(p.frame), 0, float64(last), 1, func(frame float64) {
 			v.setTrackFrame(track, int(math.Round(frame)))
 		}).
 		Label(T("page.tools.model_viewer.animation_frame_slider")).
-		Tooltip(T("page.tools.model_viewer.animation_frame", "current", current, "end", clip.FrameEnd)).
 		Cursor(fairy.CursorPointer).
 		Focusable().
 		OnPointerDown(func(e fairy.PointerEvent) { seek(e.LocalX, e.W) }).
