@@ -305,6 +305,58 @@ func TestCharacterMotion_MapPalettesFarJointOrder(t *testing.T) {
 	}
 }
 
+// A palette whose dominant group agrees with a skin's joint order does not keep that order when the order swaps its
+// left and right groups, even though each lies within reach of the joint on the other side, as some ZZMI hair and
+// skirt palettes agree with their skin by the head group's votes.
+func TestCharacterMotion_MapPalettesSwappedJointOrder(t *testing.T) {
+	rest := func(x, y float64) motionTRS {
+		return motionTRS{t: [3]float64{x, y, 0}, r: [4]float64{0, 0, 0, 1}, s: [3]float64{1, 1, 1}}
+	}
+	m := &CharacterMotion{
+		flipX: true,
+		nodes: []motionNode{
+			{parent: -1, rest: rest(0, 0)},
+			{parent: 0, rest: rest(0.08, 0)},
+			{parent: 0, rest: rest(-0.08, 0)},
+		},
+		skins: [][]int{{0, 2, 1}},
+	}
+	locals := []motionTRS{m.nodes[0].rest, m.nodes[1].rest, m.nodes[2].rest}
+	worlds, err := m.worlds(locals, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range m.nodes {
+		m.nodes[i].world = worlds[i]
+	}
+	if err := m.bindSkeleton(motionIdentity()); err != nil {
+		t.Fatal(err)
+	}
+	// The left joint lies at mod -X, the right joint at mod +X.
+	at := map[int32][3]float32{0: {0, 0.05, 0}, 1: {-0.08, 0, 0}, 2: {0.08, 0, 0}}
+	for node, p := range at {
+		for _, z := range []float32{-0.01, 0, 0.01} {
+			m.refs = append(m.refs, motionReference{
+				position: [3]float32{p[0], p[1], z}, nodes: [4]int32{node, -1, -1, -1}, weights: [4]float32{1},
+			})
+		}
+	}
+
+	var palette MotionPalette
+	for _, z := range []float32{-0.01, -0.006, -0.003, 0, 0.003, 0.006, 0.01} {
+		addTestVertices(&palette, fullTestWeight(0), [3]float32{0, 0.05, z})
+	}
+	addTestVertices(&palette, fullTestWeight(1), [3]float32{-0.08, 0, -0.005}, [3]float32{-0.08, 0, 0.005})
+	addTestVertices(&palette, fullTestWeight(2), [3]float32{0.08, 0, -0.005}, [3]float32{0.08, 0, 0.005})
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{0, 1, 2}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
 // A palette lying mostly on one skin follows that skin's bones where another skin's mesh lies closer, as a dress's
 // back bow does under long hair.
 func TestCharacterMotion_MapPalettesOwnSkin(t *testing.T) {

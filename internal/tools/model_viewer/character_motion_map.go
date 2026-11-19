@@ -45,6 +45,13 @@ const (
 	// motionReachLimit of their joint for the palette to keep that skin's joint order. Hair longer than the source
 	// model's still roots at its bones, but its strongly weighted vertices can hang far below the bone chain.
 	motionIdentityFarShare = 0.25
+	// motionDisplacedRatio and motionDisplacedMargin, in metres, also put a group off a joint of a skin's joint order
+	// when the joint's bone lies more than motionDisplacedRatio times as far from the group's centre as the bone of the
+	// node its votes favour, plus motionDisplacedMargin, and neither node lies below the other. Some ZZMI hair, skirt
+	// and tail palettes agree by vote mass with a joint order that swaps their left and right groups; the bone on the
+	// other side lies within motionReachLimit of such a group, but much farther than the bone on its own side.
+	motionDisplacedRatio  = 2.0
+	motionDisplacedMargin = 0.03
 	// motionSeamDistance is how close, in metres, vertices of two palettes lie to be one seam vertex.
 	motionSeamDistance = 0.0001
 	// motionSeamWeight is how far apart, as a fraction, two bone weights of a seam vertex may be to pair their groups.
@@ -375,6 +382,18 @@ func (m *CharacterMotion) identitySkin(
 	strong := strongVertices(palette, vertices, groups)
 	limit := m.fromMetres(motionReachLimit)
 	reaches := map[int]float64{}
+	margin := m.fromMetres(motionDisplacedMargin)
+	// favoured holds, by group, the node its votes favour, or -1 for a group without votes.
+	favoured := make([]int, groups)
+	for group := range favoured {
+		favoured[group] = -1
+		bestScore := 0.0
+		for n, score := range votes.scores[group*nodes : (group+1)*nodes] {
+			if score > bestScore {
+				favoured[group], bestScore = n, score
+			}
+		}
+	}
 	off := func(group, node int) bool {
 		key := group*nodes + node
 		reach, ok := reaches[key]
@@ -382,7 +401,7 @@ func (m *CharacterMotion) identitySkin(
 			reach = boneReach(&bones[node], palette.Positions, strong[group])
 			reaches[key] = reach
 		}
-		return reach > limit
+		return reach > limit || m.displaced(votes.centres[group], bones, favoured[group], node, margin)
 	}
 	var fitting []int
 	fewest := math.MaxInt
@@ -436,6 +455,29 @@ func (m *CharacterMotion) identitySkin(
 		}
 	}
 	return best
+}
+
+// displaced reports whether a group with the weighted centre centre lies off node by the measure of
+// motionDisplacedRatio, best being the node the group's votes favour or -1. margin is in mod units.
+func (m *CharacterMotion) displaced(centre [4]float64, bones []motionBone, best, node int, margin float64) bool {
+	if centre[3] <= 0 || best < 0 || m.lineal(best, node) {
+		return false
+	}
+	p := [3]float64{centre[0] / centre[3], centre[1] / centre[3], centre[2] / centre[3]}
+	return bones[node].distance(p) > motionDisplacedRatio*bones[best].distance(p)+margin
+}
+
+// lineal reports whether a and b are one node or one lies below the other.
+func (m *CharacterMotion) lineal(a, b int) bool {
+	below := func(node, ancestor int) bool {
+		for ; node >= 0; node = m.nodes[node].parent {
+			if node == ancestor {
+				return true
+			}
+		}
+		return false
+	}
+	return below(a, b) || below(b, a)
 }
 
 func absInt(x int) int {
