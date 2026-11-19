@@ -568,6 +568,15 @@ func seamTestPoints(y float32, n int) [][3]float32 {
 
 var viewerMotionTestIdentity = [12]float32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}
 
+// EFMI binds rigid parts such as the eyes with a stride 4 blend buffer: one group per vertex and no weights.
+func TestDecodeModelViewerMeshBlendSingleGroup(t *testing.T) {
+	blend := decodeModelViewerMeshBlend([]byte{3, 0, 0, 0, 0, 0, 0, 0}, 4, 0, nil, 2)
+	want := []uint16{3, 0, 0, 0, 65535, 0, 0, 0, 0, 0, 0, 0, 65535, 0, 0, 0}
+	if !slices.Equal(blend, want) {
+		t.Fatalf("blend = %v, want %v", blend, want)
+	}
+}
+
 // A WWMI draw binds its blend buffer as vb4, eight groups then eight weights per row, of which the four strongest
 // are kept. Without a vb4 binding it is the BlendBuffer beside the PositionBuffer.
 func TestResolveModelViewerBlendSourceWWMI(t *testing.T) {

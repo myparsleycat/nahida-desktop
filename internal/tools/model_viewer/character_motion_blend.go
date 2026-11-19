@@ -110,13 +110,14 @@ func wwmiComponentPalette(palette, component string) string {
 }
 
 // modelViewerBlendStride reports the blend layouts read: four float32 weights and four int32 groups (GIMI,
-// SRMI, ZZMI), or four UNORM16 weights followed by four uint16 (EFMI) or four uint8 groups (EFMI compact); for
-// WWMI, the strides of the layouts its blend source names.
+// SRMI, ZZMI), four UNORM16 weights followed by four uint16 (EFMI) or four uint8 groups (EFMI compact), or one
+// uint32 group without weights that binds the vertex rigidly (EFMI rigid parts); for WWMI, the strides of the
+// layouts its blend source names.
 func modelViewerBlendStride(stride int, wwmi bool) bool {
 	if wwmi {
 		return stride == 8 || stride == 16 || stride == 32
 	}
-	return stride == 32 || stride == 16 || stride == 12
+	return stride == 32 || stride == 16 || stride == 12 || stride == 4
 }
 
 // readModelViewerMeshBlend returns four groups, then four UNORM16 weights, per mesh vertex; nil when the buffer
@@ -179,6 +180,11 @@ func decodeModelViewerMeshBlend(
 			case 12:
 				weights[k] = float64(binary.LittleEndian.Uint16(record[k*2:])) / 65535
 				groups[k] = int64(record[8+k])
+			case 4:
+				if k == 0 {
+					weights[k] = 1
+					groups[k] = int64(binary.LittleEndian.Uint32(record))
+				}
 			}
 			if math.IsNaN(weights[k]) || weights[k] < 0 || groups[k] < 0 || groups[k] > math.MaxUint16 {
 				weights[k] = 0
