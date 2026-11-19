@@ -57,7 +57,7 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 - Application-owned files live under `~/.nahida-desktop` and are addressed through `appdata.Store` (`Resolve`, `EnsureDir`, and the directory constants in `internal/appdata`). Do not derive those paths from `os.UserHomeDir` in feature code.
 - Extract archives of user or unknown origin with `infra.Archive`, which detects the container by content and rejects unsafe entry paths. Code that reads a zip directly must validate entry paths itself.
 - Watch files and directories with `internal/watcher` (debounced, settled `ReadDirectoryChangesW`). Do not add another watching library.
-- Sort names shown to the user with `platform.NewLocaleLess`, not byte order.
+- Sort names shown to the user with the comparator for the `general.nameSortPolicy` setting, not byte order or `platform.NewLocaleLess`: `Shell.nameCompare` in `internal/ui`, `platform.NewNameCompare` with the policy read through settings elsewhere.
 
 ### Persistence
 

@@ -43,6 +43,10 @@ func (s testSettings) GetCopyShaderFixesOnEnable(context.Context) (bool, error) 
 	return false, nil
 }
 
+func (s testSettings) NameSortIgnoresSpacing(context.Context) (bool, error) {
+	return true, nil
+}
+
 func newTestMod(t *testing.T, settings testSettings) (*Mod, string) {
 	t.Helper()
 	root := t.TempDir()

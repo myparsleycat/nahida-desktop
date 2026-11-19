@@ -186,7 +186,8 @@ func (s *Shell) outlineDialog(cx *fairy.Cx) {
 	}
 	if d.inspection != nil {
 		files := fairy.Col().Gap(16)
-		for _, file := range d.inspection.Files {
+		byPath := func(f efmioutline.OutlineFile) string { return f.Path }
+		for _, file := range sortedByName(d.inspection.Files, byPath, s.nameCompare()) {
 			files.Child(s.outlineFileCard(d, file))
 		}
 		body.Child(fairy.Col(files).MaxH(480).ScrollY())

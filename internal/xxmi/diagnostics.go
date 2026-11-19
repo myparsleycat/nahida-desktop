@@ -344,7 +344,7 @@ func (x *XXMI) EndDiagnostics(ctx context.Context, importer string) (returnErr e
 }
 
 // ListDiagnosticsMods lists the folders a report can attach directly inside parent, a slash-separated path below
-// the importer's Mods folder or "" for the Mods folder itself, the enabled ones first.
+// the importer's Mods folder or "" for the Mods folder itself.
 func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer, parent string) ([]DiagnosticsMod, error) {
 	if parent != "" {
 		local := filepath.FromSlash(parent)
@@ -407,20 +407,6 @@ func (x *XXMI) ListDiagnosticsMods(ctx context.Context, importer, parent string)
 			HasChildren: hasModSubfolder(path),
 		})
 	}
-	less := platform.NewLocaleLess()
-	slices.SortFunc(mods, func(a, b DiagnosticsMod) int {
-		switch {
-		case a.Disabled != b.Disabled && a.Disabled:
-			return 1
-		case a.Disabled != b.Disabled:
-			return -1
-		case less(a.Name, b.Name):
-			return -1
-		case less(b.Name, a.Name):
-			return 1
-		}
-		return 0
-	})
 	return mods, nil
 }
 

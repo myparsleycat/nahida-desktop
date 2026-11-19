@@ -17,7 +17,6 @@ import (
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
-	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/transfer"
 )
 
@@ -368,38 +367,20 @@ func (s *Shell) driveSorted(v *driveView) []driveItem {
 	if v.listing == nil {
 		return nil
 	}
-	policy := "natural_ignore_spacing"
-	if s.settingsLoaded(setting.KeyDriveNameSortPolicy) &&
-		s.stringSetting(setting.KeyDriveNameSortPolicy) == "natural" {
-		policy = "natural"
-	}
-	key := v.listed + "\x00" + s.drive.sortField + "\x00" + policy
+	key := v.listed + "\x00" + s.drive.sortField + "\x00" + s.nameSortPolicy()
 	if s.drive.sortDesc {
 		key += "\x00desc"
 	}
 	if key == v.sortedFor {
 		return v.sorted
 	}
-	v.sorted = sortDriveItems(
-		v.listing.children,
-		s.drive.sortField,
-		s.drive.sortDesc,
-		policy,
-		platform.NewNaturalCompare(),
-	)
+	v.sorted = sortDriveItems(v.listing.children, s.drive.sortField, s.drive.sortDesc, s.nameCompare())
 	v.sortedFor = key
 	return v.sorted
 }
 
-// sortDriveItems orders folders before files, then by field. Names compare naturally, and first without white
-// space under the natural_ignore_spacing policy.
-func sortDriveItems(
-	items []driveItem,
-	field string,
-	desc bool,
-	policy string,
-	compare func(a, b string) int,
-) []driveItem {
+// sortDriveItems orders folders before files, then by field, comparing names with compare.
+func sortDriveItems(items []driveItem, field string, desc bool, compare func(a, b string) int) []driveItem {
 	sorted := slices.Clone(items)
 	sign := 1
 	if desc {
@@ -418,18 +399,9 @@ func sortDriveItems(
 		case "date":
 			return sign * a.Updated.Compare(b.Updated)
 		}
-		if policy == "natural_ignore_spacing" {
-			if c := compare(stripSpaces(a.Name), stripSpaces(b.Name)); c != 0 {
-				return sign * c
-			}
-		}
 		return sign * compare(a.Name, b.Name)
 	})
 	return sorted
-}
-
-func stripSpaces(text string) string {
-	return strings.Join(strings.Fields(text), "")
 }
 
 // driveSubdirSearch reports whether the search looks in subfolders. The shared drives list has none to search.

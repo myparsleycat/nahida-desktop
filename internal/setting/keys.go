@@ -2,7 +2,7 @@ package setting
 
 // Public keys are the contract with internal/ui and with values stored by earlier releases.
 // Storage keys follow a single convention, {scope}_{snake_case}, derived from the
-// public key. Electron keys that differ are migrated once during initialization.
+// public key. Electron keys and storage keys of moved settings are migrated during initialization.
 
 const (
 	KeyGeneralRunOnStartup                       = "general.runOnStartup"
@@ -20,6 +20,7 @@ const (
 	KeyGeneralTheme                              = "general.theme"
 	KeyGeneralWindowBackdrop                     = "general.windowBackdrop"
 	KeyGeneralBackdropBlur                       = "general.backdropBlur"
+	KeyGeneralNameSortPolicy                     = "general.nameSortPolicy"
 
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
@@ -53,7 +54,6 @@ const (
 	KeyTransferDownloadBandwidthLimitMibps = "transfer.downloadBandwidthLimitMibps"
 	KeyTransferUploadConcurrency           = "transfer.uploadConcurrency"
 
-	KeyDriveNameSortPolicy   = "drive.nameSortPolicy"
 	KeyDriveAutoTryPasswords = "drive.autoTryPasswords"
 	KeyDrivePasswordList     = "drive.passwordList"
 
@@ -133,6 +133,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralTheme, ScopeGeneral, "general_theme"},
 	{KeyGeneralWindowBackdrop, ScopeGeneral, "general_window_backdrop"},
 	{KeyGeneralBackdropBlur, ScopeGeneral, "general_backdrop_blur"},
+	{KeyGeneralNameSortPolicy, ScopeGeneral, "general_name_sort_policy"},
 
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},
@@ -166,7 +167,6 @@ var allDefinitions = []Definition{
 	{KeyTransferDownloadBandwidthLimitMibps, ScopeTransfer, "transfer_download_bandwidth_limit_mibps"},
 	{KeyTransferUploadConcurrency, ScopeTransfer, "transfer_upload_concurrency"},
 
-	{KeyDriveNameSortPolicy, ScopeDrive, "drive_name_sort_policy"},
 	{KeyDriveAutoTryPasswords, ScopeDrive, "drive_auto_try_passwords"},
 	{KeyDrivePasswordList, ScopeDrive, "drive_password_list"},
 
@@ -211,7 +211,7 @@ type storageKeyMigration struct {
 	Destination string
 }
 
-var electronStorageKeyMigrations = []storageKeyMigration{
+var legacyStorageKeyMigrations = []storageKeyMigration{
 	{"runOnStartup", "general_run_on_startup"},
 	{"language", "general_language"},
 	{"autoUpdate", "general_auto_update_mode"},
@@ -224,6 +224,7 @@ var electronStorageKeyMigrations = []storageKeyMigration{
 	{"titlebarActivityBadgeClickNavigate", "general_titlebar_activity_badge_click_navigate"},
 	{"bounds", storageBounds},
 	{"settingBounds", storageSettingBounds},
+	{"drive_name_sort_policy", "general_name_sort_policy"},
 }
 
 var definitionsByKey map[string]Definition

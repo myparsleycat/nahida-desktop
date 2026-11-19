@@ -164,8 +164,9 @@ func (s *Shell) loadFixLists() {
 func (s *Shell) fixMenuItems(path string) []kit.MenuItem {
 	r := &s.mods.fix
 	s.loadFixLists()
+	compare := s.nameCompare()
 	presets := make([]kit.MenuItem, 0, len(r.presets))
-	for _, preset := range r.presets {
+	for _, preset := range sortedByName(r.presets, func(row db.ScriptPresetWithScripts) string { return row.Name }, compare) {
 		id := preset.ID
 		presets = append(presets, kit.MenuItem{Label: preset.Name, OnClick: func() { s.runFixScript(true, id, path) }})
 	}
@@ -173,7 +174,7 @@ func (s *Shell) fixMenuItems(path string) []kit.MenuItem {
 		presets = append(presets, kit.MenuItem{Label: T("page.mod.context-menu.no_presets"), Disabled: true})
 	}
 	scripts := make([]kit.MenuItem, 0, len(r.scripts))
-	for _, script := range r.scripts {
+	for _, script := range sortedByName(r.scripts, func(row db.ScriptBasicRow) string { return row.Name }, compare) {
 		id := script.ID
 		scripts = append(scripts, kit.MenuItem{Label: script.Name, OnClick: func() { s.runFixScript(false, id, path) }})
 	}

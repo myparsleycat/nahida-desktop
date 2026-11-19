@@ -62,7 +62,7 @@ func (s *Shell) activeClassification() *mod.Classification {
 func modCount(g mod.FolderGroup) int { return g.ModCount }
 
 // visibleFolders filters and sorts folders as the sidebar menu asks.
-func (s *Shell) visibleFolders(groups []mod.FolderGroup, less func(a, b string) bool) []mod.FolderGroup {
+func (s *Shell) visibleFolders(groups []mod.FolderGroup, compare func(a, b string) int) []mod.FolderGroup {
 	m := &s.mods
 	out := make([]mod.FolderGroup, 0, len(groups))
 	for _, g := range groups {
@@ -78,12 +78,7 @@ func (s *Shell) visibleFolders(groups []mod.FolderGroup, less func(a, b string) 
 		case "enabled-mod-count":
 			c = cmp.Compare(a.EnabledModCount, b.EnabledModCount)
 		default:
-			switch {
-			case less(a.Name, b.Name):
-				c = -1
-			case less(b.Name, a.Name):
-				c = 1
-			}
+			c = compare(a.Name, b.Name)
 		}
 		if m.folderDesc {
 			return -c
@@ -98,7 +93,7 @@ func (s *Shell) visibleFolders(groups []mod.FolderGroup, less func(a, b string) 
 // matching folders with the parents that lead to them.
 func (s *Shell) folderRows() []folderRow {
 	m := &s.mods
-	less := platform.NewLocaleLess()
+	compare := s.nameCompare()
 	query := strings.ToLower(strings.TrimSpace(m.sidebarSearch))
 	searching := query != ""
 	matches := func(g mod.FolderGroup) bool { return strings.Contains(strings.ToLower(g.Name), query) }
@@ -138,7 +133,7 @@ func (s *Shell) folderRows() []folderRow {
 		children = slices.DeleteFunc(slices.Clone(children), func(c mod.FolderGroup) bool {
 			return classifiedPaths[c.Path]
 		})
-		children = s.visibleFolders(children, less)
+		children = s.visibleFolders(children, compare)
 		showParent := !searching || matches(g)
 		if !showParent && len(children) == 0 {
 			return
@@ -152,7 +147,7 @@ func (s *Shell) folderRows() []folderRow {
 	}
 
 	if classification == nil {
-		for _, g := range s.visibleFolders(m.characters, less) {
+		for _, g := range s.visibleFolders(m.characters, compare) {
 			visit(g, 0, "", "")
 		}
 		return rows
@@ -184,7 +179,7 @@ func (s *Shell) folderRows() []folderRow {
 	}
 	sections = append(sections, unassigned)
 	for _, sec := range sections {
-		visible := s.visibleFolders(sec.groups, less)
+		visible := s.visibleFolders(sec.groups, compare)
 		if sec == unassigned && len(visible) == 0 {
 			continue
 		}

@@ -114,6 +114,7 @@ type modFilterKey struct {
 	sortType  string
 	desc      bool
 	downloads string
+	nameSort  string
 }
 
 // filteredMods sorts and filters the listing as the React screen did: mods being downloaded first, then enabled
@@ -124,7 +125,7 @@ func (s *Shell) filteredMods() []mod.ModInfo {
 		return nil
 	}
 	downloads := s.modDownloadsIn(m.listing.Path)
-	key := modFilterKey{m.listing, m.search, m.sortType, m.sortDesc, downloadIdentity(downloads)}
+	key := modFilterKey{m.listing, m.search, m.sortType, m.sortDesc, downloadIdentity(downloads), s.nameSortPolicy()}
 	if m.filterKey == key {
 		return m.filtered
 	}
@@ -150,7 +151,7 @@ func (s *Shell) filteredMods() []mod.ModInfo {
 		}
 		items = append(items, scored{info, score})
 	}
-	less := platform.NewLocaleLess()
+	compare := s.nameCompare()
 	slices.SortStableFunc(items, func(a, b scored) int {
 		if da, db := downloading[strings.ToLower(a.mod.Path)], downloading[strings.ToLower(b.mod.Path)]; da != db {
 			if da {
@@ -174,12 +175,7 @@ func (s *Shell) filteredMods() []mod.ModInfo {
 		case "size":
 			c = cmp.Compare(a.mod.Size, b.mod.Size)
 		default:
-			switch {
-			case less(a.mod.Name, b.mod.Name):
-				c = -1
-			case less(b.mod.Name, a.mod.Name):
-				c = 1
-			}
+			c = compare(a.mod.Name, b.mod.Name)
 		}
 		if m.sortDesc {
 			return -c
@@ -872,7 +868,18 @@ func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {
 	if t.Dark {
 		groupFill, badgeBorder = t.Foreground.Alpha(0.05), fairy.RGBA(255, 255, 255, 0.15)
 	}
-	for i, ini := range info.Inis {
+	inis := slices.Clone(info.Inis)
+	compare := s.nameCompare()
+	slices.SortStableFunc(inis, func(a, b mod.IniResult) int {
+		switch {
+		case a.HasToggleKey == b.HasToggleKey:
+			return compare(a.Name, b.Name)
+		case a.HasToggleKey:
+			return -1
+		}
+		return 1
+	})
+	for i, ini := range inis {
 		if i > 0 {
 			list.Child(kit.Separator())
 		}

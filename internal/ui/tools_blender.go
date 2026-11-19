@@ -142,7 +142,7 @@ func (s *Shell) blenderLinkRow(link blenderlink.LinkState) *fairy.El {
 		}
 	}, kit.Placeholder(T(prefix+"game")), kit.Disabled(sceneGame != "")).MinW(120)
 	characterSelect := kit.Combobox("tools.blender_link.character."+id, choice.character,
-		characterItems(choice.importer), func(character string) { choice.character = character },
+		characterItems(choice.importer, s.nameCompare()), func(character string) { choice.character = character },
 		kit.Placeholder(T(prefix+"character")), kit.Disabled(choice.importer == "")).MinW(224)
 
 	session, label := link.Session, scenes.SceneName(link.Session)

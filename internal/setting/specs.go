@@ -425,16 +425,16 @@ func buildSpecs() map[string]spec {
 			transferUploadConcurrencyMax,
 		),
 
-		KeyDriveNameSortPolicy: {
-			def: definitionsByKey[KeyDriveNameSortPolicy],
+		KeyGeneralNameSortPolicy: {
+			def: definitionsByKey[KeyGeneralNameSortPolicy],
 			getDefault: func(*Setting) any {
-				return normalizeDriveNameSortPolicy("")
+				return normalizeNameSortPolicy("")
 			},
 			fromStored: func(_ *Setting, value *string) any {
-				return normalizeDriveNameSortPolicy(lo.FromPtr(value))
+				return normalizeNameSortPolicy(lo.FromPtr(value))
 			},
 			normalize: func(_ *Setting, value any) any {
-				return normalizeDriveNameSortPolicy(asString(value))
+				return normalizeNameSortPolicy(asString(value))
 			},
 		},
 		KeyDriveAutoTryPasswords: boolSpec(definitionsByKey[KeyDriveAutoTryPasswords], false),

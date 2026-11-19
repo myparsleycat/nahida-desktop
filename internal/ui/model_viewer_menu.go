@@ -865,13 +865,15 @@ func (v *ModelViewer) toonMenu() []kit.MenuItem {
 		if listed != nil {
 			ramps = listed.Ramps
 		}
-		for _, ramp := range ramps {
-			label := ramp.Name
-			if len(label) > len("avatar_") && strings.EqualFold(label[:len("avatar_")], "avatar_") {
-				label = label[len("avatar_"):]
+		rampLabel := func(ramp modelviewer.GenshinToonRampTransport) string {
+			if len(ramp.Name) > len("avatar_") && strings.EqualFold(ramp.Name[:len("avatar_")], "avatar_") {
+				return ramp.Name[len("avatar_"):]
 			}
+			return ramp.Name
+		}
+		for _, ramp := range sortedByName(ramps, rampLabel, v.shell.nameCompare()) {
 			items = append(items, kit.MenuItem{
-				Label: label, Radio: true, Checked: style.Ramp == ramp.Name && !style.rampAuto,
+				Label: rampLabel(ramp), Radio: true, Checked: style.Ramp == ramp.Name && !style.rampAuto,
 				OnClick: update(func(s *viewerToonStyle) { s.Ramp, s.rampAuto = ramp.Name, false }),
 			})
 		}

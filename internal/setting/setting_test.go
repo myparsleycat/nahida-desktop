@@ -150,7 +150,7 @@ END`); err != nil {
 	}
 }
 
-func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T) {
+func TestOpenMigratesLegacyStorageKeysWithoutOverwritingGoValues(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "data.db")
@@ -162,8 +162,8 @@ func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T)
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for index, migration := range electronStorageKeyMigrations {
-		value := electronMigrationTestValue(migration.Source, index)
+	for index, migration := range legacyStorageKeyMigrations {
+		value := legacyMigrationTestValue(migration.Source, index)
 		if err := client.Settings.Upsert(ctx, migration.Source, &value); err != nil {
 			t.Fatal(err)
 		}
@@ -181,7 +181,7 @@ func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T)
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	for index, migration := range electronStorageKeyMigrations {
+	for index, migration := range legacyStorageKeyMigrations {
 		if legacy, err := s.Client().Settings.Get(ctx, migration.Source); err != nil || legacy != nil {
 			t.Fatalf("legacy %q = %#v, %v", migration.Source, legacy, err)
 		}
@@ -189,7 +189,7 @@ func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T)
 		if err != nil || row == nil || row.Value == nil {
 			t.Fatalf("destination %q = %#v, %v", migration.Destination, row, err)
 		}
-		want := electronMigrationTestValue(migration.Source, index)
+		want := legacyMigrationTestValue(migration.Source, index)
 		if migration.Destination == "general_log_level" {
 			want = currentLogLevel
 		}
@@ -201,7 +201,7 @@ func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T)
 	if err != nil || language != "ja" {
 		t.Fatalf("language = %q, %v", language, err)
 	}
-	if err := s.MigrateElectronStorage(ctx); err != nil {
+	if err := s.MigrateLegacyStorage(ctx); err != nil {
 		t.Fatalf("idempotent migration: %v", err)
 	}
 	bounds, err := s.GetBounds(ctx)
@@ -214,7 +214,7 @@ func TestOpenMigratesElectronStorageKeysWithoutOverwritingGoValues(t *testing.T)
 	}
 }
 
-func electronMigrationTestValue(source string, index int) string {
+func legacyMigrationTestValue(source string, index int) string {
 	switch source {
 	case "language":
 		return "ja"

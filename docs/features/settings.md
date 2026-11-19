@@ -25,6 +25,15 @@ The `Mod` section is described in [Mod Settings](/features/mod-manager/settings)
 
 [Persist Toggles](/features/mod-tools/persist-toggles) and `Toggle Viewer Auto Generate` in Toggle Viewer Generator need the app to keep running. Turning either on also turns on `Run in background`, and turning `Run in background` off while either is on asks for confirmation.
 
+### Sorting
+
+| Setting | Default | Description |
+|---|---|---|
+| `Name sort policy` | `Natural sort + ignore spaces` | How spaces and numbers are handled when lists are sorted by name. Applies to every list sorted by name, including Drive, the mod sidebar and mod list, presets, and Fix Tool. |
+
+- `Natural sort + ignore spaces`: compares numbers by value, and compares names without spaces first.
+- `Default natural sort`: compares numbers by value.
+
 ### Updates
 
 | Setting | Default | Description |
@@ -51,7 +60,6 @@ Settings for [Drive and Shared Drive](/features/#drive).
 
 | Setting | Default | Description |
 |---|---|---|
-| `Name sort policy` | `Natural sort + ignore spaces` | How spaces and numbers are handled when drive items are sorted by name: `Natural sort + ignore spaces` or `Default natural sort`. |
 | `Auto-try passwords` | Off | Tries the saved passwords when a link that requires a password is resolved. |
 | `Password list` | Empty | The passwords to try. Up to 10 can be saved. Click `Add` to add one. |
 

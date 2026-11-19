@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -79,8 +80,8 @@ func (m *Mod) GetPresets(ctx context.Context, game string) ([]Preset, error) {
 	for i := range rows {
 		result[i] = presetFromRow(rows[i])
 	}
-	less := newLocaleLess()
-	sort.SliceStable(result, func(i, j int) bool { return less(result[i].Name, result[j].Name) })
+	compare := m.nameCompare(ctx)
+	slices.SortStableFunc(result, func(a, b Preset) int { return compare(a.Name, b.Name) })
 	return result, nil
 }
 
@@ -89,7 +90,7 @@ func (m *Mod) GetPresetCreateConflicts(ctx context.Context, game string) ([]Pres
 	if err != nil {
 		return nil, err
 	}
-	return snapshotConflicts(items), nil
+	return snapshotConflicts(items, m.nameCompare(ctx)), nil
 }
 
 func (m *Mod) CreatePreset(
@@ -118,7 +119,8 @@ func (m *Mod) CreatePreset(
 	if err != nil {
 		return Preset{}, err
 	}
-	conflicts := snapshotConflicts(items)
+	compare := m.nameCompare(ctx)
+	conflicts := snapshotConflicts(items, compare)
 	if len(conflicts) > 0 && !resolveConflicts {
 		return Preset{}, errors.New("PRESET_CONFLICTS_EXIST")
 	}
@@ -130,7 +132,7 @@ func (m *Mod) CreatePreset(
 		if err != nil {
 			return Preset{}, err
 		}
-		if len(snapshotConflicts(items)) > 0 {
+		if len(snapshotConflicts(items, compare)) > 0 {
 			return Preset{}, errors.New("PRESET_CONFLICT_RESOLUTION_FAILED")
 		}
 	}
@@ -334,7 +336,7 @@ func (m *Mod) presetSnapshot(ctx context.Context, game string, strict bool) ([]p
 	return items, nil
 }
 
-func snapshotConflicts(items []presetSnapshotItem) []PresetConflict {
+func snapshotConflicts(items []presetSnapshotItem, compare func(a, b string) int) []PresetConflict {
 	byKey := map[string][]presetSnapshotItem{}
 	for _, item := range items {
 		byKey[item.ModKey] = append(byKey[item.ModKey], item)
@@ -344,8 +346,10 @@ func snapshotConflicts(items []presetSnapshotItem) []PresetConflict {
 		if len(values) < 2 {
 			continue
 		}
-		less := newLocaleLess()
-		sort.SliceStable(values, func(i, j int) bool { return less(values[i].RelativePath, values[j].RelativePath) })
+		slices.SortStableFunc(
+			values,
+			func(a, b presetSnapshotItem) int { return compare(a.RelativePath, b.RelativePath) },
+		)
 		conflict := PresetConflict{ModKey: key, Candidates: make([]PresetConflictCandidate, len(values))}
 		for i, item := range values {
 			conflict.Candidates[i] = PresetConflictCandidate{
@@ -355,8 +359,7 @@ func snapshotConflicts(items []presetSnapshotItem) []PresetConflict {
 		}
 		result = append(result, conflict)
 	}
-	less := newLocaleLess()
-	sort.SliceStable(result, func(i, j int) bool { return less(result[i].ModKey, result[j].ModKey) })
+	slices.SortStableFunc(result, func(a, b PresetConflict) int { return compare(a.ModKey, b.ModKey) })
 	return result
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/myparsleycat/fairy/motion"
 
 	"nahida.live/desktop/internal/db"
-	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools"
 )
 
@@ -67,21 +66,6 @@ func (s *Shell) fixToolPage(cx *fairy.Cx) *fairy.El {
 	).Gap(12).Grow(1).MinH(0))
 }
 
-func sortedByName[T any](items []T, name func(T) string) []T {
-	less := platform.NewLocaleLess()
-	out := slices.Clone(items)
-	slices.SortStableFunc(out, func(a, b T) int {
-		switch {
-		case less(name(a), name(b)):
-			return -1
-		case less(name(b), name(a)):
-			return 1
-		}
-		return 0
-	})
-	return out
-}
-
 const fixScriptsKey = "tools.fix.scripts"
 
 func fixPaneHeader(title, description string, trailing ...*fairy.El) *fairy.El {
@@ -109,7 +93,7 @@ func (s *Shell) fixPresetList() *fairy.El {
 	if len(presets.value) == 0 {
 		list.Child(fairy.Text(T("page.tools.fix-tool-manager.presets.empty")).FontSize(14).Color(t.MutedForeground))
 	}
-	for _, preset := range sortedByName(presets.value, func(p db.ScriptPresetWithScripts) string { return p.Name }) {
+	for _, preset := range sortedByName(presets.value, func(p db.ScriptPresetWithScripts) string { return p.Name }, s.nameCompare()) {
 		id, name := preset.ID, preset.Name
 		list.Child(fairy.Row(
 			fairy.Text(name).FontSize(14).Medium().Ellipsis().Grow(1).MinW(0).TooltipWhenTruncated(),
@@ -163,7 +147,7 @@ func (s *Shell) fixScriptList(cx *fairy.Cx) *fairy.El {
 	scripts := fetch(s, &f.scripts, s.deps.Tools.GetScripts)
 	query := strings.ToLower(f.search)
 	var visible []db.ScriptBasicRow
-	for _, script := range sortedByName(scripts.value, func(r db.ScriptBasicRow) string { return r.Name }) {
+	for _, script := range sortedByName(scripts.value, func(r db.ScriptBasicRow) string { return r.Name }, s.nameCompare()) {
 		picked := slices.ContainsFunc(f.picked, func(p db.ScriptBasicRow) bool { return p.ID == script.ID })
 		if !picked && strings.Contains(strings.ToLower(script.Name), query) {
 			visible = append(visible, script)

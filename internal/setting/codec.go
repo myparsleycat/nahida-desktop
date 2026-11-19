@@ -56,16 +56,18 @@ const (
 	defaultTouchProfileLlmModel     = "openai/gpt-5.6-luna"
 	defaultTouchProfileLlmReasoning = "auto"
 
-	defaultDriveNameSortPolicy = "natural_ignore_spacing"
-	defaultArchiveExtractPath  = "flatten_single_root"
-	defaultSidebarLayout       = "row"
-	defaultModGridLayout       = "responsive"
-	defaultDisabledPrefix      = "space"
-	defaultAutoUpdateMode      = "auto"
+	defaultArchiveExtractPath = "flatten_single_root"
+	defaultSidebarLayout      = "row"
+	defaultModGridLayout      = "responsive"
+	defaultDisabledPrefix     = "space"
+	defaultAutoUpdateMode     = "auto"
 
 	ThemeSystem = "system"
 	ThemeLight  = "light"
 	ThemeDark   = "dark"
+
+	NameSortNaturalIgnoreSpacing = "natural_ignore_spacing"
+	NameSortNatural              = "natural"
 )
 
 var (
@@ -76,7 +78,7 @@ var (
 	modCompressionMethods     = []string{"zstd", "xpress4k"}
 	togglePresetStores        = []string{TogglePresetStoreMetadata, TogglePresetStoreDatabase}
 	downloadSources           = []string{"gamebanana", "nahidaLive", "hui", "drive"}
-	driveNameSortPolicies     = []string{"natural_ignore_spacing", "natural"}
+	nameSortPolicies          = []string{NameSortNaturalIgnoreSpacing, NameSortNatural}
 	touchProfileLlmProtocols  = []string{"openai-response", "openai-compatible", "anthropic"}
 	touchProfileLlmReasonings = []string{"auto", "low", "medium", "high"}
 	modelViewerToneMappings   = []string{"neutral", "aces", "none"}
@@ -281,8 +283,8 @@ func parsePasswordList(value *string) []string {
 	return normalizePasswordList(parsed)
 }
 
-func normalizeDriveNameSortPolicy(value string) string {
-	return normalizeEnum(value, driveNameSortPolicies, defaultDriveNameSortPolicy)
+func normalizeNameSortPolicy(value string) string {
+	return normalizeEnum(value, nameSortPolicies, NameSortNaturalIgnoreSpacing)
 }
 
 func isTouchProfileLlmProtocol(value string) bool {

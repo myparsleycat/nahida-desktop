@@ -15,6 +15,7 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
 
@@ -240,6 +241,16 @@ func (s *Shell) settingChanged(key string, value any) {
 	if strings.HasPrefix(key, "backup.") && s.backup.overview != nil {
 		s.loadBackupOverview()
 	}
+	// The mod service sorts preset lists by this policy when it returns them.
+	if key == setting.KeyGeneralNameSortPolicy {
+		if s.mods.game != "" {
+			s.loadPresets()
+		}
+		s.loadTogglePresets()
+		for v := range s.viewers {
+			v.loadTogglePresets()
+		}
+	}
 }
 
 // reloadSettings drops what the screens cached after a raw edit in the advanced section, which bypasses the
@@ -311,6 +322,26 @@ func (s *Shell) stringsSetting(key string) []string {
 		return out
 	}
 	return nil
+}
+
+// nameSortPolicy is the app-wide name sort policy, or the default until the setting is loaded.
+func (s *Shell) nameSortPolicy() string {
+	if s.settingsLoaded(setting.KeyGeneralNameSortPolicy) &&
+		s.stringSetting(setting.KeyGeneralNameSortPolicy) == setting.NameSortNatural {
+		return setting.NameSortNatural
+	}
+	return setting.NameSortNaturalIgnoreSpacing
+}
+
+// nameCompare orders names shown to the user under the name sort policy.
+func (s *Shell) nameCompare() func(a, b string) int {
+	return platform.NewNameCompare(s.nameSortPolicy() == setting.NameSortNaturalIgnoreSpacing)
+}
+
+func sortedByName[T any](items []T, name func(T) string, compare func(a, b string) int) []T {
+	out := slices.Clone(items)
+	slices.SortStableFunc(out, func(a, b T) int { return compare(name(a), name(b)) })
+	return out
 }
 
 func (s *Shell) settingsPage(cx *fairy.Cx) *fairy.El {

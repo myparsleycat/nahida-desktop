@@ -118,7 +118,7 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	rt.loadGitHubToken(ctx)
 	rt.setting.UseLocale(platform.SystemLocale())
 	rt.transfer.UseSettings(rt.setting)
-	if err := rt.setting.MigrateElectronStorage(ctx); err != nil {
+	if err := rt.setting.MigrateLegacyStorage(ctx); err != nil {
 		return rt.failInit(err, "migrate-settings")
 	}
 	if _, err := rt.setting.Get(ctx, setting.KeyGeneralLanguage); err != nil {

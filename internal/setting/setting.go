@@ -63,7 +63,7 @@ func OpenWithOptions(ctx context.Context, path string, opts Options) (*Setting, 
 		return nil, err
 	}
 	s := NewWithOptions(client, opts)
-	if err := s.MigrateElectronStorage(ctx); err != nil {
+	if err := s.MigrateLegacyStorage(ctx); err != nil {
 		_ = client.Close()
 		return nil, err
 	}
@@ -105,13 +105,13 @@ func (s *Setting) Client() *db.Client {
 	return s.client
 }
 
-// MigrateElectronStorage preserves settings from the Electron database when
-// the Go port uses a different storage key. Existing Go values always win.
-func (s *Setting) MigrateElectronStorage(ctx context.Context) error {
+// MigrateLegacyStorage moves values stored under Electron keys and under the former storage keys of moved
+// settings to their current storage keys. Existing values under the current keys always win.
+func (s *Setting) MigrateLegacyStorage(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return fmt.Errorf("setting is not bound to a database")
 	}
-	for _, migration := range electronStorageKeyMigrations {
+	for _, migration := range legacyStorageKeyMigrations {
 		if err := s.client.Settings.MoveIfMissing(ctx, migration.Source, migration.Destination); err != nil {
 			return fmt.Errorf("migrate setting %q to %q: %w", migration.Source, migration.Destination, err)
 		}
@@ -660,12 +660,9 @@ func (s *Setting) SetUploadConcurrency(ctx context.Context, concurrency int) err
 	return s.Set(ctx, KeyTransferUploadConcurrency, concurrency)
 }
 
-func (s *Setting) GetNameSortPolicy(ctx context.Context) (string, error) {
-	return s.getString(ctx, KeyDriveNameSortPolicy)
-}
-
-func (s *Setting) SetNameSortPolicy(ctx context.Context, policy string) error {
-	return s.Set(ctx, KeyDriveNameSortPolicy, policy)
+func (s *Setting) NameSortIgnoresSpacing(ctx context.Context) (bool, error) {
+	policy, err := s.getString(ctx, KeyGeneralNameSortPolicy)
+	return policy != NameSortNatural, err
 }
 
 func (s *Setting) GetOpenConsole(ctx context.Context) (bool, error) {

@@ -2567,6 +2567,18 @@
         }
       },
       "gen": {
+        "sorting": {
+          "title": "並べ替え"
+        },
+        "nameSortPolicy": {
+          "title": "名前の並べ替えポリシー",
+          "description": "名前順に並べ替えるときの空白と数字の扱いを選択します。",
+          "select": "並べ替えポリシーを選択",
+          "options": {
+            "natural_ignore_spacing": "自然順 + 空白を無視",
+            "natural": "標準の自然順"
+          }
+        },
         "update": {
           "title": "更新"
         },
@@ -3471,18 +3483,6 @@
       },
       "drive": {
         "title": "ドライブ",
-        "sorting": {
-          "title": "並べ替え"
-        },
-        "nameSortPolicy": {
-          "title": "名前の並べ替えポリシー",
-          "description": "ドライブで名前順に並べ替えるときの空白と数字の扱いを選択します。",
-          "select": "並べ替えポリシーを選択",
-          "options": {
-            "natural_ignore_spacing": "自然順 + 空白を無視",
-            "natural": "標準の自然順"
-          }
-        },
         "import": {
           "title": "インポート"
         },

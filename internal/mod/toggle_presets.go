@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -103,7 +102,7 @@ func (m *Mod) GetTogglePresets(ctx context.Context, modPath string) (TogglePrese
 	if err != nil {
 		return TogglePresetList{}, m.reportTogglePresetError(err, "toggle-preset.list", ref, nil)
 	}
-	return TogglePresetList{Store: store, Presets: sortTogglePresets(presets)}, nil
+	return TogglePresetList{Store: store, Presets: sortTogglePresets(presets, m.nameCompare(ctx))}, nil
 }
 
 // CreateTogglePreset saves the current state of the mod's persist variables, read from the running game when it
@@ -418,9 +417,8 @@ func togglePresetNameTaken(presets []TogglePreset, name, exceptID string) bool {
 	})
 }
 
-func sortTogglePresets(presets []TogglePreset) []TogglePreset {
-	less := newLocaleLess()
-	sort.SliceStable(presets, func(i, j int) bool { return less(presets[i].Name, presets[j].Name) })
+func sortTogglePresets(presets []TogglePreset, compare func(a, b string) int) []TogglePreset {
+	slices.SortStableFunc(presets, func(a, b TogglePreset) int { return compare(a.Name, b.Name) })
 	return presets
 }
 

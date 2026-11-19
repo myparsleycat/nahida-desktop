@@ -50,16 +50,12 @@ func (s *Shell) openCharacterDraft(folder mod.FolderGroup) {
 	})
 }
 
-func characterItems(game string) []kit.Item {
+func characterItems(game string, compare func(a, b string) int) []kit.Item {
 	lang := catalog.Language()
 	characters := character.List(game)
-	less := platform.NewLocaleLess()
 	slices.SortFunc(characters, func(a, b character.Character) int {
-		switch an, bn := a.Name(lang), b.Name(lang); {
-		case less(an, bn):
-			return -1
-		case less(bn, an):
-			return 1
+		if c := compare(a.Name(lang), b.Name(lang)); c != 0 {
+			return c
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
@@ -118,8 +114,11 @@ func (s *Shell) characterDialog(cx *fairy.Cx) {
 		modDialogField(T(prefix+"game"), kit.Select("mod.character.game", d.game, gameItems, func(game string) {
 			d.game, d.id = game, ""
 		}, kit.Disabled(disabled))),
-		modDialogField(T(prefix+"character"), kit.Combobox("mod.character.id", d.id, characterItems(d.game),
-			func(id string) { d.id = id }, kit.Placeholder(T(prefix+"search-placeholder")), kit.Disabled(disabled))),
+		modDialogField(
+			T(prefix+"character"),
+			kit.Combobox("mod.character.id", d.id, characterItems(d.game, s.nameCompare()),
+				func(id string) { d.id = id }, kit.Placeholder(T(prefix+"search-placeholder")), kit.Disabled(disabled)),
+		),
 	).Gap(16)
 
 	close := func() {

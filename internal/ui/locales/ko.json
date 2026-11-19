@@ -2567,6 +2567,18 @@
         }
       },
       "gen": {
+        "sorting": {
+          "title": "정렬"
+        },
+        "nameSortPolicy": {
+          "title": "이름 정렬 정책",
+          "description": "이름순으로 정렬할 때 공백과 숫자를 처리하는 방식을 선택합니다.",
+          "select": "정렬 정책 선택",
+          "options": {
+            "natural_ignore_spacing": "자연 정렬 + 공백 무시",
+            "natural": "기본 자연 정렬"
+          }
+        },
         "update": {
           "title": "업데이트"
         },
@@ -3471,18 +3483,6 @@
       },
       "drive": {
         "title": "드라이브",
-        "sorting": {
-          "title": "정렬"
-        },
-        "nameSortPolicy": {
-          "title": "이름 정렬 정책",
-          "description": "드라이브에서 이름순으로 정렬할 때 공백과 숫자를 처리하는 방식을 선택합니다.",
-          "select": "정렬 정책 선택",
-          "options": {
-            "natural_ignore_spacing": "자연 정렬 + 공백 무시",
-            "natural": "기본 자연 정렬"
-          }
-        },
         "import": {
           "title": "가져오기"
         },

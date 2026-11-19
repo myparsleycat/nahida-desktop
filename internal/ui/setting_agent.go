@@ -864,7 +864,7 @@ func (s *Shell) agentMCPSettings() *fairy.El {
 	t := kit.T()
 	sec := &s.settings.agent
 	list := fairy.Col().Gap(2)
-	for _, server := range sec.servers {
+	for _, server := range sortedByName(sec.servers, func(v agent.MCPServerView) string { return v.Name }, s.nameCompare()) {
 		status := T("page.agent.disabled")
 		if server.Enabled {
 			status = T("page.agent.enabled")
@@ -981,7 +981,7 @@ func (s *Shell) agentSkillSettings() *fairy.El {
 	t := kit.T()
 	sec := &s.settings.agent
 	list := fairy.Col().Gap(12)
-	for _, skill := range sec.skills {
+	for _, skill := range sortedByName(sec.skills, func(v agent.SkillView) string { return v.Name }, s.nameCompare()) {
 		description := skill.Description
 		if skill.Error != "" {
 			description = skill.Error

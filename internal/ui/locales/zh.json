@@ -2567,6 +2567,18 @@
         }
       },
       "gen": {
+        "sorting": {
+          "title": "排序"
+        },
+        "nameSortPolicy": {
+          "title": "名称排序策略",
+          "description": "选择按名称排序时如何处理空格和数字。",
+          "select": "选择排序策略",
+          "options": {
+            "natural_ignore_spacing": "自然排序 + 忽略空格",
+            "natural": "默认自然排序"
+          }
+        },
         "update": {
           "title": "更新"
         },
@@ -3471,18 +3483,6 @@
       },
       "drive": {
         "title": "网盘",
-        "sorting": {
-          "title": "排序"
-        },
-        "nameSortPolicy": {
-          "title": "名称排序策略",
-          "description": "选择在网盘按名称排序时如何处理空格和数字。",
-          "select": "选择排序策略",
-          "options": {
-            "natural_ignore_spacing": "自然排序 + 忽略空格",
-            "natural": "默认自然排序"
-          }
-        },
         "import": {
           "title": "导入"
         },

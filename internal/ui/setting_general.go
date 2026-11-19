@@ -27,6 +27,7 @@ var generalSettingKeys = []string{
 	setting.KeyGeneralWindowBackdrop,
 	setting.KeyGeneralBackdropBlur,
 	setting.KeyGeneralTheme,
+	setting.KeyGeneralNameSortPolicy,
 }
 
 type generalSection struct {
@@ -79,8 +80,20 @@ func (s *Shell) generalSettings() *fairy.El {
 
 	return settingsBody(
 		settingsGroup(T("page.setting.gen.application.title"), application...),
+		settingsGroup(T("page.setting.gen.sorting.title"), s.nameSortSetting()),
 		settingsGroup(T("page.setting.gen.update.title"), s.updateSettings()...),
 	)
+}
+
+func (s *Shell) nameSortSetting() *fairy.El {
+	const prefix = "page.setting.gen.nameSortPolicy."
+	policies := []kit.Item{
+		{Value: setting.NameSortNaturalIgnoreSpacing, Label: T(prefix + "options.natural_ignore_spacing")},
+		{Value: setting.NameSortNatural, Label: T(prefix + "options.natural")},
+	}
+	return settingRow(T(prefix+"title"), T(prefix+"description"),
+		s.settingSelect(setting.KeyGeneralNameSortPolicy, policies, 208,
+			kit.Placeholder(T(prefix+"select")), kit.Label(T(prefix+"title"))))
 }
 
 func (s *Shell) generalSelects() *fairy.El {

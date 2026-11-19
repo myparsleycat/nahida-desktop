@@ -552,8 +552,19 @@ func (s *Shell) diagnosticsModList(key string, r *diagnosticsReport, parent stri
 		}
 	}
 
+	mods := slices.Clone(list.value)
+	compare := s.nameCompare()
+	slices.SortStableFunc(mods, func(a, b xxmi.DiagnosticsMod) int {
+		switch {
+		case a.Disabled == b.Disabled:
+			return compare(a.Name, b.Name)
+		case a.Disabled:
+			return 1
+		}
+		return -1
+	})
 	var rows []*fairy.El
-	for _, mod := range list.value {
+	for _, mod := range mods {
 		open := r.expanded[mod.Relative]
 		checked, covered, partial := false, false, false
 		for _, picked := range r.mods {

@@ -55,9 +55,6 @@ func viewerTextureChoiceGroups(transport *modelviewer.ModelViewerTransport) []vi
 		group.meshes = append(group.meshes, i)
 		group.game = append(group.game, modelviewer.TextureChoiceOf(mesh))
 	}
-	for g := range groups {
-		slices.Sort(groups[g].sources)
-	}
 	return groups
 }
 
@@ -299,11 +296,14 @@ func (v *ModelViewer) textureInfoPopover(t kit.Theme, status viewerStatus) *fair
 			fairy.Text(T("page.tools.model_viewer.texture_choices")).FontSize(13).LineHeight(20).Medium(),
 			muted(T("page.tools.model_viewer.texture_choices_hint")),
 		).Gap(2))
+		compare := v.shell.nameCompare()
 		for g, group := range groups {
 			items := []kit.Item{
 				{Value: viewerTextureChoiceGame, Label: T("page.tools.model_viewer.texture_choice_game")},
 			}
-			for _, source := range group.sources {
+			sources := slices.Clone(group.sources)
+			slices.SortStableFunc(sources, compare)
+			for _, source := range sources {
 				items = append(items, kit.Item{Value: source, Label: source})
 			}
 			id := "model-viewer.texture-choice." + strconv.Itoa(g)

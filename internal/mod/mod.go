@@ -44,6 +44,7 @@ type Settings interface {
 	GetDeleteArchiveAfterExtract(context.Context) (bool, error)
 	GetMoveFolderInsteadOfCopy(context.Context) (bool, error)
 	GetCopyShaderFixesOnEnable(context.Context) (bool, error)
+	NameSortIgnoresSpacing(context.Context) (bool, error)
 }
 
 type compressionSettings interface {
@@ -1103,6 +1104,25 @@ func (m *Mod) SetExpandedGroups(ctx context.Context, paths []string) error {
 	}
 	value := string(raw)
 	return client.Settings.Upsert(ctx, expandedGroupsSettingKey, &value)
+}
+
+// nameCompare orders names shown to the user under the name sort policy setting, or the default policy when the
+// setting cannot be read.
+func (m *Mod) nameCompare(ctx context.Context) func(a, b string) int {
+	ignoreSpacing := true
+	if m.settings != nil {
+		if value, err := m.settings.NameSortIgnoresSpacing(ctx); err == nil {
+			ignoreSpacing = value
+		} else if !infra.IsCancellationError(err) {
+			_ = infra.ReportError(
+				m.log,
+				err,
+				"Mod",
+				infra.Diagnostic{Operation: "mod.name-sort", Stage: "read-setting"},
+			)
+		}
+	}
+	return platform.NewNameCompare(ignoreSpacing)
 }
 
 func (m *Mod) settingValue(ctx context.Context, key string) (*string, error) {

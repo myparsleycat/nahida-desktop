@@ -49,6 +49,10 @@ func (s *flakyActionSettings) GetDisabledPrefixStyle(context.Context) (string, e
 	return "space", nil
 }
 
+func (s *flakyActionSettings) NameSortIgnoresSpacing(context.Context) (bool, error) {
+	return true, nil
+}
+
 func (s *flakyActionSettings) GetCopyShaderFixesOnEnable(context.Context) (bool, error) {
 	if s.enableFailures > 0 {
 		s.enableFailures--

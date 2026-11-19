@@ -12,7 +12,6 @@ import (
 )
 
 var driveSettingKeys = []string{
-	setting.KeyDriveNameSortPolicy,
 	setting.KeyDriveAutoTryPasswords,
 	setting.KeyDrivePasswordList,
 }
@@ -42,16 +41,7 @@ func (s *Shell) driveSettings() *fairy.El {
 		return s.settingsLoading()
 	}
 	const prefix = "page.setting.drive."
-	policies := []kit.Item{
-		{Value: "natural_ignore_spacing", Label: T(prefix + "nameSortPolicy.options.natural_ignore_spacing")},
-		{Value: "natural", Label: T(prefix + "nameSortPolicy.options.natural")},
-	}
 	return settingsBody(
-		settingsGroup(T(prefix+"sorting.title"),
-			settingRow(T(prefix+"nameSortPolicy.title"), T(prefix+"nameSortPolicy.description"),
-				s.settingSelect(setting.KeyDriveNameSortPolicy, policies, 208,
-					kit.Placeholder(T(prefix+"nameSortPolicy.select")), kit.Label(T(prefix+"nameSortPolicy.title")))),
-		),
 		settingsGroup(T(prefix+"import.title"),
 			s.settingSwitch(setting.KeyDriveAutoTryPasswords, T(prefix+"autoTryPasswords.title"),
 				T(prefix+"autoTryPasswords.description")),

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"unicode"
 	"unsafe"
 )
 
@@ -55,6 +56,38 @@ func NewLocaleLessFor(locale string) func(string, string) bool {
 // caseFirst "lower" does. It falls back to byte ordering when ICU is not available.
 func NewNaturalCompare() func(string, string) int {
 	return newNaturalCompareFor(SystemLocale())
+}
+
+// NewNameCompare returns the comparator for names shown to the user: NewNaturalCompare, comparing the names
+// with white space removed first when ignoreSpacing is set.
+func NewNameCompare(ignoreSpacing bool) func(string, string) int {
+	return nameCompare(NewNaturalCompare(), ignoreSpacing)
+}
+
+func nameCompare(compare func(string, string) int, ignoreSpacing bool) func(string, string) int {
+	if !ignoreSpacing {
+		return compare
+	}
+	return func(a, b string) int {
+		strippedA, strippedB := stripSpaces(a), stripSpaces(b)
+		if c := compare(strippedA, strippedB); c != 0 || strippedA == a && strippedB == b {
+			return c
+		}
+		return compare(a, b)
+	}
+}
+
+// stripSpaces returns text without white space, allocating only when text contains some.
+func stripSpaces(text string) string {
+	if strings.IndexFunc(text, unicode.IsSpace) < 0 {
+		return text
+	}
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, text)
 }
 
 func newNaturalCompareFor(locale string) func(string, string) int {
