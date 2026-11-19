@@ -246,6 +246,12 @@ type viewerDrawOptions struct {
 	morph float32
 	// interpolating is set while a playback draws between frames, so the meshes move on every draw.
 	interpolating bool
+	// singleSample draws without multisampling. An export rendered above the viewer's size needs none, and
+	// multisampled targets at that size can exceed the device's per-resource limit.
+	singleSample bool
+	// pixelScale is how many target pixels one viewer pixel covers, so details sized in pixels keep their
+	// on-screen size in an export; 0 means 1.
+	pixelScale float32
 }
 
 // viewerRing is a circle drawn over the model without depth testing, in model space.
@@ -319,6 +325,7 @@ type viewerRenderer struct {
 	blend     d3d.BlendState
 
 	width, height int
+	singleSample  bool
 	samples       uint32
 	color         d3d.Texture2D
 	colorRTV      d3d.RenderTargetView
@@ -550,14 +557,19 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 }
 
 // targets makes the multisampled colour and depth buffers for a frame size.
-func (r *viewerRenderer) targets(dev d3d.Device, width, height int) error {
-	if r.width == width && r.height == height && r.dsv.P != nil {
+func (r *viewerRenderer) targets(dev d3d.Device, width, height int, singleSample bool) error {
+	if r.width == width && r.height == height && r.singleSample == singleSample && r.dsv.P != nil {
 		return nil
 	}
 	r.releaseTargets()
 	r.samples = 1
+	r.singleSample = singleSample
+	counts := []uint32{4, 2}
+	if singleSample {
+		counts = nil
+	}
 	// 8x would double the targets' memory at large sizes for little visible gain.
-	for _, count := range []uint32{4, 2} {
+	for _, count := range counts {
 		if dev.MultisampleQualityLevels(d3d.FORMAT_B8G8R8A8_UNORM, count) > 0 &&
 			dev.MultisampleQualityLevels(d3d.FORMAT_D32_FLOAT, count) > 0 {
 			r.samples = count
@@ -602,7 +614,7 @@ func (r *viewerRenderer) draw(f fairy.SurfaceFrame, scene *viewerScene, opts vie
 	if err := r.init(g); err != nil {
 		return err
 	}
-	if err := r.targets(g.Device, f.Width, f.Height); err != nil {
+	if err := r.targets(g.Device, f.Width, f.Height, opts.singleSample); err != nil {
 		r.releaseTargets()
 		return err
 	}
@@ -720,6 +732,10 @@ func (r *viewerRenderer) drawScene(
 	opts viewerDrawOptions,
 ) error {
 	cam := opts.camera
+	pixelScale := opts.pixelScale
+	if pixelScale <= 0 {
+		pixelScale = 1
+	}
 	aspect := float64(f.Width) / float64(max(f.Height, 1))
 	eye := cam.eye()
 	view, proj := cam.view(), cam.projection(aspect)
@@ -730,7 +746,7 @@ func (r *viewerRenderer) drawScene(
 		surface:  [4]float32{float32(opts.metalness), float32(opts.roughness)},
 		view:     view.float32s(),
 		proj:     proj.float32s(),
-		viewport: [4]float32{float32(f.Width), float32(f.Height)},
+		viewport: [4]float32{float32(f.Width) / pixelScale, float32(f.Height) / pixelScale},
 	}
 	lights := viewerLighting(opts.environment)
 	direction := func(position vec3, intensity float64) [4]float32 {

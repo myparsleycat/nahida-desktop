@@ -27,7 +27,7 @@ cbuffer Frame : register(b0) {
     float4 toonShadow;  // x: 1 while receiving the shadow map, y: depth bias, z: normal bias, w: map size
     float4 toonParams[3]; // the profile's shading values, laid out as viewerToonParams in model_viewer_toon.go
     float4 toonState;     // x: 2.414 tan(fov / 2), y: GIMI daytime, z: GIMI face light map, w: GIMI face shadow
-    float4 viewport;    // xy: size in pixels
+    float4 viewport;    // xy: size in the viewer's pixels, which an export renders at a multiple of
 };
 
 cbuffer Mesh : register(b1) {

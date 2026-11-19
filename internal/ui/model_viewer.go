@@ -163,6 +163,7 @@ type ModelViewer struct {
 	windowToasts   kit.Toaster
 	previewPath    string
 	savingPreview  bool
+	savingPNG      bool
 	confirmPreview bool
 	// gameLinked is set while a running game that loads the mod takes toggle changes through the desktop
 	// channel; applyingToGame while those changes are being sent.

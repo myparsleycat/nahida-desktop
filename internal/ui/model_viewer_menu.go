@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"maps"
 	"math"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/myparsleycat/fairy"
@@ -262,6 +266,9 @@ func (v *ModelViewer) menuBar() *fairy.El {
 		return []kit.MenuItem{{
 			Label: T("page.tools.model_viewer.menu.capture_set_preview"), Icon: lucide.Camera,
 			Disabled: v.scene == nil || v.savingPreview, OnClick: v.requestPreviewCapture,
+		}, {
+			Label: T("page.tools.model_viewer.menu.save_png"), Icon: lucide.ImageDown,
+			Disabled: v.scene == nil || v.savingPNG, Submenu: v.pngMenu(),
 		}}
 	}})
 	return kit.Menubar("model-viewer", menus)
@@ -554,7 +561,7 @@ func (v *ModelViewer) savePreview() {
 	if v.shell == nil || v.shell.deps.Mod == nil {
 		return
 	}
-	shot, err := v.capture()
+	shot, err := v.capture(1)
 	if errors.Is(err, errViewerCaptureNotReady) {
 		v.toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.capture_not_ready"), "")
 		return
@@ -567,22 +574,31 @@ func (v *ModelViewer) savePreview() {
 		return
 	}
 	v.savingPreview = true
-	s, path, existing, toasts := v.shell, v.path, v.previewPath, v.toasts
+	s, path, existing, toasts, log := v.shell, v.path, v.previewPath, v.toasts, v.log
 	s.background(func(ctx context.Context) {
-		var encoded bytes.Buffer
-		err := png.Encode(&encoded, shot)
+		frame, err := shot.NRGBA()
+		shot.Release()
+		stage := "readback"
 		var saved string
 		if err == nil {
-			var previous *string
-			if existing != "" {
-				previous = &existing
+			stage = "save"
+			bounds := frame.Bounds()
+			size := min(bounds.Dx(), bounds.Dy())
+			x, y := (bounds.Dx()-size)/2, (bounds.Dy()-size)/2
+			var encoded bytes.Buffer
+			err = png.Encode(&encoded, frame.SubImage(image.Rect(x, y, x+size, y+size)))
+			if err == nil {
+				var previous *string
+				if existing != "" {
+					previous = &existing
+				}
+				data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())
+				saved, err = s.deps.Mod.PastePreview(ctx, path, data, "base64", previous)
 			}
-			data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())
-			saved, err = s.deps.Mod.PastePreview(ctx, path, data, "base64", previous)
 		}
 		if err != nil {
-			err = infra.ReportError(v.log, err, "ModelViewer.capturePreview", infra.Diagnostic{
-				Operation: "capture-preview", Stage: "save", Fields: map[string]any{"modPath": path},
+			err = infra.ReportError(log, err, "ModelViewer.capturePreview", infra.Diagnostic{
+				Operation: "capture-preview", Stage: stage, Fields: map[string]any{"modPath": path},
 			})
 		}
 		fairy.Go(func() {
@@ -603,9 +619,34 @@ func (v *ModelViewer) savePreview() {
 // errViewerCaptureNotReady is returned while the scene is not on the current device, so a capture would miss it.
 var errViewerCaptureNotReady = errors.New("model viewer is still loading the model")
 
-// capture renders the current view at the surface's size and crops its centre square.
-func (v *ModelViewer) capture() (image.Image, error) {
-	width, height := v.surfaceSize[0], v.surfaceSize[1]
+// maxCaptureSize is the longest texture side Direct3D 11 allows.
+const maxCaptureSize = 16384
+
+// pngScales are the PNG export's resolutions as multiples of the viewport's device pixels.
+var pngScales = []int{1, 2, 4}
+
+// maxCapturePixels keeps a capture's colour and depth targets, four bytes a pixel each, at 512 MiB: the
+// per-resource limit Direct3D 11 sets for an adapter with 2 GiB of memory.
+const maxCapturePixels = 1 << 27
+
+// captureSize is the surface size times scale, shrunk in proportion so neither side passes maxCaptureSize and the
+// area stays within maxCapturePixels.
+func (v *ModelViewer) captureSize(scale int) (width, height int) {
+	width, height = v.surfaceSize[0]*scale, v.surfaceSize[1]*scale
+	shrink := max(
+		float64(max(width, height))/maxCaptureSize,
+		math.Sqrt(float64(width)*float64(height)/maxCapturePixels),
+	)
+	if shrink > 1 {
+		width, height = max(int(float64(width)/shrink), 1), max(int(float64(height)/shrink), 1)
+	}
+	return width, height
+}
+
+// capture renders the current view again with a transparent background at captureSize(scale). The caller
+// releases the image; reading its pixels back may run on any goroutine.
+func (v *ModelViewer) capture(scale int) (*fairy.Image, error) {
+	width, height := v.captureSize(scale)
 	scene := v.scene
 	// While the scene waits for a mesh it keeps drawing the frame it shows, so only a scene without its GPU set is
 	// incomplete.
@@ -614,24 +655,135 @@ func (v *ModelViewer) capture() (image.Image, error) {
 		return nil, errViewerCaptureNotReady
 	}
 	opts := v.drawOptions([4]float32{})
+	opts.morph = float32(v.interpolation(trackMod, time.Now()))
+	opts.interpolating = v.interpolating()
+	opts.singleSample = scale > 1
+	opts.pixelScale = float32(width) / float32(v.surfaceSize[0])
+	// The live surface may not draw again soon to bring the targets back to its size and sample count, so the
+	// capture's are not kept until then.
+	release := opts.singleSample || [2]int{width, height} != v.surfaceSize
 	var drawErr error
 	shot, err := fairy.SurfaceImage(width, height, 1, func(f fairy.SurfaceFrame) {
 		drawErr = v.renderer.draw(f, v.scene, opts)
+		if release {
+			v.renderer.releaseTargets()
+		}
 	})
 	if err != nil {
 		return nil, err
 	}
-	defer shot.Release()
 	if drawErr != nil {
+		shot.Release()
 		return nil, drawErr
 	}
-	pixels, err := shot.NRGBA()
-	if err != nil {
-		return nil, err
+	return shot, nil
+}
+
+// savePNG asks for a destination and then saves the view rendered at the scale there as a PNG file.
+func (v *ModelViewer) savePNG(scale int) {
+	if v.shell == nil || v.shell.deps.Dialog == nil || v.savingPNG {
+		return
 	}
-	size := min(width, height)
-	x, y := (width-size)/2, (height-size)/2
-	return pixels.SubImage(image.Rect(x, y, x+size, y+size)), nil
+	name := filepath.Base(v.path)
+	if v.scene != nil && v.scene.transport.Name != "" {
+		name = v.scene.transport.Name
+	}
+	if v.shell.deps.FS != nil {
+		name = v.shell.deps.FS.SanitizeWindowsFilename(name, "_")
+	}
+	v.savingPNG = true
+	s, path, toasts, log := v.shell, v.path, v.toasts, v.log
+	go func() {
+		selection, err := s.deps.Dialog.SaveFile(platform.SaveFileOptions{
+			SuggestedName: name + ".png",
+			Filters:       []platform.FileFilter{{Name: "PNG", Extensions: []string{"png"}}},
+			Role:          "model-viewer-png",
+		})
+		if err != nil {
+			err = infra.ReportError(log, err, "ModelViewer.savePNG", infra.Diagnostic{
+				Operation: "save-png", Stage: "dialog", Fields: map[string]any{"modPath": path, "scale": scale},
+			})
+		}
+		fairy.Go(func() {
+			switch {
+			case err != nil:
+				v.savingPNG = false
+				toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.save_png_error"), err.Error())
+			case selection.Canceled || selection.FilePath == "":
+				v.savingPNG = false
+			default:
+				v.writePNG(scale, selection.FilePath)
+			}
+		})
+	}()
+}
+
+// writePNG renders the view at the scale and writes it to destination, reading the pixels back and encoding them
+// off the UI thread.
+func (v *ModelViewer) writePNG(scale int, destination string) {
+	if v.closed {
+		v.savingPNG = false
+		return
+	}
+	fields := map[string]any{"modPath": v.path, "scale": scale, "destinationPath": destination}
+	shot, err := v.capture(scale)
+	if errors.Is(err, errViewerCaptureNotReady) {
+		v.savingPNG = false
+		v.toasts.Show(kit.ToastWarning, T("page.tools.model_viewer.toast.capture_not_ready"), "")
+		return
+	}
+	if err != nil {
+		v.savingPNG = false
+		width, height := v.captureSize(scale)
+		fields["size"] = [2]int{width, height}
+		_ = infra.ReportError(v.log, err, "ModelViewer.savePNG", infra.Diagnostic{
+			Operation: "save-png", Stage: "render", Fields: fields,
+		})
+		v.toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.save_png_error"), err.Error())
+		return
+	}
+
+	toasts, log := v.toasts, v.log
+	go func() {
+		frame, err := shot.NRGBA()
+		shot.Release()
+		stage := "readback"
+		if err == nil {
+			stage = "write"
+			err = platform.WriteFileAtomicFunc(destination, 0o644, func(w io.Writer) error {
+				return png.Encode(w, frame)
+			})
+		}
+		if err != nil {
+			err = infra.ReportError(log, err, "ModelViewer.savePNG", infra.Diagnostic{
+				Operation: "save-png", Stage: stage, Fields: fields,
+			})
+		}
+		fairy.Go(func() {
+			v.savingPNG = false
+			if err != nil {
+				toasts.Show(kit.ToastError, T("page.tools.model_viewer.toast.save_png_error"), err.Error())
+				return
+			}
+			bounds := frame.Bounds()
+			toasts.Show(kit.ToastSuccess, T("page.tools.model_viewer.toast.save_png_success"),
+				fmt.Sprintf("%s · %d×%d", filepath.Base(destination), bounds.Dx(), bounds.Dy()))
+		})
+	}()
+}
+
+// pngMenu lists the PNG export's scales with the size each one saves.
+func (v *ModelViewer) pngMenu() []kit.MenuItem {
+	items := make([]kit.MenuItem, 0, len(pngScales))
+	for _, scale := range pngScales {
+		width, height := v.captureSize(scale)
+		items = append(items, kit.MenuItem{
+			Label: T("page.tools.model_viewer.menu.save_png_scale",
+				"scale", strconv.Itoa(scale), "width", strconv.Itoa(width), "height", strconv.Itoa(height)),
+			OnClick: func() { v.savePNG(scale) },
+		})
+	}
+	return items
 }
 
 // toonMenu is the toon style submenu: the style's switches and, for GIMI, the texture folder, the shadow ramps
