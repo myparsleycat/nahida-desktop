@@ -32,10 +32,13 @@ export default defineConfig({
                         link: "/mod-manager/index",
                         collapsed: true,
                         items: [
-                            {
-                                text: "Model Viewer",
-                                link: "/mod-manager/model-viewer",
-                            },
+                            { text: "Previews", link: "/mod-manager/previews" },
+                            { text: "Presets", link: "/mod-manager/presets" },
+                            { text: "Mod Tools", link: "/mod-manager/mod-tools" },
+                            { text: "Mod Settings", link: "/mod-manager/settings" },
+                            { text: "Model Viewer", link: "/mod-manager/model-viewer" },
+                            { text: "Character Data", link: "/mod-manager/character-data" },
+                            { text: "Blender Live Preview", link: "/mod-manager/blender-live-preview" },
                         ],
                     },
                     {
@@ -117,10 +120,13 @@ export default defineConfig({
                                 link: "/mod-manager/index",
                                 collapsed: true,
                                 items: [
-                                    {
-                                        text: "모델 뷰어",
-                                        link: "/mod-manager/model-viewer",
-                                    },
+                                    { text: "미리보기", link: "/mod-manager/previews" },
+                                    { text: "프리셋", link: "/mod-manager/presets" },
+                                    { text: "모드 도구", link: "/mod-manager/mod-tools" },
+                                    { text: "모드 설정", link: "/mod-manager/settings" },
+                                    { text: "모델 뷰어", link: "/mod-manager/model-viewer" },
+                                    { text: "캐릭터 데이터", link: "/mod-manager/character-data" },
+                                    { text: "Blender 실시간 미리보기", link: "/mod-manager/blender-live-preview" },
                                 ],
                             },
                             {
@@ -188,10 +194,13 @@ export default defineConfig({
                                 link: "/mod-manager/index",
                                 collapsed: true,
                                 items: [
-                                    {
-                                        text: "モデルビューアー",
-                                        link: "/mod-manager/model-viewer",
-                                    },
+                                    { text: "プレビュー", link: "/mod-manager/previews" },
+                                    { text: "プリセット", link: "/mod-manager/presets" },
+                                    { text: "MOD ツール", link: "/mod-manager/mod-tools" },
+                                    { text: "MOD 設定", link: "/mod-manager/settings" },
+                                    { text: "モデルビューアー", link: "/mod-manager/model-viewer" },
+                                    { text: "キャラクターデータ", link: "/mod-manager/character-data" },
+                                    { text: "Blender ライブプレビュー", link: "/mod-manager/blender-live-preview" },
                                 ],
                             },
                             {
@@ -259,10 +268,13 @@ export default defineConfig({
                                 link: "/mod-manager/index",
                                 collapsed: true,
                                 items: [
-                                    {
-                                        text: "模型查看器",
-                                        link: "/mod-manager/model-viewer",
-                                    },
+                                    { text: "预览", link: "/mod-manager/previews" },
+                                    { text: "预设", link: "/mod-manager/presets" },
+                                    { text: "模组工具", link: "/mod-manager/mod-tools" },
+                                    { text: "模组设置", link: "/mod-manager/settings" },
+                                    { text: "模型查看器", link: "/mod-manager/model-viewer" },
+                                    { text: "角色数据", link: "/mod-manager/character-data" },
+                                    { text: "Blender 实时预览", link: "/mod-manager/blender-live-preview" },
                                 ],
                             },
                             {

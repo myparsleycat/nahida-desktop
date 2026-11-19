@@ -12,7 +12,7 @@ Browses and downloads GameBanana mods without opening a web browser. Signing in 
 
 ## [Mod Manager](/features/mod-manager/)
 
-Enables, disables, organizes, and previews mods for each registered game. It also manages mod presets and toggle presets, and opens the mod tools for a selected mod, including the [Model Viewer](/features/mod-manager/model-viewer).
+Enables, disables, organizes, and [previews](/features/mod-manager/previews) mods for each registered game. It also manages [presets and toggle presets](/features/mod-manager/presets), and opens the [mod tools](/features/mod-manager/mod-tools) for a selected mod, including the [Model Viewer](/features/mod-manager/model-viewer).
 
 ## Tools
 
@@ -26,8 +26,9 @@ Lists the tools that work across mods:
 - Mod Bisect
 - Body Shape (beta)
 - Touch Profile (beta)
+- [Blender Live Preview (beta)](/features/mod-manager/blender-live-preview)
 
-Tools that work on a single mod, such as the Model Viewer, Texture Resizer, and Liquid Emitter, are opened from the mod's context menu in the Mod Manager.
+[Mod tools](/features/mod-manager/mod-tools) that work on a single mod, such as the Model Viewer, Texture Resizer, Vulkan Outline Fix, Liquid Emitter, and Find Conflict Mods, are opened from the mod's context menu in the Mod Manager.
 
 ## Nahida Agent
 

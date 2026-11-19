@@ -12,7 +12,7 @@ Web ブラウザを開かずに GameBanana の MOD を閲覧してダウンロ�
 
 ## [MODマネージャー](/ja/features/mod-manager/)
 
-登録したゲームごとに、MOD の有効化、無効化、整理、プレビューを行います。MOD プリセットとトグルプリセットの管理や、選択した MOD に対する MOD ツールの起動もここから行えます。MOD ツールには [モデルビューアー](/ja/features/mod-manager/model-viewer) などがあります。
+登録したゲームごとに、MOD の有効化、無効化、整理、[プレビュー](/ja/features/mod-manager/previews) を行います。[プリセットとトグルプリセット](/ja/features/mod-manager/presets) の管理や、選択した MOD に対する [MOD ツール](/ja/features/mod-manager/mod-tools) の起動もここから行えます。MOD ツールには [モデルビューアー](/ja/features/mod-manager/model-viewer) などがあります。
 
 ## Tools
 
@@ -26,8 +26,9 @@ Web ブラウザを開かずに GameBanana の MOD を閲覧してダウンロ�
 - 二分探索
 - 体型変更 (ベータ)
 - タッチプロファイル (ベータ)
+- [Blender ライブプレビュー (ベータ)](/ja/features/mod-manager/blender-live-preview)
 
-モデルビューアー、テクスチャ リサイザー、液体噴射ポイントなど、1 つの MOD を対象とするツールは、MODマネージャーで MOD のコンテキストメニューから開きます。
+モデルビューアー、テクスチャ リサイザー、Vulkan アウトライン補正、液体噴射ポイント、競合する MOD を探すなど、1 つの MOD を対象とする [MOD ツール](/ja/features/mod-manager/mod-tools) は、MODマネージャーで MOD のコンテキストメニューから開きます。
 
 ## Nahida Agent
 

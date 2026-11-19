@@ -12,7 +12,7 @@
 
 ## [모드 매니저](/ko/features/mod-manager/)
 
-등록된 게임별로 모드를 활성화, 비활성화, 정리하고 미리보기를 표시합니다. 모드 프리셋과 토글 프리셋도 관리하며, 선택한 모드에 대해 [모델 뷰어](/ko/features/mod-manager/model-viewer)를 포함한 모드 툴을 열 수 있습니다.
+등록된 게임별로 모드를 활성화, 비활성화, 정리하고 [미리보기](/ko/features/mod-manager/previews)를 표시합니다. [프리셋과 토글 프리셋](/ko/features/mod-manager/presets)을 관리하며, 선택한 모드에 대해 [모델 뷰어](/ko/features/mod-manager/model-viewer)를 포함한 [모드 도구](/ko/features/mod-manager/mod-tools)를 열 수 있습니다.
 
 ## 도구
 
@@ -26,8 +26,9 @@
 - 이진 탐색
 - 체형 변경 (베타)
 - 터치 프로필 (베타)
+- [Blender 실시간 미리보기 (베타)](/ko/features/mod-manager/blender-live-preview)
 
-모델 뷰어, 텍스처 리사이저, 액체 분사 부착점처럼 하나의 모드를 대상으로 하는 도구는 모드 매니저에서 해당 모드의 컨텍스트 메뉴로 엽니다.
+모델 뷰어, 텍스처 리사이저, Vulkan 외곽선 보정, 액체 분사 부착점, 충돌 모드 찾기처럼 하나의 모드를 대상으로 하는 [모드 도구](/ko/features/mod-manager/mod-tools)는 모드 매니저에서 해당 모드의 컨텍스트 메뉴로 엽니다.
 
 ## 나히다 에이전트
 

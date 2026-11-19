@@ -12,7 +12,7 @@
 
 ## [模组管理器](/zh-CN/features/mod-manager/)
 
-为每个已注册的游戏启用、禁用、整理和预览模组。它还可以管理模组预设和切换状态预设，并为所选模组打开模组工具，包括[模型查看器](/zh-CN/features/mod-manager/model-viewer)。
+为每个已注册的游戏启用、禁用、整理和[预览](/zh-CN/features/mod-manager/previews)模组。它还可以管理[预设和切换状态预设](/zh-CN/features/mod-manager/presets)，并为所选模组打开[模组工具](/zh-CN/features/mod-manager/mod-tools)，包括[模型查看器](/zh-CN/features/mod-manager/model-viewer)。
 
 ## Tools
 
@@ -26,8 +26,9 @@
 - 二分查找
 - 体型修改（测试版）
 - 触摸配置（测试版）
+- [Blender 实时预览（测试版）](/zh-CN/features/mod-manager/blender-live-preview)
 
-模型查看器、纹理缩放器、液体喷射点等作用于单个模组的工具，需要在模组管理器中通过该模组的右键菜单打开。
+模型查看器、纹理缩放器、Vulkan 描边修正、液体喷射点、查找冲突模组等作用于单个模组的[模组工具](/zh-CN/features/mod-manager/mod-tools)，需要在模组管理器中通过该模组的右键菜单打开。
 
 ## Nahida Agent
 
