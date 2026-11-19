@@ -1037,6 +1037,7 @@
         "name-placeholder": "预设名称",
         "save-current": "保存当前值",
         "empty": "没有预设",
+        "preview-unavailable": "无法显示预览",
         "delete-title": "删除预设",
         "delete-description": "“{{name}}”将被永久删除。",
         "store": {

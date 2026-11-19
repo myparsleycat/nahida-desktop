@@ -53,10 +53,12 @@ type modelPreviews struct {
 	queue    map[string]*modelPreviewJob
 	failures map[string][]modelPreviewFailure
 	// current is the preview being rendered; a card built meanwhile must not queue it again.
-	current  *modelPreviewJob
-	cancel   context.CancelFunc
-	used     uint64
-	renderer viewerRenderer
+	current *modelPreviewJob
+	cancel  context.CancelFunc
+	// pumpPosted is set while a pump waits for the build that asked for previews to finish.
+	pumpPosted bool
+	used       uint64
+	renderer   viewerRenderer
 }
 
 type modelPreviewImage struct {
@@ -66,13 +68,18 @@ type modelPreviewImage struct {
 }
 
 type modelPreviewJob struct {
-	key      string
-	info     mod.ModInfo
+	key  string
+	info mod.ModInfo
+	// preset poses the model in a toggle preset's values instead of the INIs' current ones. A preset preview is
+	// asked for while the pointer rests on the preset, so it takes the free render slot before the cards asking in
+	// the same build.
+	preset   *mod.TogglePreset
 	settings modelPreviewSettings
 	// queued is when a card of the folder first asked for the preview.
 	queued time.Time
 	wanted time.Time
-	// stopped is set on the UI thread when the render is canceled because the folder or the screen was left.
+	// stopped is set on the UI thread when the render is canceled because the folder or the screen was left, or,
+	// for a preset preview, because the pointer moved to another preset.
 	stopped bool
 }
 
@@ -141,6 +148,16 @@ func modelPreviewState(transport modelviewer.ModelViewerTransport, info mod.ModI
 	return state
 }
 
+// presetINIValues keys a toggle preset's values, which name each INI by its path in the mod, by absolute path, as
+// viewerStateWithValues takes them.
+func presetINIValues(modPath string, inis map[string]map[string]string) map[string]map[string]string {
+	values := make(map[string]map[string]string, len(inis))
+	for relative, vars := range inis {
+		values[filepath.Join(modPath, filepath.FromSlash(relative))] = vars
+	}
+	return values
+}
+
 // modelPreviewEnabled reports whether the mod's card shows a model preview: the setting is on and the mod has
 // INIs, no media preview, and no download writing to it.
 func (s *Shell) modelPreviewEnabled(info mod.ModInfo) bool {
@@ -199,9 +216,27 @@ func (s *Shell) modelPreviewSettings() modelPreviewSettings {
 // modelPreview returns the mod's rendered preview, or whether it is still being made. Call it on the UI thread
 // each time the card is built: a queued preview is only made while its card keeps asking for it.
 func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
+	return s.requestModelPreview(info, nil)
+}
+
+// togglePresetPreview returns the mod's model posed in preset's values, or whether it is still being made. Call
+// it on the UI thread each time the preview is built, as modelPreview.
+func (s *Shell) togglePresetPreview(info mod.ModInfo, preset mod.TogglePreset) (*fairy.Image, bool) {
+	if s.deps.Tools == nil || s.isNteGame() || s.isModDownloading(info.Path) || s.isDownloadPlaceholder(info.Path) ||
+		len(info.Inis) == 0 {
+		return nil, false
+	}
+	return s.requestModelPreview(info, &preset)
+}
+
+func (s *Shell) requestModelPreview(info mod.ModInfo, preset *mod.TogglePreset) (*fairy.Image, bool) {
 	p := &s.mods.modelPreviews
 	settings := s.modelPreviewSettings()
 	key := modelPreviewKey(info, settings)
+	if preset != nil {
+		values, _ := json.Marshal(preset.INIs)
+		key += string(values)
+	}
 	if entry := p.images[key]; entry != nil && entry.generation == fairy.DeviceGeneration() {
 		p.used++
 		entry.used = p.used
@@ -214,21 +249,46 @@ func (s *Shell) modelPreview(info mod.ModInfo) (*fairy.Image, bool) {
 	if p.current != nil && !p.current.stopped && p.current.key == key {
 		return nil, true
 	}
+	if preset != nil {
+		// The pointer has left every other preset, so their previews are no longer wanted.
+		maps.DeleteFunc(p.queue, func(other string, job *modelPreviewJob) bool {
+			return job.preset != nil && other != key
+		})
+		if p.current != nil && p.current.preset != nil && !p.current.stopped {
+			p.current.stopped = true
+			p.cancel()
+		}
+	}
 
 	if p.queue == nil {
 		p.queue = map[string]*modelPreviewJob{}
 	}
 	job := p.queue[key]
 	if job == nil {
-		job = &modelPreviewJob{key: key, settings: settings, queued: time.Now()}
+		job = &modelPreviewJob{key: key, preset: preset, settings: settings, queued: time.Now()}
 		p.queue[key] = job
 	}
 	job.info, job.wanted = info, time.Now()
-	s.pumpModelPreviews()
+	s.postModelPreviewPump()
 	return nil, true
 }
 
-// pumpModelPreviews starts the preview whose card asked for it last, skipping the ones no card wants now.
+// postModelPreviewPump runs pumpModelPreviews after the current build, once every card and preset of the build has
+// asked; the view builds the cards first. Starting a render changes nothing on screen, so it does not rebuild.
+func (s *Shell) postModelPreviewPump() {
+	p := &s.mods.modelPreviews
+	if p.pumpPosted {
+		return
+	}
+	p.pumpPosted = true
+	fairy.GoQuiet(func() {
+		p.pumpPosted = false
+		s.pumpModelPreviews()
+	})
+}
+
+// pumpModelPreviews starts the preset preview asked for last, else the card preview asked for last, skipping the
+// ones nothing wants now.
 func (s *Shell) pumpModelPreviews() {
 	p := &s.mods.modelPreviews
 	if p.current != nil {
@@ -239,7 +299,14 @@ func (s *Shell) pumpModelPreviews() {
 		if time.Since(job.wanted) > modelPreviewWantedFor {
 			continue
 		}
-		if next == nil || job.wanted.After(next.wanted) {
+		switch {
+		case next == nil:
+			next = job
+		case (job.preset != nil) != (next.preset != nil):
+			if job.preset != nil {
+				next = job
+			}
+		case job.wanted.After(next.wanted):
 			next = job
 		}
 	}
@@ -257,10 +324,12 @@ func (s *Shell) pumpModelPreviews() {
 		defer cancel()
 		img, generation, err := s.renderModelPreview(ctx, p, next)
 		if err != nil && jobCtx.Err() == nil {
-			err = infra.ReportError(s.deps.Log, err, "Mod.gridModelPreview", infra.Diagnostic{
-				Operation: "grid-model-preview",
-				Fields:    map[string]any{"modName": next.info.Name, "modPath": next.info.Path},
-			})
+			_, service, operation := next.diagnostics()
+			fields := map[string]any{"modName": next.info.Name, "modPath": next.info.Path}
+			if next.preset != nil {
+				fields["presetId"], fields["presetName"] = next.preset.ID, next.preset.Name
+			}
+			err = infra.ReportError(s.deps.Log, err, service, infra.Diagnostic{Operation: operation, Fields: fields})
 		}
 		fairy.Go(func() { s.finishModelPreview(next, img, generation, err) })
 	})
@@ -374,10 +443,14 @@ func (s *Shell) renderModelPreview(
 	loaded := time.Now()
 
 	stage = "read-meshes"
-	_, states := modelviewer.EvaluateViewerState(transport, modelPreviewState(transport, job.info), "")
+	state := modelPreviewState(transport, job.info)
+	if job.preset != nil {
+		state = viewerStateWithValues(state, transport.INIs, presetINIValues(job.info.Path, job.preset.INIs))
+	}
+	_, states := modelviewer.EvaluateViewerState(transport, state, "")
 	transport, states = visiblePreviewTransport(transport, states)
 	if len(transport.Meshes) == 0 {
-		return nil, 0, errors.New("the mod draws no mesh in its current toggle state")
+		return nil, 0, errors.New("the mod draws no mesh in this toggle state")
 	}
 	scene, err := buildViewerScene(ctx, tools.ReadModelViewerResource, transport, states)
 	if err != nil {
@@ -419,10 +492,12 @@ func (s *Shell) renderModelPreview(
 	}
 
 	done := time.Now()
+	title, service, _ := job.diagnostics()
 	s.deps.Log.Info(
 		fmt.Sprintf(
-			"Grid model preview rendered in %dms "+
+			"%s rendered in %dms "+
 				"(wait=%dms load=%dms scene=%dms upload=%dms render=%dms meshes=%d textures=%d)",
+			title,
 			done.Sub(started).Milliseconds(),
 			started.Sub(job.queued).Milliseconds(),
 			loaded.Sub(started).Milliseconds(),
@@ -432,9 +507,17 @@ func (s *Shell) renderModelPreview(
 			len(transport.Meshes),
 			len(transport.Textures),
 		),
-		"Mod.gridModelPreview",
+		service,
 	)
 	return img, generation, nil
+}
+
+// diagnostics names the job's kind in the log.
+func (job *modelPreviewJob) diagnostics() (title, service, operation string) {
+	if job.preset != nil {
+		return "Toggle preset preview", "Mod.togglePresetPreview", "toggle-preset-preview"
+	}
+	return "Grid model preview", "Mod.gridModelPreview", "grid-model-preview"
 }
 
 // visiblePreviewTransport keeps only the meshes the state draws and the textures they use: a still image shows

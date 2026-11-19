@@ -1037,6 +1037,7 @@
         "name-placeholder": "プリセット名",
         "save-current": "現在の値を保存",
         "empty": "プリセットがありません",
+        "preview-unavailable": "プレビューを表示できません",
         "delete-title": "プリセットを削除",
         "delete-description": "「{{name}}」は完全に削除されます。",
         "store": {

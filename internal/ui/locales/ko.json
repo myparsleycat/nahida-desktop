@@ -1037,6 +1037,7 @@
         "name-placeholder": "프리셋 이름",
         "save-current": "현재 값 저장",
         "empty": "프리셋이 없습니다.",
+        "preview-unavailable": "미리보기를 표시할 수 없습니다.",
         "delete-title": "프리셋 삭제",
         "delete-description": "\"{{name}}\" 프리셋이 영구적으로 삭제됩니다.",
         "store": {

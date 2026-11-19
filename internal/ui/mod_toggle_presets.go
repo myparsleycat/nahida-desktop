@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/mod"
+	"nahida.live/desktop/internal/modname"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/tools"
 )
 
@@ -29,6 +32,10 @@ type togglePresetsDialog struct {
 	// renamingID is the preset whose name is being edited inline, and renameName the edited name.
 	renamingID string
 	renameName string
+	// hoverID is the preset row under the pointer, whose model preview shows beside it.
+	hoverID string
+	// listing is the mod listing mod was last looked up in; each update of the listing replaces the pointer.
+	listing *mod.FolderGroup
 	// storePick is the store selected in the chooser shown before the first preset.
 	storePick string
 }
@@ -36,6 +43,28 @@ type togglePresetsDialog struct {
 func (s *Shell) openTogglePresets(info mod.ModInfo) {
 	s.mods.togglePresets = &togglePresetsDialog{mod: info, storePick: mod.TogglePresetStoreMetadata}
 	s.loadTogglePresets()
+}
+
+// listedMod returns the listed entry of info's mod, which follows the toggles and INI writes made after info was
+// read, or info when the mod is not listed.
+func (s *Shell) listedMod(info mod.ModInfo) mod.ModInfo {
+	listing := s.mods.listing
+	if listing == nil {
+		return info
+	}
+	for _, listed := range listing.Mods {
+		if listed.Path == info.Path {
+			return listed
+		}
+	}
+	// Enabling or disabling the mod renames its folder.
+	want := modname.StripDisabledPath(filepath.ToSlash(info.Path))
+	for _, listed := range listing.Mods {
+		if platform.SamePathFold(modname.StripDisabledPath(filepath.ToSlash(listed.Path)), want) {
+			return listed
+		}
+	}
+	return info
 }
 
 func (s *Shell) loadTogglePresets() {
@@ -82,6 +111,9 @@ func (s *Shell) togglePresetsDialog(cx *fairy.Cx) {
 	d := s.mods.togglePresets
 	if d == nil {
 		return
+	}
+	if d.listing != s.mods.listing {
+		d.listing, d.mod = s.mods.listing, s.listedMod(d.mod)
 	}
 	close := func() {
 		if !d.busy {
@@ -172,21 +204,57 @@ func (s *Shell) togglePresetList(d *togglePresetsDialog, allowed bool) *fairy.El
 		if updated := formatTogglePresetTime(preset.UpdatedAt); updated != "" {
 			detail += " · " + updated
 		}
-		list.Child(fairy.Row(
+		row := fairy.Row(
 			fairy.Col(
 				fairy.Text(preset.Name).FontSize(14).LineHeight(20).Medium().Ellipsis(),
 				fairy.Text(detail).FontSize(12).LineHeight(16).Color(t.MutedForeground).Ellipsis(),
 			).Grow(1).MinW(0),
 			kit.IconButton(lucide.BookmarkCheck, func() { s.applyTogglePreset(d.mod.Path, preset, &d.busy) },
 				kit.Ghost, kit.Small, kit.Disabled(d.busy || !allowed), kit.Tooltip(T("g.apply"))).Label(T("g.apply")),
-			kit.IconButton(lucide.Pencil, func() { d.renamingID, d.renameName = preset.ID, preset.Name }, kit.Ghost,
-				kit.Small, kit.Disabled(d.busy), kit.Tooltip(T("g.rename"))).Label(T("g.rename")),
+			// The rename row takes this row's key, so this row's OnHover never hears the pointer leave.
+			kit.IconButton(lucide.Pencil, func() { d.renamingID, d.renameName, d.hoverID = preset.ID, preset.Name, "" },
+				kit.Ghost, kit.Small, kit.Disabled(d.busy), kit.Tooltip(T("g.rename"))).Label(T("g.rename")),
 			kit.IconButton(lucide.Trash, func() { s.deleteTogglePreset(d, preset) }, kit.Ghost, kit.Small,
 				kit.Disabled(d.busy), kit.Tooltip(T("g.delete"))).Label(T("g.delete")),
 		).Key("toggle-preset:"+preset.ID).Gap(4).Align(fairy.Center).PadXY(8, 6).Radius(t.RadiusMd()).
-			Fill(t.Muted.Alpha(0.5)))
+			Fill(t.Muted.Alpha(0.5))
+		row.OnHover(func(in bool) bool {
+			switch {
+			case in && d.hoverID != preset.ID:
+				d.hoverID = preset.ID
+			case !in && d.hoverID == preset.ID:
+				d.hoverID = ""
+			default:
+				return false
+			}
+			return true
+		})
+		if d.hoverID == preset.ID {
+			panel := t.Surface(fairy.Box(s.togglePresetPreviewContent(d.mod, preset)).Pad(4), t.Popover).
+				Radius(t.RadiusLg()).Ring(1, t.Foreground.Alpha(0.1)).Color(t.PopoverForeground).
+				Shadow(0, 8, 24, 0, shadowColor(t)).PassThrough()
+			row.Popover(panel, fairy.PopoverOptions{Side: fairy.SideRight, Align: fairy.AlignStart, Gap: 8})
+		}
+		list.Child(row)
 	}
 	return list
+}
+
+const togglePresetPreviewSize = 240
+
+// togglePresetPreviewContent shows the mod's model posed in preset's values: the rendered image, a placeholder
+// while it is made, or a note when it could not be made.
+func (s *Shell) togglePresetPreviewContent(info mod.ModInfo, preset mod.TogglePreset) *fairy.El {
+	box := fairy.Box().Size(togglePresetPreviewSize, togglePresetPreviewSize).Center()
+	img, loading := s.togglePresetPreview(info, preset)
+	switch {
+	case img != nil:
+		return box.Child(fairy.ImageEl(img).WFull().HFull().Fit(fairy.FitContain))
+	case loading:
+		return box.Child(kit.Skeleton().WFull().HFull())
+	}
+	return box.Child(fairy.Text(T(togglePresetsPrefix + "preview-unavailable")).FontSize(13).LineHeight(18).
+		Color(kit.T().MutedForeground).TextAlign(fairy.TextCenter).Wrap()).Pad(16)
 }
 
 func (s *Shell) chooseTogglePresetStore(d *togglePresetsDialog, store string) {
@@ -383,6 +451,7 @@ func (s *Shell) togglePresetCardItems(info mod.ModInfo, menu *togglePresetMenu) 
 			items = append(items, kit.MenuItem{
 				Label: preset.Name, Icon: lucide.Bookmark, Disabled: menu.applying || !supported,
 				OnClick: func() { s.applyTogglePreset(info.Path, preset, &menu.applying) },
+				Preview: func() *fairy.El { return s.togglePresetPreviewContent(info, preset) },
 			})
 		}
 	}

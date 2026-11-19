@@ -1040,6 +1040,7 @@
         "name-placeholder": "Preset name",
         "save-current": "Save current values",
         "empty": "No presets",
+        "preview-unavailable": "No preview available",
         "delete-title": "Delete preset",
         "delete-description": "\"{{name}}\" will be deleted permanently.",
         "store": {
