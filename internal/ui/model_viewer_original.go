@@ -428,6 +428,7 @@ func buildViewerOriginal(
 			texture: texture,
 			srgb:    role == fillDiffuse,
 			normal:  role == fillNormal,
+			lut:     texture.LUT,
 		})
 		return key
 	}
@@ -659,6 +660,12 @@ func loadOriginalTextures(
 				fail(key, req, err)
 				return nil
 			}
+			if req.lut {
+				if image, err = originalLUTWhite(image); err != nil {
+					fail(key, req, err)
+					return nil
+				}
+			}
 			texture := originalTextureData(image, req, reconstruct)
 			return fairy.UseDevice(func(g fairy.GPU) error {
 				view, err := texture.upload(g.Device, g.Context)
@@ -761,8 +768,8 @@ func (v *ModelViewer) showOriginalTexturesMissing() {
 }
 
 type originalTextureRequest struct {
-	texture      modelviewer.CharacterOriginalTexture
-	srgb, normal bool
+	texture           modelviewer.CharacterOriginalTexture
+	srgb, normal, lut bool
 }
 
 func originalTextureKey(texture modelviewer.CharacterOriginalTexture) string {
@@ -770,7 +777,24 @@ func originalTextureKey(texture modelviewer.CharacterOriginalTexture) string {
 	if texture.Alpha != nil {
 		key += "+" + texture.AlphaChannel + ":" + texture.Alpha.File
 	}
+	if texture.LUT {
+		key += "#lut"
+	}
 	return key
+}
+
+// originalLUTWhite reduces a colour LUT to a one-pixel image of its output for white. The LUT file lays out n blue
+// slices of n×n side by side, red rising across each slice and green toward the top row. LoadCharacterOriginalTexture
+// flips the rows, so white is the last column of the last row.
+func originalLUTWhite(img *image.NRGBA) (*image.NRGBA, error) {
+	width, height := img.Rect.Dx(), img.Rect.Dy()
+	if height < 2 || width != height*height {
+		return nil, fmt.Errorf("colour LUT is %dx%d, want n²×n", width, height)
+	}
+	at := img.PixOffset(img.Rect.Max.X-1, img.Rect.Max.Y-1)
+	out := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	copy(out.Pix, img.Pix[at:at+4])
+	return out, nil
 }
 
 func originalTextureData(img *image.NRGBA, req originalTextureRequest, reconstruct bool) *viewerTextureData {

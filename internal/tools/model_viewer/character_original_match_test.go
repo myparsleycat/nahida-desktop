@@ -69,6 +69,35 @@ func TestMatchCharacterOriginal(t *testing.T) {
 	}
 }
 
+func TestCharacterOriginalEFMISkinLUT(t *testing.T) {
+	skin := CharacterOriginalTexture{Name: "T_actor_common_femaleskincolor01_lut_D"}
+	clothLUT := CharacterOriginalTexture{Name: "T_actor_common_cloth_lut_01_D"}
+	colour := CharacterOriginalTexture{Name: "T_actor_x_cloth_01_D"}
+	parts := []CharacterOriginalPart{
+		{Role: OriginalRoleBody, Shader: "Qebg", Textures: map[string]CharacterOriginalTexture{"Qtvf": skin}},
+		{Role: OriginalRoleFace, Shader: "Qebg", Textures: map[string]CharacterOriginalTexture{"Qtvf": skin}},
+		{Role: OriginalRoleBody, Shader: "Qpgh", Textures: map[string]CharacterOriginalTexture{
+			"Qy3l": colour, "Qtvf": clothLUT,
+		}},
+		// Brows and fur carry LUTs that do not give their colour.
+		{Role: OriginalRoleBrow, Shader: "Qxkp", Textures: map[string]CharacterOriginalTexture{"Qtvf": skin}},
+		{Role: OriginalRoleHair, Shader: "Qpgh", Textures: map[string]CharacterOriginalTexture{"Qtvf": clothLUT}},
+	}
+	original := &CharacterOriginal{Game: "EFMI", Parts: parts}
+	for i, want := range []CharacterOriginalTexture{
+		{Name: skin.Name, LUT: true}, {Name: skin.Name, LUT: true}, colour, {}, {},
+	} {
+		got, ok := original.Texture(i, OriginalTextureDiffuse)
+		if ok != (want.Name != "") || got.Name != want.Name || got.LUT != want.LUT {
+			t.Errorf("part %d diffuse = %+v, %v; want %+v", i, got, ok, want)
+		}
+	}
+	original.Game = "SRMI"
+	if got, ok := original.Texture(0, OriginalTextureDiffuse); ok {
+		t.Errorf("SRMI diffuse = %+v, want none", got)
+	}
+}
+
 func TestMatchCharacterOriginalKeptHair(t *testing.T) {
 	body := originalTestPart(OriginalRoleBody, 0, 0.2)
 	body.Mesh = "Body"

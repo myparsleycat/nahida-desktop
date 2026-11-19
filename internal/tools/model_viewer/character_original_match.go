@@ -28,6 +28,14 @@ var originalTextureSlots = map[string]map[string]string{
 	"WWMI": {OriginalTextureDiffuse: "MainTex", OriginalTextureNormal: "Normal_Roughness_Metallic"},
 }
 
+// Endfield's skin shader (Qebg, the body and face) has no colour map. Its colour comes from a 32³ skin colour LUT
+// (T_actor_common_femaleskincolor*_lut_D) in Qtvf, whose output for white is the lit skin tone. Brows and cloth also
+// carry LUTs in Qtvf, but those do not give their colour.
+const (
+	efmiSkinShader = "Qebg"
+	efmiLUTSlot    = "Qtvf"
+)
+
 // originalFaceSlots are the face maps of the face material, which Genshin and Star Rail sample from their own slots.
 var originalFaceSlots = map[string]map[string]string{
 	"GIMI": {OriginalTextureFaceLight: "_FaceMapTex", OriginalTextureFaceShadow: "_LightMapTex"},
@@ -55,8 +63,16 @@ func (o *CharacterOriginal) Texture(part int, role string) (CharacterOriginalTex
 	if !ok {
 		return CharacterOriginalTexture{}, false
 	}
-	texture, found := p.Textures[slot]
-	return texture, found
+	if texture, found := p.Textures[slot]; found {
+		return texture, true
+	}
+	if o.Game == "EFMI" && role == OriginalTextureDiffuse && p.Shader == efmiSkinShader {
+		if texture, found := p.Textures[efmiLUTSlot]; found {
+			texture.LUT = true
+			return texture, true
+		}
+	}
+	return CharacterOriginalTexture{}, false
 }
 
 const (

@@ -545,15 +545,20 @@ func (v *ModelViewer) formSwitcher() *fairy.El {
 	return fairy.Box(list).Absolute().Top(12).Left(12).MaxW(280)
 }
 
-// gameTextureCount counts the drawn meshes the mod binds no diffuse texture to and the original model does not
-// fill. The game draws them with its own textures, which the viewer cannot read.
+// gameTextureCount counts the visible meshes the mod binds no diffuse texture to and the original model does not
+// fill. The game draws them with its own textures, which the viewer cannot read. Overlay shadows are left out: the
+// viewer never draws them.
 func (v *ModelViewer) gameTextureCount() int {
 	var original *viewerOriginal
+	var meshes []*viewerMesh
 	if v.scene != nil {
-		original = v.scene.original
+		original, meshes = v.scene.original, v.scene.meshes
 	}
 	count := 0
 	for i, state := range v.toggleStates {
+		if i < len(meshes) && meshes[i].overlayShadow {
+			continue
+		}
 		if state.Visible && state.TexKey == "" && !original.fillsDiffuse(i) {
 			count++
 		}

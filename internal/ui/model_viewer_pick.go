@@ -97,7 +97,7 @@ func hitScene(scene *viewerScene, origin, direction vec3) (viewerHit, bool) {
 	var best viewerHit
 	found := false
 	for i, mesh := range scene.meshes {
-		if !mesh.drawn(false) {
+		if !mesh.drawn() {
 			continue
 		}
 		for face := 0; face*3+2 < len(mesh.indices); face++ {

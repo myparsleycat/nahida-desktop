@@ -35,9 +35,8 @@ func TestMarkEFMIMeshesHidesOverlayShadows(t *testing.T) {
 	markViewerMeshes(scene)
 	for _, m := range scene.meshes {
 		wantHidden := m == eyeShadow || m == hairShadow
-		if m.drawn(false) == wantHidden || !m.drawn(true) {
-			t.Errorf("%s drawn = %v, highlighted %v; want hidden only without highlight: %v",
-				m.info.ID, m.drawn(false), m.drawn(true), wantHidden)
+		if m.drawn() == wantHidden {
+			t.Errorf("%s drawn = %v, want hidden: %v", m.info.ID, m.drawn(), wantHidden)
 		}
 	}
 	if !face.efmiHead || body.efmiHead || shoe.efmiHead || !iris.toonEye || face.toonEye {

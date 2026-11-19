@@ -143,6 +143,8 @@ type CharacterOriginalTexture struct {
 	Color        characterFileEntry
 	Alpha        *characterFileEntry
 	AlphaChannel string
+	// LUT marks a colour LUT that stands in for a missing colour map; its output for white is the colour.
+	LUT bool
 }
 
 type originalTextureFile struct {

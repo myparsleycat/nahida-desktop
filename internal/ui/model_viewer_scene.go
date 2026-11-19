@@ -411,9 +411,8 @@ func (m *viewerMesh) variantBase() viewerVariantBase {
 	return viewerVariantBase{vertexCount: m.vertexCount, extra: m.baseExtra, tangentOutline: m.tangentOutline()}
 }
 
-// drawn reports whether the mesh draws, given whether game textures are highlighted.
-func (m *viewerMesh) drawn(highlight bool) bool {
-	return m.state.Visible && (!m.overlayShadow || highlight)
+func (m *viewerMesh) drawn() bool {
+	return m.state.Visible && !m.overlayShadow
 }
 
 // decodeViewerMesh reads the MVG3 mesh buffer the backend writes (see modelViewerMeshBytes).

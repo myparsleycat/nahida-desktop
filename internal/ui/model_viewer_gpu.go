@@ -919,7 +919,7 @@ func (r *viewerRenderer) drawScene(
 			return nil
 		}
 		for i, mesh := range scene.meshes {
-			if !mesh.drawn(opts.untextured != nil) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
+			if !mesh.drawn() || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
 				continue
 			}
 			blend, _ := skin.blend(i, mesh.vertexCount)
@@ -1051,7 +1051,7 @@ func (r *viewerRenderer) drawShadowMap(
 	gpu := scene.gpu
 	casters, buffers := r.casterScratch[:0], r.bufferScratch[:0]
 	for i, mesh := range scene.meshes {
-		if !mesh.drawn(false) || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
+		if !mesh.drawn() || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
 			continue
 		}
 		// Coverage cards are flat ink decals that block no light.
