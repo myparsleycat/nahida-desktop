@@ -99,11 +99,8 @@ func formatBool(value bool) string {
 }
 
 func defaultLanguageFromLocale(locale string) string {
-	if strings.EqualFold(strings.TrimSpace(locale), "ko") {
-		return "ko"
-	}
-	lang := localeLanguage(locale)
-	if lang == "en" || lang == "zh" {
+	switch lang := localeLanguage(locale); lang {
+	case "en", "ja", "ko", "zh":
 		return lang
 	}
 	return defaultLanguage

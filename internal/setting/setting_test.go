@@ -475,9 +475,9 @@ func TestDefaultLanguageFromLocale(t *testing.T) {
 	}{
 		{"", "en"},
 		{"ko", "ko"},
-		{"ko-KR", "en"},
-		{"ko_KR.UTF-8", "en"},
-		{"ja-JP", "en"},
+		{"ko-KR", "ko"},
+		{"ko_KR.UTF-8", "ko"},
+		{"ja-JP", "ja"},
 		{"zh-Hans-CN", "zh"},
 		{"fr-FR", "en"},
 		{"C", "en"},
@@ -545,8 +545,8 @@ func TestGetMany(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("GetMany len = %d, want 3", len(got))
 	}
-	if got[KeyGeneralLanguage] != "en" {
-		t.Fatalf("language = %#v, want en", got[KeyGeneralLanguage])
+	if got[KeyGeneralLanguage] != "ja" {
+		t.Fatalf("language = %#v, want ja", got[KeyGeneralLanguage])
 	}
 	if got[KeyModGridLayoutMode] != "responsive" {
 		t.Fatalf("grid = %#v", got[KeyModGridLayoutMode])
