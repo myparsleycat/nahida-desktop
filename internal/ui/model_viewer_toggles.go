@@ -563,8 +563,9 @@ func (v *ModelViewer) gameTextureCount() int {
 
 // The status chips in the animation bar have fixed widths, so the bar is sized before they are laid out. A chip is
 // viewerStatusChipHeight high with viewerStatusChipPadX at each side and viewerStatusChipGap between its parts. A
-// download chip holds the ring and the percentage, which fits "100%" in viewerStatusPercentWidth; the game texture
-// chip holds the icon and the count, which fits three digits in viewerStatusCountWidth.
+// load chip holds the ring, and while it downloads also the percentage, which fits "100%" in
+// viewerStatusPercentWidth; the game texture chip holds the icon and the count, which fits three digits in
+// viewerStatusCountWidth.
 const (
 	viewerStatusChipHeight     = 28
 	viewerStatusChipPadX       = 6
@@ -573,11 +574,12 @@ const (
 	viewerStatusIconSize       = 14
 	viewerStatusPercentWidth   = 34
 	viewerStatusCountWidth     = 24
-	viewerDownloadChipWidth    = 2*viewerStatusChipPadX + viewerStatusRingSize + viewerStatusChipGap + viewerStatusPercentWidth
+	viewerLoadChipWidth        = 2*viewerStatusChipPadX + viewerStatusRingSize
+	viewerDownloadChipWidth    = viewerLoadChipWidth + viewerStatusChipGap + viewerStatusPercentWidth
 	viewerGameTextureChipWidth = 2*viewerStatusChipPadX + viewerStatusIconSize + viewerStatusChipGap + viewerStatusCountWidth
 )
 
-// viewerStatus is what the animation bar's status chips show: the downloads running and the number of parts drawn
+// viewerStatus is what the animation bar's status chips show: the loads running and the number of parts drawn
 // with the game's textures.
 type viewerStatus struct {
 	downloads []viewerDownloadProgress
@@ -589,7 +591,10 @@ func (s viewerStatus) empty() bool { return len(s.downloads) == 0 && s.gameParts
 // width is the width of the row of status chips.
 func (s viewerStatus) width() float32 {
 	chips := len(s.downloads)
-	width := float32(chips * viewerDownloadChipWidth)
+	var width float32
+	for _, p := range s.downloads {
+		width += p.width()
+	}
 	if s.gameParts > 0 {
 		chips++
 		width += viewerGameTextureChipWidth

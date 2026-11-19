@@ -22,8 +22,12 @@ const (
 // viewerDownloadPostGap is the shortest time between the rebuilds download progress asks for.
 const viewerDownloadPostGap = 100 * time.Millisecond
 
-// viewerDownloads holds the progress of the character data files the viewer's loads read. The loads' goroutines
-// report into it; the UI thread begins and ends the loads and reads it.
+// viewerLoadShowDelay is how long a load that downloads nothing runs before its chip shows, so that a quick load from
+// the cache does not flash one.
+const viewerLoadShowDelay = 300 * time.Millisecond
+
+// viewerDownloads holds the running loads of character data and the progress of the files they read. The loads'
+// goroutines report into it; the UI thread begins and ends the loads and reads it.
 type viewerDownloads struct {
 	mu     sync.Mutex
 	tasks  [downloadTasks]viewerDownloadState
@@ -31,11 +35,14 @@ type viewerDownloads struct {
 }
 
 // viewerDownloadState is a task's running loads and their files by name. fetched is set once a file comes from the
-// network rather than the cache.
+// network rather than the cache. reveal asks for the rebuild that shows the chip once viewerLoadShowDelay has passed
+// since started.
 type viewerDownloadState struct {
 	runs    int
 	files   map[string]viewerDownloadFile
 	fetched bool
+	started time.Time
+	reveal  *time.Timer
 }
 
 type viewerDownloadFile struct {
@@ -56,7 +63,10 @@ func (d *viewerDownloads) begin(task viewerDownloadTask, post func(func())) view
 	defer d.mu.Unlock()
 	s := &d.tasks[task]
 	if s.runs == 0 {
-		s.files, s.fetched = map[string]viewerDownloadFile{}, false
+		s.files, s.fetched, s.started = map[string]viewerDownloadFile{}, false, time.Now()
+		if post != nil {
+			s.reveal = time.AfterFunc(viewerLoadShowDelay, func() { post(func() {}) })
+		}
 	}
 	s.runs++
 	return viewerDownloadRun{d: d, task: task, post: post}
@@ -70,6 +80,10 @@ func (r viewerDownloadRun) end() {
 	defer r.d.mu.Unlock()
 	s := &r.d.tasks[r.task]
 	s.runs = max(s.runs-1, 0)
+	if s.runs == 0 && s.reveal != nil {
+		s.reveal.Stop()
+		s.reveal = nil
+	}
 }
 
 // expect counts a file the load will read before it starts, so the total does not grow as downloads wait their turn.
@@ -110,23 +124,33 @@ func (r viewerDownloadRun) report(file string, done, size int64, cached bool) {
 	}
 }
 
-// viewerDownloadProgress is what the panel shows of a task: done of total bytes.
+// viewerDownloadProgress is what the panel shows of a task: done of total bytes while downloading is set.
 type viewerDownloadProgress struct {
 	task        viewerDownloadTask
+	downloading bool
 	done, total int64
 }
 
-// shown lists the tasks with a load running that downloads a file.
+// width is the width of the chip that shows p.
+func (p viewerDownloadProgress) width() float32 {
+	if p.downloading {
+		return viewerDownloadChipWidth
+	}
+	return viewerLoadChipWidth
+}
+
+// shown lists the tasks with a load running that downloads a file or has run for viewerLoadShowDelay.
 func (d *viewerDownloads) shown() []viewerDownloadProgress {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	now := time.Now()
 	var out []viewerDownloadProgress
 	for task := range downloadTasks {
 		s := &d.tasks[task]
-		if s.runs == 0 || !s.fetched {
+		if s.runs == 0 || !s.fetched && now.Sub(s.started) < viewerLoadShowDelay {
 			continue
 		}
-		p := viewerDownloadProgress{task: task}
+		p := viewerDownloadProgress{task: task, downloading: s.fetched}
 		for _, file := range s.files {
 			p.done += file.done
 			p.total += file.size
@@ -136,31 +160,35 @@ func (d *viewerDownloads) shown() []viewerDownloadProgress {
 	return out
 }
 
-// downloadChip shows the download of p as the task's icon inside a progress ring and the percentage, with the task
-// and the sizes in its tooltip. Once its files have all arrived a spinner takes the ring's place while its load
-// finishes.
+// downloadChip shows the load of p as the task's icon inside a spinner. While the load downloads, a progress ring
+// takes the spinner's place beside the percentage, with the sizes in the tooltip, until its files have all arrived.
 func downloadChip(t kit.Theme, p viewerDownloadProgress) *fairy.El {
 	icon, label := lucide.PersonStanding, T("page.tools.model_viewer.menu.character_motion")
 	if p.task == downloadOriginal {
 		icon, label = lucide.Database, T("page.tools.model_viewer.menu.original_data")
 	}
+
+	const ring = viewerStatusRingSize
+	progress := kit.Spinner(ring).Color(t.MutedForeground)
+	chip := fairy.Row().Key("model-viewer.download."+strconv.Itoa(int(p.task))).W(p.width()).Shrink(0).
+		Gap(viewerStatusChipGap).Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0)
+	if !p.downloading {
+		return chip.Child(fairy.Box(progress.Absolute().Inset(0), fairy.Icon(icon).Size(10, 10)).Size(ring, ring).
+			Center().Shrink(0)).Label(label).Tooltip(label)
+	}
+
 	value := 1.0
 	if p.total > 0 {
 		value = float64(p.done) / float64(p.total)
 	}
-
-	const ring = viewerStatusRingSize
-	progress := kit.Spinner(ring).Color(t.MutedForeground)
 	if p.done < p.total {
 		progress = kit.ProgressCircle(value, ring, kit.Label(label)).Color(t.Primary)
 	}
-	return fairy.Row(
+	return chip.Child(
 		fairy.Box(progress.Absolute().Inset(0), fairy.Icon(icon).Size(10, 10)).Size(ring, ring).Center().Shrink(0),
 		fairy.Box(viewerStatusText(strconv.Itoa(int(value*100))+"%").Color(t.MutedForeground)).
 			W(viewerStatusPercentWidth).Align(fairy.End),
-	).Key("model-viewer.download."+strconv.Itoa(int(p.task))).W(viewerDownloadChipWidth).Shrink(0).
-		Gap(viewerStatusChipGap).Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0).
-		Tooltip(label + "\n" + formatSize(p.done) + " / " + formatSize(p.total))
+	).Tooltip(label + "\n" + formatSize(p.done) + " / " + formatSize(p.total))
 }
 
 func viewerStatusText(text string) *fairy.El {
