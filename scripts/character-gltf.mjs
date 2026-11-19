@@ -180,9 +180,9 @@ export function readBatch(bytes) {
   return characters;
 }
 
-// writeIndex writes the index of the characters just imported ({game: {id: entry}}) as <out-dir>/index.json, indented,
-// the copy hosted beside the files, and to indexPath, compact, the copy the app embeds. When indexPath already holds
-// an index, each imported game replaces its rows there and the other games keep theirs, in both files.
+// writeIndex writes the index of the characters just imported ({game: {id: entry}}) as <out-dir>/index.json, the copy
+// hosted beside the files, and to indexPath, the copy the app embeds; both are indented and identical. When indexPath
+// already holds an index, each imported game replaces its rows there and the other games keep theirs, in both files.
 export async function writeIndex(outDir, indexPath, index) {
   let characters = {};
   if (indexPath) {
@@ -201,9 +201,10 @@ export async function writeIndex(outDir, indexPath, index) {
       .map(([game, rows]) => [game, Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)))]),
   );
   const document = { format: 1, characters: sorted };
-  await writeFile(path.join(outDir, 'index.json'), `${JSON.stringify(document, null, 2)}\n`);
+  const text = `${JSON.stringify(document, null, 2)}\n`;
+  await writeFile(path.join(outDir, 'index.json'), text);
   if (indexPath) {
     await mkdir(path.dirname(indexPath), { recursive: true });
-    await writeFile(indexPath, JSON.stringify(document));
+    await writeFile(indexPath, text);
   }
 }
