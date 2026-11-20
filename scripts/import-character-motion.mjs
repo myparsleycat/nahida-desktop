@@ -1,7 +1,7 @@
 // Converts extracted character motions into the files the model viewer downloads, keyed by the character catalog's
 // ids, and writes an index with each file's size and SHA-256.
 //
-// The input batches were extracted with the operators' permission: Genshin Impact, Honkai: Star Rail and Zenless Zone
+// Sources of the input batches: Genshin Impact, Honkai: Star Rail and Zenless Zone
 // Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki; Wuthering Waves batches come from
 // scripts/convert-character-wwmi.mjs. Each batch is a gzip stream of records (u32 name length, u32 data length,
 // name, data) holding, per character:

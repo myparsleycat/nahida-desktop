@@ -1,7 +1,7 @@
 // Converts extracted original character models into the files the model viewer downloads to fill parts and textures a
 // mod does not ship, keyed by the character catalog's ids, and writes an index with each model file's size and SHA-256.
 //
-// The input batches were extracted with the operators' permission: Genshin Impact, Honkai: Star Rail and Zenless Zone
+// Sources of the input batches: Genshin Impact, Honkai: Star Rail and Zenless Zone
 // Zero from skowt.cc's 3D viewer, Arknights: Endfield from studio.warfarin.wiki; Wuthering Waves batches come from
 // scripts/convert-character-wwmi.mjs. Each batch holds, per character:
 //   <game>/<key>/model.glb           the source model with every mesh attribute, its materials and (skowt, Wuthering
