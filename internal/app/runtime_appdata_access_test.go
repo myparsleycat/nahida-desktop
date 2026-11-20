@@ -184,7 +184,7 @@ func TestBootRuntimeRestoresDeniedJunctionRoot(t *testing.T) {
 		}
 	}}
 	rt := newRuntime(uiHost{})
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 	rt.appDataAccess = appDataAccess{
 		denied:  platform.AccessDenied,
 		confirm: func(string) (bool, error) { return true, nil },

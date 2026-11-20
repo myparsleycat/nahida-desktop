@@ -100,6 +100,16 @@ func (w *StallWatch) finishLocked() {
 	}
 }
 
+// Expire logs the stage still running as expired, with the goroutine dump, for a caller that gives up on the
+// operation. It ignores the dump throttle because nothing else is logged for the operation afterwards.
+func (w *StallWatch) Expire() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	fields := w.record("expired")
+	fields["stageGoroutine"], fields["goroutines"] = summarizeGoroutines(allGoroutineStacks(), w.goroutine)
+	w.log.Error(fields, w.where)
+}
+
 func (w *StallWatch) fire(generation int, dump bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

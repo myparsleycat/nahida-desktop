@@ -152,17 +152,28 @@ func (rt *runtime) Init(ctx context.Context, dbPath string) error {
 	return nil
 }
 
-func (rt *runtime) Close() error {
+// Close stops the services in order and names each step on watch, so a step that never returns can be logged.
+func (rt *runtime) Close(watch *infra.StallWatch) error {
 	var err error
-	rt.githubRate.Close()
-	rt.startup.stop()
-	rt.gameLink.Shutdown()
-	if rt.blenderLink != nil {
-		rt.blenderLink.Shutdown()
+	step := func(stage string, stop func()) {
+		watch.Stage(stage)
+		stop()
 	}
-	rt.elevatedLifecycle.shutdown()
-	err = errors.Join(err, infra.AnnotateError(rt.elevated.Close(), infra.Diagnostic{Stage: "elevated-helper"}))
-	rt.gameBananaLogin.Close()
+	shutdown := func(stage string, stop func() error) {
+		watch.Stage(stage)
+		err = errors.Join(err, infra.AnnotateError(stop(), infra.Diagnostic{Stage: stage}))
+	}
+
+	step("github-rate", rt.githubRate.Close)
+	step("startup", rt.startup.stop)
+	step("game-link", rt.gameLink.Shutdown)
+	if rt.blenderLink != nil {
+		step("blender-link", rt.blenderLink.Shutdown)
+	}
+	step("elevated-lifecycle", rt.elevatedLifecycle.shutdown)
+	shutdown("elevated-helper", rt.elevated.Close)
+	step("gamebanana-login", rt.gameBananaLogin.Close)
+	watch.Stage("gamebanana")
 	_ = infra.ReportError(
 		rt.log,
 		rt.gamebanana.ServiceShutdown(),
@@ -170,26 +181,32 @@ func (rt *runtime) Close() error {
 		infra.Diagnostic{Operation: "shutdown", Stage: "gamebanana"},
 	)
 	if rt.proxyRelay != nil {
+		watch.Stage("proxy-relay")
 		err = errors.Join(err, rt.proxyRelay.Close())
 		rt.proxyRelay = nil
 	}
-	err = errors.Join(err, infra.AnnotateError(rt.updater.ServiceShutdown(), infra.Diagnostic{Stage: "updater"}))
-	err = errors.Join(err, infra.AnnotateError(rt.protocol.ServiceShutdown(), infra.Diagnostic{Stage: "protocol"}))
-	err = errors.Join(err, infra.AnnotateError(rt.transfer.ServiceShutdown(), infra.Diagnostic{Stage: "transfer"}))
-	err = errors.Join(err, infra.AnnotateError(rt.auth.ServiceShutdown(), infra.Diagnostic{Stage: "auth"}))
-	err = errors.Join(err, infra.AnnotateError(rt.backup.ServiceShutdown(), infra.Diagnostic{Stage: "backup"}))
-	err = errors.Join(err, infra.AnnotateError(rt.xxmi.ServiceShutdown(), infra.Diagnostic{Stage: "xxmi"}))
-	err = errors.Join(err, infra.AnnotateError(rt.mod.ServiceShutdown(), infra.Diagnostic{Stage: "mod"}))
-	err = errors.Join(err, infra.AnnotateError(rt.agent.ServiceShutdown(), infra.Diagnostic{Stage: "agent"}))
-	err = errors.Join(err, infra.AnnotateError(rt.tools.ServiceShutdown(), infra.Diagnostic{Stage: "tools"}))
-	err = errors.Join(err, infra.AnnotateError(rt.native.Close(), infra.Diagnostic{Stage: "native"}))
+	shutdown("updater", rt.updater.ServiceShutdown)
+	shutdown("protocol", rt.protocol.ServiceShutdown)
+	shutdown("transfer", rt.transfer.ServiceShutdown)
+	shutdown("auth", rt.auth.ServiceShutdown)
+	shutdown("backup", rt.backup.ServiceShutdown)
+	shutdown("xxmi", rt.xxmi.ServiceShutdown)
+	shutdown("mod", rt.mod.ServiceShutdown)
+	shutdown("agent", rt.agent.ServiceShutdown)
+	shutdown("tools", rt.tools.ServiceShutdown)
+	shutdown("native", rt.native.Close)
 	err = infra.ReportError(rt.log, err, "Runtime", infra.Diagnostic{Operation: "shutdown"})
+
 	if rt.store != nil {
+		watch.Stage("store")
 		storeErr := rt.store.Close()
 		_ = infra.ReportError(rt.log, storeErr, "Runtime", infra.Diagnostic{Operation: "shutdown", Stage: "store"})
 		err = errors.Join(err, storeErr)
 	}
-	return errors.Join(err, rt.log.Close())
+	watch.Stage("log")
+	err = errors.Join(err, rt.log.Close())
+	watch.Stop()
+	return err
 }
 
 func (rt *runtime) failInit(err error, stage string) error {

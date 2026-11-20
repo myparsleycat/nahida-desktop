@@ -34,6 +34,8 @@ func Run(icon []byte) (runErr error) {
 	if err != nil || !first {
 		return err
 	}
+	// Runs after shutdown, so a launch made while main shows a startup error starts instead of waiting for this process.
+	defer fairy.ReleaseSingleInstance()
 
 	notices := &trayNotices{}
 	events := ui.NewEvents()
@@ -43,7 +45,12 @@ func Run(icon []byte) (runErr error) {
 	rt := newRuntime(host)
 	window = rt.window
 	// Runs once, when Run returns or when the Windows session ends, whichever comes first.
-	shutdown := sync.OnceValue(rt.Close)
+	shutdown := sync.OnceValue(func() error {
+		watch := infra.NewStallWatch(rt.log, "Runtime", "shutdown", nil)
+		return closeWithin(func() error { return rt.Close(watch) }, watch, shutdownLimit, shutdownLogWait, func() {
+			os.Exit(1)
+		})
+	})
 	defer func() {
 		runErr = errors.Join(runErr, shutdown())
 	}()

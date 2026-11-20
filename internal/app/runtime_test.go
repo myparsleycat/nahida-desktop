@@ -68,7 +68,7 @@ func TestRuntimeInitOpensAndSeedsLanguage(t *testing.T) {
 	if err := rt.Init(ctx, path); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	got, err := rt.setting.Get(ctx, setting.KeyGeneralLanguage)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestRuntimeInitDefersSettingHooksUntilApplicationIsReady(t *testing.T) {
 	if err := rt.Init(ctx, filepath.Join(t.TempDir(), "data.db")); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	if err := rt.setting.SetLanguage(ctx, "ko"); err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestBootRuntimeOpensDBAndFollowsLogLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	wantDB := filepath.Join(cwd, "local.db")
 	if paths.DB != wantDB {
@@ -228,7 +228,7 @@ func TestBootRuntimePackagedUsesAppDataWithoutLegacyMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	wantRoot := filepath.Join(home, appdata.RootDirName)
 	wantDB := filepath.Join(wantRoot, appdata.DatabaseFile)
@@ -256,7 +256,7 @@ func TestBootRuntimeDBOverrideWinsInDevelopment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 	if paths.DB != override {
 		t.Fatalf("DB = %q, want override %q", paths.DB, override)
 	}
@@ -276,7 +276,7 @@ func TestBootRuntimeFailsBeforeInjectionWhenHomeIsNotDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := newRuntime(uiHost{})
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 	_, err := bootRuntime(context.Background(), rt, runtimePathInput{
 		HomeDir: home, Cwd: t.TempDir(), Packaged: false,
 	})
@@ -302,7 +302,7 @@ func TestBootRuntimeDevLogsIgnoreLevel(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("bootRuntime: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	rt.log.Configure(infra.LogOptions{Writer: &buf, Dev: true})
 	if rt.log.Level() != "warn" {
@@ -323,7 +323,7 @@ func TestRuntimeInitWiresAuthTokenStore(t *testing.T) {
 	if err := rt.Init(ctx, path); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer func() { _ = rt.Close() }()
+	defer closeTestRuntime(rt)
 
 	enc, err := platform.NewCrypto().EncryptString("wired-token")
 	if err != nil {

@@ -107,7 +107,7 @@ func TestRuntimeInitDefersBisectRecovery(t *testing.T) {
 	rt.http.UseTransport(startupTestTransport(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("network disabled during startup test")
 	}))
-	t.Cleanup(func() { _ = rt.Close() })
+	t.Cleanup(func() { closeTestRuntime(rt) })
 	if err := rt.Init(context.Background(), path); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestStartupWaitReturnsOnCancel(t *testing.T) {
 func TestMaintenanceFailureReleasesWaiters(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(uiHost{})
-	t.Cleanup(func() { _ = rt.Close() })
+	t.Cleanup(func() { closeTestRuntime(rt) })
 	var output bytes.Buffer
 	rt.log.Configure(infra.LogOptions{Writer: &output, DisableFile: true})
 	rt.startup.start(func(ctx context.Context) {
