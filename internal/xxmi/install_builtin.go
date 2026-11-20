@@ -180,8 +180,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 		return err
 	}
 	prepared = true
-	var iniBackup []byte
-	iniBackup, _, err = stageRoot.readFile("d3dx.ini")
+	iniBackup, err := transaction.readLiveFile("d3dx.ini")
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		_ = stageRoot.Close()
 		return err
@@ -193,17 +192,23 @@ func (x *XXMI) installBuiltinImporterPackage(
 		}
 	}
 	setStage("pre-install")
-	if _, err := executeXcmdDeletesRoot(ctx, stagingDir, stageRoot, "PreInstall"); err != nil {
+	packageRoot, err := openInstallRoot(stagingDir)
+	if err != nil {
+		_ = stageRoot.Close()
+		return err
+	}
+	defer func() { _ = packageRoot.Close() }()
+	if _, err := transaction.dropDeletes(packageRoot, "PreInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
 	setStage("copy-package")
-	if err := copyTreeFilterToRoot(ctx, stagingDir, stageRoot, shouldSkipImporterMods); err != nil {
+	if err := copyTreeRoots(ctx, packageRoot, stageRoot, shouldSkipImporterMods); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}
 	setStage("post-install")
-	if _, err := executeXcmdDeletesFromRoot(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
+	if err := transaction.applyDeletes(ctx, stageRoot, stageRoot, "PostInstall"); err != nil {
 		_ = stageRoot.Close()
 		return err
 	}

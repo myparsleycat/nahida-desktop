@@ -34,6 +34,7 @@ var importErrorCodes = []string{
 }
 
 var importerFolderErrorCodes = []string{
+	"XXMI_IMPORTER_ENTRY_CONFLICT",
 	"XXMI_IMPORTER_FILE_ACCESS_DENIED",
 	"XXMI_IMPORTER_FOLDER_ACCESS_DENIED",
 	"XXMI_IMPORTER_FOLDER_IN_USE",

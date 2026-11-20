@@ -344,10 +344,7 @@ func TestImporterInstallTransactionMovesModsInsteadOfCopying(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.Stat(filepath.Join(importerRoot, "Mods"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := statIdentity(t, filepath.Join(importerRoot, "Mods"))
 
 	commitTestImporterInstall(t, importerRoot, func(stage *installRoot) {
 		if _, err := stage.root.Lstat("Mods"); !errors.Is(err, os.ErrNotExist) {
@@ -355,22 +352,151 @@ func TestImporterInstallTransactionMovesModsInsteadOfCopying(t *testing.T) {
 		}
 	})
 
-	after, err := os.Stat(filepath.Join(importerRoot, "Mods"))
-	if err != nil || !os.SameFile(before, after) {
-		t.Fatalf("Mods identity changed (err = %v), want the original folder moved", err)
+	if !os.SameFile(before, statIdentity(t, filepath.Join(importerRoot, "Mods"))) {
+		t.Fatal("Mods identity changed, want the original folder moved")
 	}
 	assertFile(t, filepath.Join(importerRoot, "Mods", "SomeMod", "mod.ini"), "mod")
+}
+
+// Data the new tree takes over from live, such as frame dumps and files beside the package's, is moved rather than
+// copied, so an update does not copy and then delete a user's whole importer folder.
+func TestImporterInstallTransactionMovesUserEntriesInsteadOfCopying(t *testing.T) {
+	importerRoot := filepath.Join(t.TempDir(), "GIMI")
+	dump := filepath.Join(importerRoot, "FrameAnalysis-2026-11-12-173553")
+	userFile := filepath.Join(importerRoot, "Core", "user.ini")
+	obsolete := filepath.Join(importerRoot, "Core", "old.ini")
+	preInstalled := filepath.Join(importerRoot, "Core", "pre.ini")
+	packageFile := filepath.Join(importerRoot, "Core", "core.ini")
+	// The package does not ship Core/Old, so only the delete target inside it makes the walk descend there.
+	nestedUserFile := filepath.Join(importerRoot, "Core", "Old", "user.ini")
+	nestedObsolete := filepath.Join(importerRoot, "Core", "Old", "x.ini")
+	for path, content := range map[string]string{
+		filepath.Join(dump, "000001-vb0.buf"): "dump",
+		userFile:                              "user",
+		obsolete:                              "old",
+		preInstalled:                          "old",
+		packageFile:                           "old",
+		nestedUserFile:                        "user",
+		nestedObsolete:                        "old",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := map[string]os.FileInfo{}
+	for _, path := range []string{dump, userFile, nestedUserFile} {
+		before[path] = statIdentity(t, path)
+	}
+
+	ctx := context.Background()
+	transaction, err := beginImporterInstallTransaction(ctx, importerRoot, "", "GIMI", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = transaction.Close() }()
+	stage, err := transaction.prepare(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		filepath.Join("Core", "core.ini"): "new",
+		filepath.Join("Core", "auto_update.xcmd"): "[PreInstall]\ndelete = Core\\pre.ini\n" +
+			"[PostInstall]\ndelete = Core\\old.ini\ndelete = Core\\Old\\x.ini\n",
+	} {
+		if err := stage.writeFileAtomic(ctx, name, strings.NewReader(content), 0o644, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := transaction.dropDeletes(stage, "PreInstall"); err != nil {
+		t.Fatal(err)
+	}
+	if err := transaction.applyDeletes(ctx, stage, stage, "PostInstall"); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := transaction.commit(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := transaction.finish(); err != nil {
+		t.Fatal(err)
+	}
+
+	for path, info := range before {
+		if !os.SameFile(info, statIdentity(t, path)) {
+			t.Fatalf("%s identity changed, want the original moved", path)
+		}
+	}
+	assertFile(t, filepath.Join(dump, "000001-vb0.buf"), "dump")
+	assertFile(t, userFile, "user")
+	assertFile(t, packageFile, "new")
+	assertFile(t, nestedUserFile, "user")
+	for _, path := range []string{obsolete, preInstalled, nestedObsolete} {
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("deleted file %s err = %v, want it left out of the new tree", path, err)
+		}
+	}
+}
+
+// A live folder where the package ships a file must fail the installation instead of being dropped with the backup.
+func TestImporterInstallTransactionRejectsEntryTypeConflict(t *testing.T) {
+	importerRoot := filepath.Join(t.TempDir(), "GIMI")
+	userFile := filepath.Join(importerRoot, "Core", "conflict", "user.ini")
+	if err := os.MkdirAll(filepath.Dir(userFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userFile, []byte("user"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	transaction, err := beginImporterInstallTransaction(ctx, importerRoot, "", "GIMI", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = transaction.Close() }()
+	stage, err := transaction.prepare(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.writeFileAtomic(
+		ctx, filepath.Join("Core", "conflict"), strings.NewReader("package"), 0o644, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = transaction.commit(ctx, nil)
+	if want := "XXMI_IMPORTER_ENTRY_CONFLICT: " + filepath.Join(importerRoot, "Core", "conflict"); err == nil ||
+		!strings.EqualFold(err.Error(), want) {
+		t.Fatalf("commit over a type conflict = %v, want %q", err, want)
+	}
+	if err := transaction.rollback(); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, userFile, "user")
 }
 
 func TestImporterInstallTransactionRollbackRestoresMods(t *testing.T) {
 	root := t.TempDir()
 	writeXXMITestConfig(t, root)
 	importerRoot := filepath.Join(root, "GIMI")
-	if err := os.MkdirAll(filepath.Join(importerRoot, "Mods"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(importerRoot, "Mods", "mod.ini"), []byte("mod"), 0o644); err != nil {
-		t.Fatal(err)
+	userFile := filepath.Join(importerRoot, "Core", "user.ini")
+	for path, content := range map[string]string{
+		filepath.Join(importerRoot, "Mods", "mod.ini"): "mod",
+		userFile: "user",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	transaction, err := beginImporterInstallTransaction(
@@ -384,10 +510,16 @@ func TestImporterInstallTransactionRollbackRestoresMods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A staged Core makes the user file beside it move on its own.
+	if err := stage.writeFileAtomic(
+		context.Background(), filepath.Join("Core", "core.ini"), strings.NewReader("new"), 0o644, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
 	if err := stage.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// Invalid configuration fails the commit after Mods has moved into the new tree.
+	// Invalid configuration fails the commit after Mods and the user file have moved into the new tree.
 	if _, _, err := transaction.commit(context.Background(), []byte("{\n")); err == nil {
 		t.Fatal("expected commit to fail")
 	}
@@ -396,6 +528,10 @@ func TestImporterInstallTransactionRollbackRestoresMods(t *testing.T) {
 	}
 
 	assertFile(t, filepath.Join(importerRoot, "Mods", "mod.ini"), "mod")
+	assertFile(t, userFile, "user")
+	if _, err := os.Lstat(filepath.Join(importerRoot, "Core", "core.ini")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("staged file after rollback err = %v, want the old tree back", err)
+	}
 }
 
 func TestExecuteXcmdDeletesFollowsLinkedImporterRoot(t *testing.T) {
@@ -494,6 +630,22 @@ func commitTestImporterInstall(t *testing.T, importerRoot string, mutate func(*i
 	if err := transaction.finish(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// statIdentity stats path through an open handle. os.Stat reads the file ID lazily by path, so comparing it after
+// the path was replaced would read the replacement's ID.
+func statIdentity(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info
 }
 
 func createXXMIJunction(t *testing.T, target, link string) {
@@ -707,6 +859,12 @@ func TestImporterInstallTransactionRemovesUndeletableBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The package replaces the file, so the old one stays in the backup.
+	if err := stage.writeFileAtomic(
+		context.Background(), filepath.Join("Core", "core.ini"), strings.NewReader("new"), 0o644, nil,
+	); err != nil {
+		t.Fatal(err)
+	}
 	if err := stage.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -760,7 +918,7 @@ func TestImporterInstallTransactionRemovesUndeletableBackup(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(root, transaction.backupName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("backup after recovery: %v", err)
 	}
-	assertFile(t, coreFile, "old")
+	assertFile(t, coreFile, "new")
 }
 
 // grantOnlyModify replaces the folder's permissions with a protected list that grants sid Modify, which lacks
@@ -782,7 +940,7 @@ func grantOnlyModify(path, sid string) error {
 	)
 }
 
-func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
+func TestImporterInstallTransactionRestoresUnlistableLiveFolders(t *testing.T) {
 	current, err := user.Current()
 	if err != nil {
 		t.Fatal(err)
@@ -792,7 +950,8 @@ func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
 			importerRoot := filepath.Join(t.TempDir(), "ZZMI")
 			libraries := filepath.Join(importerRoot, "Core", "ZZMI", "Libraries")
 			folder := filepath.Join(libraries, "SlotFix")
-			files := []string{filepath.Join(folder, "Resources.ini"), filepath.Join(libraries, "SlotFix.ini")}
+			nested := filepath.Join(folder, "Resources")
+			files := []string{filepath.Join(nested, "Resources.ini"), filepath.Join(libraries, "SlotFix.ini")}
 			for _, path := range files {
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					t.Fatal(err)
@@ -801,9 +960,9 @@ func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// The folder and a file inside it are denied separately, so restoring the folder only reveals the
-			// file, which a later round must restore under the same consent.
-			for _, path := range append([]string{folder}, files...) {
+			// The folder and a folder inside it are denied separately, so restoring the folder only reveals the
+			// nested one, which a later round must restore under the same consent.
+			for _, path := range []string{folder, nested} {
 				if output, err := exec.Command("icacls", path, "/deny", "*"+current.Uid+":(RD)").
 					CombinedOutput(); err != nil {
 					t.Skipf("filesystem cannot deny reading: %v (%s)", err, output)
@@ -841,37 +1000,49 @@ func TestImporterInstallTransactionRestoresUnreadableLiveFiles(t *testing.T) {
 			}
 
 			stage, err := transaction.prepare(ctx)
-			// In walk order, the order the copy meets them.
-			want := [][]string{{folder, files[1]}, {files[0]}}
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The package ships both folders, so commit has to list them to find the live entries to keep.
+			packageFile := filepath.Join(nested, "package.ini")
+			relative, _ := filepath.Rel(importerRoot, packageFile)
+			if err := stage.writeFileAtomic(ctx, relative, strings.NewReader("new"), 0o644, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := stage.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			_, _, err = transaction.commit(ctx, nil)
+			want := [][]string{{folder}, {nested}}
 			if outcome != "restored" {
 				want = want[:1]
 			}
 			if !slices.EqualFunc(requests, want, slices.Equal) {
-				t.Fatalf("access requests = %v, want %v", requests, want)
+				t.Fatalf("access requests = %v, want %v (commit: %v)", requests, want, err)
 			}
 			switch outcome {
 			case "declined":
 				if want := "XXMI_IMPORTER_FILE_ACCESS_DENIED: " + folder; err == nil || err.Error() != want {
-					t.Fatalf("prepare with access left denied = %v, want %q", err, want)
+					t.Fatalf("commit with access left denied = %v, want %q", err, want)
 				}
 			case "cancelled":
 				if !infra.IsCancellationError(err) ||
 					strings.Contains(err.Error(), "XXMI_IMPORTER_FILE_ACCESS_DENIED") {
-					t.Fatalf("prepare cancelled during the restore = %v, want a cancellation", err)
+					t.Fatalf("commit cancelled during the restore = %v, want a cancellation", err)
 				}
 			default:
 				if err != nil {
 					t.Fatal(err)
 				}
-				_ = stage.Close()
-				for _, path := range files {
-					relative, _ := filepath.Rel(importerRoot, path)
-					assertFile(
-						t,
-						filepath.Join(filepath.Dir(importerRoot), transaction.stageName, relative),
-						"[Loader]\n",
-					)
+				if err := transaction.finish(); err != nil {
+					t.Fatal(err)
 				}
+				for _, path := range files {
+					assertFile(t, path, "[Loader]\n")
+				}
+				assertFile(t, packageFile, "new")
+				return
 			}
 			if err := transaction.rollback(); err != nil {
 				t.Fatal(err)

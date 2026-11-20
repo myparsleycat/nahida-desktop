@@ -165,15 +165,22 @@ func executeXcmdDeletesRoot(
 	return executeXcmdDeletesFromRoot(ctx, root, targetRoot, section)
 }
 
-// executeXcmdDeletesFromRoot runs one auto_update.xcmd section and returns the targets it skipped. A target
-// reached through a user's symbolic link or junction is never deleted, but it is skipped rather than failing
-// the whole section, since the reference launcher does not stop on such paths either.
+// executeXcmdDeletesFromRoot runs one auto_update.xcmd section and returns the targets it skipped.
 func executeXcmdDeletesFromRoot(
 	ctx context.Context,
 	commandRoot *installRoot,
 	targetRoot *installRoot,
 	section string,
 ) ([]string, error) {
+	targets, err := xcmdDeleteTargets(commandRoot, section)
+	if err != nil {
+		return nil, err
+	}
+	return removeXcmdTargets(ctx, targetRoot, targets)
+}
+
+// xcmdDeleteTargets returns the delete targets of one auto_update.xcmd section, relative to the importer folder.
+func xcmdDeleteTargets(commandRoot *installRoot, section string) ([]string, error) {
 	raw, _, err := commandRoot.readFile(filepath.Join("Core", "auto_update.xcmd"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -185,16 +192,27 @@ func executeXcmdDeletesFromRoot(
 	if err != nil {
 		return nil, err
 	}
-	var skipped []string
+	targets := make([]string, 0, len(deletes))
 	for _, relative := range deletes {
+		target, err := resolveXcmdDeleteRelative(relative)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	return targets, nil
+}
+
+// removeXcmdTargets removes the targets and returns the ones it skipped. A target reached through a user's
+// symbolic link or junction is never deleted, but it is skipped rather than failing the whole section, since the
+// reference launcher does not stop on such paths either.
+func removeXcmdTargets(ctx context.Context, targetRoot *installRoot, targets []string) ([]string, error) {
+	var skipped []string
+	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			return skipped, err
 		}
-		target, err := resolveXcmdDeleteRelative(relative)
-		if err != nil {
-			return skipped, err
-		}
-		err = targetRoot.removeAll(target)
+		err := targetRoot.removeAll(target)
 		if errors.Is(err, errInstallReparsePoint) {
 			skipped = append(skipped, target)
 			continue

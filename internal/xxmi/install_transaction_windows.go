@@ -49,9 +49,12 @@ type importerInstallTransaction struct {
 	configRaw    []byte
 	configInfo   *installFileSnapshot
 	state        string
-	// preserved names top-level live entries that are moved into the new tree instead of copied.
+	// preserved names the live entries, relative to the importer folder, that commit moves into the new tree.
 	preserved []string
-	// restoreAccess, when set, gives the account back the live entries it may not read so staging can go on.
+	// dropped names the auto_update.xcmd delete targets, which the new tree does not take over from live.
+	dropped []string
+	// restoreAccess, when set, gives the account back the live folders it may not list and the entries it may not
+	// move or remove, so commit and cleanup can go on.
 	restoreAccess func(ctx context.Context, paths []string) error
 }
 
@@ -166,128 +169,204 @@ func (t *importerInstallTransaction) prepare(ctx context.Context) (*installRoot,
 	if err := t.parent.root.Mkdir(t.stageName, 0o755); err != nil {
 		return nil, err
 	}
-	stage, err := t.parent.openChild(t.stageName)
+	return t.parent.openChild(t.stageName)
+}
+
+// dropDeletes keeps the targets of one auto_update.xcmd section read from commandRoot out of the live entries the
+// new tree takes over, and returns them.
+func (t *importerInstallTransaction) dropDeletes(commandRoot *installRoot, section string) ([]string, error) {
+	targets, err := xcmdDeleteTargets(commandRoot, section)
 	if err != nil {
 		return nil, err
 	}
+	t.dropped = append(t.dropped, targets...)
+	return targets, nil
+}
+
+// applyDeletes drops the targets of one auto_update.xcmd section like dropDeletes and removes them from the stage.
+func (t *importerInstallTransaction) applyDeletes(
+	ctx context.Context, commandRoot, stage *installRoot, section string,
+) error {
+	targets, err := t.dropDeletes(commandRoot, section)
+	if err != nil {
+		return err
+	}
+	_, err = removeXcmdTargets(ctx, stage, targets)
+	return err
+}
+
+// readLiveFile reads a top-level file of the live importer folder. A linked file reads as missing, because the
+// new tree keeps the link instead of a package copy.
+func (t *importerInstallTransaction) readLiveFile(name string) ([]byte, error) {
 	if !t.hadLive {
-		return stage, nil
+		return nil, os.ErrNotExist
 	}
 	live, err := t.parent.openChild(t.liveName)
 	if err != nil {
-		_ = stage.Close()
 		return nil, err
+	}
+	defer func() { _ = live.Close() }()
+	data, _, err := live.readFile(name)
+	if errors.Is(err, errInstallReparsePoint) {
+		return nil, os.ErrNotExist
+	}
+	return data, err
+}
+
+// carryLive sets the live entries the new tree takes over at commit. Folders this account may not list are
+// restored in rounds, so the caller's helper lease asks for consent once; restoring a folder can reveal denied
+// folders below it. A folder that stays denied fails the installation: it may hold user data.
+func (t *importerInstallTransaction) carryLive(ctx context.Context) error {
+	live, err := t.parent.openChild(t.liveName)
+	if err != nil {
+		return err
 	}
 	defer func() { _ = live.Close() }()
 	liveInfo, err := live.root.Stat(".")
 	if err != nil {
-		_ = stage.Close()
-		return nil, err
+		return err
 	}
 	if !os.SameFile(t.liveIdentity, liveInfo) {
-		_ = stage.Close()
-		return nil, errors.New("importer folder identity changed before staging")
+		return errors.New("importer folder identity changed before commit")
 	}
-	t.preserved, err = preservedImporterEntries(live)
+	stage, err := t.parent.openChild(t.stageName)
 	if err != nil {
-		_ = stage.Close()
-		return nil, err
+		return err
 	}
-	skip := func(relative string) bool {
-		first, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
-		return slices.ContainsFunc(t.preserved, func(name string) bool { return strings.EqualFold(name, first) })
-	}
-	err = copyTreeRoots(ctx, live, stage, skip)
-	if t.restoreAccess != nil && isInstallSourceDenied(err) {
-		err = t.restoreLiveAccess(ctx, live, skip, err)
-		if err == nil {
-			err = copyTreeRoots(ctx, live, stage, skip)
-		}
-	}
-	if err != nil {
-		_ = stage.Close()
-		return nil, importerFileAccessDeniedError(err)
-	}
-	return stage, nil
-}
+	defer func() { _ = stage.Close() }()
 
-// restoreLiveAccess restores every live entry this account may not read and returns copyErr when it cannot.
-// Each round collects all denied entries first, so the caller's helper lease asks for consent once. Restoring
-// a folder can reveal entries below it that are denied on their own, so the scan repeats until it finds none
-// it has not restored; an entry that stays denied is left for the copy to report.
-func (t *importerInstallTransaction) restoreLiveAccess(
-	ctx context.Context, live *installRoot, skip func(string) bool, copyErr error,
-) error {
-	// A cancelled scan or restore is not a denied file, so it must not turn into the access error.
-	failed := func(err error) error {
-		if ctx.Err() != nil || infra.IsCancellationError(err) {
-			return cmp.Or(ctx.Err(), err)
-		}
-		return infra.WithCause(copyErr, err)
-	}
 	restored := map[string]bool{}
 	for {
-		denied, err := unreadableInstallEntries(ctx, live, skip)
+		carried, denied, err := carriedEntries(ctx, live, stage, t.dropped)
 		if err != nil {
-			return failed(err)
+			return err
 		}
-		denied = slices.DeleteFunc(denied, func(path string) bool { return restored[path] })
 		if len(denied) == 0 {
+			t.preserved = carried
 			return nil
 		}
-		if err := t.restoreAccess(ctx, denied); err != nil {
-			return failed(err)
+
+		var paths []string
+		for _, entry := range denied {
+			if !restored[entry.path] {
+				paths = append(paths, entry.path)
+			}
 		}
-		for _, path := range denied {
+		if len(paths) == 0 || t.restoreAccess == nil {
+			return importerFileAccessDeniedError(denied[0])
+		}
+		if restoreErr := t.restoreAccess(ctx, paths); restoreErr != nil {
+			// A cancelled restore is not a denied folder, so it must not turn into the access error.
+			if ctx.Err() != nil || infra.IsCancellationError(restoreErr) {
+				return cmp.Or(ctx.Err(), restoreErr)
+			}
+			return infra.WithCause(importerFileAccessDeniedError(denied[0]), restoreErr)
+		}
+		for _, path := range paths {
 			restored[path] = true
 		}
 	}
 }
 
-func isInstallSourceDenied(err error) bool {
-	var source *installSourceError
-	return errors.As(err, &source) && errors.Is(source, fs.ErrPermission)
-}
+// carriedEntries lists, relative to live, the entries the new tree takes over by rename: the Mods folder, every
+// top-level link, nested links the package does not replace, and every other entry the package neither replaces
+// nor deletes. It descends only into folders the stage also has or that hold a delete target, so its cost
+// follows the package rather than the user's data. The folders it may not list are returned apart.
+func carriedEntries(
+	ctx context.Context, live, stage *installRoot, dropped []string,
+) ([]string, []*installSourceError, error) {
+	droppedPaths := make([]string, len(dropped))
+	for i, target := range dropped {
+		droppedPaths[i] = filepath.Join(live.path, target)
+	}
+	isDropped := func(relative string) bool {
+		path := filepath.Join(live.path, relative)
+		return slices.ContainsFunc(droppedPaths, func(target string) bool {
+			return platform.SameOrChildPath(target, path)
+		})
+	}
+	holdsDropped := func(relative string) bool {
+		path := filepath.Join(live.path, relative)
+		return slices.ContainsFunc(droppedPaths, func(target string) bool {
+			return platform.SameOrChildPath(path, target)
+		})
+	}
 
-// unreadableInstallEntries lists the files below root that this account may not open and the folders it may
-// not list, as absolute paths.
-func unreadableInstallEntries(ctx context.Context, root *installRoot, skip func(string) bool) ([]string, error) {
-	var denied []string
-	err := fs.WalkDir(root.root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+	var (
+		carried []string
+		denied  []*installSourceError
+	)
+	var walk func(dir string) error
+	walk = func(dir string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		relative := filepath.FromSlash(path)
-		if walkErr != nil {
-			if relative == "." || !errors.Is(walkErr, fs.ErrPermission) {
-				return walkErr
-			}
-			denied = append(denied, filepath.Join(root.path, relative))
-			if entry != nil && entry.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if relative != "." && skip(relative) {
-			if entry.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !entry.Type().IsRegular() {
-			return nil
-		}
-		file, err := root.root.Open(relative)
-		if errors.Is(err, fs.ErrPermission) {
-			denied = append(denied, filepath.Join(root.path, relative))
+		entries, err := fs.ReadDir(live.root.FS(), filepath.ToSlash(dir))
+		if errors.Is(err, fs.ErrPermission) && dir != "." {
+			denied = append(denied, &installSourceError{path: filepath.Join(live.path, dir), err: err})
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		return file.Close()
-	})
-	return denied, err
+		for _, entry := range entries {
+			relative := filepath.Join(dir, entry.Name())
+			// The listing's own information, since opening a folder this account may not list fails.
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			staged, err := stage.root.Lstat(relative)
+			inStage := err == nil
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+
+			switch {
+			case isInstallReparsePoint(info) || (dir == "." && strings.EqualFold(entry.Name(), "Mods")):
+				// Top-level user entries are merged with a staged copy at commit; a nested link the package
+				// replaces is left behind.
+				if dir == "." || !inStage {
+					carried = append(carried, relative)
+				}
+			case isDropped(relative):
+			case !inStage:
+				if info.IsDir() && holdsDropped(relative) {
+					if err := walk(relative); err != nil {
+						return err
+					}
+					continue
+				}
+				carried = append(carried, relative)
+			case info.IsDir() != staged.IsDir():
+				// Neither side can replace the other without dropping a folder or a file.
+				return fmt.Errorf("XXMI_IMPORTER_ENTRY_CONFLICT: %s", filepath.Join(live.path, relative))
+			case info.IsDir():
+				if !holdsDropped(relative) {
+					stagedEntries, err := fs.ReadDir(stage.root.FS(), filepath.ToSlash(relative))
+					if err != nil {
+						return err
+					}
+					// movePreserved replaces an empty staged folder with the live one.
+					if len(stagedEntries) == 0 {
+						carried = append(carried, relative)
+						continue
+					}
+				}
+				if err := walk(relative); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	err := walk(".")
+	return carried, denied, err
+}
+
+func isInstallSourceDenied(err error) bool {
+	var source *installSourceError
+	return errors.As(err, &source) && errors.Is(source, fs.ErrPermission)
 }
 
 // importerAccessRestorer returns the access restore for an installation transaction and the release of the
@@ -330,8 +409,8 @@ func (x *XXMI) restoreImporterAccess(ctx context.Context, lease *elevated.FileLe
 	return nil
 }
 
-// importerFileAccessDeniedError names a live file the current account cannot read, such as a leftover written by
-// an elevated launcher, once restoring its access failed or was declined. The file is not skipped: it may be
+// importerFileAccessDeniedError names a live folder the current account cannot list, such as a leftover written by
+// an elevated launcher, once restoring its access failed or was declined. The folder is not skipped: it may hold
 // user data that is not part of the package.
 func importerFileAccessDeniedError(err error) error {
 	var source *installSourceError
@@ -341,38 +420,26 @@ func importerFileAccessDeniedError(err error) error {
 	return infra.WithCause(fmt.Errorf("XXMI_IMPORTER_FILE_ACCESS_DENIED: %s", source.path), err)
 }
 
-// preservedImporterEntries lists the live entries that belong to the user rather than the package: the Mods
-// folder and any top-level symbolic link or junction. The reference launcher updates in place and never
-// touches them, so they are moved into the new tree at commit instead of being copied or dropped.
-func preservedImporterEntries(live *installRoot) ([]string, error) {
-	entries, err := fs.ReadDir(live.root.FS(), ".")
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, entry := range entries {
-		info, err := live.root.Lstat(entry.Name())
-		if err != nil {
-			return nil, err
-		}
-		if strings.EqualFold(entry.Name(), "Mods") || isInstallReparsePoint(info) {
-			names = append(names, entry.Name())
-		}
-	}
-	return names, nil
-}
-
 // movePreserved moves preserved entries from the backed-up tree into the stage. When the package staged
 // content under the same name, a directory's content is written into the preserved entry, following a link as
 // the reference launcher's in-place update does, and the staged copy is discarded.
 func (t *importerInstallTransaction) movePreserved(ctx context.Context) error {
 	for _, name := range t.preserved {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		from := filepath.Join(t.backupName, name)
 		to := filepath.Join(t.stageName, name)
 		if _, err := t.parent.root.Lstat(from); errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
 			return err
+		}
+		// A nested entry can sit below a folder only the live tree has, which was kept for a delete target in it.
+		if filepath.Dir(name) != "." {
+			if err := t.parent.mkdirAll(filepath.Dir(to), 0o755); err != nil {
+				return err
+			}
 		}
 
 		staged, err := t.parent.root.Lstat(to)
@@ -450,6 +517,9 @@ func (t *importerInstallTransaction) commit(
 	}
 
 	if t.hadLive {
+		if err := t.carryLive(ctx); err != nil {
+			return nil, parsedConfig{}, err
+		}
 		if err := t.backUpLive(ctx); err != nil {
 			return nil, parsedConfig{}, err
 		}
