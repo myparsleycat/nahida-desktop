@@ -215,3 +215,35 @@ func TestGenshinCharacterRamp(t *testing.T) {
 		t.Errorf("ramp = %q, want none for another body", got)
 	}
 }
+
+func TestGenshinFaceRow(t *testing.T) {
+	procedural := genshinProceduralRamp()
+	if got := genshinFaceRow(procedural, genshinRampWidth, genshinRampRows, genshinRampWidth*4); got != 3 {
+		t.Errorf("built-in ramp face row = %d, want the skin row 3", got)
+	}
+
+	// Only daytime row 1 holds skin; a warmer night row must not win.
+	pix := make([]byte, genshinRampRows*4)
+	for band := range genshinRampRows {
+		copy(pix[band*4:], []byte{200, 200, 230, 255})
+	}
+	copy(pix[3*4:], []byte{250, 210, 200, 255})
+	copy(pix[5*4:], []byte{255, 200, 180, 255})
+	if got := genshinFaceRow(pix, 1, genshinRampRows, 4); got != 1 {
+		t.Errorf("face row = %d, want daytime row 1", got)
+	}
+
+	// Nicole's row 3 is lavender and her skin is in row 2.
+	raw, err := readBundledToonMap(bundledToonScheme + characterToonDir +
+		"gimi/Avatar_Lady_Catalyst_Nicole_Tex_Body_Shadow_Ramp.webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ramp, err := decodeViewerImage(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := genshinFaceRow(ramp.mips[0], int(ramp.width), int(ramp.height), int(ramp.pitches[0])); got != 2 {
+		t.Errorf("Nicole face row = %d, want 2", got)
+	}
+}

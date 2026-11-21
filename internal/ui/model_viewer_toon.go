@@ -769,6 +769,35 @@ func genshinProceduralRamp() []byte {
 	return data
 }
 
+// genshinFaceRow is the row of a GIMI ramp, given as RGBA8 rows from the top, that a face shades with: row 3,
+// which holds skin in most characters' ramps, unless its deepest daytime tone is not a skin tone and another row's
+// is, as in Nicole's ramp. The warmest such row wins.
+func genshinFaceRow(pix []byte, width, height, stride int) int {
+	const skin = 3
+	if width <= 0 || height < genshinRampRows || len(pix) < height*stride {
+		return skin
+	}
+	// warmth is how much red exceeds blue in a row's deepest daytime tone, or -1 for a tone too dark or cool for
+	// skin. Daytime rows run up from the middle of the image.
+	warmth := func(row int) int {
+		at := (2*(genshinRampRows/2-1-row) + 1) * height / (2 * genshinRampRows) * stride
+		if r, b := int(pix[at]), int(pix[at+2]); r >= 200 && r-b >= 20 {
+			return r - b
+		}
+		return -1
+	}
+	if warmth(skin) >= 0 {
+		return skin
+	}
+	best := skin
+	for row := range genshinRampRows / 2 {
+		if warmth(row) > warmth(best) {
+			best = row
+		}
+	}
+	return best
+}
+
 func smoothstep(edge0, edge1, x float64) float64 {
 	t := min(max((x-edge0)/(edge1-edge0), 0), 1)
 	return t * t * (3 - 2*t)
@@ -778,6 +807,9 @@ func smoothstep(edge0, edge1, x float64) float64 {
 // the renderer's built-in or bundled map.
 type viewerToonTextures struct {
 	bodyRamp, hairRamp, metalMap, faceLightMap, faceShadow d3d.ShaderResourceView
+	// faceRow is the row of bodyRamp a face shades with, when faceRowSet; the built-in ramp holds skin in row 3.
+	faceRow    int
+	faceRowSet bool
 	// ramps holds the views of the character's bundled ramps in the order of character.names, zero until loaded,
 	// for the profiles that bind them per mesh; character picks each mesh's.
 	ramps     []d3d.ShaderResourceView
@@ -805,6 +837,8 @@ type viewerToonAssets struct {
 	generation uint64
 	textures   map[string]d3d.ShaderResourceView
 	loading    map[string]bool
+	// faceRows holds genshinFaceRow of each loaded texture by the key of textures.
+	faceRows map[string]int
 }
 
 func (a *viewerToonAssets) release() {
@@ -1127,6 +1161,7 @@ func (v *ModelViewer) syncToonAssets(style viewerToonStyle) {
 			view.Release()
 		}
 		assets.generation, assets.textures, assets.loading = generation, map[string]d3d.ShaderResourceView{}, nil
+		assets.faceRows = map[string]int{}
 	}
 	for _, request := range requests {
 		key := request.key()
@@ -1239,6 +1274,9 @@ func (v *ModelViewer) toonTextures(style viewerToonStyle) viewerToonTextures {
 		textures = viewerToonTextures{
 			bodyRamp: views[0], hairRamp: views[1], metalMap: views[2], faceLightMap: views[3], faceShadow: views[4],
 		}
+		if views[0].P != nil {
+			textures.faceRow, textures.faceRowSet = assets.faceRows[v.toonTextureRequests(style)[0].key()]
+		}
 		// The face maps of an original face belong to that face.
 		if o := v.scene.original; o != nil && o.generation == assets.generation {
 			if texture, ok := o.textures[o.faceLight]; ok {
@@ -1272,10 +1310,12 @@ func (v *ModelViewer) loadToonTexture(request toonTextureRequest, generation uin
 			data, err = v.read(ctx, request.url)
 		}
 		var texture *viewerTextureData
+		faceRow := 0
 		if err == nil {
 			texture, err = decodeViewerImage(data)
 		}
 		if err == nil {
+			faceRow = genshinFaceRow(texture.mips[0], int(texture.width), int(texture.height), int(texture.pitches[0]))
 			texture.generateMips = false
 			if request.srgb {
 				texture.format = d3d.FORMAT_R8G8B8A8_UNORM_SRGB
@@ -1302,6 +1342,10 @@ func (v *ModelViewer) loadToonTexture(request toonTextureRequest, generation uin
 			}
 			if view.P != nil {
 				assets.textures[key] = view
+				if assets.faceRows == nil {
+					assets.faceRows = map[string]int{}
+				}
+				assets.faceRows[key] = faceRow
 				delete(assets.loading, key)
 				v.revision++
 			}

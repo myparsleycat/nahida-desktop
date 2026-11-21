@@ -32,7 +32,7 @@ cbuffer Frame : register(b0) {
 
 cbuffer Mesh : register(b1) {
     float4 tint;
-    float4 faceForward; // xyz: mean normal of a face mesh in model space
+    float4 faceForward; // xyz: mean normal of a face mesh in model space, w: GIMI ramp row of the face
     uint flags;
     uint normalMode;
     uint characterUse;  // CHARACTER_* bits, 0 without the character's material values
@@ -505,7 +505,7 @@ float3 gimiToon(VSOut i, float3 n, float3 v, float3 albedo, float emissionMask) 
     float rampU = 1 - min(max(lightArea - area, 0) / lightArea, 1);
 
     if (face > 0.5) {
-        row = 3;
+        row = faceForward.w;
         float2 faceLight = toonFaceLight(mul((float3x3)world, faceForward.xyz), l);
         if (toonState.z > 0.5) {
             float2 faceUV = i.uv;
@@ -696,6 +696,12 @@ uint zzmiMaterialIndex(float red) {
     return red >= 0.8 ? 0 : red >= 0.6 ? 1 : red >= 0.4 ? 2 : red >= 0.2 ? 3 : 4;
 }
 
+// HoyoToon reads a face's material ID from the low two bits of the vertex colour's blue instead of a light map, and
+// gives a face only the first three materials' colours.
+uint zzmiFaceMaterialIndex(float blue) {
+    return min((uint)(blue * 255 + 0.5) & 3, 2);
+}
+
 // HoyoToon's body shadow: the shadow value runs from -3 to 3 and splits into deep shadow, shadow, shallow,
 // transition, subsurface, front and lit bands, each with its tint.
 float3 zzmiShadowTint(float shade, float3 shadowColor, float3 shallowColor) {
@@ -814,7 +820,7 @@ float3 zzmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
         shade = (faceLit * 2 - 1) * occlusion;
     }
 
-    uint id = zzmiMaterialIndex(lightTexel.r);
+    uint id = face ? zzmiFaceMaterialIndex(vertexColor.b) : zzmiMaterialIndex(lightTexel.r);
     float3 shadowColor = (characterUse & CHARACTER_SHADOW) != 0 ? character[id].rgb : ZZMI_SHADOW_BRIGHTNESS;
     float3 shallowColor = (characterUse & CHARACTER_SHALLOW) != 0 ? character[5 + id].rgb : ZZMI_SHALLOW_BRIGHTNESS;
     float3 color = saturate(albedo * zzmiShadowTint(shade, shadowColor, shallowColor));
@@ -1118,6 +1124,7 @@ struct OutlineOut {
     float width : TEXCOORD2; // vertex colour alpha, below 0.05 of which Star Rail draws no outline
     float3 normal : NORMAL;  // the hull's smoothed normal, for the profiles that light it
     float3 worldPos : POSITION1;
+    nointerpolation float material : TEXCOORD3; // ZZMI: the vertex colour's blue, which holds a face's material ID
 };
 
 // The hull's smoothed normal in view space, or the view axis where it has none.
@@ -1130,6 +1137,7 @@ float3 outlineViewNormal(VSIn i) {
 OutlineOut outlineBase(VSIn i, float4 viewPos) {
     OutlineOut o;
     o.width = 1;
+    o.material = 0;
     o.facing = dot(outlineViewNormal(i), normalize(-viewPos.xyz));
     o.normal = mul((float3x3)world, i.outline);
     o.worldPos = mul(world, float4(i.pos, 1)).xyz;
@@ -1146,6 +1154,7 @@ OutlineOut zzmiOutline(VSIn i) {
     float4 color = (flags & FLAG_VERTEX_COLOR) != 0 ? i.color : ZZMI_NEUTRAL_COLOR;
     float4 viewPos = mul(view, mul(world, float4(i.pos, 1)));
     OutlineOut o = outlineBase(i, viewPos);
+    o.material = color.b;
     float3 smoothNormal = outlineViewNormal(i);
     float3 direction = float3(normalize(float3(smoothNormal.xy, 0.0001)).xy, 0.0001);
     float depth = abs(viewPos.z) * (2.414 / proj[1][1]);
@@ -1284,8 +1293,8 @@ float4 ps_outline(OutlineOut i) : SV_Target {
     }
     uint mode = toonMode();
     if (mode == TOON_EFMI) return float4(linearToSrgb(efmiOutlineColor(i, albedo)), 1);
-    // The character's outline colours follow the light map's material ID, read as the surface reads it when the
-    // mesh has no light map.
+    // The character's outline colours follow the material ID the surface reads: the light map's, its neutral value
+    // when the mesh has no light map, or a ZZMI face's vertex colour.
     bool characterOutline = (characterUse & CHARACTER_OUTLINE) != 0;
     float4 lightTexel = (flags & FLAG_LIGHT_MAP) != 0 ? lightMap.Sample(linearWrap, i.uv)
         : mode == TOON_ZZMI ? ZZMI_NEUTRAL_LIGHT : 0;
@@ -1294,7 +1303,8 @@ float4 ps_outline(OutlineOut i) : SV_Target {
         // The albedo under a dimmed outline tint, darker on the side away from the light.
         float NoL = dot(i.normal, i.normal) > 1e-10 ? saturate(dot(normalize(i.normal), toonLight.xyz)) : 1;
         float3 brightness = ZZMI_OUTLINE_BRIGHTNESS;
-        if (characterOutline) brightness = pow(character[15 + zzmiMaterialIndex(lightTexel.r)].rgb * 0.5, 1.5);
+        uint id = (flags & FLAG_FACE) != 0 ? zzmiFaceMaterialIndex(i.material) : zzmiMaterialIndex(lightTexel.r);
+        if (characterOutline) brightness = pow(character[15 + id].rgb * 0.5, 1.5);
         tint = lerp(0.01, 1, NoL * 0.5 + 0.5) * brightness;
     } else if (mode == TOON_WWMI) {
         tint = WWMI_OUTLINE_COLOR;

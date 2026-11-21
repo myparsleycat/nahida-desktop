@@ -924,8 +924,9 @@ func (r *viewerRenderer) drawScene(
 				material.constants.flags |= viewerFlagSkinned
 				if material.constants.flags&viewerFlagFace != 0 {
 					forward := opts.skin.turnBy(anchor, mesh.faceForward)
+					row := material.constants.faceForward[3]
 					material.constants.faceForward = [4]float32{
-						float32(forward[0]), float32(forward[1]), float32(forward[2]),
+						float32(forward[0]), float32(forward[1]), float32(forward[2]), row,
 					}
 				}
 				ctx.VSSetShaderResources(14, blend)
@@ -1358,6 +1359,10 @@ func meshMaterial(
 			float32(mesh.faceForward[0]),
 			float32(mesh.faceForward[1]),
 			float32(mesh.faceForward[2]),
+			3,
+		}
+		if opts.toon.textures.faceRowSet {
+			c.faceForward[3] = float32(opts.toon.textures.faceRow)
 		}
 	}
 	// BC1 and opaque images carry no emission mask; their alpha would light everything. Star Rail has no
