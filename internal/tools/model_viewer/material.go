@@ -25,6 +25,7 @@ import (
 	"github.com/myparsleycat/ddsutil"
 
 	"nahida.live/desktop/internal/diskio"
+	"nahida.live/desktop/internal/infra"
 )
 
 const (
@@ -776,7 +777,7 @@ func decodeModelViewerImage(raw []byte, extension string) (*image.NRGBA, error) 
 	if strings.EqualFold(extension, ".dds") {
 		return decodeModelViewerDDS(raw)
 	}
-	decoded, _, err := image.Decode(bytes.NewReader(raw))
+	decoded, _, err := infra.DecodeImage(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}

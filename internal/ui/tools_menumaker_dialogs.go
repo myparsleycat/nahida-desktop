@@ -17,6 +17,7 @@ import (
 	"github.com/myparsleycat/fairy/icons/lucide"
 	"github.com/myparsleycat/fairy/kit"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
 )
 
@@ -82,7 +83,7 @@ func loadMenuMakerImage(path string) (image.Image, error) {
 	if len(data) > maxMenuMakerImageBytes {
 		return nil, fmt.Errorf("image is larger than %d bytes", maxMenuMakerImageBytes)
 	}
-	src, _, err := image.Decode(bytes.NewReader(data))
+	src, _, err := infra.DecodeImage(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

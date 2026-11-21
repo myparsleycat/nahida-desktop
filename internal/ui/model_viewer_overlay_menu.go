@@ -154,7 +154,7 @@ func (v *ModelViewer) viewerImage(source string, flipX, flipY bool) *fairy.Image
 
 // flipViewerImage mirrors an encoded picture, since an element draws its image upright.
 func flipViewerImage(data []byte, flipX, flipY bool) ([]byte, error) {
-	source, _, err := image.Decode(bytes.NewReader(data))
+	source, _, err := infra.DecodeImage(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

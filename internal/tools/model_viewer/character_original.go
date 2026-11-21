@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
 	"io"
 	"math"
 	"path/filepath"
@@ -718,19 +716,17 @@ func (r originalTextureReference) texture() (CharacterOriginalTexture, bool) {
 // mergeOriginalTexture decodes a colour WebP and, when alphaData is set, replaces its alpha with channel of that
 // image. Colours under zero alpha are kept, since game textures store data there.
 func mergeOriginalTexture(colorData, alphaData []byte, channel string) (*image.NRGBA, error) {
-	decoded, err := decodeOriginalWebP(colorData)
+	out, err := decodeOriginalWebP(colorData)
 	if err != nil {
 		return nil, err
 	}
-	out := nrgbaOf(decoded)
 	if alphaData == nil {
 		return out, nil
 	}
-	alphaImage, err := decodeOriginalWebP(alphaData)
+	alpha, err := decodeOriginalWebP(alphaData)
 	if err != nil {
 		return nil, err
 	}
-	alpha := nrgbaOf(alphaImage)
 	if alpha.Rect.Size() != out.Rect.Size() {
 		return nil, fmt.Errorf("alpha image is %v, colour image %v", alpha.Rect.Size(), out.Rect.Size())
 	}
@@ -748,7 +744,8 @@ func mergeOriginalTexture(colorData, alphaData []byte, channel string) (*image.N
 	return out, nil
 }
 
-func decodeOriginalWebP(data []byte) (image.Image, error) {
+// decodeOriginalWebP decodes to non-premultiplied RGBA, which keeps the colour of transparent texels.
+func decodeOriginalWebP(data []byte) (*image.NRGBA, error) {
 	config, err := webp.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -756,32 +753,13 @@ func decodeOriginalWebP(data []byte) (image.Image, error) {
 	if config.Width <= 0 || config.Height <= 0 || config.Width*config.Height > characterOriginalMaxPixels {
 		return nil, fmt.Errorf("texture size %dx%d is unsupported", config.Width, config.Height)
 	}
-	return webp.Decode(bytes.NewReader(data))
-}
-
-// nrgbaOf converts img to non-premultiplied RGBA without passing through premultiplied colour, which would lose
-// the colour of transparent texels.
-func nrgbaOf(img image.Image) *image.NRGBA {
-	bounds := img.Bounds()
-	switch src := img.(type) {
-	case *image.NRGBA:
-		if src.Rect.Min == (image.Point{}) {
-			return src
-		}
-	case *image.NYCbCrA:
-		out := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-		for y := range bounds.Dy() {
-			for x := range bounds.Dx() {
-				px, py := bounds.Min.X+x, bounds.Min.Y+y
-				yi, ci := src.YOffset(px, py), src.COffset(px, py)
-				r, g, b := color.YCbCrToRGB(src.Y[yi], src.Cb[ci], src.Cr[ci])
-				i := y*out.Stride + x*4
-				out.Pix[i], out.Pix[i+1], out.Pix[i+2], out.Pix[i+3] = r, g, b, src.A[src.AOffset(px, py)]
-			}
-		}
-		return out
+	decoded, _, err := infra.DecodeImage(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
 	}
-	out := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-	draw.Draw(out, out.Rect, img, bounds.Min, draw.Src)
-	return out
+	img, ok := decoded.(*image.NRGBA)
+	if !ok || img.Rect.Min != (image.Point{}) {
+		return nil, fmt.Errorf("texture decoded to %T at %v", decoded, decoded.Bounds().Min)
+	}
+	return img, nil
 }

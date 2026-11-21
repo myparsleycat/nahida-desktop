@@ -21,6 +21,7 @@ import (
 
 	"github.com/myparsleycat/fairy/d3d"
 
+	"nahida.live/desktop/internal/infra"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
@@ -149,7 +150,7 @@ func loadViewerTexture(
 }
 
 func decodeViewerImage(data []byte) (*viewerTextureData, error) {
-	decoded, _, err := image.Decode(bytes.NewReader(data))
+	decoded, _, err := infra.DecodeImage(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode texture image: %w", err)
 	}

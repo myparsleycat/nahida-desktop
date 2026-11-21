@@ -67,6 +67,10 @@ Each cross-cutting policy below has one owning package. Go through it instead of
 - Adding a setting touches both of these: the `Key*` constant and its `allDefinitions` row in `internal/setting/keys.go`, with storage key `{scope}_{snake_case}`, which a test enforces; and its spec in `buildSpecs` in `specs.go`.
 - Settings side effects on other services go through `setting.Hooks`. The setting package does not import feature packages.
 
+### Images
+
+- Decode images with `infra.DecodeImage`, not `image.Decode`. Lossy WebP decodes to limited-range YCbCr, which `image/draw` and `At` read as full range, washing the colours out.
+
 ## Commands
 
 - Windows build: `task build`

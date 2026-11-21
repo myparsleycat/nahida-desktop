@@ -19,6 +19,7 @@ import (
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
 
+	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/tools/menumaker"
 )
 
@@ -301,7 +302,7 @@ func decodeDataURL(dataURL string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, _, err := infra.DecodeImage(bytes.NewReader(data))
 	return img, err
 }
 

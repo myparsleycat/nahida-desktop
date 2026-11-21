@@ -273,7 +273,7 @@ func convertImporterIcon(path string) ([]byte, error) {
 			return avif.Decode(bytes.NewReader(data), avif.Options{AutoRotate: true})
 		})
 	} else {
-		source, _, err = image.Decode(bytes.NewReader(data))
+		source, _, err = infra.DecodeImage(bytes.NewReader(data))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("XXMI_SHORTCUT_ICON_INVALID: %w", err)

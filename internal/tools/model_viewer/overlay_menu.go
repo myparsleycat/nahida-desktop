@@ -1129,7 +1129,7 @@ func decodeModelViewerOverlayBackdrop(ctx context.Context, path string) (image.I
 	if err != nil {
 		return nil, err
 	}
-	decoded, _, err := image.Decode(modelViewerContextReader{ctx: ctx, reader: bytes.NewReader(data)})
+	decoded, _, err := infra.DecodeImage(modelViewerContextReader{ctx: ctx, reader: bytes.NewReader(data)})
 	return decoded, err
 }
 
