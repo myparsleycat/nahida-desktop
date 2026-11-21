@@ -889,6 +889,7 @@ func originalViewerMesh(part modelviewer.CharacterOriginalPart, game string) *vi
 	case modelviewer.OriginalRoleEye:
 		mesh.toonEye = true
 	}
+	mesh.layer = part.Layer
 	if game == "EFMI" && modelviewer.IsHeadRole(part.Role) {
 		mesh.efmiHead, mesh.efmiFace = true, part.Role == modelviewer.OriginalRoleFace
 	}

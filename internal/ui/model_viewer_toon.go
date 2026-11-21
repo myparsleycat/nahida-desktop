@@ -541,11 +541,32 @@ var (
 	starRailFaceRE = regexp.MustCompile(`(?i)(?:face|head)[a-z\d]?$`)
 )
 
+// Star Rail's eye shadow is a small part of the head's index buffer, 138 to 180 indices in the SRMI mods surveyed,
+// where the face itself has thousands. It binds no diffuse of its own, so it either has none or inherits the face's.
+const starRailEyeShadowMaxIndices = 240
+
+// starRailEyeShadowColor is StarRailNPRShader's EyeShadow colour, applied to the display-referred image.
+var starRailEyeShadowColor = [3]float32{0.6770648, 0.7038123, 0.8018868}
+
 func markStarRailMeshes(scene *viewerScene) {
+	faceTextures := map[string]bool{}
 	for _, mesh := range scene.meshes {
 		mesh.toonHair = starRailHairRE.MatchString(mesh.info.Component)
 		mesh.toonFace = !mesh.toonHair && starRailFaceRE.MatchString(mesh.info.Component)
+		if mesh.toonFace && mesh.info.IndexCount > starRailEyeShadowMaxIndices && texturePresent(mesh.info.TexKey) {
+			faceTextures[*mesh.info.TexKey] = true
+		}
 	}
+	for _, mesh := range scene.meshes {
+		info := mesh.info
+		mesh.eyeShadow = mesh.toonFace && info.IndexCount > 0 && info.IndexCount <= starRailEyeShadowMaxIndices &&
+			len(info.TextureVariants) == 0 && len(info.TextureChoices) == 0 &&
+			(!texturePresent(info.TexKey) || faceTextures[*info.TexKey])
+	}
+}
+
+func texturePresent(key *string) bool {
+	return key != nil && *key != ""
 }
 
 // ZZMI and WWMI components end in a part name, such as EllenHair or AnbySFaceHead.
@@ -626,7 +647,6 @@ func markEFMIHeads(entries []*viewerMesh) {
 		top, bottom = max(top, mesh.info.Bounds.Max[2]), min(bottom, mesh.info.Bounds.Min[2])
 	}
 	heightOf := func(z float64) float64 { return (z - bottom) / (top - bottom) }
-	present := func(key *string) bool { return key != nil && *key != "" }
 
 	var narrow, bound, sized []*viewerMesh
 	for _, mesh := range entries {
@@ -635,10 +655,10 @@ func markEFMIHeads(entries []*viewerMesh) {
 			continue
 		}
 		narrow = append(narrow, mesh)
-		if present(mesh.info.LightMapKey) || len(mesh.info.LightMapVariants) > 0 {
+		if texturePresent(mesh.info.LightMapKey) || len(mesh.info.LightMapVariants) > 0 {
 			continue
 		}
-		if (present(mesh.info.MaterialMapKey) || present(mesh.info.HighlightMapKey)) &&
+		if (texturePresent(mesh.info.MaterialMapKey) || texturePresent(mesh.info.HighlightMapKey)) &&
 			heightOf(b.Min[2]) >= efmiBoundFaceMinHeight {
 			bound = append(bound, mesh)
 		}
@@ -668,7 +688,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 		}
 		height, indices := b.Max[2]-b.Min[2], mesh.info.IndexCount
 		mesh.efmiHead = true
-		mesh.overlayShadow = !present(mesh.info.TexKey) && len(mesh.info.TextureVariants) == 0 &&
+		mesh.overlayShadow = !texturePresent(mesh.info.TexKey) && len(mesh.info.TextureVariants) == 0 &&
 			len(mesh.info.TextureChoices) == 0 &&
 			(indices <= efmiEyeShadowMaxIndices ||
 				(indices <= efmiHairShadowMaxIndices && height >= efmiHairShadowMinHeight))

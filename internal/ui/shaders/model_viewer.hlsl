@@ -82,6 +82,10 @@ static const uint FLAG_PACKED_MASK = 8388608;
 static const uint FLAG_OUTLINE_MASK = 16777216;
 // A character motion poses the mesh with skinBlend and skinBones.
 static const uint FLAG_SKINNED = 33554432;
+// The mesh multiplies what lies behind it by the tint, with the multiply blend state.
+static const uint FLAG_MULTIPLY = 67108864;
+// The mesh is drawn at the tint's alpha.
+static const uint FLAG_TRANSLUCENT = 134217728;
 
 // The body shape editor's brush cursor: a circle around centre spanned by u and v, in model space.
 cbuffer Ring : register(b2) {
@@ -1027,6 +1031,7 @@ float4 decodeDiffuse(float2 uv) {
 
 float4 ps_main(VSOut i, bool front : SV_IsFrontFace) : SV_Target {
     if ((flags & FLAG_CUTOUT) != 0 && cutoutMap.Sample(linearWrap, i.uv).r < 0.5) discard;
+    if ((flags & FLAG_MULTIPLY) != 0) return float4(tint.rgb, 1);
 
     float4 albedo = 1;
     // The emission mask is the texture's own alpha, before the inversion for maps that store opacity inverted.
@@ -1043,6 +1048,7 @@ float4 ps_main(VSOut i, bool front : SV_IsFrontFace) : SV_Target {
     }
     if ((flags & FLAG_OVERLAY_COLOR) != 0) albedo.rgb = srgbToLinear(i.color.rgb);
     albedo.rgb *= tint.rgb;
+    if ((flags & FLAG_TRANSLUCENT) != 0) albedo.a = tint.a;
 
     // Back faces only reach here on double-sided meshes, which light them from their own side.
     float face = front ? 1 : -1;

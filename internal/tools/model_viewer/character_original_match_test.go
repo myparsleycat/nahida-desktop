@@ -69,6 +69,25 @@ func TestMatchCharacterOriginal(t *testing.T) {
 	}
 }
 
+// A mod that draws its own eye hides the eyelid shadow split from the original eye too, though it covers only the
+// iris.
+func TestMatchCharacterOriginalSplitEyeCoveredTogether(t *testing.T) {
+	iris := originalTestPart(OriginalRoleEye, 0, 0.1)
+	iris.splitFrom = 1
+	shadow := originalTestPart(OriginalRoleEye, 0.5, 0.2)
+	shadow.Positions = shadow.Positions[:15]
+	shadow.splitFrom = 1
+	original := &CharacterOriginal{Game: "ZZMI", Parts: []CharacterOriginalPart{iris, shadow}}
+
+	match, err := MatchCharacterOriginal(t.Context(), original, []OriginalMatchMesh{{Positions: iris.Positions}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(match.HeadParts) != 0 {
+		t.Errorf("HeadParts = %v, want neither piece of the covered eye", match.HeadParts)
+	}
+}
+
 func TestCharacterOriginalEFMISkinLUT(t *testing.T) {
 	skin := CharacterOriginalTexture{Name: "T_actor_common_femaleskincolor01_lut_D"}
 	clothLUT := CharacterOriginalTexture{Name: "T_actor_common_cloth_lut_01_D"}

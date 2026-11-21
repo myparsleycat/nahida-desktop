@@ -277,7 +277,11 @@ type viewerMesh struct {
 	// overlayShadow marks one of EFMI's overlay shadows, which the game multiplies over the face through a mask
 	// and stencil that mods do not carry; it draws only while game textures are highlighted.
 	overlayShadow bool
-	shapes        []viewerShapeTarget
+	// eyeShadow marks Star Rail's eye shadow, which StarRailNPRShader multiplies over the eyes in a flat colour.
+	eyeShadow bool
+	// layer is set on a translucent piece of an original Zenless eye.
+	layer  *modelviewer.OriginalLayer
+	shapes []viewerShapeTarget
 	// variants holds the position variants loaded so far by index.
 	variants map[int]*viewerPositionGeometry
 	// unreadable holds the position variants that could not be read. A state that selects one keeps the geometry

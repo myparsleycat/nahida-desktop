@@ -197,6 +197,8 @@ const (
 	viewerFlagPackedMask    = 1 << 23
 	viewerFlagOutlineMask   = 1 << 24
 	viewerFlagSkinned       = 1 << 25
+	viewerFlagMultiply      = 1 << 26
+	viewerFlagTranslucent   = 1 << 27
 )
 
 // viewerShadowMapSize is the React viewer's key light shadow map size.
@@ -323,6 +325,8 @@ type viewerRenderer struct {
 	depthOn   d3d.DepthStencilState
 	depthRead d3d.DepthStencilState
 	blend     d3d.BlendState
+	// multiply multiplies the target's colour by the pixel's and keeps its alpha.
+	multiply d3d.BlendState
 
 	width, height int
 	singleSample  bool
@@ -341,7 +345,7 @@ func (r *viewerRenderer) release() {
 		r.overlayVB.Release, r.layout.Release,
 		r.frameCB.Release, r.meshCB.Release, r.characterCB.Release, r.sampler.Release, r.clamp.Release, r.dfg.Release, r.raster.Release,
 		r.culled.Release, r.frontCulled.Release, r.compare.Release, r.depthOn.Release, r.depthRead.Release,
-		r.blend.Release, r.shadowSRV.Release, r.shadowDSV.Release, r.shadow.Release,
+		r.blend.Release, r.multiply.Release, r.shadowSRV.Release, r.shadowDSV.Release, r.shadow.Release,
 	} {
 		release()
 	}
@@ -552,7 +556,16 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 		SrcBlendAlpha: d3d.BLEND_ONE, DestBlendAlpha: d3d.BLEND_INV_SRC_ALPHA, BlendOpAlpha: d3d.BLEND_OP_ADD,
 		RenderTargetWriteMask: d3d.COLOR_WRITE_ALL,
 	}
-	r.blend, err = dev.CreateBlendState(&blend)
+	if r.blend, err = dev.CreateBlendState(&blend); err != nil {
+		return err
+	}
+	multiply := d3d.BlendDesc{}
+	multiply.RenderTarget[0] = d3d.RenderTargetBlendDesc{
+		BlendEnable: 1, SrcBlend: d3d.BLEND_DEST_COLOR, DestBlend: d3d.BLEND_ZERO, BlendOp: d3d.BLEND_OP_ADD,
+		SrcBlendAlpha: d3d.BLEND_ZERO, DestBlendAlpha: d3d.BLEND_ONE, BlendOpAlpha: d3d.BLEND_OP_ADD,
+		RenderTargetWriteMask: d3d.COLOR_WRITE_ALL,
+	}
+	r.multiply, err = dev.CreateBlendState(&multiply)
 	return err
 }
 
@@ -895,9 +908,17 @@ func (r *viewerRenderer) drawScene(
 				return nil
 			}
 			material := meshMaterial(mesh, state, textures, opts)
-			coverage := material.constants.flags&viewerFlagCoverage != 0
-			if coverage != (pass == "blended") {
+			flags := material.constants.flags
+			blended := flags&(viewerFlagCoverage|viewerFlagMultiply|viewerFlagTranslucent) != 0
+			if blended != (pass == "blended") {
 				return nil
+			}
+			if pass == "blended" {
+				if flags&viewerFlagMultiply != 0 {
+					ctx.OMSetBlendState(r.multiply, [4]float32{}, 0xffffffff)
+				} else {
+					ctx.OMSetBlendState(r.blend, [4]float32{}, 0xffffffff)
+				}
 			}
 			if blend.P != nil {
 				material.constants.flags |= viewerFlagSkinned
@@ -952,6 +973,9 @@ func (r *viewerRenderer) drawScene(
 			if err := drawOne(part.mesh, part.state, part.gpu, blend, part.anchor); err != nil {
 				return err
 			}
+		}
+		if pass == "blended" {
+			ctx.OMSetBlendState(r.blend, [4]float32{}, 0xffffffff)
 		}
 	}
 	if opts.overlay != nil {
@@ -1070,15 +1094,18 @@ func (r *viewerRenderer) drawShadowMap(
 		if !mesh.drawn() || i >= len(gpu.meshes) || gpu.meshes[i].indexCount == 0 {
 			continue
 		}
-		// Coverage cards are flat ink decals that block no light.
-		if texture, ok := scene.texture(mesh.state.TexKey); ok && texture.flags&viewerFlagCoverage != 0 {
+		// Coverage cards are flat ink decals that block no light, and neither do eye shadows.
+		if texture, ok := scene.texture(mesh.state.TexKey); (ok && texture.flags&viewerFlagCoverage != 0) ||
+			mesh.eyeShadow {
 			continue
 		}
 		casters = append(casters, i)
 		buffers = append(buffers, gpu.meshes[i].vertices)
 	}
 	for _, part := range originals {
-		buffers = append(buffers, part.gpu.vertices)
+		if part.mesh.layer == nil {
+			buffers = append(buffers, part.gpu.vertices)
+		}
 	}
 	key := viewerShadowKey{
 		gpu: gpu, viewProj: frame.shadowViewProj, world: frame.world, doubleSided: opts.doubleSided,
@@ -1136,6 +1163,9 @@ func (r *viewerRenderer) drawShadowMap(
 		r.drawMesh(ctx, gpu.meshes[i])
 	}
 	for _, part := range originals {
+		if part.mesh.layer != nil {
+			continue
+		}
 		var flags uint32
 		if part.skinned {
 			flags = viewerFlagSkinned
@@ -1220,7 +1250,16 @@ func meshMaterial(
 	if !hasDiffuse && opts.untextured != nil {
 		c.tint = [4]float32{opts.untextured[0], opts.untextured[1], opts.untextured[2], 1}
 	}
+	if mesh.eyeShadow {
+		c.flags |= viewerFlagMultiply
+		c.tint = [4]float32{starRailEyeShadowColor[0], starRailEyeShadowColor[1], starRailEyeShadowColor[2], 1}
+	}
+	if layer := mesh.layer; layer != nil {
+		c.flags |= viewerFlagTranslucent
+		c.tint = [4]float32{layer.Tint[0], layer.Tint[1], layer.Tint[2], layer.Opacity}
+	}
 	if overlay := mesh.overlay; overlay != nil {
+		c.flags &^= viewerFlagMultiply | viewerFlagTranslucent
 		c.tint = [4]float32{overlay.tint[0], overlay.tint[1], overlay.tint[2], 1}
 		if overlay.colors {
 			c.flags |= viewerFlagOverlayColor

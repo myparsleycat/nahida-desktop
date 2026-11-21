@@ -126,6 +126,14 @@ type CharacterOriginalPart struct {
 	Targets []CharacterOriginalTarget
 	// Blink names the shape keys that close the eyes.
 	Blink []string
+	// Layer is set on a translucent piece of an eye material, which HoyoToon's Zenless shader blends at the opacity
+	// of its eye colour texel.
+	Layer *OriginalLayer
+
+	// eyeColumns holds, per vertex, the column of the eye colour map's top row that tints it, or noEyeColumn.
+	eyeColumns []uint8
+	// splitFrom is one more than the index, before splitting, of the part this one was split from, or 0.
+	splitFrom int
 }
 
 // CharacterOriginalTarget is a shape key: three mod-space offsets per vertex of its part, and the weight the model
@@ -197,6 +205,9 @@ func (t *Service) LoadCharacterOriginal(
 	original, err := parseCharacterOriginal(data, game)
 	if err != nil {
 		return nil, fmt.Errorf("parse character original %s: %w", destination, err)
+	}
+	if err := t.layerOriginalEyes(ctx, original, progress); err != nil {
+		return nil, err
 	}
 	return original, nil
 }
@@ -505,7 +516,14 @@ func readOriginalPart(
 	if err != nil {
 		return part, err
 	}
-	if len(jointValues) != count*4 || (colors != nil && len(colors) != count*4) {
+	var eyeColors []float32
+	if _, ok := part.Textures[zenlessEyeColorSlot]; ok {
+		if eyeColors, err = read("COLOR_1", 4, false); err != nil {
+			return part, err
+		}
+	}
+	if len(jointValues) != count*4 || (colors != nil && len(colors) != count*4) ||
+		(eyeColors != nil && len(eyeColors) != count*4) {
 		return part, errors.New("vertex attributes differ in length")
 	}
 	if primitive.Indices == nil {
@@ -528,6 +546,9 @@ func readOriginalPart(
 	positions = compactOriginalVertices(positions, 3, used)
 	jointValues = compactOriginalVertices(jointValues, 4, used)
 	colors = compactOriginalVertices(colors, 4, used)
+	if eyeColors != nil {
+		part.eyeColumns = readZenlessEyeColumns(compactOriginalVertices(eyeColors, 4, used))
+	}
 	for _, attribute := range attributes {
 		*attribute.out = compactOriginalVertices(*attribute.out, attribute.components, used)
 	}
@@ -630,11 +651,11 @@ func compactOriginalIndices(indices []float32, vertices int) (used []int, rebase
 }
 
 // compactOriginalVertices keeps the width values of each used vertex, or returns nil for nil values.
-func compactOriginalVertices(values []float32, width int, used []int) []float32 {
+func compactOriginalVertices[T any](values []T, width int, used []int) []T {
 	if values == nil {
 		return nil
 	}
-	out := make([]float32, len(used)*width)
+	out := make([]T, len(used)*width)
 	for i, v := range used {
 		copy(out[i*width:(i+1)*width], values[v*width:(v+1)*width])
 	}

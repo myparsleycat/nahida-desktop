@@ -249,6 +249,20 @@ func MatchCharacterOriginal(
 		}
 	}
 
+	// The pieces split from one part are covered or not together, as the part they came from.
+	splitPositions := map[int][]float32{}
+	for _, part := range original.Parts {
+		if part.splitFrom != 0 {
+			splitPositions[part.splitFrom] = append(splitPositions[part.splitFrom], part.Positions...)
+		}
+	}
+	headCovered := func(positions []float32) bool {
+		return coveredShare(headGrid, modPositions, positions, float32(headCell)) >= originalHeadCovered
+	}
+	splitCovered := make(map[int]bool, len(splitPositions))
+	for from, positions := range splitPositions {
+		splitCovered[from] = headCovered(positions)
+	}
 	for p, part := range original.Parts {
 		if err := ctx.Err(); err != nil {
 			return OriginalMatch{}, err
@@ -257,7 +271,11 @@ func MatchCharacterOriginal(
 			continue
 		}
 		if IsHeadRole(part.Role) {
-			if coveredShare(headGrid, modPositions, part.Positions, float32(headCell)) < originalHeadCovered {
+			covered := splitCovered[part.splitFrom]
+			if part.splitFrom == 0 {
+				covered = headCovered(part.Positions)
+			}
+			if !covered {
 				match.HeadParts = append(match.HeadParts, p)
 			}
 			continue
