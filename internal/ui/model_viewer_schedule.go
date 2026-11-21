@@ -129,7 +129,7 @@ func (v *ModelViewer) syncSchedule() {
 	revision := v.anim.scheduleRevision
 	ctx, cancel := context.WithCancel(v.ctx)
 	v.anim.scheduleCancel = cancel
-	transport, frames, loop := scene.transport, clip.Frames, clip.Loop
+	transport, frames, loop := scene.snapshotMeshTransport(), clip.Frames, clip.Loop
 	post := v.poster()
 	go func() {
 		defer cancel()
