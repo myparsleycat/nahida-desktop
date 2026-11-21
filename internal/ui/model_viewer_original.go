@@ -896,19 +896,13 @@ func originalViewerMesh(part modelviewer.CharacterOriginalPart, game string) *vi
 	return mesh
 }
 
-// shadeWithFace shades the parts that share a face part's material, such as Genshin's eye area and brows, as one
-// face facing the mean of their normals, so the face map's shadow edge runs across them without a seam.
+// shadeWithFace shades the parts that share a face part's material or face map, such as Genshin's eye area and
+// brows, as one face facing the mean of their normals, so the face map's shadow edge runs across them without a seam.
 func shadeWithFace(parts []*viewerOriginalPart, data *modelviewer.CharacterOriginal) {
-	materials := map[string]bool{}
-	for _, part := range data.Parts {
-		if part.Role == modelviewer.OriginalRoleFace && part.Material != "" {
-			materials[part.Material] = true
-		}
-	}
 	var faces []*viewerMesh
 	var normals []float32
 	for _, part := range parts {
-		if materials[data.Parts[part.index].Material] {
+		if data.FaceShaded(part.index) {
 			part.mesh.toonFace, part.mesh.toonEye = true, false
 			faces = append(faces, part.mesh)
 			normals = append(normals, part.mesh.normals...)

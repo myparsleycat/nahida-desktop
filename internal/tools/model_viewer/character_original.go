@@ -536,6 +536,16 @@ func readOriginalPart(
 	if len(indices)%3 != 0 {
 		return part, fmt.Errorf("%d indices do not form triangles", len(indices))
 	}
+	if _, ok := part.Textures[facialExpressionAtlasSlot]; ok {
+		atlasUVs, err := read("TEXCOORD_2", 2, false)
+		if err != nil {
+			return part, err
+		}
+		if atlasUVs != nil && len(atlasUVs) != count*2 {
+			return part, fmt.Errorf("TEXCOORD_2 has %d values for %d vertices", len(atlasUVs), count)
+		}
+		indices = dropExpressionAtlasTriangles(indices, atlasUVs)
+	}
 
 	// Primitives of one mesh may share a vertex buffer; each part keeps only the vertices its triangles use.
 	vertices := count
@@ -625,6 +635,37 @@ func readOriginalPart(
 		}
 	}
 	return part, nil
+}
+
+// facialExpressionAtlasSlot holds the expression atlas of Genshin's Character_Uber_FacialUVExpression shader.
+const facialExpressionAtlasSlot = "_FacialExpAtlasTex"
+
+// dropExpressionAtlasTriangles removes the triangles with a vertex whose third UV set is not (0, 1). In Nicole's eye
+// area these form a layer that no shape key moves and that covers the eye openings and cheeks; the viewer does not
+// draw the expression atlas, and drawn with the face texture the layer hides the eyes. It keeps every triangle when
+// none would remain.
+func dropExpressionAtlasTriangles(indices, atlasUVs []float32) []float32 {
+	if atlasUVs == nil {
+		return indices
+	}
+	base := func(v float32) bool {
+		if v < 0 || int(v) >= len(atlasUVs)/2 {
+			// compactOriginalIndices rejects the index.
+			return true
+		}
+		u, w := atlasUVs[int(v)*2], atlasUVs[int(v)*2+1]
+		return math.Abs(float64(u)) < 1e-4 && math.Abs(float64(w)-1) < 1e-4
+	}
+	kept := make([]float32, 0, len(indices))
+	for i := 0; i < len(indices); i += 3 {
+		if base(indices[i]) && base(indices[i+1]) && base(indices[i+2]) {
+			kept = append(kept, indices[i:i+3]...)
+		}
+	}
+	if len(kept) == 0 {
+		return indices
+	}
+	return kept
 }
 
 // compactOriginalIndices lists, in ascending order, the vertices of a vertices-long buffer that indices use, and

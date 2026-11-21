@@ -117,6 +117,37 @@ func TestCharacterOriginalEFMISkinLUT(t *testing.T) {
 	}
 }
 
+func TestCharacterOriginalFaceShaded(t *testing.T) {
+	faceMap := CharacterOriginalTexture{Name: "FaceLightmap", Color: characterFileEntry{SHA256: "a"}}
+	shadow := CharacterOriginalTexture{Name: "Face01_Shadow", Color: characterFileEntry{SHA256: "b"}}
+	hair := CharacterOriginalTexture{Name: "Hair_Lightmap", Color: characterFileEntry{SHA256: "c"}}
+	original := &CharacterOriginal{Game: "GIMI", Parts: []CharacterOriginalPart{
+		{Role: OriginalRoleFace, Material: "Mat_Face", Textures: map[string]CharacterOriginalTexture{
+			"_FaceMapTex": faceMap, "_LightMapTex": shadow,
+		}},
+		// Nicole's eye area has a material of its own that samples the face's maps.
+		{Role: OriginalRoleEye, Material: "Mat_Eye", Textures: map[string]CharacterOriginalTexture{
+			"_FaceMapTex": faceMap, "_LightMapTex": shadow,
+		}},
+		{Role: OriginalRoleEye, Material: "Mat_Pupil", Textures: map[string]CharacterOriginalTexture{
+			"_LightMapTex": hair,
+		}},
+		{Role: OriginalRoleBrow, Material: "Mat_Face"},
+	}}
+
+	for i, want := range []bool{true, true, false, true} {
+		if got := original.FaceShaded(i); got != want {
+			t.Errorf("part %d FaceShaded = %v, want %v", i, got, want)
+		}
+	}
+	for i, want := range []string{"", "", hair.Name, ""} {
+		got, ok := original.Texture(i, OriginalTextureLight)
+		if ok != (want != "") || got.Name != want {
+			t.Errorf("part %d light = %q, %v; want %q", i, got.Name, ok, want)
+		}
+	}
+}
+
 func TestMatchCharacterOriginalKeptHair(t *testing.T) {
 	body := originalTestPart(OriginalRoleBody, 0, 0.2)
 	body.Mesh = "Body"

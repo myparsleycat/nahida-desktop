@@ -49,7 +49,7 @@ func (o *CharacterOriginal) Texture(part int, role string) (CharacterOriginalTex
 	}
 	p := o.Parts[part]
 	slots := originalTextureSlots[o.Game]
-	if p.Role == OriginalRoleFace {
+	if o.FaceShaded(part) {
 		if slot, ok := originalFaceSlots[o.Game][role]; ok {
 			texture, found := p.Textures[slot]
 			return texture, found
@@ -73,6 +73,33 @@ func (o *CharacterOriginal) Texture(part int, role string) (CharacterOriginalTex
 		}
 	}
 	return CharacterOriginalTexture{}, false
+}
+
+// FaceShaded reports whether the game shades part as the face: it is a face part, draws with a face part's material,
+// or samples a face part's face map from a material of its own, as Nicole's eye area and brows do.
+func (o *CharacterOriginal) FaceShaded(part int) bool {
+	if part < 0 || part >= len(o.Parts) {
+		return false
+	}
+	p := o.Parts[part]
+	if p.Role == OriginalRoleFace {
+		return true
+	}
+	slot := originalFaceSlots[o.Game][OriginalTextureFaceLight]
+	faceMap, hasMap := p.Textures[slot]
+	hasMap = hasMap && slot != "" && faceMap.Color.SHA256 != ""
+	for _, face := range o.Parts {
+		if face.Role != OriginalRoleFace {
+			continue
+		}
+		if p.Material != "" && face.Material == p.Material {
+			return true
+		}
+		if other, ok := face.Textures[slot]; hasMap && ok && other.Color.SHA256 == faceMap.Color.SHA256 {
+			return true
+		}
+	}
+	return false
 }
 
 const (
