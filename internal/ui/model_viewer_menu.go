@@ -268,16 +268,22 @@ func (v *ModelViewer) menuBar() *fairy.El {
 			}},
 		)
 	}
-	menus = append(menus, kit.MenubarMenu{Label: T("page.tools.model_viewer.menu.misc"), Items: func() []kit.MenuItem {
-		return []kit.MenuItem{{
+	menus = append(menus, kit.MenubarMenu{Label: T("page.tools.model_viewer.menu.misc"), Items: v.captureMenuItems})
+	return kit.Menubar("model-viewer", menus)
+}
+
+func (v *ModelViewer) captureMenuItems() []kit.MenuItem {
+	var items []kit.MenuItem
+	if v.blender == nil {
+		items = append(items, kit.MenuItem{
 			Label: T("page.tools.model_viewer.menu.capture_set_preview"), Icon: lucide.Camera,
 			Disabled: v.scene == nil || v.savingPreview, OnClick: v.requestPreviewCapture,
-		}, {
-			Label: T("page.tools.model_viewer.menu.save_png"), Icon: lucide.ImageDown,
-			Disabled: v.scene == nil || v.savingPNG, Submenu: v.pngMenu(),
-		}}
-	}})
-	return kit.Menubar("model-viewer", menus)
+		})
+	}
+	return append(items, kit.MenuItem{
+		Label: T("page.tools.model_viewer.menu.save_png"), Icon: lucide.ImageDown,
+		Disabled: v.scene == nil || v.savingPNG, Submenu: v.pngMenu(),
+	})
 }
 
 func (v *ModelViewer) exposureControl(exposure float64) *fairy.El {

@@ -144,9 +144,9 @@ type ModelViewer struct {
 	pendingMeshes map[int]bool
 	// blender is set for a viewer of a Blender live link scene instead of a mod folder.
 	blender *viewerBlenderSource
-	// liveWanted holds, by mesh index, the geometry URL of the newest Blender live mesh being loaded.
+	// liveWanted holds, by mesh index, the newest Blender live geometry still to apply.
 	liveWanted map[int]string
-	// liveTextureWanted holds, by texture key, the URL of the newest Blender live texture being loaded.
+	// liveTextureWanted holds, by texture key, the newest Blender live texture still to apply.
 	liveTextureWanted map[string]string
 	// pendingLive holds the Blender live updates that arrived while the scene loaded, which install applies.
 	pendingLive []modelviewer.ModelViewerLiveUpdate
@@ -269,6 +269,9 @@ func (v *ModelViewer) Close() {
 
 func (v *ModelViewer) releaseScene() {
 	v.pendingLive = nil
+	v.liveWanted, v.liveTextureWanted = nil, nil
+	v.uploading = false
+	v.cancelSchedule()
 	v.stopCompute(false)
 	v.stopMotion()
 	v.motionFailed = viewerCharacterKey{}
@@ -276,6 +279,10 @@ func (v *ModelViewer) releaseScene() {
 	v.originalFailed = viewerCharacterKey{}
 	scene := v.scene
 	v.scene = nil
+	v.disposeScene(scene)
+}
+
+func (v *ModelViewer) disposeScene(scene *viewerScene) {
 	if scene == nil {
 		return
 	}
@@ -298,27 +305,26 @@ func (v *ModelViewer) load() {
 	ctx := v.ctx
 	go func() {
 		scene, err := v.loadScene(ctx)
-		fairy.Go(func() {
-			if v.closed || ctx.Err() != nil {
-				if scene != nil {
-					v.scene = scene
-					v.releaseScene()
-				}
-				return
-			}
-			v.loading = false
-			if err != nil {
-				if !v.opened && v.openFailed != nil {
-					v.openFailed(err)
-					return
-				}
-				v.loadErr = err.Error()
-				return
-			}
-			v.opened = true
-			v.install(scene)
-		})
+		fairy.Go(func() { v.finishLoad(ctx, scene, err) })
 	}()
+}
+
+func (v *ModelViewer) finishLoad(ctx context.Context, scene *viewerScene, err error) {
+	if v.closed || ctx.Err() != nil {
+		v.disposeScene(scene)
+		return
+	}
+	v.loading = false
+	if err != nil {
+		if !v.opened && v.openFailed != nil {
+			v.openFailed(err)
+			return
+		}
+		v.loadErr = err.Error()
+		return
+	}
+	v.opened = true
+	v.install(scene)
 }
 
 func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err error) {
@@ -436,7 +442,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.preview, v.previewForm, v.previewVars = nil, nil, nil
 	v.form = ""
 	v.highlightGameTextures, v.textureInfoOpen = false, false
-	v.pendingVariants, v.pendingMeshes, v.liveWanted, v.liveTextureWanted = nil, nil, nil, nil
+	v.pendingVariants, v.pendingMeshes = nil, nil
 	v.liveBlendFailures = nil
 	v.loadFailureShown = false
 	v.sourceIndices = nil
@@ -757,55 +763,84 @@ func (v *ModelViewer) reupload() {
 		return
 	}
 	v.uploading = true
+	transport := scene.snapshotMeshTransport()
+	transport.Textures = maps.Clone(transport.Textures)
 	uploads := viewerMeshUploads(scene)
 	// Meshes that dropped their arrays are read again.
-	reread := map[int]modelviewer.ModelViewerMeshTransport{}
+	type meshRead struct {
+		info     modelviewer.ModelViewerMeshTransport
+		averaged bool
+	}
+	reread := map[int]meshRead{}
 	for i, mesh := range scene.meshes {
 		if mesh.cpuDropped {
-			reread[i] = mesh.info
+			reread[i] = meshRead{info: mesh.info, averaged: mesh.averagedOutline}
 		}
 	}
 	ctx := v.ctx
 	go func() {
-		for i, info := range reread {
-			decoded, err := readViewerMesh(ctx, v.read, info, scene.meshes[i].averagedOutline)
+		for i, mesh := range reread {
+			decoded, err := readViewerMesh(ctx, v.read, mesh.info, mesh.averaged)
 			if err != nil {
 				if ctx.Err() == nil {
-					v.log.Warn(fmt.Sprintf("Model viewer mesh %s could not be read again: %v", info.ID, err),
+					v.log.Warn(fmt.Sprintf("Model viewer mesh %s could not be read again: %v", mesh.info.ID, err),
 						"ModelViewer.reupload")
 				}
 				continue
 			}
 			uploads[i] = decoded.upload()
 		}
-		set, err := uploadViewerScene(ctx, v.read, v.log, scene.transport, uploads)
+		set, err := uploadViewerScene(ctx, v.read, v.log, transport, uploads)
 		fairy.Go(func() {
-			v.uploading = false
-			if err != nil || v.scene != scene {
+			if v.scene != scene {
 				set.release()
-				if err != nil && v.scene == scene && !infra.IsCancellationError(err) {
+				return
+			}
+			v.uploading = false
+			if err != nil {
+				set.release()
+				if !infra.IsCancellationError(err) {
 					v.uploadErr = infra.ReportError(v.log, err, "ModelViewer.reupload", infra.Diagnostic{
 						Operation: "reupload", Fields: map[string]any{"modPath": v.path},
 					}).Error()
 				}
 				return
 			}
-			scene.gpu.release()
-			scene.gpu = set
-			// A mesh loaded meanwhile has no buffers in the new set and loads again; one dropped meanwhile does
-			// not keep them.
-			for i, mesh := range scene.meshes {
-				switch {
-				case !mesh.unloaded && set.meshes[i].indexCount == 0 && mesh.info.IndexCount > 0:
-					scene.forgetMesh(i)
-				case mesh.unloaded && set.meshes[i].indexCount > 0:
-					releaseViewerMeshGPU(&set.meshes[i])
+			generation := fairy.DeviceGeneration()
+			if !v.installRecoveredGPU(scene, set, generation, transport.Textures) {
+				set.release()
+				// The next draw on a replacement device restarts recovery if none is available yet.
+				if generation != 0 {
+					v.reupload()
 				}
-				mesh.dirty, mesh.nextDirty, mesh.swapped = mesh.current != nil, mesh.next != nil, false
 			}
-			v.present()
 		})
 	}()
+}
+
+func (v *ModelViewer) installRecoveredGPU(
+	scene *viewerScene,
+	set *viewerGPUSet,
+	generation uint64,
+	textures map[string]modelviewer.ModelViewerTextureTransport,
+) bool {
+	if !set.matchesGeneration(generation) {
+		return false
+	}
+	scene.gpu.release()
+	scene.gpu = set
+	for i, mesh := range scene.meshes {
+		switch {
+		case !mesh.unloaded && set.meshes[i].indexCount == 0 && mesh.info.IndexCount > 0:
+			scene.forgetMesh(i)
+		case mesh.unloaded && set.meshes[i].indexCount > 0:
+			releaseViewerMeshGPU(&set.meshes[i])
+		}
+		mesh.dirty, mesh.nextDirty, mesh.swapped = mesh.current != nil, mesh.next != nil, false
+	}
+	v.resumeLiveUploads(scene, textures)
+	v.present()
+	return true
 }
 
 // poster returns how a goroutine started now hands a result without device objects to the UI thread. Posting to
@@ -1253,8 +1288,11 @@ func (s *Shell) openBlenderViewer(name string, blender viewerBlenderSource) {
 }
 
 func (s *Shell) openViewer(path string, blender *viewerBlenderSource) {
-	if s.mods.viewer != nil {
-		return
+	if current := s.mods.viewer; current != nil {
+		if current.blocksOpen(path, blender) {
+			return
+		}
+		s.closeModelViewer()
 	}
 	v := s.newModelViewer(path, blender)
 	v.openFailed = func(err error) {
@@ -1267,11 +1305,22 @@ func (s *Shell) openViewer(path string, blender *viewerBlenderSource) {
 	s.mods.viewer = v
 }
 
+func (v *ModelViewer) blocksOpen(path string, blender *viewerBlenderSource) bool {
+	return v.opened || v.matchesSource(path, blender)
+}
+
 // modelViewerOpening reports whether the viewer of the mod at path is still loading its first scene, while the
 // mod screen shows the button that opened it as busy.
 func (s *Shell) modelViewerOpening(path string) bool {
 	v := s.mods.viewer
-	return v != nil && !v.opened && platform.SamePathFold(v.path, path)
+	return v != nil && !v.opened && v.matchesSource(path, nil)
+}
+
+func (v *ModelViewer) matchesSource(path string, blender *viewerBlenderSource) bool {
+	if v.blender != nil && blender != nil {
+		return v.blender.link == blender.link
+	}
+	return v.blender == nil && blender == nil && platform.SamePathFold(v.path, path)
 }
 
 // modelViewerFailure is the part of a load error after its last "Error", as the React mod screen showed it.

@@ -8,6 +8,104 @@ import (
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
+func TestGPURecoveryKeepsPendingTextureWithoutDevice(t *testing.T) {
+	t.Parallel()
+	previous := &viewerGPUSet{}
+	scene := &viewerScene{gpu: previous}
+	v := &ModelViewer{scene: scene, liveTextureWanted: map[string]string{"diffuse": "latest"}}
+	if v.liveUploadReady(scene, previous, 0) {
+		t.Error("the live upload accepted a GPU set without a device")
+	}
+
+	mixed := &viewerGPUSet{textures: map[string]viewerTextureGPU{"diffuse": {}}}
+	textures := map[string]modelviewer.ModelViewerTextureTransport{"diffuse": {URL: "latest"}}
+	if v.installRecoveredGPU(scene, mixed, 0, textures) || scene.gpu != previous {
+		t.Error("recovery installed mixed-generation GPU resources without a device")
+	}
+	if got := v.liveTextureWanted["diffuse"]; got != "latest" {
+		t.Errorf("pending texture after device loss = %q, want latest", got)
+	}
+
+	recovered := &viewerGPUSet{generation: 1, textures: map[string]viewerTextureGPU{"diffuse": {}}}
+	if !v.installRecoveredGPU(scene, recovered, 1, textures) || scene.gpu != recovered {
+		t.Fatal("recovery did not install the current GPU set")
+	}
+	if _, pending := v.liveTextureWanted["diffuse"]; pending {
+		t.Error("the texture installed on the replacement device is still pending")
+	}
+}
+
+func TestLiveUpdatesSurviveGPURecovery(t *testing.T) {
+	const generation = 1
+	oldGPU := &viewerGPUSet{generation: generation}
+	info := modelviewer.ModelViewerMeshTransport{ID: "body", GeometryURL: "before-recovery", IndexCount: 3}
+	scene := &viewerScene{
+		transport: modelviewer.ModelViewerTransport{
+			MemorySessionID: "session", Meshes: []modelviewer.ModelViewerMeshTransport{info},
+		},
+		gpu: oldGPU, meshes: []*viewerMesh{{info: info}},
+	}
+	v := &ModelViewer{scene: scene, uploading: true, liveWanted: map[int]string{0: info.GeometryURL}}
+	update := func(geometry, texture string) {
+		v.applyLiveMeshes(modelviewer.ModelViewerLiveUpdate{
+			MemorySessionID: "session",
+			Meshes:          []modelviewer.ModelViewerLiveMesh{{ID: "body", GeometryURL: geometry, IndexCount: 3}},
+			Textures: []modelviewer.ModelViewerLiveTexture{{
+				Key: "diffuse", Texture: modelviewer.ModelViewerTextureTransport{URL: texture},
+			}},
+		})
+	}
+	update("during-recovery", "first")
+	v.uploading, v.uploadErr = false, "device unavailable"
+	update("after-failure", "latest")
+	if v.liveUploadReady(scene, oldGPU, generation) {
+		t.Fatal("the failed GPU set can start or accept uploads")
+	}
+	if got := v.liveWanted[0]; got != "after-failure" || scene.transport.Meshes[0].GeometryURL != got {
+		t.Fatalf("pending geometry %q and transport %+v do not name the latest edit", got, scene.transport.Meshes[0])
+	}
+	if got := v.liveTextureWanted["diffuse"]; got != "latest" || scene.transport.Textures["diffuse"].URL != got {
+		t.Fatalf("pending texture %q and transport %+v do not name the latest edit", got, scene.transport.Textures)
+	}
+	if got := scene.meshes[0].info.GeometryURL; got != "before-recovery" {
+		t.Fatalf("installed geometry changed before the upload completed: %q", got)
+	}
+
+	v.uploadErr = ""
+	scene.gpu = &viewerGPUSet{generation: generation}
+	if v.liveUploadReady(scene, oldGPU, generation) || !v.liveUploadReady(scene, scene.gpu, generation) {
+		t.Fatal("only the recovered GPU set should accept the pending uploads")
+	}
+
+	// Recovery could not restore the previous geometry. Keep uploads paused while inspecting the replay inputs.
+	scene.forgetMesh(0)
+	v.uploading = true
+	scene.gpu.textures = map[string]viewerTextureGPU{"diffuse": {}, "changed": {}}
+	scene.transport.Textures["changed"] = modelviewer.ModelViewerTextureTransport{URL: "newer"}
+	scene.transport.Textures["missing"] = modelviewer.ModelViewerTextureTransport{URL: "not-uploaded"}
+	v.liveTextureWanted["changed"], v.liveTextureWanted["missing"] = "newer", "not-uploaded"
+	v.resumeLiveUploads(scene, map[string]modelviewer.ModelViewerTextureTransport{
+		"diffuse": {URL: "latest"},
+		"changed": {URL: "older"},
+		"missing": {URL: "not-uploaded"},
+	})
+	if got := scene.meshes[0].info.GeometryURL; got != "after-failure" || len(v.liveWanted) != 0 {
+		t.Errorf("next regular load would read %q with live uploads pending: %v", got, v.liveWanted)
+	}
+	if _, pending := v.liveTextureWanted["diffuse"]; pending {
+		t.Error("the recovered current texture would be uploaded again")
+	}
+	if v.liveTextureWanted["changed"] != "newer" || v.liveTextureWanted["missing"] != "not-uploaded" {
+		t.Errorf("recovery dropped textures it did not upload at their latest revision: %v", v.liveTextureWanted)
+	}
+
+	scene.transport.MemorySessionID = ""
+	v.releaseScene()
+	if len(v.liveWanted) != 0 || len(v.liveTextureWanted) != 0 || v.liveUploadReady(scene, scene.gpu, generation) {
+		t.Fatal("releasing the scene left live uploads pending")
+	}
+}
+
 // A rebuilt component carries an empty mesh for each of its objects without triangles, including ones the scene
 // never had. Those must not open the scene again on every edit, while a mesh the scene has takes the empty one. A
 // face mesh that loses its triangles no longer counts as a face, and the original model's match goes stale.

@@ -9,6 +9,29 @@ import (
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
 
+func TestViewerScheduleUsesGeometryFromItsSnapshot(t *testing.T) {
+	t.Parallel()
+	scene := &viewerScene{transport: modelviewer.ModelViewerTransport{
+		Meshes: []modelviewer.ModelViewerMeshTransport{{
+			Conditions: modelviewer.ModelViewerDNF{{}},
+			PositionVariants: []modelviewer.ModelViewerPositionVariant{{
+				GeometryURL: "variant", Conditions: modelviewer.ModelViewerDNF{{}},
+			}},
+		}},
+	}}
+	input := scene.snapshotMeshTransport()
+	scene.transport.Meshes[0].PositionVariants = nil
+
+	frames := []modelviewer.ModelViewerAnimationFrame{{}, {}}
+	oldSchedule := buildViewerSchedule(t.Context(), input, nil, "", frames, false)
+	newSchedule := buildViewerSchedule(t.Context(), scene.snapshotMeshTransport(), nil, "", frames, false)
+	variant := viewerScheduleItem{mesh: 0, variant: 0}
+	if !slices.Contains(oldSchedule.frames[0], variant) || slices.Contains(newSchedule.frames[0], variant) {
+		t.Fatalf("old frame %v, new frame %v; only the old frame should request the variant",
+			oldSchedule.frames[0], newSchedule.frames[0])
+	}
+}
+
 // A looping clip with more frames than the cache holds evicts, least recently drawn first, exactly the frame it
 // plays next. With the clip's schedule the cache drops the mesh drawn last instead.
 func TestSceneDropsMeshDrawnLastWithSchedule(t *testing.T) {

@@ -65,6 +65,10 @@ type viewerGPUSet struct {
 	textures   map[string]viewerTextureGPU
 }
 
+func (s *viewerGPUSet) matchesGeneration(generation uint64) bool {
+	return s != nil && generation != 0 && s.generation == generation
+}
+
 type viewerMeshGPU struct {
 	// vertices interleaves position and normal and follows the mesh's current geometry; uvs never change, and
 	// extra changes only for the body shape editor's colours.

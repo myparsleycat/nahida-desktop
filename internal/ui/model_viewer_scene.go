@@ -67,6 +67,12 @@ type viewerScene struct {
 	residentAt uint64
 }
 
+func (s *viewerScene) snapshotMeshTransport() modelviewer.ModelViewerTransport {
+	transport := s.transport
+	transport.Meshes = slices.Clone(transport.Meshes)
+	return transport
+}
+
 // viewerMeshCacheBytes bounds the GPU size of the meshes a scene keeps loaded beyond the ones it shows. A mod
 // that animates by switching between many meshes, one per frame, only ever draws a few of them.
 const viewerMeshCacheBytes = 256 << 20
