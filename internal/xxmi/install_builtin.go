@@ -45,14 +45,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 			"importer": spec.key, "version": input.Version, "importer_path": cfg.ImporterFolder,
 			"rollback": rollbackState,
 		}
-		if inUse, ok := errors.AsType[*ImporterFolderInUseError](returnErr); ok && inUse.folder != "" {
-			watch.Stage("identify-locking-processes")
-			x.identifyImporterLockingProcesses(ctx, inUse)
-			fields["resolved_importer_path"] = inUse.folder
-			if len(inUse.Processes) > 0 {
-				fields["locking_processes"] = inUse.Processes
-			}
-		}
+		x.describeImporterFolderInUse(ctx, returnErr, fields, watch)
 		returnErr = infra.ReportError(x.log, returnErr, "XXMI.installBuiltinImporterPackage", infra.Diagnostic{
 			Operation: "install-importer-package", Stage: stage, Fields: fields,
 		})
@@ -271,6 +264,25 @@ func (x *XXMI) installBuiltinImporterPackage(
 	watch.Stage("finish-transaction")
 	x.reportCleanup(transaction.finish(), "InstallImporterPackage")
 	return nil
+}
+
+// describeImporterFolderInUse fills the processes of an importer folder in use into err and adds them and the
+// searched folder to the diagnostic fields.
+func (x *XXMI) describeImporterFolderInUse(
+	ctx context.Context, err error, fields map[string]any, watch *infra.StallWatch,
+) {
+	inUse, ok := errors.AsType[*ImporterFolderInUseError](err)
+	if !ok || inUse.folder == "" {
+		return
+	}
+	if watch != nil {
+		watch.Stage("identify-locking-processes")
+	}
+	x.identifyImporterLockingProcesses(ctx, inUse)
+	fields["resolved_importer_path"] = inUse.folder
+	if len(inUse.Processes) > 0 {
+		fields["locking_processes"] = inUse.Processes
+	}
 }
 
 func (x *XXMI) identifyImporterLockingProcesses(ctx context.Context, inUse *ImporterFolderInUseError) {

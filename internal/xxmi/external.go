@@ -548,6 +548,7 @@ func (x *XXMI) installExternalImporterPackage(
 		}
 		fields["rollback"] = rollbackState
 		fields["cleanup"] = cleanupState
+		x.describeImporterFolderInUse(ctx, returnErr, fields, nil)
 		returnErr = infra.ReportError(x.log, returnErr, "XXMI.installExternalImporterPackage", infra.Diagnostic{
 			Operation: "install-importer-package", Stage: stage, Fields: fields,
 		})
