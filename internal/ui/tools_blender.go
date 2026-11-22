@@ -193,5 +193,5 @@ func guessBlenderCharacter(game string, names []string) string {
 // blenderViewerOpening reports whether the viewer of a connection's scene is still loading its first scene.
 func (s *Shell) blenderViewerOpening(link uint64) bool {
 	v := s.mods.viewer
-	return v != nil && !v.opened && v.blender != nil && v.blender.link == link
+	return v != nil && !v.opened && v.matchesSource("", &viewerBlenderSource{link: link})
 }

@@ -73,21 +73,6 @@ func (v *ModelViewer) applyLiveMeshes(update modelviewer.ModelViewerLiveUpdate) 
 		// The rebuilt mesh may have other vertices than the targets and variants of the exported one.
 		info.ShapeTargets, info.PositionVariants = nil, nil
 		scene.transport.Meshes[i] = info
-		if mesh.unloaded {
-			coverageChanged := (mesh.info.IndexCount > 0) != (info.IndexCount > 0)
-			mesh.info, mesh.failed = info, false
-			mesh.variants, mesh.unreadable = map[int]*viewerPositionGeometry{}, nil
-			// A live load started while the mesh was loaded would otherwise swap the older geometry in.
-			delete(v.liveWanted, i)
-			if m := v.activeMotion(); m != nil {
-				m.replaceBlend(i, "", nil, nil)
-				v.reloadMotionBlend(scene, m, i)
-			}
-			if coverageChanged {
-				v.rematchOriginal(scene)
-			}
-			continue
-		}
 		v.loadLiveMesh(scene, i, info)
 	}
 	for _, live := range update.Textures {
@@ -106,31 +91,33 @@ func (v *ModelViewer) loadLiveTexture(scene *viewerScene, key string, entry mode
 		v.liveTextureWanted = map[string]string{}
 	}
 	v.liveTextureWanted[key] = entry.URL
+	gpu := scene.gpu
+	if !v.liveUploadReady(scene, gpu, fairy.DeviceGeneration()) {
+		return
+	}
 	ctx, read, log, normalXY := v.ctx, v.read, v.log, scene.transport.NormalXYReconstruct
 	entries := map[string]modelviewer.ModelViewerTextureTransport{key: entry}
 	go func() {
 		textures, generations, err := uploadViewerTextures(ctx, read, log, entries, normalXY)
 		fairy.Go(func() {
 			texture, uploaded := textures[key]
-			current := v.scene == scene && v.liveTextureWanted[key] == entry.URL
-			if !current || !uploaded || len(generations) != 1 || scene.gpu == nil ||
-				!generations[scene.gpu.generation] ||
-				v.uploading {
+			if v.liveTextureWanted[key] != entry.URL || !v.liveUploadReady(scene, gpu, fairy.DeviceGeneration()) ||
+				uploaded && !generations[gpu.generation] {
 				if uploaded {
-					_ = fairy.UseDevice(func(fairy.GPU) error {
-						texture.view.Release()
-						return nil
-					})
+					texture.view.Release()
 				}
-				if current && err != nil && ctx.Err() == nil {
+				return
+			}
+			delete(v.liveTextureWanted, key)
+			if !uploaded {
+				if err != nil && ctx.Err() == nil {
 					v.log.Warn(fmt.Sprintf("Model viewer could not show live texture %s: %v", key, err),
 						"ModelViewer.loadLiveTexture")
 				}
 				return
 			}
-			delete(v.liveTextureWanted, key)
-			old, replaced := scene.gpu.textures[key]
-			scene.gpu.textures[key] = texture
+			old, replaced := gpu.textures[key]
+			gpu.textures[key] = texture
 			if replaced {
 				_ = fairy.UseDevice(func(fairy.GPU) error {
 					old.view.Release()
@@ -143,14 +130,34 @@ func (v *ModelViewer) loadLiveTexture(scene *viewerScene, key string, entry mode
 	}()
 }
 
-// loadLiveMesh reads and uploads the new geometry of loaded mesh i, then swaps it in, unless a newer one was
-// asked for meanwhile.
+// loadLiveMesh swaps in new geometry for a resident mesh. For an unloaded mesh, the next regular load uses the
+// new geometry, including when recovery could not restore the mesh's previous buffers.
 func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.ModelViewerMeshTransport) {
+	mesh := scene.meshes[i]
+	if mesh.unloaded {
+		coverageChanged := (mesh.info.IndexCount > 0) != (info.IndexCount > 0)
+		mesh.info, mesh.failed = info, false
+		mesh.variants, mesh.unreadable = map[int]*viewerPositionGeometry{}, nil
+		delete(v.liveWanted, i)
+		if m := v.activeMotion(); m != nil {
+			m.replaceBlend(i, "", nil, nil)
+			v.reloadMotionBlend(scene, m, i)
+		}
+		if coverageChanged {
+			v.rematchOriginal(scene)
+		}
+		return
+	}
+
 	if v.liveWanted == nil {
 		v.liveWanted = map[int]string{}
 	}
 	v.liveWanted[i] = info.GeometryURL
-	ctx, read, averagedOutline := v.ctx, v.read, scene.meshes[i].averagedOutline
+	gpu := scene.gpu
+	if !v.liveUploadReady(scene, gpu, fairy.DeviceGeneration()) {
+		return
+	}
+	ctx, read, averagedOutline := v.ctx, v.read, mesh.averagedOutline
 	go func() {
 		var buffers viewerMeshGPU
 		var generation uint64
@@ -168,16 +175,19 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 			buffers, generation, err = uploadViewerMesh(decoded.upload())
 		}
 		fairy.Go(func() {
-			current := v.scene == scene && v.liveWanted[i] == info.GeometryURL
-			if !current || err != nil || scene.gpu == nil || scene.gpu.generation != generation || v.uploading {
-				releaseViewerMeshGPU(&buffers)
-				if current && err != nil && ctx.Err() == nil {
+			if v.liveWanted[i] != info.GeometryURL || !v.liveUploadReady(scene, gpu, fairy.DeviceGeneration()) ||
+				err == nil && gpu.generation != generation {
+				buffers.release()
+				return
+			}
+			delete(v.liveWanted, i)
+			if err != nil {
+				if ctx.Err() == nil {
 					v.log.Warn(fmt.Sprintf("Model viewer could not show live mesh %s: %v", info.ID, err),
 						"ModelViewer.loadLiveMesh")
 				}
 				return
 			}
-			delete(v.liveWanted, i)
 			mesh := scene.meshes[i]
 			old := scene.gpu.meshes[i]
 			if !mesh.unloaded {
@@ -211,6 +221,28 @@ func (v *ModelViewer) loadLiveMesh(scene *viewerScene, i int, info modelviewer.M
 			v.present()
 		})
 	}()
+}
+
+// A GPU set replaced by recovery cannot accept an upload, even if both were made on the same device.
+func (v *ModelViewer) liveUploadReady(scene *viewerScene, gpu *viewerGPUSet, generation uint64) bool {
+	return v.scene == scene && !v.uploading && v.uploadErr == "" && gpu.matchesGeneration(generation) &&
+		scene.gpu == gpu
+}
+
+func (v *ModelViewer) resumeLiveUploads(
+	scene *viewerScene,
+	recoveryTextures map[string]modelviewer.ModelViewerTextureTransport,
+) {
+	for i := range v.liveWanted {
+		v.loadLiveMesh(scene, i, scene.transport.Meshes[i])
+	}
+	for key, url := range v.liveTextureWanted {
+		if _, uploaded := scene.gpu.textures[key]; uploaded && recoveryTextures[key].URL == url {
+			delete(v.liveTextureWanted, key)
+			continue
+		}
+		v.loadLiveTexture(scene, key, scene.transport.Textures[key])
+	}
 }
 
 // applyMotionBlend poses scene mesh i with bone weights blend through its palette. When blend weights groups the
