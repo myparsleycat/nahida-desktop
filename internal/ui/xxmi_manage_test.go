@@ -21,8 +21,8 @@ func TestImporterFolderMessageShowsDetectedProcesses(t *testing.T) {
 		t.Fatalf("no-process message = %q", fallback)
 	}
 
-	inUse.Processes = []platform.ProcessInfo{{Name: "Game", PID: 1234}, {PID: 5678}}
-	const processes = "Game (1234), PID 5678"
+	inUse.Processes = []platform.ProcessInfo{{Name: "Game", PID: 1234}, {PID: 5678}, {Name: "Game", PID: 1300}}
+	const processes = "Game (1234, 1300), PID 5678"
 	message := importerFolderMessage(err)
 	if message != T(key+"_WITH_PROCESSES", "processes", processes) || !strings.Contains(message, processes) {
 		t.Fatalf("message with processes = %q", message)

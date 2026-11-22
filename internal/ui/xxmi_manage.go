@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/myparsleycat/fairy"
@@ -94,14 +95,25 @@ func importerFolderMessage(err error) string {
 		if !ok || len(inUse.Processes) == 0 {
 			return T(prefix + code)
 		}
-		processes := make([]string, 0, len(inUse.Processes))
+		var names, unnamed []string
+		pids := map[string][]string{}
 		for _, process := range inUse.Processes {
-			if name := strings.TrimSpace(process.Name); name != "" {
-				processes = append(processes, fmt.Sprintf("%s (%d)", name, process.PID))
-			} else {
-				processes = append(processes, fmt.Sprintf("PID %d", process.PID))
+			pid := strconv.FormatUint(uint64(process.PID), 10)
+			name := strings.TrimSpace(process.Name)
+			if name == "" {
+				unnamed = append(unnamed, "PID "+pid)
+				continue
 			}
+			if _, seen := pids[name]; !seen {
+				names = append(names, name)
+			}
+			pids[name] = append(pids[name], pid)
 		}
+		processes := make([]string, 0, len(names)+len(unnamed))
+		for _, name := range names {
+			processes = append(processes, fmt.Sprintf("%s (%s)", name, strings.Join(pids[name], ", ")))
+		}
+		processes = append(processes, unnamed...)
 		return T(prefix+code+"_WITH_PROCESSES", "processes", strings.Join(processes, ", "))
 	}
 	detail := strings.TrimPrefix(message[strings.Index(message, code)+len(code):], ":")
