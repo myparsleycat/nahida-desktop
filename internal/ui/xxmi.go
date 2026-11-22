@@ -1050,7 +1050,7 @@ func (s *Shell) xxmiDialogs(cx *fairy.Cx) {
 				}, func() {
 					x.updateTarget = ""
 					x.refresh()
-				}, nil)
+				}, importerFolderMessage)
 			}, func() { x.updateTarget = "" })
 	}
 	s.launchGuardDialogs(cx)

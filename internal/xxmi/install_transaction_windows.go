@@ -531,7 +531,7 @@ func (t *importerInstallTransaction) commit(
 		return nil, parsedConfig{}, err
 	}
 	if err := t.parent.renameChild(t.stageName, t.liveName); err != nil {
-		return nil, parsedConfig{}, importerFolderInUseError(err)
+		return nil, parsedConfig{}, importerFolderInUseError(err, "")
 	}
 	if err := t.writeJournal(context.Background(), installStateTreeInstalled); err != nil {
 		return nil, parsedConfig{}, err
@@ -579,7 +579,8 @@ func (t *importerInstallTransaction) backUpLive(ctx context.Context) error {
 
 // renameRestoringAccess runs rename, which moves the entry at relative below the parent. A rename refused by
 // the entry's own permissions rather than by a file open below it has them restored once and runs again; the
-// restore is skipped for a link, which it refuses. Errors name the entry as reported.
+// restore is skipped for a link, which it refuses. Errors name the entry as reported, which is also the folder
+// searched for locking processes after a rollback.
 func (t *importerInstallTransaction) renameRestoringAccess(
 	ctx context.Context, relative, reported string, rename func() error,
 ) error {
@@ -590,7 +591,7 @@ func (t *importerInstallTransaction) renameRestoringAccess(
 	path := filepath.Join(t.parent.path, relative)
 	if info, statErr := t.parent.root.Lstat(relative); statErr != nil || isInstallReparsePoint(info) ||
 		!errors.Is(err, windows.ERROR_ACCESS_DENIED) || !deleteAccessDenied(path) {
-		return importerFolderInUseError(err)
+		return importerFolderInUseError(err, reported)
 	}
 
 	if t.restoreAccess == nil {
@@ -608,7 +609,7 @@ func (t *importerInstallTransaction) renameRestoringAccess(
 	if err != nil && errors.Is(err, windows.ERROR_ACCESS_DENIED) && deleteAccessDenied(path) {
 		return importerFolderAccessDeniedError(reported, err)
 	}
-	return importerFolderInUseError(err)
+	return importerFolderInUseError(err, reported)
 }
 
 // deleteAccessDenied reports whether the folder's permissions refuse this account DELETE. Opening for DELETE
@@ -637,11 +638,26 @@ func importerFolderAccessDeniedError(path string, err error) error {
 	return infra.WithCause(fmt.Errorf("XXMI_IMPORTER_FOLDER_ACCESS_DENIED: %s", path), err)
 }
 
+type ImporterFolderInUseError struct {
+	Err       error
+	Processes []platform.ProcessInfo
+	folder    string
+}
+
+func (e *ImporterFolderInUseError) Error() string {
+	if e.Err == nil {
+		return "XXMI_IMPORTER_FOLDER_IN_USE"
+	}
+	return "XXMI_IMPORTER_FOLDER_IN_USE: " + e.Err.Error()
+}
+
+func (e *ImporterFolderInUseError) Unwrap() error { return e.Err }
+
 // importerFolderInUseError names a denied importer folder swap. Windows refuses to rename a directory while any
 // file below it is open and reports that as an access error, which otherwise reads like a permission problem.
-func importerFolderInUseError(err error) error {
+func importerFolderInUseError(err error, folder string) error {
 	if errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
-		return fmt.Errorf("XXMI_IMPORTER_FOLDER_IN_USE: %w", err)
+		return &ImporterFolderInUseError{Err: err, folder: folder}
 	}
 	return err
 }
@@ -680,7 +696,7 @@ func (t *importerInstallTransaction) removeRestoringAccess(ctx context.Context, 
 		}
 		denied = slices.DeleteFunc(denied, func(path string) bool { return restored[path] })
 		if len(denied) == 0 {
-			return importerFolderInUseError(err)
+			return importerFolderInUseError(err, "")
 		}
 		if restoreErr := t.restoreAccess(ctx, denied); restoreErr != nil {
 			if ctx.Err() != nil || infra.IsCancellationError(restoreErr) {

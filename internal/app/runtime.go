@@ -183,8 +183,9 @@ func newRuntime(host uiHost) *runtime {
 	})
 	xxmiService = xxmi.NewWithOptions(xxmi.Options{
 		HTTP: httpClient, Log: log, Download: download, Archive: archive, EventEmit: eventEmit, GitHub: githubClient,
-		Elevated: xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
-		ReShade:  reshadeService,
+		Elevated:                     xxmiElevatedLauncher{lifecycle: elevatedHelper, client: elevatedClient},
+		ReShade:                      reshadeService,
+		FindImporterLockingProcesses: fs.FindDirectoryLockingProcesses,
 	})
 	dialog := platform.NewDialog(host.dialog)
 	gameLink := gamelink.NewManager(gamelink.Options{Log: log, EventEmit: eventEmit, Processes: xxmiService})

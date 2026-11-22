@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -86,9 +88,25 @@ func importerFolderMessage(err error) string {
 	if code == "" {
 		return ""
 	}
+	const prefix = "page.setting.xxmi.fn.installImporterPackage.errors."
+	if code == "XXMI_IMPORTER_FOLDER_IN_USE" {
+		inUse, ok := errors.AsType[*xxmi.ImporterFolderInUseError](err)
+		if !ok || len(inUse.Processes) == 0 {
+			return T(prefix + code)
+		}
+		processes := make([]string, 0, len(inUse.Processes))
+		for _, process := range inUse.Processes {
+			if name := strings.TrimSpace(process.Name); name != "" {
+				processes = append(processes, fmt.Sprintf("%s (%d)", name, process.PID))
+			} else {
+				processes = append(processes, fmt.Sprintf("PID %d", process.PID))
+			}
+		}
+		return T(prefix+code+"_WITH_PROCESSES", "processes", strings.Join(processes, ", "))
+	}
 	detail := strings.TrimPrefix(message[strings.Index(message, code)+len(code):], ":")
 	detail, _, _ = strings.Cut(strings.TrimLeft(detail, " \t"), "\n")
-	return T("page.setting.xxmi.fn.installImporterPackage.errors."+code, "detail", strings.TrimSpace(detail))
+	return T(prefix+code, "detail", strings.TrimSpace(detail))
 }
 
 func customDLLMessage(err error) string {
@@ -194,7 +212,7 @@ func (s *Shell) builtinDashboard() *fairy.El {
 			s.xxmiAction("install-all-updates", func(ctx context.Context) error {
 				_, err := s.deps.XXMI.InstallUpdates(ctx, "", packages)
 				return err
-			}, x.refresh, nil)
+			}, x.refresh, importerFolderMessage)
 		}, kit.Small, kit.Icon(lucide.Download), kit.Disabled(installing && !x.busy["install-all-updates"]),
 			kit.Loading(x.busy["install-all-updates"]))
 		heading := T(prefix+"updatesPending", "count", len(pending))

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +14,11 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/windows"
+
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
 
@@ -38,7 +42,14 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(importerFolder, "Mods"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, content := range map[string]string{"d3dx.ini": "user ini", "Mods/user.ini": "user mod"} {
+	mainINI := filepath.Join(importerFolder, "Core", "GIMI", "main.ini")
+	if err := os.MkdirAll(filepath.Dir(mainINI), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const oldMain = "global $version = 1.22\n"
+	for name, content := range map[string]string{
+		"d3dx.ini": "user ini", "Mods/user.ini": "user mod", "Core/GIMI/main.ini": oldMain,
+	} {
 		if err := os.WriteFile(filepath.Join(importerFolder, name), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +83,18 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
 	download := infra.NewDownload()
 	download.UseClient(infraClient)
-	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
+	var lookup func(context.Context, string) []platform.ProcessInfo
+	var logOutput bytes.Buffer
+	service := NewWithOptions(Options{
+		HTTP: infraClient, Download: download, Archive: infra.NewArchive(),
+		Log: infra.NewLogWithOptions(infra.LogOptions{Writer: &logOutput, DisableFile: true}),
+		FindImporterLockingProcesses: func(ctx context.Context, path string) []platform.ProcessInfo {
+			if lookup == nil {
+				return nil
+			}
+			return lookup(ctx, path)
+		},
+	})
 	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
@@ -117,9 +139,82 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 		t.Fatalf("failed install persisted the draft: %+v, err = %v", stored, err)
 	}
 	input.AllowUnsigned = true
+	for _, outcome := range []string{"found", "empty", "cancelled"} {
+		t.Run(outcome, func(t *testing.T) {
+			held, err := os.Open(mainINI)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = held.Close() }()
+			installCtx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			lookups := 0
+			holder := platform.ProcessInfo{Name: "Game", PID: 1234}
+			lookup = func(_ context.Context, path string) []platform.ProcessInfo {
+				lookups++
+				if !platform.SamePathFold(path, importerFolder) {
+					t.Errorf("lookup folder = %q, want %q", path, importerFolder)
+				}
+				if entries, globErr := filepath.Glob(filepath.Join(root, ".nahida-gimi-install.*")); globErr != nil ||
+					len(entries) != 0 {
+					t.Errorf("lookup ran before cleanup: %v, err = %v", entries, globErr)
+				}
+				if outcome == "cancelled" {
+					cancel()
+				}
+				if outcome == "empty" {
+					return nil
+				}
+				return []platform.ProcessInfo{holder}
+			}
+			t.Cleanup(func() { lookup = nil })
+			logOutput.Reset()
+			err = service.InstallImporterPackage(installCtx, input)
+			inUse, ok := errors.AsType[*ImporterFolderInUseError](err)
+			if !ok || !strings.Contains(inUse.Error(), "XXMI_IMPORTER_FOLDER_IN_USE:") {
+				t.Fatalf("blocked install returned %v, want importer folder in use", err)
+			}
+			if !errors.Is(err, windows.ERROR_ACCESS_DENIED) && !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+				t.Fatalf("original Windows error missing: %v", err)
+			}
+			if lookups != 1 {
+				t.Fatalf("lock lookups = %d, want one", lookups)
+			}
+			if outcome == "found" {
+				if len(inUse.Processes) != 1 || inUse.Processes[0] != holder {
+					t.Fatalf("locking processes = %v, want %v", inUse.Processes, holder)
+				}
+				logged := logOutput.String()
+				if !strings.Contains(logged, `"locking_processes":[{"name":"Game","pid":1234}]`) ||
+					!strings.Contains(logged, `"rollback":"rolled-back"`) {
+					t.Fatalf("lock or rollback diagnostic missing: %s", logged)
+				}
+			} else if len(inUse.Processes) != 0 {
+				t.Fatalf("%s lookup returned processes: %v", outcome, inUse.Processes)
+			}
+			assertFile(t, mainINI, oldMain)
+			assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
+			assertFile(t, filepath.Join(importerFolder, "d3dx.ini"), "user ini")
+			stored, err := service.GetImporterConfig(t.Context(), "GIMI")
+			if err != nil || stored.PackageVersion.Pinned != "" || stored.ProcessTimeout == 40 {
+				t.Fatalf("blocked install persisted the draft: %+v, err = %v", stored, err)
+			}
+		})
+	}
+	cacheRoot, err := service.cacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupPattern := filepath.Join(cacheRoot, "backups", "GIMI *", "d3dx.ini")
+	failedInstallBackups, err := filepath.Glob(backupPattern)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := service.InstallImporterPackage(ctx, input); err != nil {
 		t.Fatal(err)
 	}
+	assertFile(t, mainINI, "global $version = 1.23\n")
 	stored, err = service.GetImporterConfig(ctx, "GIMI")
 	if err != nil || stored.PackageVersion != cfg.PackageVersion || stored.ProcessTimeout != 40 {
 		t.Fatalf("successful install did not persist the draft: %+v, err = %v", stored, err)
@@ -135,12 +230,8 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	}
 	assertFile(t, filepath.Join(importerFolder, "Mods", "user.ini"), "user mod")
 	assertFile(t, filepath.Join(importerFolder, "d3dx.ini"), "user ini")
-	cacheRoot, err := service.cacheRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	backups, err := filepath.Glob(filepath.Join(cacheRoot, "backups", "GIMI *", "d3dx.ini"))
-	if err != nil || len(backups) != 2 {
+	backups, err := filepath.Glob(backupPattern)
+	if err != nil || len(backups)-len(failedInstallBackups) != 2 {
 		t.Fatalf("consecutive INI backups = %v, err = %v", backups, err)
 	}
 	for _, backup := range backups {

@@ -477,10 +477,14 @@ func (s *Shell) installLaunchUpdates(u *pendingUpdate) {
 				err = infra.ReportError(s.deps.Log, err, "XXMI", infra.Diagnostic{
 					Operation: "launch-updates", Fields: map[string]any{"importer": u.importer},
 				})
+				detail := importerFolderMessage(err)
+				if detail == "" {
+					detail = err.Error()
+				}
 				s.toasts.Show(
 					kit.ToastWarning,
 					T("page.setting.xxmi.builtin.launchUpdateFailed", "importer", u.importer),
-					err.Error(),
+					detail,
 				)
 			}
 			x.guard.update = nil

@@ -11,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"nahida.live/desktop/internal/diskio"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
@@ -39,12 +41,20 @@ func (x *XXMI) installBuiltinImporterPackage(
 		if returnErr == nil {
 			return
 		}
+		fields := map[string]any{
+			"importer": spec.key, "version": input.Version, "importer_path": cfg.ImporterFolder,
+			"rollback": rollbackState,
+		}
+		if inUse, ok := errors.AsType[*ImporterFolderInUseError](returnErr); ok && inUse.folder != "" {
+			watch.Stage("identify-locking-processes")
+			x.identifyImporterLockingProcesses(ctx, inUse)
+			fields["resolved_importer_path"] = inUse.folder
+			if len(inUse.Processes) > 0 {
+				fields["locking_processes"] = inUse.Processes
+			}
+		}
 		returnErr = infra.ReportError(x.log, returnErr, "XXMI.installBuiltinImporterPackage", infra.Diagnostic{
-			Operation: "install-importer-package", Stage: stage,
-			Fields: map[string]any{
-				"importer": spec.key, "version": input.Version, "importer_path": cfg.ImporterFolder,
-				"rollback": rollbackState,
-			},
+			Operation: "install-importer-package", Stage: stage, Fields: fields,
 		})
 	}()
 	if err := ValidateImporterSettings(spec.key, cfg); err != nil {
@@ -261,6 +271,29 @@ func (x *XXMI) installBuiltinImporterPackage(
 	watch.Stage("finish-transaction")
 	x.reportCleanup(transaction.finish(), "InstallImporterPackage")
 	return nil
+}
+
+func (x *XXMI) identifyImporterLockingProcesses(ctx context.Context, inUse *ImporterFolderInUseError) {
+	if x.findImporterLockingProcesses == nil || ctx.Err() != nil {
+		return
+	}
+	const budget = 2 * time.Second
+
+	acquireCtx, cancelAcquire := context.WithTimeout(ctx, budget)
+	release, err := diskio.AcquireDir(acquireCtx, inUse.folder)
+	cancelAcquire()
+	if err != nil {
+		return
+	}
+	defer release()
+
+	// A lookup that passes its deadline keeps whatever it already found; only cancelling the install discards it.
+	lookupCtx, cancelLookup := context.WithTimeout(ctx, budget)
+	defer cancelLookup()
+	processes := x.findImporterLockingProcesses(lookupCtx, inUse.folder)
+	if ctx.Err() == nil {
+		inUse.Processes = processes
+	}
 }
 
 func verifyReleaseDigest(release github.Release, assetName string, data []byte) (bool, error) {

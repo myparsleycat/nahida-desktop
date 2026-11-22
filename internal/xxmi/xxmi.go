@@ -18,6 +18,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
@@ -38,8 +39,9 @@ type Options struct {
 	EventEmit   func(name string, data ...any)
 	SearchRoots func() ([]string, error)
 	// GitHub serves release lists and files; nil builds one from HTTP and Download.
-	GitHub   *github.Client
-	Elevated elevatedLauncher
+	GitHub                       *github.Client
+	Elevated                     elevatedLauncher
+	FindImporterLockingProcesses func(context.Context, string) []platform.ProcessInfo
 	// ReShade prepares the module a launch injects for importers that turn ReShade on.
 	ReShade reshadeProvider
 }
@@ -123,8 +125,9 @@ type externalImporter struct {
 }
 
 type XXMI struct {
-	mu        sync.RWMutex
-	packageMu sync.Mutex
+	findImporterLockingProcesses func(context.Context, string) []platform.ProcessInfo
+	mu                           sync.RWMutex
+	packageMu                    sync.Mutex
 	// updateMu runs update installs, and the package operations that change what they install (package versions,
 	// the shared libraries choice, the libraries cache), one at a time. An update install holds it from its update
 	// check on, so one waiting for another picks its packages from the other's result. It is taken before
@@ -221,6 +224,7 @@ func NewWithOptions(opts Options) *XXMI {
 		log: opts.Log, github: githubClient, archive: opts.Archive,
 		eventEmit: opts.EventEmit, searchRoots: searchRoots, elevated: opts.Elevated, reshade: opts.ReShade,
 		runningWake: make(chan struct{}, 1), processSnapshot: snapshotProcessNames,
+		findImporterLockingProcesses: opts.FindImporterLockingProcesses,
 	}
 	x.installImporter = func(ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput) error {
 		return x.installBuiltinImporterPackage(ctx, spec, cfg, input, nil, nil)

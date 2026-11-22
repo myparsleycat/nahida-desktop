@@ -1,10 +1,12 @@
 package platform
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -62,6 +64,84 @@ func getLockingProcesses(pathStr string) []ProcessInfo {
 	if err == nil && info.IsDir() {
 		files = lockingFilesInDir(normalized)
 	}
+	return lockingProcessesForFiles(files)
+}
+
+// FindDirectoryLockingProcesses lists the other processes holding files below path, or path itself when it is a
+// file. A ctx deadline stops collecting files, and the files collected by then are still checked; cancelling
+// ctx returns nil.
+func (f *FS) FindDirectoryLockingProcesses(ctx context.Context, path string) []ProcessInfo {
+	const maxFiles = 4096
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	files := []string{path}
+	if info.IsDir() {
+		files, err = directoryLockCandidates(ctx, path, maxFiles)
+		if err != nil {
+			return nil
+		}
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return nil
+	}
+
+	self := windows.GetCurrentProcessId()
+	return slices.DeleteFunc(lockingProcessesForFiles(files), func(process ProcessInfo) bool {
+		return process.PID == self
+	})
+}
+
+// directoryLockCandidates registers the directory's own files before any subfolder: a process usually holds DLLs
+// mapped from the root, and byte order walks upper-case folders such as Mods first, which can fill the cap alone.
+func directoryLockCandidates(ctx context.Context, directory string, maxFiles int) ([]string, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+	var files, folders []string
+	for _, entry := range entries {
+		path := filepath.Join(directory, entry.Name())
+		if entry.Type().IsRegular() {
+			files = append(files, path)
+		} else if entry.IsDir() {
+			folders = append(folders, path)
+		}
+	}
+	files = files[:min(len(files), maxFiles)]
+
+	for _, folder := range folders {
+		if len(files) == maxFiles {
+			break
+		}
+		err := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if err != nil {
+				return nil //nolint:nilerr // An unreadable entry does not prevent checking its siblings.
+			}
+			if entry.Type().IsRegular() {
+				files = append(files, path)
+				if len(files) == maxFiles {
+					return fs.SkipAll
+				}
+			}
+			return nil
+		})
+		if errors.Is(err, context.DeadlineExceeded) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return files, nil
+}
+
+func lockingProcessesForFiles(files []string) []ProcessInfo {
 	if len(files) == 0 {
 		return []ProcessInfo{}
 	}
@@ -99,35 +179,34 @@ func getLockingProcesses(pathStr string) []ProcessInfo {
 		return []ProcessInfo{}
 	}
 
-	var needed uint32
-	var count uint32
-	var reason uint32
-	_, _, _ = procRmGetList.Call(
-		uintptr(session),
-		uintptr(unsafe.Pointer(&needed)),
-		uintptr(unsafe.Pointer(&count)),
-		0,
-		uintptr(unsafe.Pointer(&reason)),
-	)
-	if needed == 0 {
-		return []ProcessInfo{}
+	// The list can grow between the size query and the fill when another process opens a registered file.
+	var infos []rmProcessInfo
+	for attempt := 0; ; attempt++ {
+		var needed, reason uint32
+		count := uint32(len(infos))
+		var buffer *rmProcessInfo
+		if count > 0 {
+			buffer = &infos[0]
+		}
+		status, _, _ := procRmGetList.Call(
+			uintptr(session),
+			uintptr(unsafe.Pointer(&needed)),
+			uintptr(unsafe.Pointer(&count)),
+			uintptr(unsafe.Pointer(buffer)),
+			uintptr(unsafe.Pointer(&reason)),
+		)
+		if status == 0 {
+			infos = infos[:count]
+			break
+		}
+		if syscall.Errno(status) != windows.ERROR_MORE_DATA || attempt == 3 {
+			return []ProcessInfo{}
+		}
+		infos = make([]rmProcessInfo, needed)
 	}
 
-	infos := make([]rmProcessInfo, needed)
-	count = needed
-	second, _, _ := procRmGetList.Call(
-		uintptr(session),
-		uintptr(unsafe.Pointer(&needed)),
-		uintptr(unsafe.Pointer(&count)),
-		uintptr(unsafe.Pointer(&infos[0])),
-		uintptr(unsafe.Pointer(&reason)),
-	)
-	if second != 0 {
-		return []ProcessInfo{}
-	}
-
-	result := make([]ProcessInfo, 0, count)
-	for i := range count {
+	result := make([]ProcessInfo, 0, len(infos))
+	for i := range infos {
 		result = append(result, ProcessInfo{
 			Name: windows.UTF16ToString(infos[i].StrAppName[:]),
 			PID:  infos[i].Process.ProcessID,

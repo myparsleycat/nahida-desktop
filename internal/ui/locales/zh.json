@@ -3225,7 +3225,8 @@
               "XXMI_IMPORTER_ENTRY_CONFLICT": "导入器文件夹中的“{{detail}}”与安装包冲突：一方是文件夹，另一方是文件。请移动或重命名该项后重试。",
               "XXMI_IMPORTER_FILE_ACCESS_DENIED": "无法访问导入器文件夹中的文件夹“{{detail}}”，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取该文件夹的所有权并重置权限。",
               "XXMI_IMPORTER_FOLDER_ACCESS_DENIED": "没有更改“{{detail}}”的权限，且未能恢复其权限。请重试并允许管理员权限请求，或手动获取其所有权并重置权限。",
-              "XXMI_IMPORTER_FOLDER_IN_USE": "导入器文件夹正被其他程序占用。请关闭游戏、XXMI Launcher 以及打开了该文件夹内文件的程序，然后重试。",
+              "XXMI_IMPORTER_FOLDER_IN_USE": "无法替换导入器文件夹。请关闭游戏、XXMI Launcher 和打开了该文件夹内文件的程序，然后重试。",
+              "XXMI_IMPORTER_FOLDER_IN_USE_WITH_PROCESSES": "无法替换导入器文件夹。正在使用导入器文件的程序：{{processes}}。请关闭这些程序后重试。",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "导入器文件夹是 XXMI Launcher 的安装文件夹。请为此导入器选择单独的文件夹。"
             }
           }

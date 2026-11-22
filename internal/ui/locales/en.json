@@ -3271,7 +3271,8 @@
               "XXMI_IMPORTER_ENTRY_CONFLICT": "\"{{detail}}\" in the importer folder conflicts with the package: one is a folder and the other is a file. Move or rename it, then try again.",
               "XXMI_IMPORTER_FILE_ACCESS_DENIED": "Access to the folder \"{{detail}}\" in the importer folder was denied, and its permissions could not be restored. Try again and allow the administrator request, or take ownership of the folder and reset its permissions yourself.",
               "XXMI_IMPORTER_FOLDER_ACCESS_DENIED": "Permission to change \"{{detail}}\" was denied, and its permissions could not be restored. Try again and allow the administrator request, or take ownership of it and reset its permissions yourself.",
-              "XXMI_IMPORTER_FOLDER_IN_USE": "The importer folder is in use by another program. Close the game, XXMI Launcher, and any program that has files in the folder open, then try again.",
+              "XXMI_IMPORTER_FOLDER_IN_USE": "Could not replace the importer folder. Close the game, XXMI Launcher, and any program with files open in the folder, then try again.",
+              "XXMI_IMPORTER_FOLDER_IN_USE_WITH_PROCESSES": "Could not replace the importer folder. Programs using importer files: {{processes}}. Close these programs and try again.",
               "XXMI_IMPORTER_FOLDER_IS_LAUNCHER": "The importer folder is an XXMI Launcher installation folder. Choose a separate folder for this importer."
             }
           }
