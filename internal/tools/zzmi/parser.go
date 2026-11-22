@@ -181,7 +181,7 @@ func (p *literalParser) parseValue() (any, error) {
 	return nil, fmt.Errorf("unsupported Python literal at byte %d", p.pos)
 }
 
-func (p *literalParser) parseSequence(open byte) ([]any, error) {
+func (p *literalParser) parseSequence(open byte) (any, error) {
 	close := byte(']')
 	if open == '(' {
 		close = ')'
@@ -209,6 +209,10 @@ func (p *literalParser) parseSequence(open byte) ([]any, error) {
 		}
 		if p.pos >= len(p.source) || p.source[p.pos] != close {
 			return nil, fmt.Errorf("expected %q at byte %d", close, p.pos)
+		}
+		if open == '(' && len(items) == 1 {
+			p.pos++
+			return value, nil
 		}
 	}
 }

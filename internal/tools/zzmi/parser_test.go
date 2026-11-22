@@ -53,11 +53,41 @@ def get_hash_commands(log, **kwargs):
 	}
 }
 
+func TestParseRemapperDistinguishesGroupingFromSequences(t *testing.T) {
+	t.Parallel()
+	values, err := ParseRemapper([]byte(`
+GROUPED = ('value')
+SINGLE = ('value',)
+EMPTY = ()
+LIST = ['value']
+NESTED = (('12345678', 'abcdef00'),)
+`), "GROUPED", "SINGLE", "EMPTY", "LIST", "NESTED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["GROUPED"] != "value" {
+		t.Errorf("grouped value = %#v", values["GROUPED"])
+	}
+	for _, name := range []string{"SINGLE", "LIST"} {
+		if got, ok := values[name].([]any); !ok || len(got) != 1 || got[0] != "value" {
+			t.Errorf("%s = %#v, want one-element sequence", name, values[name])
+		}
+	}
+	if got, ok := values["EMPTY"].([]any); !ok || len(got) != 0 {
+		t.Errorf("empty tuple = %#v", values["EMPTY"])
+	}
+	if err := validateCommand(Command{
+		Op: "multiply_section_if_missing", Args: []any{values["NESTED"], "Texture"},
+	}); err == nil {
+		t.Error("accepted a nested list of equivalent hashes")
+	}
+}
+
 func TestCompileZipVerifiesGitBlob(t *testing.T) {
 	t.Parallel()
 	module := []byte(`
-def get_hash_commands(log, **kwargs):
-    return {'12345678': [(log, ('ok',))]}
+def get_hash_commands(multiply_section_if_missing, **kwargs):
+    return {'12345678': [(multiply_section_if_missing, ((("abcdef00", "abcdef01")), 'Texture'))]}
 `)
 	jane := []byte(`
 HAIR_MAPPINGS={26:4}
@@ -105,6 +135,10 @@ VALID_BLEND_HASHES={'3d7e53cf'}
 	}
 	if len(pack.HashCommands) != 1 {
 		t.Fatalf("unexpected hash count: %d", len(pack.HashCommands))
+	}
+	hashes, err := hashArgs(pack.HashCommands["12345678"][0].Args, 0)
+	if err != nil || len(hashes) != 2 || hashes[0] != "abcdef00" || hashes[1] != "abcdef01" {
+		t.Fatalf("equivalent hashes = %v, err = %v", hashes, err)
 	}
 	expected["Source Codes/Assets/PlayerCharacterPYData/Missing.py"] = gitBlobSHA(module)
 	if _, err := CompileZip(
