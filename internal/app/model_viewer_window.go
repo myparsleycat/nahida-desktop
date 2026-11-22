@@ -19,8 +19,12 @@ type modelViewerWindows struct {
 	log   *infra.Log
 	// lastClosed runs after the last viewer window closed.
 	lastClosed func()
-	// windows maps each open viewer window to its mod folder.
-	windows map[*fairy.Window]string
+	windows    map[*fairy.Window]modelViewerFolder
+}
+
+type modelViewerFolder struct {
+	requested  string
+	comparison string
 }
 
 func newModelViewerWindows(
@@ -31,22 +35,29 @@ func newModelViewerWindows(
 	lastClosed func(),
 ) *modelViewerWindows {
 	return &modelViewerWindows{
-		shell: shell, icon: icon, font: font, log: log, lastClosed: lastClosed, windows: map[*fairy.Window]string{},
+		shell:      shell,
+		icon:       icon,
+		font:       font,
+		log:        log,
+		lastClosed: lastClosed,
+		windows:    map[*fairy.Window]modelViewerFolder{},
 	}
 }
 
 // Open shows the viewer of the mod folder at path, focusing the window that already shows it.
 func (m *modelViewerWindows) Open(path string) {
 	for window, folder := range m.windows {
-		if !platform.SamePathFold(folder, path) {
-			continue
+		if platform.SamePathFold(folder.requested, path) {
+			showModelViewerWindow(window)
+			return
 		}
-		if window.IsMinimized() {
-			window.Restore()
+	}
+	comparison := modelViewerFolderPath(path)
+	for window, folder := range m.windows {
+		if platform.SamePathFold(folder.comparison, comparison) {
+			showModelViewerWindow(window)
+			return
 		}
-		window.Show()
-		platform.ForceForegroundWindow(window.HWND())
-		return
 	}
 
 	viewer := m.shell.NewModelViewer(path)
@@ -80,9 +91,20 @@ func (m *modelViewerWindows) Open(path string) {
 		})
 		return
 	}
-	m.windows[window] = path
+	m.windows[window] = modelViewerFolder{requested: path, comparison: comparison}
+	showModelViewerWindow(window)
+}
+
+func showModelViewerWindow(window *fairy.Window) {
 	window.Show()
 	platform.ForceForegroundWindow(window.HWND())
+}
+
+func modelViewerFolderPath(path string) string {
+	if long, err := platform.LongPath(path); err == nil {
+		path = long
+	}
+	return platform.TrimExtendedPathPrefix(path)
 }
 
 // modelViewerClosed ends a launch that only opened model viewers, unless the app keeps running in the

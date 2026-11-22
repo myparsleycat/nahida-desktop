@@ -233,11 +233,23 @@ func FinalPathOfHandle(handle windows.Handle) (string, error) {
 		buffer = make([]uint16, length+1)
 	}
 
-	final := windows.UTF16ToString(buffer)
-	if rest, ok := strings.CutPrefix(final, `\\?\UNC\`); ok {
-		return `\\` + rest, nil
+	return TrimExtendedPathPrefix(windows.UTF16ToString(buffer)), nil
+}
+
+// TrimExtendedPathPrefix removes the \\?\ prefix from an extended-length drive-letter or UNC path. A path in
+// another namespace, such as a volume GUID path, has no form without the prefix and is returned unchanged.
+func TrimExtendedPathPrefix(path string) string {
+	rest, extended := strings.CutPrefix(path, `\\?\`)
+	if !extended {
+		return path
 	}
-	return strings.TrimPrefix(final, `\\?\`), nil
+	if len(rest) >= 4 && strings.EqualFold(rest[:4], `UNC\`) {
+		return `\\` + rest[4:]
+	}
+	if volume := filepath.VolumeName(rest); len(volume) == 2 && volume[1] == ':' && filepath.IsAbs(rest) {
+		return rest
+	}
+	return path
 }
 
 // PhysicalPath is FinalPath for a path that may not exist yet: the deepest existing ancestor is resolved and the

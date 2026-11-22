@@ -155,6 +155,26 @@ func TestFinalPathStripsExtendedLengthPrefix(t *testing.T) {
 	}
 }
 
+func TestTrimExtendedPathPrefix(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, path, want string }{
+		{"drive", `\\?\C:\Mods\Viewer`, `C:\Mods\Viewer`},
+		{"UNC", `\\?\unc\server\share\Viewer`, `\\server\share\Viewer`},
+		{"volume", `\\?\Volume{00000000-0000-0000-0000-000000000000}\Viewer`, `\\?\Volume{00000000-0000-0000-0000-000000000000}\Viewer`},
+		{"drive-relative", `\\?\C:Viewer`, `\\?\C:Viewer`},
+		{"plain", `C:\Mods\Viewer`, `C:\Mods\Viewer`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := TrimExtendedPathPrefix(tt.path); got != tt.want {
+				t.Errorf("TrimExtendedPathPrefix(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 // A junction is invisible to filepath.EvalSymlinks; FinalPath has to name the folder it points at.
 func TestFinalPathFollowsJunction(t *testing.T) {
 	t.Parallel()
