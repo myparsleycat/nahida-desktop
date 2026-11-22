@@ -159,9 +159,13 @@ func TestUploadPackAcceptsCBORResultsFromNHDAPI(t *testing.T) {
 func TestUploadPackPollsPendingMembersWithoutResendingPack(t *testing.T) {
 	var packRequests atomic.Int32
 	var statusRequests atomic.Int32
+	var releases atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(request.URL.Path, "/status") {
+			if count := releases.Load(); count != 1 {
+				t.Errorf("payload releases before polling = %d, want 1", count)
+			}
 			statusRequests.Add(1)
 			_, _ = io.WriteString(w, `{"status":"completed"}`)
 			return
@@ -189,19 +193,29 @@ func TestUploadPackPollsPendingMembersWithoutResendingPack(t *testing.T) {
 		},
 	}
 	ready := make([]string, 0, 2)
-	if err := uploadTestDrive(
-		server,
-	).uploadPack(context.Background(), members, nil, nil, func(file FinalUploadFile, _ []FinalUploadFile, _ bool) {
-		ready = append(ready, file.FID)
-	}); err != nil {
+	if err := uploadTestDrive(server).uploadPack(
+		context.Background(),
+		members,
+		func() { releases.Add(1) },
+		nil,
+		func(file FinalUploadFile, _ []FinalUploadFile, sent bool) {
+			if !sent {
+				t.Errorf("file %q was not counted as sent at completion", file.FID)
+			}
+			ready = append(ready, file.FID)
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if packRequests.Load() != 1 || statusRequests.Load() != 1 || len(ready) != 2 {
+	if len(ready) != 2 || ready[0] != "file-1" || ready[1] != "file-2" {
+		t.Errorf("ready = %v, want [file-1 file-2]", ready)
+	}
+	if packRequests.Load() != 1 || statusRequests.Load() != 1 || releases.Load() != 1 {
 		t.Fatalf(
-			"pack requests = %d, status requests = %d, ready = %v",
+			"pack requests = %d, status requests = %d, payload releases = %d",
 			packRequests.Load(),
 			statusRequests.Load(),
-			ready,
+			releases.Load(),
 		)
 	}
 }

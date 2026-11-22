@@ -441,6 +441,22 @@ func (d *Drive) executeDownload(
 	var workers sync.WaitGroup
 	var stateMu sync.Mutex
 	failures := make([]error, 0)
+	reportProgress := func(bytesDelta *int64, filesDelta int) {
+		stateMu.Lock()
+		defer stateMu.Unlock()
+
+		var updates transfer.Updates
+		if bytesDelta != nil {
+			downloadedBytes += *bytesDelta
+			updates.TransferredSize = &downloadedBytes
+		}
+		if filesDelta != 0 {
+			downloadedFiles += filesDelta
+			updates.TransferredFiles = &downloadedFiles
+		}
+		_ = transfers.Update(pid, updates)
+	}
+
 	workerCount := min(max(1, concurrency), max(1, plan.fileCount+len(paths)))
 	workers.Add(workerCount)
 	for range workerCount {
@@ -504,13 +520,9 @@ func (d *Drive) executeDownload(
 						_ = transfers.MarkFileFailed(pid, failure.Error())
 						continue
 					}
-					stateMu.Lock()
-					downloadedBytes += transfer.LogicalFileBytes(file)
-					downloadedFiles++
-					bytesNow, filesNow := downloadedBytes, downloadedFiles
-					stateMu.Unlock()
+					bytes := transfer.LogicalFileBytes(file)
 					_ = transfers.MarkIndexCompleted(pid, job.index)
-					_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow, TransferredFiles: &filesNow})
+					reportProgress(&bytes, 1)
 					continue
 				}
 				downloadErr := d.downloadDriveFile(
@@ -520,11 +532,7 @@ func (d *Drive) executeDownload(
 					destination,
 					downloadAccess{Link: params.Link, Mod: params.Mod},
 					func(bytes int64) {
-						stateMu.Lock()
-						downloadedBytes += bytes
-						bytesNow := downloadedBytes
-						stateMu.Unlock()
-						_ = transfers.Update(pid, transfer.Updates{TransferredSize: &bytesNow})
+						reportProgress(&bytes, 0)
 					},
 				)
 				if downloadErr != nil {
@@ -539,11 +547,7 @@ func (d *Drive) executeDownload(
 					continue
 				}
 				_ = transfers.MarkIndexCompleted(pid, job.index)
-				stateMu.Lock()
-				downloadedFiles++
-				filesNow := downloadedFiles
-				stateMu.Unlock()
-				_ = transfers.Update(pid, transfer.Updates{TransferredFiles: &filesNow})
+				reportProgress(nil, 1)
 			}
 		}()
 	}
