@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"nahida.live/desktop/internal/platform"
 )
 
 type pathQueue struct {
@@ -52,7 +54,9 @@ func queueKey(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve mod metadata directory %s: %w", path, err)
 	}
-	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
+	if resolved, err := platform.FinalPath(absolute); err == nil {
+		absolute = resolved
+	} else if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
 		absolute = resolved
 	}
 	return strings.ToLower(filepath.Clean(absolute)), nil

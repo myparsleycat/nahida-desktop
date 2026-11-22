@@ -18,10 +18,11 @@ const (
 )
 
 type modelViewerLoadBudget struct {
-	root       string
-	seen       map[string]bool
-	resolved   map[string]string
-	totalBytes int64
+	root        string
+	logicalRoot string
+	seen        map[string]bool
+	resolved    map[string]string
+	totalBytes  int64
 }
 
 func newModelViewerLoadBudget(root string) (*modelViewerLoadBudget, error) {
@@ -56,7 +57,9 @@ func (b *modelViewerLoadBudget) validateReferencedResources(
 		path, ok := b.resolved[resolveKey]
 		if !ok {
 			var resolveErr error
-			path, resolveErr = resolveModelViewerResourcePath(b.root, baseDir, resource.Filename)
+			path, resolveErr = resolveModelViewerResourcePathWith(
+				b.root, baseDir, resource.Filename, b.logicalRoot, platform.FinalPath,
+			)
 			if resolveErr != nil {
 				return fmt.Errorf("resource %s: %w", resource.Name, resolveErr)
 			}
@@ -155,7 +158,7 @@ func sanitizeModelViewerLogValue(value string) string {
 }
 
 func resolveModelViewerResourcePath(root, baseDir, relative string) (string, error) {
-	return resolveModelViewerResourcePathWith(root, baseDir, relative, platform.FinalPath)
+	return resolveModelViewerResourcePathWith(root, baseDir, relative, "", platform.FinalPath)
 }
 
 // resolveModelViewerResourcePathWith allows a filename to reach the parent of the mod folder, where sibling folders
@@ -163,13 +166,22 @@ func resolveModelViewerResourcePath(root, baseDir, relative string) (string, err
 // final location, and one in a sibling folder inside that sibling's. A sibling may itself be a link, as mod folders
 // linked into the mods folder are, but a link below it must not lead out of it. A target that cannot be opened keeps
 // its lexical path and fails when it is read.
+// With a logicalRoot, sibling paths are relative to the requested mod folder and paths inside it use root.
 func resolveModelViewerResourcePathWith(
-	root, baseDir, relative string,
+	root, baseDir, relative, logicalRoot string,
 	finalPath func(string) (string, error),
 ) (string, error) {
 	relative = filepath.FromSlash(strings.ReplaceAll(strings.TrimSpace(relative), `\`, string(filepath.Separator)))
 	if relative == "" || filepath.IsAbs(relative) {
 		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource path must be relative: %s", relative))
+	}
+	physicalRoot := filepath.Clean(root)
+	if logicalRoot != "" {
+		subdir, err := filepath.Rel(physicalRoot, baseDir)
+		if err != nil {
+			return "", err
+		}
+		root, baseDir = logicalRoot, filepath.Join(logicalRoot, subdir)
 	}
 	target, err := filepath.Abs(filepath.Join(baseDir, relative))
 	if err != nil {
@@ -181,16 +193,25 @@ func resolveModelViewerResourcePathWith(
 		return "", infra.ContractError(fmt.Sprintf("Model Viewer resource escapes the mod folder: %s", relative))
 	}
 
-	if finalTarget, targetErr := finalPath(target); targetErr == nil {
-		bound := root
-		if !platform.SameOrChildPath(root, target) {
-			bound = ceiling
-			if relative, err := filepath.Rel(ceiling, target); err == nil {
-				if sibling, _, nested := strings.Cut(relative, string(filepath.Separator)); nested {
-					bound = filepath.Join(ceiling, sibling)
-				}
+	bound := physicalRoot
+	if platform.SameOrChildPath(root, target) {
+		if logicalRoot != "" {
+			inside, err := filepath.Rel(root, target)
+			if err != nil {
+				return "", err
+			}
+			target = filepath.Join(physicalRoot, inside)
+		}
+	} else {
+		bound = ceiling
+		if relative, err := filepath.Rel(ceiling, target); err == nil {
+			if sibling, _, nested := strings.Cut(relative, string(filepath.Separator)); nested {
+				bound = filepath.Join(ceiling, sibling)
 			}
 		}
+	}
+
+	if finalTarget, targetErr := finalPath(target); targetErr == nil {
 		finalBound, err := finalPath(bound)
 		if err != nil {
 			return "", err

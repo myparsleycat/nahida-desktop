@@ -961,6 +961,7 @@
           "game": "Game",
           "character": "Character",
           "search-placeholder": "Search characters",
+          "select-game": "Select a game",
           "#": {
             "failed": "Could not save the folder's character."
           },
@@ -1767,6 +1768,16 @@
         "dialog": {
           "save_preset": {
             "title": "Save as preset"
+          },
+          "character": {
+            "title": "Set Character…",
+            "current": "Current character: {{name}}",
+            "current_direct": "Current character: {{name}} (set for this mod)",
+            "current_inherited": "Current character: {{name}} (from {{folder}})",
+            "current_none": "No character set",
+            "clear": "Clear Mod Assignment",
+            "load_failed": "Could not load the character assignment.",
+            "save_failed": "Could not save the character assignment."
           },
           "overwrite_preview": {
             "title": "Replace preview",

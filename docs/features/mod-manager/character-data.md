@@ -11,12 +11,14 @@ Supported games are Genshin Impact (GIMI), Honkai: Star Rail (SRMI), Zenless Zon
 
 ## Set a Character
 
-To use character data, set a character on the sidebar folder that contains the mod.
+In the Model Viewer, select `Model` → `Set Character…`, choose the game and character, then select `Save`. The selection is saved in the current mod folder's `nhd.json` and used the next time the mod is opened. Select `Clear Mod Assignment` to use the folder's character again.
+
+To set a default for the mods in a folder:
 
 1. In the Mod Manager sidebar, right-click a folder and select `Set Character…`.
 2. Select the `Game` and `Character`, then click `Save`.
 
-The Model Viewer uses the character set on the nearest folder above the mod. In [Blender Live Preview](/features/mod-manager/blender-live-preview), select the character in the connection list.
+When the mod has no direct assignment, the viewer uses the nearest folder's character. In [Blender Live Preview](/features/mod-manager/blender-live-preview), select the character in the connection list.
 
 ## Downloads
 

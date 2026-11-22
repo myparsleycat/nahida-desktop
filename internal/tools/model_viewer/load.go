@@ -22,11 +22,11 @@ func (t *Service) LoadModViewer(ctx context.Context, modPath string) (ModelViewe
 	// The load leaves a heap sized for its peak and the spool now holds the meshes; return the pages now
 	// instead of waiting for the background scavenger. Grid previews skip this because they load in batches.
 	defer debug.FreeOSMemory()
-	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{spoolGeometry: true})
+	return t.loadModViewer(ctx, modPath, true, modelViewerPayloadOptions{})
 }
 
 func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
-	return t.loadModViewer(ctx, modPath, modelViewerPayloadOptions{
+	return t.loadModViewer(ctx, modPath, false, modelViewerPayloadOptions{
 		ddsPreviewMaxDimension:       modelViewerDDSPreviewMaxDimension,
 		ddsPreviewPreferredDimension: modelViewerGridPreviewDDSDimension,
 		includeAllStateVariables:     true,
@@ -36,6 +36,7 @@ func (t *Service) LoadModGridPreview(ctx context.Context, modPath string) (Model
 func (t *Service) loadModViewer(
 	ctx context.Context,
 	modPath string,
+	fullViewer bool,
 	options modelViewerPayloadOptions,
 ) (transport ModelViewerTransport, err error) {
 	startedAt := time.Now()
@@ -92,6 +93,21 @@ func (t *Service) loadModViewer(
 	} else if !info.IsDir() {
 		return ModelViewerTransport{}, infra.ContractError("Model viewer path must be a folder.")
 	}
+	var openedPath, logicalRoot string
+	if fullViewer {
+		options.spoolGeometry = true
+		if resolved, resolveErr := platform.FinalPath(folder); resolveErr == nil {
+			if !platform.SamePathFold(folder, resolved) {
+				logicalRoot = folder
+			}
+			openedPath, folder = resolved, resolved
+		} else {
+			_ = infra.ReportError(t.log, resolveErr, "StaticGlb.loadForViewer", infra.Diagnostic{
+				Severity: infra.DiagnosticWarn, Operation: "load-model-viewer", Stage: "resolve-directory",
+				Fields: map[string]any{"modPath": requestedPath},
+			})
+		}
+	}
 	discoveryStartedAt := time.Now()
 	diagnostics := &infra.DiagnosticBatch{}
 	defer diagnostics.Report(t.log, "Tools", "model-viewer-discovery")
@@ -117,6 +133,7 @@ func (t *Service) loadModViewer(
 	if budgetErr != nil {
 		return ModelViewerTransport{}, budgetErr
 	}
+	budget.logicalRoot = logicalRoot
 	sessionID = t.protocol.CreateMemorySession()
 	if options.spoolGeometry {
 		options.spool = t.openSpool(sessionID)
@@ -132,6 +149,7 @@ func (t *Service) loadModViewer(
 		MemorySessionID:  sessionID,
 		INIPath:          iniPaths[0],
 		ModPath:          requestedPath,
+		OpenedModPath:    openedPath,
 		Name:             modname.DisplayName(requestedPath),
 		Meshes:           []ModelViewerMeshTransport{},
 		Textures:         make(map[string]ModelViewerTextureTransport),
@@ -328,6 +346,29 @@ func (t *Service) loadModViewer(
 			prepared.drawSources[id] = source
 		}
 	}
+	if logicalRoot != "" {
+		// Toggle presets and tool requests address INIs through the mod path they opened.
+		requestedINIPath := func(path string) string {
+			if !platform.SameOrChildPath(folder, path) {
+				return path
+			}
+			if relative, err := filepath.Rel(folder, path); err == nil {
+				return filepath.Join(logicalRoot, relative)
+			}
+			return path
+		}
+		transport.INIPath = requestedINIPath(transport.INIPath)
+		for i := range transport.INIs {
+			transport.INIs[i].Path = requestedINIPath(transport.INIs[i].Path)
+		}
+		for id, source := range prepared.drawSources {
+			source.INIPath = requestedINIPath(source.INIPath)
+			source.UnitINIPaths = lo.Map(source.UnitINIPaths, func(path string, _ int) string {
+				return requestedINIPath(path)
+			})
+			prepared.drawSources[id] = source
+		}
+	}
 	stage = "write-payload"
 	if writeErr := writeModelViewerPayload(
 		ctx,
@@ -411,6 +452,7 @@ func firstUnresolvedModelViewerPositionResource(scans []modelViewerGeometryScan)
 type modelViewerGeometryScan struct {
 	sections  []modINISection
 	resources []modelViewerResource
+	paths     *modelViewerBufferCache
 	// iniDir is what the shader paths of the sections are relative to.
 	iniDir string
 }
@@ -448,6 +490,7 @@ func (t *Service) prepareModelViewerGeometry(
 		inis:              make([]ModelViewerINI, 0, len(iniPaths)),
 	}
 	prepared.cache.hashSources = hashSources
+	prepared.cache.logicalRoot = budget.logicalRoot
 	defer prepared.cache.diagnostics.Report(t.log, "StaticGlb.loadForViewer", "model-viewer-buffers")
 	keep := false
 	defer func() {
@@ -456,6 +499,10 @@ func (t *Service) prepareModelViewerGeometry(
 		}
 	}()
 	var stageStartedAt time.Time
+	rootLabel := modname.DisplayName(folder)
+	if budget.logicalRoot != "" {
+		rootLabel = modname.DisplayName(budget.logicalRoot)
+	}
 	scopes := modelViewerINIScopes(iniPaths, folder)
 	parsedINIs := make([]modelViewerParsedINI, len(iniPaths))
 	for iniIndex, iniPath := range iniPaths {
@@ -522,6 +569,7 @@ func (t *Service) prepareModelViewerGeometry(
 		prepared.scans = append(prepared.scans, modelViewerGeometryScan{
 			sections:  sections,
 			resources: resources,
+			paths:     prepared.cache,
 			iniDir:    filepath.Dir(iniPaths[unit.primary]),
 		})
 		stageStartedAt = time.Now()
@@ -620,12 +668,12 @@ func (t *Service) prepareModelViewerGeometry(
 			if err := recoverWwmiDumpTextures(ctx, folder, meshes, resources, declaredResourcePaths); err != nil {
 				return nil, err
 			}
-			if err := refineWwmiDumpAtlases(ctx, folder, meshes, resources); err != nil {
+			if err := refineWwmiDumpAtlases(ctx, folder, meshes, resources, prepared.cache); err != nil {
 				return nil, err
 			}
 		}
 		attributeModelViewerDrawSources(meshes, built[unitIndex].scoped, iniPaths)
-		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], folder)
+		prepared.scopeMeshes(meshes, filepath.Base(iniPath), scopes[unit.primary], rootLabel)
 		prepared.scopeCommandForms(meshes, iniPath, scopes[unit.primary])
 		computeScopeID := ""
 		if len(units) > 1 {
@@ -654,7 +702,7 @@ func (t *Service) prepareModelViewerGeometry(
 			bindings: textureBindings,
 			shapes:   shapeKeys,
 			jobs: collectModelViewerTextureJobs(len(prepared.textures), folder, resources, textureBindings, meshes,
-				modelViewerFaceTextureAssignments(face)),
+				modelViewerFaceTextureAssignments(face), prepared.cache),
 			face: face,
 			form: scopes[unit.primary].form,
 		})
@@ -683,7 +731,7 @@ func (p *modelViewerPreparedGeometry) scopeMeshes(
 	meshes []modelViewerDirectMesh,
 	fileName string,
 	scope modelViewerINIScope,
-	folder string,
+	rootLabel string,
 ) {
 	if len(meshes) == 0 || scope.form == "" {
 		return
@@ -699,7 +747,7 @@ func (p *modelViewerPreparedGeometry) scopeMeshes(
 	}
 	label := scope.form
 	if label == "." {
-		label = modname.DisplayName(folder)
+		label = rootLabel
 	}
 	p.forms = append(p.forms, ModelViewerForm{ID: scope.form, Label: label})
 }

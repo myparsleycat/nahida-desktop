@@ -958,6 +958,7 @@
           "game": "游戏",
           "character": "角色",
           "search-placeholder": "搜索角色",
+          "select-game": "选择游戏",
           "#": {
             "failed": "无法保存文件夹的角色。"
           },
@@ -1761,6 +1762,16 @@
         "dialog": {
           "save_preset": {
             "title": "保存为预设"
+          },
+          "character": {
+            "title": "设置角色…",
+            "current": "当前角色：{{name}}",
+            "current_direct": "当前角色：{{name}}（此模组单独设置）",
+            "current_inherited": "当前角色：{{name}}（继承自 {{folder}}）",
+            "current_none": "未设置角色",
+            "clear": "清除模组角色设置",
+            "load_failed": "无法读取角色设置。",
+            "save_failed": "无法保存角色设置。"
           },
           "overwrite_preview": {
             "title": "替换预览",

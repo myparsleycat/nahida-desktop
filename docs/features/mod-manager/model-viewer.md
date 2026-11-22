@@ -38,7 +38,8 @@ NTE mods are not supported.
 
 - `Rotate`: Rotates the model with `Left 90°`, `Right 90°`, `Up 90°`, `Down 90°`, and `Flip 180°`.
 - `Reset`: Returns the model's rotation and the camera to their starting state.
-- `Character Motion`, `Original Game Data`, `Missing Parts`, `Expression`: Shown for mods in a folder with a character set. See [Character Data](/features/mod-manager/character-data).
+- `Set Character…` assigns a character to the current mod. Use `Clear Mod Assignment` to return to the folder's character.
+- `Character Motion`, `Original Game Data`, `Missing Parts`, `Expression`: Shown when the assigned character and model support them. See [Character Data](/features/mod-manager/character-data).
 
 ### Texture
 
@@ -83,7 +84,7 @@ The toon style submenu in the `Rendering` menu changes these items.
   - `Shadow Ramp`: Selects `Auto`, `Built-in`, or a ramp in the texture folder.
   - `Face Shadow Map`: When a face is drawn, selects `Auto`, `Boy`, `Girl`, `Lady`, `Loli`, or `Male`.
 
-Mods in a folder with a character set use that character's toon style, and changes are saved per character. Other mods save changes per game. See [Character Data](/features/mod-manager/character-data#toon-style).
+Mods with an assigned character use that character's toon style, and changes are saved per character. Other mods save changes per game. See [Character Data](/features/mod-manager/character-data#toon-style).
 
 ## Toggle Viewer
 

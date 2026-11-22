@@ -29,9 +29,10 @@ const viewerLoadShowDelay = 300 * time.Millisecond
 // viewerDownloads holds the running loads of character data and the progress of the files they read. The loads'
 // goroutines report into it; the UI thread begins and ends the loads and reads it.
 type viewerDownloads struct {
-	mu     sync.Mutex
-	tasks  [downloadTasks]viewerDownloadState
-	posted time.Time
+	mu         sync.Mutex
+	tasks      [downloadTasks]viewerDownloadState
+	posted     time.Time
+	generation uint64
 }
 
 // viewerDownloadState is a task's running loads and their files by name. fetched is set once a file comes from the
@@ -51,9 +52,23 @@ type viewerDownloadFile struct {
 
 // viewerDownloadRun is one load of a task. It reports its files and ends once, on the UI thread.
 type viewerDownloadRun struct {
-	d    *viewerDownloads
-	task viewerDownloadTask
-	post func(func())
+	d          *viewerDownloads
+	task       viewerDownloadTask
+	post       func(func())
+	generation uint64
+}
+
+func (d *viewerDownloads) reset() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i := range d.tasks {
+		if s := &d.tasks[i]; s.reveal != nil {
+			s.reveal.Stop()
+		}
+	}
+	d.tasks = [downloadTasks]viewerDownloadState{}
+	d.posted = time.Time{}
+	d.generation++
 }
 
 // begin starts a load of task, whose progress rebuilds through post. The task's files are cleared when no other
@@ -69,7 +84,7 @@ func (d *viewerDownloads) begin(task viewerDownloadTask, post func(func())) view
 		}
 	}
 	s.runs++
-	return viewerDownloadRun{d: d, task: task, post: post}
+	return viewerDownloadRun{d: d, task: task, post: post, generation: d.generation}
 }
 
 func (r viewerDownloadRun) end() {
@@ -78,6 +93,9 @@ func (r viewerDownloadRun) end() {
 	}
 	r.d.mu.Lock()
 	defer r.d.mu.Unlock()
+	if r.generation != r.d.generation {
+		return
+	}
 	s := &r.d.tasks[r.task]
 	s.runs = max(s.runs-1, 0)
 	if s.runs == 0 && s.reveal != nil {
@@ -93,6 +111,9 @@ func (r viewerDownloadRun) expect(file string, size int64) {
 	}
 	r.d.mu.Lock()
 	defer r.d.mu.Unlock()
+	if r.generation != r.d.generation {
+		return
+	}
 	s := &r.d.tasks[r.task]
 	if _, ok := s.files[file]; !ok && s.runs > 0 {
 		s.files[file] = viewerDownloadFile{size: size}
@@ -106,7 +127,7 @@ func (r viewerDownloadRun) report(file string, done, size int64, cached bool) {
 	}
 	r.d.mu.Lock()
 	s := &r.d.tasks[r.task]
-	if s.runs == 0 {
+	if s.runs == 0 || r.generation != r.d.generation {
 		r.d.mu.Unlock()
 		return
 	}

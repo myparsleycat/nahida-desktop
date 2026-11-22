@@ -3,6 +3,7 @@ package metadata
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -220,6 +221,15 @@ func TestQueueKeyResolvesAliases(t *testing.T) {
 	alias, err := queueKey(strings.ToUpper(dir))
 	if err != nil || alias != key {
 		t.Fatalf("queue key for case alias = %q, %v; want %q", alias, err, key)
+	}
+
+	link := filepath.Join(t.TempDir(), "Junction With Spaces")
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, dir).CombinedOutput(); err != nil {
+		t.Skipf("filesystem cannot create a junction: %v (%s)", err, output)
+	}
+	alias, err = queueKey(link)
+	if err != nil || alias != key {
+		t.Fatalf("queue key for junction = %q, %v; want %q", alias, err, key)
 	}
 }
 

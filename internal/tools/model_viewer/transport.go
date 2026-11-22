@@ -373,11 +373,13 @@ func (p ModelViewerMaterialProfile) traits() modelViewerProfileTraits {
 }
 
 type ModelViewerTransport struct {
-	MemorySessionID string  `json:"memorySessionId"`
-	INIPath         string  `json:"iniPath"`
-	ModPath         string  `json:"modPath"`
-	Name            string  `json:"name"`
-	PreviewPath     *string `json:"previewPath,omitempty"`
+	MemorySessionID string `json:"memorySessionId"`
+	INIPath         string `json:"iniPath"`
+	ModPath         string `json:"modPath"`
+	// OpenedModPath is the physical directory used to read a mod viewer scene.
+	OpenedModPath string  `json:"-"`
+	Name          string  `json:"name"`
+	PreviewPath   *string `json:"previewPath,omitempty"`
 	// DefaultYaw is the rotation in degrees about viewer Y after upright correction.
 	DefaultYaw      float64                    `json:"defaultYaw,omitempty"`
 	MaterialProfile ModelViewerMaterialProfile `json:"materialProfile,omitempty"`

@@ -54,6 +54,7 @@ func refineWwmiDumpAtlases(
 	modDir string,
 	meshes []modelViewerDirectMesh,
 	resources []modelViewerResource,
+	paths *modelViewerBufferCache,
 ) error {
 	groups := make(map[string][]*modelViewerDirectMesh)
 	for index := range meshes {
@@ -95,7 +96,7 @@ func refineWwmiDumpAtlases(
 			return atlas{}
 		}
 		cache[file] = atlas{}
-		path, err := resolveModelViewerResourcePath(modDir, modDir, file)
+		path, err := paths.resourcePath(modDir, modDir, file)
 		if err != nil {
 			return atlas{}
 		}

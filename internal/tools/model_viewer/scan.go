@@ -909,7 +909,7 @@ func attachModelViewerDirectPositionOverrides(
 	resources []modelViewerResource,
 	modDir string,
 	variables map[string]any,
-	_ *modelViewerBufferCache,
+	cache *modelViewerBufferCache,
 ) error {
 	var assignments []modelViewerDirectPositionResourceAssignment
 	for _, section := range sections {
@@ -944,7 +944,7 @@ func attachModelViewerDirectPositionOverrides(
 	}
 	for meshIndex := range meshes {
 		mesh := &meshes[meshIndex]
-		basePath, baseErr := resolveModelViewerResourcePath(modDir, modDir, mesh.positionFile)
+		basePath, baseErr := cache.resourcePath(modDir, modDir, mesh.positionFile)
 		targets := make(map[string]bool)
 		for _, assignment := range assignments {
 			target := modelViewerNormalizeKey(assignment.target)
@@ -952,7 +952,7 @@ func attachModelViewerDirectPositionOverrides(
 			if baseErr != nil || resource.Filename == "" {
 				continue
 			}
-			sourcePath, err := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
+			sourcePath, err := cache.resourcePath(modDir, modDir, resource.Filename)
 			if err == nil && platform.SamePathFold(basePath, sourcePath) {
 				targets[target] = true
 			}
@@ -1003,7 +1003,7 @@ func attachModelViewerDirectPositionOverrides(
 			if !ok || resource.Filename == "" {
 				continue
 			}
-			sourcePath, err := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
+			sourcePath, err := cache.resourcePath(modDir, modDir, resource.Filename)
 			if err != nil {
 				continue
 			}

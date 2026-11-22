@@ -27,6 +27,9 @@ type viewerScene struct {
 	// gained or lost all of its triangles since it was matched.
 	original      *viewerOriginal
 	originalStale bool
+	// character is the mod's character resolved while the scene loaded, or nil for a Blender scene or a viewer
+	// without the mod service.
+	character *viewerCharacterLoad
 	// textureChoices are the parts whose texture the user picks among their siblings'.
 	textureChoices []viewerTextureChoiceGroup
 	// faceTexture is the key of the face diffuse the mod replaces by hash in the state shown, or "". The original

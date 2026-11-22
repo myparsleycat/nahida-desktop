@@ -184,11 +184,11 @@ type ModelViewer struct {
 	scenePreview bool
 	// togglePresets are the mod's toggle presets for the Toggle menu, presetDraft the open save dialog, and
 	// applyingPreset set while a preset is being applied.
-	togglePresets  []mod.TogglePreset
-	presetDraft    *viewerPresetDraft
-	applyingPreset bool
-	// character is the character assigned to the nearest folder holding the mod, whose toon style it uses.
-	character *viewerCharacter
+	togglePresets      []mod.TogglePreset
+	presetDraft        *viewerPresetDraft
+	applyingPreset     bool
+	character          *viewerCharacter
+	characterSelection viewerCharacterSelection
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -221,7 +221,6 @@ func (s *Shell) newModelViewer(path string, blender *viewerBlenderSource) *Model
 	s.viewers[v] = struct{}{}
 	v.refreshGameLinked()
 	v.loadTogglePresets()
-	v.loadCharacter()
 	v.load()
 	return v
 }
@@ -369,6 +368,9 @@ func (v *ModelViewer) loadScene(ctx context.Context) (scene *viewerScene, err er
 		release()
 		return nil, err
 	}
+	if v.blender == nil {
+		scene.character = v.resolveCharacter(ctx, transport.OpenedModPath)
+	}
 	return scene, nil
 }
 
@@ -456,6 +458,7 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.startAnimation("")
 	v.refreshIneffective()
 	v.loadTextureChoices(scene)
+	v.installCharacter(scene)
 
 	pending := v.pendingLive
 	v.pendingLive = nil

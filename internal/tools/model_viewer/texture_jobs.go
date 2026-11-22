@@ -63,6 +63,7 @@ func collectModelViewerTextureJobs(
 	bindings []modelViewerTextureBinding,
 	meshes []modelViewerDirectMesh,
 	extra []modelViewerDirectTextureAssignment,
+	cache *modelViewerBufferCache,
 ) []modelViewerTextureJob {
 	resourceMap := make(map[string]modelViewerResource)
 	for _, resource := range resources {
@@ -108,7 +109,7 @@ func collectModelViewerTextureJobs(
 			}
 		}
 		fileKey := modelViewerTextureVariantKey(resource.Filename, role, name)
-		texturePath, pathErr := resolveModelViewerResourcePath(modDir, modDir, resource.Filename)
+		texturePath, pathErr := cache.resourcePath(modDir, modDir, resource.Filename)
 		if pathErr != nil {
 			continue
 		}
@@ -138,7 +139,7 @@ func collectModelViewerTextureJobs(
 		if key == "" || seen[key] || assignment.file == "" {
 			continue
 		}
-		texturePath, pathErr := resolveModelViewerResourcePath(modDir, modDir, assignment.file)
+		texturePath, pathErr := cache.resourcePath(modDir, modDir, assignment.file)
 		if pathErr != nil {
 			continue
 		}

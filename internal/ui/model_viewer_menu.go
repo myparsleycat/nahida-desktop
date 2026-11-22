@@ -141,6 +141,12 @@ func (v *ModelViewer) menuBar() *fairy.El {
 			items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
 				Label: T("page.tools.model_viewer.menu.reset"), Icon: lucide.RotateCcw, OnClick: v.resetView,
 			})
+			if v.characterSelectionAvailable() {
+				items = append(items, kit.MenuItem{Separator: true}, kit.MenuItem{
+					Label: T(viewerCharacterPrefix + "title"), OnClick: v.openCharacterSelection,
+					Loading: v.characterSelection.loading,
+				})
+			}
 			if v.characterMotionAvailable() {
 				wanted, _ := v.motionWanted()
 				checked := wanted && v.motionFailed != v.motionKey()
@@ -530,6 +536,7 @@ func (v *ModelViewer) requestPreviewCapture() {
 
 // dialogs shows the viewer's confirmations. Call it after the overlay that holds the viewer, so they show above it.
 func (v *ModelViewer) dialogs(cx *fairy.Cx) {
+	v.characterSelectionDialog(cx)
 	v.togglePresetDialogs(cx)
 	if !v.confirmPreview {
 		return

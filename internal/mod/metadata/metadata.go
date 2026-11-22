@@ -64,13 +64,22 @@ func Initialize(modPath string, data []byte) error {
 // Read reads a mod directory's nhd.json. A missing file returns an error matching os.ErrNotExist.
 // Callers decode the JSON into the fields they need.
 func Read(modPath string) ([]byte, error) {
+	return read(modPath, os.ReadFile)
+}
+
+// ReadLocal reads a regular metadata file in the supplied physical directory.
+func ReadLocal(modPath string) ([]byte, error) {
+	return read(modPath, readLocalFile)
+}
+
+func read(modPath string, readFile func(string) ([]byte, error)) ([]byte, error) {
 	release, err := reserve(modPath)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	return os.ReadFile(filepath.Join(modPath, fileName))
+	return readFile(filepath.Join(modPath, fileName))
 }
 
 // Write replaces nhd.json with the caller's complete JSON contents.
@@ -82,17 +91,42 @@ func Write(modPath string, data []byte, reports ...func(error)) error {
 // Update reads and replaces nhd.json under one queue reservation, preventing lost read-modify-write updates.
 // The callback must only transform the supplied contents; it must not call metadata operations on the same path.
 func Update(modPath string, change func([]byte) ([]byte, error), reports ...func(error)) error {
-	return update(modPath, change, false, reports...)
+	return update(modPath, os.ReadFile, change, false, reports...)
 }
 
 // Upsert reads and replaces nhd.json under one queue reservation, passing nil to change when absent.
 // The callback must not call metadata operations on the same directory.
 func Upsert(modPath string, change func([]byte) ([]byte, error), reports ...func(error)) error {
-	return update(modPath, change, true, reports...)
+	return update(modPath, os.ReadFile, change, true, reports...)
+}
+
+// UpdateLocal checks that metadata is a regular file in the supplied physical directory before updating it.
+// Pass create to supply nil to change when the file is missing.
+func UpdateLocal(modPath string, create bool, change func([]byte) ([]byte, error), reports ...func(error)) error {
+	return update(modPath, readLocalFile, change, create, reports...)
+}
+
+func readLocalFile(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("metadata is not a regular file: %s", path)
+	}
+	resolved, err := platform.FinalPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if !platform.SamePathFold(resolved, path) {
+		return nil, fmt.Errorf("metadata resolves to another path: %s", resolved)
+	}
+	return os.ReadFile(path)
 }
 
 func update(
 	modPath string,
+	readFile func(string) ([]byte, error),
 	change func([]byte) ([]byte, error),
 	allowMissing bool,
 	reports ...func(error),
@@ -103,7 +137,7 @@ func update(
 	}
 	defer release()
 
-	current, err := os.ReadFile(filepath.Join(modPath, fileName))
+	current, err := readFile(filepath.Join(modPath, fileName))
 	if err != nil && (!allowMissing || !errors.Is(err, os.ErrNotExist)) {
 		return err
 	}

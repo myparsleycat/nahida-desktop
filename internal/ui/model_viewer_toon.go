@@ -18,7 +18,6 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/infra"
-	"nahida.live/desktop/internal/mod/character"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
@@ -860,75 +859,6 @@ func (v *ModelViewer) toonProfile() string {
 		return profile
 	}
 	return ""
-}
-
-// viewerCharacter is the catalog character assigned to a folder holding the viewer's mod.
-type viewerCharacter struct {
-	game string
-	character.Character
-	characterToon
-}
-
-// styleKey is the character's entry in the character toon styles setting.
-func (c *viewerCharacter) styleKey() string { return c.game + "/" + c.ID }
-
-// loadCharacter looks up the character assigned to the folders holding the mod.
-func (v *ModelViewer) loadCharacter() {
-	s := v.shell
-	if b := v.blender; b != nil {
-		v.chooseCharacter(b.importer, b.character)
-		return
-	}
-	if s == nil || s.deps.Mod == nil {
-		return
-	}
-	path := v.path
-	s.backgroundRead(func(ctx context.Context) {
-		assigned, err := s.deps.Mod.ResolveModCharacter(ctx, path)
-		var next *viewerCharacter
-		if err == nil && assigned != nil {
-			if entry, ok := character.Lookup(assigned.Game, assigned.ID); ok {
-				toon, toonErr := loadCharacterToon(assigned.Game, assigned.ID)
-				if toonErr != nil {
-					_ = infra.ReportError(v.log, toonErr, "ModelViewer.loadCharacter", infra.Diagnostic{
-						Operation: "load-character-toon",
-						Fields:    map[string]any{"game": assigned.Game, "character": assigned.ID},
-					})
-				}
-				next = &viewerCharacter{game: assigned.Game, Character: entry, characterToon: toon}
-			}
-		}
-		fairy.Go(func() {
-			if v.closed || err != nil {
-				return
-			}
-			if (next == nil) == (v.character == nil) && (next == nil || next.styleKey() == v.character.styleKey()) {
-				return
-			}
-			// Shading being changed belongs to the style it was changed in.
-			v.flushToonDraft()
-			// The motion's skeleton and palette mapping belong to the previous character.
-			v.stopMotion()
-			v.character = next
-			v.revision++
-		})
-	})
-}
-
-// chooseCharacter shows the character the user chose for a Blender scene, or none for an empty id.
-func (v *ModelViewer) chooseCharacter(game, id string) {
-	entry, ok := character.Lookup(game, id)
-	if !ok {
-		v.character = nil
-		return
-	}
-	toon, err := loadCharacterToon(game, id)
-	if err != nil {
-		_ = infra.ReportError(v.log, err, "ModelViewer.loadCharacter", infra.Diagnostic{
-			Operation: "load-character-toon", Fields: map[string]any{"game": game, "character": id},
-		})
-	}
-	v.character = &viewerCharacter{game: game, Character: entry, characterToon: toon}
 }
 
 // toonCharacter is the mod's character when its game draws with the model's toon profile, or nil.

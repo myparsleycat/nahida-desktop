@@ -428,6 +428,7 @@ type modelViewerBufferCache struct {
 	// hashSources records the SHA-256 of every buffer read, which surface snapshots of a spooled load check
 	// against the files later.
 	hashSources bool
+	logicalRoot string
 	// diagnostics collects the buffers the load skipped because they could not be read or decoded.
 	diagnostics     infra.DiagnosticBatch
 	mu              sync.Mutex
@@ -720,7 +721,7 @@ func (c *modelViewerBufferCache) resourcePath(root, baseDir, relative string) (s
 	}
 	c.mu.Unlock()
 
-	path, err := resolveModelViewerResourcePathWith(root, baseDir, relative, c.finalPath)
+	path, err := resolveModelViewerResourcePathWith(root, baseDir, relative, c.logicalRoot, c.finalPath)
 	c.mu.Lock()
 	c.resourcePaths[key] = modelViewerResourcePathResult{path: path, err: err}
 	c.mu.Unlock()

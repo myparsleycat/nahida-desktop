@@ -14,11 +14,82 @@ import (
 	"testing"
 
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 )
 
 type viewerCancelWriter struct {
 	cancel context.CancelFunc
 	marker string
+}
+
+func TestLoadModViewerKeepsOpenedDirectoryWhenJunctionChanges(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	first, second := filepath.Join(root, "First"), filepath.Join(root, "Second")
+	mods := filepath.Join(root, "Mods")
+	writeTextureFile(t, mods, "Shared/coat.png", encodeTinyPNG())
+	for path, component := range map[string]string{first: "FirstBody", second: "SecondBody"} {
+		ini := "[TextureOverride" + component + `]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+ps-t0 = ResourceBodyDiffuse
+drawindexed = 3, 0, 0
+` + viewerBodyResources + `
+[ResourceBodyDiffuse]
+filename = ../Shared/coat.png
+`
+		writeTextureFile(t, path, "mod.ini", []byte(ini))
+		writeViewerGeometry(t, path)
+	}
+	alias := filepath.Join(mods, "Linked Mod")
+	createViewerDirectoryLink(t, "junction", first, alias)
+	openedPath, err := platform.FinalPath(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var retargeted bool
+	service := NewWithOptions(Options{FindModelViewerPreview: func(string) *string {
+		if !retargeted {
+			if err := os.Remove(alias); err != nil {
+				t.Fatal(err)
+			}
+			createViewerDirectoryLink(t, "junction", second, alias)
+			retargeted = true
+		}
+		return nil
+	}})
+	load := func() ModelViewerTransport {
+		t.Helper()
+		result, err := service.LoadModViewer(t.Context(), alias)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _, _ = service.CleanupModelViewer(context.Background(), result.MemorySessionID) })
+		return result
+	}
+	result := load()
+	mesh := meshesNamed(result, "FirstBody")
+	if !platform.SamePathFold(result.OpenedModPath, openedPath) || len(mesh) != 1 {
+		t.Fatalf("opened %q, meshes = %+v; want FirstBody from %q", result.OpenedModPath, result.Meshes, openedPath)
+	}
+	if key := texKey(mesh[0]); key == "" || result.Textures[key].URL == "" {
+		t.Fatalf("linked mod lost its shared texture: key = %q, textures = %+v", key, result.Textures)
+	}
+	wantINI := filepath.Join(alias, "mod.ini")
+	source, ok := service.DrawSource(result.MemorySessionID, mesh[0].ID)
+	if !ok || !platform.SamePathFold(source.INIPath, wantINI) ||
+		!platform.SamePathFold(result.INIs[0].Path, wantINI) {
+		t.Fatalf("draw INI = %q and viewer INIs = %+v; want %q", source.INIPath, result.INIs, wantINI)
+	}
+	result = load()
+	secondPath, err := platform.FinalPath(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !platform.SamePathFold(result.OpenedModPath, secondPath) || len(meshesNamed(result, "SecondBody")) != 1 {
+		t.Fatalf("reopened %q, meshes = %+v; want SecondBody from %q", result.OpenedModPath, result.Meshes, secondPath)
+	}
 }
 
 func TestModelViewerLoadSkipsFullyInvalidMeshes(t *testing.T) {

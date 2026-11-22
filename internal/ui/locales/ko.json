@@ -958,6 +958,7 @@
           "game": "게임",
           "character": "캐릭터",
           "search-placeholder": "캐릭터 검색",
+          "select-game": "게임 선택",
           "#": {
             "failed": "폴더의 캐릭터를 저장하지 못했습니다."
           },
@@ -1761,6 +1762,16 @@
         "dialog": {
           "save_preset": {
             "title": "프리셋으로 저장"
+          },
+          "character": {
+            "title": "캐릭터 지정…",
+            "current": "현재 캐릭터: {{name}}",
+            "current_direct": "현재 캐릭터: {{name}} (이 모드에 직접 지정)",
+            "current_inherited": "현재 캐릭터: {{name}} ({{folder}} 폴더에서 상속)",
+            "current_none": "지정된 캐릭터 없음",
+            "clear": "직접 지정 해제",
+            "load_failed": "캐릭터 지정을 불러오지 못했습니다.",
+            "save_failed": "캐릭터 지정을 저장하지 못했습니다."
           },
           "overwrite_preview": {
             "title": "미리보기 교체",

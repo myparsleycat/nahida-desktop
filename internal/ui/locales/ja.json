@@ -958,6 +958,7 @@
           "game": "ゲーム",
           "character": "キャラクター",
           "search-placeholder": "キャラクターを検索",
+          "select-game": "ゲームを選択",
           "#": {
             "failed": "フォルダーのキャラクターを保存できませんでした。"
           },
@@ -1761,6 +1762,16 @@
         "dialog": {
           "save_preset": {
             "title": "プリセットとして保存"
+          },
+          "character": {
+            "title": "キャラクターを設定…",
+            "current": "現在のキャラクター: {{name}}",
+            "current_direct": "現在のキャラクター: {{name}}（この MOD に設定）",
+            "current_inherited": "現在のキャラクター: {{name}}（{{folder}} から継承）",
+            "current_none": "キャラクター未設定",
+            "clear": "MOD の設定を解除",
+            "load_failed": "キャラクターの設定を読み込めませんでした。",
+            "save_failed": "キャラクターの設定を保存できませんでした。"
           },
           "overwrite_preview": {
             "title": "プレビューを置き換え",

@@ -89,7 +89,7 @@ func (s *Shell) saveFolderCharacter(d *characterDraft, assignment *mod.Character
 				s.mods.characterDraft = nil
 			}
 			for v := range s.viewers {
-				if platform.SameOrChildPath(path, v.path) {
+				if v.canLoadFolderCharacter() && platform.SameOrChildPath(path, v.path) {
 					v.loadCharacter()
 				}
 			}
@@ -104,22 +104,8 @@ func (s *Shell) characterDialog(cx *fairy.Cx) {
 		return
 	}
 	const prefix = characterDialogPrefix
-	games := character.Games()
-	gameItems := make([]kit.Item, len(games))
-	for i, game := range games {
-		gameItems[i] = kit.Item{Value: game, Label: T(prefix + "games." + game)}
-	}
 	disabled := d.busy || !d.loaded
-	body := fairy.Col(
-		modDialogField(T(prefix+"game"), kit.Select("mod.character.game", d.game, gameItems, func(game string) {
-			d.game, d.id = game, ""
-		}, kit.Disabled(disabled))),
-		modDialogField(
-			T(prefix+"character"),
-			kit.Combobox("mod.character.id", d.id, characterItems(d.game, s.nameCompare()),
-				func(id string) { d.id = id }, kit.Placeholder(T(prefix+"search-placeholder")), kit.Disabled(disabled)),
-		),
-	).Gap(16)
+	body := fairy.Col(s.characterFields("mod.character", &d.game, &d.id, disabled)...).Gap(16)
 
 	close := func() {
 		if !d.busy {
@@ -146,4 +132,24 @@ func (s *Shell) characterDialog(cx *fairy.Cx) {
 		OnClose: close,
 		Key:     "mod.character",
 	})
+}
+
+func (s *Shell) characterFields(key string, game, id *string, disabled bool) []*fairy.El {
+	const prefix = characterDialogPrefix
+	games := character.Games()
+	gameItems := make([]kit.Item, len(games))
+	for i, name := range games {
+		gameItems[i] = kit.Item{Value: name, Label: T(prefix + "games." + name)}
+	}
+	return []*fairy.El{
+		modDialogField(T(prefix+"game"), kit.Select(key+".game", *game, gameItems, func(value string) {
+			*game, *id = value, ""
+		}, kit.Placeholder(T(prefix+"select-game")), kit.Disabled(disabled))),
+		modDialogField(
+			T(prefix+"character"),
+			kit.Combobox(key+".id."+*game, *id, characterItems(*game, s.nameCompare()),
+				func(value string) { *id = value }, kit.Placeholder(T(prefix+"search-placeholder")),
+				kit.Disabled(disabled || *game == "")),
+		),
+	}
 }

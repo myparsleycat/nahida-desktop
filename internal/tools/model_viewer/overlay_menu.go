@@ -161,6 +161,7 @@ type modelViewerOverlayShader struct {
 
 type modelViewerOverlayProgram struct {
 	folder, shaderDir string
+	paths             *modelViewerBufferCache
 	lists             map[string][]string
 	presents          [][]string
 	clickLines        []string
@@ -234,6 +235,7 @@ func newModelViewerOverlayProgramBase(folder string, scan modelViewerGeometrySca
 	return &modelViewerOverlayProgram{
 		folder:          folder,
 		shaderDir:       scan.iniDir,
+		paths:           scan.paths,
 		lists:           make(map[string][]string),
 		targets:         make(map[string]bool),
 		textures:        make(map[string]string),
@@ -250,9 +252,9 @@ func (p *modelViewerOverlayProgram) loadTextures(folder string, scan modelViewer
 		if resource.Filename == "" {
 			continue
 		}
-		path := filepath.Join(folder, filepath.FromSlash(slashPath(resource.Filename)))
+		path, err := p.paths.resourcePath(folder, folder, resource.Filename)
 		name := modelViewerNormalizeKey(modelViewerTrimResourcePrefix(resource.Name))
-		if regularFile(path) {
+		if err == nil && regularFile(path) {
 			p.textures[name] = path
 			if !modelViewerOverlayKnownImageExtension(path) && modelViewerOverlayImageType(path) != "" {
 				p.renamedImages[path] = true
@@ -1800,7 +1802,7 @@ func (p *modelViewerOverlayProgram) shaderSource(list, stage string) string {
 	if relative == "" {
 		return ""
 	}
-	path, err := resolveModelViewerResourcePath(p.folder, p.shaderDir, relative)
+	path, err := p.paths.resourcePath(p.folder, p.shaderDir, relative)
 	if err != nil {
 		return ""
 	}
