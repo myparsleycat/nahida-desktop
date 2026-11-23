@@ -26,7 +26,7 @@ type Service struct {
 	protocol               *infra.Protocol
 	findModelViewerPreview func(string) *string
 	download               *infra.Download
-	packedSkinning         func() uintptr
+	packedSkinning         func() packedSkinningProcs
 	// motionFiles admits one character motion download or cache prune at a time, so two viewers never write the
 	// same file and a prune never removes a download in progress.
 	motionFiles chan struct{}
@@ -79,14 +79,14 @@ func (t *Service) BlenderLink() *BlenderLink { return t.blenderLink }
 func (t *Service) UseAppData(data *appdata.Store) { t.appData = data }
 
 func (t *Service) UseNativeCompute(library *nativecompute.Library) {
-	t.packedSkinning = sync.OnceValue(func() uintptr {
-		frame, err := lookupPackedSkinningFrame(library)
+	t.packedSkinning = sync.OnceValue(func() packedSkinningProcs {
+		frames, err := lookupPackedSkinningFrames(library)
 		if err != nil && t.log != nil {
 			_ = infra.ReportError(t.log, err, "ModelViewer.packedSkinning", infra.Diagnostic{
 				Operation: "bind-packed-skinning", Severity: infra.DiagnosticWarn,
 			})
 		}
-		return frame
+		return frames
 	})
 }
 

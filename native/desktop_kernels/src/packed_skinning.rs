@@ -31,11 +31,32 @@ pub unsafe extern "C" fn packed_skinning_frame(args: *const FrameArgs) -> isize 
         return -1;
     }
     // SAFETY: The Go binding validates the sizes and keeps the buffers pinned during the call.
-    unsafe { skin_frame(&*args) }
+    unsafe { skin_frame::<false, false>(&*args) }
+}
+
+/// # Safety
+///
+/// The caller must satisfy the buffer contract of `packed_skinning_frame`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn packed_skinning_variant_frame(
+    args: *const FrameArgs,
+    variant: u32,
+) -> isize {
+    if packed_skinning_supported() == 0 {
+        return -1;
+    }
+    // SAFETY: Both variants borrow the same prevalidated buffers as the legacy kernel.
+    unsafe {
+        match variant {
+            1 => skin_frame::<true, false>(&*args),
+            2 => skin_frame::<true, true>(&*args),
+            _ => -1,
+        }
+    }
 }
 
 #[target_feature(enable = "avx,f16c")]
-fn skin_frame(args: &FrameArgs) -> isize {
+fn skin_frame<const USE_SIGN: bool, const DIRECT: bool>(args: &FrameArgs) -> isize {
     // SAFETY: Input lengths, bone indices and buffer lifetimes are part of FrameArgs' contract.
     let (base, weights, bones, palettes, positions, normals) = unsafe {
         (
@@ -76,11 +97,21 @@ fn skin_frame(args: &FrameArgs) -> isize {
                     let products = lanes(_mm256_mul_pd(reference, rotation));
                     let dot = products[0] + products[1] + products[2] + products[3];
                     let weight = _mm256_set1_pd(factors[sample]);
-                    let signed = _mm256_set1_pd(if dot < 0.0 {
-                        -factors[sample]
-                    } else {
-                        factors[sample]
-                    });
+                    let signed =
+                        _mm256_set1_pd(if USE_SIGN && (!DIRECT || influence != 0 || sample != 0) {
+                            let sign = if dot > 0.0 {
+                                1.0
+                            } else if dot < 0.0 {
+                                -1.0
+                            } else {
+                                dot
+                            };
+                            factors[sample] * sign
+                        } else if dot < 0.0 {
+                            -factors[sample]
+                        } else {
+                            factors[sample]
+                        });
                     scale_bias0 = _mm256_add_pd(
                         scale_bias0,
                         _mm256_mul_pd(_mm256_cvtps_pd(_mm_loadu_ps(record)), weight),
@@ -104,7 +135,7 @@ fn skin_frame(args: &FrameArgs) -> isize {
         let dual_parts = lanes(dual);
         let [qx, qy, qz, qw] = real_parts;
         let length = (qx * qx + qy * qy + qz * qz + qw * qw).sqrt();
-        if length < 1e-8
+        if (!DIRECT && length < 1e-8)
             || scale_bias0
                 .iter()
                 .chain(&scale_bias1[..2])
@@ -114,24 +145,26 @@ fn skin_frame(args: &FrameArgs) -> isize {
         {
             return (vertex + 1) as isize;
         }
-        let divisor = _mm256_set1_pd(length);
+        let divisor = _mm256_set1_pd(if DIRECT { length.max(1e-6) } else { length });
         let (matrix, translation) = transform(
             lanes(_mm256_div_pd(real, divisor)),
             lanes(_mm256_div_pd(dual, divisor)),
         );
 
+        let (y, z) = if DIRECT {
+            (f64::from(source[1]), f64::from(source[2]))
+        } else {
+            (-f64::from(source[2]), f64::from(source[1]))
+        };
         let [x, y, z] = rotate(
             matrix,
             f64::from(source[0]) * scale_bias0[0] + scale_bias0[3],
-            -f64::from(source[2]) * scale_bias0[1] + scale_bias1[0],
-            f64::from(source[1]) * scale_bias0[2] + scale_bias1[1],
+            y * scale_bias0[1] + scale_bias1[0],
+            z * scale_bias0[2] + scale_bias1[1],
         );
-        let position = _mm_setr_ps(
-            (x + translation[0]) as f32,
-            (z + translation[2]) as f32,
-            -(y + translation[1]) as f32,
-            0.0,
-        );
+        let (y, z) = (y + translation[1], z + translation[2]);
+        let (y, z) = if DIRECT { (y, z) } else { (z, -y) };
+        let position = _mm_setr_ps((x + translation[0]) as f32, y as f32, z as f32, 0.0);
         if _mm_movemask_ps(_mm_cmplt_ps(
             _mm_and_ps(position, position_abs_mask),
             position_limit,
@@ -148,8 +181,9 @@ fn skin_frame(args: &FrameArgs) -> isize {
             -f64::from(source[6]),
             f64::from(source[5]),
         );
+        let (ny, nz) = if DIRECT { (ny, nz) } else { (nz, -ny) };
         let normal = _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(_mm256_setr_pd(
-            nx, nz, -ny, 0.0,
+            nx, ny, nz, 0.0,
         ));
         let clamped = _mm256_max_pd(
             _mm256_set1_pd(-128.0),

@@ -58,6 +58,7 @@ type textureResizeRequest struct {
 	CustomHeight int
 	OutputFormat string
 	Backup       bool
+	encodeBC7    bc7FastEncoder
 }
 
 type textureResizeMode struct {
@@ -74,6 +75,7 @@ type normalizedTextureResizeRequest struct {
 	outputFormat ddsutil.ImageFormat
 	hasFormat    bool
 	backup       bool
+	encodeBC7    bc7FastEncoder
 }
 
 // executeTextureResize mirrors the sidecar's `resize` subcommand.
@@ -177,6 +179,7 @@ func normalizeTextureResizeRequest(request textureResizeRequest) (normalizedText
 		mode:       mode,
 		operation:  operation,
 		backup:     request.Backup,
+		encodeBC7:  request.encodeBC7,
 	}
 	// A plain resize keeps the source format even when settings still hold one from an earlier conversion.
 	if operation != textureOperationResize && strings.TrimSpace(request.OutputFormat) != "" {
@@ -311,7 +314,7 @@ func processResizeDDSFile(
 		base, err = surface.DecodeLayersMipmapsRgbaf32(0, surface.Layers, 0, 1)
 		if surface.Mipmaps > 1 {
 			largest := max(uint32(targetWidth), uint32(targetHeight), surface.Depth)
-			mipmaps = ddsutil.GeneratedExact(min(surface.Mipmaps, uint32(bits.Len32(largest))))
+			mipmaps = ddsutil.MipmapsGeneratedExact(min(surface.Mipmaps, uint32(bits.Len32(largest))))
 		}
 	case eightBitTextureFormats[surface.ImageFormat] && eightBitTextureFormats[outputFormat]:
 		output, err = surface.DecodeRgba8()
@@ -342,7 +345,10 @@ func processResizeDDSFile(
 		}
 	}
 
-	encoded, err := output.Encode(outputFormat, ddsutil.QualityFast, mipmaps)
+	encoded, err := encodeTexture(ctx, output, outputFormat, mipmaps, request.encodeBC7)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return TextureResizeFileResult{}, "encode", ctxErr
+	}
 	if err != nil {
 		return TextureResizeFileResult{}, "encode", textureError("Failed to encode processed DDS '%s': %s", path, err)
 	}
@@ -392,7 +398,33 @@ func processResizeDDSFile(
 }
 
 type textureEncoder interface {
-	Encode(format ddsutil.ImageFormat, quality ddsutil.Quality, mipmaps ddsutil.Mipmaps) (*ddsutil.Surface, error)
+	EncodeWithBC7Fast(format ddsutil.ImageFormat, quality ddsutil.Quality, mipmaps ddsutil.Mipmaps,
+		bc7 ddsutil.BC7FastEncoder) (*ddsutil.Surface, error)
+}
+
+func encodeTexture(
+	ctx context.Context,
+	source textureEncoder,
+	format ddsutil.ImageFormat,
+	mipmaps ddsutil.Mipmaps,
+	bc7 bc7FastEncoder,
+) (*ddsutil.Surface, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Preserve the endpoint searches of the previous encoders for BC1 through BC6H.
+	var quality ddsutil.Quality
+	switch format {
+	case ddsutil.BC1RgbaUnorm, ddsutil.BC1RgbaUnormSrgb, ddsutil.BC2RgbaUnorm, ddsutil.BC2RgbaUnormSrgb,
+		ddsutil.BC3RgbaUnorm, ddsutil.BC3RgbaUnormSrgb, ddsutil.BC4RUnorm, ddsutil.BC4RSnorm,
+		ddsutil.BC5RgUnorm, ddsutil.BC5RgSnorm:
+		quality = ddsutil.QualitySlow
+	case ddsutil.BC6hRgbUfloat, ddsutil.BC6hRgbSfloat:
+		quality = ddsutil.QualityNormal
+	default:
+		quality = ddsutil.QualityFast
+	}
+	return source.EncodeWithBC7Fast(format, quality, mipmaps, bc7)
 }
 
 // eightBitTextureFormats decode to 8-bit channels without losing precision and encode from them.
@@ -571,9 +603,11 @@ func decodeDDSToPng(input, output string) (textureDecodedMetadata, error) {
 
 // encodePNGToDDS mirrors the sidecar's `encode` subcommand. source, when not nil, supplies the alpha mode.
 func encodePNGToDDS(
+	ctx context.Context,
 	input, target, outputFormatName string,
 	source *ddsutil.Dds,
 	backup, generateMipmaps bool,
+	bc7 bc7FastEncoder,
 ) (textureEncodedMetadata, error) {
 	pixels, width, height, err := loadTexturePNG(input)
 	if err != nil {
@@ -602,7 +636,10 @@ func encodePNGToDDS(
 	if generateMipmaps {
 		mipmaps = ddsutil.MipmapsGeneratedAutomatic
 	}
-	encoded, err := surface.Encode(outputFormat, ddsutil.QualityFast, mipmaps)
+	encoded, err := encodeTexture(ctx, surface, outputFormat, mipmaps, bc7)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return textureEncodedMetadata{}, ctxErr
+	}
 	if err != nil {
 		return textureEncodedMetadata{}, textureError("Failed to encode processed DDS '%s': %s", target, err)
 	}

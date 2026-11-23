@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"slices"
 	"strconv"
-	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/cpu"
@@ -45,14 +45,14 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 	service.UseAppData(store)
 	service.UseNativeCompute(nativecompute.New(store, nil))
 	available := cpu.X86.HasAVX && cpu.X86.HasF16C
-	if loaded := service.packedSkinning() != 0; loaded != available {
-		t.Fatalf("loaded native kernel = %t, want %t", loaded, available)
-	}
-	var nativeBinds atomic.Int32
-	loadKernel := service.packedSkinning
-	service.packedSkinning = func() uintptr {
-		nativeBinds.Add(1)
-		return loadKernel()
+	procs := service.packedSkinning()
+	if (procs.legacy != 0) != available || (procs.variants != 0) != available {
+		t.Fatalf(
+			"loaded legacy = %t, loaded variants = %t, want both %t",
+			procs.legacy != 0,
+			procs.variants != 0,
+			available,
+		)
 	}
 	session := service.protocol.CreateMemorySession()
 	t.Cleanup(func() { service.protocol.CleanupMemorySession(session) })
@@ -82,6 +82,7 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 	half := float32(math.Sqrt(0.5))
 	identity := []float32{1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}
 	turned := []float32{2, 1, 1, 1, -1, 0, 0, -half, 0, -half, 0, 0, 0, 0}
+	orthogonal := []float32{1, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}
 	single := blend([4]float32{1}, [4]uint32{})
 	tests := []struct {
 		name      string
@@ -90,6 +91,7 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 		blend     []byte
 		poses     [][]float32
 		wantError string
+		directOK  bool
 	}{
 		{
 			name: "one bone", vertices: 1, bones: 1, blend: single,
@@ -104,10 +106,22 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 			},
 		},
 		{
+			name: "orthogonal second influence", vertices: 1, bones: 2,
+			blend: blend([4]float32{0.5, 0.5}, [4]uint32{0, 1, 0, 0}),
+			poses: [][]float32{identity, orthogonal, identity, orthogonal},
+		},
+		{
+			name: "largest finite float16", vertices: 1, bones: 1, blend: single,
+			poses: [][]float32{
+				{65504, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+				{65504, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+			},
+		},
+		{
 			name: "float16 overflow", vertices: 1, bones: 1, blend: single,
 			poses: [][]float32{
-				{70000, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
-				{70000, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+				{65520, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+				{65520, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
 			},
 			wantError: "packed dual-quaternion position exceeds finite float16 range",
 		},
@@ -116,14 +130,24 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 			blend:     slices.Concat(single, blend([4]float32{1}, [4]uint32{1, 1, 1, 1})),
 			poses:     [][]float32{identity, make([]float32, 14), identity, make([]float32, 14)},
 			wantError: "invalid packed dual-quaternion pose at vertex 1",
+			directOK:  true,
+		},
+		{
+			name: "non-finite pose at zero weight", vertices: 1, bones: 1, blend: single,
+			poses: [][]float32{
+				identity, {1, 1, 1, 0, 0, 0, float32(math.Inf(1)), 0, 0, 1, 0, 0, 0, 0},
+			},
+			wantError: "invalid packed dual-quaternion pose at vertex 0",
 		},
 	}
-	// The cases run in parallel, so their binds are counted once they have all finished.
-	t.Cleanup(func() {
-		if got := int(nativeBinds.Load()); got != len(tests) {
-			t.Errorf("binds that selected the native kernel = %d, want %d", got, len(tests))
-		}
-	})
+	variants := []struct {
+		pose   ModelViewerDualQuaternionVariant
+		native packedSkinningVariant
+	}{
+		{"", packedSkinningLegacy},
+		{modelViewerObjectPoseVariant, packedSkinningObject},
+		{modelViewerObjectDirectPoseVariant, packedSkinningObjectDirect},
+	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -141,46 +165,84 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 					BoneCount: tt.bones, FrameCount: 2,
 				},
 			}
-			got, err := service.NewComputeDeformer(t.Context(), descriptor)
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := NewComputeDeformer(t.Context(), descriptor, service.ReadResource)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			for _, frame := range []float64{0, 0.25, 0.5, 1, 2} {
-				gotFrame, gotErr := got.compute(frame, 0, nil)
-				wantFrame, wantErr := want.compute(frame, 0, nil)
-				if errorText(wantErr) != tt.wantError {
-					t.Fatalf("frame %g: Go error = %v, want %q", frame, wantErr, tt.wantError)
+			for _, variant := range variants {
+				name := string(variant.pose)
+				if name == "" {
+					name = "legacy"
 				}
-				if errorText(gotErr) != errorText(wantErr) {
-					t.Fatalf("frame %g: Rust error = %v, want %v", frame, gotErr, wantErr)
-				}
-				if wantErr != nil {
-					continue
-				}
-				for _, stream := range []struct {
-					name      string
-					got, want []float32
-				}{
-					{"positions", gotFrame.Positions, wantFrame.Positions},
-					{"normals", gotFrame.Normals, wantFrame.Normals},
-					{"tangents", gotFrame.Tangents, wantFrame.Tangents},
-				} {
-					if len(stream.got) != len(stream.want) {
-						t.Fatalf("frame %g %s length = %d, want %d",
-							frame, stream.name, len(stream.got), len(stream.want))
+				t.Run(name, func(t *testing.T) {
+					descriptor.Pose.DualQuaternionVariant = variant.pose
+					wantError := tt.wantError
+					if variant.pose == modelViewerObjectDirectPoseVariant && tt.directOK {
+						wantError = ""
 					}
-					for i, value := range stream.want {
-						if math.Float32bits(stream.got[i]) != math.Float32bits(value) {
-							t.Fatalf("frame %g %s[%d] = %08x, want %08x",
-								frame, stream.name, i, math.Float32bits(stream.got[i]), math.Float32bits(value))
+					var calls []packedSkinningVariant
+					observed := packedSkinningProcs{}
+					if available {
+						observed.legacy = syscall.NewCallback(func(args uintptr) uintptr {
+							calls = append(calls, packedSkinningLegacy)
+							result, _, _ := syscall.SyscallN(procs.legacy, args)
+							return result
+						})
+						observed.variants = syscall.NewCallback(func(args, variant uintptr) uintptr {
+							calls = append(calls, packedSkinningVariant(variant))
+							result, _, _ := syscall.SyscallN(procs.variants, args, variant)
+							return result
+						})
+					}
+					modelService := NewWithOptions(Options{Protocol: service.protocol})
+					modelService.packedSkinning = func() packedSkinningProcs { return observed }
+					got, err := modelService.NewComputeDeformer(t.Context(), descriptor)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want, err := NewComputeDeformer(t.Context(), descriptor, service.ReadResource)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					for _, frame := range []float64{0, 0.25, 0.5, 1, 2} {
+						calls = calls[:0]
+						gotFrame, gotErr := got.compute(frame, 0, nil)
+						if available && (len(calls) != 1 || calls[0] != variant.native) {
+							t.Fatalf(
+								"frame %g: native calls = %v, want one call for variant %d",
+								frame,
+								calls,
+								variant.native,
+							)
+						}
+						wantFrame, wantErr := want.compute(frame, 0, nil)
+						if errorText(wantErr) != wantError {
+							t.Fatalf("frame %g: Go error = %v, want %q", frame, wantErr, wantError)
+						}
+						if errorText(gotErr) != errorText(wantErr) {
+							t.Fatalf("frame %g: Rust error = %v, want %v", frame, gotErr, wantErr)
+						}
+						if wantErr != nil {
+							continue
+						}
+						for _, stream := range []struct {
+							name      string
+							got, want []float32
+						}{
+							{"positions", gotFrame.Positions, wantFrame.Positions},
+							{"normals", gotFrame.Normals, wantFrame.Normals},
+							{"tangents", gotFrame.Tangents, wantFrame.Tangents},
+						} {
+							if len(stream.got) != len(stream.want) {
+								t.Fatalf("frame %g %s length = %d, want %d",
+									frame, stream.name, len(stream.got), len(stream.want))
+							}
+							for i, value := range stream.want {
+								if math.Float32bits(stream.got[i]) != math.Float32bits(value) {
+									t.Fatalf("frame %g %s[%d] = %08x, want %08x",
+										frame, stream.name, i, math.Float32bits(stream.got[i]), math.Float32bits(value))
+								}
+							}
 						}
 					}
-				}
+				})
 			}
 		})
 	}

@@ -255,6 +255,16 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 
 func (t *Tools) UseNativeCompute(library *nativecompute.Library) {
 	t.modelViewer.UseNativeCompute(library)
+	t.texture.UseNativeCompute(library)
+}
+
+func (t *Tools) CompressUncompressedTextures(
+	ctx context.Context,
+	textures []texture.UncompressedTexture,
+	backup bool,
+	progress func(done, total int, path string),
+) (texture.TextureResizeResult, error) {
+	return t.texture.CompressUncompressed(ctx, textures, backup, progress)
 }
 
 func (t *Tools) ServiceShutdown() error {

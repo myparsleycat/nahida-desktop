@@ -17,6 +17,17 @@ import (
 
 const xxmiLaunchTexturesWhere = "XXMI.launchTextures"
 
+type launchTextureCompressor func(
+	ctx context.Context,
+	textures []texture.UncompressedTexture,
+	backup bool,
+	progress func(done, total int, path string),
+) (texture.TextureResizeResult, error)
+
+func (x *XXMI) UseTextureCompressor(compress launchTextureCompressor) {
+	x.compressUncompressedTextures = compress
+}
+
 // LaunchUncompressedTextures returns the uncompressed textures of the mods a launch of importer
 // loads. It is empty while the guard is off or the launch loads no mods.
 func (x *XXMI) LaunchUncompressedTextures(ctx context.Context, importer string) ([]texture.UncompressedTexture, error) {
@@ -72,7 +83,11 @@ func (x *XXMI) CompressLaunchTextures(
 		return lo.ContainsBy(paths, func(path string) bool { return platform.SamePathFold(path, found.Path) })
 	})
 
-	result, err := texture.CompressUncompressed(ctx, textures, backup, func(done, total int, path string) {
+	compress := x.compressUncompressedTextures
+	if compress == nil {
+		compress = texture.CompressUncompressed
+	}
+	result, err := compress(ctx, textures, backup, func(done, total int, path string) {
 		if x.eventEmit != nil {
 			x.eventEmit("xxmi:texture-compress-progress", map[string]any{
 				"importer": importer, "done": done, "total": total, "file": path,

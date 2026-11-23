@@ -275,6 +275,7 @@ func (t *Service) runTextureResize(
 		TargetPath: target, Mode: settings.Mode, Operation: settings.Operation,
 		Percent: settings.Percent, CustomWidth: settings.CustomWidth, CustomHeight: settings.CustomHeight,
 		OutputFormat: settings.OutputFormat, Backup: settings.Backup,
+		encodeBC7: t.bc7Encoder(ctx),
 	})
 }
 
@@ -365,7 +366,8 @@ func (t *Service) upscaleTextureFile(
 		return TextureResizeResult{}, err
 	}
 	t.emitTextureUpscaleProgress("encode", nil, lo.ToPtr("Encoding DDS texture"), path)
-	encoded, err := encodePNGToDDS(outputPNG, path, outputFormat, source, settings.Backup, decoded.Mipmaps > 1)
+	encoded, err := encodePNGToDDS(ctx, outputPNG, path, outputFormat, source, settings.Backup,
+		decoded.Mipmaps > 1, t.bc7Encoder(ctx))
 	if err != nil {
 		return fail(err)
 	}

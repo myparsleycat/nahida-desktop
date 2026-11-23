@@ -494,8 +494,8 @@ func encodeWwmiBC1MipDDS(t *testing.T, width, height int, pixels []color.NRGBA) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if encoded.GetNumMipmapLevels() < 2 {
-		t.Fatalf("mipmaps = %d, want at least 2", encoded.GetNumMipmapLevels())
+	if encoded.NumMipmapLevels() < 2 {
+		t.Fatalf("mipmaps = %d, want at least 2", encoded.NumMipmapLevels())
 	}
 	raw, err := encoded.Bytes()
 	if err != nil {

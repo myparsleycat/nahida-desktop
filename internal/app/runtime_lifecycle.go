@@ -80,6 +80,7 @@ func bootRuntime(
 	rt.drive.UseAppData(data)
 	rt.tools.UseAppData(data)
 	rt.tools.UseNativeCompute(nativecompute.New(data, rt.log))
+	rt.xxmi.UseTextureCompressor(rt.tools.CompressUncompressedTextures)
 	rt.reshade.UseAppData(data)
 	rt.blenderLink = blenderlink.NewManager(blenderlink.Options{
 		Log: rt.log, EventEmit: rt.emit, AppData: data, Handler: rt.tools.BlenderLink(),

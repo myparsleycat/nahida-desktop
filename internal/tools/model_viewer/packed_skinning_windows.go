@@ -12,19 +12,33 @@ import (
 	"nahida.live/desktop/internal/nativecompute"
 )
 
-func lookupPackedSkinningFrame(library *nativecompute.Library) (uintptr, error) {
+type packedSkinningVariant uintptr
+
+const (
+	packedSkinningLegacy packedSkinningVariant = iota
+	packedSkinningObject
+	packedSkinningObjectDirect
+)
+
+type packedSkinningProcs struct {
+	legacy, variants uintptr
+}
+
+func lookupPackedSkinningFrames(library *nativecompute.Library) (packedSkinningProcs, error) {
 	if !cpu.X86.HasAVX || !cpu.X86.HasF16C {
-		return 0, nil
+		return packedSkinningProcs{}, nil
 	}
 	supports, err := library.Lookup("packed_skinning_supported")
 	if err != nil || supports == 0 {
-		return 0, err
+		return packedSkinningProcs{}, err
 	}
 	supported, _, _ := syscall.SyscallN(supports)
 	if uint32(supported) == 0 {
-		return 0, nil
+		return packedSkinningProcs{}, nil
 	}
-	return library.Lookup("packed_skinning_frame")
+	legacy, legacyErr := library.Lookup("packed_skinning_frame")
+	variants, variantsErr := library.Lookup("packed_skinning_variant_frame")
+	return packedSkinningProcs{legacy: legacy, variants: variants}, errors.Join(legacyErr, variantsErr)
 }
 
 // packedSkinningFrameArgs follows the C layout of FrameArgs in native/desktop_kernels/src/packed_skinning.rs.
@@ -38,9 +52,10 @@ type packedSkinningFrameArgs struct {
 	fraction           float64
 }
 
-func runPackedSkinningFrame(proc uintptr, args packedSkinningFrameArgs) error {
-	// The DLL borrows all seven Go buffers until this synchronous call returns.
+func runPackedSkinningFrame(proc uintptr, variant packedSkinningVariant, args packedSkinningFrameArgs) error {
 	var pins runtime.Pinner
+	// The address of args must survive Go callback reentry, including a stack move.
+	pins.Pin(&args)
 	pins.Pin(args.base)
 	pins.Pin(args.weights)
 	pins.Pin(args.bones)
@@ -50,7 +65,12 @@ func runPackedSkinningFrame(proc uintptr, args packedSkinningFrameArgs) error {
 	pins.Pin(args.normals)
 	defer pins.Unpin()
 
-	result, _, _ := syscall.SyscallN(proc, uintptr(unsafe.Pointer(&args)))
+	var result uintptr
+	if variant == packedSkinningLegacy {
+		result, _, _ = syscall.SyscallN(proc, uintptr(unsafe.Pointer(&args)))
+	} else {
+		result, _, _ = syscall.SyscallN(proc, uintptr(unsafe.Pointer(&args)), uintptr(variant))
+	}
 	switch code := int(result); {
 	case code == 0:
 		return nil

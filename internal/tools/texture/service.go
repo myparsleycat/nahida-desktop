@@ -24,6 +24,7 @@ type Service struct {
 	archive  *infra.Archive
 	client   *db.Client
 	appData  *appdata.Store
+	loadBC7  func() *nativeBC7
 
 	textureRuntimeMu sync.Mutex
 	textureEventMu   sync.Mutex

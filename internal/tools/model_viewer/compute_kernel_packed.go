@@ -136,9 +136,18 @@ func bindPackedDualQuaternionKernel(
 	}
 
 	var native uintptr
-	if variant == "" && sources.packedSkinning != nil && boneCount <= len(palette)/14 &&
+	nativeVariant := packedSkinningLegacy
+	if !efmi && sources.packedSkinning != nil && boneCount <= len(palette)/14 &&
 		len(palette)/(boneCount*14) == frameCount {
-		native = sources.packedSkinning()
+		procs := sources.packedSkinning()
+		switch {
+		case object:
+			native, nativeVariant = procs.variants, packedSkinningObject
+		case direct:
+			native, nativeVariant = procs.variants, packedSkinningObjectDirect
+		default:
+			native = procs.legacy
+		}
 	}
 
 	// The direct and EFMI shaders seed the blend with their first sample as it is; the others turn every
@@ -159,7 +168,7 @@ func bindPackedDualQuaternionKernel(
 		inter := at - float64(frame0)
 
 		if native != 0 {
-			err := runPackedSkinningFrame(native, packedSkinningFrameArgs{
+			err := runPackedSkinningFrame(native, nativeVariant, packedSkinningFrameArgs{
 				base: &base[0], weights: &blend.weights[0], bones: &blend.bones[0],
 				palette0: &palette[frame0*boneCount*14], palette1: &palette[frame1*boneCount*14],
 				positions: &frame.Positions[0], normals: &frame.Normals[0],

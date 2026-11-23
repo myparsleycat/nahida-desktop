@@ -206,24 +206,48 @@ func textureChanged(before os.FileInfo, path string) bool {
 
 // CompressUncompressed converts each texture to BC7 in place and keeps its color space, so the
 // shaders sample the same values. A texture that changed since it was listed is checked again and
-// skipped when it no longer qualifies. A failed file does not stop the others, and a cancelled run
-// still finishes the files it is already encoding.
+// skipped when it no longer qualifies. A failed file does not stop the others. Cancellation lets
+// files that have started encoding finish and prevents the remaining files from starting to encode.
 func CompressUncompressed(
 	ctx context.Context,
 	textures []UncompressedTexture,
 	backup bool,
 	progress func(done, total int, path string),
 ) (TextureResizeResult, error) {
+	return compressUncompressed(ctx, textures, backup, progress, nil)
+}
+
+func (t *Service) CompressUncompressed(
+	ctx context.Context,
+	textures []UncompressedTexture,
+	backup bool,
+	progress func(done, total int, path string),
+) (TextureResizeResult, error) {
+	return compressUncompressed(ctx, textures, backup, progress, func(ctx context.Context) bc7FastEncoder {
+		return t.newBC7Encoder(ctx, true)
+	})
+}
+
+func compressUncompressed(
+	ctx context.Context,
+	textures []UncompressedTexture,
+	backup bool,
+	progress func(done, total int, path string),
+	newBC7 func(context.Context) bc7FastEncoder,
+) (TextureResizeResult, error) {
 	files := make([]TextureResizeFileResult, len(textures))
 	var done int
 	var mu sync.Mutex
-	// The encoder is single-threaded and a 5120x5120 texture takes it about half a minute, while
-	// each one holds its pixels twice over, so only a few run at once.
+	// Limit concurrent files since each decode and encode holds whole images.
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(min(uncompressedWorkers, runtime.NumCPU()))
 	for index, listed := range textures {
 		group.Go(func() error {
-			file, err := compressUncompressedFile(groupCtx, listed.Path, backup)
+			var bc7 bc7FastEncoder
+			if newBC7 != nil {
+				bc7 = newBC7(groupCtx)
+			}
+			file, err := compressUncompressedFile(groupCtx, listed.Path, backup, bc7)
 			if err != nil {
 				return err
 			}
@@ -260,8 +284,13 @@ func CompressUncompressed(
 
 // compressUncompressedFile reports a file it could not convert in the result. Its error is only
 // ever the cancellation of ctx.
-func compressUncompressedFile(ctx context.Context, path string, backup bool) (TextureResizeFileResult, error) {
-	result, err := convertUncompressedFile(ctx, path, backup)
+func compressUncompressedFile(
+	ctx context.Context,
+	path string,
+	backup bool,
+	bc7 bc7FastEncoder,
+) (TextureResizeFileResult, error) {
+	result, err := convertUncompressedFile(ctx, path, backup, bc7)
 	if ctxErr := ctx.Err(); ctxErr != nil && err != nil {
 		return TextureResizeFileResult{}, ctxErr
 	}
@@ -278,7 +307,12 @@ func compressUncompressedFile(ctx context.Context, path string, backup bool) (Te
 // convertUncompressedFile holds a disk slot only while it reads and while it writes, so the long
 // encode between the two does not keep other disk work waiting. It decodes to 8-bit channels, a
 // quarter of what the float pipeline of the resize tool needs for the same texture.
-func convertUncompressedFile(ctx context.Context, path string, backup bool) (TextureResizeFileResult, error) {
+func convertUncompressedFile(
+	ctx context.Context,
+	path string,
+	backup bool,
+	bc7 bc7FastEncoder,
+) (TextureResizeFileResult, error) {
 	if err := ctx.Err(); err != nil {
 		return TextureResizeFileResult{}, err
 	}
@@ -310,7 +344,7 @@ func convertUncompressedFile(ctx context.Context, path string, backup bool) (Tex
 	}
 	// The levels are encoded as they are instead of being generated again from the base, because a
 	// mod can ship levels it authored by hand.
-	encoded, err := decoded.Encode(format, ddsutil.QualityFast, ddsutil.MipmapsFromSurface)
+	encoded, err := encodeTexture(ctx, decoded, format, ddsutil.MipmapsFromSurface, bc7)
 	if err != nil {
 		return TextureResizeFileResult{}, textureError("Failed to encode processed DDS '%s': %s", path, err)
 	}

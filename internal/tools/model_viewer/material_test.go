@@ -952,11 +952,11 @@ func TestDecodeModelViewerDDSFileDoesNotFallbackFromTruncatedSelectedMip(t *test
 
 func encodeModelViewerBC1DDS(t *testing.T, width, height, mipmaps, whiteFromMip uint32) []byte {
 	t.Helper()
-	dds, err := ddsutil.NewDXGI(ddsutil.NewDxgiParams{
+	dds, err := ddsutil.NewDxgi(ddsutil.DxgiParams{
 		Height:            height,
 		Width:             width,
 		Format:            ddsutil.DxgiFormatBC1_UNorm,
-		MipmapLevels:      &mipmaps,
+		MipmapLevels:      mipmaps,
 		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
 		AlphaMode:         ddsutil.AlphaModeStraight,
 	})
@@ -986,12 +986,11 @@ func encodeModelViewerBC1DDS(t *testing.T, width, height, mipmaps, whiteFromMip 
 
 func encodeModelViewerTransparentWhiteBC3DDS(t *testing.T, width, height uint32) []byte {
 	t.Helper()
-	mipmaps := uint32(1)
-	dds, err := ddsutil.NewDXGI(ddsutil.NewDxgiParams{
+	dds, err := ddsutil.NewDxgi(ddsutil.DxgiParams{
 		Height:            height,
 		Width:             width,
 		Format:            ddsutil.DxgiFormatBC3_UNorm,
-		MipmapLevels:      &mipmaps,
+		MipmapLevels:      1,
 		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
 		AlphaMode:         ddsutil.AlphaModeStraight,
 	})

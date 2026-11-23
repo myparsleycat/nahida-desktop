@@ -1,5 +1,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod bc7;
 mod packed_skinning;
 
 #[unsafe(no_mangle)]

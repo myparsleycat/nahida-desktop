@@ -85,7 +85,7 @@ tasks:
       - >-
         test ! -f internal/nativecompute/desktop_kernels.dll ||
         go tool -modfile="./golangci-lint.mod" golangci-lint run --build-tags nodynamic,native_kernels
-        ./internal/nativecompute/... ./internal/tools/model_viewer/...
+        ./internal/nativecompute/... ./internal/tools/model_viewer/... ./internal/tools/texture/...
 
   lint:fix:
     summary: Runs golangci-lint with autofix
@@ -94,7 +94,7 @@ tasks:
       - >-
         test ! -f internal/nativecompute/desktop_kernels.dll ||
         go tool -modfile="./golangci-lint.mod" golangci-lint run --fix --build-tags nodynamic,native_kernels
-        ./internal/nativecompute/... ./internal/tools/model_viewer/...
+        ./internal/nativecompute/... ./internal/tools/model_viewer/... ./internal/tools/texture/...
 
   fmt:
     summary: Formats selected Go files with gofmt, goimports, and golines

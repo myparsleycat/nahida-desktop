@@ -72,6 +72,134 @@ func TestNormalizeTextureResizeDimension(t *testing.T) {
 	}
 }
 
+func TestEncodeTexturePreservesDarkGrayInBC1ColorBlocks(t *testing.T) {
+	t.Parallel()
+	data := make([]byte, 4*4*4)
+	for i := range 16 {
+		copy(data[i*4:], []byte{45, 45, 45, 255})
+	}
+	copy(data[:4], []byte{0, 0, 0, 255})
+	copy(data[4:8], []byte{255, 255, 255, 255})
+	source := &ddsutil.SurfaceRgba8{Width: 4, Height: 4, Depth: 1, Layers: 1, Mipmaps: 1, Data: data}
+	for _, format := range []ddsutil.ImageFormat{
+		ddsutil.BC1RgbaUnorm, ddsutil.BC1RgbaUnormSrgb, ddsutil.BC2RgbaUnorm, ddsutil.BC3RgbaUnorm,
+	} {
+		t.Run(format.String(), func(t *testing.T) {
+			t.Parallel()
+			encoded, err := encodeTexture(t.Context(), source, format, ddsutil.MipmapsDisabled, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := encoded.DecodeRgba8()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 2; i < 16; i++ {
+				pixel := decoded.Data[i*4:][:4]
+				for _, channel := range pixel[:3] {
+					if channel < 37 || channel > 53 {
+						t.Fatalf("gray pixel %d = %v, want RGB within 8 of 45", i, pixel)
+					}
+				}
+			}
+		})
+	}
+}
+
+func bc7AlphaRegressionBlock() [64]byte {
+	var block [64]byte
+	for i := range 16 {
+		pixel := block[i*4:][:4]
+		switch {
+		case i < 3:
+			copy(pixel, []byte{64, 254, 0, 0})
+		case i < 14:
+			copy(pixel, []byte{254, 0, 64, 0})
+		default:
+			copy(pixel, []byte{192, 64, 192, 254})
+		}
+	}
+	return block
+}
+
+func bc7ColorRegressionBlock() [64]byte {
+	var block [64]byte
+	for i := range 12 {
+		copy(block[i*4:], []byte{128, 254, 254, 255})
+	}
+	copy(block[48:], []byte{128, 128, 64, 255, 128, 254, 254, 255, 128, 64, 0, 255, 254, 254, 254, 255})
+	return block
+}
+
+func TestEncodeTexturePreservesBC7DominantColor(t *testing.T) {
+	t.Parallel()
+	block := bc7ColorRegressionBlock()
+	source := &ddsutil.SurfaceRgba8{Width: 4, Height: 4, Depth: 1, Layers: 1, Mipmaps: 1, Data: block[:]}
+	encoded, err := encodeTexture(t.Context(), source, ddsutil.BC7RgbaUnorm, ddsutil.MipmapsDisabled, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := assertBC7AlphaCoverage(t, encoded, block[:])
+	assertBC7DominantColor(t, decoded, 4)
+}
+
+func assertBC7DominantColor(t *testing.T, rgba []byte, width int) {
+	t.Helper()
+	for i := range 12 {
+		pixel := rgba[(i/4*width+i%4)*4:][:4]
+		if pixel[0] < 120 || pixel[0] > 136 || pixel[1] < 246 || pixel[2] < 246 {
+			t.Fatalf("dominant pixel %d = %v, want RGB within 8 of (128, 254, 254)", i, pixel)
+		}
+	}
+}
+
+func TestEncodeTexturePreservesBC7AlphaCoverage(t *testing.T) {
+	t.Parallel()
+	regression := bc7AlphaRegressionBlock()
+	nearCutoff := regression
+	for i := 3; i < len(nearCutoff); i += 4 {
+		if nearCutoff[i] == 0 {
+			nearCutoff[i] = 127
+		} else {
+			nearCutoff[i] = 128
+		}
+	}
+	for _, tt := range []struct {
+		name  string
+		block [64]byte
+	}{
+		{"transparent mask", regression},
+		{"adjacent alpha levels", nearCutoff},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			source := &ddsutil.SurfaceRgba8{Width: 4, Height: 4, Depth: 1, Layers: 1, Mipmaps: 1, Data: tt.block[:]}
+			encoded, err := encodeTexture(t.Context(), source, ddsutil.BC7RgbaUnorm, ddsutil.MipmapsDisabled, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBC7AlphaCoverage(t, encoded, tt.block[:])
+		})
+	}
+}
+
+func assertBC7AlphaCoverage(t *testing.T, encoded *ddsutil.Surface, rgba []byte) []byte {
+	t.Helper()
+	decoded, err := encoded.DecodeRgba8()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Data) != len(rgba) {
+		t.Fatalf("decoded bytes = %d, want %d", len(decoded.Data), len(rgba))
+	}
+	for i := 3; i < len(rgba); i += 4 {
+		if (decoded.Data[i] >= 128) != (rgba[i] >= 128) {
+			t.Fatalf("pixel %d changed sides of the alpha cutoff: input %d, decoded %d", i/4, rgba[i], decoded.Data[i])
+		}
+	}
+	return decoded.Data
+}
+
 // Mirrors the Rust sidecar's encodes_decodes_and_resizes_a_dds_texture test.
 func TestExecuteTextureResizeEncodeDecodeAndResizeDDS(t *testing.T) {
 	t.Parallel()
@@ -84,7 +212,16 @@ func TestExecuteTextureResizeEncodeDecodeAndResizeDDS(t *testing.T) {
 	if err := saveTexturePNG(pngPath, pixels, 2048, 2048); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", nil, false, true); err != nil {
+	if _, err := encodePNGToDDS(
+		t.Context(),
+		pngPath,
+		ddsPath,
+		"DXGI_FORMAT_BC1_UNORM",
+		nil,
+		false,
+		true,
+		nil,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
@@ -127,7 +264,16 @@ func TestExecuteResizeSkipsConvertWithSameFormat(t *testing.T) {
 	if err := saveTexturePNG(pngPath, pixels, 2048, 2048); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, ddsPath, "DXGI_FORMAT_BC1_UNORM", nil, false, false); err != nil {
+	if _, err := encodePNGToDDS(
+		t.Context(),
+		pngPath,
+		ddsPath,
+		"DXGI_FORMAT_BC1_UNORM",
+		nil,
+		false,
+		false,
+		nil,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result, err := executeTextureResize(context.Background(), nil, textureResizeRequest{
@@ -226,9 +372,9 @@ func TestParseTextureOutputFormatRoundTrip(t *testing.T) {
 	}
 }
 
-func writeDXGITestDDS(t *testing.T, path string, params ddsutil.NewDxgiParams, fill func(data []byte)) {
+func writeDXGITestDDS(t *testing.T, path string, params ddsutil.DxgiParams, fill func(data []byte)) {
 	t.Helper()
-	dds, err := ddsutil.NewDXGI(params)
+	dds, err := ddsutil.NewDxgi(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,10 +429,9 @@ func TestExecuteConvertPreservesArrayAndCubeLayout(t *testing.T) {
 			if testCase.cube {
 				caps2 = ddsutil.Caps2CUBEMAP | ddsutil.Caps2CUBEMAP_ALLFACES
 			}
-			layers := testCase.layers
-			writeDXGITestDDS(t, path, ddsutil.NewDxgiParams{
-				Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, ArrayLayers: &layers,
-				Caps2: &caps2, IsCubemap: testCase.cube, ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
+			writeDXGITestDDS(t, path, ddsutil.DxgiParams{
+				Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, ArrayLayers: testCase.layers,
+				Caps2: caps2, IsCubemap: testCase.cube, ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D,
 				AlphaMode: ddsutil.AlphaModeStraight,
 			}, func(data []byte) {
 				for index := range data {
@@ -314,10 +459,8 @@ func TestExecuteConvertPreservesArrayAndCubeLayout(t *testing.T) {
 func TestExecuteConvertKeepsAuthoredMipmaps(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "mips.dds")
-	mipmaps := uint32(2)
-	var caps2 ddsutil.Caps2
-	writeDXGITestDDS(t, path, ddsutil.NewDxgiParams{
-		Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, MipmapLevels: &mipmaps, Caps2: &caps2,
+	writeDXGITestDDS(t, path, ddsutil.DxgiParams{
+		Height: 4, Width: 4, Format: ddsutil.DxgiFormatR8G8B8A8_UNorm, MipmapLevels: 2,
 		ResourceDimension: ddsutil.D3D10ResourceDimensionTexture2D, AlphaMode: ddsutil.AlphaModeStraight,
 	}, func(data []byte) {
 		// Mip 0 is red and mip 1 green, so a regenerated mip 1 would come out red.

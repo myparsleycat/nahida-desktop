@@ -266,7 +266,16 @@ func TestDDSBC7RetagPreservesCompressedMipPayload(t *testing.T) {
 	if err := saveTexturePNG(pngPath, pixels, 16, 16); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := encodePNGToDDS(pngPath, path, "DXGI_FORMAT_BC7_UNORM_SRGB", nil, false, true); err != nil {
+	if _, err := encodePNGToDDS(
+		t.Context(),
+		pngPath,
+		path,
+		"DXGI_FORMAT_BC7_UNORM_SRGB",
+		nil,
+		false,
+		true,
+		nil,
+	); err != nil {
 		t.Fatal(err)
 	}
 	before, err := os.ReadFile(path)

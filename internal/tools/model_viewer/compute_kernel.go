@@ -62,7 +62,7 @@ func newComputeDeformer(
 	ctx context.Context,
 	deformer ModelViewerComputeDeformerTransport,
 	read func(context.Context, string) ([]byte, error),
-	packedSkinning func() uintptr,
+	packedSkinning func() packedSkinningProcs,
 ) (*ComputeDeformer, error) {
 	if deformer.VertexCount <= 0 {
 		return nil, fmt.Errorf("compute deformer %s has no vertices", deformer.ID)
@@ -116,7 +116,7 @@ func (d *ComputeDeformer) Frame(poseFrame int, phaseSeconds float64, groupWeight
 
 // computeSources reads each source of a deformer once.
 type computeSources struct {
-	packedSkinning func() uintptr
+	packedSkinning func() packedSkinningProcs
 	ctx            context.Context
 	read           func(context.Context, string) ([]byte, error)
 	cache          map[string][]byte

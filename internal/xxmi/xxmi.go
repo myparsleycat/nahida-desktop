@@ -125,6 +125,7 @@ type externalImporter struct {
 }
 
 type XXMI struct {
+	compressUncompressedTextures launchTextureCompressor
 	findImporterLockingProcesses func(context.Context, string) []platform.ProcessInfo
 	mu                           sync.RWMutex
 	packageMu                    sync.Mutex
