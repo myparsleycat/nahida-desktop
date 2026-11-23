@@ -512,6 +512,9 @@ func (s *Shell) gbPreviewCard(item gbSubmission, width float32) *fairy.El {
 			fairy.Col(fairy.Icon(lucide.Image).Size(32, 32), fairy.Text("No preview").FontSize(12).LineHeight(16)).
 				WFull().HFull().Center().Gap(8).Color(t.MutedForeground),
 		)
+	} else if fairy.Images.SizedErr(gbImageKey(previewURL), width, height, fairy.FitCover) != nil {
+		media.Child(fairy.Col(fairy.Icon(lucide.ImageOff).Size(32, 32)).WFull().HFull().Center().
+			Color(t.MutedForeground))
 	}
 	subtitle := item.Description
 	if subtitle == "" && item.SubCategory != nil {

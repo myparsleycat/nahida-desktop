@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -504,6 +505,7 @@ func (s *Shell) gbFetchPosts(key string, gen int, sel gbSelection, first, count 
 func (s *Shell) gbRefresh() {
 	g := &s.gameBanana
 	g.generation++
+	s.gbRetryFailedImages()
 }
 
 // gbRefetchMod loads the open mod again and waits for it. It runs off the UI thread.
@@ -836,22 +838,155 @@ func (s *Shell) gbOpenExternal(link string) {
 	}()
 }
 
+func gbImageKey(src string) string {
+	return "gamebanana:" + src
+}
+
 // gbImage returns a remote picture decoded for a w×h box drawn with fit, or nil while it loads or when it failed.
+// The image cache keeps a failure until gbRetryFailedImages forgets it.
 func (s *Shell) gbImage(src string, w, h float32, fit fairy.Fit) *fairy.Image {
 	u, err := url.Parse(src)
 	if src == "" || err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil
 	}
-	return fairy.Images.Sized("gamebanana:"+src, w, h, fit, func() ([]byte, error) {
+	key := gbImageKey(src)
+	img := fairy.Images.Sized(key, w, h, fit, func() ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), gbImageFetchTimeout)
 		defer cancel()
 		response, err := s.deps.HTTP.Fetch(ctx, src, infra.FetchOptions{})
 		if err != nil {
-			return nil, err
+			return nil, &gbImageError{stage: "fetch", err: err}
 		}
 		defer func() { _ = response.Body.Close() }()
-		return io.ReadAll(io.LimitReader(response.Body, gbImageMaxBytes))
+		return gbImageBody(response)
 	})
+	// Sized returns the size of src that loaded last while this size fails, so a failure can sit behind an image.
+	s.gbNoteImageFailure(key, src, u.Host, w, h, fit)
+	return img
+}
+
+// gbImageError is a GameBanana image load that failed before decoding, at stage fetch, response, read or content.
+type gbImageError struct {
+	stage  string
+	status int
+	err    error
+}
+
+func (e *gbImageError) Error() string { return e.err.Error() }
+
+func (e *gbImageError) Unwrap() error { return e.err }
+
+// gbImageBody reads an image response. Fetch returns error statuses from hosts other than the API as responses, and
+// a proxy or filter can answer with a page instead of the image; both fail here with the status and content type
+// rather than later as an undecodable image.
+func gbImageBody(response *http.Response) ([]byte, error) {
+	contentType := response.Header.Get("Content-Type")
+	fail := func(stage string, err error, fields map[string]any) error {
+		fields["status"], fields["contentType"] = response.StatusCode, contentType
+		return infra.AnnotateError(&gbImageError{stage: stage, status: response.StatusCode, err: err}, infra.Diagnostic{
+			Operation: "image-fetch", Stage: stage, Fields: fields,
+		})
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fail("response", fmt.Errorf("image response: HTTP %d", response.StatusCode), map[string]any{})
+	}
+
+	body, err := io.ReadAll(io.LimitReader(response.Body, gbImageMaxBytes))
+	if err != nil {
+		return nil, fail("read", fmt.Errorf("read image response: %w", err), map[string]any{"bytes": len(body)})
+	}
+	sniffed := http.DetectContentType(body)
+	if strings.HasPrefix(sniffed, "text/html") || strings.HasPrefix(sniffed, "text/plain") {
+		return nil, fail("content", errors.New("image response is not an image"),
+			map[string]any{"sniffedType": sniffed, "bytes": len(body)})
+	}
+	return body, nil
+}
+
+// maxGBImageFailures bounds the failed image keys kept; past it the set starts over, and gbRetryFailedImages retries
+// only the keys recorded since.
+const maxGBImageFailures = 1024
+
+// gbImageRetryInterval is the least time between retries of failed images, as every focus of the window asks for one.
+const gbImageRetryInterval = 30 * time.Second
+
+// gbImageFailures holds the images loaded through gbImage that failed since the last retry.
+type gbImageFailures struct {
+	keys map[string]struct{}
+	// logged holds the host and failure class of each failure logged on its own.
+	logged map[string]struct{}
+	// count is the number of failures in batch, which logs those not logged on their own at the next retry.
+	count int
+	batch *infra.DiagnosticBatch
+	// retried is when gbRetryFailedImages last forgot failures.
+	retried time.Time
+}
+
+// gbImageFailureClass groups failures that have one cause: the stage and status that rejected a response, a fetch
+// error, or a decode error.
+func gbImageFailureClass(err error) string {
+	if imageErr, ok := errors.AsType[*gbImageError](err); ok {
+		return imageErr.stage + ":" + strconv.Itoa(imageErr.status)
+	}
+	return "decode"
+}
+
+// gbNoteImageFailure records a failed load of the image at key for gbRetryFailedImages to retry. The first failure
+// of each class on each host is logged at once; one blocked host fails every picture on a page, so the rest are
+// logged together at the retry.
+func (s *Shell) gbNoteImageFailure(key, src, host string, w, h float32, fit fairy.Fit) {
+	f := &s.gbImageFailures
+	if _, seen := f.keys[key]; seen {
+		return
+	}
+	err := fairy.Images.SizedErr(key, w, h, fit)
+	if err == nil || infra.IsCancellationError(err) {
+		return
+	}
+
+	if f.keys == nil || len(f.keys) >= maxGBImageFailures {
+		f.keys = map[string]struct{}{}
+	}
+	f.keys[key] = struct{}{}
+	fields := func() map[string]any {
+		return map[string]any{
+			"url": infra.SanitizeLogURL(src), "host": host, "width": w, "height": h,
+			"deviceGeneration": fairy.DeviceGeneration(),
+		}
+	}
+	class := host + "|" + gbImageFailureClass(err)
+	if _, logged := f.logged[class]; !logged {
+		if f.logged == nil {
+			f.logged = map[string]struct{}{}
+		}
+		f.logged[class] = struct{}{}
+		_ = infra.ReportError(s.deps.Log, err, "GameBanana.image", infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "image", Fields: fields(),
+		})
+		return
+	}
+	if f.batch == nil {
+		f.batch = &infra.DiagnosticBatch{}
+	}
+	f.batch.Add(infra.AnnotateError(err, infra.Diagnostic{Operation: "image", Fields: fields()}))
+	f.count++
+}
+
+// gbRetryFailedImages forgets the cached failures of images loaded through gbImage so the next build loads them
+// again, at most once per gbImageRetryInterval. It logs the failures that were not logged on their own.
+func (s *Shell) gbRetryFailedImages() {
+	f := &s.gbImageFailures
+	if len(f.keys) == 0 || time.Since(f.retried) < gbImageRetryInterval {
+		return
+	}
+
+	for key := range f.keys {
+		fairy.Images.Forget(key)
+	}
+	if f.count > 0 {
+		f.batch.Report(s.deps.Log, "GameBanana.image", "image")
+	}
+	*f = gbImageFailures{retried: time.Now()}
 }
 
 // gbErrorPresentation explains a load failure as the React screens did.

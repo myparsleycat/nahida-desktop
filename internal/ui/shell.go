@@ -124,6 +124,7 @@ type Shell struct {
 	driveVideos previewVideos
 	// previewImageFailures keeps the cache keys of mod preview images that failed to load, so each is logged once.
 	previewImageFailures map[string]bool
+	gbImageFailures      gbImageFailures
 	// modPreviewPaths keeps the file each mod preview cache key was last loaded from; see sizedModPreview.
 	modPreviewPaths map[string]modPreviewPath
 	// modCardShown keeps, by mod path, the preview each grid card last drew; see modCardPreview.
@@ -328,6 +329,7 @@ func (s *Shell) OnFocus(focused bool) {
 			fairy.Go(func() { s.setUpdater(status) })
 		}
 	}()
+	s.gbRetryFailedImages()
 	s.refreshAgent()
 	s.modFocused()
 	s.refreshFixInspections()
