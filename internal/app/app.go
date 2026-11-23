@@ -91,7 +91,7 @@ func Run(icon []byte) (runErr error) {
 		Tools:        rt.tools,
 		Transfer:     rt.transfer,
 		GameBanana:   rt.gamebanana,
-		HTTP:         rt.http,
+		ImageCache:   rt.imageCache,
 		XXMI:         rt.xxmi,
 		ReShade:      rt.reshade,
 		Drive:        rt.drive,
@@ -240,12 +240,25 @@ func (rt *runtime) useSettingHooks() {
 	afterSet := hooks.AfterSet
 	hooks.AfterSet = func(key string, value any) {
 		afterSet(key, value)
-		if key == setting.KeyModelViewerBlenderLink {
+		switch key {
+		case setting.KeyModelViewerBlenderLink:
 			enabled, _ := value.(bool)
 			rt.configureBlenderLink(enabled)
+		case setting.KeyGeneralImageCacheSizeMib:
+			mib, _ := value.(int)
+			rt.imageCache.SetMaxBytes(int64(mib) << 20)
 		}
 	}
 	rt.setting.UseHooks(rt.githubTokenHooks(hooks))
+
+	if mib, err := rt.setting.Get(context.Background(), setting.KeyGeneralImageCacheSizeMib); err == nil {
+		n, _ := mib.(int)
+		rt.imageCache.SetMaxBytes(int64(n) << 20)
+	} else {
+		_ = infra.ReportError(rt.log, err, "App:imageCache", infra.Diagnostic{
+			Operation: "App:imageCache", Stage: "read-size",
+		})
+	}
 
 	if language, err := rt.setting.GetLanguage(context.Background()); err == nil {
 		syncModelViewerMenu(language)

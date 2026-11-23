@@ -96,7 +96,8 @@ var agentSettingKeys = map[string]bool{
 	setting.KeyModGridFixedCardWidth: true, setting.KeyModGridFixedColumnCount: true,
 	setting.KeyModDisabledPrefixStyle: true, setting.KeyModAutoInspectFix: true,
 	setting.KeyTransferDownloadConcurrency: true, setting.KeyTransferDownloadBandwidthLimitMibps: true,
-	setting.KeyTransferUploadConcurrency: true, setting.KeyModelViewerToneMapping: true,
+	setting.KeyTransferUploadConcurrency: true, setting.KeyGeneralImageCacheSizeMib: true,
+	setting.KeyModelViewerToneMapping: true,
 	setting.KeyModelViewerEnvironment: true, setting.KeyModelViewerExposure: true,
 	setting.KeyModelViewerToonShadows: true, setting.KeyXXMIPersistToggles: true,
 }
@@ -166,5 +167,5 @@ var agentIntegerSettingKeys = map[string]bool{
 	setting.KeyModCharacterSidebarWidth: true, setting.KeyModGridResponsiveBaseWidth: true,
 	setting.KeyModGridFixedCardWidth: true, setting.KeyModGridFixedColumnCount: true,
 	setting.KeyTransferDownloadConcurrency: true, setting.KeyTransferDownloadBandwidthLimitMibps: true,
-	setting.KeyTransferUploadConcurrency: true,
+	setting.KeyTransferUploadConcurrency: true, setting.KeyGeneralImageCacheSizeMib: true,
 }

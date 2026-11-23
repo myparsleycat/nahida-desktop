@@ -21,6 +21,7 @@ const (
 	NTEModsDir       = "NTE-Mods"
 	DownloadSpoolDir = "download-spool"
 	DrivePreviewDir  = "drive-preview"
+	ImageCacheDir    = "image-cache"
 	// ModelViewerSpoolDir holds the mesh buffers of open model viewer sessions.
 	ModelViewerSpoolDir = "model-viewer-spool"
 	NativeKernelsDir    = "native-kernels"

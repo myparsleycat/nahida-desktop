@@ -7,6 +7,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/blenderlink"
+	"nahida.live/desktop/internal/httpcache"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/nativecompute"
 	"nahida.live/desktop/internal/platform"
@@ -74,6 +75,15 @@ func bootRuntime(
 	}
 
 	rt.appData = data
+	imageCacheDir, err := data.EnsureDir(appdata.ImageCacheDir)
+	if err != nil {
+		// An empty Dir makes the cache fetch every image without storing it.
+		_ = infra.ReportError(rt.log, err, "AppData", infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "image-cache", Stage: "ensure-dir",
+		})
+		imageCacheDir = ""
+	}
+	rt.imageCache = httpcache.New(httpcache.Options{Client: rt.http, Log: rt.log, Dir: imageCacheDir})
 	rt.setting.UseAppData(data)
 	rt.xxmi.UseAppData(data)
 	rt.mod.UseAppData(data)
@@ -169,6 +179,9 @@ func (rt *runtime) Close(watch *infra.StallWatch) error {
 
 	step("github-rate", rt.githubRate.Close)
 	step("startup", rt.startup.stop)
+	if rt.imageCache != nil {
+		step("image-cache", rt.imageCache.Close)
+	}
 	step("game-link", rt.gameLink.Shutdown)
 	if rt.blenderLink != nil {
 		step("blender-link", rt.blenderLink.Shutdown)

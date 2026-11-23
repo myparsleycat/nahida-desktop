@@ -2,7 +2,8 @@ package ui
 
 import (
 	"context"
-	"io"
+	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"github.com/myparsleycat/fairy/video"
 
 	"nahida.live/desktop/internal/drive"
-	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/httpcache"
 )
 
 const (
@@ -481,8 +482,8 @@ func (s *Shell) driveIcon(v *driveView, item driveItem, size float32, cover bool
 	return icon(lucide.File, t.MutedForeground)
 }
 
-// httpImage loads a remote image through the shared HTTP client for a w×h box drawn with FitContain, keyed by
-// prefix and URL.
+// httpImage loads a remote image through the HTTP cache for a w×h box drawn with FitContain, keyed by prefix and
+// URL.
 func (s *Shell) httpImage(prefix, src string, w, h float32) *fairy.Image {
 	u, err := url.Parse(src)
 	if src == "" || err != nil || (u.Scheme != "http" && u.Scheme != "https") {
@@ -491,13 +492,28 @@ func (s *Shell) httpImage(prefix, src string, w, h float32) *fairy.Image {
 	return fairy.Images.Sized(prefix+src, w, h, fairy.FitContain, func() ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), driveImageTimeout)
 		defer cancel()
-		response, err := s.deps.HTTP.Fetch(ctx, src, infra.FetchOptions{})
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = response.Body.Close() }()
-		return io.ReadAll(io.LimitReader(response.Body, driveImageMaxSize))
+		return s.deps.ImageCache.Get(
+			ctx,
+			src,
+			httpcache.Request{MaxBytes: driveImageMaxSize, Validate: imageResponseCheck},
+		)
 	})
+}
+
+func imageResponseCheck(status int, _ http.Header, body []byte) error {
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("image response: HTTP %d", status)
+	}
+	if sniffed, page := sniffPage(body); page {
+		return fmt.Errorf("image response is %s, not an image", sniffed)
+	}
+	return nil
+}
+
+// sniffPage reports a body that is a page or plain text, which a proxy or filter can send in place of an image.
+func sniffPage(body []byte) (string, bool) {
+	sniffed := http.DetectContentType(body)
+	return sniffed, strings.HasPrefix(sniffed, "text/html") || strings.HasPrefix(sniffed, "text/plain")
 }
 
 func driveSize(item driveItem) string {

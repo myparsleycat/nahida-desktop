@@ -42,10 +42,12 @@ type networkSection struct {
 	token         string
 	tokenSaving   bool
 	tokenError    string
+
+	imageCacheClearing bool
 }
 
 func (s *Shell) networkSettings() *fairy.El {
-	return settingsBody(s.proxySettings(), s.githubTokenSettings())
+	return settingsBody(s.proxySettings(), s.githubTokenSettings(), s.imageCacheSettings())
 }
 
 func networkField(label string, control *fairy.El, description string) *fairy.El {
@@ -385,6 +387,45 @@ func (s *Shell) saveGitHubToken(action string) {
 			}
 			net.github = nil
 			s.loadGitHubToken()
+		})
+	}()
+}
+
+func (s *Shell) imageCacheSettings() *fairy.El {
+	const prefix = "page.setting.network.imageCache."
+	if !s.settingsLoaded(setting.KeyGeneralImageCacheSizeMib) {
+		return settingsGroup(T(prefix+"title"), s.settingsLoading())
+	}
+	clearing := s.settings.network.imageCacheClearing
+	return settingsGroup(T(prefix+"title"),
+		settingRow(T(prefix+"size.title"), T(prefix+"size.description"),
+			s.settingNumber(setting.KeyGeneralImageCacheSizeMib, T(prefix+"size.title"), 112)),
+		settingRow(T(prefix+"clear.title"), T(prefix+"clear.usage", "size", formatSize(s.deps.ImageCache.Usage())),
+			kit.Button(T(prefix+"clear.action"), s.clearImageCache, kit.Outline, kit.Disabled(clearing))),
+	)
+}
+
+func (s *Shell) clearImageCache() {
+	const prefix = "page.setting.network.imageCache.clear."
+	net := &s.settings.network
+	if net.imageCacheClearing {
+		return
+	}
+	net.imageCacheClearing = true
+	go func() {
+		err := s.deps.ImageCache.Clear(context.Background())
+		if err != nil {
+			_ = infra.ReportError(s.deps.Log, err, "Setting.imageCache", infra.Diagnostic{
+				Operation: "image-cache.clear",
+			})
+		}
+		fairy.Go(func() {
+			net.imageCacheClearing = false
+			if err != nil {
+				s.toasts.Show(kit.ToastError, T(prefix+"failed"), "")
+				return
+			}
+			s.toasts.Show(kit.ToastSuccess, T(prefix+"done"), "")
 		})
 	}()
 }

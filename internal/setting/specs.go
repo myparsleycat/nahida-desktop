@@ -425,6 +425,12 @@ func buildSpecs() map[string]spec {
 			transferUploadConcurrencyMax,
 		),
 
+		KeyGeneralImageCacheSizeMib: clampedIntSpec(
+			definitionsByKey[KeyGeneralImageCacheSizeMib],
+			imageCacheSizeMibDefault,
+			imageCacheSizeMibMin,
+			imageCacheSizeMibMax,
+		),
 		KeyGeneralNameSortPolicy: {
 			def: definitionsByKey[KeyGeneralNameSortPolicy],
 			getDefault: func(*Setting) any {

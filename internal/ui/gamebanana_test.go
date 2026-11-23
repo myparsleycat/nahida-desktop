@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"image"
 	"image/png"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/myparsleycat/fairy"
 
+	"nahida.live/desktop/internal/httpcache"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -108,8 +108,10 @@ func gbImageTestShell(t *testing.T, picture []byte, available *atomic.Bool) (*Sh
 	t.Cleanup(server.Close)
 	var output bytes.Buffer
 	s := &Shell{deps: Deps{
-		HTTP: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()}),
-		Log:  infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true}),
+		ImageCache: httpcache.New(httpcache.Options{
+			Client: infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: server.Client()}),
+		}),
+		Log: infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true}),
 	}}
 	return s, &output, server.URL
 }
@@ -194,7 +196,7 @@ func TestGameBananaImageRetriesFailureBehindLoadedSize(t *testing.T) {
 	})
 }
 
-func TestGameBananaImageBodyRejectsNonImageResponses(t *testing.T) {
+func TestGameBananaImageCheckRejectsNonImageResponses(t *testing.T) {
 	t.Parallel()
 	picture := gbTestPNG(t, 8)
 	for _, tc := range []struct {
@@ -211,16 +213,9 @@ func TestGameBananaImageBodyRejectsNonImageResponses(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			body, err := gbImageBody(&http.Response{
-				StatusCode: tc.status,
-				Header:     http.Header{"Content-Type": {tc.contentType}},
-				Body:       io.NopCloser(bytes.NewReader(tc.body)),
-			})
+			err := gbImageCheck(tc.status, http.Header{"Content-Type": {tc.contentType}}, tc.body)
 			if (err == nil) != tc.ok {
-				t.Fatalf("gbImageBody() error = %v, want success %v", err, tc.ok)
-			}
-			if tc.ok && !bytes.Equal(body, tc.body) {
-				t.Fatalf("gbImageBody() returned %d bytes, want the %d-byte body", len(body), len(tc.body))
+				t.Fatalf("gbImageCheck() error = %v, want success %v", err, tc.ok)
 			}
 		})
 	}
