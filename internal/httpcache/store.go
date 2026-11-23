@@ -27,6 +27,8 @@ const (
 type indexEntry struct {
 	size int64
 	used time.Time
+	// requested is when the stored response was requested; it is zero for entries left by earlier runs.
+	requested time.Time
 }
 
 // SetMaxBytes changes the size limit and evicts the least recently used entries over it.
@@ -101,16 +103,22 @@ func (c *Cache) hold(name string) {
 func (c *Cache) release(name string) {
 	c.mu.Lock()
 	_, cleared := c.clearPending[name]
+	var victims []string
 	if c.busy[name]--; c.busy[name] > 0 {
 		cleared = false
 	} else {
 		delete(c.busy, name)
 		delete(c.clearPending, name)
+		if !cleared {
+			// Eviction skipped name while it was busy.
+			victims = c.evictLocked()
+		}
 	}
 	c.mu.Unlock()
 	if cleared {
 		c.remove(name)
 	}
+	c.removeVictims(victims)
 }
 
 // read returns the entry stored for key, or nil when there is none or it is unreadable. A damaged entry is
@@ -133,11 +141,12 @@ func (c *Cache) read(ctx context.Context, name, key string) *entry {
 	return e
 }
 
-// write stores e under name through a temporary file. A failure is logged and leaves any earlier entry.
+// write stores e under name through a temporary file, unless the stored entry answers a later request. A
+// failure is logged and leaves any earlier entry.
 func (c *Cache) write(ctx context.Context, name string, e *entry) {
 	data, err := e.encode()
 	if err == nil {
-		err = c.writeFile(ctx, name, data)
+		err = c.writeFile(ctx, name, data, e.RequestTime)
 	}
 	if err != nil {
 		if !infra.IsCancellationError(err) {
@@ -150,15 +159,12 @@ func (c *Cache) write(ctx context.Context, name string, e *entry) {
 	}
 
 	c.mu.Lock()
-	c.forgetLocked(name)
-	c.index[name] = indexEntry{size: int64(len(data)), used: c.now()}
-	c.total += int64(len(data))
 	victims := c.evictLocked()
 	c.mu.Unlock()
 	c.removeVictims(victims)
 }
 
-func (c *Cache) writeFile(ctx context.Context, name string, data []byte) error {
+func (c *Cache) writeFile(ctx context.Context, name string, data []byte, requested time.Time) error {
 	release, err := diskio.Acquire(ctx, c.path(name))
 	if err != nil {
 		return err
@@ -170,13 +176,37 @@ func (c *Cache) writeFile(ctx context.Context, name string, data []byte) error {
 	}
 	_, err = temp.Write(data)
 	err = errors.Join(err, temp.Close())
+	replaced := false
 	if err == nil {
-		err = platform.ReplaceAtomic(temp.Name(), c.path(name))
+		replaced, err = c.commit(temp.Name(), name, int64(len(data)), requested)
 	}
-	if err != nil {
+	if !replaced {
 		_ = os.Remove(temp.Name())
 	}
 	return err
+}
+
+// commit replaces the entry file name with temp and indexes it, unless the indexed entry was requested later.
+func (c *Cache) commit(temp, name string, size int64, requested time.Time) (bool, error) {
+	c.commitMu.Lock()
+	defer c.commitMu.Unlock()
+
+	c.mu.Lock()
+	stored, ok := c.index[name]
+	c.mu.Unlock()
+	if ok && requested.Before(stored.requested) {
+		return false, nil
+	}
+	if err := platform.ReplaceAtomic(temp, c.path(name)); err != nil {
+		return false, err
+	}
+
+	c.mu.Lock()
+	c.forgetLocked(name)
+	c.index[name] = indexEntry{size: size, used: c.now(), requested: requested}
+	c.total += size
+	c.mu.Unlock()
+	return true, nil
 }
 
 // touch records a use of name for eviction. The modification time carries it across restarts.

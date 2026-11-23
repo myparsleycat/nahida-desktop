@@ -3,6 +3,7 @@ package httpcache
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -294,6 +295,69 @@ func TestStoredResponseRejectedByLaterRequestIsFetchedAgain(t *testing.T) {
 	}
 	if body, err := get(t, c, url, rejectHTML); err != nil || string(body) != "picture" {
 		t.Fatalf("Get() after the refetch = %q, %v, want the stored picture", body, err)
+	}
+}
+
+func TestCancelledCallerLeavesSharedLoadRunning(t *testing.T) {
+	t.Parallel()
+	arrived, release := make(chan struct{}, 1), make(chan struct{})
+	defer close(release)
+	c, _, origin := newTestCache(t, func(w http.ResponseWriter, _ *http.Request, _ time.Time) {
+		arrived <- struct{}{}
+		<-release
+		w.Header().Set("Cache-Control", "max-age=3600")
+		_, _ = w.Write([]byte("picture"))
+	})
+	url := origin.server.URL + "/a.png"
+
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := c.Get(firstCtx, url, Request{})
+		firstErr <- err
+	}()
+	<-arrived
+	type result struct {
+		body []byte
+		err  error
+	}
+	second := make(chan result, 1)
+	go func() {
+		body, err := c.Get(context.Background(), url, Request{})
+		second <- result{body, err}
+	}()
+	waitWaiters(t, c, 2)
+
+	cancelFirst()
+	if err := <-firstErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Get() = %v, want context.Canceled", err)
+	}
+	release <- struct{}{}
+	if r := <-second; r.err != nil || string(r.body) != "picture" {
+		t.Fatalf("other Get() = %q, %v, want the shared load to finish", r.body, r.err)
+	}
+	if got := origin.requests.Load(); got != 1 {
+		t.Fatalf("origin served %d requests, want one shared request", got)
+	}
+}
+
+func waitWaiters(t *testing.T, c *Cache, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.mu.Lock()
+		waiters := 0
+		for _, shared := range c.calls {
+			waiters += shared.waiters
+		}
+		c.mu.Unlock()
+		if waiters == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d callers of a shared load", want)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

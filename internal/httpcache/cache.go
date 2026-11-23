@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -48,9 +49,11 @@ type Cache struct {
 	dir    string
 	now    func() time.Time
 
-	flight        singleflight.Group
+	revalidations singleflight.Group
 	storeFailures infra.DiagnosticThrottle
-	staleServed   infra.DiagnosticThrottle
+	// commitMu orders entry file replacements with the request times the index records.
+	commitMu    sync.Mutex
+	staleServed infra.DiagnosticThrottle
 
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -63,6 +66,7 @@ type Cache struct {
 	total    int64
 	scanned  bool
 	busy     map[string]int
+	calls    map[string]*call
 	// changedBeforeScan holds the entries written or removed before the first scan finished.
 	changedBeforeScan map[string]struct{}
 	// clearPending holds the busy entries Clear could not remove yet.
@@ -75,6 +79,15 @@ type response struct {
 	body   []byte
 	// stored reports that body came from an entry on disk rather than from the network.
 	stored bool
+}
+
+// call is a load shared by concurrent Gets. It runs until it finishes, the cache closes, or every waiter left.
+type call struct {
+	done    chan struct{}
+	result  response
+	err     error
+	waiters int
+	cancel  context.CancelFunc
 }
 
 // ResponseError is a response whose body could not be read, at stage read, or was larger than
@@ -106,6 +119,7 @@ func newCache(opts Options, now func() time.Time) *Cache {
 		maxBytes: opts.MaxBytes,
 		index:    map[string]indexEntry{},
 		busy:     map[string]int{},
+		calls:    map[string]*call{},
 
 		changedBeforeScan: map[string]struct{}{},
 		clearPending:      map[string]struct{}{},
@@ -132,11 +146,13 @@ func (c *Cache) Get(ctx context.Context, rawURL string, req Request) ([]byte, er
 		req.MaxBytes = defaultMaxBodyBytes
 	}
 	key := cacheKey(rawURL)
-	r, err := c.share(ctx, key, req)
+	// Requests with different limits load separately, so none receives a body read up to a smaller limit.
+	callKey := strconv.FormatInt(req.MaxBytes, 10) + " " + key
+	r, err := c.share(ctx, callKey, key, req)
 	if err == nil && r.stored && c.accept(key, r, req) != nil {
 		// A request with another Validate stored what this one rejects; the entry is dropped and fetched again.
 		c.remove(entryName(key))
-		r, err = c.share(ctx, key, req)
+		r, err = c.share(ctx, callKey, key, req)
 	}
 	if err != nil {
 		return nil, err
@@ -147,11 +163,48 @@ func (c *Cache) Get(ctx context.Context, rawURL string, req Request) ([]byte, er
 	return r.body, nil
 }
 
-// share loads key once for all concurrent requests for it.
-func (c *Cache) share(ctx context.Context, key string, req Request) (response, error) {
-	result, err, _ := c.flight.Do(key, func() (any, error) { return c.load(ctx, key, req) })
-	r, _ := result.(response)
-	return r, err
+// share loads key once for all concurrent requests with the same callKey. Each caller stops waiting when its
+// own ctx ends; the load is cancelled only when no caller is left.
+func (c *Cache) share(ctx context.Context, callKey, key string, req Request) (response, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return c.load(ctx, key, req)
+	}
+	shared, ok := c.calls[callKey]
+	if !ok {
+		loadCtx, cancel := context.WithCancel(c.ctx)
+		shared = &call{done: make(chan struct{}), cancel: cancel}
+		c.calls[callKey] = shared
+		c.background.Go(func() {
+			defer cancel()
+			r, err := c.load(loadCtx, key, req)
+			c.mu.Lock()
+			if c.calls[callKey] == shared {
+				delete(c.calls, callKey)
+			}
+			c.mu.Unlock()
+			shared.result, shared.err = r, err
+			close(shared.done)
+		})
+	}
+	shared.waiters++
+	c.mu.Unlock()
+
+	select {
+	case <-shared.done:
+		return shared.result, shared.err
+	case <-ctx.Done():
+		c.mu.Lock()
+		if shared.waiters--; shared.waiters == 0 {
+			shared.cancel()
+			if c.calls[callKey] == shared {
+				delete(c.calls, callKey)
+			}
+		}
+		c.mu.Unlock()
+		return response{}, ctx.Err()
+	}
 }
 
 // accept applies the request's own limits to a response that may have been loaded for another request.
@@ -222,7 +275,11 @@ func (c *Cache) fetch(ctx context.Context, key, name string, cached *entry, req 
 	case cached != nil && resp.StatusCode == http.StatusNotModified:
 		_, _ = io.Copy(io.Discard, resp.Body)
 		cached.refresh(resp.Header, requested, received)
-		c.write(ctx, name, cached)
+		if storable(cached.Status, cached.Header) {
+			c.write(ctx, name, cached)
+		} else {
+			c.remove(name)
+		}
 		return cached.response(), nil
 	case cached != nil && resp.StatusCode >= http.StatusInternalServerError && cached.servableOnError():
 		c.noteStale(key, fmt.Errorf("revalidation response: HTTP %d", resp.StatusCode))
@@ -275,7 +332,7 @@ func (c *Cache) revalidateLater(key string, req Request) {
 	c.background.Go(func() {
 		ctx, cancel := context.WithTimeout(c.ctx, revalidateTimeout)
 		defer cancel()
-		_, _, _ = c.flight.Do("revalidate:"+key, func() (any, error) {
+		_, _, _ = c.revalidations.Do(key, func() (any, error) {
 			name := entryName(key)
 			c.hold(name)
 			defer c.release(name)
