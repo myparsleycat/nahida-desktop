@@ -16,6 +16,7 @@ import (
 	"nahida.live/desktop/internal/gamebanana"
 	"nahida.live/desktop/internal/gamelink"
 	"nahida.live/desktop/internal/github"
+	"nahida.live/desktop/internal/httpcache"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/modruntime"
@@ -34,6 +35,7 @@ type runtime struct {
 	log             *infra.Log
 	store           *infra.Store
 	http            *infra.Client
+	imageCache      *httpcache.Cache
 	cdnTrace        *infra.CDNTrace
 	fs              *platform.FS
 	native          *platform.Native

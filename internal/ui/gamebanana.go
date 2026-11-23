@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +16,7 @@ import (
 	"github.com/myparsleycat/fairy/kit"
 
 	"nahida.live/desktop/internal/gamebanana"
+	"nahida.live/desktop/internal/httpcache"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 )
@@ -853,19 +853,29 @@ func (s *Shell) gbImage(src string, w, h float32, fit fairy.Fit) *fairy.Image {
 	img := fairy.Images.Sized(key, w, h, fit, func() ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), gbImageFetchTimeout)
 		defer cancel()
-		response, err := s.deps.HTTP.Fetch(ctx, src, infra.FetchOptions{})
-		if err != nil {
-			return nil, &gbImageError{stage: "fetch", err: err}
+		body, err := s.deps.ImageCache.Get(
+			ctx,
+			src,
+			httpcache.Request{MaxBytes: gbImageMaxBytes, Validate: gbImageCheck},
+		)
+		if err == nil {
+			return body, nil
 		}
-		defer func() { _ = response.Body.Close() }()
-		return gbImageBody(response)
+		if _, checked := errors.AsType[*gbImageError](err); checked {
+			return nil, err
+		}
+		if responseErr, ok := errors.AsType[*httpcache.ResponseError](err); ok {
+			return nil, &gbImageError{stage: responseErr.Stage, status: responseErr.Status, err: err}
+		}
+		return nil, &gbImageError{stage: "fetch", err: err}
 	})
 	// Sized returns the size of src that loaded last while this size fails, so a failure can sit behind an image.
 	s.gbNoteImageFailure(key, src, u.Host, w, h, fit)
 	return img
 }
 
-// gbImageError is a GameBanana image load that failed before decoding, at stage fetch, response, read or content.
+// gbImageError is a GameBanana image load that failed before decoding, at stage fetch, read, size, response or
+// content.
 type gbImageError struct {
 	stage  string
 	status int
@@ -876,31 +886,24 @@ func (e *gbImageError) Error() string { return e.err.Error() }
 
 func (e *gbImageError) Unwrap() error { return e.err }
 
-// gbImageBody reads an image response. Fetch returns error statuses from hosts other than the API as responses, and
-// a proxy or filter can answer with a page instead of the image; both fail here with the status and content type
-// rather than later as an undecodable image.
-func gbImageBody(response *http.Response) ([]byte, error) {
-	contentType := response.Header.Get("Content-Type")
+// gbImageCheck accepts an image response. The cache returns error statuses as responses, and a proxy or filter can
+// answer with a page instead of the image; both fail here with the status and content type rather than later as
+// an undecodable image, and neither is cached.
+func gbImageCheck(status int, header http.Header, body []byte) error {
 	fail := func(stage string, err error, fields map[string]any) error {
-		fields["status"], fields["contentType"] = response.StatusCode, contentType
-		return infra.AnnotateError(&gbImageError{stage: stage, status: response.StatusCode, err: err}, infra.Diagnostic{
+		fields["status"], fields["contentType"] = status, header.Get("Content-Type")
+		return infra.AnnotateError(&gbImageError{stage: stage, status: status, err: err}, infra.Diagnostic{
 			Operation: "image-fetch", Stage: stage, Fields: fields,
 		})
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fail("response", fmt.Errorf("image response: HTTP %d", response.StatusCode), map[string]any{})
+	if status < 200 || status >= 300 {
+		return fail("response", fmt.Errorf("image response: HTTP %d", status), map[string]any{})
 	}
-
-	body, err := io.ReadAll(io.LimitReader(response.Body, gbImageMaxBytes))
-	if err != nil {
-		return nil, fail("read", fmt.Errorf("read image response: %w", err), map[string]any{"bytes": len(body)})
-	}
-	sniffed := http.DetectContentType(body)
-	if strings.HasPrefix(sniffed, "text/html") || strings.HasPrefix(sniffed, "text/plain") {
-		return nil, fail("content", errors.New("image response is not an image"),
+	if sniffed, page := sniffPage(body); page {
+		return fail("content", errors.New("image response is not an image"),
 			map[string]any{"sniffedType": sniffed, "bytes": len(body)})
 	}
-	return body, nil
+	return nil
 }
 
 // maxGBImageFailures bounds the failed image keys kept; past it the set starts over, and gbRetryFailedImages retries

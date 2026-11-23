@@ -21,6 +21,7 @@ const (
 	KeyGeneralWindowBackdrop                     = "general.windowBackdrop"
 	KeyGeneralBackdropBlur                       = "general.backdropBlur"
 	KeyGeneralNameSortPolicy                     = "general.nameSortPolicy"
+	KeyGeneralImageCacheSizeMib                  = "general.imageCacheSizeMib"
 
 	KeyModArchiveExtractPathMode           = "mod.archiveExtractPathMode"
 	KeyModDeleteArchiveAfterExtract        = "mod.deleteArchiveAfterExtract"
@@ -134,6 +135,7 @@ var allDefinitions = []Definition{
 	{KeyGeneralWindowBackdrop, ScopeGeneral, "general_window_backdrop"},
 	{KeyGeneralBackdropBlur, ScopeGeneral, "general_backdrop_blur"},
 	{KeyGeneralNameSortPolicy, ScopeGeneral, "general_name_sort_policy"},
+	{KeyGeneralImageCacheSizeMib, ScopeGeneral, "general_image_cache_size_mib"},
 
 	{KeyModArchiveExtractPathMode, ScopeMod, "mod_archive_extract_path_mode"},
 	{KeyModDeleteArchiveAfterExtract, ScopeMod, "mod_delete_archive_after_extract"},

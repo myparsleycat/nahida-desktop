@@ -33,6 +33,10 @@ const (
 	transferUploadConcurrencyMin       = 4
 	transferUploadConcurrencyMax       = 16
 
+	imageCacheSizeMibDefault = 512
+	imageCacheSizeMibMin     = 64
+	imageCacheSizeMibMax     = 4096
+
 	modGridWidthMin                   = 240
 	modGridWidthMax                   = 640
 	modGridColumnMin                  = 1

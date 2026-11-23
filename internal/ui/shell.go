@@ -16,6 +16,7 @@ import (
 	"nahida.live/desktop/internal/drive"
 	"nahida.live/desktop/internal/feedback"
 	"nahida.live/desktop/internal/gamebanana"
+	"nahida.live/desktop/internal/httpcache"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/modruntime"
@@ -43,10 +44,10 @@ type Deps struct {
 	Transfer  *transfer.Transfer
 	// GameBanana browses gamebanana.com and signs in through the login window the app wires into it.
 	GameBanana *gamebanana.GameBanana
-	// HTTP fetches remote images.
-	HTTP    *infra.Client
-	XXMI    *xxmi.XXMI
-	ReShade *reshade.ReShade
+	// ImageCache fetches remote images through the HTTP cache on disk.
+	ImageCache *httpcache.Cache
+	XXMI       *xxmi.XXMI
+	ReShade    *reshade.ReShade
 	// Drive lists, uploads to and downloads from the nahida.live drive.
 	Drive  *drive.Drive
 	Backup *backup.Backup

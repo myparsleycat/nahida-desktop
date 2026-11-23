@@ -2503,6 +2503,20 @@
           "type": "Choose HTTP, SOCKS5 or SOCKS5h.",
           "saveFailed": "Unable to save proxy settings."
         },
+        "imageCache": {
+          "title": "Image cache",
+          "size": {
+            "title": "Maximum size (MB)",
+            "description": "Stores images from GameBanana, Drive and other sites on disk. Least recently used images are removed above this size."
+          },
+          "clear": {
+            "title": "Cached images",
+            "usage": "In use: {{size}}",
+            "action": "Clear",
+            "done": "Image cache cleared.",
+            "failed": "Unable to clear the image cache."
+          }
+        },
         "githubToken": {
           "title": "GitHub token",
           "description": "Without a token, GitHub API requests are limited to 60 per hour per IP address. A personal access token raises the limit to 5,000 per hour per account. The app only reads public repositories, so a fine-grained token needs no additional permissions. The token is encrypted for the current Windows user before being saved.",

@@ -497,6 +497,7 @@ var settingNumberBounds = map[string]numberBounds{
 	setting.KeyModGridResponsiveBaseWidth:          within(240, 640),
 	setting.KeyModGridFixedCardWidth:               within(240, 640),
 	setting.KeyModGridFixedColumnCount:             within(1, 8),
+	setting.KeyGeneralImageCacheSizeMib:            within(64, 4096),
 }
 
 // settingNumberFallback is what React saved for text that is not a number: an empty transfer field read as 0 and
@@ -508,6 +509,7 @@ var settingNumberFallback = map[string]int{
 	setting.KeyModGridResponsiveBaseWidth:          400,
 	setting.KeyModGridFixedCardWidth:               360,
 	setting.KeyModGridFixedColumnCount:             4,
+	setting.KeyGeneralImageCacheSizeMib:            512,
 }
 
 // settingNumber is a number field that saves an integer setting, clamped to its bounds, when it loses focus or
