@@ -8,6 +8,7 @@ import (
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/nativecompute"
 )
 
 type Options struct {
@@ -25,6 +26,7 @@ type Service struct {
 	protocol               *infra.Protocol
 	findModelViewerPreview func(string) *string
 	download               *infra.Download
+	packedSkinning         func() uintptr
 	// motionFiles admits one character motion download or cache prune at a time, so two viewers never write the
 	// same file and a prune never removes a download in progress.
 	motionFiles chan struct{}
@@ -75,6 +77,18 @@ func NewWithOptions(opts Options) *Service {
 func (t *Service) BlenderLink() *BlenderLink { return t.blenderLink }
 
 func (t *Service) UseAppData(data *appdata.Store) { t.appData = data }
+
+func (t *Service) UseNativeCompute(library *nativecompute.Library) {
+	t.packedSkinning = sync.OnceValue(func() uintptr {
+		frame, err := lookupPackedSkinningFrame(library)
+		if err != nil && t.log != nil {
+			_ = infra.ReportError(t.log, err, "ModelViewer.packedSkinning", infra.Diagnostic{
+				Operation: "bind-packed-skinning", Severity: infra.DiagnosticWarn,
+			})
+		}
+		return frame
+	})
+}
 
 // ReadResource returns the bytes behind a geometry, texture or position URL of a loaded transport.
 func (t *Service) ReadResource(ctx context.Context, url string) ([]byte, error) {

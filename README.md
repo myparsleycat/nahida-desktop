@@ -186,6 +186,7 @@ Requirements:
 
 - Go (the version in `go.mod`)
 - [Task](https://taskfile.dev) v3
+- [Rustup](https://rustup.rs/) and Visual Studio C++ Build Tools with the Windows SDK for the amd64 build
 
 ```sh
 git clone https://github.com/myparsleycat/nahida-desktop.git

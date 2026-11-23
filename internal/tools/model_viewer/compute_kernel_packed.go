@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+
+	"github.com/x448/float16"
 )
 
 // bindCyclicPackedKernel binds packed object vertices skinned by 3x4 bone matrices, interpolated between two
@@ -101,7 +103,8 @@ func bindPackedDualQuaternionKernel(
 	// the other variants write back.
 	efmi := variant == modelViewerEFMIArmatureVariant || efmiCompact
 	if (variant != "" && !object && !direct && !efmi) || pose.BoneCount <= 0 || pose.FrameCount < 2 ||
-		(!efmi && len(deformer.ShapePasses) != 0) || len(deformer.ShapeStages) != 0 {
+		(!efmi && len(deformer.ShapePasses) != 0) || len(deformer.ShapeStages) != 0 ||
+		deformer.VertexCount > math.MaxInt/computeBlendStride {
 		return nil, invalid
 	}
 	base, err := sources.packedVertices("packed dual-quaternion base", deformer.Base, deformer.VertexCount)
@@ -132,6 +135,12 @@ func bindPackedDualQuaternionKernel(
 		}
 	}
 
+	var native uintptr
+	if variant == "" && sources.packedSkinning != nil && boneCount <= len(palette)/14 &&
+		len(palette)/(boneCount*14) == frameCount {
+		native = sources.packedSkinning()
+	}
+
 	// The direct and EFMI shaders seed the blend with their first sample as it is; the others turn every
 	// sample into the hemisphere of the first.
 	unsignedSeed := direct || efmi
@@ -148,6 +157,19 @@ func bindPackedDualQuaternionKernel(
 		frame0 := int(math.Floor(at))
 		frame1 := min(frame0+1, frameCount-1)
 		inter := at - float64(frame0)
+
+		if native != 0 {
+			err := runPackedSkinningFrame(native, packedSkinningFrameArgs{
+				base: &base[0], weights: &blend.weights[0], bones: &blend.bones[0],
+				palette0: &palette[frame0*boneCount*14], palette1: &palette[frame1*boneCount*14],
+				positions: &frame.Positions[0], normals: &frame.Normals[0],
+				vertexCount: uintptr(deformer.VertexCount), boneCount: uintptr(boneCount), fraction: inter,
+			})
+			if err != nil {
+				return ComputeFrame{}, err
+			}
+			return frame, nil
+		}
 
 		for vertex := range deformer.VertexCount {
 			var sum [14]float64
@@ -259,21 +281,15 @@ func bindPackedDualQuaternionKernel(
 // roundPackedPosition rounds a position as f32tof16 does, to nearest with ties to even, so the viewer shows
 // no more precision than the half-float record the shader writes.
 func roundPackedPosition(value float64) (float64, error) {
-	magnitude := math.Abs(float64(float32(value)))
+	position := float32(value)
+	magnitude := math.Abs(float64(position))
 	if math.IsNaN(magnitude) || magnitude >= 65520 {
 		return 0, errors.New("packed dual-quaternion position exceeds finite float16 range")
 	}
 	if magnitude == 0 {
 		return value, nil
 	}
-	step := math.Pow(2, max(-24, math.Floor(math.Log2(magnitude))-10))
-	scaled := magnitude / step
-	lower := math.Floor(scaled)
-	rounded := math.Floor(scaled + 0.5)
-	if scaled-lower == 0.5 {
-		rounded = lower + math.Mod(lower, 2)
-	}
-	return computeSign(value) * rounded * step, nil
+	return float64(float16.Fromfloat32(position).Float32()), nil
 }
 
 type computeShapeStage struct {

@@ -29,6 +29,9 @@ tasks:
       - sh: '{{if eq .OBFUSCATED "true"}}command -v garble >/dev/null 2>&1{{else}}true{{end}}'
         msg: "garble is required for obfuscated builds"
     cmds:
+      - task: build:desktop-kernels
+        vars:
+          ARCH: '{{.ARCH | default "amd64"}}'
       - task: build:elevated-helper
         vars:
           APP_VERSION: '{{.APP_VERSION}}'
@@ -46,11 +49,22 @@ tasks:
       # nodynamic keeps github.com/gen2brain/avif on its embedded decoder instead of loading libavif.dll from the DLL
       # search path at startup; internal/xxmi does not compile without it. production selects packaged mode in
       # internal/platform.
-      BUILD_FLAGS: '{{if eq .DEV "true"}}-tags nodynamic{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -buildvcs=false -gcflags=all="-l"{{else}}-tags production,nodynamic{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .APP_VERSION}} -X nahida.live/desktop/internal/platform.AppVersion={{.APP_VERSION}}{{end}}"{{end}}'
+      BUILD_TAGS: 'nodynamic{{if eq (.ARCH | default "amd64") "amd64"}},native_kernels{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-tags {{.BUILD_TAGS}} -buildvcs=false -gcflags=all="-l"{{else}}-tags production,{{.BUILD_TAGS}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .APP_VERSION}} -X nahida.live/desktop/internal/platform.AppVersion={{.APP_VERSION}}{{end}}"{{end}}'
     env:
       GOOS: windows
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
       GOARCH: '{{.ARCH | default "amd64"}}'
+
+  build:desktop-kernels:
+    summary: Builds the Rust compute DLL embedded in the Windows amd64 executable
+    internal: true
+    dir: native/desktop_kernels
+    status:
+      - 'test "{{.ARCH | default "amd64"}}" != "amd64"'
+    cmds:
+      - cargo build --release --locked
+      - powershell -NoProfile -Command "Copy-Item -LiteralPath 'target/x86_64-pc-windows-msvc/release/desktop_kernels.dll' -Destination '../../internal/nativecompute/desktop_kernels.dll' -Force"
 
   build:elevated-helper:
     summary: Builds the administrator-only broker used for narrow privileged operations
@@ -163,12 +177,15 @@ tasks:
       GOARCH: '{{.ARCH | default "amd64"}}'
 
   dev:build:
-    summary: Builds the elevated helper and the development application that task dev runs
+    summary: Builds the bundled native code and the development application that task dev runs
     cmds:
+      - task: build:desktop-kernels
+        vars:
+          ARCH: '{{.ARCH | default "amd64"}}'
       - task: build:elevated-helper
         vars:
           ARCH: '{{.ARCH | default "amd64"}}'
-      - go build -tags nodynamic -buildvcs=false -o .task/dev/nahida-desktop.exe .
+      - 'go build -tags nodynamic{{if eq (.ARCH | default "amd64") "amd64"}},native_kernels{{end}} -buildvcs=false -o .task/dev/nahida-desktop.exe .'
     env:
       GOOS: windows
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'

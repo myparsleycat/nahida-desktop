@@ -18,6 +18,16 @@ runs:
       shell: pwsh
       run: go test -tags nodynamic ./...
 
+    - name: Test embedded native kernels
+      shell: pwsh
+      run: go test -tags nodynamic,native_kernels ./internal/nativecompute ./internal/tools/model_viewer -run '^Test(BundledLibrary|PackedSkinning)'
+
+    - name: Test packed skinning fallback with AVX disabled
+      shell: pwsh
+      env:
+        GODEBUG: cpu.avx=off
+      run: go test -tags nodynamic,native_kernels ./internal/nativecompute ./internal/tools/model_viewer -run '^Test(BundledLibrary|PackedSkinning)'
+
     - name: Lint Go backend
       shell: pwsh
       run: task lint

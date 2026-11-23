@@ -81,11 +81,20 @@ tasks:
       First run may download the binary.
     cmds:
       - go tool -modfile="./golangci-lint.mod" golangci-lint run ./...
+      # The native kernel files compile only with the DLL that task build produces.
+      - >-
+        test ! -f internal/nativecompute/desktop_kernels.dll ||
+        go tool -modfile="./golangci-lint.mod" golangci-lint run --build-tags nodynamic,native_kernels
+        ./internal/nativecompute/... ./internal/tools/model_viewer/...
 
   lint:fix:
     summary: Runs golangci-lint with autofix
     cmds:
       - go tool -modfile="./golangci-lint.mod" golangci-lint run --fix ./...
+      - >-
+        test ! -f internal/nativecompute/desktop_kernels.dll ||
+        go tool -modfile="./golangci-lint.mod" golangci-lint run --fix --build-tags nodynamic,native_kernels
+        ./internal/nativecompute/... ./internal/tools/model_viewer/...
 
   fmt:
     summary: Formats selected Go files with gofmt, goimports, and golines

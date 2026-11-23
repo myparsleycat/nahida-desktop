@@ -23,6 +23,7 @@ const (
 	DrivePreviewDir  = "drive-preview"
 	// ModelViewerSpoolDir holds the mesh buffers of open model viewer sessions.
 	ModelViewerSpoolDir = "model-viewer-spool"
+	NativeKernelsDir    = "native-kernels"
 	// CharacterMotionDir caches the character motion files the model viewer plays.
 	CharacterMotionDir = "character-motion"
 	// CharacterOriginalDir caches the original character models and textures the model viewer fills mods with.

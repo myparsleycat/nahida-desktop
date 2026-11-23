@@ -6,6 +6,7 @@ node_modules
 .gocache
 .gomodcache
 internal/elevated/bundle/*.exe
+internal/nativecompute/desktop_kernels.dll
 # Windows resources go-winres generates for each build
 *.syso
 # Cargo build artifacts (per-machine)

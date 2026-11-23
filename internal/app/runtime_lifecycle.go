@@ -8,6 +8,7 @@ import (
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/blenderlink"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/nativecompute"
 	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/setting"
 )
@@ -78,6 +79,7 @@ func bootRuntime(
 	rt.mod.UseAppData(data)
 	rt.drive.UseAppData(data)
 	rt.tools.UseAppData(data)
+	rt.tools.UseNativeCompute(nativecompute.New(data, rt.log))
 	rt.reshade.UseAppData(data)
 	rt.blenderLink = blenderlink.NewManager(blenderlink.Options{
 		Log: rt.log, EventEmit: rt.emit, AppData: data, Handler: rt.tools.BlenderLink(),

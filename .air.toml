@@ -4,10 +4,10 @@ root = "."
 tmp_dir = ".task/dev"
 
 [build]
-# Also rebuilds the elevated helper, which the application embeds and must match.
+# Rebuilds the embedded native code before compiling the application.
 cmd = 'task windows:dev:build'
 entrypoint = [".task/dev/nahida-desktop.exe"]
-include_ext = ["go", "hlsl", "ini", "json", "md", "png", "ttf", "webp", "zst"]
+include_ext = ["go", "rs", "toml", "hlsl", "ini", "json", "md", "png", "ttf", "webp", "zst"]
 include_file = ["go.mod", "go.sum"]
 # air skips dot-directories on its own. Entries are compared with Windows relative paths, so they use backslashes.
 exclude_dir = [
@@ -18,6 +18,7 @@ exclude_dir = [
     "scripts",
     "tools",
     'internal\elevated\bundle',
+    'native\desktop_kernels\target',
 ]
 exclude_regex = ['_test\.go$', '[\\/]testdata[\\/]']
 delay = 300

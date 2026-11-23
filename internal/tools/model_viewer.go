@@ -53,6 +53,13 @@ func (t *Tools) ReadModelViewerResource(ctx context.Context, url string) ([]byte
 	return t.modelViewer.ReadResource(ctx, url)
 }
 
+func (t *Tools) NewModelViewerComputeDeformer(
+	ctx context.Context,
+	deformer ModelViewerComputeDeformerTransport,
+) (*modelviewer.ComputeDeformer, error) {
+	return t.modelViewer.NewComputeDeformer(ctx, deformer)
+}
+
 func (t *Tools) LoadModGridPreview(ctx context.Context, modPath string) (ModelViewerTransport, error) {
 	return t.modelViewer.LoadModGridPreview(ctx, modPath)
 }

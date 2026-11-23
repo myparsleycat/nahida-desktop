@@ -10,6 +10,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/modruntime"
+	"nahida.live/desktop/internal/nativecompute"
 	"nahida.live/desktop/internal/platform"
 	bodyshape "nahida.live/desktop/internal/tools/body_shape"
 	efmioutline "nahida.live/desktop/internal/tools/efmi_outline"
@@ -250,6 +251,10 @@ func (t *Tools) UseAppData(data *appdata.Store) {
 	t.touchProfile.UseAppData(data)
 	t.wuwa.UseAppData(data)
 	t.zzmi.UseAppData(data)
+}
+
+func (t *Tools) UseNativeCompute(library *nativecompute.Library) {
+	t.modelViewer.UseNativeCompute(library)
 }
 
 func (t *Tools) ServiceShutdown() error {

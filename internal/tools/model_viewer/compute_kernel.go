@@ -48,10 +48,26 @@ func NewComputeDeformer(
 	deformer ModelViewerComputeDeformerTransport,
 	read func(context.Context, string) ([]byte, error),
 ) (*ComputeDeformer, error) {
+	return newComputeDeformer(ctx, deformer, read, nil)
+}
+
+func (t *Service) NewComputeDeformer(
+	ctx context.Context,
+	deformer ModelViewerComputeDeformerTransport,
+) (*ComputeDeformer, error) {
+	return newComputeDeformer(ctx, deformer, t.ReadResource, t.packedSkinning)
+}
+
+func newComputeDeformer(
+	ctx context.Context,
+	deformer ModelViewerComputeDeformerTransport,
+	read func(context.Context, string) ([]byte, error),
+	packedSkinning func() uintptr,
+) (*ComputeDeformer, error) {
 	if deformer.VertexCount <= 0 {
 		return nil, fmt.Errorf("compute deformer %s has no vertices", deformer.ID)
 	}
-	sources := &computeSources{ctx: ctx, read: read, cache: map[string][]byte{}}
+	sources := &computeSources{ctx: ctx, read: read, cache: map[string][]byte{}, packedSkinning: packedSkinning}
 	var (
 		compute computeKernel
 		err     error
@@ -100,9 +116,10 @@ func (d *ComputeDeformer) Frame(poseFrame int, phaseSeconds float64, groupWeight
 
 // computeSources reads each source of a deformer once.
 type computeSources struct {
-	ctx   context.Context
-	read  func(context.Context, string) ([]byte, error)
-	cache map[string][]byte
+	packedSkinning func() uintptr
+	ctx            context.Context
+	read           func(context.Context, string) ([]byte, error)
+	cache          map[string][]byte
 }
 
 func (s *computeSources) bytes(url string) ([]byte, error) {

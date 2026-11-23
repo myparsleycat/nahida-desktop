@@ -136,7 +136,7 @@ func (v *ModelViewer) syncCompute() {
 
 	meshes := c.meshes
 	go func() {
-		kernel, err := modelviewer.NewComputeDeformer(ctx, deformer, v.read)
+		kernel, err := v.tools.NewModelViewerComputeDeformer(ctx, deformer)
 		sources := make([][]uint32, len(meshes))
 		for i, mesh := range meshes {
 			if err != nil {
