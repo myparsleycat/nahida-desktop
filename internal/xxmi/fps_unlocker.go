@@ -57,7 +57,10 @@ func (x *XXMI) ListCachedFPSUnlocker(ctx context.Context) ([]string, error) {
 func (x *XXMI) EnsureFPSUnlockerVersion(ctx context.Context, version string) error {
 	x.updateMu.Lock()
 	defer x.updateMu.Unlock()
-	return x.ensureFPSUnlockerVersion(ctx, version)
+	if err := x.ensureFPSUnlockerVersion(ctx, version); err != nil {
+		return err
+	}
+	return x.recordSelectedRelease(ctx, "gi-fps-unlocker", version)
 }
 
 // ensureFPSUnlockerVersion is EnsureFPSUnlockerVersion for a caller that holds updateMu.
@@ -300,13 +303,19 @@ func (x *XXMI) importExternalFPSUnlocker(externalRoot string) error {
 	return replaceCorruptFPSCache(root, staging, destination, version)
 }
 
-func (x *XXMI) fpsUnlockerFolder() (string, error) {
+func (x *XXMI) verifiedFPSUnlocker(version string) bool {
+	root, err := x.cacheRoot()
+	return err == nil &&
+		verifyFPSUnlockerCache(filepath.Join(root, "packages", "gi-fps-unlocker", version), version) == nil
+}
+
+func (x *XXMI) fpsUnlockerFolder(ctx context.Context) (string, error) {
 	root, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}
 	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
-	version := x.newestCachedPackageVersion("gi-fps-unlocker")
+	version := x.cachedReleaseVersion(ctx, "gi-fps-unlocker", x.verifiedFPSUnlocker)
 	if version == "" {
 		return "", errNoCachedLegacyRuntime
 	}
@@ -322,55 +331,55 @@ func (x *XXMI) prepareFPSUnlocker(
 	cfg ImporterConfig,
 	gameExe string,
 	warn func(string),
-) error {
-	folder, err := x.fpsUnlockerFolder()
+) (string, error) {
+	folder, err := x.fpsUnlockerFolder(ctx)
 	if err != nil {
 		releases, listErr := x.ListReleases(ctx, "gi-fps-unlocker")
 		if listErr != nil {
-			return listErr
+			return "", listErr
 		}
 		if len(releases) == 0 {
-			return errors.New("GI FPS Unlocker has no available release")
+			return "", errors.New("GI FPS Unlocker has no available release")
 		}
 		if err := x.EnsureFPSUnlockerVersion(ctx, releases[0].Version); err != nil {
-			return err
+			return "", err
 		}
-		folder, err = x.fpsUnlockerFolder()
+		folder, err = x.fpsUnlockerFolder(ctx)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 	executable := filepath.Join(folder, "unlockfps_nc.exe")
 	pid, err := findProcessPID(ctx, executable)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if pid != 0 {
 		if err := killProcessForExecutable(executable)(pid); err != nil {
-			return fmt.Errorf("GIMI_FPS_UNLOCKER_RUNNING: %w", err)
+			return "", fmt.Errorf("GIMI_FPS_UNLOCKER_RUNNING: %w", err)
 		}
 		deadline := time.Now().Add(10 * time.Second)
 		for {
 			pid, err = findProcessPID(ctx, executable)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if pid == 0 {
 				break
 			}
 			if time.Now().After(deadline) {
-				return errors.New("GIMI_FPS_UNLOCKER_RUNNING")
+				return "", errors.New("GIMI_FPS_UNLOCKER_RUNNING")
 			}
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return "", ctx.Err()
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
 	}
 	root, err := openInstallRoot(folder)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = root.Close() }()
 	settings, data, info, err := readFPSUnlockerConfig(ctx, root, func(decodeErr error, backup string) {
@@ -382,7 +391,7 @@ func (x *XXMI) prepareFPSUnlocker(
 		))
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	priority := map[string]int{"Realtime": 0, "High": 1, "AboveNormal": 2, "Normal": 3, "BelowNormal": 4, "Low": 5}
@@ -392,7 +401,7 @@ func (x *XXMI) prepareFPSUnlocker(
 	}
 	window := windowModes[cfg.WindowMode]
 	if cfg.GIMI.UnlockFPSValue < 30 || cfg.GIMI.UnlockFPSValue > 1000 {
-		return fmt.Errorf("invalid Genshin FPS target %d", cfg.GIMI.UnlockFPSValue)
+		return "", fmt.Errorf("invalid Genshin FPS target %d", cfg.GIMI.UnlockFPSValue)
 	}
 	settings["GamePath"] = gameExe
 	settings["Priority"] = priority[cfg.ProcessPriority]
@@ -406,12 +415,15 @@ func (x *XXMI) prepareFPSUnlocker(
 	settings["FPSTarget"] = cfg.GIMI.UnlockFPSValue
 	encoded, err := json.MarshalIndent(settings, "", "    ")
 	if err != nil {
-		return err
+		return "", err
 	}
 	if bytes.Equal(data, encoded) {
-		return nil
+		return folder, nil
 	}
-	return root.writeFileAtomic(ctx, "fps_config.json", bytes.NewReader(encoded), 0o600, info)
+	if err := root.writeFileAtomic(ctx, "fps_config.json", bytes.NewReader(encoded), 0o600, info); err != nil {
+		return "", err
+	}
+	return folder, nil
 }
 
 // readFPSUnlockerConfig always returns the on-disk bytes and snapshot of fps_config.json, even when the

@@ -127,15 +127,7 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 	if err != nil {
 		return "", nil, err
 	}
-	latest, skipped := "", ""
-	if pkg != nil {
-		if pkg.LatestVersion != nil {
-			latest = normalizeVersion(*pkg.LatestVersion)
-		}
-		if pkg.SkippedVersion != nil {
-			skipped = normalizeVersion(*pkg.SkippedVersion)
-		}
-	}
+	latest, skipped, downgrade := packageVersions(pkg)
 	referenced := map[string]CachedLibs{}
 	for _, row := range rows {
 		var cfg ImporterConfig
@@ -181,9 +173,9 @@ func (x *XXMI) libsCacheReferences(ctx context.Context) (string, map[string]Cach
 			}
 		}
 		if selected == "" && cfg.Mode == RuntimeXXMI {
-			selected = cachedLibsVersion(latest, skipped, deployedVersion, x.verifiedCachedLibsVersion)
+			selected = cachedLibsVersion(latest, skipped, downgrade, deployedVersion, x.verifiedCachedLibsVersion)
 		} else if selected == "" && legacyUsesXXMIInjector(cfg) {
-			selected = x.newestCachedPackageVersion("xxmi-libs")
+			selected = x.cachedReleaseVersion(ctx, "xxmi-libs", x.verifiedCachedLibsVersion)
 		}
 		if selected != "" {
 			reference := referenced[selected]

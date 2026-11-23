@@ -61,10 +61,10 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 		if err != nil {
 			return nil, err
 		}
+		available, _ := updateDirection(info.LatestVersion, info.DeployedVersion, info.SkippedVersion)
 		out = append(out, EnabledImporter{Key: row.Key, Mode: cfg.Mode, ImporterFolder: cfg.ImporterFolder,
 			GameFolder: cfg.GameFolder, InstalledVersion: installed, PackageInfo: info,
-			UpdateAvailable: updateAvailable(info.LatestVersion, info.DeployedVersion, info.SkippedVersion),
-			CustomDLL:       customDLL})
+			UpdateAvailable: available, CustomDLL: customDLL})
 	}
 	return out, nil
 }

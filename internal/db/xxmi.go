@@ -73,7 +73,8 @@ ON CONFLICT("key") DO UPDATE SET "config" = excluded."config", "updated_at" = ex
 				`INSERT INTO "xxmi_packages" ("package", "latest_version", "latest_release_notes", "update_check_time", "skipped_version", "updated_at")
 VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT("package") DO UPDATE SET "latest_version" = excluded."latest_version", "latest_release_notes" = excluded."latest_release_notes",
-"update_check_time" = excluded."update_check_time", "skipped_version" = excluded."skipped_version", "updated_at" = excluded."updated_at"`,
+"update_check_time" = excluded."update_check_time", "skipped_version" = excluded."skipped_version",
+"downgrade_version" = CASE WHEN "latest_version" IS excluded."latest_version" THEN "downgrade_version" END, "updated_at" = excluded."updated_at"`,
 				row.Package,
 				argString(row.LatestVersion),
 				argString(row.LatestReleaseNotes),
@@ -151,16 +152,23 @@ type XXMIPackageRow struct {
 	LatestReleaseNotes *string
 	UpdateCheckTime    int64
 	SkippedVersion     *string
-	UpdatedAt          string
+	// DowngradeVersion is the latest release, older than the installed one, that the user installed as a
+	// downgrade. Upsert does not write it and clears it when the latest version changes; SetDowngradeVersion
+	// records it.
+	DowngradeVersion *string
+	// SelectedVersion is the release last installed through SetSelectedVersion, for a package that is used from
+	// the cache rather than deployed. Upsert does not write it, so it outlives changes of the latest version.
+	SelectedVersion *string
+	UpdatedAt       string
 }
 
 type XXMIPackagesStore struct{ c *Client }
 
 func (s XXMIPackagesStore) Get(ctx context.Context, pkg string) (*XXMIPackageRow, error) {
 	var row XXMIPackageRow
-	var latest, notes, skipped sql.NullString
-	err := s.c.db.QueryRowContext(ctx, `SELECT "package", "latest_version", "latest_release_notes", "update_check_time", "skipped_version", "updated_at" FROM "xxmi_packages" WHERE "package" = ?`, pkg).
-		Scan(&row.Package, &latest, &notes, &row.UpdateCheckTime, &skipped, &row.UpdatedAt)
+	var latest, notes, skipped, downgrade, selected sql.NullString
+	err := s.c.db.QueryRowContext(ctx, `SELECT "package", "latest_version", "latest_release_notes", "update_check_time", "skipped_version", "downgrade_version", "selected_version", "updated_at" FROM "xxmi_packages" WHERE "package" = ?`, pkg).
+		Scan(&row.Package, &latest, &notes, &row.UpdateCheckTime, &skipped, &downgrade, &selected, &row.UpdatedAt)
 	if isNoRows(err) {
 		return nil, nil
 	}
@@ -170,6 +178,8 @@ func (s XXMIPackagesStore) Get(ctx context.Context, pkg string) (*XXMIPackageRow
 	row.LatestVersion = ptrString(latest)
 	row.LatestReleaseNotes = ptrString(notes)
 	row.SkippedVersion = ptrString(skipped)
+	row.DowngradeVersion = ptrString(downgrade)
+	row.SelectedVersion = ptrString(selected)
 	return &row, nil
 }
 
@@ -179,7 +189,8 @@ func (s XXMIPackagesStore) Upsert(ctx context.Context, row XXMIPackageRow) error
 		`INSERT INTO "xxmi_packages" ("package", "latest_version", "latest_release_notes", "update_check_time", "skipped_version", "updated_at")
 VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT("package") DO UPDATE SET "latest_version" = excluded."latest_version", "latest_release_notes" = excluded."latest_release_notes",
-"update_check_time" = excluded."update_check_time", "skipped_version" = excluded."skipped_version", "updated_at" = excluded."updated_at"`,
+"update_check_time" = excluded."update_check_time", "skipped_version" = excluded."skipped_version",
+"downgrade_version" = CASE WHEN "latest_version" IS excluded."latest_version" THEN "downgrade_version" END, "updated_at" = excluded."updated_at"`,
 		row.Package,
 		argString(row.LatestVersion),
 		argString(row.LatestReleaseNotes),
@@ -187,4 +198,16 @@ ON CONFLICT("package") DO UPDATE SET "latest_version" = excluded."latest_version
 		argString(row.SkippedVersion),
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)
+}
+
+// SetDowngradeVersion records version as the package's installed downgrade while it is still the latest release.
+func (s XXMIPackagesStore) SetDowngradeVersion(ctx context.Context, pkg, version string) error {
+	return s.c.exec(ctx, `UPDATE "xxmi_packages" SET "downgrade_version" = ?, "updated_at" = ?
+WHERE "package" = ? AND "latest_version" = ?`, version, time.Now().UTC().Format(time.RFC3339Nano), pkg, version)
+}
+
+func (s XXMIPackagesStore) SetSelectedVersion(ctx context.Context, pkg, version string) error {
+	return s.c.exec(ctx, `INSERT INTO "xxmi_packages" ("package", "selected_version", "updated_at") VALUES (?, ?, ?)
+ON CONFLICT("package") DO UPDATE SET "selected_version" = excluded."selected_version", "updated_at" = excluded."updated_at"`,
+		pkg, version, time.Now().UTC().Format(time.RFC3339Nano))
 }

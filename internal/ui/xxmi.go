@@ -1092,9 +1092,13 @@ func (s *Shell) xxmiUpdateDialog(cx *fairy.Cx, importer string, updates []xxmi.U
 		}
 		list.Child(item)
 	}
+	description := T("page.setting.xxmi.builtin.updateDialogDescription")
+	if slices.ContainsFunc(updates, func(u xxmi.UpdateStatus) bool { return u.Downgrade }) {
+		description = T("page.setting.xxmi.builtin.updateDialogDowngradeDescription")
+	}
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title:       T("page.setting.xxmi.builtin.updateDialogTitle", "importer", importer),
-		Description: T("page.setting.xxmi.builtin.updateDialogDescription"),
+		Description: description,
 		Body: fairy.Col(list, xxmiDialogButtons(
 			kit.Button(T("g.cancel"), onClose, kit.Outline, kit.Disabled(busy)),
 			kit.Button(confirmLabel, onConfirm, kit.Icon(lucide.Download), kit.Disabled(blocked && !busy),
@@ -1122,7 +1126,11 @@ func updateLine(entry xxmi.UpdateStatus) string {
 	if installed == "" {
 		installed = T("page.setting.xxmi.builtin.notInstalled")
 	}
-	return entry.Package + ": " + installed + " → " + entry.LatestVersion
+	line := entry.Package + ": " + installed + " → " + entry.LatestVersion
+	if entry.Downgrade {
+		line += " (" + T("page.setting.xxmi.builtin.downgrade") + ")"
+	}
+	return line
 }
 
 // xxmiAlert is a bordered notice with an icon, an optional title and trailing controls.

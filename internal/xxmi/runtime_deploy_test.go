@@ -586,20 +586,30 @@ func TestResolveLibsVersionKeepsDeployedRuntimeWithoutVerifiedUpdate(t *testing.
 func TestSelectLibsVersionRespectsSkippedAndVerifiedUpdates(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, latest, skipped, deployed, want string
-		verified                              bool
-		wantChecks                            int
+		name, latest, skipped, downgrade, deployed, want string
+		verified                                         bool
+		wantChecks                                       int
 	}{
 		{name: "verified update", latest: "2.0.0", deployed: "1.0.0", verified: true, want: "2.0.0", wantChecks: 1},
 		{name: "failed update", latest: "2.0.0", deployed: "1.0.0", want: "1.0.0", wantChecks: 1},
 		{name: "skipped cached update", latest: "2.0.0", skipped: "2.0.0", deployed: "1.0.0", verified: true, want: "1.0.0"},
 		{name: "initial install", latest: "2.0.0", want: "2.0.0"},
 		{name: "keep newer imported prerelease", latest: "1.9.0", deployed: "2.0.0-beta.1", verified: true, want: "2.0.0-beta.1"},
+		{name: "older release left in cache", latest: "1.9.0", deployed: "2.0.0", verified: true, want: "2.0.0"},
+		{
+			name: "installed downgrade", latest: "1.9.0", downgrade: "1.9.0", deployed: "2.0.0", verified: true,
+			want: "1.9.0", wantChecks: 1,
+		},
+		{name: "uncached downgrade", latest: "1.9.0", downgrade: "1.9.0", deployed: "2.0.0", want: "2.0.0", wantChecks: 1},
+		{
+			name: "downgrade kept off deployed prerelease", latest: "1.9.0", downgrade: "1.9.0", deployed: "2.0.0-beta.1",
+			verified: true, want: "2.0.0-beta.1",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			checks := 0
-			got := selectLibsVersion(tc.latest, tc.skipped, tc.deployed, func(version string) bool {
+			got := selectLibsVersion(tc.latest, tc.skipped, tc.downgrade, tc.deployed, func(version string) bool {
 				checks++
 				if version != tc.latest {
 					t.Fatalf("checked %q, want %q", version, tc.latest)

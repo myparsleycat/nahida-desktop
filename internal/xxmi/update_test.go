@@ -18,21 +18,28 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-func TestUpdateAvailableDoesNotDowngradeImportedPackages(t *testing.T) {
+func TestUpdateDirectionOffersDowngradeOnlyFromStableReleases(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, latest, installed string
-		want                    bool
+		name, latest, installed, skipped string
+		available, downgrade             bool
 	}{
-		{name: "newer release", latest: "1.3.0", installed: "1.2.3", want: true},
+		{name: "newer release", latest: "1.3.0", installed: "1.2.3", available: true},
 		{name: "same release", latest: "1.2.3", installed: "1.2.3"},
+		{name: "withdrawn release", latest: "1.2.2", installed: "1.2.3", available: true, downgrade: true},
+		{name: "skipped downgrade", latest: "1.2.2", installed: "1.2.3", skipped: "1.2.2"},
 		{name: "older stable release", latest: "1.9.0", installed: "2.0.0-beta.1"},
-		{name: "stable replaces prerelease", latest: "2.0.0", installed: "2.0.0-beta.1", want: true},
+		{name: "stable replaces prerelease", latest: "2.0.0", installed: "2.0.0-beta.1", available: true},
+		{name: "not installed", latest: "1.2.3", available: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := updateAvailable(tc.latest, tc.installed, ""); got != tc.want {
-				t.Fatalf("update available = %v, want %v", got, tc.want)
+			available, downgrade := updateDirection(tc.latest, tc.installed, tc.skipped)
+			if available != tc.available || downgrade != tc.downgrade {
+				t.Fatalf("available, downgrade = %v, %v; want %v, %v", available, downgrade, tc.available, tc.downgrade)
+			}
+			if got := updateAvailable(tc.latest, tc.installed, tc.skipped); got != (tc.available && !tc.downgrade) {
+				t.Fatalf("external update available = %v", got)
 			}
 		})
 	}
@@ -622,7 +629,7 @@ func TestCachedLibsVersionClearsInstalledUpdateBeforeDeployment(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			installed := cachedLibsVersion("1.2.0", tc.skipped, tc.deployed, func(version string) bool {
+			installed := cachedLibsVersion("1.2.0", tc.skipped, "", tc.deployed, func(version string) bool {
 				if version != "1.2.0" {
 					t.Fatalf("verified version = %q", version)
 				}
@@ -648,6 +655,64 @@ func TestNewestCachedPackageVersionUsesVersionOrder(t *testing.T) {
 		if got := service.newestCachedPackageVersion(pkg); got != "1.7.6" {
 			t.Fatalf("%s newest cached version = %q", pkg, got)
 		}
+	}
+}
+
+func TestCachedReleaseVersionKeepsSelectedReleaseAcrossUpdateChecks(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service := New()
+	root := useTestAppData(t, service)
+	service.UseClient(client)
+	for _, version := range []string{"1.7.5", "1.7.6"} {
+		if err := os.MkdirAll(filepath.Join(root, "packages", "gi-fps-unlocker", version), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	verified := func(string) bool { return true }
+	latest := "1.7.5"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		db.XXMIPackageRow{Package: "gi-fps-unlocker", LatestVersion: &latest},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.6" {
+		t.Fatalf("version before downgrade = %q, want the newest cached 1.7.6", got)
+	}
+
+	if err := service.recordSelectedRelease(ctx, "gi-fps-unlocker", latest); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.5" {
+		t.Fatalf("version after downgrade = %q, want 1.7.5", got)
+	}
+
+	// A newer release that is not installed yet must not hand the launch back to the release the user left.
+	newer := "1.7.7"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		db.XXMIPackageRow{Package: "gi-fps-unlocker", LatestVersion: &newer},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.5" {
+		t.Fatalf("version after the latest release changed = %q, want 1.7.5", got)
+	}
+
+	if err := service.recordSelectedRelease(ctx, "gi-fps-unlocker", "1.7.6"); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.6" {
+		t.Fatalf("version after installing 1.7.6 = %q, want 1.7.6", got)
 	}
 }
 

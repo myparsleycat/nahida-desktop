@@ -216,7 +216,7 @@ func (x *XXMI) latestSignedLibsVersion(
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, "xxmi-libs")
 		if err == nil && len(releases) > 0 {
-			return selectLibsVersion(releases[0].Version, "", deployed, cacheVerified), nil
+			return selectLibsVersion(releases[0].Version, "", "", deployed, cacheVerified), nil
 		}
 		if deployed != "" {
 			return deployed, nil
@@ -229,14 +229,15 @@ func (x *XXMI) latestSignedLibsVersion(
 		}
 		return "", errors.New("XXMI libraries latest version is unknown")
 	}
-	skipped := ""
-	if pkg.SkippedVersion != nil {
-		skipped = normalizeVersion(*pkg.SkippedVersion)
-	}
-	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, cacheVerified), nil
+	latest, skipped, downgrade := packageVersions(pkg)
+	return selectLibsVersion(latest, skipped, downgrade, deployed, cacheVerified), nil
 }
 
-func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {
+// selectLibsVersion picks the release to deploy over deployed. A latest release below a deployed stable one is
+// selected only when it is downgrade, the release the user installed as a downgrade, because older releases
+// stay in the cache after an update. A deployed prerelease is kept over an older release, as updateDirection
+// never offers that downgrade.
+func selectLibsVersion(latest, skipped, downgrade, deployed string, cacheVerified func(string) bool) string {
 	if deployed == "" || latest == deployed {
 		return latest
 	}
@@ -244,7 +245,8 @@ func selectLibsVersion(latest, skipped, deployed string, cacheVerified func(stri
 		return deployed
 	}
 	if semver.IsValid("v"+latest) && semver.IsValid("v"+deployed) &&
-		semver.Compare("v"+latest, "v"+deployed) < 0 {
+		semver.Compare("v"+latest, "v"+deployed) < 0 &&
+		(latest != downgrade || semver.Prerelease("v"+deployed) != "") {
 		return deployed
 	}
 	if !cacheVerified(latest) {

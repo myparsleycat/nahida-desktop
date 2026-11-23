@@ -47,6 +47,58 @@ func TestXXMIStores(t *testing.T) {
 	}
 }
 
+func TestXXMIPackageDowngradeVersionSurvivesUpsertUntilLatestChanges(t *testing.T) {
+	t.Parallel()
+	client := mustNewTemp(t)
+	ctx := context.Background()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	downgrade := func() *string {
+		t.Helper()
+		pkg, err := client.XXMIPackages.Get(ctx, "xxmi-libs")
+		if err != nil || pkg == nil {
+			t.Fatalf("package = %+v, err = %v", pkg, err)
+		}
+		return pkg.DowngradeVersion
+	}
+
+	latest := "1.7.5"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		XXMIPackageRow{Package: "xxmi-libs", LatestVersion: &latest},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIPackages.SetDowngradeVersion(ctx, "xxmi-libs", "1.7.4"); err != nil {
+		t.Fatal(err)
+	}
+	if got := downgrade(); got != nil {
+		t.Fatalf("downgrade to a release that is not the latest = %q", *got)
+	}
+
+	// An update check that read the row before the downgrade was recorded writes the same latest release back.
+	if err := client.XXMIPackages.SetDowngradeVersion(ctx, "xxmi-libs", latest); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.XXMIPackages.Upsert(ctx, XXMIPackageRow{
+		Package: "xxmi-libs", LatestVersion: &latest, UpdateCheckTime: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := downgrade(); got == nil || *got != latest {
+		t.Fatalf("downgrade after same-latest upsert = %v, want %q", got, latest)
+	}
+
+	newer := "1.7.7"
+	if err := client.XXMIPackages.Upsert(ctx, XXMIPackageRow{Package: "xxmi-libs", LatestVersion: &newer}); err != nil {
+		t.Fatal(err)
+	}
+	if got := downgrade(); got != nil {
+		t.Fatalf("downgrade after latest changed = %q", *got)
+	}
+}
+
 func TestXXMILaunchCountUpdatePreservesConcurrentSettings(t *testing.T) {
 	t.Parallel()
 	client := mustNewTemp(t)
