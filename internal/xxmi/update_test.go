@@ -658,7 +658,7 @@ func TestNewestCachedPackageVersionUsesVersionOrder(t *testing.T) {
 	}
 }
 
-func TestCachedReleaseVersionSelectsOlderReleaseOnlyAfterDowngrade(t *testing.T) {
+func TestCachedReleaseVersionKeepsSelectedReleaseAcrossUpdateChecks(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
@@ -689,11 +689,30 @@ func TestCachedReleaseVersionSelectsOlderReleaseOnlyAfterDowngrade(t *testing.T)
 		t.Fatalf("version before downgrade = %q, want the newest cached 1.7.6", got)
 	}
 
-	if err := service.recordDowngrade(ctx, "gi-fps-unlocker", latest); err != nil {
+	if err := service.recordSelectedRelease(ctx, "gi-fps-unlocker", latest); err != nil {
 		t.Fatal(err)
 	}
 	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.5" {
 		t.Fatalf("version after downgrade = %q, want 1.7.5", got)
+	}
+
+	// A newer release that is not installed yet must not hand the launch back to the release the user left.
+	newer := "1.7.7"
+	if err := client.XXMIPackages.Upsert(
+		ctx,
+		db.XXMIPackageRow{Package: "gi-fps-unlocker", LatestVersion: &newer},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.5" {
+		t.Fatalf("version after the latest release changed = %q, want 1.7.5", got)
+	}
+
+	if err := service.recordSelectedRelease(ctx, "gi-fps-unlocker", "1.7.6"); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.cachedReleaseVersion(ctx, "gi-fps-unlocker", verified); got != "1.7.6" {
+		t.Fatalf("version after installing 1.7.6 = %q, want 1.7.6", got)
 	}
 }
 

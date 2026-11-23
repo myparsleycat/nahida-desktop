@@ -456,8 +456,10 @@ func (x *XXMI) launchBuiltinGameLocked(
 			warn("Engine.ini cleanup was not recorded: " + err.Error())
 		}
 	}
+	fpsUnlockerFolder := ""
 	if usesFPSUnlocker(cfg) {
-		if err := x.prepareFPSUnlocker(ctx, cfg, gameExe, warn); err != nil {
+		fpsUnlockerFolder, err = x.prepareFPSUnlocker(ctx, cfg, gameExe, warn)
+		if err != nil {
 			return fmt.Errorf("GIMI_FPS_UNLOCKER_CONFIG_FAILED: %w", err)
 		}
 	}
@@ -486,7 +488,9 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := elevationDenied(lease.Hold(ctx)); err != nil {
 		return err
 	}
-	launchSpec, err := x.builtinLaunchSpec(ctx, key, cfg, gameExe, processName, parentExe, migotoDLLUsed)
+	launchSpec, err := x.builtinLaunchSpec(
+		ctx, key, cfg, gameExe, processName, parentExe, fpsUnlockerFolder, migotoDLLUsed,
+	)
 	if err != nil {
 		return err
 	}
@@ -671,7 +675,7 @@ func (x *XXMI) builtinLaunchSpec(
 	ctx context.Context,
 	key string,
 	cfg ImporterConfig,
-	gameExe, processName, parentExe string,
+	gameExe, processName, parentExe, fpsUnlockerFolder string,
 	migotoDLLUsed bool,
 ) (inject.LaunchSpec, error) {
 	// Nothing is deployed for a launch that leaves the XXMI DLL out, so it has no manifest to read.
@@ -727,12 +731,12 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.StartArgs = append([]string{renderer}, spec.StartArgs...)
 	}
 	if usesFPSUnlocker(cfg) {
-		folder, err := x.fpsUnlockerFolder(ctx)
-		if err != nil {
-			return inject.LaunchSpec{}, err
+		// The folder prepareFPSUnlocker configured, so the unlocker started is the one its config was written to.
+		if fpsUnlockerFolder == "" {
+			return inject.LaunchSpec{}, errors.New("GI FPS Unlocker folder was not prepared")
 		}
-		spec.StartExe = filepath.Join(folder, "unlockfps_nc.exe")
-		spec.WorkDir = folder
+		spec.StartExe = filepath.Join(fpsUnlockerFolder, "unlockfps_nc.exe")
+		spec.WorkDir = fpsUnlockerFolder
 		spec.StartArgs = nil
 	}
 	switch cfg.GameLaunch {

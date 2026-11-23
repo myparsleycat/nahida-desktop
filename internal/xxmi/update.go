@@ -318,9 +318,9 @@ func (x *XXMI) newestCachedPackageVersion(pkg string) string {
 	return latest
 }
 
-// cachedReleaseVersion returns the cached release of pkg used where none is deployed: the newest cached one,
-// or the latest release once the user's downgrade to it is cached. Older releases stay cached, so the latest
-// one alone does not mean the user chose it.
+// cachedReleaseVersion returns the cached release of pkg used where none is deployed: the release the user last
+// installed while it stays cached, otherwise the newest cached one. Older releases stay cached and the latest
+// release changes with every update check, so neither alone means the user chose it.
 func (x *XXMI) cachedReleaseVersion(ctx context.Context, pkg string, cacheVerified func(string) bool) string {
 	newest := x.newestCachedPackageVersion(pkg)
 	client, err := x.settingsClient()
@@ -328,13 +328,22 @@ func (x *XXMI) cachedReleaseVersion(ctx context.Context, pkg string, cacheVerifi
 		return newest
 	}
 	state, err := client.XXMIPackages.Get(ctx, pkg)
-	if err != nil {
+	if err != nil || state == nil || state.SelectedVersion == nil {
 		return newest
 	}
-	if latest, _, downgrade := packageVersions(state); latest != "" && latest == downgrade && cacheVerified(latest) {
-		return latest
+	if selected := normalizeVersion(*state.SelectedVersion); cacheVerified(selected) {
+		return selected
 	}
 	return newest
+}
+
+// recordSelectedRelease makes version the release cachedReleaseVersion returns for pkg.
+func (x *XXMI) recordSelectedRelease(ctx context.Context, pkg, version string) error {
+	client, err := x.settingsClient()
+	if err != nil {
+		return err
+	}
+	return client.XXMIPackages.SetSelectedVersion(ctx, pkg, normalizeVersion(version))
 }
 
 func (x *XXMI) selectedLegacyInjectorVersion(ctx context.Context, cfg ImporterConfig, pin string) string {
@@ -506,6 +515,11 @@ func (x *XXMI) installUpdates(
 		if status.Downgrade && !strings.HasPrefix(status.Package, "importer:") {
 			if err := x.recordDowngrade(ctx, status.Package, status.LatestVersion); err != nil {
 				return installed, fmt.Errorf("record %s downgrade: %w", status.Package, err)
+			}
+		}
+		if status.Package == "xxmi-libs" || status.Package == "gi-fps-unlocker" {
+			if err := x.recordSelectedRelease(ctx, status.Package, status.LatestVersion); err != nil {
+				return installed, fmt.Errorf("record %s selection: %w", status.Package, err)
 			}
 		}
 

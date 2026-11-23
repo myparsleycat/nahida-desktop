@@ -89,6 +89,7 @@ var TableSpecs = []TableSpec{
 			{Name: "update_check_time", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
 			{Name: "skipped_version", Type: TypeText},
 			{Name: "downgrade_version", Type: TypeText},
+			{Name: "selected_version", Type: TypeText},
 			{Name: "updated_at", Type: TypeText, NotNull: true},
 		},
 	},
