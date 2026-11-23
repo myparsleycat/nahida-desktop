@@ -727,7 +727,7 @@ func (x *XXMI) builtinLaunchSpec(
 		spec.StartArgs = append([]string{renderer}, spec.StartArgs...)
 	}
 	if usesFPSUnlocker(cfg) {
-		folder, err := x.fpsUnlockerFolder()
+		folder, err := x.fpsUnlockerFolder(ctx)
 		if err != nil {
 			return inject.LaunchSpec{}, err
 		}

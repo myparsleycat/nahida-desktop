@@ -29,6 +29,8 @@ type UpdateStatus struct {
 	SkippedVersion string `json:"skippedVersion"`
 	Pinned         bool   `json:"pinned"`
 	Available      bool   `json:"available"`
+	// Downgrade marks an available release older than the installed one, as after a release is withdrawn.
+	Downgrade bool `json:"downgrade"`
 	// Shared marks the XXMI libraries of an importer that follows the shared version, whose update belongs to
 	// the runtime as a whole rather than to that importer.
 	Shared bool `json:"shared"`
@@ -163,7 +165,11 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			}
 		}
 		status.Pinned = cfg.PackageVersion.Pinned != ""
-		status.Available = updateAvailable(status.LatestVersion, status.Installed, status.SkippedVersion)
+		status.Available, status.Downgrade = updateDirection(
+			status.LatestVersion,
+			status.Installed,
+			status.SkippedVersion,
+		)
 		statuses = append(statuses, status)
 
 		pin, notify, err := x.libsPin(ctx, cfg)
@@ -177,8 +183,9 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			if cfg.Mode == RuntimeXXMI {
 				libs.Installed, _ = deployedLibsVersion(cfg.ImporterFolder)
 				if pin == "" {
+					_, _, downgrade := packageVersions(states["xxmi-libs"])
 					libs.Installed = cachedLibsVersion(
-						libs.LatestVersion, libs.SkippedVersion, libs.Installed, x.verifiedCachedLibsVersion,
+						libs.LatestVersion, libs.SkippedVersion, downgrade, libs.Installed, x.verifiedCachedLibsVersion,
 					)
 				}
 			}
@@ -203,7 +210,7 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 					}
 				}
 			}
-			libs.Available = updateAvailable(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
+			libs.Available, libs.Downgrade = updateDirection(libs.LatestVersion, libs.Installed, libs.SkippedVersion)
 			statuses = append(statuses, libs)
 		}
 
@@ -213,20 +220,24 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			dll.Pinned = pin != "" && !notify
 			dll.Shared = cfg.LibsProvider == ""
 			if pin == "" {
+				_, _, downgrade := packageVersions(states[provider.overlayPackage])
 				dll.Installed = cachedLibsVersion(
-					dll.LatestVersion, dll.SkippedVersion, x.providerDLLBaseVersion(cfg.ImporterFolder, provider),
+					dll.LatestVersion,
+					dll.SkippedVersion,
+					downgrade,
+					x.providerDLLBaseVersion(cfg.ImporterFolder, provider),
 					func(version string) bool { return x.verifiedProviderDLL(ctx, provider, version) },
 				)
 			} else if version, err := x.resolveProviderDLLVersion(ctx, provider, pin, cfg.ImporterFolder); err == nil {
 				dll.Installed = version
 			}
-			dll.Available = updateAvailable(dll.LatestVersion, dll.Installed, dll.SkippedVersion)
+			dll.Available, dll.Downgrade = updateDirection(dll.LatestVersion, dll.Installed, dll.SkippedVersion)
 			statuses = append(statuses, dll)
 		}
 		if row.Key == "GIMI" && cfg.GIMI != nil && cfg.GIMI.UnlockFPS {
 			fps := updateStatus(row.Key, "gi-fps-unlocker", states["gi-fps-unlocker"])
-			fps.Installed = x.newestCachedPackageVersion("gi-fps-unlocker")
-			fps.Available = updateAvailable(fps.LatestVersion, fps.Installed, fps.SkippedVersion)
+			fps.Installed = x.cachedReleaseVersion(ctx, "gi-fps-unlocker", x.verifiedFPSUnlocker)
+			fps.Available, fps.Downgrade = updateDirection(fps.LatestVersion, fps.Installed, fps.SkippedVersion)
 			statuses = append(statuses, fps)
 		}
 	}
@@ -255,11 +266,29 @@ func updateStatus(importer, pkg string, state *db.XXMIPackageRow) UpdateStatus {
 	return status
 }
 
+// packageVersions returns the normalized latest, skipped and downgraded-to versions of a package state, which
+// may be nil.
+func packageVersions(state *db.XXMIPackageRow) (latest, skipped, downgrade string) {
+	if state == nil {
+		return "", "", ""
+	}
+	if state.LatestVersion != nil {
+		latest = normalizeVersion(*state.LatestVersion)
+	}
+	if state.SkippedVersion != nil {
+		skipped = normalizeVersion(*state.SkippedVersion)
+	}
+	if state.DowngradeVersion != nil {
+		downgrade = normalizeVersion(*state.DowngradeVersion)
+	}
+	return latest, skipped, downgrade
+}
+
 // cachedLibsVersion reports libraries ready for the next launch. Downloads are installed in the shared
 // cache before the next launch deploys them, so an older importer manifest must not announce them again.
-func cachedLibsVersion(latest, skipped, deployed string, cacheVerified func(string) bool) string {
+func cachedLibsVersion(latest, skipped, downgrade, deployed string, cacheVerified func(string) bool) string {
 	if deployed != "" {
-		return selectLibsVersion(latest, skipped, deployed, cacheVerified)
+		return selectLibsVersion(latest, skipped, downgrade, deployed, cacheVerified)
 	}
 	if latest != "" && cacheVerified(latest) {
 		return latest
@@ -289,9 +318,28 @@ func (x *XXMI) newestCachedPackageVersion(pkg string) string {
 	return latest
 }
 
+// cachedReleaseVersion returns the cached release of pkg used where none is deployed: the newest cached one,
+// or the latest release once the user's downgrade to it is cached. Older releases stay cached, so the latest
+// one alone does not mean the user chose it.
+func (x *XXMI) cachedReleaseVersion(ctx context.Context, pkg string, cacheVerified func(string) bool) string {
+	newest := x.newestCachedPackageVersion(pkg)
+	client, err := x.settingsClient()
+	if err != nil {
+		return newest
+	}
+	state, err := client.XXMIPackages.Get(ctx, pkg)
+	if err != nil {
+		return newest
+	}
+	if latest, _, downgrade := packageVersions(state); latest != "" && latest == downgrade && cacheVerified(latest) {
+		return latest
+	}
+	return newest
+}
+
 func (x *XXMI) selectedLegacyInjectorVersion(ctx context.Context, cfg ImporterConfig, pin string) string {
 	if pin == "" {
-		return x.newestCachedPackageVersion("xxmi-libs")
+		return x.cachedReleaseVersion(ctx, "xxmi-libs", x.verifiedCachedLibsVersion)
 	}
 	spec, err := x.pinProvider(ctx, cfg)
 	if err != nil {
@@ -303,14 +351,29 @@ func (x *XXMI) selectedLegacyInjectorVersion(ctx context.Context, cfg ImporterCo
 	return signedLibsVersion(pin)
 }
 
+// updateAvailable reports whether latest is newer than installed. The external launcher, which installs its
+// own updates, uses it; the built-in launcher also offers downgrades through updateDirection.
 func updateAvailable(latest, installed, skipped string) bool {
+	available, downgrade := updateDirection(latest, installed, skipped)
+	return available && !downgrade
+}
+
+// updateDirection reports whether latest is offered over installed and whether it is older than installed. An
+// installed prerelease is kept over an older latest release, which hides prereleases unless they are enabled.
+func updateDirection(latest, installed, skipped string) (available, downgrade bool) {
 	if latest == "" || latest == installed || latest == skipped {
-		return false
+		return false, false
 	}
-	if semver.IsValid("v"+latest) && semver.IsValid("v"+installed) {
-		return semver.Compare("v"+latest, "v"+installed) > 0
+	if !semver.IsValid("v"+latest) || !semver.IsValid("v"+installed) {
+		return true, false
 	}
-	return true
+	switch order := semver.Compare("v"+latest, "v"+installed); {
+	case order > 0:
+		return true, false
+	case order < 0 && semver.Prerelease("v"+installed) == "":
+		return true, true
+	}
+	return false, false
 }
 
 // followsSignedLibs reports whether the importer's updates follow the signed libraries releases. Under a
@@ -440,6 +503,11 @@ func (x *XXMI) installUpdates(
 		if err != nil {
 			return installed, fmt.Errorf("install %s update: %w", status.Package, err)
 		}
+		if status.Downgrade && !strings.HasPrefix(status.Package, "importer:") {
+			if err := x.recordDowngrade(ctx, status.Package, status.LatestVersion); err != nil {
+				return installed, fmt.Errorf("record %s downgrade: %w", status.Package, err)
+			}
+		}
 
 		// The shared libraries report one status per importer, and each one may hold its own pin to move.
 		if !slices.Contains(installed, status.Package) {
@@ -452,6 +520,16 @@ func (x *XXMI) installUpdates(
 		}
 	}
 	return installed, nil
+}
+
+// recordDowngrade lets launches select a cached release below the deployed one; see selectLibsVersion. An
+// importer package is installed into its folder and needs no record.
+func (x *XXMI) recordDowngrade(ctx context.Context, pkg, version string) error {
+	client, err := x.settingsClient()
+	if err != nil {
+		return err
+	}
+	return client.XXMIPackages.SetDowngradeVersion(ctx, pkg, version)
 }
 
 // installLibsUpdate caches the release and moves the pin of an importer that announces updates for its own

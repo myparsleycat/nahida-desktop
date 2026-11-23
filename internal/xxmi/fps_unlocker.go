@@ -300,13 +300,19 @@ func (x *XXMI) importExternalFPSUnlocker(externalRoot string) error {
 	return replaceCorruptFPSCache(root, staging, destination, version)
 }
 
-func (x *XXMI) fpsUnlockerFolder() (string, error) {
+func (x *XXMI) verifiedFPSUnlocker(version string) bool {
+	root, err := x.cacheRoot()
+	return err == nil &&
+		verifyFPSUnlockerCache(filepath.Join(root, "packages", "gi-fps-unlocker", version), version) == nil
+}
+
+func (x *XXMI) fpsUnlockerFolder(ctx context.Context) (string, error) {
 	root, err := x.cacheRoot()
 	if err != nil {
 		return "", err
 	}
 	parent := filepath.Join(root, "packages", "gi-fps-unlocker")
-	version := x.newestCachedPackageVersion("gi-fps-unlocker")
+	version := x.cachedReleaseVersion(ctx, "gi-fps-unlocker", x.verifiedFPSUnlocker)
 	if version == "" {
 		return "", errNoCachedLegacyRuntime
 	}
@@ -323,7 +329,7 @@ func (x *XXMI) prepareFPSUnlocker(
 	gameExe string,
 	warn func(string),
 ) error {
-	folder, err := x.fpsUnlockerFolder()
+	folder, err := x.fpsUnlockerFolder(ctx)
 	if err != nil {
 		releases, listErr := x.ListReleases(ctx, "gi-fps-unlocker")
 		if listErr != nil {
@@ -335,7 +341,7 @@ func (x *XXMI) prepareFPSUnlocker(
 		if err := x.EnsureFPSUnlockerVersion(ctx, releases[0].Version); err != nil {
 			return err
 		}
-		folder, err = x.fpsUnlockerFolder()
+		folder, err = x.fpsUnlockerFolder(ctx)
 		if err != nil {
 			return err
 		}

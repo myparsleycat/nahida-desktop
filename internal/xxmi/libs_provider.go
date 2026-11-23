@@ -834,7 +834,7 @@ func (x *XXMI) resolveProviderDLLVersion(
 	if pkg == nil || pkg.LatestVersion == nil || strings.TrimSpace(*pkg.LatestVersion) == "" {
 		releases, err := x.ListReleases(ctx, spec.overlayPackage)
 		if err == nil && len(releases) > 0 {
-			return selectLibsVersion(releases[0].Version, "", deployed, cacheVerified), nil
+			return selectLibsVersion(releases[0].Version, "", "", deployed, cacheVerified), nil
 		}
 		if deployed != "" {
 			return deployed, nil
@@ -844,11 +844,8 @@ func (x *XXMI) resolveProviderDLLVersion(
 		}
 		return "", fmt.Errorf("%s has no releases", spec.overlayPackage)
 	}
-	skipped := ""
-	if pkg.SkippedVersion != nil {
-		skipped = normalizeVersion(*pkg.SkippedVersion)
-	}
-	return selectLibsVersion(normalizeVersion(*pkg.LatestVersion), skipped, deployed, cacheVerified), nil
+	latest, skipped, downgrade := packageVersions(pkg)
+	return selectLibsVersion(latest, skipped, downgrade, deployed, cacheVerified), nil
 }
 
 func (x *XXMI) ensureProviderDLL(ctx context.Context, spec libsProviderSpec, version string) error {
