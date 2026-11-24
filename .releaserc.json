@@ -14,7 +14,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "pnpm run release:prepare -- ${nextRelease.version}"
+        "prepareCmd": "node scripts/verify-attested-release.mjs ${nextRelease.version}"
       }
     ],
     [

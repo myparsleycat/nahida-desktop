@@ -25,6 +25,13 @@ test('publishes only the three documented draft assets', () => {
   ]);
 });
 
+test('attests release binaries before semantic-release can push the tag', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const attest = workflow.search(/^\s+uses: actions\/attest@/m);
+  const publish = workflow.search(/^\s+run: pnpm exec semantic-release\s*$/m);
+  assert.ok(attest !== -1 && publish > attest, 'the release must remain retryable if attestation fails');
+});
+
 test('commits source versions without publishing to npm', () => {
   const names = config.plugins.map((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin));
   assert.deepEqual(names, [

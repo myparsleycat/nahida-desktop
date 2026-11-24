@@ -9,6 +9,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -73,18 +75,40 @@ jobs:
       - name: Validate desktop
         uses: ./.github/actions/validate-desktop
 
-      - name: Create release tag and draft
+      - name: Determine next release version
+        id: plan-release
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec semantic-release
+        run: node scripts/plan-release.mjs
+
+      - name: Package desktop release
+        if: steps.plan-release.outputs.version != ''
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.plan-release.outputs.version }}
+        run: pnpm run release:prepare -- $env:RELEASE_VERSION
 
       - name: Verify packaged release binary
+        if: steps.plan-release.outputs.version != ''
         shell: pwsh
-        run: |
-          if (-not (Test-Path -LiteralPath bin/release-version.nsh)) {
-            Write-Output 'No release was created from this commit range; skipping binary verification.'
-          } else {
-            $version = (Get-Content -LiteralPath bin/release-version.nsh | Select-String 'NAHIDA_SEMVER').Line.Split('"')[1]
-            ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $version
-          }
+        env:
+          RELEASE_VERSION: ${{ steps.plan-release.outputs.version }}
+        run: ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $env:RELEASE_VERSION
+
+      - name: Attest release executables
+        id: attest-release
+        if: steps.plan-release.outputs.version != ''
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            bin/nahida-desktop-windows-amd64.exe
+            bin/nahida-desktop-windows-amd64-installer.exe
+
+      - name: Create release tag and draft
+        if: steps.plan-release.outputs.version != ''
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATTESTED_RELEASE_VERSION: ${{ steps.attest-release.outputs.attestation-id && steps.plan-release.outputs.version }}
+        run: pnpm exec semantic-release
