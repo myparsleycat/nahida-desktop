@@ -58,7 +58,7 @@ type textureResizeRequest struct {
 	CustomHeight int
 	OutputFormat string
 	Backup       bool
-	encodeBC7    bc7FastEncoder
+	encodeBlocks blockEncoder
 }
 
 type textureResizeMode struct {
@@ -75,7 +75,7 @@ type normalizedTextureResizeRequest struct {
 	outputFormat ddsutil.ImageFormat
 	hasFormat    bool
 	backup       bool
-	encodeBC7    bc7FastEncoder
+	encodeBlocks blockEncoder
 }
 
 // executeTextureResize mirrors the sidecar's `resize` subcommand.
@@ -175,11 +175,11 @@ func normalizeTextureResizeRequest(request textureResizeRequest) (normalizedText
 		return normalizedTextureResizeRequest{}, textureError("Unsupported texture operation '%s'.", request.Operation)
 	}
 	normalized := normalizedTextureResizeRequest{
-		targetPath: trimmed,
-		mode:       mode,
-		operation:  operation,
-		backup:     request.Backup,
-		encodeBC7:  request.encodeBC7,
+		targetPath:   trimmed,
+		mode:         mode,
+		operation:    operation,
+		backup:       request.Backup,
+		encodeBlocks: request.encodeBlocks,
 	}
 	// A plain resize keeps the source format even when settings still hold one from an earlier conversion.
 	if operation != textureOperationResize && strings.TrimSpace(request.OutputFormat) != "" {
@@ -345,7 +345,7 @@ func processResizeDDSFile(
 		}
 	}
 
-	encoded, err := encodeTexture(ctx, output, outputFormat, mipmaps, request.encodeBC7)
+	encoded, err := encodeTexture(ctx, output, outputFormat, mipmaps, request.encodeBlocks)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return TextureResizeFileResult{}, "encode", ctxErr
 	}
@@ -398,8 +398,8 @@ func processResizeDDSFile(
 }
 
 type textureEncoder interface {
-	EncodeWithBC7Fast(format ddsutil.ImageFormat, quality ddsutil.Quality, mipmaps ddsutil.Mipmaps,
-		bc7 ddsutil.BC7FastEncoder) (*ddsutil.Surface, error)
+	EncodeWithBlockEncoder(format ddsutil.ImageFormat, quality ddsutil.Quality, mipmaps ddsutil.Mipmaps,
+		encoder ddsutil.BlockEncoder) (*ddsutil.Surface, error)
 }
 
 func encodeTexture(
@@ -407,7 +407,7 @@ func encodeTexture(
 	source textureEncoder,
 	format ddsutil.ImageFormat,
 	mipmaps ddsutil.Mipmaps,
-	bc7 bc7FastEncoder,
+	encoder blockEncoder,
 ) (*ddsutil.Surface, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -424,7 +424,7 @@ func encodeTexture(
 	default:
 		quality = ddsutil.QualityFast
 	}
-	return source.EncodeWithBC7Fast(format, quality, mipmaps, bc7)
+	return source.EncodeWithBlockEncoder(format, quality, mipmaps, encoder)
 }
 
 // eightBitTextureFormats decode to 8-bit channels without losing precision and encode from them.
@@ -607,7 +607,7 @@ func encodePNGToDDS(
 	input, target, outputFormatName string,
 	source *ddsutil.Dds,
 	backup, generateMipmaps bool,
-	bc7 bc7FastEncoder,
+	encoder blockEncoder,
 ) (textureEncodedMetadata, error) {
 	pixels, width, height, err := loadTexturePNG(input)
 	if err != nil {
@@ -636,7 +636,7 @@ func encodePNGToDDS(
 	if generateMipmaps {
 		mipmaps = ddsutil.MipmapsGeneratedAutomatic
 	}
-	encoded, err := encodeTexture(ctx, surface, outputFormat, mipmaps, bc7)
+	encoded, err := encodeTexture(ctx, surface, outputFormat, mipmaps, encoder)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return textureEncodedMetadata{}, ctxErr
 	}

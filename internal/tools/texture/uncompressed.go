@@ -223,8 +223,8 @@ func (t *Service) CompressUncompressed(
 	backup bool,
 	progress func(done, total int, path string),
 ) (TextureResizeResult, error) {
-	return compressUncompressed(ctx, textures, backup, progress, func(ctx context.Context) bc7FastEncoder {
-		return t.newBC7Encoder(ctx, true)
+	return compressUncompressed(ctx, textures, backup, progress, func(ctx context.Context) blockEncoder {
+		return t.newNativeEncoder(ctx, true)
 	})
 }
 
@@ -233,7 +233,7 @@ func compressUncompressed(
 	textures []UncompressedTexture,
 	backup bool,
 	progress func(done, total int, path string),
-	newBC7 func(context.Context) bc7FastEncoder,
+	newEncoder func(context.Context) blockEncoder,
 ) (TextureResizeResult, error) {
 	files := make([]TextureResizeFileResult, len(textures))
 	var done int
@@ -243,11 +243,11 @@ func compressUncompressed(
 	group.SetLimit(min(uncompressedWorkers, runtime.NumCPU()))
 	for index, listed := range textures {
 		group.Go(func() error {
-			var bc7 bc7FastEncoder
-			if newBC7 != nil {
-				bc7 = newBC7(groupCtx)
+			var encoder blockEncoder
+			if newEncoder != nil {
+				encoder = newEncoder(groupCtx)
 			}
-			file, err := compressUncompressedFile(groupCtx, listed.Path, backup, bc7)
+			file, err := compressUncompressedFile(groupCtx, listed.Path, backup, encoder)
 			if err != nil {
 				return err
 			}
@@ -288,9 +288,9 @@ func compressUncompressedFile(
 	ctx context.Context,
 	path string,
 	backup bool,
-	bc7 bc7FastEncoder,
+	encoder blockEncoder,
 ) (TextureResizeFileResult, error) {
-	result, err := convertUncompressedFile(ctx, path, backup, bc7)
+	result, err := convertUncompressedFile(ctx, path, backup, encoder)
 	if ctxErr := ctx.Err(); ctxErr != nil && err != nil {
 		return TextureResizeFileResult{}, ctxErr
 	}
@@ -311,7 +311,7 @@ func convertUncompressedFile(
 	ctx context.Context,
 	path string,
 	backup bool,
-	bc7 bc7FastEncoder,
+	encoder blockEncoder,
 ) (TextureResizeFileResult, error) {
 	if err := ctx.Err(); err != nil {
 		return TextureResizeFileResult{}, err
@@ -344,7 +344,7 @@ func convertUncompressedFile(
 	}
 	// The levels are encoded as they are instead of being generated again from the base, because a
 	// mod can ship levels it authored by hand.
-	encoded, err := encodeTexture(ctx, decoded, format, ddsutil.MipmapsFromSurface, bc7)
+	encoded, err := encodeTexture(ctx, decoded, format, ddsutil.MipmapsFromSurface, encoder)
 	if err != nil {
 		return TextureResizeFileResult{}, textureError("Failed to encode processed DDS '%s': %s", path, err)
 	}

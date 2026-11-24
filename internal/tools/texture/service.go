@@ -18,13 +18,13 @@ type Options struct {
 }
 
 type Service struct {
-	log      *infra.Log
-	emit     func(string, ...any)
-	download *infra.Download
-	archive  *infra.Archive
-	client   *db.Client
-	appData  *appdata.Store
-	loadBC7  func() *nativeBC7
+	log        *infra.Log
+	emit       func(string, ...any)
+	download   *infra.Download
+	archive    *infra.Archive
+	client     *db.Client
+	appData    *appdata.Store
+	loadNative func() *nativeBlocks
 
 	textureRuntimeMu sync.Mutex
 	textureEventMu   sync.Mutex

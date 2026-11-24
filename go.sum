@@ -369,8 +369,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/modelcontextprotocol/go-sdk v1.8.0 h1:KIvahhYqwtbeniWVPs3TcXEA7b8jEtwfBpOTAI+Urx4=
 github.com/modelcontextprotocol/go-sdk v1.8.0/go.mod h1:dL7u98E/zjJTGzEq+j30jQ8K2k1mb6LeAH4inEcSGts=
-github.com/myparsleycat/ddsutil v0.3.1 h1:kngN8uA1o6+8OOC7USuSEHvPn3WEjXuBKp3gIa5j73E=
-github.com/myparsleycat/ddsutil v0.3.1/go.mod h1:InioKuc7NG5WrBaWQ6LoqH0UsSyD4rIrDiSIqV+LsuQ=
+github.com/myparsleycat/ddsutil v0.4.0 h1:yryZgkGEZDOTACJFJGogZ1gIi2wTboOAW4bm23bUdf4=
+github.com/myparsleycat/ddsutil v0.4.0/go.mod h1:InioKuc7NG5WrBaWQ6LoqH0UsSyD4rIrDiSIqV+LsuQ=
 github.com/myparsleycat/fairy v0.1.32 h1:j9xVicEZR6/02zxMQUDStw+xcNZGqLVI8cw+3tmcS6A=
 github.com/myparsleycat/fairy v0.1.32/go.mod h1:u7xuYm720336iLXJTH6ORvFCsem9wIXGzmd/5sRziDs=
 github.com/natefinch/atomic v1.0.1 h1:ZPYKxkqQOx3KZ+RsbnP/YsgvxWQPGxjC0oBt2AhwV0A=
