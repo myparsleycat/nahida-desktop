@@ -46,11 +46,12 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 	service.UseNativeCompute(nativecompute.New(store, nil))
 	available := cpu.X86.HasAVX && cpu.X86.HasF16C
 	procs := service.packedSkinning()
-	if (procs.legacy != 0) != available || (procs.variants != 0) != available {
+	if (procs.legacy != 0) != available || (procs.variants != 0) != available || (procs.efmi != 0) != available {
 		t.Fatalf(
-			"loaded legacy = %t, loaded variants = %t, want both %t",
+			"loaded legacy = %t, loaded variants = %t, loaded EFMI = %t, want all %t",
 			procs.legacy != 0,
 			procs.variants != 0,
+			procs.efmi != 0,
 			available,
 		)
 	}
@@ -92,6 +93,8 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 		poses     [][]float32
 		wantError string
 		directOK  bool
+		efmiOK    bool
+		shapes    bool
 	}{
 		{
 			name: "one bone", vertices: 1, bones: 1, blend: single,
@@ -104,6 +107,7 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 				identity, {1, 1, 1, 0.5, 0, 0, half, 0, 0, half, 0.1, 0.2, 0, 0},
 				turned, {1, 2, 1, 0, 0, 0.5, 0, 0, half, half, 0, 0.1, 0.3, 0},
 			},
+			shapes: true,
 		},
 		{
 			name: "orthogonal second influence", vertices: 1, bones: 2,
@@ -124,6 +128,7 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 				{65520, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
 			},
 			wantError: "packed dual-quaternion position exceeds finite float16 range",
+			efmiOK:    true,
 		},
 		{
 			name: "degenerate pose at vertex 1", vertices: 2, bones: 2,
@@ -143,10 +148,13 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 	variants := []struct {
 		pose   ModelViewerDualQuaternionVariant
 		native packedSkinningVariant
+		efmi   bool
 	}{
-		{"", packedSkinningLegacy},
-		{modelViewerObjectPoseVariant, packedSkinningObject},
-		{modelViewerObjectDirectPoseVariant, packedSkinningObjectDirect},
+		{"", packedSkinningLegacy, false},
+		{modelViewerObjectPoseVariant, packedSkinningObject, false},
+		{modelViewerObjectDirectPoseVariant, packedSkinningObjectDirect, false},
+		{modelViewerEFMIArmatureVariant, packedSkinningEFMITyped, true},
+		{modelViewerEFMICompactVariant, packedSkinningEFMICompact, true},
 	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -165,16 +173,52 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 					BoneCount: tt.bones, FrameCount: 2,
 				},
 			}
+			floatSource := func(name string, vertices []float32) ModelViewerComputeBinarySource {
+				buffer := source(t, name+"-"+id, computePackedFloatStride, modelViewerFloat32Bytes(vertices))
+				buffer.Encoding = modelViewerPackedFloatEncoding
+				return buffer
+			}
+			efmiBase := floatSource(
+				"efmi-base", slices.Repeat([]float32{1.0003, 2, 3, 1, 0.25, -0.5, 0.75}, tt.vertices),
+			)
+			var shapes []ModelViewerComputeShapePass
+			if tt.shapes {
+				shapes = []ModelViewerComputeShapePass{
+					{
+						Target: floatSource("efmi-first", []float32{
+							2.1, 1, 1.5, 1, 0, 1, 0,
+							3.1, 1, 1.5, 1, 0, 1, 0,
+						}),
+						PhaseRate: 3.0, WrapAt: 1.0, AngularScale: 2.0, Amplitude: 0.5, Bias: 0.25,
+					},
+					{
+						Target: floatSource("efmi-second", []float32{
+							-2.1, 4, 3.5, 1, 1, 0, 0,
+							-4.1, 4, 3.5, 1, 1, 0, 0,
+						}),
+						PhaseRate: 0.5, PhaseOffset: 1.5, AngularScale: 2.0, Amplitude: 0.25, Bias: -0.35,
+					},
+				}
+			}
 			for _, variant := range variants {
 				name := string(variant.pose)
 				if name == "" {
 					name = "legacy"
 				}
 				t.Run(name, func(t *testing.T) {
-					descriptor.Pose.DualQuaternionVariant = variant.pose
+					descriptor := descriptor
+					pose := *descriptor.Pose
+					pose.DualQuaternionVariant = variant.pose
+					descriptor.Pose = &pose
 					wantError := tt.wantError
-					if variant.pose == modelViewerObjectDirectPoseVariant && tt.directOK {
+					if (variant.pose == modelViewerObjectDirectPoseVariant || variant.efmi) && tt.directOK {
 						wantError = ""
+					}
+					if variant.efmi {
+						descriptor.Base, descriptor.ShapePasses = efmiBase, shapes
+						if tt.efmiOK {
+							wantError = ""
+						}
 					}
 					var calls []packedSkinningVariant
 					observed := packedSkinningProcs{}
@@ -187,6 +231,11 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 						observed.variants = syscall.NewCallback(func(args, variant uintptr) uintptr {
 							calls = append(calls, packedSkinningVariant(variant))
 							result, _, _ := syscall.SyscallN(procs.variants, args, variant)
+							return result
+						})
+						observed.efmi = syscall.NewCallback(func(args, variant, shapes, count uintptr) uintptr {
+							calls = append(calls, packedSkinningVariant(variant))
+							result, _, _ := syscall.SyscallN(procs.efmi, args, variant, shapes, count)
 							return result
 						})
 					}
@@ -203,7 +252,8 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 
 					for _, frame := range []float64{0, 0.25, 0.5, 1, 2} {
 						calls = calls[:0]
-						gotFrame, gotErr := got.compute(frame, 0, nil)
+						phase := frame*0.75 - 0.125
+						gotFrame, gotErr := got.compute(frame, phase, nil)
 						if available && (len(calls) != 1 || calls[0] != variant.native) {
 							t.Fatalf(
 								"frame %g: native calls = %v, want one call for variant %d",
@@ -212,7 +262,7 @@ func TestPackedSkinningBundledKernelMatchesGo(t *testing.T) {
 								variant.native,
 							)
 						}
-						wantFrame, wantErr := want.compute(frame, 0, nil)
+						wantFrame, wantErr := want.compute(frame, phase, nil)
 						if errorText(wantErr) != wantError {
 							t.Fatalf("frame %g: Go error = %v, want %q", frame, wantErr, wantError)
 						}

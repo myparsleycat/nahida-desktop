@@ -18,10 +18,12 @@ const (
 	packedSkinningLegacy packedSkinningVariant = iota
 	packedSkinningObject
 	packedSkinningObjectDirect
+	packedSkinningEFMITyped
+	packedSkinningEFMICompact
 )
 
 type packedSkinningProcs struct {
-	legacy, variants uintptr
+	legacy, variants, efmi uintptr
 }
 
 func lookupPackedSkinningFrames(library *nativecompute.Library) (packedSkinningProcs, error) {
@@ -38,7 +40,16 @@ func lookupPackedSkinningFrames(library *nativecompute.Library) (packedSkinningP
 	}
 	legacy, legacyErr := library.Lookup("packed_skinning_frame")
 	variants, variantsErr := library.Lookup("packed_skinning_variant_frame")
-	return packedSkinningProcs{legacy: legacy, variants: variants}, errors.Join(legacyErr, variantsErr)
+	efmi, efmiErr := library.Lookup("packed_skinning_efmi_frame")
+	return packedSkinningProcs{
+		legacy:   legacy,
+		variants: variants,
+		efmi:     efmi,
+	}, errors.Join(
+		legacyErr,
+		variantsErr,
+		efmiErr,
+	)
 }
 
 // packedSkinningFrameArgs follows the C layout of FrameArgs in native/desktop_kernels/src/packed_skinning.rs.
@@ -52,7 +63,17 @@ type packedSkinningFrameArgs struct {
 	fraction           float64
 }
 
-func runPackedSkinningFrame(proc uintptr, variant packedSkinningVariant, args packedSkinningFrameArgs) error {
+type packedSkinningShape struct {
+	target *float32
+	weight float64
+}
+
+func runPackedSkinningFrame(
+	proc uintptr,
+	variant packedSkinningVariant,
+	args packedSkinningFrameArgs,
+	shapes []packedSkinningShape,
+) error {
 	var pins runtime.Pinner
 	// The address of args must survive Go callback reentry, including a stack move.
 	pins.Pin(&args)
@@ -63,12 +84,27 @@ func runPackedSkinningFrame(proc uintptr, variant packedSkinningVariant, args pa
 	pins.Pin(args.palette1)
 	pins.Pin(args.positions)
 	pins.Pin(args.normals)
+	if len(shapes) != 0 {
+		pins.Pin(&shapes[0])
+		for _, shape := range shapes {
+			pins.Pin(shape.target)
+		}
+	}
 	defer pins.Unpin()
 
 	var result uintptr
-	if variant == packedSkinningLegacy {
+	switch variant {
+	case packedSkinningLegacy:
 		result, _, _ = syscall.SyscallN(proc, uintptr(unsafe.Pointer(&args)))
-	} else {
+	case packedSkinningEFMITyped, packedSkinningEFMICompact:
+		result, _, _ = syscall.SyscallN(
+			proc,
+			uintptr(unsafe.Pointer(&args)),
+			uintptr(variant),
+			uintptr(unsafe.Pointer(unsafe.SliceData(shapes))),
+			uintptr(len(shapes)),
+		)
+	default:
 		result, _, _ = syscall.SyscallN(proc, uintptr(unsafe.Pointer(&args)), uintptr(variant))
 	}
 	switch code := int(result); {

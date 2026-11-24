@@ -137,16 +137,27 @@ func bindPackedDualQuaternionKernel(
 
 	var native uintptr
 	nativeVariant := packedSkinningLegacy
-	if !efmi && sources.packedSkinning != nil && boneCount <= len(palette)/14 &&
+	if sources.packedSkinning != nil && boneCount <= len(palette)/14 &&
 		len(palette)/(boneCount*14) == frameCount {
 		procs := sources.packedSkinning()
 		switch {
+		case efmiCompact:
+			native, nativeVariant = procs.efmi, packedSkinningEFMICompact
+		case efmi:
+			native, nativeVariant = procs.efmi, packedSkinningEFMITyped
 		case object:
 			native, nativeVariant = procs.variants, packedSkinningObject
 		case direct:
 			native, nativeVariant = procs.variants, packedSkinningObjectDirect
 		default:
 			native = procs.legacy
+		}
+	}
+	var nativeShapes []packedSkinningShape
+	if native != 0 && len(shapes) != 0 {
+		nativeShapes = make([]packedSkinningShape, len(shapes))
+		for i, shape := range shapes {
+			nativeShapes[i].target = &shape.target[0]
 		}
 	}
 
@@ -168,12 +179,15 @@ func bindPackedDualQuaternionKernel(
 		inter := at - float64(frame0)
 
 		if native != 0 {
+			for i := range nativeShapes {
+				nativeShapes[i].weight = weights[i]
+			}
 			err := runPackedSkinningFrame(native, nativeVariant, packedSkinningFrameArgs{
 				base: &base[0], weights: &blend.weights[0], bones: &blend.bones[0],
 				palette0: &palette[frame0*boneCount*14], palette1: &palette[frame1*boneCount*14],
 				positions: &frame.Positions[0], normals: &frame.Normals[0],
 				vertexCount: uintptr(deformer.VertexCount), boneCount: uintptr(boneCount), fraction: inter,
-			})
+			}, nativeShapes)
 			if err != nil {
 				return ComputeFrame{}, err
 			}
