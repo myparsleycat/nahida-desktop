@@ -1,13 +1,9 @@
 package drive
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
-
-	"github.com/samber/lo"
 
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/transfer"
@@ -31,14 +27,10 @@ func spoolTestPlan(t *testing.T, files []transfer.DownloadFile) *downloadPlan {
 	return plan
 }
 
-func collectSpool(t *testing.T, plan *downloadPlan, scheduled bool) []spooledFile {
+func collectSpool(t *testing.T, plan *downloadPlan) []spooledFile {
 	t.Helper()
-	sequence := plan.files()
-	if scheduled {
-		sequence = plan.scheduled()
-	}
 	var out []spooledFile
-	for item, err := range sequence {
+	for item, err := range plan.files() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +56,7 @@ func TestDownloadSpoolRoundTripsFilesAcrossReads(t *testing.T) {
 	}
 
 	for range 2 {
-		got := collectSpool(t, plan, false)
+		got := collectSpool(t, plan)
 		if len(got) != len(files) {
 			t.Fatalf("read %d files, want %d", len(got), len(files))
 		}
@@ -92,7 +84,7 @@ func TestDownloadSpoolEmptyYieldsNothing(t *testing.T) {
 	t.Parallel()
 
 	plan := spoolTestPlan(t, nil)
-	if got := collectSpool(t, plan, true); len(got) != 0 {
+	if got := collectSpool(t, plan); len(got) != 0 {
 		t.Fatalf("empty spool yielded %+v", got)
 	}
 }
@@ -114,68 +106,6 @@ func TestDownloadSpoolReleasesFileWhenIterationStopsEarly(t *testing.T) {
 	if _, err := os.Stat(plan.spoolPath); !os.IsNotExist(err) {
 		t.Fatalf("spool still exists: %v", err)
 	}
-}
-
-func TestDownloadSpoolSchedulesLargeFilesAmongSmallOnes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		large []bool
-	}{
-		{name: "no large files", large: []bool{false, false, false}},
-		{name: "only large files", large: []bool{true, true}},
-		{name: "large first", large: []bool{true, true, false, false, false, false, false}},
-		{name: "large last", large: []bool{false, false, false, false, true}},
-		{name: "more large than small", large: []bool{true, false, true, true, false, true}},
-		{name: "uneven interval", large: []bool{false, true, false, false, false, true, false, false, true, false}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			files := make([]transfer.DownloadFile, len(test.large))
-			for index, large := range test.large {
-				files[index] = transfer.DownloadFile{ID: fmt.Sprintf("file-%d", index), Size: 1}
-				if large {
-					files[index].Size = largeDownloadThreshold
-				}
-			}
-			plan := spoolTestPlan(t, files)
-
-			got := lo.Map(collectSpool(t, plan, true), func(item spooledFile, _ int) string {
-				if files[item.index].ID != item.file.ID {
-					t.Fatalf("index %d carries %q", item.index, item.file.ID)
-				}
-				return item.file.ID
-			})
-			if want := interleaveLargeDownloads(files); !slices.Equal(got, want) {
-				t.Fatalf("scheduled = %v, want %v", got, want)
-			}
-		})
-	}
-}
-
-// interleaveLargeDownloads is the in-memory ordering the spool replaced: each
-// group of small files is followed by one large file.
-func interleaveLargeDownloads(files []transfer.DownloadFile) []string {
-	large, small := lo.FilterReject(files, func(file transfer.DownloadFile, _ int) bool {
-		return file.Size >= largeDownloadThreshold
-	})
-	ordered := files
-	if len(large) > 0 && len(small) > 0 {
-		interval := max(1, len(small)/len(large))
-		ordered = make([]transfer.DownloadFile, 0, len(files))
-		for len(small) > 0 || len(large) > 0 {
-			count := min(interval, len(small))
-			ordered = append(ordered, small[:count]...)
-			small = small[count:]
-			if len(large) > 0 {
-				ordered = append(ordered, large[0])
-				large = large[1:]
-			}
-		}
-	}
-	return lo.Map(ordered, func(file transfer.DownloadFile, _ int) string { return file.ID })
 }
 
 func TestSweepDownloadSpoolsRemovesOnlySpoolsWithoutATransfer(t *testing.T) {

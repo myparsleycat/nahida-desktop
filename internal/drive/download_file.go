@@ -13,6 +13,7 @@ import (
 
 const (
 	parallelDownloadThreshold = 20 * 1024 * 1024
+	parallelDownloadChunks    = 8
 	downloadErrorRetries      = 2
 	presignErrorRetries       = 1
 )
@@ -51,9 +52,16 @@ func (d *Drive) downloadDriveFile(
 			if supported {
 				var parallelProgress int64
 				err = d.parallelDownload.Download(ctx, infra.ParallelDownloadOptions{
-					URL: file.URL, SavePath: destination, FileSize: file.Size, MaxChunks: 8, Adaptive: true,
-					Header: header, BandwidthLimiter: transfers, SlowChunkMonitor: transfers.SlowChunks(),
-					FileID: file.ID, CohortKey: "drive-parallel",
+					URL:              file.URL,
+					SavePath:         destination,
+					FileSize:         file.Size,
+					MaxChunks:        parallelDownloadChunks,
+					Adaptive:         true,
+					Header:           header,
+					BandwidthLimiter: transfers,
+					SlowChunkMonitor: transfers.SlowChunks(),
+					FileID:           file.ID,
+					CohortKey:        "drive-parallel",
 					OnProgress: func(bytes int64) {
 						parallelProgress += bytes
 						if onProgress != nil {

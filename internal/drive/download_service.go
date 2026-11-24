@@ -430,17 +430,18 @@ func (d *Drive) executeDownload(
 		return infra.AnnotateError(err, infra.Diagnostic{Stage: "prepare"})
 	}
 
-	concurrency := d.downloadConcurrency(ctx)
+	concurrency := max(1, d.downloadConcurrency(ctx))
 	d.parallelDownload.SetRequestConcurrency(concurrency)
-	// A job is a file to download, or a directory to create when dirPath is set.
-	type downloadJob struct {
-		spooledFile
-		dirPath string
-	}
-	jobs := make(chan downloadJob)
+	scheduler := newDownloadScheduler(plan, concurrency)
+	defer scheduler.close()
 	var workers sync.WaitGroup
 	var stateMu sync.Mutex
 	failures := make([]error, 0)
+	recordFailure := func(failure error) {
+		stateMu.Lock()
+		failures = append(failures, failure)
+		stateMu.Unlock()
+	}
 	reportProgress := func(bytesDelta *int64, filesDelta int) {
 		stateMu.Lock()
 		defer stateMu.Unlock()
@@ -457,132 +458,101 @@ func (d *Drive) executeDownload(
 		_ = transfers.Update(pid, updates)
 	}
 
-	workerCount := min(max(1, concurrency), max(1, plan.fileCount+len(paths)))
+	downloadFile := func(item spooledFile) {
+		file := item.file
+		if transfers.IsIndexCompleted(pid, item.index) {
+			return
+		}
+		parentPath := paths[parentDownloadKey(file, plan.root.ID, singleFile)]
+		if parentPath == "" {
+			failure := infra.AnnotateError(
+				fmt.Errorf("download parent path missing for %s", file.Name),
+				infra.Diagnostic{Stage: "resolve-target"},
+			)
+			recordFailure(failure)
+			_ = transfers.MarkFileFailed(pid, failure.Error())
+			return
+		}
+		if !singleFile {
+			if err := os.MkdirAll(parentPath, 0o755); err != nil {
+				failure := infra.AnnotateError(
+					fmt.Errorf("create download directory %q: %w", parentPath, err),
+					infra.Diagnostic{Stage: "write"},
+				)
+				recordFailure(failure)
+				_ = transfers.MarkFileFailed(pid, failure.Error())
+				return
+			}
+		}
+		destination := filepath.Join(parentPath, file.Name)
+		if info, statErr := os.Stat(destination); statErr == nil {
+			if !info.Mode().IsRegular() {
+				failure := infra.AnnotateError(
+					fmt.Errorf("download target is not a file: %s", destination),
+					infra.Diagnostic{Stage: "write"},
+				)
+				recordFailure(failure)
+				_ = transfers.MarkFileFailed(pid, failure.Error())
+				return
+			}
+			bytes := transfer.LogicalFileBytes(file)
+			_ = transfers.MarkIndexCompleted(pid, item.index)
+			reportProgress(&bytes, 1)
+			return
+		}
+		downloadErr := d.downloadDriveFile(
+			ctx,
+			transfers,
+			file,
+			destination,
+			downloadAccess{Link: params.Link, Mod: params.Mod},
+			func(bytes int64) {
+				reportProgress(&bytes, 0)
+			},
+		)
+		if downloadErr != nil {
+			if errors.Is(downloadErr, context.Canceled) {
+				return
+			}
+			failure := fmt.Errorf("%s: %w", file.Name, downloadErr)
+			recordFailure(failure)
+			_ = transfers.MarkFileFailed(pid, failure.Error())
+			return
+		}
+		_ = transfers.MarkIndexCompleted(pid, item.index)
+		reportProgress(nil, 1)
+	}
+
+	workerCount := min(concurrency, max(1, plan.fileCount))
 	workers.Add(workerCount)
 	for range workerCount {
 		go func() {
 			defer workers.Done()
-			for job := range jobs {
-				if ctx.Err() != nil {
-					continue
+			for {
+				item, ok := scheduler.take(ctx)
+				if !ok {
+					return
 				}
-				if job.dirPath != "" {
-					if err := os.MkdirAll(job.dirPath, 0o755); err != nil {
-						failure := infra.AnnotateError(
-							fmt.Errorf("create download directory %q: %w", job.dirPath, err),
-							infra.Diagnostic{Stage: "write"},
-						)
-						stateMu.Lock()
-						failures = append(failures, failure)
-						stateMu.Unlock()
-					}
-					continue
-				}
-				file := job.file
-				if transfers.IsIndexCompleted(pid, job.index) {
-					continue
-				}
-				parentPath := paths[parentDownloadKey(file, plan.root.ID, singleFile)]
-				if parentPath == "" {
-					failure := infra.AnnotateError(
-						fmt.Errorf("download parent path missing for %s", file.Name),
-						infra.Diagnostic{Stage: "resolve-target"},
-					)
-					stateMu.Lock()
-					failures = append(failures, failure)
-					stateMu.Unlock()
-					_ = transfers.MarkFileFailed(pid, failure.Error())
-					continue
-				}
-				if !singleFile {
-					if err := os.MkdirAll(parentPath, 0o755); err != nil {
-						failure := infra.AnnotateError(
-							fmt.Errorf("create download directory %q: %w", parentPath, err),
-							infra.Diagnostic{Stage: "write"},
-						)
-						stateMu.Lock()
-						failures = append(failures, failure)
-						stateMu.Unlock()
-						_ = transfers.MarkFileFailed(pid, failure.Error())
-						continue
-					}
-				}
-				destination := filepath.Join(parentPath, file.Name)
-				if info, statErr := os.Stat(destination); statErr == nil {
-					if !info.Mode().IsRegular() {
-						failure := infra.AnnotateError(
-							fmt.Errorf("download target is not a file: %s", destination),
-							infra.Diagnostic{Stage: "write"},
-						)
-						stateMu.Lock()
-						failures = append(failures, failure)
-						stateMu.Unlock()
-						_ = transfers.MarkFileFailed(pid, failure.Error())
-						continue
-					}
-					bytes := transfer.LogicalFileBytes(file)
-					_ = transfers.MarkIndexCompleted(pid, job.index)
-					reportProgress(&bytes, 1)
-					continue
-				}
-				downloadErr := d.downloadDriveFile(
-					ctx,
-					transfers,
-					file,
-					destination,
-					downloadAccess{Link: params.Link, Mod: params.Mod},
-					func(bytes int64) {
-						reportProgress(&bytes, 0)
-					},
-				)
-				if downloadErr != nil {
-					if errors.Is(downloadErr, context.Canceled) {
-						continue
-					}
-					failure := fmt.Errorf("%s: %w", file.Name, downloadErr)
-					stateMu.Lock()
-					failures = append(failures, failure)
-					stateMu.Unlock()
-					_ = transfers.MarkFileFailed(pid, failure.Error())
-					continue
-				}
-				_ = transfers.MarkIndexCompleted(pid, job.index)
-				reportProgress(nil, 1)
+				downloadFile(item.spooledFile)
+				scheduler.done(item)
 			}
 		}()
 	}
-	queue := func(job downloadJob) bool {
-		select {
-		case <-ctx.Done():
-			return false
-		case jobs <- job:
-			return true
-		}
-	}
-	var spoolErr error
-	for item, err := range plan.scheduled() {
-		if err != nil {
-			spoolErr = infra.AnnotateError(err, infra.Diagnostic{Stage: "metadata"})
-			break
-		}
-		if !queue(downloadJob{spooledFile: item}) {
-			break
-		}
-	}
-	if spoolErr == nil && ctx.Err() == nil && !singleFile {
-		for _, path := range paths {
-			if !queue(downloadJob{dirPath: path}) {
-				break
-			}
-		}
-	}
-	close(jobs)
 	workers.Wait()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if spoolErr != nil {
-		failures = append(failures, spoolErr)
+	if err := scheduler.spoolErr(); err != nil {
+		failures = append(failures, infra.AnnotateError(err, infra.Diagnostic{Stage: "metadata"}))
+	} else if !singleFile {
+		for _, path := range paths {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				failures = append(failures, infra.AnnotateError(
+					fmt.Errorf("create download directory %q: %w", path, err),
+					infra.Diagnostic{Stage: "write"},
+				))
+			}
+		}
 	}
 	if len(failures) > 0 {
 		return errors.Join(failures...)

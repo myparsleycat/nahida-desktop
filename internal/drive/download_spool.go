@@ -15,10 +15,7 @@ import (
 	"nahida.live/desktop/internal/transfer"
 )
 
-const (
-	downloadSpoolExt       = ".spool"
-	largeDownloadThreshold = 50 * 1024 * 1024
-)
+const downloadSpoolExt = ".spool"
 
 // spooledFile is a download file together with its position in the spool,
 // which is what completion is tracked by.
@@ -82,42 +79,26 @@ func (p *downloadPlan) files() iter.Seq2[spooledFile, error] {
 	}
 }
 
-// scheduled yields every file with the large ones spread evenly among the
-// small ones, so a run of large files does not occupy every worker at once.
-func (p *downloadPlan) scheduled() iter.Seq2[spooledFile, error] {
-	small := p.fileCount - len(p.large)
-	if len(p.large) == 0 || small == 0 {
-		return p.files()
-	}
+// smallFiles yields the spooled files that are not in p.large, in spool order.
+func (p *downloadPlan) smallFiles() iter.Seq2[spooledFile, error] {
 	return func(yield func(spooledFile, error) bool) {
-		interval := max(1, small/len(p.large))
-		large := p.large
-		emitted := 0
 		for item, err := range p.files() {
 			if err != nil {
 				yield(spooledFile{}, err)
 				return
 			}
-			if item.file.Size >= largeDownloadThreshold {
+			if isLargeDownload(item.file) {
 				continue
 			}
 			if !yield(item, nil) {
 				return
 			}
-			emitted++
-			if emitted%interval == 0 && len(large) > 0 {
-				if !yield(large[0], nil) {
-					return
-				}
-				large = large[1:]
-			}
-		}
-		for _, item := range large {
-			if !yield(item, nil) {
-				return
-			}
 		}
 	}
+}
+
+func isLargeDownload(file transfer.DownloadFile) bool {
+	return file.Size >= parallelDownloadThreshold
 }
 
 type spoolWriter struct {
@@ -154,7 +135,7 @@ func (w *spoolWriter) add(file transfer.DownloadFile) error {
 	if err := w.encoder.Encode(file); err != nil {
 		return fmt.Errorf("write download spool: %w", err)
 	}
-	if file.Size >= largeDownloadThreshold {
+	if isLargeDownload(file) {
 		w.plan.large = append(w.plan.large, spooledFile{index: w.plan.fileCount, file: file})
 	}
 	w.plan.fileCount++
