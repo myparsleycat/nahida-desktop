@@ -41,6 +41,9 @@
           },
           {
             "path": "bin/SHA256SUMS"
+          },
+          {
+            "path": "bin/nahida-desktop-windows-amd64.sigstore.json"
           }
         ],
         "draftRelease": true,

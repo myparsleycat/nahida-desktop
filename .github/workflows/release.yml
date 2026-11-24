@@ -96,6 +96,15 @@ jobs:
           RELEASE_VERSION: ${{ steps.plan-release.outputs.version }}
         run: ./scripts/verify-release-binary.ps1 -Executable bin/nahida-desktop-windows-amd64.exe -AppVersion $env:RELEASE_VERSION
 
+      # Attesting the version string binds the executables to this release, so an older attested build cannot be
+      # republished under a newer tag.
+      - name: Write attested release version
+        if: steps.plan-release.outputs.version != ''
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.plan-release.outputs.version }}
+        run: Set-Content -LiteralPath bin/nahida-desktop-release-version -Value $env:RELEASE_VERSION -NoNewline -Encoding ascii
+
       - name: Attest release executables
         id: attest-release
         if: steps.plan-release.outputs.version != ''
@@ -104,6 +113,15 @@ jobs:
           subject-path: |
             bin/nahida-desktop-windows-amd64.exe
             bin/nahida-desktop-windows-amd64-installer.exe
+            bin/nahida-desktop-release-version
+
+      # The self-updater installs only builds whose digest this bundle attests.
+      - name: Stage attestation bundle
+        if: steps.plan-release.outputs.version != ''
+        shell: pwsh
+        env:
+          BUNDLE_PATH: ${{ steps.attest-release.outputs.bundle-path }}
+        run: Copy-Item -LiteralPath $env:BUNDLE_PATH -Destination bin/nahida-desktop-windows-amd64.sigstore.json
 
       - name: Create release tag and draft
         if: steps.plan-release.outputs.version != ''

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/sigstore/sigstore-go/pkg/root"
+
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
@@ -54,15 +56,25 @@ func (s *releaseServer) setFile(tag, name, body string) {
 	s.mu.Unlock()
 }
 
-func newTestEngine(t *testing.T, version string, server *releaseServer) (*Engine, string) {
+func newTestEngine(t *testing.T, version string, transport http.RoundTripper) (*Engine, string) {
 	t.Helper()
 	noRetries := 0
-	client := github.New(github.Options{HTTP: infra.NewClientWithOptions(infra.ClientOptions{
-		HTTPClient: &http.Client{Transport: server}, Status: infra.BackendOnline, RetryLimit: &noRetries,
-	})})
-	engine, err := New(Options{Version: version, GitHub: client, Quit: func() { t.Error("unexpected quit") }})
+	client := infra.NewClientWithOptions(infra.ClientOptions{
+		HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: &noRetries,
+	})
+	engine, err := New(Options{
+		Version: version, GitHub: github.New(github.Options{HTTP: client}), HTTP: client, TrustCacheDir: t.TempDir(),
+		Quit: func() { t.Error("unexpected quit") },
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	engine.loadTrust = func(context.Context) (root.TrustedMaterial, error) { return nil, nil }
+	engine.verify = func(_ root.TrustedMaterial, bundle []byte, version string, digest []byte) error {
+		if string(bundle) != "attests "+hex.EncodeToString(digest)+" for "+version {
+			return ErrProvenanceUnverified
+		}
+		return nil
 	}
 	target := filepath.Join(t.TempDir(), "nahida-desktop.exe")
 	if err := os.WriteFile(target, []byte("running build"), 0o600); err != nil {
@@ -85,19 +97,27 @@ func checksumLine(body, name string) string {
 	return hex.EncodeToString(digest[:]) + "  " + name + "\r\n"
 }
 
+// attestation is a provenance bundle that the test engine accepts for an executable with the given content
+// released as version.
+func attestation(body, version string) string {
+	digest := sha256.Sum256([]byte(body))
+	return "attests " + hex.EncodeToString(digest[:]) + " for " + version
+}
+
 func TestCheckSelectsNewestInstallableRelease(t *testing.T) {
 	t.Parallel()
 	server := &releaseServer{
 		releases: []github.Release{
-			testRelease("v3.47.0-beta.1", true, assetName, checksumAsset),
-			testRelease("v3.46.0", false, checksumAsset, assetName),
-			testRelease("v3.45.0", false, assetName, checksumAsset),
+			testRelease("v3.47.0-beta.1", true, assetName, checksumAsset, bundleAsset),
+			testRelease("v3.46.0", false, checksumAsset, bundleAsset, assetName),
+			testRelease("v3.45.0", false, assetName, checksumAsset, bundleAsset),
 		},
 		files: map[string]string{},
 	}
 	for _, tag := range []string{"v3.47.0-beta.1", "v3.46.0", "v3.45.0"} {
 		server.setFile(tag, checksumAsset, checksumLine("installer", "nahida-desktop-windows-amd64-installer.exe")+
 			checksumLine(tag, assetName))
+		server.setFile(tag, bundleAsset, attestation(tag, strings.TrimPrefix(tag, "v")))
 	}
 
 	for _, test := range []struct {
@@ -151,7 +171,7 @@ func TestCheckSelectsNewestInstallableRelease(t *testing.T) {
 func TestCheckRejectsReleaseWithoutChecksumLine(t *testing.T) {
 	t.Parallel()
 	server := &releaseServer{
-		releases: []github.Release{testRelease("v3.46.0", false, assetName, checksumAsset)},
+		releases: []github.Release{testRelease("v3.46.0", false, assetName, checksumAsset, bundleAsset)},
 		files:    map[string]string{},
 	}
 	server.setFile("v3.46.0", checksumAsset, checksumLine("installer", "nahida-desktop-windows-amd64-installer.exe"))
@@ -163,28 +183,139 @@ func TestCheckRejectsReleaseWithoutChecksumLine(t *testing.T) {
 	}
 }
 
-func TestSelectReleaseSkipsIncompleteReleases(t *testing.T) {
+func TestCheckRejectsUnattestedRelease(t *testing.T) {
+	t.Parallel()
+	server := &releaseServer{
+		releases: []github.Release{testRelease("v3.46.0", false, assetName, checksumAsset, bundleAsset)},
+		files:    map[string]string{},
+	}
+	server.setFile("v3.46.0", checksumAsset, checksumLine("replaced build", assetName))
+	server.setFile("v3.46.0", bundleAsset, attestation("released build", "3.46.0"))
+	engine, _ := newTestEngine(t, "3.45.0", server)
+
+	release, err := engine.Check(t.Context(), false)
+	if !errors.Is(err, ErrProvenanceUnverified) || release != nil {
+		t.Fatalf("release = %+v, err = %v", release, err)
+	}
+	if err := engine.DownloadAndInstall(t.Context(), nil); !errors.Is(err, ErrNoPendingRelease) {
+		t.Fatalf("download after rejected check err = %v, want ErrNoPendingRelease", err)
+	}
+}
+
+func TestCheckSkipsDefectiveRelease(t *testing.T) {
+	t.Parallel()
+	const older, newer = "v3.46.0", "v3.47.0"
+	for _, test := range []struct {
+		name     string
+		checksum string
+	}{
+		{name: "unattested build", checksum: checksumLine(newer, assetName)},
+		{name: "missing checksum", checksum: checksumLine(newer, "installer.exe")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			server := &releaseServer{
+				releases: []github.Release{
+					testRelease(older, false, assetName, checksumAsset, bundleAsset),
+					testRelease(newer, false, assetName, checksumAsset, bundleAsset),
+				},
+				files: map[string]string{},
+			}
+			server.setFile(older, checksumAsset, checksumLine(older, assetName))
+			server.setFile(older, bundleAsset, attestation(older, "3.46.0"))
+			server.setFile(newer, checksumAsset, test.checksum)
+			server.setFile(newer, bundleAsset, attestation("other build", "3.47.0"))
+			var newerRequested bool
+			transport := trustTestTransport(func(req *http.Request) (*http.Response, error) {
+				newerRequested = newerRequested || strings.Contains(req.URL.Path, "/download/"+newer+"/")
+				return server.RoundTrip(req)
+			})
+			engine, _ := newTestEngine(t, "3.45.0", transport)
+			loads := 0
+			engine.loadTrust = func(context.Context) (root.TrustedMaterial, error) {
+				loads++
+				return nil, nil
+			}
+
+			release, err := engine.Check(t.Context(), false)
+			if !newerRequested {
+				t.Errorf("newest release %s was never tried", newer)
+			}
+			if release == nil || release.Version != "3.46.0" || err != nil ||
+				engine.pending == nil || engine.pending.tag != older {
+				t.Errorf("release = %+v, err = %v, pending = %+v, want %s", release, err, engine.pending, older)
+			}
+			if loads != 1 {
+				t.Errorf("trust loads = %d, want 1", loads)
+			}
+		})
+	}
+}
+
+func TestCheckStopsOnTrustLoadFailure(t *testing.T) {
+	t.Parallel()
+	const older, newer = "v3.46.0", "v3.47.0"
+	server := &releaseServer{
+		releases: []github.Release{
+			testRelease(newer, false, assetName, checksumAsset, bundleAsset),
+			testRelease(older, false, assetName, checksumAsset, bundleAsset),
+		},
+		files: map[string]string{},
+	}
+	for _, tag := range []string{older, newer} {
+		server.setFile(tag, checksumAsset, checksumLine(tag, assetName))
+		server.setFile(tag, bundleAsset, attestation(tag, strings.TrimPrefix(tag, "v")))
+	}
+	var olderRequested bool
+	transport := trustTestTransport(func(req *http.Request) (*http.Response, error) {
+		olderRequested = olderRequested || strings.Contains(req.URL.Path, "/download/"+older+"/")
+		return server.RoundTrip(req)
+	})
+	engine, _ := newTestEngine(t, "3.45.0", transport)
+	trustErr := errors.New("trust mirror unavailable")
+	engine.loadTrust = func(context.Context) (root.TrustedMaterial, error) { return nil, trustErr }
+
+	release, err := engine.Check(t.Context(), false)
+	if !errors.Is(err, trustErr) || !errors.Is(err, ErrProvenanceUnverified) || release != nil ||
+		engine.pending != nil || olderRequested {
+		t.Fatalf(
+			"release = %+v, err = %v, pending = %+v, older requested = %t",
+			release,
+			err,
+			engine.pending,
+			olderRequested,
+		)
+	}
+}
+
+func TestReleaseCandidatesSkipIncompleteReleases(t *testing.T) {
 	t.Parallel()
 	releases := []github.Release{
-		testRelease("nightly", false, assetName, checksumAsset),
-		testRelease("v3.46.1", false, checksumAsset),
-		testRelease("v3.46.0", false, assetName),
-		{TagName: "v3.46.2", Draft: true, Assets: []github.Asset{{Name: assetName}, {Name: checksumAsset}}},
-		testRelease("v3.45.1", false, assetName, checksumAsset),
+		testRelease("nightly", false, assetName, checksumAsset, bundleAsset),
+		testRelease("v3.46.1", false, checksumAsset, bundleAsset),
+		testRelease("v3.46.0", false, assetName, bundleAsset),
+		testRelease("v3.45.2", false, assetName, checksumAsset),
+		{
+			TagName: "v3.46.2",
+			Draft:   true,
+			Assets:  []github.Asset{{Name: assetName}, {Name: checksumAsset}, {Name: bundleAsset}},
+		},
+		testRelease("v3.45.1", false, assetName, checksumAsset, bundleAsset),
 	}
-	release, found := selectRelease(releases, "3.45.0", true)
-	if !found || release.TagName != "v3.45.1" {
-		t.Fatalf("selected %q (found %t), want v3.45.1", release.TagName, found)
+	candidates := releaseCandidates(releases, "3.45.0", true)
+	if len(candidates) != 1 || candidates[0].TagName != "v3.45.1" {
+		t.Fatalf("candidates = %+v, want only v3.45.1", candidates)
 	}
 }
 
 func TestDownloadAndInstallKeepsOnlyVerifiedBuilds(t *testing.T) {
 	t.Parallel()
 	server := &releaseServer{
-		releases: []github.Release{testRelease("v3.46.0", false, assetName, checksumAsset)},
+		releases: []github.Release{testRelease("v3.46.0", false, assetName, checksumAsset, bundleAsset)},
 		files:    map[string]string{},
 	}
 	server.setFile("v3.46.0", checksumAsset, checksumLine("new build", assetName))
+	server.setFile("v3.46.0", bundleAsset, attestation("new build", "3.46.0"))
 	server.setFile("v3.46.0", assetName, "new build")
 	engine, target := newTestEngine(t, "3.45.0", server)
 	stale := filepath.Join(filepath.Dir(target), stagingPrefix+"stale")

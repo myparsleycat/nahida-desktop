@@ -12,7 +12,7 @@ test('uses stable main and beta v3 release branches', () => {
   assert.equal(config.tagFormat, 'v${version}');
 });
 
-test('publishes only the three documented draft assets', () => {
+test('publishes only the four documented draft assets', () => {
   const github = config.plugins.find(
     (plugin) => Array.isArray(plugin) && plugin[0] === '@semantic-release/github',
   );
@@ -22,6 +22,7 @@ test('publishes only the three documented draft assets', () => {
     { path: 'bin/nahida-desktop-windows-amd64.exe' },
     { path: 'bin/nahida-desktop-windows-amd64-installer.exe' },
     { path: 'bin/SHA256SUMS' },
+    { path: 'bin/nahida-desktop-windows-amd64.sigstore.json' },
   ]);
 });
 
@@ -30,6 +31,11 @@ test('attests release binaries before semantic-release can push the tag', async 
   const attest = workflow.search(/^\s+uses: actions\/attest@/m);
   const publish = workflow.search(/^\s+run: pnpm exec semantic-release\s*$/m);
   assert.ok(attest !== -1 && publish > attest, 'the release must remain retryable if attestation fails');
+  const bundle = workflow.indexOf('BUNDLE_PATH: ${{ steps.attest-release.outputs.bundle-path }}');
+  assert.ok(
+    bundle > attest && publish > bundle,
+    'the attestation bundle must be staged before semantic-release uploads assets',
+  );
 });
 
 test('commits source versions without publishing to npm', () => {

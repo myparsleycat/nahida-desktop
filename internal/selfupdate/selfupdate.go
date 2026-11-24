@@ -13,11 +13,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/sigstore/sigstore-go/pkg/root"
 	"golang.org/x/mod/semver"
 
 	"nahida.live/desktop/internal/diskio"
@@ -26,13 +28,15 @@ import (
 	"nahida.live/desktop/internal/platform"
 )
 
-// The asset names are the release contract of build/windows/publish-updater.ps1.
+// The asset names are the release contract of build/windows/publish-updater.ps1 and .github/workflows/release.yml.
 const (
 	assetName          = "nahida-desktop-windows-amd64.exe"
 	checksumAsset      = "SHA256SUMS"
+	bundleAsset        = "nahida-desktop-windows-amd64.sigstore.json"
 	stagingPrefix      = "nahida-update-"
 	readyFileName      = "helper.ready"
 	maxChecksumBytes   = 64 << 10
+	maxBundleBytes     = 1 << 20
 	maxExecutableBytes = 1 << 30
 	helperReadyTimeout = 30 * time.Second
 )
@@ -52,7 +56,11 @@ type Options struct {
 	// Version is the running version; empty uses platform.AppVersion.
 	Version string
 	GitHub  *github.Client
-	Log     *infra.Log
+	// HTTP fetches the Sigstore trust metadata that release provenance is verified against.
+	HTTP *infra.Client
+	// TrustCacheDir holds the verified Sigstore trust metadata between checks.
+	TrustCacheDir string
+	Log           *infra.Log
 	// Quit starts the application's normal shutdown once the swap helper waits for this process to exit.
 	Quit func()
 	// HelperLog is the file the swap helper appends its progress to; empty writes no helper log.
@@ -69,6 +77,8 @@ type Engine struct {
 
 	executable   func() (string, error)
 	spawn        func(executable string, env []string) (helperProcess, error)
+	loadTrust    func(ctx context.Context) (root.TrustedMaterial, error)
+	verify       func(trusted root.TrustedMaterial, bundle []byte, version string, digest []byte) error
 	readyTimeout time.Duration
 
 	downloadMu sync.Mutex
@@ -100,68 +110,144 @@ func New(opts Options) (*Engine, error) {
 	if opts.Quit == nil {
 		return nil, errors.New("self-update quit is not configured")
 	}
+	if opts.HTTP == nil || strings.TrimSpace(opts.TrustCacheDir) == "" {
+		return nil, errors.New("self-update provenance verification is not configured")
+	}
+	trust := newSigstoreTrust(opts.HTTP, opts.TrustCacheDir, opts.Log)
 	version := strings.TrimSpace(opts.Version)
 	if version == "" {
 		version = platform.AppVersion
 	}
 	return &Engine{
-		version:      version,
-		helperLog:    opts.HelperLog,
-		github:       opts.GitHub,
-		log:          opts.Log,
-		quit:         opts.Quit,
-		executable:   currentExecutable,
-		spawn:        spawnHelper,
+		version:    version,
+		helperLog:  opts.HelperLog,
+		github:     opts.GitHub,
+		log:        opts.Log,
+		quit:       opts.Quit,
+		executable: currentExecutable,
+		spawn:      spawnHelper,
+		loadTrust: func(ctx context.Context) (root.TrustedMaterial, error) {
+			return trust.load(ctx)
+		},
+		verify: func(trusted root.TrustedMaterial, bundle []byte, version string, digest []byte) error {
+			statement, err := verifyProvenance(trusted, releaseBuild, bundle, digest)
+			if err != nil {
+				return err
+			}
+			return requireReleaseSubjects(statement, version, digest)
+		},
 		readyTimeout: helperReadyTimeout,
 	}, nil
 }
 
-// Check returns the newest release above the running version that carries the executable and its checksum,
-// or nil when none does. The release list goes through the shared GitHub client, so the caller's
-// infra.WithGitHub* context values decide its cache use and refresh.
+// Check tries releases above the running version in descending version order, skipping invalid checksums and
+// provenance. It returns the first verified release, nil when there are no candidates, or the newest
+// candidate's error if all candidates are defective. The caller's infra.WithGitHub* context values decide
+// whether the shared GitHub client caches or refreshes the release list.
 func (e *Engine) Check(ctx context.Context, includePrerelease bool) (*infra.UpdateRelease, error) {
 	releases, err := e.github.AllReleases(ctx, releaseRepo)
 	if err != nil {
 		return nil, err
 	}
-	release, found := selectRelease(releases, e.version, includePrerelease)
-	if !found {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	candidates := releaseCandidates(releases, e.version, includePrerelease)
+	if len(candidates) == 0 {
 		e.mu.Lock()
 		e.pending = nil
 		e.mu.Unlock()
 		return nil, nil
 	}
 
-	tag := release.TagName
+	loadTrust := sync.OnceValues(func() (root.TrustedMaterial, error) { return e.loadTrust(ctx) })
+	var skipped []error
+	defer func() {
+		for _, err := range skipped {
+			e.warn(err, "", nil)
+		}
+	}()
+	for _, release := range candidates {
+		tag := release.TagName
+		digest, defective, err := e.checkRelease(ctx, tag, loadTrust)
+		if err != nil && !defective {
+			return nil, err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if err != nil {
+			skipped = append(skipped, err)
+			continue
+		}
+
+		e.mu.Lock()
+		e.pending = &pendingRelease{tag: tag, digest: digest}
+		e.mu.Unlock()
+		channel := ""
+		if release.Prerelease {
+			channel = infra.UpdateChannelPrerelease
+		}
+		return &infra.UpdateRelease{Version: strings.TrimPrefix(tag, "v"), Channel: channel, Notes: release.Body}, nil
+	}
+	newestErr := skipped[0]
+	skipped = skipped[1:]
+	return nil, newestErr
+}
+
+func (e *Engine) checkRelease(
+	ctx context.Context,
+	tag string,
+	loadTrust func() (root.TrustedMaterial, error),
+) (digest []byte, defective bool, err error) {
 	sumsURL := github.ReleaseFileURL(releaseRepo, tag, checksumAsset)
 	sums, err := e.github.FetchFile(ctx, releaseRepo, sumsURL, maxChecksumBytes)
 	if err != nil {
-		return nil, infra.AnnotateError(fmt.Errorf("read %s of %s: %w", checksumAsset, tag, err), infra.Diagnostic{
-			Operation: "self-update", Stage: "checksum",
-			Fields: map[string]any{"tag": tag, "url": infra.SanitizeLogURL(sumsURL)},
-		})
+		return nil, false, infra.AnnotateError(
+			fmt.Errorf("read %s of %s: %w", checksumAsset, tag, err),
+			infra.Diagnostic{
+				Operation: "self-update", Stage: "checksum",
+				Fields: map[string]any{"tag": tag, "url": infra.SanitizeLogURL(sumsURL)},
+			},
+		)
 	}
-	digest, err := checksumFor(sums, assetName)
+	digest, err = checksumFor(sums, assetName)
 	if err != nil {
-		return nil, infra.AnnotateError(fmt.Errorf("release %s: %w", tag, err), infra.Diagnostic{
-			Operation: "self-update", Stage: "checksum", Fields: map[string]any{"tag": tag, "asset": assetName},
+		return nil, true, infra.AnnotateError(fmt.Errorf("release %s: %w", tag, err), infra.Diagnostic{
+			Operation: "self-update", Stage: "checksum",
+			Fields: map[string]any{"tag": tag, "asset": assetName, "url": infra.SanitizeLogURL(sumsURL)},
 		})
 	}
 
-	e.mu.Lock()
-	e.pending = &pendingRelease{tag: tag, digest: digest}
-	e.mu.Unlock()
-	channel := ""
-	if release.Prerelease {
-		channel = infra.UpdateChannelPrerelease
+	bundleURL := github.ReleaseFileURL(releaseRepo, tag, bundleAsset)
+	provenanceFields := map[string]any{
+		"tag": tag, "asset": assetName, "digest": hex.EncodeToString(digest), "url": infra.SanitizeLogURL(bundleURL),
 	}
-	return &infra.UpdateRelease{Version: strings.TrimPrefix(tag, "v"), Channel: channel, Notes: release.Body}, nil
+	bundle, err := e.github.FetchFile(ctx, releaseRepo, bundleURL, maxBundleBytes)
+	diagnostic := infra.Diagnostic{Operation: "self-update", Stage: "provenance", Fields: provenanceFields}
+	if err != nil {
+		return nil, false, infra.AnnotateError(fmt.Errorf("read %s of %s: %w", bundleAsset, tag, err), diagnostic)
+	}
+
+	trusted, err := loadTrust()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		err = ctxErr
+	} else if err != nil {
+		err = fmt.Errorf("%w: %w", ErrProvenanceUnverified, err)
+	}
+	if err != nil {
+		return nil, false, infra.AnnotateError(fmt.Errorf("release %s: %w", tag, err), diagnostic)
+	}
+	if err := e.verify(trusted, bundle, strings.TrimPrefix(tag, "v"), digest); err != nil {
+		defective := !infra.IsCancellationError(err) && !errors.Is(err, context.DeadlineExceeded)
+		return nil, defective, infra.AnnotateError(fmt.Errorf("release %s: %w", tag, err), diagnostic)
+	}
+	return digest, false, nil
 }
 
-func selectRelease(releases []github.Release, current string, includePrerelease bool) (github.Release, bool) {
+func releaseCandidates(releases []github.Release, current string, includePrerelease bool) []github.Release {
 	current = canonicalVersion(current)
-	var best github.Release
-	found := false
+	var candidates []github.Release
 	for _, release := range releases {
 		if release.Draft || release.Prerelease && !includePrerelease {
 			continue
@@ -170,14 +256,15 @@ func selectRelease(releases []github.Release, current string, includePrerelease 
 		if !semver.IsValid(tag) || semver.Compare(tag, current) <= 0 {
 			continue
 		}
-		if !hasAsset(release, assetName) || !hasAsset(release, checksumAsset) {
+		if !hasAsset(release, assetName) || !hasAsset(release, checksumAsset) || !hasAsset(release, bundleAsset) {
 			continue
 		}
-		if !found || semver.Compare(tag, canonicalVersion(best.TagName)) > 0 {
-			best, found = release, true
-		}
+		candidates = append(candidates, release)
 	}
-	return best, found
+	slices.SortStableFunc(candidates, func(a, b github.Release) int {
+		return semver.Compare(canonicalVersion(b.TagName), canonicalVersion(a.TagName))
+	})
+	return candidates
 }
 
 func canonicalVersion(version string) string {
@@ -320,7 +407,11 @@ func (e *Engine) removeStaging(dir string) {
 }
 
 func (e *Engine) warn(err error, stage string, fields map[string]any) {
-	_ = infra.ReportError(e.log, err, "SelfUpdate", infra.Diagnostic{
+	warnSelfUpdate(e.log, err, stage, fields)
+}
+
+func warnSelfUpdate(log *infra.Log, err error, stage string, fields map[string]any) {
+	_ = infra.ReportError(log, err, "SelfUpdate", infra.Diagnostic{
 		Severity: infra.DiagnosticWarn, Operation: "self-update", Stage: stage, Fields: fields,
 	})
 }

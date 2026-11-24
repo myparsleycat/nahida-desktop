@@ -108,10 +108,11 @@ func (e *HTTPError) Error() string {
 
 // FetchOptions is the Go stand-in for ky/fetcher RequestInit.
 type FetchOptions struct {
-	Method            string
-	Header            http.Header
-	Body              io.Reader
-	DisableHTTPErrors bool
+	Method                string
+	Header                http.Header
+	Body                  io.Reader
+	DisableHTTPErrors     bool
+	DisableTimeoutRewrite bool
 	// HTTPClient overrides the client for this request without changing the shared client policy.
 	// Callers use it for request-scoped redirect handling while retaining the configured transport.
 	HTTPClient *http.Client
@@ -435,7 +436,9 @@ func (c *Client) Fetch(
 		return nil, errors.New("http: empty response")
 	}
 	stage = "response"
-	resp = c.rewriteTimeout(resp)
+	if !opts.DisableTimeoutRewrite {
+		resp = c.rewriteTimeout(resp)
+	}
 	if nhd {
 		if err := normalizeAPIResponse(resp); err != nil {
 			c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, err)
@@ -463,7 +466,9 @@ func (c *Client) Fetch(
 				return nil, requestErr
 			}
 			rawURL = fallbackURL
-			resp = c.rewriteTimeout(resp)
+			if !opts.DisableTimeoutRewrite {
+				resp = c.rewriteTimeout(resp)
+			}
 			if normalizeErr := normalizeAPIResponse(resp); normalizeErr != nil {
 				c.logAPIResponseDecodeFailure(rawURL, resp.StatusCode, normalizeErr)
 				return nil, normalizeErr
