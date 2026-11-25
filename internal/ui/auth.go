@@ -40,8 +40,10 @@ func (s *Shell) authPage() *fairy.El {
 // startLogin opens the web sign-in and waits for its deep link. A successful sign-in from the auth screen
 // returns to the previous screen.
 func (s *Shell) startLogin() {
-	// A running login is left to Auth.StartLogin, which ends the login it replaces and records it as replaced.
+	// Auth.StartLogin registers here on the UI thread, so the latest click owns the login and the one it replaces
+	// ends as replaced.
 	ctx, cancel := context.WithCancel(context.Background())
+	run := s.deps.Auth.StartLogin(ctx)
 	s.login.seq++
 	seq := s.login.seq
 	s.login.busy, s.login.stoppable, s.login.cancel = true, false, cancel
@@ -55,7 +57,7 @@ func (s *Shell) startLogin() {
 	})
 	go func() {
 		defer cancel()
-		err := s.deps.Auth.StartLogin(ctx)
+		err := run()
 		cancelled := infra.IsCancellationError(err)
 		if err != nil && !cancelled {
 			err = infra.ReportError(s.deps.Log, err, "Auth.StartLogin", infra.Diagnostic{Operation: "auth.login"})

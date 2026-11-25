@@ -83,8 +83,8 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// pendingLogin is the handshake StartLogin is running. Its verifier never
-// leaves StartLogin, so a code completes only the login that asked for it.
+// pendingLogin is the handshake runLogin is running. Its verifier never
+// leaves runLogin, so a code completes only the login that asked for it.
 // state is empty until the backend answers. state and mismatchLogged are
 // guarded by Auth.mu.
 type pendingLogin struct {
@@ -94,17 +94,20 @@ type pendingLogin struct {
 	cancel         context.CancelCauseFunc
 }
 
-// StartLogin runs the deep-link handshake: it registers a PKCE challenge with
+// StartLogin registers a new login, replacing the running one, and returns run,
+// which performs the deep-link handshake: it registers a PKCE challenge with
 // the backend, opens the web sign-in page, and waits for the nahida://auth link
 // that page opens to deliver a one-time code through CompleteLogin. The code and
 // the verifier together are exchanged for the session token.
-func (a *Auth) StartLogin(ctx context.Context) (err error) {
+//
+// The login registered by the latest StartLogin call owns the sign-in, whichever
+// run reaches the backend first. The caller must call run exactly once.
+func (a *Auth) StartLogin(ctx context.Context) (run func() error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	// The newest call owns the login from here on, whichever backend answer
-	// arrives first: taking over cancels every step of the one before.
+	// Taking over cancels every step of the login before.
 	loginCtx, cancel := context.WithCancelCause(ctx)
 	pending := &pendingLogin{code: make(chan string, 1), cancel: cancel}
 	a.mu.Lock()
@@ -114,7 +117,10 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	if previous != nil {
 		previous.cancel(errLoginReplaced)
 	}
+	return func() error { return a.runLogin(ctx, loginCtx, pending) }
+}
 
+func (a *Auth) runLogin(ctx, loginCtx context.Context, pending *pendingLogin) (err error) {
 	started := time.Now()
 	stage, stageStarted := "prepare", started
 	var requestTook time.Duration
@@ -135,7 +141,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		if !saved && replaced {
 			err = ctx.Err()
 		}
-		cancel(nil)
+		pending.cancel(nil)
 		a.mu.Lock()
 		if a.login == pending {
 			a.login = nil
@@ -188,6 +194,9 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		}
 		err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage, Fields: fields})
 	}()
+	if errors.Is(context.Cause(loginCtx), errLoginReplaced) {
+		return errLoginReplaced
+	}
 	if a.http == nil {
 		return errors.New("auth http is not configured")
 	}

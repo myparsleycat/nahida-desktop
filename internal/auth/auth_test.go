@@ -643,7 +643,7 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 	if a.CompleteLogin("st", "one-time-code") {
 		t.Fatal("a link was accepted before any login started")
 	}
-	if err := a.StartLogin(context.Background()); err != nil {
+	if err := a.StartLogin(context.Background())(); err != nil {
 		t.Fatalf("StartLogin: %v", err)
 	}
 	if opened != "https://nahida.live/login" {
@@ -692,7 +692,7 @@ func TestStartLoginReportsRefusedExchange(t *testing.T) {
 		return nil
 	}
 
-	err := a.StartLogin(context.Background())
+	err := a.StartLogin(context.Background())()
 	if !errors.Is(err, errLoginExchange) || err.Error() != errLoginExchange.Error() {
 		t.Fatalf("StartLogin = %v, want %v", err, errLoginExchange)
 	}
@@ -730,12 +730,12 @@ func TestStartLoginIsReplacedByNewerLogin(t *testing.T) {
 	}
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background()) }()
+	go func() { first <- a.StartLogin(context.Background())() }()
 	<-firstOpened
 
 	ctx, cancel := context.WithCancel(context.Background())
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(ctx) }()
+	go func() { second <- a.StartLogin(ctx)() }()
 
 	// The first login ends quietly once the second takes its place.
 	if err := <-first; err != nil {
@@ -836,14 +836,14 @@ func TestReplacedLoginDoesNotSaveLateExchange(t *testing.T) {
 	a := login.auth
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background()) }()
+	go func() { first <- a.StartLogin(context.Background())() }()
 	if page := <-login.opened; page != "first" || !a.CompleteLogin("first", "code") {
 		t.Fatalf("first login did not take its link, opened %q", page)
 	}
 	<-login.holding
 
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(context.Background()) }()
+	go func() { second <- a.StartLogin(context.Background())() }()
 	if page := <-login.opened; page != "second" || !a.CompleteLogin("second", "code") {
 		t.Fatalf("second login did not take its link, opened %q", page)
 	}
@@ -870,11 +870,11 @@ func TestLateStartResponseDoesNotReplaceNewerLogin(t *testing.T) {
 	a := login.auth
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background()) }()
+	go func() { first <- a.StartLogin(context.Background())() }()
 	<-login.holding
 
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(context.Background()) }()
+	go func() { second <- a.StartLogin(context.Background())() }()
 	if page := <-login.opened; page != "second" {
 		t.Fatalf("opened %q, want the second login's page", page)
 	}
@@ -898,6 +898,48 @@ func TestLateStartResponseDoesNotReplaceNewerLogin(t *testing.T) {
 	}
 }
 
+// Two quick clicks register in click order, but the second click's run may
+// reach the backend first; the later registration still owns the login.
+func TestLaterRegisteredLoginOwnsLoginWhenRunFirst(t *testing.T) {
+	t.Parallel()
+	login := newLateLogin(t, "")
+	a := login.auth
+
+	runFirst := a.StartLogin(context.Background())
+	runSecond := a.StartLogin(context.Background())
+	second := make(chan error, 1)
+	go func() { second <- runSecond() }()
+	var page string
+	select {
+	case page = <-login.opened:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the later login never opened its page")
+	}
+
+	first := make(chan error, 1)
+	go func() { first <- runFirst() }()
+	select {
+	case err := <-first:
+		if err != nil {
+			t.Fatalf("replaced login = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("replaced login kept running")
+	}
+	if len(login.opened) != 0 {
+		t.Fatalf("the replaced login opened %q", <-login.opened)
+	}
+	if !a.CompleteLogin(page, "code") {
+		t.Fatal("the later login no longer accepted its link")
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("later login: %v", err)
+	}
+	if got := login.store.token(); got != page+"-token" {
+		t.Fatalf("stored %q, want %q", got, page+"-token")
+	}
+}
+
 // Stop cancels the running login before the next one replaces it, so the
 // replaced login sees its own cancellation rather than errLoginReplaced.
 func TestCanceledLoginOutlivedByLateStartResponseIsQuiet(t *testing.T) {
@@ -910,13 +952,13 @@ func TestCanceledLoginOutlivedByLateStartResponseIsQuiet(t *testing.T) {
 
 	firstCtx, cancelFirst := context.WithCancel(context.Background())
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(firstCtx) }()
+	go func() { first <- a.StartLogin(firstCtx)() }()
 	<-login.holding
 
 	cancelFirst()
 	secondCtx, cancelSecond := context.WithCancel(context.Background())
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(secondCtx) }()
+	go func() { second <- a.StartLogin(secondCtx)() }()
 	if page := <-login.opened; page != "second" {
 		t.Fatalf("opened %q, want the second login's page", page)
 	}
@@ -958,7 +1000,7 @@ func TestStartLoginRefusesPlaintextRedirect(t *testing.T) {
 	})
 	a.openURL = func(string) error { return nil }
 
-	if err := a.StartLogin(context.Background()); err == nil {
+	if err := a.StartLogin(context.Background())(); err == nil {
 		t.Fatal("StartLogin succeeded through a redirect to http://")
 	}
 	if got := backendHits.Load(); got != 1 {
