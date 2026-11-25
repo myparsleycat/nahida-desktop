@@ -1351,7 +1351,6 @@
         "loading": "読み込み中...",
         "load_failed": "バージョンの読み込みに失敗しました。",
         "no_versions": "利用可能なバージョンがありません。",
-        "target_importer": "対象 GIMI Importer",
         "no_importer": "利用可能な GIMI Importer がありません",
         "select_importer_msg": "対象の GIMI Importer を選択してください。",
         "building": "ビルド中",

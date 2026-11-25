@@ -1354,7 +1354,6 @@
         "loading": "Loading...",
         "load_failed": "Failed to load versions.",
         "no_versions": "No versions available.",
-        "target_importer": "Target GIMI Importer",
         "no_importer": "No available GIMI Importer",
         "select_importer_msg": "Select a target GIMI Importer.",
         "building": "Building",

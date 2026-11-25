@@ -1351,7 +1351,6 @@
         "loading": "불러오는 중...",
         "load_failed": "버전을 불러오지 못했습니다.",
         "no_versions": "사용 가능한 버전이 없습니다.",
-        "target_importer": "대상 GIMI 임포터",
         "no_importer": "사용 가능한 GIMI 임포터가 없습니다",
         "select_importer_msg": "대상 GIMI 임포터를 선택해 주세요.",
         "building": "빌드 진행 중",

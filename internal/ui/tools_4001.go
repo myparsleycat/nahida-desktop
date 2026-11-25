@@ -179,47 +179,29 @@ func (s *Shell) check4001Importer() {
 
 func (s *Shell) fixer4001ToolPage(cx *fairy.Cx) *fairy.El {
 	f := &s.tools.fixer4001
-	t := kit.T()
 	const prefix = "page.tools.4001_fixer."
 	s.start4001Fixer()
 
-	var importers []string
-	keys := map[string]string{}
-	if data := fetch(s, &s.xxmi.data, s.deps.XXMI.GetXXMIData); data.loaded {
-		for _, importer := range data.value.EnabledImporters {
-			if strings.EqualFold(importer.Key, "GIMI") {
-				importers = append(importers, importer.ImporterFolder)
-				keys[importer.ImporterFolder] = importer.Key
+	data := fetch(s, &s.xxmi.data, s.deps.XXMI.GetXXMIData)
+	if data.loaded {
+		importer, key := "", ""
+		for _, enabled := range data.value.EnabledImporters {
+			if strings.EqualFold(enabled.Key, "GIMI") {
+				importer, key = enabled.ImporterFolder, enabled.Key
+				break
 			}
 		}
-	}
-	if f.importer == "" && len(importers) > 0 {
-		f.importer, f.importerKey = importers[0], keys[importers[0]]
+		if f.importer != importer {
+			f.importer, f.importerKey, f.checked, f.backupPath, f.requiresElevation = importer, key, "", "", false
+		}
 	}
 	s.check4001Importer()
 	running := f.task != ""
 
-	importerRow := fairy.Row().Gap(8).Wrap().RowGap(8)
-	if len(importers) == 0 {
-		importerRow.Child(
-			fairy.Text(T(prefix+"no_importer")).FontSize(12).Color(t.MutedForeground).WFull().PadXY(12, 6).
-				Radius(4).Border(1, t.Border).BorderDashed().TextAlign(fairy.TextCenter),
-		)
+	page := toolPage(toolHeading(T(prefix+"title"), T(prefix+"description"), nil))
+	if data.loaded && f.importer == "" {
+		page.Child(xxmiAlert(lucide.CircleAlert, false, "", T(prefix+"no_importer")))
 	}
-	for _, folder := range importers {
-		importerRow.Child(fixerChip(keys[folder], f.importer == folder, running, func() {
-			if f.importer == folder {
-				return
-			}
-			f.importer, f.importerKey, f.backupPath, f.requiresElevation = folder, keys[folder], "", false
-		}).Tooltip(folder))
-	}
-
-	page := toolPage(
-		toolHeading(T(prefix+"title"), T(prefix+"description"), nil),
-		fairy.Col(fixerLabel(T(prefix+"target_importer")), importerRow).Gap(8).
-			PadEdges(4, 14, 4, 30).BorderEdges(0, 0, 0, 1, t.Foreground.Alpha(0.2)),
-	)
 	if f.requiresElevation {
 		page.Child(xxmiAlert(lucide.ShieldAlert, false, T(prefix+"system_folder_warning_title"),
 			T(prefix+"system_folder_warning_description")))
