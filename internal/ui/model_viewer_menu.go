@@ -669,7 +669,6 @@ func (v *ModelViewer) capture(scale int) (*fairy.Image, error) {
 	}
 	opts := v.drawOptions([4]float32{})
 	opts.morph = float32(v.interpolation(trackMod, time.Now()))
-	opts.interpolating = v.interpolating()
 	opts.singleSample = scale > 1
 	opts.pixelScale = float32(width) / float32(v.surfaceSize[0])
 	// The live surface may not draw again soon to bring the targets back to its size and sample count, so the

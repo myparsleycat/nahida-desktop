@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 	"unsafe"
 
 	"github.com/myparsleycat/fairy"
@@ -208,10 +207,6 @@ const (
 // viewerShadowMapSize is the React viewer's key light shadow map size.
 const viewerShadowMapSize = 4096
 
-// viewerShadowInterval is how long the shadow map keeps the pose it was drawn with while a playback draws between
-// frames, which would otherwise draw it again on every frame.
-const viewerShadowInterval = time.Second / 60
-
 // viewerToonDraw is the toon shading a draw applies, or nil without Toon Shadows.
 type viewerToonDraw struct {
 	profile  string
@@ -250,8 +245,6 @@ type viewerDrawOptions struct {
 	skin *viewerMotion
 	// morph is the share of their next animation frame's geometry the meshes that have one are drawn with.
 	morph float32
-	// interpolating is set while a playback draws between frames, so the meshes move on every draw.
-	interpolating bool
 	// singleSample draws without multisampling. An export rendered above the viewer's size needs none, and
 	// multisampled targets at that size can exceed the device's per-resource limit.
 	singleSample bool
@@ -324,11 +317,9 @@ type viewerRenderer struct {
 	casterScratch []int
 	bufferScratch []d3d.Buffer
 	shadowDrawn   bool
-	// shadowAt is the surface time the shadow map was last drawn at.
-	shadowAt  time.Duration
-	depthOn   d3d.DepthStencilState
-	depthRead d3d.DepthStencilState
-	blend     d3d.BlendState
+	depthOn       d3d.DepthStencilState
+	depthRead     d3d.DepthStencilState
+	blend         d3d.BlendState
 	// multiply multiplies the target's colour by the pixel's and keeps its alpha.
 	multiply d3d.BlendState
 
@@ -841,7 +832,7 @@ func (r *viewerRenderer) drawScene(
 		}
 	}
 	if shadowed {
-		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, originals, &frame, f.Time); err != nil {
+		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, originals, &frame); err != nil {
 			return err
 		}
 	} else if r.shadowSRV.P != nil {
@@ -1078,8 +1069,7 @@ func (r *viewerRenderer) drawRing(ctx d3d.Context, rtv d3d.RenderTargetView, rin
 }
 
 // drawShadowMap renders the depth of the meshes that cast shadows into the key light's map, unless the map already
-// holds them as frame's light sees them. While a playback draws between frames, a map drawn less than
-// viewerShadowInterval before now stays as long as only the pose or the share of the next frame changed.
+// holds them as frame's light sees them.
 func (r *viewerRenderer) drawShadowMap(
 	ctx d3d.Context,
 	dev d3d.Device,
@@ -1088,7 +1078,6 @@ func (r *viewerRenderer) drawShadowMap(
 	skin *viewerSkinGPU,
 	originals []originalDraw,
 	frame *viewerFrameConstants,
-	now time.Duration,
 ) error {
 	if err := r.shadowTargets(dev); err != nil {
 		return err
@@ -1119,19 +1108,13 @@ func (r *viewerRenderer) drawShadowMap(
 	if skin != nil {
 		key.posed = skin.posed
 	}
-	moved := key
-	moved.posed, moved.morph = r.shadowKey.posed, r.shadowKey.morph
-	// The surface's time starts again after a frame that left it out.
-	elapsed := now - r.shadowAt
-	recent := opts.interpolating && moved == r.shadowKey && elapsed >= 0 && elapsed < viewerShadowInterval
-	if r.shadowDrawn && (key == r.shadowKey || recent) && slices.Equal(casters, r.shadowCasters) &&
+	if r.shadowDrawn && key == r.shadowKey && slices.Equal(casters, r.shadowCasters) &&
 		slices.Equal(buffers, r.shadowBuffers) {
 		r.casterScratch, r.bufferScratch = casters, buffers
 		return nil
 	}
 	r.casterScratch, r.bufferScratch = r.shadowCasters, r.shadowBuffers
 	r.shadowKey, r.shadowCasters, r.shadowBuffers, r.shadowDrawn = key, casters, buffers, true
-	r.shadowAt = now
 
 	ctx.PSSetShaderResources(9, d3d.ShaderResourceView{})
 	ctx.OMSetRenderTargets(nil, r.shadowDSV)

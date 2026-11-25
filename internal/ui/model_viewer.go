@@ -1102,7 +1102,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 		}
 		now := time.Now()
 		opts.morph = float32(v.interpolation(trackMod, now))
-		opts.interpolating = v.interpolating()
+		interpolating := v.interpolating()
 		if err := v.poseMotion(now); err != nil {
 			m := v.activeMotion()
 			v.poster()(func() {
@@ -1142,7 +1142,7 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
 			cx.Window().Update()
 		}
-		return v.motion.running || animated || opts.interpolating || expressing
+		return v.motion.running || animated || interpolating || expressing
 	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull().
 		Cursor(fairy.CursorMove).DragButtons(fairy.MouseLeft | fairy.MouseRight | fairy.MouseMiddle).
 		OnDrag(v.drag).
