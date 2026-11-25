@@ -280,10 +280,15 @@ func (v *ModelViewer) captureMenuItems() []kit.MenuItem {
 			Disabled: v.scene == nil || v.savingPreview, OnClick: v.requestPreviewCapture,
 		})
 	}
-	return append(items, kit.MenuItem{
+	items = append(items, kit.MenuItem{
 		Label: T("page.tools.model_viewer.menu.save_png"), Icon: lucide.ImageDown,
 		Disabled: v.scene == nil || v.savingPNG, Submenu: v.pngMenu(),
 	})
+	if wallpaper := v.wallpaperMenuItems(); len(wallpaper) > 0 {
+		items = append(items, kit.MenuItem{Separator: true})
+		items = append(items, wallpaper...)
+	}
+	return items
 }
 
 func (v *ModelViewer) exposureControl(exposure float64) *fairy.El {
@@ -544,6 +549,7 @@ func (v *ModelViewer) requestPreviewCapture() {
 func (v *ModelViewer) dialogs(cx *fairy.Cx) {
 	v.characterSelectionDialog(cx)
 	v.togglePresetDialogs(cx)
+	v.wallpaperMakerDialogs(cx)
 	if !v.confirmPreview {
 		return
 	}

@@ -179,6 +179,9 @@ func (s *Shell) settingsLoaded(keys ...string) bool {
 // its own message.
 var revertOnSaveFailure = []string{setting.KeyModAutoInspectFix, setting.KeyToolsWuwaFixerUpdateNotification}
 
+// SaveSetting is setSetting for the windows the app owns. Call it on the UI thread.
+func (s *Shell) SaveSetting(key string, value any) { s.setSetting(key, value) }
+
 // setSetting shows value at once and saves it in the background. A failed save drops the cached value, so the
 // stored one is loaded again, or for revertOnSaveFailure shows the value from before the change.
 func (s *Shell) setSetting(key string, value any) {

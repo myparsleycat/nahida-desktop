@@ -52,8 +52,10 @@ type viewerMotion struct {
 	clipBoxesValid   []bool
 	clipBox, restBox viewerMotionBox
 	// fadeStart is when the pose shown at the last change of clip began fading into the new clip, or zero once the
-	// fade is over. fadeStowed marks the nodes the clips faded from put out of sight, hidden until the fade ends.
+	// fade is over. fadeLength is how long the fade takes at the clip's own rate. fadeStowed marks the nodes the
+	// clips faded from put out of sight, hidden until the fade ends.
 	fadeStart  time.Time
+	fadeLength time.Duration
 	fadeStowed []bool
 	// palettes maps each blend palette's groups to skeleton nodes, as packMotionBlend takes them; a negative entry
 	// maps a group to no node. paletteEvidence counts, by palette and group, the most weighted vertices MapPalettes has
@@ -383,6 +385,11 @@ func (v *ModelViewer) startCharacterMotion(key viewerCharacterKey) {
 			m.cancel = cancel
 			v.charMotion = m
 			v.startMotion(m.defaultClip())
+			if v.sequence != nil {
+				v.restartShot()
+			} else if v.wallpaper != nil {
+				v.restoreWallpaperTrack(trackMotion, v.wallpaper.Motion)
+			}
 			// A Blender live link replaced these meshes while the motion loaded.
 			for _, i := range changed {
 				m.replaceBlend(i, "", nil, nil)
@@ -737,7 +744,11 @@ const viewerMotionFade = 250 * time.Millisecond
 
 // startMotion selects a motion clip and plays it from its first frame when it has more than one, blending into it
 // from the pose shown.
-func (v *ModelViewer) startMotion(clipID string) {
+func (v *ModelViewer) startMotion(clipID string) { v.startMotionFade(clipID, viewerMotionFade) }
+
+// startMotionFade starts a motion clip as startMotion does, blending into it over fade, or showing it at once when
+// fade is zero.
+func (v *ModelViewer) startMotionFade(clipID string, fade time.Duration) {
 	m := v.activeMotion()
 	if m == nil {
 		return
@@ -755,8 +766,8 @@ func (v *ModelViewer) startMotion(clipID string) {
 		held = nil
 	}
 	m.fadeStart, m.fadeStowed = time.Time{}, nil
-	if m.posed != 0 && m.pose.Hold() {
-		m.fadeStart = time.Now()
+	if fade > 0 && m.posed != 0 && m.pose.Hold() {
+		m.fadeStart, m.fadeLength = time.Now(), fade
 		m.fadeStowed = unionStowed(held, m.motion.StowedNodes(m.posedAt.clip))
 	}
 	v.runTrackClock(trackMotion)
@@ -765,7 +776,15 @@ func (v *ModelViewer) startMotion(clipID string) {
 
 // fadeProgress is the share of the fade played at now, at the motion's playback speed.
 func (m *viewerMotion) fadeProgress(now time.Time) float64 {
-	return now.Sub(m.fadeStart).Seconds() * m.play.rate() / viewerMotionFade.Seconds()
+	return now.Sub(m.fadeStart).Seconds() * m.play.rate() / m.fade().Seconds()
+}
+
+// fade is how long the fade into the clip takes at the clip's own rate.
+func (m *viewerMotion) fade() time.Duration {
+	if m.fadeLength <= 0 {
+		return viewerMotionFade
+	}
+	return m.fadeLength
 }
 
 // motionHold is the share of the pose held at the last change of clip that the pose at now keeps, easing from 1 to

@@ -78,6 +78,7 @@ const (
 	KeyModelViewerOriginalData        = "modelViewer.originalData"
 	KeyModelViewerCharacterMotion     = "modelViewer.characterMotion"
 	KeyModelViewerBlenderLink         = "modelViewer.blenderLink"
+	KeyModelViewerWallpaper           = "modelViewer.wallpaper"
 
 	KeyXXMIRoot               = "xxmi.root"
 	KeyXXMIAutoUpdate         = "xxmi.autoUpdate"
@@ -192,6 +193,7 @@ var allDefinitions = []Definition{
 	{KeyModelViewerOriginalData, ScopeModelViewer, "model_viewer_original_data"},
 	{KeyModelViewerCharacterMotion, ScopeModelViewer, "model_viewer_character_motion"},
 	{KeyModelViewerBlenderLink, ScopeModelViewer, "model_viewer_blender_link"},
+	{KeyModelViewerWallpaper, ScopeModelViewer, "model_viewer_wallpaper"},
 
 	{KeyXXMIPersistToggles, ScopeXXMI, "xxmi_persist_toggles"},
 	{KeyXXMIToggleViewerAutoGenerate, ScopeXXMI, "xxmi_toggle_viewer_auto_generate"},

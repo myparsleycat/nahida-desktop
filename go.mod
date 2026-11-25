@@ -19,7 +19,7 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/myparsleycat/ddsutil v0.4.0
-	github.com/myparsleycat/fairy v0.1.32
+	github.com/myparsleycat/fairy v0.1.33
 	github.com/openai/openai-go v1.12.0
 	github.com/rodrigocfd/windigo v0.2.7
 	github.com/samber/lo v1.53.0

@@ -189,6 +189,14 @@ type ModelViewer struct {
 	applyingPreset     bool
 	character          *viewerCharacter
 	characterSelection viewerCharacterSelection
+
+	// wallpaper is the snapshot a desktop wallpaper viewer restores over each scene it installs, nil for other
+	// viewers. wallpaperPaused stops its surface animating while windows cover the desktop.
+	wallpaper       *ViewerWallpaper
+	wallpaperPaused bool
+	// sequence plays a wallpaper's shots, or the Wallpaper Maker's preview; maker is the open Wallpaper Maker.
+	sequence *sequencer
+	maker    *wallpaperMaker
 }
 
 // NewModelViewer makes the viewer of the mod at path and starts loading it. Call it on the UI thread.
@@ -449,6 +457,9 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.orientation = vec3{}
 	v.camera = frameOrbit(scene.minimum, scene.maximum)
 	v.home = v.camera
+	if v.wallpaper != nil {
+		v.restoreWallpaper(*v.wallpaper)
+	}
 	v.motion.stop()
 	v.previewPath = ""
 	if scene.transport.PreviewPath != nil {
@@ -462,6 +473,13 @@ func (v *ModelViewer) install(scene *viewerScene) {
 	v.anim.clock = clock
 	v.evaluate()
 	v.startAnimation("")
+	if v.wallpaper != nil {
+		v.restoreWallpaperTrack(trackMod, v.wallpaper.Animation)
+	}
+	v.stopSequence()
+	if v.wallpaper != nil && len(v.wallpaper.Shots) > 0 {
+		v.startSequence(v.wallpaper.Shots, true)
+	}
 	v.refreshIneffective()
 	v.loadTextureChoices(scene)
 	v.installCharacter(scene)
@@ -983,6 +1001,7 @@ func (v *ModelViewer) dragAt(d fairy.DragEvent, now time.Time) {
 		return
 	}
 	if d.Phase == fairy.DragStart {
+		v.stopPreview()
 		v.dragStart = v.camera
 		v.dragPanning = d.Button != 0 || d.Mods&keyboard.ModShift != 0
 		v.dragLast = [2]float32{}
@@ -1014,6 +1033,7 @@ func (v *ModelViewer) dragAt(d fairy.DragEvent, now time.Time) {
 // viewAlong turns the camera to the yaw and pitch of an axis view.
 func (v *ModelViewer) viewAlong(view [2]float64) {
 	now := time.Now()
+	v.stopPreview()
 	v.advanceCamera(now)
 	v.motion.turn = &view
 	v.runCamera(now)
@@ -1055,47 +1075,10 @@ func (v *ModelViewer) advanceCamera(now time.Time) {
 	}
 }
 
-// View builds the content of a viewer window of its own.
-func (v *ModelViewer) View(cx *fairy.Cx) *fairy.El {
-	dark := v.dark()
-	t := Theme(dark, v.shell.blur, v.font)
-	// The viewer window keeps the system title bar, so dialogs centre on the whole window.
-	t.DialogTopInset = 0
-	if v.shownDark == nil || *v.shownDark != dark {
-		v.shownDark = &dark
-		cx.Window().SetColors(dark, t.Background, t.Foreground)
-	}
-	kit.Use(t)
-	v.toasts = &v.windowToasts
-	content := v.content(cx, t, v.header(t, nil))
-	v.dialogs(cx)
-	cx.Overlay(v.windowToasts.View(), nil)
-	return content.Pad(12)
-}
-
-// content builds the viewer with header above its menu bar and viewport; a tool's dialog passes nil and titles
-// the dialog itself, as React's ModelViewerWorkspace has no header of its own.
-func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fairy.El {
-	v.window = cx.Window()
-	background := t.Background.Mix(t.Muted, 0.5)
-
-	scene := v.scene
-	v.syncFieldOfView()
-	v.advanceCamera(time.Now())
-	v.syncOriginal()
-	v.syncMotion()
-	v.syncToonAssets(v.toonStyle())
-	gameTextures := v.gameTextureCount()
-	// The highlight's switch shows only while such parts exist, so the highlight ends with them.
-	if gameTextures == 0 {
-		v.highlightGameTextures = false
-	}
-	opts := v.drawOptions([4]float32{background.R, background.G, background.B, 1})
-	if v.tool != nil && v.tool.overlay != nil {
-		opts.overlay = v.tool.overlay()
-	}
+// viewportSurface draws the scene with opts; it stops animating while the wallpaper is paused.
+func (v *ModelViewer) viewportSurface(cx *fairy.Cx, scene *viewerScene, opts viewerDrawOptions) *fairy.El {
 	animated := opts.overlay != nil && opts.overlay.animated != nil
-	surface := fairy.Surface(func(f fairy.SurfaceFrame) bool {
+	return fairy.Surface(func(f fairy.SurfaceFrame) bool {
 		v.surfaceSize = [2]int{f.Width, f.Height}
 		if scene != nil && scene.gpu != nil && scene.gpu.generation != f.Generation && v.uploadErr == "" {
 			v.reupload()
@@ -1138,16 +1121,62 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 				}
 			})
 		}
-		if v.motion.running {
+		moving := v.motion.running || v.sequenceMoving()
+		if moving {
 			// Rebuild before the next draw so the surface, gizmo and tools share one camera.
 			cx.Window().Update()
 		}
-		return v.motion.running || animated || interpolating || expressing
-	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull().
+		return !v.wallpaperPaused && (moving || animated || interpolating || expressing)
+	}).Retain(v.version(opts)).Key(modelViewerSurfaceKey).WFull().HFull()
+}
+
+// View builds the content of a viewer window of its own.
+func (v *ModelViewer) View(cx *fairy.Cx) *fairy.El {
+	dark := v.dark()
+	t := Theme(dark, v.shell.blur, v.font)
+	// The viewer window keeps the system title bar, so dialogs centre on the whole window.
+	t.DialogTopInset = 0
+	if v.shownDark == nil || *v.shownDark != dark {
+		v.shownDark = &dark
+		cx.Window().SetColors(dark, t.Background, t.Foreground)
+	}
+	kit.Use(t)
+	v.toasts = &v.windowToasts
+	content := v.content(cx, t, v.header(t, nil))
+	v.dialogs(cx)
+	cx.Overlay(v.windowToasts.View(), nil)
+	return content.Pad(12)
+}
+
+// content builds the viewer with header above its menu bar and viewport; a tool's dialog passes nil and titles
+// the dialog itself, as React's ModelViewerWorkspace has no header of its own.
+func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fairy.El {
+	v.window = cx.Window()
+	background := t.Background.Mix(t.Muted, 0.5)
+
+	scene := v.scene
+	v.syncFieldOfView()
+	v.runSequence(time.Now())
+	v.advanceCamera(time.Now())
+	v.syncOriginal()
+	v.syncMotion()
+	v.syncToonAssets(v.toonStyle())
+	v.syncSelectedShot()
+	gameTextures := v.gameTextureCount()
+	// The highlight's switch shows only while such parts exist, so the highlight ends with them.
+	if gameTextures == 0 {
+		v.highlightGameTextures = false
+	}
+	opts := v.drawOptions([4]float32{background.R, background.G, background.B, 1})
+	if v.tool != nil && v.tool.overlay != nil {
+		opts.overlay = v.tool.overlay()
+	}
+	surface := v.viewportSurface(cx, scene, opts).
 		Cursor(fairy.CursorMove).DragButtons(fairy.MouseLeft | fairy.MouseRight | fairy.MouseMiddle).
 		OnDrag(v.drag).
 		OnWheel(func(e fairy.WheelEvent) bool {
 			now := time.Now()
+			v.stopPreview()
 			v.advanceCamera(now)
 			v.motion.zoom(v.camera, float64(e.DY))
 			v.runCamera(now)
@@ -1236,6 +1265,9 @@ func (v *ModelViewer) content(cx *fairy.Cx, t kit.Theme, header *fairy.El) *fair
 	main.Child(v.menuBar().Shrink(0))
 	width, _ := cx.Size()
 	main.Child(v.sideSplit(t, viewport, width))
+	if v.maker != nil {
+		main.Child(v.makerTimeline(t))
+	}
 	return main
 }
 
@@ -1339,14 +1371,21 @@ func (s *Shell) closeModelViewer() {
 	}
 }
 
+// requestCloseModelViewer closes the viewer dialog at the user's request, once any unsaved changes are dropped.
+func (s *Shell) requestCloseModelViewer() {
+	if v := s.mods.viewer; v != nil && v.ConfirmClose(s.closeModelViewer) {
+		s.closeModelViewer()
+	}
+}
+
 func (s *Shell) modelViewerDialog(cx *fairy.Cx) {
 	v := s.mods.viewer
 	if v == nil || !v.opened {
 		return
 	}
 	t := kit.T()
-	panel := v.content(cx, *t, v.header(*t, s.closeModelViewer)).Pad(12).Radius(t.RadiusXl()).
+	panel := v.content(cx, *t, v.header(*t, s.requestCloseModelViewer)).Pad(12).Radius(t.RadiusXl()).
 		Border(1, t.Border).Clip().Shadow(0, 20, 50, 0, shadowColor(t)).Role(fairy.RoleDialog).Label(v.Title())
-	showWindowDialog(cx, "mod.model-viewer", panel, s.closeModelViewer)
+	showWindowDialog(cx, "mod.model-viewer", panel, s.requestCloseModelViewer)
 	v.dialogs(cx)
 }

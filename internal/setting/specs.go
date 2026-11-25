@@ -558,6 +558,13 @@ func buildSpecs() map[string]spec {
 			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
 			normalize:  func(_ *Setting, value any) any { return asString(value) },
 		},
+		// JSON snapshot of the viewer shown as the desktop wallpaper, owned by the UI; empty when none is set.
+		KeyModelViewerWallpaper: {
+			def:        definitionsByKey[KeyModelViewerWallpaper],
+			getDefault: func(*Setting) any { return "" },
+			fromStored: func(_ *Setting, value *string) any { return lo.FromPtr(value) },
+			normalize:  func(_ *Setting, value any) any { return asString(value) },
+		},
 
 		KeyXXMIPersistToggles: {
 			def:        definitionsByKey[KeyXXMIPersistToggles],

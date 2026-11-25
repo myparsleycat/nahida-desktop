@@ -1730,6 +1730,11 @@
           "capture_set_preview": "캡처 후 미리보기 지정",
           "save_png": "PNG로 저장",
           "save_png_scale": "{{scale}}x · {{width}}×{{height}}",
+          "set_wallpaper": "바탕 화면 배경으로 설정",
+          "wallpaper_maker": "바탕 화면 배경 메이커",
+          "wallpaper_monitor": "모니터 {{index}} · {{width}}×{{height}}",
+          "wallpaper_monitor_primary": "모니터 {{index}}(주 모니터) · {{width}}×{{height}}",
+          "remove_wallpaper": "바탕 화면 배경 해제",
           "save_to_ini": "INI에 저장",
           "save_as_preset": "프리셋으로 저장",
           "apply_preset": "프리셋 적용",
@@ -1792,6 +1797,7 @@
           "apply_to_game_error": "게임에 토글 값을 적용하지 못했습니다.",
           "overlay_in_viewer_save_error": "오버레이 표시 설정을 저장하지 못했습니다.",
           "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
+          "wallpaper_error": "바탕 화면 배경을 설정하지 못했습니다.",
           "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다.",
           "capture_not_ready": "모델을 불러오는 중입니다.",
           "save_png_success": "PNG 파일을 저장했습니다.",
@@ -1809,6 +1815,58 @@
           "Up 90°": "위로 90°",
           "Down 90°": "아래로 90°",
           "Flip 180°": "180° 뒤집기"
+        },
+        "sequence": {
+          "label": "시퀀스",
+          "default_name": "새 시퀀스",
+          "new": "새 시퀀스",
+          "rename": "시퀀스 이름 변경",
+          "delete": "시퀀스 삭제",
+          "empty": "현재 화면을 첫 번째 샷으로 추가하십시오.",
+          "add_shot": "현재 화면 추가",
+          "shot_title": "샷 {{index}}",
+          "still": "정지 포즈",
+          "length": "길이",
+          "loops": "반복 횟수",
+          "seconds": "초",
+          "transition": "전환",
+          "loops_value": "{{value}}회 반복",
+          "seconds_value": "{{value}}초",
+          "transition_value": "전환 {{value}}초",
+          "preview": "미리보기",
+          "stop_preview": "정지",
+          "set_wallpaper": "바탕 화면 배경으로 설정",
+          "monitor": "모니터",
+          "dialog": {
+            "new_title": "새 시퀀스",
+            "rename_title": "시퀀스 이름 변경",
+            "discard": {
+              "title": "저장하지 않은 변경 사항을 버리시겠습니까?",
+              "description": "\"{{name}}\"의 변경 사항이 저장되지 않았습니다.",
+              "confirm": "버리기"
+            },
+            "delete": {
+              "title": "시퀀스를 삭제하시겠습니까?",
+              "description": "\"{{name}}\"이(가) 모드의 nhd.json에서 삭제됩니다."
+            }
+          },
+          "toast": {
+            "saved": "시퀀스를 저장했습니다.",
+            "save_error": "시퀀스를 저장하지 못했습니다.",
+            "load_error": "저장된 시퀀스를 불러오지 못했습니다."
+          },
+          "unsaved": "저장하지 않은 변경 사항",
+          "total": "총 {{value}}",
+          "no_selection": "선택한 샷 없음",
+          "no_selection_hint": "타임라인에서 샷을 선택하여 편집하거나, 화면을 구성한 뒤 새 샷으로 추가하십시오.",
+          "shot_of": "샷 {{index}} / {{count}}",
+          "move_earlier": "앞으로 이동",
+          "move_later": "뒤로 이동",
+          "duplicate": "샷 복제",
+          "live_hint": "뷰어에서 변경한 카메라, 토글, 폼, 클립이 이 샷에 저장됩니다.",
+          "motion": "모션",
+          "mod_clip": "모드 애니메이션",
+          "transition_from": "샷 {{index}}에서 전환합니다."
         }
       },
       "fix-tool-manager": {

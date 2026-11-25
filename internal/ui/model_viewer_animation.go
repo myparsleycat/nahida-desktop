@@ -52,6 +52,8 @@ type viewerPlayback struct {
 	clock uint64
 	// applied is the time the frame last advanced at.
 	applied time.Time
+	// cycles counts the plays of a clip that ended: each wrap of a looping clip and each end of one that does not.
+	cycles int
 	// resume holds whether playback continues once a drag of the frame slider ends.
 	resume *bool
 	// scrubWidth is the measured width of the frame scrubber.
@@ -169,28 +171,36 @@ func (v *ModelViewer) animationFPS(clip *modelviewer.ModelViewerAnimationClip) f
 }
 
 // advanceAnimationFrame steps a clip from current by the whole frames that fit in elapsed. It returns the time
-// those frames took, and whether a clip that does not loop reached its end.
+// those frames took, how many plays of the clip ended on the way, and whether a clip that does not loop reached its
+// end.
 func advanceAnimationFrame(
 	current int,
 	elapsed time.Duration,
 	fps float64,
 	clip *modelviewer.ModelViewerAnimationClip,
-) (frame int, consumed time.Duration, complete bool) {
+) (frame int, consumed time.Duration, ended int, complete bool) {
 	frameCount := len(clip.Frames)
 	if frameCount <= 1 {
-		return 0, 0, true
+		return 0, 0, 1, true
 	}
 	frameDuration := time.Duration(float64(time.Second) / normalizeAnimationFPS(fps))
 	steps := int(max(elapsed, 0) / frameDuration)
 	if steps == 0 {
-		return current, 0, false
+		return current, 0, 0, false
 	}
 	consumed = time.Duration(steps) * frameDuration
 	if clip.Loop {
-		return loopAnimationFrame(clip, current+steps), consumed, false
+		if index := current + steps; index >= frameCount {
+			start := min(max(clip.LoopStart, 0), frameCount-1)
+			ended = 1 + (index-frameCount)/(frameCount-start)
+		}
+		return loopAnimationFrame(clip, current+steps), consumed, ended, false
 	}
 	frame = min(current+steps, frameCount-1)
-	return frame, consumed, frame == frameCount-1
+	if frame == frameCount-1 {
+		return frame, consumed, 1, true
+	}
+	return frame, consumed, 0, false
 }
 
 // loopAnimationFrame wraps a frame index past the end of a looping clip back into its loop section.
@@ -400,7 +410,7 @@ func (v *ModelViewer) setTrackSpeed(track viewerTrack, speed float64) {
 	p.speed = speed
 	p.clock++
 	if fading != nil {
-		fading.fadeStart = now.Add(-time.Duration(faded * float64(viewerMotionFade) / p.rate()))
+		fading.fadeStart = now.Add(-time.Duration(faded * float64(fading.fade()) / p.rate()))
 	}
 	if !p.playing || clip == nil {
 		return
@@ -485,6 +495,12 @@ func (v *ModelViewer) trackTick(track viewerTrack, p *viewerPlayback, clock uint
 		return
 	}
 	fps := p.fps(clip)
+	// A covered wallpaper holds its frame instead of drawing frames nobody sees.
+	if v.wallpaperPaused {
+		p.applied = time.Now()
+		v.scheduleTrackTick(track, p, clock, wallpaperPausedTick)
+		return
+	}
 	// The mod's playback starts once the frames ahead are loaded, then keeps real time: a frame whose meshes or
 	// position variants are not loaded when its time comes is skipped, and the frame before stays on screen.
 	if since := v.anim.warmSince; track == trackMod && since != nil {
@@ -495,8 +511,9 @@ func (v *ModelViewer) trackTick(track viewerTrack, p *viewerPlayback, clock uint
 		}
 		v.anim.warmSince, p.applied = nil, time.Now()
 	}
-	frame, consumed, complete := advanceAnimationFrame(p.frame, time.Since(p.applied), fps, clip)
+	frame, consumed, ended, complete := advanceAnimationFrame(p.frame, time.Since(p.applied), fps, clip)
 	p.applied = p.applied.Add(consumed)
+	p.cycles += ended
 	if frame != p.frame {
 		v.setTrackFrame(track, frame)
 	}

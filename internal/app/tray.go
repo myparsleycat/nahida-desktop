@@ -241,6 +241,20 @@ func newTray(rt *runtime, icon []byte) (*tray.Tray, error) {
 					fairy.MenuItem{Label: "Restart to Update", OnClick: func() { go rt.installUpdate() }},
 				)
 			}
+			if w := rt.wallpaper; w != nil && w.Active() {
+				items = append(items, fairy.MenuItem{Separator: true})
+				if w.Shown() {
+					pause := fairy.MenuItem{Label: "Pause Wallpaper", OnClick: func() { w.SetHeld(true) }}
+					if w.Held() {
+						pause = fairy.MenuItem{Label: "Resume Wallpaper", OnClick: func() { w.SetHeld(false) }}
+					}
+					items = append(items, pause)
+				}
+				items = append(items,
+					fairy.MenuItem{Label: "Remove Wallpaper", OnClick: w.Clear},
+					fairy.MenuItem{Separator: true},
+				)
+			}
 			return append(items,
 				fairy.MenuItem{Label: "Setting", OnClick: func() {
 					rt.window.Focus()

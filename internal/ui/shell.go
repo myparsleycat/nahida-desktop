@@ -69,6 +69,8 @@ type Deps struct {
 	Dev bool
 	// CDNTrace reads Cloudflare's trace for the development screen.
 	CDNTrace *infra.CDNTrace
+	// Wallpaper shows a model viewer as the desktop wallpaper; nil hides the viewer's wallpaper items.
+	Wallpaper WallpaperHost
 }
 
 // Shell is the main window's frame: title bar, navigation, the current screen, toasts and dialogs. Its

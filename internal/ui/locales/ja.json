@@ -1730,6 +1730,11 @@
           "capture_set_preview": "キャプチャしてプレビューに設定",
           "save_png": "PNG で保存",
           "save_png_scale": "{{scale}}x · {{width}}×{{height}}",
+          "set_wallpaper": "デスクトップの壁紙に設定",
+          "wallpaper_maker": "壁紙メーカー",
+          "wallpaper_monitor": "モニター {{index}} · {{width}}×{{height}}",
+          "wallpaper_monitor_primary": "モニター {{index}}（メイン） · {{width}}×{{height}}",
+          "remove_wallpaper": "デスクトップの壁紙を解除",
           "save_to_ini": "INI に保存",
           "save_as_preset": "プリセットとして保存",
           "apply_preset": "プリセットを適用",
@@ -1792,6 +1797,7 @@
           "apply_to_game_error": "ゲームへのトグル値の適用に失敗しました",
           "overlay_in_viewer_save_error": "オーバーレイ表示設定の保存に失敗しました",
           "capture_preview_success": "現在のビューアーのキャプチャを preview.png として保存しました",
+          "wallpaper_error": "デスクトップの壁紙を設定できませんでした",
           "capture_preview_error": "現在のビューアーのキャプチャを preview.png として保存できませんでした",
           "capture_not_ready": "モデルを読み込み中です",
           "save_png_success": "PNG ファイルを保存しました",
@@ -1809,6 +1815,58 @@
           "Up 90°": "上に 90°",
           "Down 90°": "下に 90°",
           "Flip 180°": "180° 反転"
+        },
+        "sequence": {
+          "label": "シーケンス",
+          "default_name": "新しいシーケンス",
+          "new": "新しいシーケンス",
+          "rename": "シーケンス名を変更",
+          "delete": "シーケンスを削除",
+          "empty": "現在の表示を最初のショットとして追加してください。",
+          "add_shot": "現在の表示を追加",
+          "shot_title": "ショット {{index}}",
+          "still": "静止ポーズ",
+          "length": "長さ",
+          "loops": "ループ回数",
+          "seconds": "秒",
+          "transition": "トランジション",
+          "loops_value": "{{value}} ループ",
+          "seconds_value": "{{value}} 秒",
+          "transition_value": "トランジション {{value}} 秒",
+          "preview": "プレビュー",
+          "stop_preview": "停止",
+          "set_wallpaper": "壁紙に設定",
+          "monitor": "モニター",
+          "dialog": {
+            "new_title": "新しいシーケンス",
+            "rename_title": "シーケンス名を変更",
+            "discard": {
+              "title": "保存していない変更を破棄しますか？",
+              "description": "「{{name}}」の変更は保存されていません。",
+              "confirm": "破棄"
+            },
+            "delete": {
+              "title": "シーケンスを削除しますか？",
+              "description": "「{{name}}」をMODの nhd.json から削除します。"
+            }
+          },
+          "toast": {
+            "saved": "シーケンスを保存しました",
+            "save_error": "シーケンスを保存できませんでした",
+            "load_error": "保存されたシーケンスを読み込めませんでした"
+          },
+          "unsaved": "未保存の変更",
+          "total": "合計 {{value}}",
+          "no_selection": "ショット未選択",
+          "no_selection_hint": "タイムラインでショットを選択して編集するか、表示を整えて新しいショットとして追加してください。",
+          "shot_of": "ショット {{index}} / {{count}}",
+          "move_earlier": "前へ移動",
+          "move_later": "後ろへ移動",
+          "duplicate": "ショットを複製",
+          "live_hint": "ビューアーで変更したカメラ、トグル、フォーム、クリップはこのショットに保存されます。",
+          "motion": "モーション",
+          "mod_clip": "MODアニメーション",
+          "transition_from": "ショット {{index}} からのトランジションです。"
         }
       },
       "fix-tool-manager": {

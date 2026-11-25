@@ -76,6 +76,9 @@ func (m *modelViewerWindows) Open(path string) {
 		Icon:       m.icon,
 		View:       viewer.View,
 		OnClose: func() bool {
+			if !viewer.ConfirmClose(window.Close) {
+				return false
+			}
 			viewer.Close()
 			delete(m.windows, window)
 			if len(m.windows) == 0 && m.lastClosed != nil {

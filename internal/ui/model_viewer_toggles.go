@@ -633,6 +633,8 @@ func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth flo
 		var side *fairy.El
 		if v.tool != nil && v.tool.inspector != nil {
 			side = v.toolPanel(t, variables, width)
+		} else if v.maker != nil {
+			side = v.makerInspector(t, variables, width)
 		} else if v.showsToggleControls(variables) {
 			side = v.togglePanel(t, variables, width)
 		}
@@ -645,6 +647,9 @@ func (v *ModelViewer) sideSplit(t kit.Theme, viewport *fairy.El, windowWidth flo
 	row := fairy.Row(viewport).Grow(1).MinH(0).OnLayout(measure)
 	if v.tool != nil && v.tool.inspector != nil {
 		return row.Gap(12).Child(v.toolPanel(t, variables, viewerSideWidth).W(viewerSideWidth).Shrink(0))
+	}
+	if v.maker != nil {
+		return row.Gap(12).Child(v.makerInspector(t, variables, viewerSideWidth).W(viewerSideWidth).Shrink(0))
 	}
 	if !v.showsToggleControls(variables) {
 		return row

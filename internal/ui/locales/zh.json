@@ -1730,6 +1730,11 @@
           "capture_set_preview": "捕获并设为预览",
           "save_png": "保存为 PNG",
           "save_png_scale": "{{scale}}x · {{width}}×{{height}}",
+          "set_wallpaper": "设为桌面壁纸",
+          "wallpaper_maker": "壁纸制作器",
+          "wallpaper_monitor": "显示器 {{index}} · {{width}}×{{height}}",
+          "wallpaper_monitor_primary": "显示器 {{index}}（主显示器） · {{width}}×{{height}}",
+          "remove_wallpaper": "取消桌面壁纸",
           "save_to_ini": "保存到 INI",
           "save_as_preset": "保存为预设",
           "apply_preset": "应用预设",
@@ -1792,6 +1797,7 @@
           "apply_to_game_error": "无法将开关值应用到游戏",
           "overlay_in_viewer_save_error": "保存覆盖层显示设置失败",
           "capture_preview_success": "已将当前查看器截图保存为 preview.png",
+          "wallpaper_error": "无法设置桌面壁纸",
           "capture_preview_error": "无法将当前查看器截图保存为 preview.png",
           "capture_not_ready": "模型仍在加载中",
           "save_png_success": "已保存 PNG 文件",
@@ -1809,6 +1815,58 @@
           "Up 90°": "向上旋转 90°",
           "Down 90°": "向下旋转 90°",
           "Flip 180°": "翻转 180°"
+        },
+        "sequence": {
+          "label": "序列",
+          "default_name": "新序列",
+          "new": "新建序列",
+          "rename": "重命名序列",
+          "delete": "删除序列",
+          "empty": "将当前视图添加为第一个镜头。",
+          "add_shot": "添加当前视图",
+          "shot_title": "镜头 {{index}}",
+          "still": "静止姿势",
+          "length": "时长",
+          "loops": "循环次数",
+          "seconds": "秒",
+          "transition": "过渡",
+          "loops_value": "循环 {{value}} 次",
+          "seconds_value": "{{value}} 秒",
+          "transition_value": "过渡 {{value}} 秒",
+          "preview": "预览",
+          "stop_preview": "停止",
+          "set_wallpaper": "设为壁纸",
+          "monitor": "显示器",
+          "dialog": {
+            "new_title": "新建序列",
+            "rename_title": "重命名序列",
+            "discard": {
+              "title": "放弃未保存的更改？",
+              "description": "“{{name}}”的更改尚未保存。",
+              "confirm": "放弃"
+            },
+            "delete": {
+              "title": "删除序列？",
+              "description": "将从模组的 nhd.json 中删除“{{name}}”。"
+            }
+          },
+          "toast": {
+            "saved": "已保存序列",
+            "save_error": "无法保存序列",
+            "load_error": "无法加载已保存的序列"
+          },
+          "unsaved": "有未保存的更改",
+          "total": "总计 {{value}}",
+          "no_selection": "未选择镜头",
+          "no_selection_hint": "在时间轴中选择镜头进行编辑，或调整视图后添加为新镜头。",
+          "shot_of": "镜头 {{index}} / {{count}}",
+          "move_earlier": "前移",
+          "move_later": "后移",
+          "duplicate": "复制镜头",
+          "live_hint": "在查看器中更改的相机、开关、形态和片段会保存到此镜头。",
+          "motion": "动作",
+          "mod_clip": "模组动画",
+          "transition_from": "从镜头 {{index}} 过渡。"
         }
       },
       "fix-tool-manager": {

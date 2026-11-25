@@ -76,6 +76,7 @@ func Run(icon []byte) (runErr error) {
 	if err != nil {
 		_ = infra.ReportError(rt.log, err, "App", infra.Diagnostic{Operation: "register-fonts"})
 	}
+	rt.wallpaper = newWallpaperHost(font, rt.log)
 	shell := ui.NewShell(ui.Deps{
 		Events:       events,
 		Settings:     rt.setting,
@@ -105,7 +106,9 @@ func Run(icon []byte) (runErr error) {
 		LibraryReady: rt.startup.waitLibrary,
 		Dev:          !in.Packaged,
 		CDNTrace:     rt.cdnTrace,
+		Wallpaper:    rt.wallpaper,
 	}, font)
+	rt.wallpaper.shell = shell
 	viewers := newModelViewerWindows(shell, icon, font, rt.log, rt.modelViewerClosed)
 	startElevatedHelper := sync.OnceFunc(rt.startElevatedHelperIfEnabled)
 	rt.window.Configure(rt.setting, rt.log, icon, shell, font, startElevatedHelper, rt.mainWindowClosed)
@@ -147,6 +150,7 @@ func Run(icon []byte) (runErr error) {
 	// Windows may end the process as soon as the session-end hook returns, before Main returns.
 	fairy.OnSessionEnd(func() {
 		rt.window.SaveBounds()
+		rt.wallpaper.Close()
 		_ = shutdown()
 	})
 	return fairy.Main(func() error {
@@ -163,6 +167,7 @@ func Run(icon []byte) (runErr error) {
 			startElevatedHelper()
 		}
 		rt.startup.start(rt.runStartupWork)
+		go rt.restoreWallpaper(rt.wallpaper)
 		launches.Start(fairy.Launch{Args: os.Args, Dir: in.Cwd}, newLaunchHandler(
 			viewers.Open,
 			rt.window.open,
@@ -300,9 +305,13 @@ func (rt *runtime) mainWindowClosed() {
 
 // quit ends the message loop after saving the main window's bounds. fairy.Main destroys the windows that are
 // still open without running their OnClose, so the bounds must be read on the UI thread before Quit; app calls
-// run in order, so the save precedes the quit message.
+// run in order, so the save precedes the quit message. The desktop wallpaper is taken down the same way, so the
+// static wallpaper is repainted before its window is destroyed.
 func (rt *runtime) quit() {
 	fairy.Go(rt.window.SaveBounds)
+	if rt.wallpaper != nil {
+		fairy.Go(rt.wallpaper.Close)
+	}
 	fairy.Quit()
 }
 

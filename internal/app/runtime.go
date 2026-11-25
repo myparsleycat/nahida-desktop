@@ -57,6 +57,8 @@ type runtime struct {
 	mod             *mod.Mod
 	modRuntime      *modruntime.Manager
 	gameLink        *gamelink.Manager
+	// wallpaper shows a model viewer behind the desktop icons; nil until the UI is built.
+	wallpaper *wallpaperHost
 	// blenderLink is made once the app data folder is known; nil before.
 	blenderLink       *blenderlink.Manager
 	xxmi              *xxmi.XXMI

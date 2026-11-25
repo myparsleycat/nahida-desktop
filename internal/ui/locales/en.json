@@ -1736,6 +1736,11 @@
           "capture_set_preview": "Capture and set preview",
           "save_png": "Save as PNG",
           "save_png_scale": "{{scale}}x · {{width}}×{{height}}",
+          "set_wallpaper": "Set as Desktop Wallpaper",
+          "wallpaper_maker": "Wallpaper Maker",
+          "wallpaper_monitor": "Monitor {{index}} · {{width}}×{{height}}",
+          "wallpaper_monitor_primary": "Monitor {{index}} (primary) · {{width}}×{{height}}",
+          "remove_wallpaper": "Remove Desktop Wallpaper",
           "save_to_ini": "Save to INI",
           "save_as_preset": "Save as preset",
           "apply_preset": "Apply preset",
@@ -1798,6 +1803,7 @@
           "apply_to_game_error": "Failed to apply toggle values to the game",
           "overlay_in_viewer_save_error": "Failed to save the overlay display setting",
           "capture_preview_success": "Saved the current viewer capture as preview.png",
+          "wallpaper_error": "Failed to set the desktop wallpaper",
           "capture_preview_error": "Failed to save the current viewer capture as preview.png",
           "capture_not_ready": "The model is still loading",
           "save_png_success": "Saved the PNG file",
@@ -1815,6 +1821,58 @@
           "Up 90°": "Up 90°",
           "Down 90°": "Down 90°",
           "Flip 180°": "Flip 180°"
+        },
+        "sequence": {
+          "label": "Sequence",
+          "default_name": "New sequence",
+          "new": "New sequence",
+          "rename": "Rename sequence",
+          "delete": "Delete sequence",
+          "empty": "Add the current view as the first shot.",
+          "add_shot": "Add current view",
+          "shot_title": "Shot {{index}}",
+          "still": "Still pose",
+          "length": "Length",
+          "loops": "Loops",
+          "seconds": "Seconds",
+          "transition": "Transition",
+          "loops_value": "{{value}} loops",
+          "seconds_value": "{{value}} s",
+          "transition_value": "Transition {{value}} s",
+          "preview": "Preview",
+          "stop_preview": "Stop",
+          "set_wallpaper": "Set as wallpaper",
+          "monitor": "Monitor",
+          "dialog": {
+            "new_title": "New sequence",
+            "rename_title": "Rename sequence",
+            "discard": {
+              "title": "Discard unsaved changes?",
+              "description": "The changes to \"{{name}}\" are not saved.",
+              "confirm": "Discard"
+            },
+            "delete": {
+              "title": "Delete sequence?",
+              "description": "\"{{name}}\" is removed from the mod's nhd.json."
+            }
+          },
+          "toast": {
+            "saved": "Sequence saved",
+            "save_error": "Failed to save the sequence",
+            "load_error": "Failed to load the saved sequences"
+          },
+          "unsaved": "Unsaved changes",
+          "total": "Total {{value}}",
+          "no_selection": "No shot selected",
+          "no_selection_hint": "Select a shot on the timeline to edit it, or set up the view and add it as a new shot.",
+          "shot_of": "Shot {{index}} of {{count}}",
+          "move_earlier": "Move earlier",
+          "move_later": "Move later",
+          "duplicate": "Duplicate shot",
+          "live_hint": "Camera, toggle, form and clip changes in the viewer are saved to this shot.",
+          "motion": "Motion",
+          "mod_clip": "Mod animation",
+          "transition_from": "Transition from shot {{index}}."
         }
       },
       "fix-tool-manager": {

@@ -371,8 +371,8 @@ github.com/modelcontextprotocol/go-sdk v1.8.0 h1:KIvahhYqwtbeniWVPs3TcXEA7b8jEtw
 github.com/modelcontextprotocol/go-sdk v1.8.0/go.mod h1:dL7u98E/zjJTGzEq+j30jQ8K2k1mb6LeAH4inEcSGts=
 github.com/myparsleycat/ddsutil v0.4.0 h1:yryZgkGEZDOTACJFJGogZ1gIi2wTboOAW4bm23bUdf4=
 github.com/myparsleycat/ddsutil v0.4.0/go.mod h1:InioKuc7NG5WrBaWQ6LoqH0UsSyD4rIrDiSIqV+LsuQ=
-github.com/myparsleycat/fairy v0.1.32 h1:j9xVicEZR6/02zxMQUDStw+xcNZGqLVI8cw+3tmcS6A=
-github.com/myparsleycat/fairy v0.1.32/go.mod h1:u7xuYm720336iLXJTH6ORvFCsem9wIXGzmd/5sRziDs=
+github.com/myparsleycat/fairy v0.1.33 h1:U3vLGPyEn0jo9UitJzWJ1gDKVsgXxUcKa6IqPjUhmuk=
+github.com/myparsleycat/fairy v0.1.33/go.mod h1:u7xuYm720336iLXJTH6ORvFCsem9wIXGzmd/5sRziDs=
 github.com/natefinch/atomic v1.0.1 h1:ZPYKxkqQOx3KZ+RsbnP/YsgvxWQPGxjC0oBt2AhwV0A=
 github.com/natefinch/atomic v1.0.1/go.mod h1:N/D/ELrljoqDyT3rZrsUmtsuzvHkeB/wWjHV22AZRbM=
 github.com/ncruces/go-strftime v1.1.0 h1:vtPmPWMkb539RGV9WpWT9EwJGvrOCKvMNI4obWL47Hk=
