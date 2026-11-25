@@ -562,8 +562,11 @@ func (a *Auth) do(req *http.Request) (*http.Response, error) {
 	if a.http == nil {
 		return nil, errors.New("auth HTTP client is not configured")
 	}
-	// SSE owns its lifetime through the request context, not the API timeout.
-	return (&http.Client{Transport: a.http.HTTPClient().Transport}).Do(req)
+	// Callers set the deadline through the request context; the copy keeps the
+	// shared redirect policy without the shared client timeout.
+	client := *a.http.HTTPClient()
+	client.Timeout = 0
+	return client.Do(req)
 }
 
 func (a *Auth) broadcast(name string, data any) {

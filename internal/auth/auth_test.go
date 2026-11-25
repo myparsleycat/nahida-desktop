@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -894,6 +895,77 @@ func TestLateStartResponseDoesNotReplaceNewerLogin(t *testing.T) {
 	}
 	if got := login.store.token(); got != "second-token" {
 		t.Fatalf("stored %q", got)
+	}
+}
+
+// Stop cancels the running login before the next one replaces it, so the
+// replaced login sees its own cancellation rather than errLoginReplaced.
+func TestCanceledLoginOutlivedByLateStartResponseIsQuiet(t *testing.T) {
+	t.Parallel()
+	login := newLateLogin(t, loginPath)
+	var output bytes.Buffer
+	login.auth.log = infra.NewLogWithOptions(infra.LogOptions{Writer: &output, DisableFile: true})
+	login.auth.log.SetLevel("info")
+	a := login.auth
+
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	first := make(chan error, 1)
+	go func() { first <- a.StartLogin(firstCtx) }()
+	<-login.holding
+
+	cancelFirst()
+	secondCtx, cancelSecond := context.WithCancel(context.Background())
+	second := make(chan error, 1)
+	go func() { second <- a.StartLogin(secondCtx) }()
+	if page := <-login.opened; page != "second" {
+		t.Fatalf("opened %q, want the second login's page", page)
+	}
+
+	login.release()
+	if err := <-first; !infra.IsCancellationError(err) {
+		t.Fatalf("replaced StartLogin = %v, want a cancellation", err)
+	}
+	cancelSecond()
+	if err := <-second; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled StartLogin = %v, want context.Canceled", err)
+	}
+
+	for _, want := range []string{`"outcome":"canceled"`, `"stage":"login-request"`, `"reached":"decoded"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("missing %s: %s", want, output.String())
+		}
+	}
+}
+
+func TestStartLoginRefusesPlaintextRedirect(t *testing.T) {
+	t.Parallel()
+	var plaintextHits atomic.Int32
+	plaintext := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		plaintextHits.Add(1)
+	}))
+	t.Cleanup(plaintext.Close)
+	var backendHits atomic.Int32
+	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendHits.Add(1)
+		http.Redirect(w, r, plaintext.URL+loginPath, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(backend.Close)
+
+	a := NewWithOptions(Options{
+		Store:  &memStore{},
+		Crypto: passCrypto{},
+		HTTP:   infra.NewClientWithOptions(infra.ClientOptions{BackendURL: backend.URL, HTTPClient: backend.Client()}),
+	})
+	a.openURL = func(string) error { return nil }
+
+	if err := a.StartLogin(context.Background()); err == nil {
+		t.Fatal("StartLogin succeeded through a redirect to http://")
+	}
+	if got := backendHits.Load(); got != 1 {
+		t.Fatalf("backend received %d start requests, want 1", got)
+	}
+	if got := plaintextHits.Load(); got != 0 {
+		t.Fatalf("the login request followed a redirect to http:// %d times", got)
 	}
 }
 

@@ -177,8 +177,8 @@ func parseAuthDeepLink(value string) (state, code string, ok bool) {
 
 // dispatchDeepLinkLogin hands the nahida://auth links found in args to the
 // login waiting for one, stopping at the link it accepts. Any page can open
-// such a link, so one that no pending login asked for is dropped without a
-// trace.
+// such a link, so one that no pending login asked for is dropped; Auth logs it
+// only while a login is waiting.
 func (rt *runtime) dispatchDeepLinkLogin(args []string) {
 	for _, arg := range args {
 		if state, code, ok := parseAuthDeepLink(arg); ok && rt.auth.CompleteLogin(state, code) {

@@ -5,12 +5,17 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"nahida.live/desktop/internal/infra"
 )
@@ -18,6 +23,16 @@ import (
 var (
 	errIWantToLogin  = errors.New("Failed to get iWantToLogin data") //nolint:staticcheck // Electron contract text.
 	errLoginExchange = errors.New("Failed to complete login")        //nolint:staticcheck // Shown in the login dialog.
+)
+
+const (
+	// slowLoginRequest is how long the start request may take before a login
+	// that otherwise ends normally is recorded at WARN.
+	slowLoginRequest = 10 * time.Second
+	// abandonedLoginStage is how long a stage outside the browser wait must
+	// have run before a cancellation in it counts as a stall rather than a
+	// change of mind.
+	abandonedLoginStage = 2 * time.Second
 )
 
 // errLoginReplaced cancels a login a newer StartLogin call took over from.
@@ -70,11 +85,13 @@ func (s *loginStart) UnmarshalJSON(data []byte) error {
 
 // pendingLogin is the handshake StartLogin is running. Its verifier never
 // leaves StartLogin, so a code completes only the login that asked for it.
-// state is empty until the backend answers and is guarded by Auth.mu.
+// state is empty until the backend answers. state and mismatchLogged are
+// guarded by Auth.mu.
 type pendingLogin struct {
-	state  string
-	code   chan string
-	cancel context.CancelCauseFunc
+	state          string
+	mismatchLogged bool
+	code           chan string
+	cancel         context.CancelCauseFunc
 }
 
 // StartLogin runs the deep-link handshake: it registers a PKCE challenge with
@@ -98,11 +115,24 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		previous.cancel(errLoginReplaced)
 	}
 
-	stage := "prepare"
+	started := time.Now()
+	stage, stageStarted := "prepare", started
+	var requestTook time.Duration
+	setStage := func(next string) {
+		if stage == "login-request" {
+			requestTook = time.Since(stageStarted)
+		}
+		stage, stageStarted = next, time.Now()
+	}
+	progress := &loginProgress{}
+	base := ""
 	saved := false
 	defer func() {
-		// A login replaced before it saved a token has nothing to report.
-		if !saved && errors.Is(context.Cause(loginCtx), errLoginReplaced) {
+		// A login replaced before it saved a token has nothing to report. Stop
+		// cancels a login before the next one replaces it, which leaves
+		// context.Canceled as the cause and errLoginReplaced only in err.
+		replaced := errors.Is(context.Cause(loginCtx), errLoginReplaced) || errors.Is(err, errLoginReplaced)
+		if !saved && replaced {
 			err = ctx.Err()
 		}
 		cancel(nil)
@@ -111,7 +141,52 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 			a.login = nil
 		}
 		a.mu.Unlock()
-		err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage})
+
+		if stage == "login-request" {
+			requestTook = time.Since(stageStarted)
+		}
+		fields := map[string]any{
+			"elapsedMs":      time.Since(started).Milliseconds(),
+			"stageElapsedMs": time.Since(stageStarted).Milliseconds(),
+		}
+		if stage == "login-request" || stage == "exchange" {
+			fields["reached"] = progress.reached()
+		}
+		if requestTook > 0 {
+			fields["requestMs"] = requestTook.Milliseconds()
+		}
+
+		// Failures reach the log through the caller. Logins that end without
+		// one are recorded here, at WARN when a stage outside the browser wait
+		// stalled until the user gave up, when the wait expired, or when the
+		// start request was slow.
+		if err == nil || infra.IsCancellationError(err) {
+			outcome := "ended"
+			switch {
+			case saved:
+				outcome = "success"
+			case ctx.Err() != nil:
+				outcome = "canceled"
+			case replaced:
+				outcome = "replaced"
+			case stage == "wait-code":
+				outcome = "wait-expired"
+			}
+			record := maps.Clone(fields)
+			record["operation"], record["outcome"], record["stage"] = "start-login", outcome, stage
+			if base != "" {
+				record["backend"] = infra.SanitizeLogURL(base)
+			}
+			abandoned := (outcome == "canceled" || outcome == "replaced") && stage != "wait-code" &&
+				time.Since(stageStarted) >= abandonedLoginStage
+			switch {
+			case abandoned || outcome == "wait-expired" || requestTook >= slowLoginRequest:
+				a.log.Warn(record, "Auth.StartLogin")
+			case outcome != "success":
+				a.log.Info(record, "Auth.StartLogin")
+			}
+		}
+		err = infra.AnnotateError(err, infra.Diagnostic{Operation: "start-login", Stage: stage, Fields: fields})
 	}()
 	if a.http == nil {
 		return errors.New("auth http is not configured")
@@ -122,12 +197,13 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	rand.Read(seed)
 	verifier := base64.RawURLEncoding.EncodeToString(seed)
 	challenge := sha256.Sum256([]byte(verifier))
-	base := strings.TrimRight(a.http.BackendURL(), "/")
+	base = strings.TrimRight(a.http.BackendURL(), "/")
 
-	stage = "login-request"
+	setStage("login-request")
 	var start loginStart
 	if err := a.loginPost(
 		loginCtx,
+		progress,
 		base+loginPath,
 		map[string]string{"challenge": base64.RawURLEncoding.EncodeToString(challenge[:])},
 		&start,
@@ -150,7 +226,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		return errLoginReplaced
 	}
 
-	stage = "open-browser"
+	setStage("open-browser")
 	if a.openURL == nil {
 		return errors.New("auth openURL is not configured")
 	}
@@ -160,7 +236,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 
 	// A newer login replaces this one, and the backend drops the state after
 	// loginWait, so either ends the wait.
-	stage = "wait-code"
+	setStage("wait-code")
 	waitCtx, stopWait := context.WithTimeout(loginCtx, loginWait)
 	defer stopWait()
 	var code string
@@ -171,7 +247,8 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 		return ctx.Err()
 	}
 
-	stage = "exchange"
+	setStage("exchange")
+	progress = &loginProgress{}
 	var exchanged struct {
 		Session *struct {
 			Token string `json:"token"`
@@ -179,6 +256,7 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 	}
 	if err := a.loginPost(
 		loginCtx,
+		progress,
 		base+loginExchangePath,
 		map[string]string{"state": start.State, "code": code, "verifier": verifier},
 		&exchanged,
@@ -192,14 +270,14 @@ func (a *Auth) StartLogin(ctx context.Context) (err error) {
 
 	// The save and what follows run on ctx: once this login wins the check, a
 	// later replacement must not leave its token half applied.
-	stage = "save-token"
+	setStage("save-token")
 	if err := a.saveTokenIf(ctx, exchanged.Session.Token, func() bool { return a.login == pending }); err != nil {
 		return err
 	}
 	saved = true
 	a.info("Login successful: Session saved.")
 
-	stage = "session"
+	setStage("session")
 	session, err := a.GetSession(ctx)
 	if err != nil {
 		return err
@@ -220,27 +298,111 @@ func (a *Auth) CompleteLogin(state, code string) bool {
 	}
 	a.mu.Lock()
 	pending := a.login
-	matches := pending != nil && pending.state == state
+	pendingState := ""
+	if pending != nil {
+		pendingState = pending.state
+	}
 	a.mu.Unlock()
-	if !matches {
+	if pending == nil {
 		return false
 	}
-	select {
-	case pending.code <- code:
-		return true
+
+	reason := ""
+	switch {
+	case pendingState == "":
+		reason = "start-pending"
+	case pendingState != state:
+		reason = "state-mismatch"
 	default:
-		return false
+		select {
+		case pending.code <- code:
+			return true
+		default:
+			reason = "code-already-delivered"
+		}
+	}
+
+	// Any page can open these links, so only the first one a waiting login
+	// rejects is recorded, without either value.
+	a.mu.Lock()
+	first := !pending.mismatchLogged
+	pending.mismatchLogged = true
+	a.mu.Unlock()
+	if first {
+		a.log.Warn(map[string]any{"operation": "complete-login", "reason": reason}, "Auth.CompleteLogin")
+	}
+	return false
+}
+
+// loginStep is how far a login request got. Headers follows the token lookup
+// in the database. When the app proxy is off, the transport resolves the
+// system proxy between headers and get-conn.
+type loginStep int32
+
+const (
+	loginStepPrepared loginStep = iota
+	loginStepHeaders
+	loginStepGetConn
+	loginStepDNSDone
+	loginStepConnectDone
+	loginStepTLSDone
+	loginStepGotConn
+	loginStepWroteRequest
+	loginStepFirstByte
+	loginStepDecoded
+)
+
+var loginStepNames = [...]string{
+	"prepared", "headers", "get-conn", "dns-done", "connect-done", "tls-done", "got-conn", "wrote-request",
+	"first-byte", "decoded",
+}
+
+// loginProgress keeps the furthest step a request reached. Steps never move
+// back, because a dial that loses a race can report after the connection that
+// won.
+type loginProgress struct {
+	step atomic.Int32
+}
+
+func (p *loginProgress) mark(step loginStep) {
+	for {
+		current := p.step.Load()
+		if int32(step) <= current || p.step.CompareAndSwap(current, int32(step)) {
+			return
+		}
+	}
+}
+
+func (p *loginProgress) reached() string {
+	return loginStepNames[p.step.Load()]
+}
+
+func (p *loginProgress) trace() *httptrace.ClientTrace {
+	return &httptrace.ClientTrace{
+		GetConn:              func(string) { p.mark(loginStepGetConn) },
+		DNSDone:              func(httptrace.DNSDoneInfo) { p.mark(loginStepDNSDone) },
+		ConnectDone:          func(string, string, error) { p.mark(loginStepConnectDone) },
+		TLSHandshakeDone:     func(tls.ConnectionState, error) { p.mark(loginStepTLSDone) },
+		GotConn:              func(httptrace.GotConnInfo) { p.mark(loginStepGotConn) },
+		WroteRequest:         func(httptrace.WroteRequestInfo) { p.mark(loginStepWroteRequest) },
+		GotFirstResponseByte: func() { p.mark(loginStepFirstByte) },
 	}
 }
 
 // loginPost sends one handshake request and decodes its JSON answer. A failure
 // keeps sentinel as its message, which is the text the renderer shows.
-func (a *Auth) loginPost(ctx context.Context, endpoint string, payload, dest any, sentinel error) error {
+func (a *Auth) loginPost(
+	ctx context.Context,
+	progress *loginProgress,
+	endpoint string,
+	payload, dest any,
+	sentinel error,
+) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
+	ctx, cancel := context.WithTimeout(httptrace.WithClientTrace(ctx, progress.trace()), loginTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -250,6 +412,7 @@ func (a *Auth) loginPost(ctx context.Context, endpoint string, payload, dest any
 	if err != nil {
 		return err
 	}
+	progress.mark(loginStepHeaders)
 	req.Header = headers
 	req.Header.Set("Content-Type", "application/json")
 
@@ -270,5 +433,6 @@ func (a *Auth) loginPost(ctx context.Context, endpoint string, payload, dest any
 			infra.HTTPDiagnostic(http.MethodPost, endpoint, "decode", resp),
 		)
 	}
+	progress.mark(loginStepDecoded)
 	return nil
 }
