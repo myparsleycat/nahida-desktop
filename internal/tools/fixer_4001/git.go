@@ -19,10 +19,24 @@ import (
 const (
 	minGitDirPrefix       = "mingit-"
 	minGitDownloadTimeout = 10 * time.Minute
+
+	fixer4001GitSourceKey = "mod_tools:4001-fixer:git-source"
 )
 
-// minGitRelease is a portable Git for Windows build. The build always uses it instead of a Git on PATH so
-// that every machine runs the same Git, whatever the user has installed or configured system-wide.
+// Git sources the DLL build can run.
+const (
+	GitSourceSystem  = "system"
+	GitSourceBundled = "bundled"
+)
+
+// Fixer4001GitSource is the stored Git source and the git.exe that PATH resolves to, "" when there is none.
+type Fixer4001GitSource struct {
+	Source     string `json:"source"`
+	SystemPath string `json:"systemPath"`
+}
+
+// minGitRelease is a portable Git for Windows build, used when the user chooses the bundled Git or PATH has
+// none.
 type minGitRelease struct {
 	version, url, sha256 string
 }
@@ -31,6 +45,62 @@ var pinnedMinGit = minGitRelease{
 	version: "2.56.0",
 	url:     "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.1/MinGit-2.56.0-64-bit.zip",
 	sha256:  "064b440ff870ed5198527e8f3a92cdf5bd2fd0fedf5e718af95e3fdaddeff718",
+}
+
+func (t *Service) FourThousandOneFixerGetGitSource(ctx context.Context) (Fixer4001GitSource, error) {
+	source, err := t.gitSource(ctx)
+	if err != nil {
+		return Fixer4001GitSource{}, err
+	}
+	return Fixer4001GitSource{Source: source, SystemPath: t.systemGitPath()}, nil
+}
+
+func (t *Service) FourThousandOneFixerSetGitSource(ctx context.Context, source string) error {
+	if source != GitSourceSystem && source != GitSourceBundled {
+		return fmt.Errorf("unknown Git source %q", source)
+	}
+	return t.setAppState(ctx, fixer4001GitSourceKey, source)
+}
+
+func (t *Service) gitSource(ctx context.Context) (string, error) {
+	value, err := t.getAppState(ctx, fixer4001GitSourceKey)
+	if err != nil {
+		return "", err
+	}
+	if value != nil && *value == GitSourceBundled {
+		return GitSourceBundled, nil
+	}
+	return GitSourceSystem, nil
+}
+
+func (t *Service) systemGitPath() string {
+	path, err := t.lookPath("git.exe")
+	if err != nil {
+		return ""
+	}
+	path, err = filepath.Abs(path)
+	if err != nil || !isLocalFilesystemPath(path) || !regularFile(path) {
+		return ""
+	}
+	return path
+}
+
+// resolveBuildGit returns the git.exe the build runs and whether it is the bundled release. The system source
+// falls back to the bundled release when PATH has no Git, which is also what the UI shows as selected then.
+func (t *Service) resolveBuildGit(ctx context.Context, release minGitRelease) (path string, bundled bool, err error) {
+	source, err := t.gitSource(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	if source == GitSourceSystem {
+		if system := t.systemGitPath(); system != "" {
+			t.log.Info("Building with the Git on PATH at "+system, "4001Fixer:resolveBuildGit")
+			return system, false, nil
+		}
+		t.log.Info("No Git on PATH; building with the bundled Git", "4001Fixer:resolveBuildGit")
+	}
+	path, err = t.locateGit(ctx, release)
+	return path, err == nil, err
 }
 
 // locateGit returns the MinGit release kept under the app data tools directory, downloading it first when

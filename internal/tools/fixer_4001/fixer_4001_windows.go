@@ -16,15 +16,17 @@ import (
 	"nahida.live/desktop/internal/elevated"
 )
 
+// executeD3DBuild runs the build. The solution's version generator calls git from PATH, so a gitPath outside
+// PATH (the bundled Git) has its directory put first; "" leaves PATH as it is.
 func executeD3DBuild(ctx context.Context, vcvarsPath, projectPath, gitPath string) error {
 	script, err := d3dBuildCommand(vcvarsPath, projectPath)
 	if err != nil {
 		return err
 	}
 	cmd := cmdScript(ctx, script)
-
-	// The solution's version generator calls git from PATH, which the portable Git is not on.
-	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(gitPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if gitPath != "" {
+		cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(gitPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

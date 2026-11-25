@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -53,6 +54,7 @@ type Service struct {
 	appData       *appdata.Store
 	// proxyURL is the app's local proxy relay that git fetches through.
 	proxyURL string
+	lookPath func(string) (string, error)
 
 	fixerMu       sync.Mutex
 	fixerTask     *string
@@ -79,6 +81,7 @@ func NewWithOptions(opts Options) *Service {
 		xxmi:          opts.XXMI,
 		peDiversifier: opts.PEDiversifier,
 		elevated:      opts.Elevated,
+		lookPath:      exec.LookPath,
 	}
 }
 

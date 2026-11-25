@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -18,8 +19,77 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
+func TestResolveBuildGit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		stored     string
+		systemGit  bool
+		wantSystem bool
+	}{
+		{name: "defaults to the Git on PATH", systemGit: true, wantSystem: true},
+		{name: "falls back to the bundled Git without one on PATH"},
+		{name: "bundled choice ignores the Git on PATH", stored: GitSourceBundled, systemGit: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			archive := minGitTestArchive(t, map[string]string{"cmd/git.exe": "portable"})
+			service, release, toolsRoot, requests, _ := newMinGitTestService(t, archive)
+			service.UseClient(openToolsTestDB(t))
+			systemGit := filepath.Join(t.TempDir(), "git.exe")
+			if err := os.WriteFile(systemGit, []byte("system"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			service.lookPath = func(string) (string, error) {
+				if !tc.systemGit {
+					return "", exec.ErrNotFound
+				}
+				return systemGit, nil
+			}
+			if tc.stored != "" {
+				if err := service.FourThousandOneFixerSetGitSource(ctx, tc.stored); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, bundled, err := service.resolveBuildGit(ctx, release)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bundled == tc.wantSystem {
+				t.Fatalf("resolveBuildGit() bundled = %v with system Git chosen = %v", bundled, tc.wantSystem)
+			}
+			want := filepath.Join(toolsRoot, minGitDirPrefix+release.version, "cmd", "git.exe")
+			if tc.wantSystem {
+				want = systemGit
+			}
+			if got != want {
+				t.Fatalf("resolveBuildGit() = %q, want %q", got, want)
+			}
+			if downloaded := requests.Load() > 0; downloaded == tc.wantSystem {
+				t.Fatalf("downloaded bundled Git = %v with system Git chosen = %v", downloaded, tc.wantSystem)
+			}
+		})
+	}
+}
+
+func TestFourThousandOneFixerSetGitSourceRejectsUnknownValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service := New()
+	service.UseClient(openToolsTestDB(t))
+	if err := service.FourThousandOneFixerSetGitSource(ctx, "portable"); err == nil {
+		t.Fatal("unknown Git source was stored")
+	}
+	got, err := service.FourThousandOneFixerGetGitSource(ctx)
+	if err != nil || got.Source != GitSourceSystem {
+		t.Fatalf("source = %#v, %v", got, err)
+	}
+}
+
 func TestLocateGitInstallsPinnedMinGitOnce(t *testing.T) {
-	// A Git on PATH must not be picked up: the build uses the pinned release on every machine.
+	// locateGit serves the bundled source, so a Git on PATH must not be picked up.
 	systemGit := t.TempDir()
 	if err := os.WriteFile(filepath.Join(systemGit, "git.exe"), []byte("system"), 0o700); err != nil {
 		t.Fatal(err)

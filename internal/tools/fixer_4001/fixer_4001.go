@@ -251,7 +251,7 @@ func (t *Service) FourThousandOneFixerBuildDll(
 	if libsRepo(input.Provider).Validate() != nil || strings.TrimSpace(input.Version) == "" {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", errors.New("invalid provider or version"))
 	}
-	gitPath, err := t.locateGit(ctx, pinnedMinGit)
+	gitPath, bundledGit, err := t.resolveBuildGit(ctx, pinnedMinGit)
 	if err != nil {
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
@@ -274,7 +274,11 @@ func (t *Service) FourThousandOneFixerBuildDll(
 		return t.failed4001("XXMI_ERR_BUILD_FAILED", err)
 	}
 	t.update4001Progress("XXMI_BUILDING", "")
-	if err := executeD3DBuild(ctx, vcvarsPath, projectPath, gitPath); err != nil {
+	pathGit := ""
+	if bundledGit {
+		pathGit = gitPath
+	}
+	if err := executeD3DBuild(ctx, vcvarsPath, projectPath, pathGit); err != nil {
 		return t.failed4001Build(err)
 	}
 	builtDLL := filepath.Join(projectPath, "x64", "Release", targetD3D11DLL)

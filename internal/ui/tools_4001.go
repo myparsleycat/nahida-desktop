@@ -42,6 +42,17 @@ type fixer4001Tool struct {
 	received bool
 
 	buildTools buildToolsPath
+	git        gitSource
+}
+
+// gitSource is the build's Git choice. systemPath is the git.exe on PATH, "" when there is none.
+type gitSource struct {
+	loaded     bool
+	loadFailed bool
+	source     string
+	systemPath string
+	err        string
+	busy       bool
 }
 
 // buildToolsPath is the Visual Studio Build Tools folder field. saved is the stored path, which locks the field
@@ -84,6 +95,21 @@ func (s *Shell) start4001Fixer() {
 			if saved := strings.TrimSpace(path); saved != "" {
 				b.saved, b.draft = saved, saved
 			}
+		})
+	})
+	s.background(func(ctx context.Context) {
+		source, err := s.deps.Tools.FourThousandOneFixerGetGitSource(ctx)
+		if err != nil {
+			err = s.toolError(err, "4001-fixer.git-source.load", nil)
+		}
+		fairy.Go(func() {
+			g := &f.git
+			g.loaded = true
+			if err != nil {
+				g.loadFailed, g.err = true, err.Error()
+				return
+			}
+			g.source, g.systemPath = source.Source, source.SystemPath
 		})
 	})
 }
@@ -268,6 +294,7 @@ func (s *Shell) fixer4001Build(running, twoColumns bool) *fairy.El {
 	}
 	return fairy.Col(
 		s.buildToolsPathField(running),
+		s.gitSourceField(running),
 		fields,
 		kit.Button(label, s.run4001Build, kit.Outline,
 			kit.Disabled(running || f.importer == "" || f.versionsErr || len(f.versions) == 0)).AlignSelf(fairy.Start),
@@ -423,6 +450,59 @@ func (s *Shell) buildToolsPathField(disabled bool) *fairy.El {
 		fairy.Row(field, action.Shrink(0)).Gap(8).Align(fairy.Center),
 		hint,
 	).Gap(8).PadEdges(4, 14, 4, 30).BorderEdges(0, 0, 0, 1, t.Foreground.Alpha(0.2))
+}
+
+func (s *Shell) gitSourceField(disabled bool) *fairy.El {
+	g := &s.tools.fixer4001.git
+	t := kit.T()
+	const prefix = "page.tools.4001_fixer."
+
+	// The build falls back to the bundled Git when PATH has none, so that is the choice shown.
+	selected := g.source
+	if g.loaded && !g.loadFailed && (selected == "" || (selected == fixer4001.GitSourceSystem && g.systemPath == "")) {
+		selected = fixer4001.GitSourceBundled
+	}
+	items := []kit.Item{
+		{Value: fixer4001.GitSourceSystem, Label: T(prefix + "git_source_system"), Disabled: g.systemPath == ""},
+		{Value: fixer4001.GitSourceBundled, Label: T(prefix + "git_source_bundled")},
+	}
+	choose := func(source string) {
+		if disabled || g.busy || source == selected {
+			return
+		}
+		previous := g.source
+		g.source, g.busy, g.err = source, true, ""
+		s.background(func(ctx context.Context) {
+			err := s.deps.Tools.FourThousandOneFixerSetGitSource(ctx, source)
+			if err != nil {
+				err = s.toolError(err, "4001-fixer.git-source.save", map[string]any{"source": source})
+			}
+			fairy.Go(func() {
+				g.busy = false
+				if err != nil {
+					g.source, g.err = previous, err.Error()
+				}
+			})
+		})
+	}
+
+	field := fairy.Col(
+		fixerLabel(T(prefix+"git_source")),
+		kit.Select("tools.4001.git-source", selected, items, choose, kit.Label(T(prefix+"git_source")),
+			kit.Placeholder(T(prefix+"git_source")), kit.Disabled(disabled || !g.loaded || g.busy)).WFull().MaxW(320),
+	).Gap(8).PadEdges(4, 14, 4, 30).BorderEdges(0, 0, 0, 1, t.Foreground.Alpha(0.2))
+	switch {
+	case g.err != "":
+		field.Child(fairy.Text(g.err).FontSize(12).LineHeight(16).Color(t.Destructive).Wrap())
+	case !g.loaded:
+	case g.systemPath == "":
+		field.Child(fairy.Text(T(prefix + "git_source_system_missing")).FontSize(12).LineHeight(16).
+			Color(t.MutedForeground).Wrap())
+	case selected == fixer4001.GitSourceSystem:
+		field.Child(fairy.Text(g.systemPath).Font(monoFont).FontSize(12).LineHeight(16).
+			Color(t.MutedForeground).Wrap())
+	}
+	return field
 }
 
 // begin4001 marks task as running, or shows the importer prompt when none is selected.

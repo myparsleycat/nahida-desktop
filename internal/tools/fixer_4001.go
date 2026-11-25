@@ -18,6 +18,7 @@ type (
 	PEDiversificationReport   = fixer4001.PEDiversificationReport
 	PEDiversifierPatch        = fixer4001.PEDiversifierPatch
 	ImporterWriteAccess       = fixer4001.ImporterWriteAccess
+	Fixer4001GitSource        = fixer4001.Fixer4001GitSource
 )
 
 func (t *Tools) FourThousandOneFixerGetState() Fixer4001State {
@@ -45,6 +46,14 @@ func (t *Tools) FourThousandOneFixerSetBuildToolsPath(
 
 func (t *Tools) FourThousandOneFixerClearBuildToolsPath(ctx context.Context) error {
 	return t.fixer4001.FourThousandOneFixerClearBuildToolsPath(ctx)
+}
+
+func (t *Tools) FourThousandOneFixerGetGitSource(ctx context.Context) (Fixer4001GitSource, error) {
+	return t.fixer4001.FourThousandOneFixerGetGitSource(ctx)
+}
+
+func (t *Tools) FourThousandOneFixerSetGitSource(ctx context.Context, source string) error {
+	return t.fixer4001.FourThousandOneFixerSetGitSource(ctx, source)
 }
 
 func (t *Tools) FourThousandOneFixerGetDiversificationState(
