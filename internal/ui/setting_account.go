@@ -21,6 +21,8 @@ func (s *Shell) accountSettings() *fairy.El {
 	switch {
 	case !s.sessionKnown:
 		return centered(fairy.Spinner().Size(24, 24).Color(t.MutedForeground))
+	case s.session == nil && s.login.busy:
+		return centered(s.loginProgress())
 	case s.session == nil && s.backendDown():
 		second := login
 		if s.hasToken {

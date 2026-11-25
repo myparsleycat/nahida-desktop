@@ -28,7 +28,18 @@
   "page": {
     "auth": {
       "error": "登录错误",
-      "stop": "停止"
+      "preparing": "正在准备登录",
+      "waiting_title": "请在浏览器中完成登录",
+      "waiting_description": "如果浏览器没有打开，请在此电脑的浏览器中打开下方链接。",
+      "open_failed": "无法打开浏览器。请复制下方链接，并在此电脑的浏览器中打开。",
+      "dialog_waiting": "请在浏览器中完成登录。如果浏览器没有打开，请复制链接并在此电脑的浏览器中打开。",
+      "dialog_open_failed": "无法打开浏览器。请复制链接，并在此电脑的浏览器中打开。",
+      "copy_link": "复制链接",
+      "copied": "已复制登录链接",
+      "copy_failed": "无法复制登录链接",
+      "reopen": "在浏览器中重新打开",
+      "cancel": "取消登录",
+      "expired": "登录等待已超时。请重新登录。"
     },
     "agent": {
       "title": "Nahida Agent",

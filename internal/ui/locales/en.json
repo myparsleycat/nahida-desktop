@@ -28,7 +28,18 @@
   "page": {
     "auth": {
       "error": "Sign-in error",
-      "stop": "Stop"
+      "preparing": "Preparing sign-in",
+      "waiting_title": "Finish signing in with your browser",
+      "waiting_description": "If the browser did not open, open the link below in a browser on this PC.",
+      "open_failed": "Could not open the browser. Copy the link below and open it in a browser on this PC.",
+      "dialog_waiting": "Finish signing in with your browser. If the browser did not open, copy the link and open it in a browser on this PC.",
+      "dialog_open_failed": "Could not open the browser. Copy the link and open it in a browser on this PC.",
+      "copy_link": "Copy link",
+      "copied": "Sign-in link copied",
+      "copy_failed": "Could not copy the sign-in link",
+      "reopen": "Open in browser again",
+      "cancel": "Cancel sign-in",
+      "expired": "The sign-in timed out. Sign in again."
     },
     "agent": {
       "title": "Nahida Agent",

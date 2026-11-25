@@ -1055,6 +1055,19 @@ func (s *Shell) showAgentShare(cx *fairy.Cx, sh *agentShare) {
 		kit.Disabled(sh.busy || s.agentShareBlocked()), kit.Loading(sh.busy))
 	if !s.signedIn() {
 		body.Child(fairy.Text(T("page.agent.share_login_required")).Color(t.Destructive))
+		if s.login.busy {
+			actions := fairy.Row().Gap(8)
+			if s.login.page != "" {
+				waiting := "page.auth.dialog_waiting"
+				if s.login.openFailed {
+					waiting = "page.auth.dialog_open_failed"
+				}
+				body.Child(fairy.Text(T(waiting)))
+				actions.Child(kit.Button(T("page.auth.copy_link"), s.copyLoginLink, kit.Outline, kit.Small,
+					kit.Icon(lucide.Copy)))
+			}
+			body.Child(actions.Child(kit.Button(T("page.auth.cancel"), s.stopLogin, kit.Ghost, kit.Small)))
+		}
 		confirm = kit.Button(T("page.agent.share_login"), s.startLogin, kit.Disabled(s.login.busy),
 			kit.Loading(s.login.busy))
 	}

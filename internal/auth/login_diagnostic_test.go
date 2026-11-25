@@ -39,7 +39,7 @@ func TestLoginFailureDiagnosticsPreserveMessage(t *testing.T) {
 					},
 				},
 			)
-			err := a.StartLogin(context.Background())()
+			err := a.StartLogin(context.Background(), nil)()
 			if !errors.Is(err, errIWantToLogin) || err.Error() != errIWantToLogin.Error() {
 				t.Fatalf("contract changed: %v", err)
 			}

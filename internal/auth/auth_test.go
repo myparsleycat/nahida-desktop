@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"nahida.live/desktop/internal/infra"
@@ -643,7 +644,7 @@ func TestStartLoginSavesTokenAndBroadcasts(t *testing.T) {
 	if a.CompleteLogin("st", "one-time-code") {
 		t.Fatal("a link was accepted before any login started")
 	}
-	if err := a.StartLogin(context.Background())(); err != nil {
+	if err := a.StartLogin(context.Background(), nil)(); err != nil {
 		t.Fatalf("StartLogin: %v", err)
 	}
 	if opened != "https://nahida.live/login" {
@@ -692,13 +693,86 @@ func TestStartLoginReportsRefusedExchange(t *testing.T) {
 		return nil
 	}
 
-	err := a.StartLogin(context.Background())()
+	err := a.StartLogin(context.Background(), nil)()
 	if !errors.Is(err, errLoginExchange) || err.Error() != errLoginExchange.Error() {
 		t.Fatalf("StartLogin = %v, want %v", err, errLoginExchange)
 	}
 	if store.token() != "" {
 		t.Fatalf("stored %q after a refused exchange", store.token())
 	}
+}
+
+func TestStartLoginContinuesWhenBrowserFailsToOpen(t *testing.T) {
+	t.Parallel()
+	store := &memStore{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/desktop/auth/start", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(loginStart{State: "st", PageURL: "https://nahida.live/login"})
+	})
+	mux.HandleFunc("/api/auth/desktop/auth/exchange", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"success":true,"session":{"userId":"user-id","token":"login-token"}}`)
+	})
+	mux.HandleFunc("/api/auth/get-session", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, sessionJSON(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	zero := 0
+	none := time.Duration(0)
+	a := NewWithOptions(Options{
+		Store:  store,
+		Crypto: passCrypto{},
+		HTTP: infra.NewClientWithOptions(infra.ClientOptions{
+			BackendURL: srv.URL,
+			HTTPClient: srv.Client(),
+			RetryLimit: &zero,
+			RetryWait:  &none,
+			Status:     infra.BackendOnline,
+		}),
+		Do: srv.Client().Do,
+	})
+	openErr := errors.New("no handler for https")
+	a.openURL = func(string) error { return openErr }
+
+	var page string
+	var reported error
+	err := a.StartLogin(context.Background(), func(pageURL string, err error) {
+		page, reported = pageURL, err
+		// The user opens the shown link themselves and the page answers through the deep link.
+		a.CompleteLogin("st", "one-time-code")
+	})()
+	if err != nil {
+		t.Fatalf("StartLogin: %v", err)
+	}
+	if page != "https://nahida.live/login" || !errors.Is(reported, openErr) {
+		t.Fatalf("onPage got %q, %v", page, reported)
+	}
+	if store.token() != "login-token" {
+		t.Fatalf("stored %q", store.token())
+	}
+}
+
+func TestStartLoginReportsExpiredWait(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		a := NewWithOptions(Options{
+			HTTP: infra.NewClientWithOptions(infra.ClientOptions{BackendURL: "https://example.com"}),
+			Do: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": {"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"state":"st","pageUrl":"https://nahida.live/login"}`)),
+					Request:    r,
+				}, nil
+			},
+		})
+		a.openURL = func(string) error { return nil }
+
+		if err := a.StartLogin(context.Background(), nil)(); !errors.Is(err, ErrLoginExpired) {
+			t.Fatalf("StartLogin = %v, want %v", err, ErrLoginExpired)
+		}
+	})
 }
 
 func TestStartLoginIsReplacedByNewerLogin(t *testing.T) {
@@ -730,12 +804,12 @@ func TestStartLoginIsReplacedByNewerLogin(t *testing.T) {
 	}
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background())() }()
+	go func() { first <- a.StartLogin(context.Background(), nil)() }()
 	<-firstOpened
 
 	ctx, cancel := context.WithCancel(context.Background())
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(ctx)() }()
+	go func() { second <- a.StartLogin(ctx, nil)() }()
 
 	// The first login ends quietly once the second takes its place.
 	if err := <-first; err != nil {
@@ -836,14 +910,14 @@ func TestReplacedLoginDoesNotSaveLateExchange(t *testing.T) {
 	a := login.auth
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background())() }()
+	go func() { first <- a.StartLogin(context.Background(), nil)() }()
 	if page := <-login.opened; page != "first" || !a.CompleteLogin("first", "code") {
 		t.Fatalf("first login did not take its link, opened %q", page)
 	}
 	<-login.holding
 
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(context.Background())() }()
+	go func() { second <- a.StartLogin(context.Background(), nil)() }()
 	if page := <-login.opened; page != "second" || !a.CompleteLogin("second", "code") {
 		t.Fatalf("second login did not take its link, opened %q", page)
 	}
@@ -870,11 +944,11 @@ func TestLateStartResponseDoesNotReplaceNewerLogin(t *testing.T) {
 	a := login.auth
 
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(context.Background())() }()
+	go func() { first <- a.StartLogin(context.Background(), nil)() }()
 	<-login.holding
 
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(context.Background())() }()
+	go func() { second <- a.StartLogin(context.Background(), nil)() }()
 	if page := <-login.opened; page != "second" {
 		t.Fatalf("opened %q, want the second login's page", page)
 	}
@@ -905,8 +979,8 @@ func TestLaterRegisteredLoginOwnsLoginWhenRunFirst(t *testing.T) {
 	login := newLateLogin(t, "")
 	a := login.auth
 
-	runFirst := a.StartLogin(context.Background())
-	runSecond := a.StartLogin(context.Background())
+	runFirst := a.StartLogin(context.Background(), nil)
+	runSecond := a.StartLogin(context.Background(), nil)
 	second := make(chan error, 1)
 	go func() { second <- runSecond() }()
 	var page string
@@ -952,13 +1026,13 @@ func TestCanceledLoginOutlivedByLateStartResponseIsQuiet(t *testing.T) {
 
 	firstCtx, cancelFirst := context.WithCancel(context.Background())
 	first := make(chan error, 1)
-	go func() { first <- a.StartLogin(firstCtx)() }()
+	go func() { first <- a.StartLogin(firstCtx, nil)() }()
 	<-login.holding
 
 	cancelFirst()
 	secondCtx, cancelSecond := context.WithCancel(context.Background())
 	second := make(chan error, 1)
-	go func() { second <- a.StartLogin(secondCtx)() }()
+	go func() { second <- a.StartLogin(secondCtx, nil)() }()
 	if page := <-login.opened; page != "second" {
 		t.Fatalf("opened %q, want the second login's page", page)
 	}
@@ -1000,7 +1074,7 @@ func TestStartLoginRefusesPlaintextRedirect(t *testing.T) {
 	})
 	a.openURL = func(string) error { return nil }
 
-	if err := a.StartLogin(context.Background())(); err == nil {
+	if err := a.StartLogin(context.Background(), nil)(); err == nil {
 		t.Fatal("StartLogin succeeded through a redirect to http://")
 	}
 	if got := backendHits.Load(); got != 1 {

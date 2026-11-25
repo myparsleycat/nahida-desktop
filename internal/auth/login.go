@@ -38,6 +38,10 @@ const (
 // errLoginReplaced cancels a login a newer StartLogin call took over from.
 var errLoginReplaced = errors.New("login replaced by a newer login")
 
+// ErrLoginExpired ends a login whose sign-in page was not approved within
+// loginWait. It is already recorded when run returns it.
+var ErrLoginExpired = errors.New("login wait expired")
+
 type loginStart struct {
 	State   string `json:"state"`
 	PageURL string `json:"pageUrl"`
@@ -100,9 +104,13 @@ type pendingLogin struct {
 // that page opens to deliver a one-time code through CompleteLogin. The code and
 // the verifier together are exchanged for the session token.
 //
+// onPage, when set, receives the sign-in page URL and the error from opening it,
+// once, on run's goroutine. With onPage set, a page that fails to open does not
+// end the login, so the caller can let the user open the URL themselves.
+//
 // The login registered by the latest StartLogin call owns the sign-in, whichever
 // run reaches the backend first. The caller must call run exactly once.
-func (a *Auth) StartLogin(ctx context.Context) (run func() error) {
+func (a *Auth) StartLogin(ctx context.Context, onPage func(pageURL string, openErr error)) (run func() error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -117,10 +125,14 @@ func (a *Auth) StartLogin(ctx context.Context) (run func() error) {
 	if previous != nil {
 		previous.cancel(errLoginReplaced)
 	}
-	return func() error { return a.runLogin(ctx, loginCtx, pending) }
+	return func() error { return a.runLogin(ctx, loginCtx, pending, onPage) }
 }
 
-func (a *Auth) runLogin(ctx, loginCtx context.Context, pending *pendingLogin) (err error) {
+func (a *Auth) runLogin(
+	ctx, loginCtx context.Context,
+	pending *pendingLogin,
+	onPage func(pageURL string, openErr error),
+) (err error) {
 	started := time.Now()
 	stage, stageStarted := "prepare", started
 	var requestTook time.Duration
@@ -166,7 +178,7 @@ func (a *Auth) runLogin(ctx, loginCtx context.Context, pending *pendingLogin) (e
 		// one are recorded here, at WARN when a stage outside the browser wait
 		// stalled until the user gave up, when the wait expired, or when the
 		// start request was slow.
-		if err == nil || infra.IsCancellationError(err) {
+		if err == nil || infra.IsCancellationError(err) || errors.Is(err, ErrLoginExpired) {
 			outcome := "ended"
 			switch {
 			case saved:
@@ -239,8 +251,20 @@ func (a *Auth) runLogin(ctx, loginCtx context.Context, pending *pendingLogin) (e
 	if a.openURL == nil {
 		return errors.New("auth openURL is not configured")
 	}
-	if err := a.openURL(start.PageURL); err != nil {
-		return err
+	openErr := a.openURL(start.PageURL)
+	if openErr != nil {
+		if onPage == nil {
+			return openErr
+		}
+		_ = infra.ReportError(a.log, openErr, "Auth", infra.Diagnostic{
+			Severity:  infra.DiagnosticWarn,
+			Operation: "start-login",
+			Stage:     "open-browser",
+			Fields:    map[string]any{"url": infra.SanitizeLogURL(start.PageURL)},
+		})
+	}
+	if onPage != nil {
+		onPage(start.PageURL, openErr)
 	}
 
 	// A newer login replaces this one, and the backend drops the state after
@@ -252,7 +276,10 @@ func (a *Auth) runLogin(ctx, loginCtx context.Context, pending *pendingLogin) (e
 	select {
 	case code = <-pending.code:
 	case <-waitCtx.Done():
-		// Replaced or never approved: there is nothing to report to the user.
+		if loginCtx.Err() == nil {
+			return ErrLoginExpired
+		}
+		// A replaced or stopped login has nothing to report to the user.
 		return ctx.Err()
 	}
 
