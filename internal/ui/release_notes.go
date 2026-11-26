@@ -88,7 +88,7 @@ func (s *Shell) releaseNoteLine(line string) *fairy.El {
 // releaseNotesContent lays out release notes line by line, with "*" and "-" lines as indented bullets.
 func (s *Shell) releaseNotesContent(text string) *fairy.El {
 	content := fairy.Col()
-	for line := range strings.SplitSeq(text, "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		bullet := releaseNoteBullet.FindStringSubmatch(line)
 		if bullet == nil {
 			content.Child(s.releaseNoteLine(line))

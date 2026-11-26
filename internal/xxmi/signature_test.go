@@ -46,6 +46,10 @@ func TestReleaseSignatureAndNotes(t *testing.T) {
 	if got := releaseNotes(body); got != "## Changes\nUpdated DLL" {
 		t.Fatalf("notes = %q", got)
 	}
+	// Release bodies can use CRLF line endings.
+	if got := releaseSignature("## Changes\r\nUpdated DLL\r\n\r\n## Signature\r\n- YWJjZA==\r\n"); got != "YWJjZA==" {
+		t.Fatalf("CRLF signature = %q", got)
+	}
 	if got := releaseSignature("## Signature\n- invalid!"); got != "" {
 		t.Fatalf("invalid signature = %q", got)
 	}

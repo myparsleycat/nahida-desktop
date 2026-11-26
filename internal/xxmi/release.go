@@ -14,7 +14,7 @@ import (
 )
 
 var releaseSignaturePattern = regexp.MustCompile(
-	`(?m)^## Signature[\r\n]+- ((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==))$`,
+	`(?m)^## Signature[\r\n]+- ((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==))\r?$`,
 )
 
 type ReleaseInfo struct {
