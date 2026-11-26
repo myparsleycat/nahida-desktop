@@ -79,11 +79,11 @@ var importerPackages = map[string]importerPackageSpec{
 		publicKey:      spectrumPublicKey,
 		gameExeNames:   []string{"Endfield.exe"},
 	},
-	// The APMI package has no release signing key, so its releases install only as unsigned ones.
 	"APMI": {
-		key: "APMI", repo: github.Repo{Owner: "loyal37", Name: "APMI-Package"},
+		key: "APMI", repo: github.Repo{Owner: "myparsleycat", Name: "APMI-Package"},
 		assetFormat: "APMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "APMI", "main.ini"),
 		versionPattern:   importerVersionPattern,
+		publicKey:        apmiPublicKey,
 		gameExeNames:     []string{"AzurPromilia.exe"},
 		manualLaunchOnly: true,
 	},

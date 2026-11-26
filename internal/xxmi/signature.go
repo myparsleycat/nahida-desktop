@@ -14,6 +14,7 @@ const (
 	gimiPublicKey     = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAET5SWORxEdlJ3RXWIFiuwMX6oyZedz+DgaxtsbpWyxNQJDgIDj4uKLLJlvhRNpnkFEuQntgJKzJs0SpASBEguPOTE7VSnmp+x5uyDmsQsWzsRSAZip++a02jqR/K2j18H"
 	zzmiPublicKey     = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEb11GjbKQS6SmRe8TcIc5VMu5Ob3moo5v2YeD+s53xEe4bVPGcToUNLu3Jgqo0OwWZ4RsNy1nR0HId6pR09HedyEMifxebsyPT3T5PH82QozEXHQlTDySklWUfGItoOdf"
 	himiPublicKey     = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEeigvK7REsX3f/vb+RRuFkZt/6VRbykI2oQcEU3IiI3N9s6jWqKkxAE2cTC9wKXDlkeSzlHjPxgzrTrKdqwkFzROMjw5T2LixFB5BYaT633aU/cCiHDbArIJ46+GrqemG"
+	apmiPublicKey     = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+I01VTZ0gztZ8MKAx6GPo7CdPgL3etjW/rlGFsoXjQmQ9NC5qdGna+1y5XQ/uHPQvFyL6FRLUecLER1abe3yDB1sqfX487qrjNE7ajQmp4aYMfe7uPFl2RxQFS9vaNe8"
 )
 
 func verifyPackageSignature(publicKey, signature string, data []byte) error {
