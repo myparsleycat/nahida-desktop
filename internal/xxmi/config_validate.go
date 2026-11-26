@@ -50,7 +50,7 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 		name, value string
 		values      []string
 	}{
-		{"game launch", cfg.GameLaunch, []string{"Direct", "Steam", "Epic", "Custom", "Manual"}},
+		{"game launch", cfg.GameLaunch, GameLaunches(key)},
 		{"process start method", cfg.ProcessStartMethod, []string{"Native", "Shell"}},
 		{"injection method", cfg.InjectionMethod, []string{"", "Default", "Native"}},
 		{"XXMI DLL injection mode", cfg.XXMIDLLInjectMode, []string{"Hook", "Inject", "Bypass"}},

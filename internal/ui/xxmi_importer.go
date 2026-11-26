@@ -536,7 +536,7 @@ func (s *Shell) importerGeneralTab(ic *importerContext) []*fairy.El {
 	}
 
 	launches := []kit.Item{}
-	for _, value := range []string{"Direct", "Steam", "Epic", "Custom", "Manual"} {
+	for _, value := range xxmi.GameLaunches(key) {
 		launches = append(launches, kit.Item{Value: value, Label: T(prefix + "gameLaunch" + value)})
 	}
 	launch := []*fairy.El{selectRow("xxmi.game-launch", T(prefix+"gameLaunch"), T(prefix+"gameLaunchDescription"),

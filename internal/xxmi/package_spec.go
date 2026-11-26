@@ -21,6 +21,8 @@ type importerPackageSpec struct {
 	gameExeNames   []string
 	processNames   []string
 	useHook        bool
+	// manualLaunchOnly limits GameLaunch to "Manual" for a game this app cannot start yet.
+	manualLaunchOnly bool
 }
 
 var (
@@ -77,11 +79,29 @@ var importerPackages = map[string]importerPackageSpec{
 		publicKey:      spectrumPublicKey,
 		gameExeNames:   []string{"Endfield.exe"},
 	},
+	// The APMI package has no release signing key, so its releases install only as unsigned ones.
+	"APMI": {
+		key: "APMI", repo: github.Repo{Owner: "loyal37", Name: "APMI-Package"},
+		assetFormat: "APMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "APMI", "main.ini"),
+		versionPattern:   importerVersionPattern,
+		gameExeNames:     []string{"AzurPromilia.exe"},
+		manualLaunchOnly: true,
+	},
 }
+
+var allGameLaunches = []string{"Direct", "Steam", "Epic", "Custom", "Manual"}
 
 func lookupImporterPackage(key string) (importerPackageSpec, bool) {
 	spec, ok := importerPackages[strings.ToUpper(strings.TrimSpace(key))]
 	return spec, ok
+}
+
+// GameLaunches returns the GameLaunch values the importer accepts.
+func GameLaunches(key string) []string {
+	if spec, ok := lookupImporterPackage(key); ok && spec.manualLaunchOnly {
+		return []string{"Manual"}
+	}
+	return allGameLaunches
 }
 
 func readImporterVersion(folder string, spec importerPackageSpec) *string {

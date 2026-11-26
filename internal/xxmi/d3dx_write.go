@@ -183,6 +183,8 @@ func enforcedRenderingOptions(importer string) [][2]string {
 		implicitIndices = "1"
 	case "EFMI":
 		regions, implicitIndices, resize = "1", "1", "0"
+	case "APMI":
+		implicitIndices, resize = "1", "0"
 	}
 	options := [][2]string{
 		{"texture_hash", textures},

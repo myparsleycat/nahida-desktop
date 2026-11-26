@@ -33,7 +33,7 @@ func xxmiLaunchArgument(args []string) string {
 			continue
 		}
 		switch strings.ToUpper(args[index+1]) {
-		case "GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI":
+		case "GIMI", "SRMI", "HIMI", "ZZMI", "WWMI", "EFMI", "APMI":
 			return strings.ToUpper(args[index+1])
 		}
 	}

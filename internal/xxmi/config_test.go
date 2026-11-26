@@ -12,7 +12,7 @@ import (
 func TestDefaultImporterSettings(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(t.TempDir(), "xxmi")
-	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI"} {
+	for _, key := range []string{"GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI", "APMI"} {
 		cfg, err := DefaultImporterConfig(key, root)
 		if err != nil {
 			t.Fatalf("%s default: %v", key, err)
@@ -330,5 +330,23 @@ func TestImporterSettingsRejectInvalidLaunchFields(t *testing.T) {
 				t.Fatal("invalid config was accepted")
 			}
 		})
+	}
+}
+
+func TestManualOnlyImporterRejectsOtherGameLaunches(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("APMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GameLaunch != "Manual" {
+		t.Fatalf("APMI default game launch = %q", cfg.GameLaunch)
+	}
+	for _, launch := range []string{"Direct", "Steam", "Epic", "Custom"} {
+		cfg.GameLaunch = launch
+		cfg.CustomLaunch.Command = "game.exe"
+		if err := ValidateImporterSettings("APMI", cfg); err == nil {
+			t.Fatalf("APMI accepted game launch %q", launch)
+		}
 	}
 }
