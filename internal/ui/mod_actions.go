@@ -419,7 +419,7 @@ func (s *Shell) modToolItems(info mod.ModInfo, nte bool) []kit.MenuItem {
 		Label: T("page.tools.model_viewer.title"), Icon: lucide.Box, Loading: opening, Disabled: opening,
 		OnClick: func() { s.openModelViewer(info.Path) },
 	}}, s.modFileToolItems(info)...)
-	if len(info.Inis) > 0 {
+	if s.showsTogglePresets(info) {
 		items = append(items, kit.MenuItem{
 			Label: T(togglePresetsPrefix + "menu"), Icon: lucide.SlidersHorizontal,
 			OnClick: func() { s.openTogglePresets(info) },

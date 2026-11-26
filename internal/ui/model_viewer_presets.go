@@ -33,6 +33,7 @@ func (v *ModelViewer) loadTogglePresets() {
 		fairy.Go(func() {
 			if err == nil {
 				v.togglePresets = list.Presets
+				v.shell.mods.savedTogglePresets[v.path] = len(list.Presets) > 0
 			}
 		})
 	})

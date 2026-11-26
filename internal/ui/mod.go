@@ -115,11 +115,15 @@ type modScreen struct {
 	togglePresets *togglePresetsDialog
 	// togglePresetMenus holds the toggle preset menus of the mod cards that were opened, by mod path.
 	togglePresetMenus map[string]*togglePresetMenu
-	extractAsks       []extractAsk
-	downloadAsk       *downloadAsk
-	gameDraft         *gameDraft
-	nteLaunch         *nteLaunchDraft
-	nteStarting       bool
+	// savedTogglePresets records by mod path whether the mod has saved toggle presets. false also covers a lookup
+	// still running or failed. savedTogglePresetsGen discards lookups started before the record was last cleared.
+	savedTogglePresets    map[string]bool
+	savedTogglePresetsGen int
+	extractAsks           []extractAsk
+	downloadAsk           *downloadAsk
+	gameDraft             *gameDraft
+	nteLaunch             *nteLaunchDraft
+	nteStarting           bool
 	// nteProgress is the last NTE bootstrap progress event, which adding or editing an NTE game shows.
 	nteProgress *mod.NteBootstrapProgress
 	urlDownload *urlDownloadDraft
@@ -150,24 +154,25 @@ type modScreen struct {
 
 func newModScreen() modScreen {
 	return modScreen{
-		subGroups:         map[string][]mod.FolderGroup{},
-		manualGroups:      map[string][]mod.FolderGroup{},
-		loadingSub:        map[string]bool{},
-		loadingManual:     map[string]bool{},
-		expanded:          map[string]bool{},
-		persistent:        map[string]bool{},
-		collapsed:         map[string]bool{},
-		iniShut:           map[string]bool{},
-		togglePresetMenus: map[string]*togglePresetMenu{},
-		toggling:          map[string]string{},
-		exclusive:         map[string]bool{},
-		busyPaths:         map[string]bool{},
-		pendingEnable:     map[string]bool{},
-		stepping:          map[string]bool{},
-		mergeSelected:     map[string]bool{},
-		downloadResolved:  map[string]bool{},
-		folderSort:        "name",
-		sortType:          "name",
+		subGroups:          map[string][]mod.FolderGroup{},
+		manualGroups:       map[string][]mod.FolderGroup{},
+		loadingSub:         map[string]bool{},
+		loadingManual:      map[string]bool{},
+		expanded:           map[string]bool{},
+		persistent:         map[string]bool{},
+		collapsed:          map[string]bool{},
+		iniShut:            map[string]bool{},
+		togglePresetMenus:  map[string]*togglePresetMenu{},
+		savedTogglePresets: map[string]bool{},
+		toggling:           map[string]string{},
+		exclusive:          map[string]bool{},
+		busyPaths:          map[string]bool{},
+		pendingEnable:      map[string]bool{},
+		stepping:           map[string]bool{},
+		mergeSelected:      map[string]bool{},
+		downloadResolved:   map[string]bool{},
+		folderSort:         "name",
+		sortType:           "name",
 	}
 }
 
@@ -617,6 +622,7 @@ func (s *Shell) loadListing(light bool) {
 		fairy.Go(func() {
 			if err == nil && seq == m.listingSeq {
 				m.listing, m.listingFull = &group, true
+				s.forgetSavedTogglePresets()
 			}
 		})
 	})

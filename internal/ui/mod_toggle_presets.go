@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,44 @@ import (
 )
 
 const togglePresetsPrefix = "page.mod.toggle-presets."
+
+func hasToggleKeys(info mod.ModInfo) bool {
+	return slices.ContainsFunc(info.Inis, func(ini mod.IniResult) bool { return len(ini.ToggleKeys) > 0 })
+}
+
+// showsTogglePresets reports whether the mod's context menu offers its toggle presets: it has toggle sections, or
+// it still has presets saved before its toggle sections were removed, which must stay reachable to be renamed or
+// deleted. The saved presets are read once per mod until the next full listing; the menu shows the entry when the
+// read finishes.
+func (s *Shell) showsTogglePresets(info mod.ModInfo) bool {
+	if hasToggleKeys(info) {
+		return true
+	}
+	saved, known := s.mods.savedTogglePresets[info.Path]
+	if !known {
+		s.mods.savedTogglePresets[info.Path] = false
+		path, gen := info.Path, s.mods.savedTogglePresetsGen
+		s.background(func(ctx context.Context) {
+			list, err := s.deps.Mod.GetTogglePresets(ctx, path)
+			if err != nil {
+				return
+			}
+			fairy.Go(func() {
+				if gen == s.mods.savedTogglePresetsGen {
+					s.mods.savedTogglePresets[path] = len(list.Presets) > 0
+				}
+			})
+		})
+	}
+	return saved
+}
+
+// forgetSavedTogglePresets makes the context menus read the saved presets again and discards the reads still
+// running.
+func (s *Shell) forgetSavedTogglePresets() {
+	clear(s.mods.savedTogglePresets)
+	s.mods.savedTogglePresetsGen++
+}
 
 // togglePresetsDialog manages the toggle presets of one mod: saving the current values, applying, renaming and
 // deleting them. Until a store is chosen it asks for one.
@@ -77,6 +116,9 @@ func (s *Shell) loadTogglePresets() {
 		list, err := s.deps.Mod.GetTogglePresets(ctx, path)
 		linked := s.deps.Tools != nil && s.deps.Tools.ModelViewerGameLinked(path)
 		fairy.Go(func() {
+			if err == nil {
+				s.mods.savedTogglePresets[path] = len(list.Presets) > 0
+			}
 			if s.mods.togglePresets != d {
 				return
 			}
@@ -287,7 +329,10 @@ func (s *Shell) changeTogglePresetStore(from, to string, after func()) {
 			fairy.Go(func() {
 				if err != nil {
 					showTogglePresetError(&s.toasts, err)
-				} else if after != nil {
+					return
+				}
+				s.forgetSavedTogglePresets()
+				if after != nil {
 					after()
 				}
 			})
@@ -321,6 +366,7 @@ func (s *Shell) changeTogglePresetStore(from, to string, after func()) {
 				return
 			}
 			showTogglePresetMigration(&s.toasts, migration)
+			s.forgetSavedTogglePresets()
 			if after != nil {
 				after()
 			}
@@ -494,6 +540,7 @@ func (s *Shell) loadTogglePresetMenu(path string, menu *togglePresetMenu) {
 				return
 			}
 			menu.presets = list.Presets
+			s.mods.savedTogglePresets[path] = len(list.Presets) > 0
 		})
 	})
 }

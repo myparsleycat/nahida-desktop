@@ -915,7 +915,7 @@ func (s *Shell) modIniList(info mod.ModInfo) *fairy.El {
 
 	panel := fairy.Col().W(modIniWidth).Shrink(0).HFull().Gap(8).Pad(6).Radius(4).Fill(t.Background.Alpha(0.1)).
 		FontSize(13)
-	if s.deps.Tools != nil {
+	if s.deps.Tools != nil && hasToggleKeys(info) {
 		panel.Child(s.togglePresetCardMenu(info))
 	}
 	return panel.Child(list)
