@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/klauspost/compress/snappy"
+
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -19,8 +22,9 @@ const (
 	apiVersion   = "2026-03-10"
 	apiUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
 		"(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
-	maxJSONBytes    = 8 << 20
-	maxDiscardBytes = 64 << 10
+	maxJSONBytes              = 8 << 20
+	maxDiscardBytes           = 64 << 10
+	maxAttestationBundleBytes = 1 << 20
 )
 
 var (
@@ -124,6 +128,80 @@ func (c *Client) AllReleases(ctx context.Context, repo Repo) ([]Release, error) 
 		published = append(published, release)
 	}
 	return published, nil
+}
+
+// Attestations returns the Sigstore bundles of the artifact attestations repo has for the SHA-256 digest, or none
+// when it has none.
+func (c *Client) Attestations(ctx context.Context, repo Repo, digest []byte) ([]json.RawMessage, error) {
+	if err := repo.Validate(); err != nil {
+		return nil, err
+	}
+	var response struct {
+		Attestations []struct {
+			Bundle    json.RawMessage `json:"bundle"`
+			BundleURL string          `json:"bundle_url"`
+		} `json:"attestations"`
+	}
+	err := c.getJSON(ctx, repo.apiURL("attestations/sha256:"+hex.EncodeToString(digest)+"?per_page=100"), &response)
+	if status, ok := errors.AsType[*StatusError](err); ok && status.Status == http.StatusNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	bundles := make([]json.RawMessage, 0, len(response.Attestations))
+	var fetchErrs []error
+	for _, attestation := range response.Attestations {
+		if len(attestation.Bundle) > 0 && string(attestation.Bundle) != "null" {
+			bundles = append(bundles, attestation.Bundle)
+			continue
+		}
+		if attestation.BundleURL == "" {
+			continue
+		}
+		bundle, err := c.fetchAttestationBundle(ctx, repo, attestation.BundleURL)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			fetchErrs = append(fetchErrs, err)
+			continue
+		}
+		bundles = append(bundles, bundle)
+	}
+
+	// Another attestation of the digest may still verify, so a bundle that cannot be read only fails the lookup
+	// when no other one was.
+	if len(bundles) == 0 && len(fetchErrs) > 0 {
+		return nil, errors.Join(fetchErrs...)
+	}
+	return bundles, nil
+}
+
+// fetchAttestationBundle reads the bundle of an attestation the API does not inline, which bundle_url serves
+// Snappy-compressed.
+func (c *Client) fetchAttestationBundle(ctx context.Context, repo Repo, rawURL string) (json.RawMessage, error) {
+	if parsed, err := url.Parse(rawURL); err != nil || parsed.Scheme != "https" {
+		return nil, infra.WithCause(
+			fmt.Errorf("unsafe attestation bundle URL %q", infra.SanitizeLogURL(rawURL)), err,
+		)
+	}
+	compressed, err := c.FetchFile(ctx, repo, rawURL, maxAttestationBundleBytes)
+	if err != nil {
+		return nil, fmt.Errorf("fetch attestation bundle: %w", err)
+	}
+	size, err := snappy.DecodedLen(compressed)
+	if err != nil {
+		return nil, fmt.Errorf("decode attestation bundle: %w", err)
+	}
+	if size > maxAttestationBundleBytes {
+		return nil, fmt.Errorf("attestation bundle exceeds %d bytes", maxAttestationBundleBytes)
+	}
+	bundle, err := snappy.Decode(nil, compressed)
+	if err != nil {
+		return nil, fmt.Errorf("decode attestation bundle: %w", err)
+	}
+	return bundle, nil
 }
 
 // LatestRelease returns the newest non-prerelease, non-draft release.

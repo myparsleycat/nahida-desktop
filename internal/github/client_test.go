@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/snappy"
+
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -81,6 +83,44 @@ func TestGetBytesReportsStatusAndSizeLimit(t *testing.T) {
 	if _, err := client.GetBytes(context.Background(), "https://api.github.com/large", 4); err == nil ||
 		!strings.Contains(err.Error(), "exceeds 4 bytes") {
 		t.Fatalf("size error = %v", err)
+	}
+}
+
+func TestAttestationsReadsInlineAndCompressedBundles(t *testing.T) {
+	compressed := snappy.Encode(nil, []byte(`{"from":"url"}`))
+	client := newTestClient(t, func(request *http.Request) (int, string) {
+		switch request.URL.Host + request.URL.Path {
+		case "api.github.com/repos/SpectrumQT/XXMI-Libs-Package/attestations/sha256:0102":
+			return http.StatusOK, `{"attestations":[` +
+				`{"bundle":{"from":"inline"},"bundle_url":"https://blob.example.test/inline.json.sn"},` +
+				`{"bundle":null,"bundle_url":"https://blob.example.test/a.json.sn"},` +
+				`{"bundle":null,"bundle_url":"https://blob.example.test/expired.json.sn"},` +
+				`{"bundle":null}]}`
+		case "api.github.com/repos/SpectrumQT/XXMI-Libs-Package/attestations/sha256:0404":
+			return http.StatusOK, `{"attestations":[{"bundle":null,"bundle_url":"https://blob.example.test/expired.json.sn"}]}`
+		case "blob.example.test/a.json.sn":
+			return http.StatusOK, string(compressed)
+		case "blob.example.test/expired.json.sn":
+			return http.StatusForbidden, ""
+		case "api.github.com/repos/SpectrumQT/XXMI-Libs-Package/attestations/sha256:0303":
+			return http.StatusNotFound, `{"message":"Not Found"}`
+		}
+		t.Errorf("unexpected request: %s", request.URL)
+		return http.StatusNotFound, ""
+	})
+
+	bundles, err := client.Attestations(context.Background(), testRepo, []byte{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundles) != 2 || string(bundles[0]) != `{"from":"inline"}` || string(bundles[1]) != `{"from":"url"}` {
+		t.Fatalf("bundles = %q", bundles)
+	}
+	if bundles, err := client.Attestations(context.Background(), testRepo, []byte{3, 3}); err != nil || bundles != nil {
+		t.Fatalf("missing attestations = %q, %v", bundles, err)
+	}
+	if bundles, err := client.Attestations(context.Background(), testRepo, []byte{4, 4}); err == nil {
+		t.Fatalf("unreadable attestations = %q, want an error", bundles)
 	}
 }
 
