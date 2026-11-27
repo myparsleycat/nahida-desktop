@@ -254,6 +254,8 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	case "EFMI":
 		cfg.ProcessTimeout = 60
 		cfg.EFMI = &EFMIOptions{}
+	case "APMI":
+		cfg.ProcessTimeout = 120
 	}
 	return cfg, nil
 }
