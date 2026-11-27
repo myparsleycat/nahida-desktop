@@ -12,9 +12,9 @@ func TestRunningGamePrefersFocusedGameByImporter(t *testing.T) {
 
 	gimi, wwmi := "GIMI", "WWMI"
 	games := []GameConfig{
-		{Game: "메인", Importer: &gimi},
-		{Game: "WW", Importer: &wwmi},
-		{Game: "젠레스"},
+		{ID: "main-id", Game: "메인", Importer: &gimi},
+		{ID: "ww-id", Game: "WW", Importer: &wwmi},
+		{ID: "zzz-id", Game: "젠레스"},
 	}
 	running := map[uint32]string{10: "GIMI", 20: "WWMI", 30: "ZZMI"}
 
@@ -24,8 +24,8 @@ func TestRunningGamePrefersFocusedGameByImporter(t *testing.T) {
 		running map[uint32]string
 		want    string
 	}{
-		{name: "most recently focused", focused: []uint32{20, 10}, running: running, want: "WW"},
-		{name: "game order without focus", running: running, want: "메인"},
+		{name: "most recently focused", focused: []uint32{20, 10}, running: running, want: "ww-id"},
+		{name: "game order without focus", running: running, want: "main-id"},
 		{name: "game without importer", running: map[uint32]string{30: "ZZMI"}},
 		{name: "unregistered game", running: map[uint32]string{40: "SRMI"}},
 	}
@@ -47,13 +47,13 @@ func TestNTEProcessNamesIncludesRegisteredExecutables(t *testing.T) {
 	t.Parallel()
 
 	executable, nte := `D:\Games\NTE\Client\NTEGame.exe`, db.NTEImporter
-	games := []GameConfig{{Game: "이환", Importer: &nte, GameExecutablePath: &executable}}
+	games := []GameConfig{{ID: "nte-id", Game: "이환", Importer: &nte, GameExecutablePath: &executable}}
 	names := nteProcessNames(games)
 	if !slices.Equal(names[db.NTEImporter], []string{nteExecutableName, "NTEGame.exe"}) {
 		t.Fatalf("nteProcessNames = %v", names)
 	}
-	if got := runningGame(games, nil, map[uint32]string{10: db.NTEImporter}); got == nil || *got != "이환" {
-		t.Fatalf("runningGame = %v, want 이환", got)
+	if got := runningGame(games, nil, map[uint32]string{10: db.NTEImporter}); got == nil || *got != "nte-id" {
+		t.Fatalf("runningGame = %v, want nte-id", got)
 	}
 
 	gimi := "GIMI"

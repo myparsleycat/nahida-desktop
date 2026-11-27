@@ -37,7 +37,7 @@ func newClassificationFixture(t *testing.T) (*Mod, string) {
 
 func characterClassifications(t *testing.T, service *Mod, game string) map[string]map[string]string {
 	t.Helper()
-	characters, err := service.GetCharacters(context.Background(), game, nil)
+	characters, err := service.GetCharacters(context.Background(), testGameID(t, service, game), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func characterClassifications(t *testing.T, service *Mod, game string) map[strin
 
 func classifiedSubGroups(t *testing.T, service *Mod, game string) map[string][]FolderGroup {
 	t.Helper()
-	characters, err := service.GetCharacters(context.Background(), game, nil)
+	characters, err := service.GetCharacters(context.Background(), testGameID(t, service, game), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,8 +65,10 @@ func TestSaveClassificationValidatesAndReplacesGroups(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, _ := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
+	otherGameID := testGameID(t, service, "Other")
 
-	element, err := service.SaveClassification(ctx, "Game", nil, " Element ", []ClassificationGroup{
+	element, err := service.SaveClassification(ctx, gameID, nil, " Element ", []ClassificationGroup{
 		{Name: "Pyro"}, {Name: " Hydro "},
 	})
 	if err != nil {
@@ -79,22 +81,22 @@ func TestSaveClassificationValidatesAndReplacesGroups(t *testing.T) {
 
 	for name, call := range map[string]func() error{
 		"INVALID_CLASSIFICATION_NAME": func() error {
-			_, err := service.SaveClassification(ctx, "Game", nil, "  ", nil)
+			_, err := service.SaveClassification(ctx, gameID, nil, "  ", nil)
 			return err
 		},
 		"CLASSIFICATION_NAME_EXISTS": func() error {
-			_, err := service.SaveClassification(ctx, "Game", nil, "Element", nil)
+			_, err := service.SaveClassification(ctx, gameID, nil, "Element", nil)
 			return err
 		},
 		"CLASSIFICATION_GROUP_NAME_EXISTS": func() error {
 			_, err := service.SaveClassification(
-				ctx, "Game", &element.ID, "Element", []ClassificationGroup{{Name: "Pyro"}, {Name: "Pyro"}},
+				ctx, gameID, &element.ID, "Element", []ClassificationGroup{{Name: "Pyro"}, {Name: "Pyro"}},
 			)
 			return err
 		},
 		"CLASSIFICATION_NOT_FOUND": func() error {
 			_, err := service.SaveClassification(
-				ctx, "Game", &element.ID, "Element", []ClassificationGroup{{ID: "unknown", Name: "Pyro"}},
+				ctx, gameID, &element.ID, "Element", []ClassificationGroup{{ID: "unknown", Name: "Pyro"}},
 			)
 			return err
 		},
@@ -103,15 +105,15 @@ func TestSaveClassificationValidatesAndReplacesGroups(t *testing.T) {
 			t.Fatalf("%s error = %v", name, err)
 		}
 	}
-	if _, err := service.SaveClassification(ctx, "Other", &element.ID, "Element", nil); err == nil ||
+	if _, err := service.SaveClassification(ctx, otherGameID, &element.ID, "Element", nil); err == nil ||
 		err.Error() != "CLASSIFICATION_NOT_FOUND" {
 		t.Fatalf("cross-game save error = %v", err)
 	}
-	if _, err := service.SaveClassification(ctx, "Other", nil, "Element", nil); err != nil {
+	if _, err := service.SaveClassification(ctx, otherGameID, nil, "Element", nil); err != nil {
 		t.Fatalf("same name in another game: %v", err)
 	}
 
-	updated, err := service.SaveClassification(ctx, "Game", &element.ID, "Elements", []ClassificationGroup{
+	updated, err := service.SaveClassification(ctx, gameID, &element.ID, "Elements", []ClassificationGroup{
 		{Name: "Cryo"}, {ID: element.Groups[0].ID, Name: "Fire"},
 	})
 	if err != nil {
@@ -122,21 +124,21 @@ func TestSaveClassificationValidatesAndReplacesGroups(t *testing.T) {
 		t.Fatalf("updated = %#v", updated)
 	}
 
-	if err := service.SetActiveClassification(ctx, "Other", &element.ID); err == nil ||
+	if err := service.SetActiveClassification(ctx, otherGameID, &element.ID); err == nil ||
 		err.Error() != "CLASSIFICATION_NOT_FOUND" {
 		t.Fatalf("cross-game activate error = %v", err)
 	}
-	if err := service.SetActiveClassification(ctx, "Game", &element.ID); err != nil {
+	if err := service.SetActiveClassification(ctx, gameID, &element.ID); err != nil {
 		t.Fatal(err)
 	}
-	listed, err := service.GetClassifications(ctx, "Game")
+	listed, err := service.GetClassifications(ctx, gameID)
 	if err != nil || len(listed) != 1 || !listed[0].Active {
 		t.Fatalf("listed = %#v, err = %v", listed, err)
 	}
 	if err := service.DeleteClassification(ctx, element.ID); err != nil {
 		t.Fatal(err)
 	}
-	if listed, err := service.GetClassifications(ctx, "Game"); err != nil || len(listed) != 0 {
+	if listed, err := service.GetClassifications(ctx, gameID); err != nil || len(listed) != 0 {
 		t.Fatalf("after delete = %#v, err = %v", listed, err)
 	}
 }
@@ -145,6 +147,7 @@ func TestCharacterClassificationFollowsRenamedFolder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	modsRoot := filepath.Join(root, "mods")
 	diluc := filepath.Join(modsRoot, "Diluc")
 	furina := filepath.Join(modsRoot, "Furina")
@@ -158,12 +161,12 @@ func TestCharacterClassificationFollowsRenamedFolder(t *testing.T) {
 	}
 
 	element, err := service.SaveClassification(
-		ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}, {Name: "Hydro"}},
+		ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}, {Name: "Hydro"}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	weapon, err := service.SaveClassification(ctx, "Game", nil, "Weapon", []ClassificationGroup{{Name: "Claymore"}})
+	weapon, err := service.SaveClassification(ctx, gameID, nil, "Weapon", []ClassificationGroup{{Name: "Claymore"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,6 +239,7 @@ func TestCharacterClassificationInSubGroups(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			service, root := newClassificationFixture(t)
+			gameID := testGameID(t, service, "Game")
 			parent := filepath.Join(root, "mods", "Diluc")
 			child := filepath.Join(parent, "Costume")
 			if manual {
@@ -244,7 +248,7 @@ func TestCharacterClassificationInSubGroups(t *testing.T) {
 				}
 			}
 			classification, err := service.SaveClassification(
-				ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+				ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -298,6 +302,7 @@ func TestCharacterClassificationPreservesModDetection(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			service, root := newClassificationFixture(t)
+			gameID := testGameID(t, service, "Game")
 			parent := filepath.Join(root, "mods", "Diluc")
 			child := filepath.Join(parent, "Costume")
 			want := 0
@@ -306,7 +311,7 @@ func TestCharacterClassificationPreservesModDetection(t *testing.T) {
 				want = 1
 			}
 			classification, err := service.SaveClassification(
-				ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+				ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -314,7 +319,7 @@ func TestCharacterClassificationPreservesModDetection(t *testing.T) {
 
 			check := func(stage string) {
 				t.Helper()
-				characters, err := service.GetCharacters(ctx, "Game", nil)
+				characters, err := service.GetCharacters(ctx, gameID, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -365,6 +370,7 @@ func TestClassifiedSubGroupsReachTheDepthLimit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	costume := filepath.Join(root, "mods", "Diluc", "Costume")
 	deepest := filepath.Join(costume, "Red")
 	tooDeep := filepath.Join(deepest, "Textures")
@@ -379,7 +385,7 @@ func TestClassifiedSubGroupsReachTheDepthLimit(t *testing.T) {
 		t.Fatalf("sub groups without definitions = %#v", got)
 	}
 
-	element, err := service.SaveClassification(ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
+	element, err := service.SaveClassification(ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,12 +415,14 @@ func TestSetCharacterClassificationRejectsInvalidTargets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
+	otherGameID := testGameID(t, service, "Other")
 	modsRoot := filepath.Join(root, "mods")
-	element, err := service.SaveClassification(ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
+	element, err := service.SaveClassification(ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := service.SaveClassification(ctx, "Other", nil, "Path", []ClassificationGroup{{Name: "Nihility"}})
+	foreign, err := service.SaveClassification(ctx, otherGameID, nil, "Path", []ClassificationGroup{{Name: "Nihility"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,13 +454,14 @@ func TestClassifiedSubGroupsFollowFolderChanges(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	parent := filepath.Join(root, "mods", "Diluc")
 	child := filepath.Join(parent, "Costume")
 	plain := filepath.Join(parent, "Plain")
 	if err := os.MkdirAll(plain, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	element, err := service.SaveClassification(ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
+	element, err := service.SaveClassification(ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,8 +542,9 @@ func TestListGroupsWhereSkipsRejectedFolders(t *testing.T) {
 func newIndexedClassificationFixture(t *testing.T) (*Mod, string, Classification, func() []string) {
 	t.Helper()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	element, err := service.SaveClassification(
-		context.Background(), "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+		context.Background(), gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -560,12 +570,13 @@ func TestClassifiedSubGroupsFollowWatchedFolderChanges(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root, element, paths := newIndexedClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	pyro := element.Groups[0].ID
 	furina := filepath.Join(root, "mods", "Furina")
 	if err := service.SetCharacterClassification(ctx, furina, element.ID, &pyro); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.WatchGame(ctx, "Game"); err != nil {
+	if err := service.WatchGame(ctx, gameID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -612,7 +623,7 @@ func TestClassifiedFolderIndexKeepsAssignmentsMadeDuringSearch(t *testing.T) {
 
 	// A change announced during a search leaves the index unbuilt, so the next listing searches again.
 	_, since, _ = service.classifiedFolderKeys(game)
-	service.invalidateClassifiedFolders("Game")
+	service.invalidateClassifiedFolders(game.ID)
 	service.finishClassifiedSearch(game, since)
 	if _, _, indexed := service.classifiedFolderKeys(game); indexed {
 		t.Fatal("index was built from a search that a folder change overtook")
@@ -647,11 +658,12 @@ func TestClearingLastClassificationForgetsIndexedFolder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	service, root, _, paths := newIndexedClassificationFixture(t)
-	weapon, err := service.SaveClassification(ctx, "Game", nil, "Weapon", []ClassificationGroup{{Name: "Claymore"}})
+	gameID := testGameID(t, service, "Game")
+	weapon, err := service.SaveClassification(ctx, gameID, nil, "Weapon", []ClassificationGroup{{Name: "Claymore"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	role, err := service.SaveClassification(ctx, "Game", nil, "Role", []ClassificationGroup{{Name: "DPS"}})
+	role, err := service.SaveClassification(ctx, gameID, nil, "Role", []ClassificationGroup{{Name: "DPS"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -727,9 +739,10 @@ func TestResolveDownloadTargetKeepsClassifiedFoldersOfOtherGroups(t *testing.T) 
 	t.Parallel()
 	ctx := context.Background()
 	service, root := newClassificationFixture(t)
+	gameID := testGameID(t, service, "Game")
 	child := filepath.Join(root, "mods", "Diluc", "Costume")
 	classification, err := service.SaveClassification(
-		ctx, "Game", nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
+		ctx, gameID, nil, "Element", []ClassificationGroup{{Name: "Pyro"}},
 	)
 	if err != nil {
 		t.Fatal(err)

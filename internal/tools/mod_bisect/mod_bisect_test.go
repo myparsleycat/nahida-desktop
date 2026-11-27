@@ -12,6 +12,8 @@ import (
 	"nahida.live/desktop/internal/db"
 )
 
+const bisectTestGameID = "9d77e8cc-965f-4781-8727-c428fa4d6ff9"
+
 type bisectTestSettings struct {
 	preserve bool
 	style    string
@@ -52,7 +54,7 @@ func newBisectTestService(t *testing.T, root string) (*Service, *db.Client, *[]B
 	useToolsTestAppData(t, service, t.TempDir())
 	if err := client.GamePaths.Insert(
 		context.Background(),
-		db.GamePathRow{Game: "test", ModFolderPath: root},
+		db.GamePathRow{ID: bisectTestGameID, Game: "test", ModFolderPath: root},
 	); err != nil {
 		t.Fatalf("insert game: %v", err)
 	}
@@ -81,11 +83,12 @@ func TestBisectFindsAndKeepsCulpritDisabled(t *testing.T) {
 	paths := writeBisectINIs(t, root, 4)
 	service, _, events := newBisectTestService(t, root)
 
-	first, err := service.BisectStart(ctx, "test", nil)
+	first, err := service.BisectStart(ctx, bisectTestGameID, nil)
 	if err != nil {
 		t.Fatalf("BisectStart: %v", err)
 	}
-	if first.Status != BisectRound || first.Round != 1 || len(first.CurrentBatch) != 2 {
+	if first.GameID != bisectTestGameID || first.Game != "test" ||
+		first.Status != BisectRound || first.Round != 1 || len(first.CurrentBatch) != 2 {
 		t.Fatalf("first snapshot = %#v", first)
 	}
 	for _, path := range first.CurrentBatch {
@@ -137,7 +140,7 @@ func TestBisectFinalizeAcceptsExistingKeepDisabledTarget(t *testing.T) {
 	writeBisectINIs(t, root, 2)
 	service, _, _ := newBisectTestService(t, root)
 
-	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
+	if _, err := service.BisectStart(ctx, bisectTestGameID, nil); err != nil {
 		t.Fatalf("BisectStart: %v", err)
 	}
 	done, err := service.BisectRespond(ctx, service.BisectGetState().Version, true)
@@ -183,7 +186,7 @@ func TestBisectRespondRollsBackPartialSwitch(t *testing.T) {
 	writeBisectINIs(t, root, 4)
 	service, _, _ := newBisectTestService(t, root)
 
-	first, err := service.BisectStart(ctx, "test", nil)
+	first, err := service.BisectStart(ctx, bisectTestGameID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +221,7 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 	paths := writeBisectINIs(t, root, 3)
 	service, _, _ := newBisectTestService(t, root)
 
-	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
+	if _, err := service.BisectStart(ctx, bisectTestGameID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.BisectCancel(ctx); err != nil {
@@ -235,7 +238,7 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 	if err := os.Rename(paths[0], orphan); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := service.BisectRecover(ctx, "test")
+	recovered, err := service.BisectRecover(ctx, bisectTestGameID)
 	if err != nil || recovered != 1 {
 		t.Fatalf("BisectRecover = %d, %v", recovered, err)
 	}
@@ -250,7 +253,7 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 	if err := os.WriteFile(orphan, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err = service.BisectRecover(ctx, "test")
+	recovered, err = service.BisectRecover(ctx, bisectTestGameID)
 	if err != nil || recovered != 1 {
 		t.Fatalf("duplicate BisectRecover = %d, %v", recovered, err)
 	}
@@ -262,7 +265,7 @@ func TestBisectCancelAndRecoverOrphans(t *testing.T) {
 	if err := os.WriteFile(orphan, []byte("disabled by bisect"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err = service.BisectRecover(ctx, "test")
+	recovered, err = service.BisectRecover(ctx, bisectTestGameID)
 	if recovered != 0 || err == nil || !strings.Contains(err.Error(), bisectRecoverConflict+":1") {
 		t.Fatalf("conflicting BisectRecover = %d, %v", recovered, err)
 	}
@@ -289,19 +292,19 @@ func TestBisectExcludeValidationAndDisabledScanning(t *testing.T) {
 	}
 	service, _, _ := newBisectTestService(t, root)
 
-	relative, err := service.BisectValidateExcludePath(context.Background(), "test", filepath.Dir(paths[0]))
+	relative, err := service.BisectValidateExcludePath(context.Background(), bisectTestGameID, filepath.Dir(paths[0]))
 	if err != nil || filepath.ToSlash(relative) != "a" {
 		t.Fatalf("BisectValidateExcludePath = %q, %v", relative, err)
 	}
 	if _, err := service.BisectValidateExcludePath(
 		context.Background(),
-		"test",
+		bisectTestGameID,
 		"..",
 	); err == nil ||
 		!strings.Contains(err.Error(), bisectExcludeOutside) {
 		t.Fatalf("outside validation error = %v", err)
 	}
-	snapshot, err := service.BisectStart(context.Background(), "test", []string{"a"})
+	snapshot, err := service.BisectStart(context.Background(), bisectTestGameID, []string{"a"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +331,7 @@ func TestBisectRestartCompletedSessionBroadcastsCancelLifecycle(t *testing.T) {
 	root := t.TempDir()
 	writeBisectINIs(t, root, 2)
 	service, _, events := newBisectTestService(t, root)
-	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
+	if _, err := service.BisectStart(ctx, bisectTestGameID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if done, err := service.BisectRespond(
@@ -340,7 +343,7 @@ func TestBisectRestartCompletedSessionBroadcastsCancelLifecycle(t *testing.T) {
 		t.Fatalf("done = %#v, %v", done, err)
 	}
 	before := len(*events)
-	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
+	if _, err := service.BisectStart(ctx, bisectTestGameID, nil); err != nil {
 		t.Fatal(err)
 	}
 	want := []BisectStatus{BisectCancelled, BisectReverting, BisectIdle, BisectScanning, BisectRound}
@@ -362,12 +365,12 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 	writeBisectINIs(t, root, 2)
 	service, client, _ := newBisectTestService(t, root)
 
-	if _, err := service.BisectStart(ctx, "test", nil); err != nil {
+	if _, err := service.BisectStart(ctx, bisectTestGameID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.BisectStart(
 		ctx,
-		"test",
+		bisectTestGameID,
 		nil,
 	); err == nil ||
 		err.Error() != "A bisect session is already running. Cancel it first." {
@@ -382,7 +385,7 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 	}
 	if _, err := service.BisectRecover(
 		ctx,
-		"test",
+		bisectTestGameID,
 	); err == nil ||
 		err.Error() != "Cannot recover while a bisect session is active." {
 		t.Fatalf("recover error = %v", err)
@@ -419,13 +422,13 @@ func TestBisectContractErrorMessagesMatchElectron(t *testing.T) {
 	if _, err := service.requireBisectGame(ctx, "missing"); err == nil || err.Error() != "Game not found: missing" {
 		t.Fatalf("game error = %v", err)
 	}
-	empty := "empty"
-	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: empty}); err != nil {
+	emptyID := "065375f7-c22a-4584-9294-4b7eefbc0ffd"
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{ID: emptyID, Game: "empty"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.requireBisectGame(
 		ctx,
-		empty,
+		emptyID,
 	); err == nil ||
 		err.Error() != "Mod folder path is not configured for empty." {
 		t.Fatalf("mod path error = %v", err)
@@ -436,15 +439,47 @@ func TestRequireBisectGameDoesNotPreflightConfiguredFolder(t *testing.T) {
 	root := t.TempDir()
 	service, client, _ := newBisectTestService(t, root)
 	missing := filepath.Join(root, "not-created")
+	configuredID := "8a17e59d-b4b5-452c-bdf3-d90fd760725d"
 	if err := client.GamePaths.Insert(
 		context.Background(),
-		db.GamePathRow{Game: "configured", ModFolderPath: missing},
+		db.GamePathRow{ID: configuredID, Game: "configured", ModFolderPath: missing},
 	); err != nil {
 		t.Fatal(err)
 	}
-	row, err := service.requireBisectGame(context.Background(), "configured")
+	row, err := service.requireBisectGame(context.Background(), configuredID)
 	if err != nil || row.ModFolderPath != missing {
 		t.Fatalf("row = %#v, err = %v", row, err)
+	}
+}
+
+func TestBisectLooksUpOnlyTheCurrentDisplayName(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	root := t.TempDir()
+	writeBisectINIs(t, root, 2)
+	service, client, _ := newBisectTestService(t, root)
+	if err := client.GamePaths.Rename(ctx, bisectTestGameID, "Renamed"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"test", "renamed", bisectTestGameID} {
+		if _, err := service.BisectGameIDByName(ctx, name); err == nil || err.Error() != "Game not found: "+name {
+			t.Fatalf("display name %q lookup error = %v", name, err)
+		}
+	}
+	if _, err := service.BisectStart(ctx, "Renamed", nil); err == nil || err.Error() != "Game not found: Renamed" {
+		t.Fatalf("bisect started with a display name: %v", err)
+	}
+	id, err := service.BisectGameIDByName(ctx, " Renamed ")
+	if err != nil || id != bisectTestGameID {
+		t.Fatalf("trimmed display name lookup = %q, %v", id, err)
+	}
+	started, err := service.BisectStart(ctx, id, nil)
+	if err != nil || started.GameID != id || started.Game != "Renamed" {
+		t.Fatalf("start = %+v, %v", started, err)
+	}
+	if _, err := service.BisectCancel(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 

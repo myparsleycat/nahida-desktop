@@ -10,8 +10,8 @@ import (
 
 type ModClassificationsStore struct{ c *Client }
 
-func (s ModClassificationsStore) ListByGame(ctx context.Context, game string) ([]ModClassificationWithGroups, error) {
-	return s.list(ctx, `WHERE c."game" = ?`, game)
+func (s ModClassificationsStore) ListByGame(ctx context.Context, gameID string) ([]ModClassificationWithGroups, error) {
+	return s.list(ctx, `WHERE c."game_id" = ?`, gameID)
 }
 
 func (s ModClassificationsStore) FindByID(ctx context.Context, id string) (*ModClassificationWithGroups, error) {
@@ -29,7 +29,7 @@ func (s ModClassificationsStore) list(
 ) ([]ModClassificationWithGroups, error) {
 	// One statement keeps classifications and their groups in the same snapshot during concurrent saves.
 	rows, err := s.c.query(ctx, `
-SELECT c."id", c."game", c."name", c."item_order", c."is_active",
+SELECT c."id", c."game_id", c."name", c."item_order", c."is_active",
        g."id", g."name", g."item_order"
 FROM "mod_classifications" c
 LEFT JOIN "mod_classification_groups" g ON g."classification_id" = c."id" `+where+`
@@ -45,7 +45,7 @@ ORDER BY c."item_order", c."name", g."item_order", g."name"`, args...)
 		var groupID, groupName sql.NullString
 		var groupOrder sql.NullInt64
 		if err := rows.Scan(
-			&row.ID, &row.Game, &row.Name, &row.ItemOrder, &active, &groupID, &groupName, &groupOrder,
+			&row.ID, &row.GameID, &row.Name, &row.ItemOrder, &active, &groupID, &groupName, &groupOrder,
 		); err != nil {
 			return nil, err
 		}
@@ -74,10 +74,10 @@ func (s ModClassificationsStore) Save(
 ) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO "mod_classifications" ("id", "game", "name", "item_order", "is_active")
+INSERT INTO "mod_classifications" ("id", "game_id", "name", "item_order", "is_active")
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT("id") DO UPDATE SET "name" = excluded."name"`,
-			row.ID, row.Game, row.Name, row.ItemOrder, lo.Ternary(row.IsActive, 1, 0)); err != nil {
+			row.ID, row.GameID, row.Name, row.ItemOrder, lo.Ternary(row.IsActive, 1, 0)); err != nil {
 			return err
 		}
 
@@ -118,10 +118,10 @@ func (s ModClassificationsStore) Delete(ctx context.Context, id string) error {
 }
 
 // SetActive marks one classification of the game as active and clears the rest; a nil id clears all.
-func (s ModClassificationsStore) SetActive(ctx context.Context, game string, id *string) error {
+func (s ModClassificationsStore) SetActive(ctx context.Context, gameID string, id *string) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		if _, err := tx.ExecContext(
-			ctx, `UPDATE "mod_classifications" SET "is_active" = 0 WHERE "game" = ?`, game,
+			ctx, `UPDATE "mod_classifications" SET "is_active" = 0 WHERE "game_id" = ?`, gameID,
 		); err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func (s ModClassificationsStore) SetActive(ctx context.Context, game string, id 
 			return nil
 		}
 		_, err := tx.ExecContext(
-			ctx, `UPDATE "mod_classifications" SET "is_active" = 1 WHERE "game" = ? AND "id" = ?`, game, *id,
+			ctx, `UPDATE "mod_classifications" SET "is_active" = 1 WHERE "game_id" = ? AND "id" = ?`, gameID, *id,
 		)
 		return err
 	})

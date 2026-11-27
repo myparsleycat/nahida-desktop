@@ -839,7 +839,11 @@ func TestServiceExecutesApprovalWithLegacyJunctionRootID(t *testing.T) {
 	if err := client.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "Game", ModFolderPath: linkedMods}); err != nil {
+	const gameID = "d8f329c7-a091-49fd-a799-b9217a51beab"
+	legacyName := "Game"
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{
+		ID: gameID, Game: legacyName, LegacyName: &legacyName, ModFolderPath: linkedMods,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := client.AgentSessions.Insert(ctx, db.AgentSessionRow{
@@ -852,7 +856,7 @@ func TestServiceExecutesApprovalWithLegacyJunctionRootID(t *testing.T) {
 		t.Fatal(err)
 	}
 	arguments, err := json.Marshal(map[string]any{
-		"rootId":     rootID("Game", legacyPath),
+		"rootId":     rootID(legacyName, legacyPath),
 		"operations": []PatchOperation{{Type: "delete", Path: "obsolete.ini"}},
 	})
 	if err != nil {
@@ -863,6 +867,9 @@ func TestServiceExecutesApprovalWithLegacyJunctionRootID(t *testing.T) {
 		ActionID: "sandbox.apply_patch", Arguments: string(arguments), Summary: "Delete obsolete file",
 		Status: "pending", CreatedAt: "1",
 	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Rename(ctx, gameID, "Renamed Game"); err != nil {
 		t.Fatal(err)
 	}
 	service := New(Options{})

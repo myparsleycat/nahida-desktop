@@ -87,7 +87,11 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			if err != nil {
 				return nil, err
 			}
-			return deps.Tools.BisectStart(ctx, input.Game, paths)
+			gameID, err := deps.Tools.BisectGameIDByName(ctx, input.Game)
+			if err != nil {
+				return nil, err
+			}
+			return deps.Tools.BisectStart(ctx, gameID, paths)
 		}))
 	registry.add(
 		simpleAction("tools.bisect_respond", "Record whether the current bisect round fixed the problem.", "tools",
@@ -540,7 +544,11 @@ func registerToolActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			restored, err := deps.Tools.BisectRecover(ctx, input.Game)
+			gameID, err := deps.Tools.BisectGameIDByName(ctx, input.Game)
+			if err != nil {
+				return nil, err
+			}
+			restored, err := deps.Tools.BisectRecover(ctx, gameID)
 			if conflict, ok := errors.AsType[*tools.BisectRecoverConflictError](err); ok {
 				return map[string]any{"restored": restored, "conflicts": conflict.Conflicts}, nil
 			}

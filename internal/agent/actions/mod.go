@@ -28,7 +28,11 @@ func registerModActions(registry *Registry, deps Dependencies) {
 				if err := decodeActionArguments(raw, &input); err != nil {
 					return nil, err
 				}
-				return deps.Mod.GetCharacters(ctx, input.Game, nil)
+				gameID, err := deps.Mod.GameIDByName(ctx, input.Game)
+				if err != nil {
+					return nil, err
+				}
+				return deps.Mod.GetCharacters(ctx, gameID, nil)
 			}),
 	)
 	registry.add(pathAction("mod.get_groups", "List subgroups under a configured Mods folder.", RiskRead,
@@ -97,7 +101,11 @@ func registerModActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.Mod.GetPresets(ctx, input.Game)
+			gameID, err := deps.Mod.GameIDByName(ctx, input.Game)
+			if err != nil {
+				return nil, err
+			}
+			return deps.Mod.GetPresets(ctx, gameID)
 		}))
 	registry.add(
 		simpleAction(
@@ -126,7 +134,11 @@ func registerModActions(registry *Registry, deps Dependencies) {
 				if err := decodeActionArguments(raw, &input); err != nil {
 					return nil, err
 				}
-				return deps.Mod.CreatePreset(ctx, input.Game, input.Name, input.Description, input.ResolveConflicts)
+				gameID, err := deps.Mod.GameIDByName(ctx, input.Game)
+				if err != nil {
+					return nil, err
+				}
+				return deps.Mod.CreatePreset(ctx, gameID, input.Name, input.Description, input.ResolveConflicts)
 			},
 		),
 	)
@@ -166,7 +178,11 @@ func registerModActions(registry *Registry, deps Dependencies) {
 			if err := decodeActionArguments(raw, &input); err != nil {
 				return nil, err
 			}
-			return deps.Mod.GetPresetCreateConflicts(ctx, input.Game)
+			gameID, err := deps.Mod.GameIDByName(ctx, input.Game)
+			if err != nil {
+				return nil, err
+			}
+			return deps.Mod.GetPresetCreateConflicts(ctx, gameID)
 		}))
 	registry.add(pathAction("mod.get_manual_groups", "List manually configured subgroups.", RiskRead,
 		func(ctx context.Context, path string, _ json.RawMessage) (any, error) {

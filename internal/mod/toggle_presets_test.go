@@ -67,8 +67,9 @@ func TestSetTogglePresetStoreMovesPresetsBothWays(t *testing.T) {
 	}
 	writeNHD(enabled, map[string]any{"preview": "cover.png", togglePresetsMetadataKey: fooPresets})
 	writeNHD(disabled, map[string]any{togglePresetsMetadataKey: barPresets})
+	gameID := testGameID(t, service, "Genshin")
 	orphan := db.ModTogglePresetRow{ID: "z", ModName: "Gone", Name: "Old", Source: "ini", INIs: `{"gone.ini":{}}`}
-	if err := service.client.ModTogglePresets.ReplaceMod(ctx, "Genshin", "char/gone", []db.ModTogglePresetRow{
+	if err := service.client.ModTogglePresets.ReplaceMod(ctx, gameID, "char/gone", []db.ModTogglePresetRow{
 		orphan,
 	}); err != nil {
 		t.Fatal(err)
@@ -287,7 +288,7 @@ func TestSetTogglePresetStoreRetriesRemappedIDsAfterReopen(t *testing.T) {
 	owner := db.ModTogglePresetRow{ID: want.ID, Name: "Owner", INIs: `{"original.ini":{"Outfit":"2"}}`}
 	if err := service.client.ModTogglePresets.ReplaceMod(
 		t.Context(),
-		"Genshin",
+		testGameID(t, service, "Genshin"),
 		"owner",
 		[]db.ModTogglePresetRow{owner},
 	); err != nil {
@@ -308,7 +309,7 @@ BEGIN SELECT RAISE(ABORT, 'copy failure'); END`); err != nil {
 			t.Fatalf("source changed after failure: %+v, %v", list, err)
 		}
 	}
-	first, err := service.client.ModTogglePresets.ListByMod(t.Context(), "Genshin", "a")
+	first, err := service.client.ModTogglePresets.ListByMod(t.Context(), testGameID(t, service, "Genshin"), "a")
 	if err != nil || len(first) != 1 || first[0].ID == want.ID {
 		t.Fatalf("first copy: %+v, %v", first, err)
 	}
@@ -328,7 +329,7 @@ BEGIN SELECT RAISE(ABORT, 'copy failure'); END`); err != nil {
 	if err != nil || migration.Moved != 2 || migration.Leftover != 0 || settings.store != TogglePresetStoreDatabase {
 		t.Fatalf("retry: %+v, %v, store %s", migration, err, settings.store)
 	}
-	again, err := client.ModTogglePresets.ListByMod(t.Context(), "Genshin", "a")
+	again, err := client.ModTogglePresets.ListByMod(t.Context(), testGameID(t, service, "Genshin"), "a")
 	if err != nil || !reflect.DeepEqual(first, again) {
 		t.Fatalf("retry changed the copied ID or added duplicates: %+v, want %+v, %v", again, first, err)
 	}
@@ -336,7 +337,7 @@ BEGIN SELECT RAISE(ABORT, 'copy failure'); END`); err != nil {
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("destination rows: %+v, %v", rows, err)
 	}
-	ownerRows, err := client.ModTogglePresets.ListByMod(t.Context(), "Genshin", "owner")
+	ownerRows, err := client.ModTogglePresets.ListByMod(t.Context(), testGameID(t, service, "Genshin"), "owner")
 	if err != nil || len(ownerRows) != 1 || ownerRows[0].ID != want.ID || ownerRows[0].INIs != owner.INIs {
 		t.Fatalf("original owner changed: %+v, %v", ownerRows, err)
 	}
@@ -410,7 +411,7 @@ func TestSetTogglePresetStoreRejectsSharedMetadata(t *testing.T) {
 					row := db.ModTogglePresetRow{ID: name, Name: name, INIs: `{}`}
 					if err := service.client.ModTogglePresets.ReplaceMod(
 						t.Context(),
-						"Genshin",
+						testGameID(t, service, "Genshin"),
 						name,
 						[]db.ModTogglePresetRow{row},
 					); err != nil {

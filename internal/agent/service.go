@@ -1985,9 +1985,13 @@ func (s *Service) resolveScope(ctx context.Context, scope AgentScope) (AgentScop
 		if path.Importer != nil {
 			importer = *path.Importer
 		}
+		identity := path.ID
+		if path.LegacyName != nil {
+			identity = *path.LegacyName
+		}
 		gameRoots = append(
 			gameRoots,
-			SandboxRoot{ID: rootID(path.Game, canonical), Name: path.Game, Path: canonical, Importer: importer},
+			SandboxRoot{ID: rootID(identity, canonical), Name: path.Game, Path: canonical, Importer: importer},
 		)
 	}
 	switch scope.Type {

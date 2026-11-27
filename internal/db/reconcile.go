@@ -68,39 +68,7 @@ type reconcileAction struct {
 // name/type/null/PK/FK/extra-column mismatch, ensures indexes, records
 // app_schema_version, and applies one-shot migrations.
 func (c *Client) Reconcile(ctx context.Context) error {
-	tableNames, err := c.listUserTables(ctx)
-	if err != nil {
-		return err
-	}
-
-	candidates := make([]reconcileCandidate, 0, len(TableSpecs))
-	for _, spec := range TableSpecs {
-		candidate, err := c.buildReconcileCandidate(ctx, spec, tableNames)
-		if err != nil {
-			return err
-		}
-		candidates = append(candidates, candidate)
-	}
-
-	if err := c.exec(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return fmt.Errorf("disable foreign_keys: %w", err)
-	}
-
-	restore := func() error {
-		return c.exec(ctx, `PRAGMA foreign_keys = ON`)
-	}
-
-	for _, candidate := range candidates {
-		if err := c.reconcileTable(ctx, candidate); err != nil {
-			restoreErr := restore()
-			if restoreErr != nil {
-				return preserveRecovery(err, fmt.Errorf("restore foreign_keys: %w", restoreErr))
-			}
-			return err
-		}
-	}
-
-	if err := restore(); err != nil {
+	if err := c.reconcileTables(ctx); err != nil {
 		return err
 	}
 
@@ -132,6 +100,45 @@ func (c *Client) Reconcile(ctx context.Context) error {
 		return err
 	}
 	return c.removeLegacyImageCache(ctx)
+}
+
+func (c *Client) reconcileTables(ctx context.Context) (err error) {
+	if err := c.exec(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign_keys: %w", err)
+	}
+	defer func() {
+		if restoreErr := c.exec(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`); restoreErr != nil {
+			restoreErr = fmt.Errorf("restore foreign_keys: %w", restoreErr)
+			if err == nil {
+				err = restoreErr
+			} else {
+				err = preserveRecovery(err, restoreErr)
+			}
+		}
+	}()
+
+	if err := c.migrateGameIDs(ctx); err != nil {
+		return fmt.Errorf("migrate game IDs: %w", err)
+	}
+
+	tableNames, err := c.listUserTables(ctx)
+	if err != nil {
+		return err
+	}
+	candidates := make([]reconcileCandidate, 0, len(TableSpecs))
+	for _, spec := range TableSpecs {
+		candidate, err := c.buildReconcileCandidate(ctx, spec, tableNames)
+		if err != nil {
+			return err
+		}
+		candidates = append(candidates, candidate)
+	}
+	for _, candidate := range candidates {
+		if err := c.reconcileTable(ctx, candidate); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrateModelViewerToonStyles merges the per-game toon style settings into one object keyed by material
@@ -302,7 +309,7 @@ func (c *Client) buildReconcileCandidate(
 }
 
 func (c *Client) readTableShape(ctx context.Context, tableName string) (*existingTableShape, error) {
-	columns, err := c.pragmaTableInfo(ctx, tableName)
+	columns, err := pragmaTableInfoOn(ctx, c.db, tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -343,8 +350,8 @@ func (c *Client) readTableShape(ctx context.Context, tableName string) (*existin
 	}, nil
 }
 
-func (c *Client) pragmaTableInfo(ctx context.Context, tableName string) ([]tableInfoRow, error) {
-	rows, err := c.query(ctx, `PRAGMA table_info(`+quoteIdent(tableName)+`)`)
+func pragmaTableInfoOn(ctx context.Context, execer queryExec, tableName string) ([]tableInfoRow, error) {
+	rows, err := execer.QueryContext(ctx, `PRAGMA table_info(`+quoteIdent(tableName)+`)`)
 	if err != nil {
 		return nil, fmt.Errorf("table_info %s: %w", tableName, err)
 	}
@@ -591,6 +598,18 @@ func getReconcileAction(spec TableSpec, shape *existingTableShape) reconcileActi
 }
 
 func (c *Client) rebuildTable(ctx context.Context, spec TableSpec, shape *existingTableShape) error {
+	return c.withImmediate(ctx, func(tx queryExec) error {
+		return rebuildTableOn(ctx, tx, spec, shape, nil)
+	})
+}
+
+func rebuildTableOn(
+	ctx context.Context,
+	tx queryExec,
+	spec TableSpec,
+	shape *existingTableShape,
+	copyExpressions map[string]string,
+) error {
 	tempTableName := "__new_" + spec.Name
 	sourceColumns := make(map[string]struct{}, len(shape.columns))
 	for _, column := range shape.columns {
@@ -599,43 +618,46 @@ func (c *Client) rebuildTable(ctx context.Context, spec TableSpec, shape *existi
 
 	insertColumns := make([]string, 0, len(spec.Columns))
 	selectExpressions := make([]string, 0, len(spec.Columns))
+	if rowID, ok := copyExpressions["rowid"]; ok {
+		insertColumns = append(insertColumns, `"rowid"`)
+		selectExpressions = append(selectExpressions, rowID)
+	}
 	for _, target := range spec.Columns {
-		sourceName, err := findSourceColumnName(target, sourceColumns)
-		if err != nil {
-			return err
+		expression, overridden := copyExpressions[target.Name]
+		if !overridden {
+			sourceName, err := findSourceColumnName(target, sourceColumns)
+			if err != nil {
+				return err
+			}
+			expression = buildCopyExpression(target, sourceName)
 		}
 		insertColumns = append(insertColumns, quoteIdent(target.Name))
-		selectExpressions = append(
-			selectExpressions,
-			buildCopyExpression(target, sourceName)+" AS "+quoteIdent(target.Name),
-		)
+		selectExpressions = append(selectExpressions, expression+" AS "+quoteIdent(target.Name))
 	}
 
-	return c.withImmediate(ctx, func(tx queryExec) error {
-		if _, err := tx.ExecContext(ctx, buildCreateTableSQL(spec, tempTableName)); err != nil {
-			return fmt.Errorf("create temp %s: %w", spec.Name, err)
-		}
-		copySQL := fmt.Sprintf(
-			`INSERT INTO %s (%s) SELECT %s FROM %s`,
-			quoteIdent(tempTableName),
-			strings.Join(insertColumns, ", "),
-			strings.Join(selectExpressions, ", "),
-			quoteIdent(shape.tableName),
-		)
-		if _, err := tx.ExecContext(ctx, copySQL); err != nil {
-			return fmt.Errorf("copy %s: %w", spec.Name, err)
-		}
-		if _, err := tx.ExecContext(ctx, `DROP TABLE `+quoteIdent(shape.tableName)); err != nil {
-			return fmt.Errorf("drop old %s: %w", shape.tableName, err)
-		}
-		if _, err := tx.ExecContext(
-			ctx,
-			`ALTER TABLE `+quoteIdent(tempTableName)+` RENAME TO `+quoteIdent(spec.Name),
-		); err != nil {
-			return fmt.Errorf("rename %s: %w", spec.Name, err)
-		}
-		return c.ensureIndexesOn(ctx, tx, spec)
-	})
+	if _, err := tx.ExecContext(ctx, buildCreateTableSQL(spec, tempTableName)); err != nil {
+		return fmt.Errorf("create temp %s: %w", spec.Name, err)
+	}
+	copySQL := fmt.Sprintf(
+		`INSERT INTO %s (%s) SELECT %s FROM %s`,
+		quoteIdent(tempTableName),
+		strings.Join(insertColumns, ", "),
+		strings.Join(selectExpressions, ", "),
+		quoteIdent(shape.tableName),
+	)
+	if _, err := tx.ExecContext(ctx, copySQL); err != nil {
+		return fmt.Errorf("copy %s: %w", spec.Name, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE `+quoteIdent(shape.tableName)); err != nil {
+		return fmt.Errorf("drop old %s: %w", shape.tableName, err)
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`ALTER TABLE `+quoteIdent(tempTableName)+` RENAME TO `+quoteIdent(spec.Name),
+	); err != nil {
+		return fmt.Errorf("rename %s: %w", spec.Name, err)
+	}
+	return ensureIndexesOn(ctx, tx, spec)
 }
 
 func findSourceColumnName(target ColumnSpec, sourceColumns map[string]struct{}) (string, error) {
@@ -680,10 +702,10 @@ func buildCopyExpression(target ColumnSpec, sourceName string) string {
 }
 
 func (c *Client) ensureIndexes(ctx context.Context, spec TableSpec) error {
-	return c.ensureIndexesOn(ctx, c.db, spec)
+	return ensureIndexesOn(ctx, c.db, spec)
 }
 
-func (c *Client) ensureIndexesOn(ctx context.Context, execer queryExec, spec TableSpec) error {
+func ensureIndexesOn(ctx context.Context, execer queryExec, spec TableSpec) error {
 	if len(spec.Indexes) == 0 {
 		return nil
 	}

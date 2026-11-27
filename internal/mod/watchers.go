@@ -55,11 +55,11 @@ type managedWatcher struct {
 	changed func()
 }
 
-func (m *Mod) WatchGame(ctx context.Context, game string) error {
+func (m *Mod) WatchGame(ctx context.Context, gameID string) error {
 	m.watchMu.Lock()
 	defer m.watchMu.Unlock()
 
-	path, err := m.GetGamePath(ctx, game)
+	path, err := m.GetGamePath(ctx, gameID)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (m *Mod) WatchGame(ctx context.Context, game string) error {
 		return err
 	}
 	watcher.onChange(func() {
-		m.invalidateClassifiedFolders(game)
+		m.invalidateClassifiedFolders(gameID)
 		m.InvalidateLibraries()
 	})
 	return m.replaceWatcher(true, watcher)
@@ -96,7 +96,7 @@ func (m *Mod) WatchCharacter(ctx context.Context, characterPath string) error {
 		return err
 	}
 	watcher.onChange(func() {
-		m.invalidateClassifiedFolders(game.Game)
+		m.invalidateClassifiedFolders(game.ID)
 		m.InvalidateLibraries()
 	})
 	return m.replaceWatcher(false, watcher)

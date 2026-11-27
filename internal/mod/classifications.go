@@ -34,23 +34,34 @@ type ClassificationGroup struct {
 // Classification is a user-defined way to group a game's character folders in the sidebar.
 type Classification struct {
 	ID     string                `json:"id"`
+	GameID string                `json:"gameId"`
 	Game   string                `json:"game"`
 	Name   string                `json:"name"`
 	Active bool                  `json:"active"`
 	Groups []ClassificationGroup `json:"groups"`
 }
 
-func (m *Mod) GetClassifications(ctx context.Context, game string) ([]Classification, error) {
+func (m *Mod) GetClassifications(ctx context.Context, gameID string) ([]Classification, error) {
 	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := client.ModClassifications.ListByGame(ctx, game)
+	rows, err := client.ModClassifications.ListByGame(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
+	if len(rows) == 0 {
+		return []Classification{}, nil
+	}
+	game, err := client.GamePaths.GetByID(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+	if game == nil {
+		return []Classification{}, nil
+	}
 	return lo.Map(rows, func(row db.ModClassificationWithGroups, _ int) Classification {
-		return classificationFromRow(row)
+		return classificationFromRow(row, game.Game)
 	}), nil
 }
 
@@ -58,7 +69,7 @@ func (m *Mod) GetClassifications(ctx context.Context, game string) ([]Classifica
 // replace the stored ones in order: groups with a known ID are kept, the rest are created or deleted.
 func (m *Mod) SaveClassification(
 	ctx context.Context,
-	game string,
+	gameID string,
 	id *string,
 	name string,
 	groups []ClassificationGroup,
@@ -71,19 +82,19 @@ func (m *Mod) SaveClassification(
 	if name == "" {
 		return Classification{}, errors.New("INVALID_CLASSIFICATION_NAME")
 	}
-	gameRow, err := client.GamePaths.GetByGame(ctx, game)
+	gameRow, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return Classification{}, err
 	}
 	if gameRow == nil {
-		return Classification{}, fmt.Errorf("no mod folder path set for %s", game)
+		return Classification{}, ErrGameNotFound
 	}
-	existing, err := client.ModClassifications.ListByGame(ctx, game)
+	existing, err := client.ModClassifications.ListByGame(ctx, gameID)
 	if err != nil {
 		return Classification{}, err
 	}
 
-	row := db.ModClassificationRow{Game: game, Name: name}
+	row := db.ModClassificationRow{GameID: gameID, Name: name}
 	knownGroups := map[string]struct{}{}
 	for _, other := range existing {
 		if id != nil && other.ID == *id {
@@ -138,7 +149,7 @@ func (m *Mod) SaveClassification(
 	if saved == nil {
 		return Classification{}, errors.New("CLASSIFICATION_NOT_FOUND")
 	}
-	return classificationFromRow(*saved), nil
+	return classificationFromRow(*saved, gameRow.Game), nil
 }
 
 func (m *Mod) DeleteClassification(ctx context.Context, id string) error {
@@ -150,7 +161,7 @@ func (m *Mod) DeleteClassification(ctx context.Context, id string) error {
 }
 
 // SetActiveClassification selects the classification the sidebar groups by; nil restores the plain folder list.
-func (m *Mod) SetActiveClassification(ctx context.Context, game string, id *string) error {
+func (m *Mod) SetActiveClassification(ctx context.Context, gameID string, id *string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -160,11 +171,11 @@ func (m *Mod) SetActiveClassification(ctx context.Context, game string, id *stri
 		if err != nil {
 			return err
 		}
-		if classification == nil || classification.Game != game {
+		if classification == nil || classification.GameID != gameID {
 			return errors.New("CLASSIFICATION_NOT_FOUND")
 		}
 	}
-	return client.ModClassifications.SetActive(ctx, game, id)
+	return client.ModClassifications.SetActive(ctx, gameID, id)
 }
 
 // SetCharacterClassification assigns a character folder to a group, or clears the assignment
@@ -175,13 +186,13 @@ func (m *Mod) SetCharacterClassification(
 	groupID *string,
 ) (err error) {
 	stage := "validate"
-	gameName := ""
+	var gameID, gameName string
 	defer func() {
 		if err != nil {
 			err = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
 				Operation: "set-character-classification", Stage: stage,
 				Fields: map[string]any{
-					"folderPath": folderPath, "game": gameName,
+					"folderPath": folderPath, "gameId": gameID, "game": gameName,
 					"classificationId": classificationID, "groupId": lo.FromPtr(groupID),
 				},
 			})
@@ -195,7 +206,7 @@ func (m *Mod) SetCharacterClassification(
 	if err != nil {
 		return infra.WithCause(errors.New("INVALID_CLASSIFICATION_PATH"), err)
 	}
-	gameName = game.Game
+	gameID, gameName = game.ID, game.Game
 	relative := manualRelativePath(gameRelativePath(game.ModFolderPath, folderPath))
 	if relative == "" || relative == "." || escapesRoot(relative) {
 		return errors.New("INVALID_CLASSIFICATION_PATH")
@@ -213,7 +224,7 @@ func (m *Mod) SetCharacterClassification(
 	if err != nil {
 		return err
 	}
-	if classification == nil || classification.Game != game.Game {
+	if classification == nil || classification.GameID != game.ID {
 		return errors.New("CLASSIFICATION_NOT_FOUND")
 	}
 	if groupID != nil && !lo.ContainsBy(classification.Groups, func(group db.ModClassificationGroupRow) bool {
@@ -275,13 +286,13 @@ func (m *Mod) SetCharacterClassification(
 func (m *Mod) loadCharacterClassifications(
 	ctx context.Context,
 	client *db.Client,
-	game string,
+	game GameConfig,
 	groups []FolderGroup,
 	reports ...func(error),
 ) []FolderGroup {
-	classifications, err := client.ModClassifications.ListByGame(ctx, game)
+	classifications, err := client.ModClassifications.ListByGame(ctx, game.ID)
 	if err != nil {
-		reportScanFailure(fmt.Errorf("list classifications for %s: %w", game, err), reports)
+		reportScanFailure(fmt.Errorf("list classifications for %s: %w", game.Game, err), reports)
 		return groups
 	}
 	if len(classifications) == 0 {
@@ -334,10 +345,10 @@ func (m *Mod) classifiedIndex(game GameConfig) *classifiedFolderIndex {
 	if m.classifiedFolders == nil {
 		m.classifiedFolders = map[string]*classifiedFolderIndex{}
 	}
-	index := m.classifiedFolders[game.Game]
+	index := m.classifiedFolders[game.ID]
 	if index == nil {
 		index = &classifiedFolderIndex{}
-		m.classifiedFolders[game.Game] = index
+		m.classifiedFolders[game.ID] = index
 	}
 	if index.keys == nil || index.root != game.ModFolderPath {
 		index.root, index.keys, index.built = game.ModFolderPath, map[string]uint64{}, false
@@ -405,16 +416,16 @@ func (m *Mod) forgetClassifiedFolder(game GameConfig, folderPath string) {
 
 // invalidateClassifiedFolders makes the next character listing search the folders again. Folders that were
 // moved, copied or edited outside SetCharacterClassification can carry assignments the index never saw.
-func (m *Mod) invalidateClassifiedFolders(game string) {
+func (m *Mod) invalidateClassifiedFolders(gameID string) {
 	m.classifiedMu.Lock()
 	defer m.classifiedMu.Unlock()
 	if m.classifiedFolders == nil {
 		m.classifiedFolders = map[string]*classifiedFolderIndex{}
 	}
-	index := m.classifiedFolders[game]
+	index := m.classifiedFolders[gameID]
 	if index == nil {
 		index = &classifiedFolderIndex{}
-		m.classifiedFolders[game] = index
+		m.classifiedFolders[gameID] = index
 	}
 	m.classifiedChanges++
 	index.built, index.invalidated = false, m.classifiedChanges
@@ -565,9 +576,9 @@ func decodeClassificationAssignments(raw json.RawMessage) map[string]string {
 	return assignments
 }
 
-func classificationFromRow(row db.ModClassificationWithGroups) Classification {
+func classificationFromRow(row db.ModClassificationWithGroups, gameName string) Classification {
 	return Classification{
-		ID: row.ID, Game: row.Game, Name: row.Name, Active: row.IsActive,
+		ID: row.ID, GameID: row.GameID, Game: gameName, Name: row.Name, Active: row.IsActive,
 		Groups: lo.Map(row.Groups, func(group db.ModClassificationGroupRow, _ int) ClassificationGroup {
 			return ClassificationGroup{ID: group.ID, Name: group.Name}
 		}),

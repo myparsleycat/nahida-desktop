@@ -663,6 +663,13 @@
           "order_value": "第 {{current}} 个，共 {{total}} 个",
           "order_description": "使用箭头按钮调整此游戏在下拉列表中的位置。"
         },
+        "rename-game": {
+          "title": "重命名游戏",
+          "name_label": "游戏名称",
+          "required": "请输入游戏名称。",
+          "duplicate": "此游戏名称已被使用。",
+          "failed": "无法重命名游戏。"
+        },
         "nte-launch": {
           "title": "指定启动器路径",
           "path_label": "启动器路径",

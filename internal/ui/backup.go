@@ -42,7 +42,7 @@ type backupScreen struct {
 	loading  bool
 	// reload asks for another read once the one in flight ends, as it may have started before a change.
 	reload bool
-	// writing counts the backupAction changes in flight. excluding holds, by game, the included state being
+	// writing counts the backupAction changes in flight. excluding holds, by game ID, the included state being
 	// written, until a read that started and ended with no change in flight replaces it.
 	writing   int
 	excluding map[string]bool
@@ -551,11 +551,8 @@ func (s *Shell) backupTargetsCard() *fairy.El {
 		if target.Kind != "game" {
 			continue
 		}
-		game := target.Label
-		if target.Game != nil {
-			game = *target.Game
-		}
-		included, writing := b.excluding[game]
+		gameID := deref(target.GameID)
+		included, writing := b.excluding[gameID]
 		if !writing {
 			included = !target.Excluded
 		}
@@ -563,11 +560,12 @@ func (s *Shell) backupTargetsCard() *fairy.El {
 			if b.excluding == nil {
 				b.excluding = map[string]bool{}
 			}
-			b.excluding[game] = included
-			s.backupAction("exclude-game", map[string]any{"game": game}, func(ctx context.Context) error {
-				return s.deps.Backup.SetGameExcluded(ctx, game, !included)
+			b.excluding[gameID] = included
+			fields := map[string]any{"gameID": gameID, "game": target.Label}
+			s.backupAction("exclude-game", fields, func(ctx context.Context) error {
+				return s.deps.Backup.SetGameExcluded(ctx, gameID, !included)
 			})
-		}, kit.Disabled(writing)).Label(T("page.backup.targets.include", "name", target.Label))))
+		}, kit.Disabled(writing || gameID == "")).Label(T("page.backup.targets.include", "name", target.Label))))
 	}
 	for _, target := range targets {
 		if target.Kind != "custom" {

@@ -768,7 +768,7 @@ type downloadAsk struct {
 // dropIntoGroup adds dropped folders and archives to the folder at groupPath, one after another, as the
 // React screen did. Archives may ask where their contents go.
 func (s *Shell) dropIntoGroup(groupPath string, paths []string) {
-	game := s.mods.game
+	gameID := s.mods.gameID
 	s.background(func(ctx context.Context) {
 		for _, path := range paths {
 			name := filepath.Base(path)
@@ -793,13 +793,13 @@ func (s *Shell) dropIntoGroup(groupPath string, paths []string) {
 				if mode == "" {
 					continue
 				}
-				go s.importDropped(game, groupPath, path, "extract", func(ctx context.Context) error {
+				go s.importDropped(gameID, groupPath, path, "extract", func(ctx context.Context) error {
 					_, err := s.deps.Mod.ExtractArchiveToGroup(ctx, path, groupPath, mode)
 					return err
 				})
 				continue
 			}
-			go s.importDropped(game, groupPath, path, "copy", func(ctx context.Context) error {
+			go s.importDropped(gameID, groupPath, path, "copy", func(ctx context.Context) error {
 				_, err := s.deps.Mod.CopyFolderToGroup(ctx, path, groupPath)
 				return err
 			})
@@ -835,7 +835,7 @@ func (s *Shell) archiveExtractMode(ctx context.Context, name, path string) (stri
 	}
 }
 
-func (s *Shell) importDropped(game, groupPath, path, kind string, run func(context.Context) error) {
+func (s *Shell) importDropped(gameID, groupPath, path, kind string, run func(context.Context) error) {
 	name := filepath.Base(path)
 	toast := s.toasts.Loading(T("page.mod.drag_drop."+kind+".loading", "fileName", name), "")
 	err := run(context.Background())
@@ -858,7 +858,7 @@ func (s *Shell) importDropped(game, groupPath, path, kind string, run func(conte
 			return
 		}
 		s.toasts.Update(toast, kit.ToastSuccess, T("page.mod.drag_drop."+kind+".success", "fileName", name), "")
-		if s.mods.game == game {
+		if s.mods.gameID == gameID {
 			s.refreshFolders()
 			if s.mods.group != nil {
 				s.refreshListing()
@@ -935,6 +935,7 @@ func (s *Shell) showModDialogs(cx *fairy.Cx) {
 	s.characterDialog(cx)
 	s.extractDialog(cx)
 	s.gameDialog(cx)
+	s.gameRenameDialog(cx)
 	s.nteLaunchDialog(cx)
 	s.urlDownloadDialog(cx)
 	s.mergeDialog(cx)

@@ -16,12 +16,15 @@ func TestModClassificationsStore(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	for _, game := range []string{"GI", "HSR"} {
-		if err := client.GamePaths.Insert(ctx, GamePathRow{Game: game, ModFolderPath: "C:/" + game}); err != nil {
+		if err := client.GamePaths.Insert(
+			ctx,
+			GamePathRow{ID: game, Game: game, ModFolderPath: "C:/" + game},
+		); err != nil {
 			t.Fatalf("insert game: %v", err)
 		}
 	}
 
-	element := ModClassificationRow{ID: "element", Game: "GI", Name: "Element", ItemOrder: 0}
+	element := ModClassificationRow{ID: "element", GameID: "GI", Name: "Element", ItemOrder: 0}
 	if err := client.ModClassifications.Save(ctx, element, []ModClassificationGroupRow{
 		{ID: "pyro", Name: "Pyro", ItemOrder: 0},
 		{ID: "hydro", Name: "Hydro", ItemOrder: 1},
@@ -29,12 +32,12 @@ func TestModClassificationsStore(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save element: %v", err)
 	}
-	weapon := ModClassificationRow{ID: "weapon", Game: "GI", Name: "Weapon", ItemOrder: 1}
+	weapon := ModClassificationRow{ID: "weapon", GameID: "GI", Name: "Weapon", ItemOrder: 1}
 	if err := client.ModClassifications.Save(ctx, weapon, nil); err != nil {
 		t.Fatalf("save weapon: %v", err)
 	}
 	if err := client.ModClassifications.Save(
-		ctx, ModClassificationRow{ID: "path", Game: "HSR", Name: "Path"}, nil,
+		ctx, ModClassificationRow{ID: "path", GameID: "HSR", Name: "Path"}, nil,
 	); err != nil {
 		t.Fatalf("save path: %v", err)
 	}
@@ -129,12 +132,15 @@ func TestModClassificationsStoreConcurrentSnapshot(t *testing.T) {
 			if err := client.Reconcile(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := client.GamePaths.Insert(ctx, GamePathRow{Game: "Game", ModFolderPath: t.TempDir()}); err != nil {
+			if err := client.GamePaths.Insert(
+				ctx,
+				GamePathRow{ID: "Game", Game: "Game", ModFolderPath: t.TempDir()},
+			); err != nil {
 				t.Fatal(err)
 			}
 			if test.existing {
 				if err := client.ModClassifications.Save(ctx,
-					ModClassificationRow{ID: "stable", Game: "Game", Name: "Stable"},
+					ModClassificationRow{ID: "stable", GameID: "Game", Name: "Stable"},
 					[]ModClassificationGroupRow{{ID: "stable-group", Name: "Stable group"}},
 				); err != nil {
 					t.Fatal(err)
@@ -178,7 +184,7 @@ func TestModClassificationsStoreConcurrentSnapshot(t *testing.T) {
 				<-start
 				for range iterations {
 					if err := client.ModClassifications.Save(ctx,
-						ModClassificationRow{ID: "changing", Game: "Game", Name: "Changing"},
+						ModClassificationRow{ID: "changing", GameID: "Game", Name: "Changing"},
 						[]ModClassificationGroupRow{{ID: "changing-group", Name: "Changing group"}},
 					); err != nil {
 						failures <- err

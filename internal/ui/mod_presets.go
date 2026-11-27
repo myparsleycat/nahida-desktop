@@ -17,7 +17,7 @@ func (s *Shell) gameSelector() *fairy.El {
 	m := &s.mods
 	games := []kit.Item{{Label: T("page.mod.game-selector.games"), Heading: true}}
 	for _, game := range m.games {
-		games = append(games, kit.Item{Value: game.Game, Label: game.Game})
+		games = append(games, kit.Item{Value: game.ID, Label: game.Game})
 	}
 	gamePlaceholder := T("page.mod.game-selector.select_game")
 	if len(m.games) == 0 {
@@ -45,18 +45,15 @@ func (s *Shell) gameSelector() *fairy.El {
 	gameRow := fairy.Row().Gap(4)
 	if len(m.games) > 0 {
 		launch := T("page.mod.game-selector.launch_game")
-		gameRow.Child(kit.IconButton(lucide.Play, s.playGame, kit.Outline, kit.Disabled(m.game == ""),
+		gameRow.Child(kit.IconButton(lucide.Play, s.playGame, kit.Outline, kit.Disabled(m.gameID == ""),
 			kit.Loading(s.gameStarting()), kit.Tooltip(launch)).Label(launch))
 	}
-	editGame := kit.RowAction(lucide.Pencil, T("page.mod.dialog.edit-game.title"), func(name string) {
-		for _, game := range m.games {
-			if game.Game == name {
-				s.openEditGame(game)
-				return
-			}
+	editGame := kit.RowAction(lucide.Pencil, T("page.mod.dialog.edit-game.title"), func(id string) {
+		if game := s.gameConfigByID(id); game != nil {
+			s.openEditGame(*game)
 		}
 	})
-	gameRow.Child(kit.Select("mod.game", m.game, games, func(game string) { s.selectGame(game, true) },
+	gameRow.Child(kit.Select("mod.game", m.gameID, games, func(id string) { s.selectGame(id, true) },
 		kit.Placeholder(gamePlaceholder), kit.Disabled(len(m.games) == 0), editGame).Grow(1).MinW(0))
 	addGame := T("page.mod.dialog.add-game.title")
 	gameRow.Child(kit.IconButton(lucide.Plus, s.openAddGame, kit.Outline, kit.Tooltip(addGame)).Label(addGame))
@@ -67,7 +64,7 @@ func (s *Shell) gameSelector() *fairy.El {
 			kit.Select("mod.preset", openID, presets, s.openPresetDialog, kit.Placeholder(presetPlaceholder),
 				kit.Disabled(len(m.presets) == 0)).Grow(1).MinW(0),
 			kit.IconButton(lucide.Plus, func() { m.presetDraft = &presetDraft{} }, kit.Outline,
-				kit.Disabled(m.game == ""), kit.Tooltip(newPreset)).Label(newPreset),
+				kit.Disabled(m.gameID == ""), kit.Tooltip(newPreset)).Label(newPreset),
 		).Gap(4),
 	).Shrink(0).Pad(8).Gap(12).BorderEdges(1, 0, 0, 0, t.Border)
 }
@@ -299,33 +296,33 @@ func (s *Shell) createPreset(d *presetDraft, resolve bool) {
 		return
 	}
 	d.busy = true
-	game, description := m.game, d.description
+	gameID, description := m.gameID, d.description
 	s.background(func(ctx context.Context) {
 		var conflicts []mod.PresetConflict
 		var err error
 		// A failed conflict lookup shows the backend's message, as the React dialog did.
 		lookupFailed := false
 		if !resolve {
-			conflicts, err = s.deps.Mod.GetPresetCreateConflicts(ctx, game)
+			conflicts, err = s.deps.Mod.GetPresetCreateConflicts(ctx, gameID)
 			lookupFailed = err != nil
 		}
 		// A failed resolution keeps the conflict list open with the conflicts as they are now.
 		var listed []mod.PresetConflict
 		if err == nil && len(conflicts) == 0 {
-			_, err = s.deps.Mod.CreatePreset(ctx, game, name, &description, resolve)
+			_, err = s.deps.Mod.CreatePreset(ctx, gameID, name, &description, resolve)
 			switch {
 			case err != nil && strings.Contains(err.Error(), "PRESET_CONFLICTS_EXIST"):
-				conflicts, err = s.deps.Mod.GetPresetCreateConflicts(ctx, game)
+				conflicts, err = s.deps.Mod.GetPresetCreateConflicts(ctx, gameID)
 				lookupFailed = err != nil
 			case err != nil && resolve && strings.Contains(err.Error(), "PRESET_CONFLICT_RESOLUTION_FAILED"):
-				listed, _ = s.deps.Mod.GetPresetCreateConflicts(ctx, game)
+				listed, _ = s.deps.Mod.GetPresetCreateConflicts(ctx, gameID)
 			}
 		}
 		fairy.Go(func() {
 			d.busy = false
 			switch {
 			case err != nil && lookupFailed:
-				s.modError(err, "get-preset-create-conflicts", map[string]any{"game": game})
+				s.modError(err, "get-preset-create-conflicts", map[string]any{"gameID": gameID})
 				s.toasts.Show(kit.ToastError, err.Error(), "")
 			case err != nil:
 				s.showPresetError(err)
@@ -338,7 +335,7 @@ func (s *Shell) createPreset(d *presetDraft, resolve bool) {
 				if m.presetDraft == d {
 					m.presetDraft = nil
 				}
-				if m.game == game {
+				if m.gameID == gameID {
 					s.loadPresets()
 				}
 			}

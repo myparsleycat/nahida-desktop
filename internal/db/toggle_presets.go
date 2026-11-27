@@ -12,7 +12,7 @@ import (
 
 type ModTogglePresetsStore struct{ c *Client }
 
-const modTogglePresetColumns = `"id", "game", "mod_key", "mod_name", "name", "source", "inis", "created_at", "updated_at"`
+const modTogglePresetColumns = `"id", "game_id", "mod_key", "mod_name", "name", "source", "inis", "created_at", "updated_at"`
 
 func (s ModTogglePresetsStore) list(ctx context.Context, query string, args ...any) ([]ModTogglePresetRow, error) {
 	rows, err := s.c.query(ctx, query, args...)
@@ -24,7 +24,7 @@ func (s ModTogglePresetsStore) list(ctx context.Context, query string, args ...a
 	for rows.Next() {
 		var row ModTogglePresetRow
 		if err := rows.Scan(
-			&row.ID, &row.Game, &row.ModKey, &row.ModName, &row.Name, &row.Source, &row.INIs,
+			&row.ID, &row.GameID, &row.ModKey, &row.ModName, &row.Name, &row.Source, &row.INIs,
 			&row.CreatedAt, &row.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -34,20 +34,20 @@ func (s ModTogglePresetsStore) list(ctx context.Context, query string, args ...a
 	return out, rows.Err()
 }
 
-func (s ModTogglePresetsStore) ListByMod(ctx context.Context, game, modKey string) ([]ModTogglePresetRow, error) {
+func (s ModTogglePresetsStore) ListByMod(ctx context.Context, gameID, modKey string) ([]ModTogglePresetRow, error) {
 	return s.list(ctx, `SELECT `+modTogglePresetColumns+`
-FROM "mod_toggle_presets" WHERE "game" = ? AND "mod_key" = ? ORDER BY "name"`, game, modKey)
+FROM "mod_toggle_presets" WHERE "game_id" = ? AND "mod_key" = ? ORDER BY "name"`, gameID, modKey)
 }
 
 func (s ModTogglePresetsStore) ListAll(ctx context.Context) ([]ModTogglePresetRow, error) {
 	return s.list(ctx, `SELECT `+modTogglePresetColumns+`
-FROM "mod_toggle_presets" ORDER BY "game", "mod_key", "name"`)
+FROM "mod_toggle_presets" ORDER BY "game_id", "mod_key", "name"`)
 }
 
 // Remaps are persisted before copying so failed imports reuse their IDs after a restart.
 func (s ModTogglePresetsStore) ResolveImportIDs(
 	ctx context.Context,
-	game, modKey string,
+	gameID, modKey string,
 	sourceIDs []string,
 ) (map[string]string, error) {
 	resolved := make(map[string]string, len(sourceIDs))
@@ -62,7 +62,7 @@ func (s ModTogglePresetsStore) ResolveImportIDs(
 		if requested[id] {
 			continue
 		}
-		encoded, err := json.Marshal([3]string{game, modKey, id})
+		encoded, err := json.Marshal([3]string{gameID, modKey, id})
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +90,7 @@ func (s ModTogglePresetsStore) ResolveImportIDs(
 			encoded, decodeErr := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(key, prefix))
 			var owner []string
 			if decodeErr != nil || json.Unmarshal(encoded, &owner) != nil || len(owner) != 3 ||
-				owner[0] != game || owner[1] != modKey {
+				owner[0] != gameID || owner[1] != modKey {
 				reservedByOther[target] = true
 			}
 		}
@@ -109,8 +109,8 @@ func (s ModTogglePresetsStore) ResolveImportIDs(
 			}
 			var occupied bool
 			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM "mod_toggle_presets"
-WHERE "id" = ? AND (? OR "game" <> ? OR "mod_key" <> ?))`,
-				id, !allowOwned, game, modKey).Scan(&occupied)
+WHERE "id" = ? AND (? OR "game_id" <> ? OR "mod_key" <> ?))`,
+				id, !allowOwned, gameID, modKey).Scan(&occupied)
 			return !occupied, err
 		}
 		for _, id := range unique {
@@ -160,16 +160,16 @@ SET "value" = excluded."value", "updated_at" = excluded."updated_at"`,
 }
 
 // ReplaceMod makes rows the presets of one mod in one immediate transaction.
-func (s ModTogglePresetsStore) ReplaceMod(ctx context.Context, game, modKey string, rows []ModTogglePresetRow) error {
+func (s ModTogglePresetsStore) ReplaceMod(ctx context.Context, gameID, modKey string, rows []ModTogglePresetRow) error {
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM "mod_toggle_presets" WHERE "game" = ? AND "mod_key" = ?`,
-			game, modKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM "mod_toggle_presets" WHERE "game_id" = ? AND "mod_key" = ?`,
+			gameID, modKey); err != nil {
 			return err
 		}
 		for _, row := range rows {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO "mod_toggle_presets" (`+modTogglePresetColumns+`)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				row.ID, game, modKey, row.ModName, row.Name, row.Source, row.INIs, row.CreatedAt,
+				row.ID, gameID, modKey, row.ModName, row.Name, row.Source, row.INIs, row.CreatedAt,
 				row.UpdatedAt); err != nil {
 				return err
 			}
@@ -178,16 +178,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	})
 }
 
-func (s ModTogglePresetsStore) DeleteByModIDs(ctx context.Context, game, modKey string, ids []string) error {
+func (s ModTogglePresetsStore) DeleteByModIDs(ctx context.Context, gameID, modKey string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	args := make([]any, len(ids)+2)
-	args[0], args[1] = game, modKey
+	args[0], args[1] = gameID, modKey
 	for i, id := range ids {
 		args[i+2] = id
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
 	return s.c.exec(ctx, `DELETE FROM "mod_toggle_presets"
-WHERE "game" = ? AND "mod_key" = ? AND "id" IN (`+placeholders+`)`, args...)
+WHERE "game_id" = ? AND "mod_key" = ? AND "id" IN (`+placeholders+`)`, args...)
 }

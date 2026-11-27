@@ -36,8 +36,8 @@ func (m *Mod) SetManualSubGroup(ctx context.Context, modPath string, enabled boo
 	if err != nil {
 		return err
 	}
-	current := make(map[string]struct{}, len(groups[game.Game]))
-	for _, value := range groups[game.Game] {
+	current := make(map[string]struct{}, len(groups[game.ID]))
+	for _, value := range groups[game.ID] {
 		current[value] = struct{}{}
 	}
 	if enabled {
@@ -51,9 +51,9 @@ func (m *Mod) SetManualSubGroup(ctx context.Context, modPath string, enabled boo
 	}
 	sortLocaleStrings(next)
 	if len(next) == 0 {
-		delete(groups, game.Game)
+		delete(groups, game.ID)
 	} else {
-		groups[game.Game] = next
+		groups[game.ID] = next
 	}
 	return m.saveManualSubGroups(ctx, groups)
 }
@@ -95,7 +95,7 @@ func (m *Mod) GetManualSubGroups(
 	if err != nil {
 		return nil, err
 	}
-	result = m.loadCharacterClassifications(ctx, client, game.Game, result, diagnostics.Add)
+	result = m.loadCharacterClassifications(ctx, client, *game, result, diagnostics.Add)
 	for _, group := range result {
 		if len(group.Classifications) > 0 {
 			m.rememberClassifiedFolder(*game, group.Path)
@@ -186,7 +186,7 @@ func manualChildren(groups manualSubGroups, game GameConfig, parentRelative stri
 		prefix = parentRelative + "/"
 	}
 	result := map[string]struct{}{}
-	for _, candidate := range groups[game.Game] {
+	for _, candidate := range groups[game.ID] {
 		if !strings.HasPrefix(candidate, prefix) || strings.Contains(candidate[len(prefix):], "/") {
 			continue
 		}

@@ -62,7 +62,7 @@ func TestRecoverBisectsRestoresINIBehindNestedJunction(t *testing.T) {
 	if err := client.AppState.Upsert(ctx, legacyScanDoneKey, "1", appStateTimestamp()); err != nil {
 		t.Fatal(err)
 	}
-	started, err := crashed.BisectStart(ctx, "test", nil)
+	started, err := crashed.BisectStart(ctx, bisectTestGameID, nil)
 	linked := filepath.Join(mods, "Linked", "mod.ini")
 	if err != nil || len(started.CurrentBatch) != 1 || started.CurrentBatch[0] != linked {
 		t.Fatalf("started = %#v, %v", started, err)

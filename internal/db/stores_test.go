@@ -144,6 +144,7 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 	}
 
 	if err := client.GamePaths.Insert(ctx, GamePathRow{
+		ID:            "GI",
 		Game:          "GI",
 		ModFolderPath: "C:/gi/mods",
 		Importer:      ptr("XXMI"),
@@ -151,6 +152,7 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 		t.Fatalf("insert game: %v", err)
 	}
 	if err := client.GamePaths.Insert(ctx, GamePathRow{
+		ID:            "HSR",
 		Game:          "HSR",
 		ModFolderPath: "C:/hsr/mods",
 	}); err != nil {
@@ -184,7 +186,7 @@ func TestTableAccessorsRoundTrip(t *testing.T) {
 	}
 
 	if err := client.ModPresets.Insert(ctx, ModPresetRow{
-		ID: "p1", Game: "GI", Name: "Default", ItemCount: 1, CreatedAt: "c", UpdatedAt: "u", Version: 1,
+		ID: "p1", GameID: "GI", Name: "Default", ItemCount: 1, CreatedAt: "c", UpdatedAt: "u", Version: 1,
 	}); err != nil {
 		t.Fatalf("insert preset: %v", err)
 	}

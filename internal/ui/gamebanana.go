@@ -542,12 +542,7 @@ func gbGameID(games []gamebanana.GameRegistration, key string) int {
 
 // gameBananaKeyForModGame returns the GameBanana game of the importer the mod screen's game uses.
 func (s *Shell) gameBananaKeyForModGame(games []gamebanana.GameRegistration) string {
-	var config *mod.GameConfig
-	for i := range s.mods.games {
-		if s.mods.games[i].Game == s.mods.game {
-			config = &s.mods.games[i]
-		}
-	}
+	config := s.gameConfig()
 	if config == nil || config.Importer == nil {
 		return ""
 	}

@@ -14,7 +14,7 @@ func scanModPreset(scanner interface{ Scan(dest ...any) error }) (*ModPresetRow,
 	var desc sql.NullString
 	if err := scanner.Scan(
 		&row.ID,
-		&row.Game,
+		&row.GameID,
 		&row.Name,
 		&desc,
 		&row.ItemCount,
@@ -28,10 +28,10 @@ func scanModPreset(scanner interface{ Scan(dest ...any) error }) (*ModPresetRow,
 	return &row, nil
 }
 
-func (s ModPresetsStore) ListByGame(ctx context.Context, game string) ([]ModPresetRow, error) {
+func (s ModPresetsStore) ListByGame(ctx context.Context, gameID string) ([]ModPresetRow, error) {
 	rows, err := s.c.query(ctx, `
-SELECT "id", "game", "name", "description", "item_count", "created_at", "updated_at", "version"
-FROM "mod_presets" WHERE "game" = ? ORDER BY "name"`, game)
+SELECT "id", "game_id", "name", "description", "item_count", "created_at", "updated_at", "version"
+FROM "mod_presets" WHERE "game_id" = ? ORDER BY "name"`, gameID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ FROM "mod_presets" WHERE "game" = ? ORDER BY "name"`, game)
 
 func (s ModPresetsStore) FindByID(ctx context.Context, id string) (*ModPresetRow, error) {
 	row := s.c.db.QueryRowContext(ctx, `
-SELECT "id", "game", "name", "description", "item_count", "created_at", "updated_at", "version"
+SELECT "id", "game_id", "name", "description", "item_count", "created_at", "updated_at", "version"
 FROM "mod_presets" WHERE "id" = ? LIMIT 1`, id)
 	out, err := scanModPreset(row)
 	if isNoRows(err) {
@@ -58,10 +58,10 @@ FROM "mod_presets" WHERE "id" = ? LIMIT 1`, id)
 	return out, err
 }
 
-func (s ModPresetsStore) FindByGameAndName(ctx context.Context, game, name string) (*ModPresetRow, error) {
+func (s ModPresetsStore) FindByGameAndName(ctx context.Context, gameID, name string) (*ModPresetRow, error) {
 	row := s.c.db.QueryRowContext(ctx, `
-SELECT "id", "game", "name", "description", "item_count", "created_at", "updated_at", "version"
-FROM "mod_presets" WHERE "game" = ? AND "name" = ? LIMIT 1`, game, name)
+SELECT "id", "game_id", "name", "description", "item_count", "created_at", "updated_at", "version"
+FROM "mod_presets" WHERE "game_id" = ? AND "name" = ? LIMIT 1`, gameID, name)
 	out, err := scanModPreset(row)
 	if isNoRows(err) {
 		return nil, nil
@@ -74,10 +74,10 @@ func (s ModPresetsStore) Insert(ctx context.Context, row ModPresetRow) error {
 		ctx,
 		`
 INSERT INTO "mod_presets"
-("id", "game", "name", "description", "item_count", "created_at", "updated_at", "version")
+("id", "game_id", "name", "description", "item_count", "created_at", "updated_at", "version")
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ID,
-		row.Game,
+		row.GameID,
 		row.Name,
 		argString(row.Description),
 		row.ItemCount,
@@ -97,9 +97,9 @@ func (s ModPresetsStore) InsertSnapshot(
 	return s.c.withImmediate(ctx, func(tx queryExec) error {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO "mod_presets"
-("id", "game", "name", "description", "item_count", "created_at", "updated_at", "version")
+("id", "game_id", "name", "description", "item_count", "created_at", "updated_at", "version")
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			preset.ID, preset.Game, preset.Name, argString(preset.Description), preset.ItemCount,
+			preset.ID, preset.GameID, preset.Name, argString(preset.Description), preset.ItemCount,
 			preset.CreatedAt, preset.UpdatedAt, preset.Version); err != nil {
 			return err
 		}

@@ -97,9 +97,18 @@ func (m *Mod) SetTogglePresetStore(ctx context.Context, store string) (TogglePre
 			}
 			migration.Failed = append(migration.Failed, group.ref.path)
 			_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
-				Severity: infra.DiagnosticWarn, Operation: "toggle-preset.set-store", Stage: "copy",
-				Fields: map[string]any{"modPath": group.ref.path, "game": group.ref.game, "modKey": group.ref.key,
-					"from": current, "to": store, "presets": len(group.presets)},
+				Severity:  infra.DiagnosticWarn,
+				Operation: "toggle-preset.set-store",
+				Stage:     "copy",
+				Fields: map[string]any{
+					"modPath": group.ref.path,
+					"gameId":  group.ref.gameID,
+					"game":    group.ref.gameName,
+					"modKey":  group.ref.key,
+					"from":    current,
+					"to":      store,
+					"presets": len(group.presets),
+				},
 			})
 			continue
 		}
@@ -120,7 +129,12 @@ func (m *Mod) SetTogglePresetStore(ctx context.Context, store string) (TogglePre
 			migration.Failed = append(migration.Failed, group.ref.path)
 			failure := fmt.Errorf("TOGGLE_PRESET_MIGRATION_FAILED:%d: %w", len(migration.Failed), err)
 			return migration, report(infra.AnnotateError(failure, infra.Diagnostic{
-				Fields: map[string]any{"modPath": group.ref.path, "game": group.ref.game, "modKey": group.ref.key},
+				Fields: map[string]any{
+					"modPath": group.ref.path,
+					"gameId":  group.ref.gameID,
+					"game":    group.ref.gameName,
+					"modKey":  group.ref.key,
+				},
 			}))
 		}
 	}
@@ -191,7 +205,7 @@ func (m *Mod) togglePresetGroups(
 		byMod := map[[2]string][]TogglePreset{}
 		var order [][2]string
 		for _, row := range rows {
-			key := [2]string{row.Game, row.ModKey}
+			key := [2]string{row.GameID, row.ModKey}
 			if _, seen := byMod[key]; !seen {
 				order = append(order, key)
 			}
@@ -201,11 +215,16 @@ func (m *Mod) togglePresetGroups(
 			}
 			byMod[key] = append(byMod[key], preset)
 		}
+		gameNames := make(map[string]string, len(games))
+		for _, game := range games {
+			gameNames[game.ID] = game.Game
+		}
 		for _, key := range order {
-			label := key[0] + "/" + key[1]
+			gameName := gameNames[key[0]]
+			label := gameName + "/" + key[1]
 			var found []string
 			for _, root := range roots {
-				if games[root.game].Game != key[0] {
+				if games[root.game].ID != key[0] {
 					continue
 				}
 				paths, err := resolveToggleDiskPaths(ctx, root.path, key[1])
@@ -227,7 +246,8 @@ func (m *Mod) togglePresetGroups(
 			case 1:
 				groups = append(groups, togglePresetGroup{
 					ref: toggleModRef{
-						game: key[0], path: found[0], key: key[1], name: stripDisabled(filepath.Base(found[0])),
+						gameID: key[0], gameName: gameName, path: found[0], key: key[1],
+						name: stripDisabled(filepath.Base(found[0])),
 					},
 					presets: byMod[key],
 				})
@@ -259,9 +279,10 @@ func (m *Mod) togglePresetGroups(
 			if err != nil {
 				return nil, err
 			}
+			game := games[root.game]
 			groups = append(groups, togglePresetGroup{
 				ref: toggleModRef{
-					game: games[root.game].Game, path: dir, key: normalizeRelativePath(relative),
+					gameID: game.ID, gameName: game.Game, path: dir, key: normalizeRelativePath(relative),
 					name: stripDisabled(filepath.Base(dir)),
 				},
 				presets: presets,
@@ -448,7 +469,7 @@ func (m *Mod) copyTogglePresets(ctx context.Context, store string, group toggleP
 		if err != nil {
 			return copied, err
 		}
-		ids, err = client.ModTogglePresets.ResolveImportIDs(ctx, group.ref.game, group.ref.key, copied.sourceIDs)
+		ids, err = client.ModTogglePresets.ResolveImportIDs(ctx, group.ref.gameID, group.ref.key, copied.sourceIDs)
 		if err != nil {
 			return copied, err
 		}
@@ -516,7 +537,7 @@ func (m *Mod) removeTogglePresets(ctx context.Context, store string, ref toggleM
 		if err != nil {
 			return err
 		}
-		return client.ModTogglePresets.DeleteByModIDs(ctx, ref.game, ref.key, ids)
+		return client.ModTogglePresets.DeleteByModIDs(ctx, ref.gameID, ref.key, ids)
 	}
 	return metadata.Update(ref.path, func(raw []byte) ([]byte, error) {
 		document, presets, err := decodeMetadataTogglePresets(raw)

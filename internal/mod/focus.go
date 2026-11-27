@@ -11,7 +11,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 )
 
-// GetPreviousFocusedGame returns the registered game whose process is running, preferring the most
+// GetPreviousFocusedGame returns the ID of the registered game whose process is running, preferring the most
 // recently focused one when several are.
 func (m *Mod) GetPreviousFocusedGame(ctx context.Context) (*string, error) {
 	if m.gameProcesses == nil {
@@ -83,14 +83,14 @@ func runningGame(games []GameConfig, focused []uint32, running map[uint32]string
 			games,
 			func(game GameConfig) bool { return gameUsesImporter(game, key) },
 		); index >= 0 {
-			return &games[index].Game
+			return &games[index].ID
 		}
 	}
 
 	for index, game := range games {
 		for _, key := range running {
 			if gameUsesImporter(game, key) {
-				return &games[index].Game
+				return &games[index].ID
 			}
 		}
 	}

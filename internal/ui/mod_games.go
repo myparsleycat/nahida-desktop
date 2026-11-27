@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"math"
 	"slices"
 	"strings"
@@ -25,7 +26,7 @@ const (
 // gameDraft is the add or edit game form. The path field holds the NTE install folder for NTE, the mod folder
 // without an importer, and nothing for an XXMI importer, whose own Mods folder the backend resolves.
 type gameDraft struct {
-	editing     string
+	editingID   string
 	name        string
 	nameTouched bool
 	importer    string
@@ -38,6 +39,13 @@ type gameDraft struct {
 	resolving  bool
 	notFound   bool
 	resolveSeq int
+}
+
+type gameRenameDraft struct {
+	gameID   string
+	name     string
+	errorKey string
+	busy     bool
 }
 
 func importerOf(game mod.GameConfig) string {
@@ -63,7 +71,7 @@ func (s *Shell) openAddGame() {
 }
 
 func (s *Shell) openEditGame(game mod.GameConfig) {
-	d := &gameDraft{editing: game.Game, importer: importerOf(game)}
+	d := &gameDraft{editingID: game.ID, importer: importerOf(game)}
 	d.path = d.savedPath(game, d.importer)
 	if game.LinkedModFolderPath != nil && *game.LinkedModFolderPath != "" {
 		d.customPath = game.ModFolderPath
@@ -109,15 +117,10 @@ func (d *gameDraft) resetNte() {
 
 func (s *Shell) editingGame() *mod.GameConfig {
 	d := s.mods.gameDraft
-	if d == nil || d.editing == "" {
+	if d == nil || d.editingID == "" {
 		return nil
 	}
-	for i := range s.mods.games {
-		if s.mods.games[i].Game == d.editing {
-			return &s.mods.games[i]
-		}
-	}
-	return nil
+	return s.gameConfigByID(d.editingID)
 }
 
 // setGameImporter switches the importer. The path field holds a different kind of path per importer kind, so a
@@ -135,7 +138,7 @@ func (s *Shell) setGameImporter(d *gameDraft, importer string) {
 	if previous == nteImporter && importer != nteImporter {
 		d.customPath = ""
 	}
-	if importer == nteImporter && d.editing == "" {
+	if importer == nteImporter && d.editingID == "" {
 		d.name = T("page.mod.dialog.add-game.nte_game_name")
 	}
 }
@@ -197,10 +200,10 @@ func (s *Shell) submitGame(d *gameDraft) {
 		return
 	}
 	name, path, customPath := strings.TrimSpace(d.name), strings.TrimSpace(d.path), strings.TrimSpace(d.customPath)
-	if d.importer == nteImporter && d.editing == "" {
+	if d.importer == nteImporter && d.editingID == "" {
 		name = T("page.mod.dialog.add-game.nte_game_name")
 	}
-	if d.editing == "" && name == "" || (d.importer == nteImporter || d.importer == noImporter) && path == "" {
+	if d.editingID == "" && name == "" || (d.importer == nteImporter || d.importer == noImporter) && path == "" {
 		return
 	}
 	if d.importer == nteImporter && d.nte == nil {
@@ -235,31 +238,34 @@ func (s *Shell) submitGame(d *gameDraft) {
 
 	d.busy = true
 	s.mods.nteProgress = nil
-	editing := d.editing
+	gameID := d.editingID
+	if game := s.editingGame(); game != nil {
+		name = game.Game
+	}
 	s.background(func(ctx context.Context) {
 		var err error
-		if editing == "" {
+		if gameID == "" {
 			err = s.deps.Mod.AddGame(ctx, name, updates.ModFolderPath, updates.Importer, updates.LinkedModFolderPath,
 				updates.GameInstallPath, updates.GameExecutablePath)
 		} else {
-			err = s.deps.Mod.UpdateGame(ctx, editing, updates)
+			err = s.deps.Mod.UpdateGame(ctx, gameID, updates)
 		}
 		fairy.Go(func() {
 			d.busy = false
 			if err != nil {
-				s.showGameError(err, editing, updates)
+				s.showGameError(err, gameID, name, updates)
 				return
 			}
 			if s.mods.gameDraft == d {
 				s.mods.gameDraft = nil
 			}
 			s.loadGames(false)
-			if editing != "" && editing == s.mods.game {
+			if gameID != "" && gameID == s.mods.gameID {
 				s.selectGroup(nil)
 				s.refreshFolders()
 				s.background(func(ctx context.Context) {
-					if err := s.deps.Mod.WatchGame(ctx, editing); err != nil {
-						s.modError(err, "watch-game", map[string]any{"game": editing})
+					if err := s.deps.Mod.WatchGame(ctx, gameID); err != nil {
+						s.modError(err, "watch-game", map[string]any{"gameID": gameID, "game": name})
 					}
 				})
 			}
@@ -267,7 +273,7 @@ func (s *Shell) submitGame(d *gameDraft) {
 	})
 }
 
-func (s *Shell) showGameError(err error, editing string, updates mod.GameUpdates) {
+func (s *Shell) showGameError(err error, gameID, name string, updates mod.GameUpdates) {
 	const prefix = "page.mod.hooks.use-mod-mutations.add-game-mutation."
 	codes := []struct{ code, key string }{
 		{"DUPLICATE_GAME_NAME", "duplicate-game-name"},
@@ -292,19 +298,93 @@ func (s *Shell) showGameError(err error, editing string, updates mod.GameUpdates
 	}
 
 	operation := "add-game"
-	if editing != "" {
+	if gameID != "" {
 		operation = "update-game"
 	}
 	s.modError(err, operation, map[string]any{
-		"game": editing, "modFolderPath": updates.ModFolderPath, "importer": deref(updates.Importer),
+		"gameID": gameID, "game": name, "modFolderPath": updates.ModFolderPath, "importer": deref(updates.Importer),
 		"gameInstallPath": deref(updates.GameInstallPath),
 	})
 	// React's update path showed the backend's message, and its add path only the NTE bootstrap ones.
-	if strings.Contains(text, "NTE_BOOTSTRAP_") || editing != "" && text != "" && text != "Unknown error" {
+	if strings.Contains(text, "NTE_BOOTSTRAP_") || gameID != "" && text != "" && text != "Unknown error" {
 		s.toasts.Show(kit.ToastError, text, "")
 		return
 	}
 	s.toasts.Show(kit.ToastError, T(prefix+"failed"), "")
+}
+
+const gameRenameLocale = "page.mod.dialog.rename-game."
+
+func (s *Shell) submitGameRename(d *gameRenameDraft) {
+	if d.busy {
+		return
+	}
+	name := strings.TrimSpace(d.name)
+	if name == "" {
+		d.errorKey = "required"
+		return
+	}
+	d.busy, d.errorKey = true, ""
+	s.background(func(ctx context.Context) {
+		err := s.deps.Mod.RenameGame(ctx, d.gameID, name)
+		fairy.Go(func() {
+			d.busy = false
+			switch {
+			case err == nil:
+				if game := s.gameConfigByID(d.gameID); game != nil {
+					game.Game = name
+				}
+				s.mods.gameRename = nil
+				s.loadGames(false)
+			case errors.Is(err, mod.ErrGameNotFound):
+				if s.mods.gameRename == d {
+					s.mods.gameRename = nil
+				}
+				s.loadGames(false)
+			case errors.Is(err, mod.ErrInvalidGameName):
+				d.errorKey = "required"
+			case errors.Is(err, mod.ErrDuplicateGameName):
+				d.errorKey = "duplicate"
+			default:
+				s.modError(err, "rename-game", map[string]any{"gameID": d.gameID, "name": name})
+				d.errorKey = "failed"
+			}
+		})
+	})
+}
+
+func (s *Shell) gameRenameDialog(cx *fairy.Cx) {
+	d := s.mods.gameRename
+	if d == nil {
+		return
+	}
+	if !d.busy && s.mods.gamesLoaded && s.gameConfigByID(d.gameID) == nil {
+		s.mods.gameRename = nil
+		return
+	}
+	close := func() {
+		if !d.busy {
+			s.mods.gameRename = nil
+		}
+	}
+	submit := func() { s.submitGameRename(d) }
+	field := kit.TextField(d.name, func(name string) { d.name, d.errorKey = name, "" },
+		kit.Disabled(d.busy), kit.Invalid(d.errorKey == "required" || d.errorKey == "duplicate")).
+		AutoFocus().OnSubmit(func(string) { submit() })
+	body := modDialogField(T(gameRenameLocale+"name_label"), field)
+	if d.errorKey != "" {
+		body.Child(fairy.Text(T(gameRenameLocale + d.errorKey)).Color(kit.T().Destructive).Wrap())
+	}
+	kit.ShowDialog(cx, kit.DialogProps{
+		Title: T(gameRenameLocale + "title"),
+		Body:  body,
+		Actions: []*fairy.El{
+			kit.Button(T("g.cancel"), close, kit.Outline, kit.Disabled(d.busy)),
+			kit.Button(T("g.save"), submit, kit.Loading(d.busy)),
+		},
+		OnClose: close,
+		Key:     "mod.game-rename",
+	})
 }
 
 func modDialogField(label string, control *fairy.El) *fairy.El {
@@ -318,7 +398,7 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 		return
 	}
 	editing := s.editingGame()
-	if d.editing != "" && editing == nil && m.gamesLoaded {
+	if d.editingID != "" && editing == nil && m.gamesLoaded {
 		m.gameDraft = nil
 		return
 	}
@@ -332,7 +412,7 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 	}
 
 	body := fairy.Col().Gap(16).PadXY(0, 16)
-	if d.editing == "" {
+	if d.editingID == "" {
 		name := d.name
 		if nte {
 			name = T("page.mod.dialog.add-game.nte_game_name")
@@ -351,13 +431,17 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 			)
 		}
 		body.Child(nameField)
+	} else if editing != nil {
+		body.Child(kit.Button(T(gameRenameLocale+"title"), func() {
+			m.gameRename = &gameRenameDraft{gameID: editing.ID, name: editing.Game}
+		}, kit.Outline, kit.Icon(lucide.Pencil), kit.Disabled(d.busy)).AlignSelf(fairy.Start))
 	}
 
 	body.Child(s.gameImporterField(d, editing))
 
 	if nte || manual {
 		label, required := T("page.mod.dialog.add-game.path_input_placeholder"), T("page.mod.dialog.add-game.#.1")
-		if d.editing != "" {
+		if d.editingID != "" {
 			label = T("page.mod.dialog.edit-game.path_label")
 		}
 		if nte {
@@ -381,7 +465,7 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 			Label(label).
 			Grow(1).
 			MinW(0)
-		if d.editing == "" {
+		if d.editingID == "" {
 			pathField.FocusVisibleBorder(t.Input).FocusRing(0, fairy.Transparent)
 		}
 		row := fairy.Row(
@@ -409,7 +493,7 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 
 	if nte {
 		body.Child(s.nteCustomFolderField(d))
-		if d.editing == "" && d.nte != nil && d.nte.RequiresElevation {
+		if d.editingID == "" && d.nte != nil && d.nte.RequiresElevation {
 			amber := fairy.Hex(0xfe9a00)
 			ink := fairy.Hex(0x461901)
 			if t.Dark {
@@ -432,19 +516,19 @@ func (s *Shell) gameDialog(cx *fairy.Cx) {
 	if editing != nil {
 		body.Child(s.gameOrderField(*editing))
 		body.Child(
-			fairy.Row(kit.Button(T("page.mod.dialog.delete-game.title"), func() { s.confirmDeleteGame(editing.Game) },
+			fairy.Row(kit.Button(T("page.mod.dialog.delete-game.title"), func() { s.confirmDeleteGame(*editing) },
 				kit.Outline, kit.Icon(lucide.Trash), kit.Disabled(d.busy))).Justify(fairy.JustifyEnd),
 		)
 	}
 
 	// As the React form, a field counts as invalid once it was edited and left empty.
 	invalid := d.pathTouched && (nte || manual) && strings.TrimSpace(d.path) == ""
-	if d.editing == "" && !nte && d.nameTouched && strings.TrimSpace(d.name) == "" {
+	if d.editingID == "" && !nte && d.nameTouched && strings.TrimSpace(d.name) == "" {
 		invalid = true
 	}
 	title, submit := T("page.mod.dialog.add-game.title"), T("g.add")
-	if d.editing != "" {
-		title, submit = d.editing, T("g.save")
+	if editing != nil {
+		title, submit = editing.Game, T("g.save")
 	}
 	kit.ShowDialog(cx, kit.DialogProps{
 		Title: title,
@@ -575,7 +659,7 @@ func (s *Shell) nteProgressView(active bool) *fairy.El {
 func (s *Shell) gameOrderField(game mod.GameConfig) *fairy.El {
 	t := kit.T()
 	games := s.mods.games
-	index := slices.IndexFunc(games, func(g mod.GameConfig) bool { return g.Game == game.Game })
+	index := slices.IndexFunc(games, func(g mod.GameConfig) bool { return g.ID == game.ID })
 	move := func(direction int) {
 		target := index + direction
 		if index < 0 || target < 0 || target >= len(games) {
@@ -583,7 +667,7 @@ func (s *Shell) gameOrderField(game mod.GameConfig) *fairy.El {
 		}
 		order := make([]string, 0, len(games))
 		for _, g := range games {
-			order = append(order, g.Game)
+			order = append(order, g.ID)
 		}
 		order[index], order[target] = order[target], order[index]
 		s.reorderGames(order)
@@ -609,13 +693,13 @@ func (s *Shell) gameOrderField(game mod.GameConfig) *fairy.El {
 // reorderGames shows the new order at once and stores it; a failure reads the stored order back.
 func (s *Shell) reorderGames(order []string) {
 	m := &s.mods
-	byName := map[string]mod.GameConfig{}
+	byID := map[string]mod.GameConfig{}
 	for _, game := range m.games {
-		byName[game.Game] = game
+		byID[game.ID] = game
 	}
 	games := make([]mod.GameConfig, 0, len(order))
-	for i, name := range order {
-		game := byName[name]
+	for i, id := range order {
+		game := byID[id]
 		game.Order = int64(i + 1)
 		games = append(games, game)
 	}
@@ -624,7 +708,7 @@ func (s *Shell) reorderGames(order []string) {
 		err := s.deps.Mod.ReorderGames(ctx, order)
 		fairy.Go(func() {
 			if err != nil {
-				s.modError(err, "reorder-games", map[string]any{"games": order})
+				s.modError(err, "reorder-games", map[string]any{"gameIDs": order})
 				s.toasts.Show(kit.ToastError, T("page.mod.hooks.use-mod-mutations.reorder-games-mutation.failed"), "")
 			}
 			s.loadGames(false)
@@ -632,11 +716,11 @@ func (s *Shell) reorderGames(order []string) {
 	})
 }
 
-func (s *Shell) confirmDeleteGame(game string) {
+func (s *Shell) confirmDeleteGame(game mod.GameConfig) {
 	m := &s.mods
 	s.Confirm(Confirmation{
 		Title:        T("page.mod.dialog.delete-game.title"),
-		Description:  T("page.mod.dialog.delete-game.description", "name", game),
+		Description:  T("page.mod.dialog.delete-game.description", "name", game.Game),
 		ConfirmLabel: T("g.delete"),
 		Danger:       true,
 		OnResult: func(confirmed bool) {
@@ -644,22 +728,22 @@ func (s *Shell) confirmDeleteGame(game string) {
 				return
 			}
 			s.background(func(ctx context.Context) {
-				err := s.deps.Mod.RemoveGame(ctx, game)
+				err := s.deps.Mod.RemoveGame(ctx, game.ID)
 				fairy.Go(func() {
 					if err != nil {
-						s.modError(err, "remove-game", map[string]any{"game": game})
+						s.modError(err, "remove-game", map[string]any{"gameID": game.ID, "game": game.Game})
 						s.toasts.Show(kit.ToastError, err.Error(), "")
 						return
 					}
-					if d := m.gameDraft; d != nil && d.editing == game {
+					if d := m.gameDraft; d != nil && d.editingID == game.ID {
 						m.gameDraft = nil
 					}
 					m.openPreset = nil
-					m.games = slices.DeleteFunc(m.games, func(g mod.GameConfig) bool { return g.Game == game })
-					if m.game == game {
+					m.games = slices.DeleteFunc(m.games, func(g mod.GameConfig) bool { return g.ID == game.ID })
+					if m.gameID == game.ID {
 						next := ""
 						if len(m.games) > 0 {
-							next = m.games[0].Game
+							next = m.games[0].ID
 						}
 						s.selectGame(next, true)
 					}
@@ -678,16 +762,16 @@ func (s *Shell) playGame() {
 	}
 	if importerOf(*game) == nteImporter {
 		if deref(game.NteLauncherPath) == "" {
-			s.mods.nteLaunch = &nteLaunchDraft{game: game.Game}
+			s.mods.nteLaunch = &nteLaunchDraft{gameID: game.ID}
 			return
 		}
 		if s.mods.nteStarting {
 			return
 		}
 		s.mods.nteStarting = true
-		name := game.Game
+		gameID, name := game.ID, game.Game
 		s.background(func(ctx context.Context) {
-			err := s.deps.Mod.StartNteLauncher(ctx, name)
+			err := s.deps.Mod.StartNteLauncher(ctx, gameID)
 			fairy.Go(func() {
 				s.mods.nteStarting = false
 				if err == nil {
@@ -699,10 +783,10 @@ func (s *Shell) playGame() {
 						T("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"),
 						"",
 					)
-					s.mods.nteLaunch = &nteLaunchDraft{game: name}
+					s.mods.nteLaunch = &nteLaunchDraft{gameID: gameID}
 					return
 				}
-				s.showNteLaunchError(err, name)
+				s.showNteLaunchError(err, gameID, name)
 			})
 		})
 		return
@@ -732,7 +816,7 @@ func (s *Shell) gameStarting() bool {
 	return s.mods.nteStarting
 }
 
-func (s *Shell) showNteLaunchError(err error, game string) {
+func (s *Shell) showNteLaunchError(err error, gameID, name string) {
 	const prefix = "page.mod.hooks.use-mod-mutations.start-nte-launcher."
 	switch text := err.Error(); {
 	case strings.Contains(text, "NTE_LAUNCHER_PATH_NOT_FOUND"):
@@ -740,16 +824,16 @@ func (s *Shell) showNteLaunchError(err error, game string) {
 	case strings.Contains(text, "NTE_LAUNCHER_PATH_NOT_SET"):
 		s.toasts.Show(kit.ToastError, T(prefix+"not-set"), "")
 	default:
-		s.modError(err, "start-nte-launcher", map[string]any{"game": game})
+		s.modError(err, "start-nte-launcher", map[string]any{"gameID": gameID, "game": name})
 		s.toasts.Show(kit.ToastError, lo.CoalesceOrEmpty(text, T(prefix+"failed")), "")
 	}
 }
 
 // nteLaunchDraft asks for the NTE launcher, which is saved for the game and started.
 type nteLaunchDraft struct {
-	game string
-	path string
-	busy bool
+	gameID string
+	path   string
+	busy   bool
 }
 
 func (s *Shell) nteLaunchDialog(cx *fairy.Cx) {
@@ -784,11 +868,15 @@ func (s *Shell) nteLaunchDialog(cx *fairy.Cx) {
 			return
 		}
 		d.busy = true
+		name := ""
+		if game := s.gameConfigByID(d.gameID); game != nil {
+			name = game.Game
+		}
 		s.background(func(ctx context.Context) {
-			err := s.deps.Mod.SetNteLauncherPath(ctx, d.game, path)
+			err := s.deps.Mod.SetNteLauncherPath(ctx, d.gameID, path)
 			saved := err == nil
 			if saved {
-				err = s.deps.Mod.StartNteLauncher(ctx, d.game)
+				err = s.deps.Mod.StartNteLauncher(ctx, d.gameID)
 			}
 			fairy.Go(func() {
 				d.busy = false
@@ -804,14 +892,16 @@ func (s *Shell) nteLaunchDialog(cx *fairy.Cx) {
 					s.toasts.Show(kit.ToastError,
 						T("page.mod.hooks.use-mod-mutations.set-game-executable-path.invalid-path"), "")
 				case !saved:
-					s.modError(err, "set-nte-launcher-path", map[string]any{"game": d.game, "path": path})
+					s.modError(err, "set-nte-launcher-path", map[string]any{
+						"gameID": d.gameID, "game": name, "path": path,
+					})
 					s.toasts.Show(
 						kit.ToastError,
 						T("page.mod.hooks.use-mod-mutations.set-game-executable-path.failed"),
 						"",
 					)
 				default:
-					s.showNteLaunchError(err, d.game)
+					s.showNteLaunchError(err, d.gameID, name)
 				}
 			})
 		})

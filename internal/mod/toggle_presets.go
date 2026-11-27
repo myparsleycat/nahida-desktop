@@ -80,10 +80,11 @@ func (m *Mod) UseToggleState(state ToggleState) { m.toggleState = state }
 // toggleModRef identifies a mod for toggle presets. key is its path below the game's mod folder, lowercased and
 // without DISABLED prefixes, so enabling or disabling the mod keeps its presets in the database.
 type toggleModRef struct {
-	game string
-	path string
-	key  string
-	name string
+	gameID   string
+	gameName string
+	path     string
+	key      string
+	name     string
 }
 
 func (m *Mod) GetTogglePresets(ctx context.Context, modPath string) (TogglePresetList, error) {
@@ -281,8 +282,9 @@ func (m *Mod) toggleModRef(ctx context.Context, modPath string) (toggleModRef, e
 	if path, err = validDirectory(path); err != nil {
 		return toggleModRef{}, err
 	}
+	game := games[root.game]
 	return toggleModRef{
-		game: games[root.game].Game, path: path, key: key, name: stripDisabled(filepath.Base(path)),
+		gameID: game.ID, gameName: game.Game, path: path, key: key, name: stripDisabled(filepath.Base(path)),
 	}, nil
 }
 
@@ -292,7 +294,7 @@ func (m *Mod) loadTogglePresets(ctx context.Context, store string, ref toggleMod
 		if err != nil {
 			return nil, err
 		}
-		rows, err := client.ModTogglePresets.ListByMod(ctx, ref.game, ref.key)
+		rows, err := client.ModTogglePresets.ListByMod(ctx, ref.gameID, ref.key)
 		if err != nil {
 			return nil, err
 		}
@@ -350,7 +352,7 @@ func (m *Mod) updateTogglePresets(
 				CreatedAt: preset.CreatedAt, UpdatedAt: preset.UpdatedAt,
 			}
 		}
-		return client.ModTogglePresets.ReplaceMod(ctx, ref.game, ref.key, rows)
+		return client.ModTogglePresets.ReplaceMod(ctx, ref.gameID, ref.key, rows)
 	}
 
 	return metadata.Upsert(ref.path, func(raw []byte) ([]byte, error) {
@@ -429,7 +431,7 @@ func (m *Mod) reportTogglePresetError(err error, operation string, ref toggleMod
 		func(target error) bool { return errors.Is(err, target) }) {
 		return err
 	}
-	diagnostic := map[string]any{"modPath": ref.path, "game": ref.game, "modKey": ref.key}
+	diagnostic := map[string]any{"modPath": ref.path, "gameId": ref.gameID, "game": ref.gameName, "modKey": ref.key}
 	for key, value := range fields {
 		diagnostic[key] = value
 	}

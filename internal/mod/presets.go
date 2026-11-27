@@ -22,6 +22,7 @@ const modPresetVersion int64 = 2
 
 type Preset struct {
 	ID          string  `json:"id"`
+	GameID      string  `json:"gameId"`
 	Game        string  `json:"game"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
@@ -67,26 +68,36 @@ type presetSnapshotItem struct {
 	ActualPath        string
 }
 
-func (m *Mod) GetPresets(ctx context.Context, game string) ([]Preset, error) {
+func (m *Mod) GetPresets(ctx context.Context, gameID string) ([]Preset, error) {
 	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := client.ModPresets.ListByGame(ctx, game)
+	rows, err := client.ModPresets.ListByGame(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
+	if len(rows) == 0 {
+		return []Preset{}, nil
+	}
+	game, err := client.GamePaths.GetByID(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+	if game == nil {
+		return []Preset{}, nil
+	}
 	result := make([]Preset, len(rows))
 	for i := range rows {
-		result[i] = presetFromRow(rows[i])
+		result[i] = presetFromRow(rows[i], game.Game)
 	}
 	compare := m.nameCompare(ctx)
 	slices.SortStableFunc(result, func(a, b Preset) int { return compare(a.Name, b.Name) })
 	return result, nil
 }
 
-func (m *Mod) GetPresetCreateConflicts(ctx context.Context, game string) ([]PresetConflict, error) {
-	items, err := m.presetSnapshot(ctx, game, false)
+func (m *Mod) GetPresetCreateConflicts(ctx context.Context, gameID string) ([]PresetConflict, error) {
+	items, err := m.presetSnapshot(ctx, gameID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +106,7 @@ func (m *Mod) GetPresetCreateConflicts(ctx context.Context, game string) ([]Pres
 
 func (m *Mod) CreatePreset(
 	ctx context.Context,
-	game, name string,
+	gameID, name string,
 	description *string,
 	resolveConflicts bool,
 ) (Preset, error) {
@@ -108,14 +119,21 @@ func (m *Mod) CreatePreset(
 		return Preset{}, errors.New("INVALID_PRESET_NAME")
 	}
 	description = cleanOptional(description)
-	existing, err := client.ModPresets.FindByGameAndName(ctx, game, name)
+	game, err := client.GamePaths.GetByID(ctx, gameID)
+	if err != nil {
+		return Preset{}, err
+	}
+	if game == nil {
+		return Preset{}, ErrGameNotFound
+	}
+	existing, err := client.ModPresets.FindByGameAndName(ctx, gameID, name)
 	if err != nil {
 		return Preset{}, err
 	}
 	if existing != nil {
 		return Preset{}, errors.New("PRESET_NAME_EXISTS")
 	}
-	items, err := m.presetSnapshot(ctx, game, true)
+	items, err := m.presetSnapshot(ctx, gameID, true)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -128,7 +146,7 @@ func (m *Mod) CreatePreset(
 		if err := resolveSnapshotConflicts(conflicts); err != nil {
 			return Preset{}, err
 		}
-		items, err = m.presetSnapshot(ctx, game, true)
+		items, err = m.presetSnapshot(ctx, gameID, true)
 		if err != nil {
 			return Preset{}, err
 		}
@@ -139,7 +157,7 @@ func (m *Mod) CreatePreset(
 	id := newPresetID()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	row := db.ModPresetRow{
-		ID: id, Game: game, Name: name, Description: description, ItemCount: int64(len(items)),
+		ID: id, GameID: gameID, Name: name, Description: description, ItemCount: int64(len(items)),
 		CreatedAt: now, UpdatedAt: now, Version: modPresetVersion,
 	}
 	dbItems := make([]db.ModPresetItemRow, len(items))
@@ -153,7 +171,7 @@ func (m *Mod) CreatePreset(
 	if err := client.ModPresets.InsertSnapshot(ctx, row, dbItems); err != nil {
 		return Preset{}, err
 	}
-	return presetFromRow(row), nil
+	return presetFromRow(row, game.Game), nil
 }
 
 func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResult, error) {
@@ -175,7 +193,7 @@ func (m *Mod) ApplyPreset(ctx context.Context, presetID string) (ApplyPresetResu
 	if err != nil {
 		return ApplyPresetResult{}, err
 	}
-	current, err := m.presetSnapshot(ctx, preset.Game, false)
+	current, err := m.presetSnapshot(ctx, preset.GameID, false)
 	if err != nil {
 		return ApplyPresetResult{}, err
 	}
@@ -266,7 +284,7 @@ func (m *Mod) UpdatePresetName(ctx context.Context, presetID, newName string) er
 	if newName == "" {
 		return errors.New("INVALID_PRESET_NAME")
 	}
-	existing, err := client.ModPresets.FindByGameAndName(ctx, preset.Game, newName)
+	existing, err := client.ModPresets.FindByGameAndName(ctx, preset.GameID, newName)
 	if err != nil {
 		return err
 	}
@@ -278,13 +296,13 @@ func (m *Mod) UpdatePresetName(ctx context.Context, presetID, newName string) er
 
 // presetSnapshot lists the mods below a game's folder. A strict snapshot fails on a folder it cannot read, so a
 // new preset never silently leaves those mods out; otherwise the folder is skipped and reported.
-func (m *Mod) presetSnapshot(ctx context.Context, game string, strict bool) ([]presetSnapshotItem, error) {
-	gamePath, err := m.GetGamePath(ctx, game)
+func (m *Mod) presetSnapshot(ctx context.Context, gameID string, strict bool) ([]presetSnapshotItem, error) {
+	gamePath, err := m.GetGamePath(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
 	if gamePath == nil {
-		return nil, fmt.Errorf("no mod folder path set for %s", game)
+		return nil, ErrGameNotFound
 	}
 	release, err := diskio.AcquireDir(ctx, *gamePath)
 	if err != nil {
@@ -389,9 +407,9 @@ func resolveSnapshotConflicts(conflicts []PresetConflict) error {
 	return nil
 }
 
-func presetFromRow(row db.ModPresetRow) Preset {
+func presetFromRow(row db.ModPresetRow, gameName string) Preset {
 	return Preset{
-		ID: row.ID, Game: row.Game, Name: row.Name, Description: row.Description,
+		ID: row.ID, GameID: row.GameID, Game: gameName, Name: row.Name, Description: row.Description,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Version: row.Version,
 		IsLegacy: row.Version < modPresetVersion,
 	}

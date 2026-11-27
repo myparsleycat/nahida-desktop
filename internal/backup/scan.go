@@ -31,6 +31,7 @@ const (
 type Target struct {
 	ID       string  `json:"id"`
 	Kind     string  `json:"kind"`
+	GameID   *string `json:"gameId"`
 	Game     *string `json:"game"`
 	Label    string  `json:"label"`
 	Path     string  `json:"path"`
@@ -58,28 +59,28 @@ type scanResult struct {
 	skipped map[string]int32
 }
 
-// gameTargetID names the target of a registered game.
-func gameTargetID(game string) string {
-	return "game:" + game
-}
-
 // listTargets answers the mod folders of the registered games followed by the
 // folders the user added, each marked excluded or missing.
 func listTargets(games []db.GamePathRow, custom []db.BackupCustomPathRow, excluded []string) ([]Target, error) {
 	targets := make([]Target, 0, len(games)+len(custom))
 	for _, row := range games {
-		game := row.Game
+		isExcluded := slices.Contains(excluded, row.ID)
 		missing, err := targetMissing(row.ModFolderPath)
-		if err != nil && !slices.Contains(excluded, game) {
+		if err != nil && !isExcluded {
 			return nil, fmt.Errorf("stat backup target %q: %w", row.ModFolderPath, err)
 		}
+		key := row.ID
+		if row.LegacyName != nil {
+			key = *row.LegacyName
+		}
 		targets = append(targets, Target{
-			ID:       gameTargetID(game),
+			ID:       TargetKindGame + ":" + key,
 			Kind:     TargetKindGame,
-			Game:     &game,
-			Label:    game,
+			GameID:   &row.ID,
+			Game:     &row.Game,
+			Label:    row.Game,
 			Path:     row.ModFolderPath,
-			Excluded: slices.Contains(excluded, game),
+			Excluded: isExcluded,
 			Missing:  missing,
 		})
 	}
@@ -327,8 +328,8 @@ func manifestDigest(targets []Target, files []scannedFile) string {
 }
 
 func targetKey(target Target) string {
-	if target.Game != nil {
-		return TargetKindGame + ":" + *target.Game
+	if target.Kind == TargetKindGame {
+		return target.ID
 	}
 	return TargetKindCustom + ":" + normalizedPath(target.Path)
 }

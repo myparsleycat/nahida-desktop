@@ -19,7 +19,7 @@ const classificationNameMax = 64
 // classificationEditor is the dialog that creates, renames and deletes the classifications of the selected game.
 // The draft is the classification being edited; a nil id is a new one.
 type classificationEditor struct {
-	game     string
+	gameID   string
 	id       *string
 	name     string
 	groups   []classificationGroupDraft
@@ -57,10 +57,10 @@ func (e *classificationEditor) canSave() bool {
 
 func (s *Shell) openClassificationEditor() {
 	m := &s.mods
-	if m.game == "" {
+	if m.gameID == "" {
 		return
 	}
-	e := &classificationEditor{game: m.game}
+	e := &classificationEditor{gameID: m.gameID}
 	current := s.activeClassification()
 	if current == nil && len(m.classifications) > 0 {
 		current = &m.classifications[0]
@@ -79,11 +79,11 @@ func (s *Shell) saveClassification(e *classificationEditor) {
 		return mod.ClassificationGroup{ID: g.id, Name: g.name}
 	})
 	s.background(func(ctx context.Context) {
-		saved, err := s.deps.Mod.SaveClassification(ctx, e.game, id, name, groups)
+		saved, err := s.deps.Mod.SaveClassification(ctx, e.gameID, id, name, groups)
 		fairy.Go(func() {
 			e.saving = false
 			if err != nil {
-				s.classificationFailed(err, "save-classification", e.game)
+				s.classificationFailed(err, "save-classification", e.gameID)
 				return
 			}
 			e.load(&saved)
@@ -111,7 +111,7 @@ func (s *Shell) deleteClassification(e *classificationEditor) {
 				fairy.Go(func() {
 					e.deleting = false
 					if err != nil {
-						s.classificationFailed(err, "delete-classification", e.game)
+						s.classificationFailed(err, "delete-classification", e.gameID)
 						return
 					}
 					next, _ := lo.Find(s.mods.classifications, func(c mod.Classification) bool { return c.ID != id })
@@ -128,9 +128,9 @@ func (s *Shell) deleteClassification(e *classificationEditor) {
 }
 
 // classificationFailed shows the error, and a missing classification reads the list again, as it is stale.
-func (s *Shell) classificationFailed(err error, operation, game string) {
+func (s *Shell) classificationFailed(err error, operation, gameID string) {
 	if !strings.Contains(err.Error(), "CLASSIFICATION") {
-		s.modError(err, operation, map[string]any{"game": game})
+		s.modError(err, operation, map[string]any{"gameID": gameID})
 	}
 	s.showClassificationError(err)
 	if strings.Contains(err.Error(), "CLASSIFICATION_NOT_FOUND") {
@@ -145,7 +145,7 @@ func (s *Shell) classificationDialog(cx *fairy.Cx) {
 	if e == nil {
 		return
 	}
-	if e.game != m.game {
+	if e.gameID != m.gameID {
 		m.classificationEditor = nil
 		return
 	}

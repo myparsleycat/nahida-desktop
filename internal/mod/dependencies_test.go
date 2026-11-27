@@ -114,7 +114,7 @@ func TestLibraryDependenciesFollowGameFolderChange(t *testing.T) {
 	if !installed(first) {
 		t.Fatal("RabbitFX in the first folder is reported missing")
 	}
-	if err := service.UpdateGame(ctx, "Game", GameUpdates{ModFolderPath: second}); err != nil {
+	if err := service.UpdateGame(ctx, testGameID(t, service, "Game"), GameUpdates{ModFolderPath: second}); err != nil {
 		t.Fatal(err)
 	}
 	if installed(second) {

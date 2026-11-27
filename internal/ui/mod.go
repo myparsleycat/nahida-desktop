@@ -34,7 +34,8 @@ type modScreen struct {
 	started     bool
 	games       []mod.GameConfig
 	gamesLoaded bool
-	game        string
+	gamesSeq    int
+	gameID      string
 
 	characters     []mod.FolderGroup
 	charactersSeq  int
@@ -122,6 +123,7 @@ type modScreen struct {
 	extractAsks           []extractAsk
 	downloadAsk           *downloadAsk
 	gameDraft             *gameDraft
+	gameRename            *gameRenameDraft
 	nteLaunch             *nteLaunchDraft
 	nteStarting           bool
 	// nteProgress is the last NTE bootstrap progress event, which adding or editing an NTE game shows.
@@ -275,6 +277,9 @@ func (s *Shell) startMods() {
 // was focused last, then the last selected one, then the first.
 func (s *Shell) loadGames(restore bool) {
 	m := &s.mods
+	restore = restore || !m.gamesLoaded
+	m.gamesSeq++
+	seq := m.gamesSeq
 	s.backgroundRead(func(ctx context.Context) {
 		games, err := s.deps.Mod.GetGames(ctx)
 		if err != nil {
@@ -282,8 +287,8 @@ func (s *Shell) loadGames(restore bool) {
 		}
 		choice := ""
 		if restore && len(games) > 0 {
-			has := func(game *string) bool {
-				return game != nil && slices.ContainsFunc(games, func(g mod.GameConfig) bool { return g.Game == *game })
+			has := func(id *string) bool {
+				return id != nil && slices.ContainsFunc(games, func(g mod.GameConfig) bool { return g.ID == *id })
 			}
 			if focused, err := s.deps.Mod.GetPreviousFocusedGame(ctx); err == nil && has(focused) {
 				choice = *focused
@@ -292,7 +297,7 @@ func (s *Shell) loadGames(restore bool) {
 			}
 		}
 		fairy.Go(func() {
-			if err != nil {
+			if err != nil || seq != m.gamesSeq {
 				return
 			}
 			before := s.gameConfig()
@@ -302,9 +307,9 @@ func (s *Shell) loadGames(restore bool) {
 			// A download handed to the screen chooses its own game.
 			case choice != "" && s.download == nil:
 				s.selectGame(choice, false)
-			case len(games) > 0 && !slices.ContainsFunc(games, func(g mod.GameConfig) bool { return g.Game == m.game }):
-				s.selectGame(games[0].Game, true)
-			case len(games) == 0 && m.game != "":
+			case len(games) > 0 && s.gameConfig() == nil:
+				s.selectGame(games[0].ID, true)
+			case len(games) == 0 && m.gameID != "":
 				s.selectGame("", true)
 			}
 		})
@@ -330,26 +335,30 @@ func (s *Shell) pendingFixReady() bool {
 func (s *Shell) followModFolder(before *mod.GameConfig) {
 	m := &s.mods
 	after := s.gameConfig()
-	if before == nil || after == nil || before.Game != after.Game ||
+	if before == nil || after == nil || before.ID != after.ID ||
 		platform.SamePathFold(before.ModFolderPath, after.ModFolderPath) {
 		return
 	}
-	game := after.Game
+	gameID, name := after.ID, after.Game
 	clear(m.subGroups)
 	clear(m.manualGroups)
 	s.selectGroup(nil)
 	s.loadCharacters()
 	s.background(func(ctx context.Context) {
-		if err := s.deps.Mod.WatchGame(ctx, game); err != nil {
-			s.modError(err, "watch-game", map[string]any{"game": game})
+		if err := s.deps.Mod.WatchGame(ctx, gameID); err != nil {
+			s.modError(err, "watch-game", map[string]any{"gameID": gameID, "game": name})
 		}
 	})
 }
 
 func (s *Shell) gameConfig() *mod.GameConfig {
+	return s.gameConfigByID(s.mods.gameID)
+}
+
+func (s *Shell) gameConfigByID(id string) *mod.GameConfig {
 	m := &s.mods
 	for i := range m.games {
-		if m.games[i].Game == m.game {
+		if m.games[i].ID == id {
 			return &m.games[i]
 		}
 	}
@@ -361,31 +370,31 @@ func (s *Shell) isNteGame() bool {
 	return game != nil && importerOf(*game) == nteImporter
 }
 
-// selectGame opens game. persist stores it as the last game, which a choice of the user or a fallback does.
-func (s *Shell) selectGame(game string, persist bool) {
+// selectGame opens the game with id. persist stores it as the last game, for a user choice or a fallback.
+func (s *Shell) selectGame(id string, persist bool) {
 	m := &s.mods
 	if persist {
 		s.background(func(ctx context.Context) {
-			if err := s.deps.Mod.SetLastGame(ctx, game); err != nil {
-				s.modError(err, "save-last-game", map[string]any{"game": game})
+			if err := s.deps.Mod.SetLastGame(ctx, id); err != nil {
+				s.modError(err, "save-last-game", map[string]any{"gameID": id})
 			}
 		})
 	}
-	if game == m.game && m.charactersSeq > 0 {
+	if id == m.gameID && m.charactersSeq > 0 {
 		return
 	}
-	m.game = game
+	m.gameID = id
 	m.characters, m.classifications, m.presets = nil, nil, nil
 	clear(m.subGroups)
 	clear(m.manualGroups)
 	m.sidebarSearch = ""
 	s.selectGroup(nil)
-	if game == "" {
+	if id == "" {
 		return
 	}
 	s.background(func(ctx context.Context) {
-		if err := s.deps.Mod.WatchGame(ctx, game); err != nil {
-			s.modError(err, "watch-game", map[string]any{"game": game})
+		if err := s.deps.Mod.WatchGame(ctx, id); err != nil {
+			s.modError(err, "watch-game", map[string]any{"gameID": id})
 		}
 	})
 	s.loadCharacters()
@@ -396,12 +405,12 @@ func (s *Shell) selectGame(game string, persist bool) {
 func (s *Shell) loadCharacters() {
 	m := &s.mods
 	m.charactersSeq++
-	seq, game := m.charactersSeq, m.game
+	seq, gameID := m.charactersSeq, m.gameID
 	m.charactersBusy = true
 	s.backgroundRead(func(ctx context.Context) {
-		groups, err := s.deps.Mod.GetCharacters(ctx, game, nil)
+		groups, err := s.deps.Mod.GetCharacters(ctx, gameID, nil)
 		if err != nil {
-			s.modError(err, "read-characters", map[string]any{"game": game})
+			s.modError(err, "read-characters", map[string]any{"gameID": gameID})
 		}
 		fairy.Go(func() {
 			if seq != m.charactersSeq {
@@ -433,15 +442,15 @@ func (s *Shell) dropMissingSelection() {
 
 func (s *Shell) loadPresets() {
 	m := &s.mods
-	game := m.game
+	gameID := m.gameID
 	s.backgroundRead(func(ctx context.Context) {
-		presets, err := s.deps.Mod.GetPresets(ctx, game)
+		presets, err := s.deps.Mod.GetPresets(ctx, gameID)
 		if err != nil {
-			s.modError(err, "read-presets", map[string]any{"game": game})
+			s.modError(err, "read-presets", map[string]any{"gameID": gameID})
 			return
 		}
 		fairy.Go(func() {
-			if m.game == game {
+			if m.gameID == gameID {
 				m.presets = presets
 			}
 		})
@@ -450,15 +459,15 @@ func (s *Shell) loadPresets() {
 
 func (s *Shell) loadClassifications() {
 	m := &s.mods
-	game := m.game
+	gameID := m.gameID
 	s.backgroundRead(func(ctx context.Context) {
-		classifications, err := s.deps.Mod.GetClassifications(ctx, game)
+		classifications, err := s.deps.Mod.GetClassifications(ctx, gameID)
 		if err != nil {
-			s.modError(err, "read-classifications", map[string]any{"game": game})
+			s.modError(err, "read-classifications", map[string]any{"gameID": gameID})
 			return
 		}
 		fairy.Go(func() {
-			if m.game == game {
+			if m.gameID == gameID {
 				m.classifications = classifications
 			}
 		})
@@ -486,7 +495,7 @@ func (s *Shell) loadSubGroups(path string, manual bool) {
 		loading = m.loadingManual
 	}
 	loading[path] = true
-	game := m.game
+	gameID := m.gameID
 	s.backgroundRead(func(ctx context.Context) {
 		var groups []mod.FolderGroup
 		var err error
@@ -500,7 +509,7 @@ func (s *Shell) loadSubGroups(path string, manual bool) {
 		}
 		fairy.Go(func() {
 			delete(loading, path)
-			if m.game != game {
+			if m.gameID != gameID {
 				return
 			}
 			if err != nil {
@@ -518,7 +527,7 @@ func (s *Shell) loadSubGroups(path string, manual bool) {
 // refreshFolders rescans the folder tree, keeping the shown listings until the new ones arrive.
 func (s *Shell) refreshFolders() {
 	m := &s.mods
-	if m.game == "" {
+	if m.gameID == "" {
 		return
 	}
 	s.loadCharacters()
@@ -568,7 +577,7 @@ func (s *Shell) modDownloadCompleted(path, name string) {
 
 // modFocused rescans the folders when the window comes back, as changes made meanwhile may have been missed.
 func (s *Shell) modFocused() {
-	if s.mods.started && s.mods.game != "" {
+	if s.mods.started && s.mods.gameID != "" {
 		s.loadCharacters()
 	}
 }

@@ -14,9 +14,10 @@ import (
 const downloadTargetMatchThreshold = 0.85
 
 type DownloadTarget struct {
-	Game  string      `json:"game"`
-	Group FolderGroup `json:"group"`
-	Score float64     `json:"score"`
+	GameID string      `json:"gameId"`
+	Game   string      `json:"game"`
+	Group  FolderGroup `json:"group"`
+	Score  float64     `json:"score"`
 }
 
 // ResolveDownloadTarget ranks folder names alone and builds only the groups it may return,
@@ -24,7 +25,7 @@ type DownloadTarget struct {
 func (m *Mod) ResolveDownloadTarget(
 	ctx context.Context,
 	input string,
-	gameFilter *string,
+	gameIDFilter *string,
 ) (*DownloadTarget, error) {
 	diagnostics := &infra.DiagnosticBatch{}
 	defer diagnostics.Report(m.log, "Mod", "ResolveDownloadTarget")
@@ -52,7 +53,7 @@ func (m *Mod) ResolveDownloadTarget(
 	tokens := tokenizeFuzzyInput(input)
 	var candidates []candidate
 	for _, row := range rows {
-		if (gameFilter != nil && row.Game != *gameFilter) || row.ModFolderPath == "" {
+		if (gameIDFilter != nil && row.ID != *gameIDFilter) || row.ModFolderPath == "" {
 			continue
 		}
 		listing := m.newGroupListing(ctx, client, gameConfig(row), search, diagnostics.Add)
@@ -95,7 +96,8 @@ func (m *Mod) ResolveDownloadTarget(
 			}
 		}
 		group := m.loadClassifiedSubGroups(best.listing, groups, false, diagnostics.Add)[0]
-		return &DownloadTarget{Game: best.listing.game.Game, Group: group, Score: best.score}, nil
+		game := best.listing.game
+		return &DownloadTarget{GameID: game.ID, Game: game.Game, Group: group, Score: best.score}, nil
 	}
 	return nil, nil
 }

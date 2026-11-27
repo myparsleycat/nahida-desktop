@@ -21,12 +21,12 @@ const (
 // sessionMarker records the mod folder of a session and, relative to it with forward slashes, every INI the
 // session may rename. Markers from older builds have no Paths.
 type sessionMarker struct {
-	game        string
+	gameID      string
 	ModRootPath string   `json:"modRootPath"`
 	Paths       []string `json:"paths,omitempty"`
 }
 
-func (t *Service) writeSessionMarker(ctx context.Context, game, modRootPath string, candidates []string) error {
+func (t *Service) writeSessionMarker(ctx context.Context, gameID, modRootPath string, candidates []string) error {
 	client, err := t.requireClient()
 	if err != nil {
 		return err
@@ -43,15 +43,15 @@ func (t *Service) writeSessionMarker(ctx context.Context, game, modRootPath stri
 	if err != nil {
 		return err
 	}
-	return client.AppState.Upsert(ctx, sessionMarkerPrefix+game, string(raw), appStateTimestamp())
+	return client.AppState.Upsert(ctx, sessionMarkerPrefix+gameID, string(raw), appStateTimestamp())
 }
 
 // clearSessionMarker only logs a failure: a marker left behind costs one walk of its folder on the next launch,
 // which then removes it.
-func (t *Service) clearSessionMarker(ctx context.Context, game string) {
+func (t *Service) clearSessionMarker(ctx context.Context, gameID string) {
 	client, err := t.requireClient()
 	if err == nil {
-		err = client.AppState.Delete(ctx, sessionMarkerPrefix+game)
+		err = client.AppState.Delete(ctx, sessionMarkerPrefix+gameID)
 	}
 	t.logError(err, "ModBisect:clearSessionMarker")
 }
@@ -69,17 +69,20 @@ func (t *Service) sessionMarkers(ctx context.Context) ([]sessionMarker, error) {
 	markers := make([]sessionMarker, 0, len(rows))
 	for _, row := range rows {
 		// LIKE treats the underscores in the prefix as wildcards.
-		game, ok := strings.CutPrefix(row.Key, sessionMarkerPrefix)
+		gameID, ok := strings.CutPrefix(row.Key, sessionMarkerPrefix)
 		if !ok {
 			continue
 		}
-		marker := sessionMarker{game: game}
+		marker := sessionMarker{gameID: gameID}
 		err := json.Unmarshal([]byte(row.Value), &marker)
 		if err == nil && marker.ModRootPath == "" {
 			err = errors.New("missing mod root path")
 		}
 		if err != nil {
-			t.logError(fmt.Errorf("invalid bisect session marker for %q: %w", game, err), "ModBisect:readSessionMarker")
+			t.logError(
+				fmt.Errorf("invalid bisect session marker for %q: %w", gameID, err),
+				"ModBisect:readSessionMarker",
+			)
 			continue
 		}
 		markers = append(markers, marker)

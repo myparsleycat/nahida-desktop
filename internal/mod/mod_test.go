@@ -63,6 +63,15 @@ func newTestMod(t *testing.T, settings testSettings) (*Mod, string) {
 	return service, root
 }
 
+func testGameID(t *testing.T, service *Mod, name string) string {
+	t.Helper()
+	id, err := service.GameIDByName(t.Context(), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func TestGameCRUDRejectsDuplicateRootsAndInvalidOrder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -93,10 +102,12 @@ func TestGameCRUDRejectsDuplicateRootsAndInvalidOrder(t *testing.T) {
 		err.Error() != "DUPLICATE_MOD_FOLDER_PATH" {
 		t.Fatalf("duplicate root error = %v", err)
 	}
-	if err := service.ReorderGames(ctx, []string{"ZZZ", "ZZZ"}); err == nil || err.Error() != "INVALID_GAME_ORDER" {
+	zzz := testGameID(t, service, "ZZZ")
+	genshin := testGameID(t, service, "Genshin")
+	if err := service.ReorderGames(ctx, []string{zzz, zzz}); err == nil || err.Error() != "INVALID_GAME_ORDER" {
 		t.Fatalf("invalid order error = %v", err)
 	}
-	if err := service.ReorderGames(ctx, []string{"ZZZ", "Genshin"}); err != nil {
+	if err := service.ReorderGames(ctx, []string{zzz, genshin}); err != nil {
 		t.Fatal(err)
 	}
 	games, err := service.GetGames(ctx)
@@ -150,7 +161,7 @@ func TestXXMIGameFollowsImporterModsFolder(t *testing.T) {
 	if err := service.AddGame(ctx, "Genshin", custom, &importer, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	path, err := service.GetGamePath(ctx, "Genshin")
+	path, err := service.GetGamePath(ctx, testGameID(t, service, "Genshin"))
 	if err != nil || path == nil || !samePath(*path, filepath.Join(oldImporter, "Mods")) {
 		t.Fatalf("added path = %v, %v; want the importer Mods folder", path, err)
 	}
@@ -161,7 +172,7 @@ func TestXXMIGameFollowsImporterModsFolder(t *testing.T) {
 	if err != nil || len(games) != 1 || !samePath(games[0].ModFolderPath, want) {
 		t.Fatalf("games = %#v, %v; want %q", games, err, want)
 	}
-	path, err = service.GetGamePath(ctx, "Genshin")
+	path, err = service.GetGamePath(ctx, testGameID(t, service, "Genshin"))
 	if err != nil || path == nil || !samePath(*path, want) {
 		t.Fatalf("stored path = %v, %v; want %q", path, err, want)
 	}
@@ -198,11 +209,12 @@ func TestImporterSyncKeepsGameEditSavedDuringLookup(t *testing.T) {
 	if err := service.AddGame(ctx, "Genshin", "", &importer, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
+	gameID := testGameID(t, service, "Genshin")
 
 	service.xxmi = &editingImporterSource{
 		importers: []xxmi.EnabledImporter{{Key: importer, ImporterFolder: newImporter}},
 		edit: func() {
-			if err := service.UpdateGame(ctx, "Genshin", GameUpdates{ModFolderPath: manual}); err != nil {
+			if err := service.UpdateGame(ctx, gameID, GameUpdates{ModFolderPath: manual}); err != nil {
 				t.Error(err)
 			}
 		},
@@ -267,10 +279,10 @@ func TestUpdateGameDoesNotRequireExistingConfiguredDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	updated := filepath.Join(root, "also-not-created")
-	if err := service.UpdateGame(ctx, "Game", GameUpdates{ModFolderPath: updated}); err != nil {
+	if err := service.UpdateGame(ctx, testGameID(t, service, "Game"), GameUpdates{ModFolderPath: updated}); err != nil {
 		t.Fatal(err)
 	}
-	path, err := service.GetGamePath(ctx, "Game")
+	path, err := service.GetGamePath(ctx, testGameID(t, service, "Game"))
 	if err != nil || path == nil || *path != updated {
 		t.Fatalf("updated path = %v, %v", path, err)
 	}
@@ -354,7 +366,8 @@ func TestUpdateAndRemoveGameCleanupNteJunctions(t *testing.T) {
 	if err := os.MkdirAll(normalRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.UpdateGame(ctx, "NTE Update", GameUpdates{ModFolderPath: normalRoot}); err != nil {
+	gameID := testGameID(t, service, "NTE Update")
+	if err := service.UpdateGame(ctx, gameID, GameUpdates{ModFolderPath: normalRoot}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Readlink(oldLink); err == nil {
@@ -379,7 +392,7 @@ func TestUpdateAndRemoveGameCleanupNteJunctions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RemoveGame(ctx, "NTE Remove"); err != nil {
+	if err := service.RemoveGame(ctx, testGameID(t, service, "NTE Remove")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Readlink(removeLink); err == nil {
@@ -586,7 +599,7 @@ func TestManualSubGroupIsDecoratedAndHiddenFromParentMods(t *testing.T) {
 	if err := service.SetManualSubGroup(ctx, manual, true); err != nil {
 		t.Fatal(err)
 	}
-	characters, err := service.GetCharacters(ctx, "Game", nil)
+	characters, err := service.GetCharacters(ctx, testGameID(t, service, "Game"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,7 +688,7 @@ func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
 		t.Fatal(err)
 	}
 	description := "enabled state"
-	preset, err := service.CreatePreset(ctx, "Game", "Default", &description, false)
+	preset, err := service.CreatePreset(ctx, testGameID(t, service, "Game"), "Default", &description, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -693,7 +706,7 @@ func TestPresetCreateAndApplyRestoresEnabledState(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(group, "Costume")); err != nil {
 		t.Fatalf("enabled folder missing after apply: %v (disabled was %q)", err, disabledPath)
 	}
-	items, err := service.GetPresets(ctx, "Game")
+	items, err := service.GetPresets(ctx, testGameID(t, service, "Game"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -721,7 +734,7 @@ func TestApplyPresetReportsActiveDownloadDestinationAsFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preset, err := service.CreatePreset(ctx, "Game", "Disabled", nil, false)
+	preset, err := service.CreatePreset(ctx, testGameID(t, service, "Game"), "Disabled", nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -760,7 +773,7 @@ func TestApplyPresetRoutesNteModsThroughPakToggle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	preset, err := service.CreatePreset(ctx, "NTE", "Enabled", nil, false)
+	preset, err := service.CreatePreset(ctx, testGameID(t, service, "NTE"), "Enabled", nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -806,7 +819,7 @@ func TestPresetConflictMustBeResolved(t *testing.T) {
 	if err := service.AddGame(ctx, "Game", modsRoot, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	conflicts, err := service.GetPresetCreateConflicts(ctx, "Game")
+	conflicts, err := service.GetPresetCreateConflicts(ctx, testGameID(t, service, "Game"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -815,7 +828,7 @@ func TestPresetConflictMustBeResolved(t *testing.T) {
 	}
 	if _, err := service.CreatePreset(
 		ctx,
-		"Game",
+		testGameID(t, service, "Game"),
 		"Blocked",
 		nil,
 		false,
@@ -823,10 +836,10 @@ func TestPresetConflictMustBeResolved(t *testing.T) {
 		err.Error() != "PRESET_CONFLICTS_EXIST" {
 		t.Fatalf("create without resolve error = %v", err)
 	}
-	if _, err := service.CreatePreset(ctx, "Game", "Resolved", nil, true); err != nil {
+	if _, err := service.CreatePreset(ctx, testGameID(t, service, "Game"), "Resolved", nil, true); err != nil {
 		t.Fatal(err)
 	}
-	remaining, err := service.GetPresetCreateConflicts(ctx, "Game")
+	remaining, err := service.GetPresetCreateConflicts(ctx, testGameID(t, service, "Game"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1031,12 +1044,12 @@ func TestResolveDownloadTargetUsesElectronFuzzyScoringAndRejectsAmbiguity(t *tes
 	if ambiguous != nil {
 		t.Fatalf("ambiguous match = %#v", ambiguous)
 	}
-	filter := "Genshin"
+	filter := testGameID(t, service, "Genshin")
 	filtered, err := service.ResolveDownloadTarget(ctx, "CharF", &filter)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filtered == nil || filtered.Game != filter {
+	if filtered == nil || filtered.GameID != filter || filtered.Game != "Genshin" {
 		t.Fatalf("filtered match = %#v", filtered)
 	}
 }
@@ -1087,7 +1100,7 @@ func TestResolveNteInstallPathAndNteListing(t *testing.T) {
 	if err := service.AddGame(ctx, "NTE", modsRoot, &importer, nil, &installRoot, &executable); err != nil {
 		t.Fatal(err)
 	}
-	characters, err := service.GetCharacters(ctx, "NTE", nil)
+	characters, err := service.GetCharacters(ctx, testGameID(t, service, "NTE"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1325,7 +1338,7 @@ func TestWatchGameDebouncesFilesystemEventsAndCloses(t *testing.T) {
 	}
 	events := make(chan string, 4)
 	service.emit = func(name string, _ ...any) { events <- name }
-	if err := service.WatchGame(ctx, "Game"); err != nil {
+	if err := service.WatchGame(ctx, testGameID(t, service, "Game")); err != nil {
 		t.Fatal(err)
 	}
 	child := filepath.Join(modsRoot, "Character")

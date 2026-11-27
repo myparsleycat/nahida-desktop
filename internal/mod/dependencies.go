@@ -183,7 +183,7 @@ func (m *Mod) attachDependencies(ctx context.Context, game GameConfig, group *Fo
 func (m *Mod) installedLibraries(ctx context.Context, game GameConfig, reports ...func(error)) libraryMask {
 	// The roots follow the mod folder and the importer, so a game whose settings change
 	// must not reuse the index of its previous folders.
-	key := strings.ToLower(game.ModFolderPath)
+	key := game.ID + "\x00" + strings.ToLower(game.ModFolderPath)
 	if game.Importer != nil {
 		key += "\x00" + strings.ToLower(*game.Importer)
 	}

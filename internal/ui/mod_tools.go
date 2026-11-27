@@ -19,17 +19,17 @@ import (
 
 // conflictDraft is the conflict finder: a bisect of the game's mods that keeps one mod enabled throughout.
 type conflictDraft struct {
-	mod  mod.ModInfo
-	game string
+	mod    mod.ModInfo
+	gameID string
 }
 
 func (d *conflictDraft) fields() map[string]any {
-	return map[string]any{"game": d.game, "mod": d.mod.Path}
+	return map[string]any{"gameID": d.gameID, "mod": d.mod.Path}
 }
 
 func (s *Shell) openConflictFinder(info mod.ModInfo) {
 	m := &s.mods
-	m.conflict = &conflictDraft{mod: info, game: m.game}
+	m.conflict = &conflictDraft{mod: info, gameID: m.gameID}
 	if s.deps.Tools == nil {
 		return
 	}
@@ -125,7 +125,7 @@ func (s *Shell) conflictDialog(cx *fairy.Cx) {
 	}
 	hasSession := bisectHasSession(snapshot)
 	busy := m.bisectBusy
-	canStart := d.game != "" && d.mod.IsEnabled && !hasSession && status != "reverting"
+	canStart := d.gameID != "" && d.mod.IsEnabled && !hasSession && status != "reverting"
 	const prefix = "page.mod.dialog.find-conflict."
 
 	description := T(prefix+"description", "name", d.mod.Name)
@@ -140,13 +140,13 @@ func (s *Shell) conflictDialog(cx *fairy.Cx) {
 	start := func() {
 		modPath := d.mod.Path
 		s.runBisect(d.fields(), "bisect-start", func(ctx context.Context) (tools.BisectSnapshot, error) {
-			return s.deps.Tools.BisectStart(ctx, d.game, []string{modPath})
+			return s.deps.Tools.BisectStart(ctx, d.gameID, []string{modPath})
 		}, func(err error) {
 			if isExcludeValidationMessage(err.Error()) {
 				s.toasts.Show(kit.ToastWarning, T("page.tools.mod_bisect.exclude_invalid"), "")
 				return
 			}
-			s.modError(err, "bisect-start", map[string]any{"game": d.game, "mod": modPath})
+			s.modError(err, "bisect-start", map[string]any{"gameID": d.gameID, "mod": modPath})
 			s.toasts.Show(kit.ToastError, err.Error(), "")
 		})
 	}

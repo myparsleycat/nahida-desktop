@@ -389,7 +389,7 @@ func (s *Shell) folderMenu() *fairy.El {
 	}
 	classificationItems = append(classificationItems, kit.MenuItem{Separator: true}, kit.MenuItem{
 		Label: T("page.mod.character-sidebar.classification.manage"), Icon: lucide.Settings2,
-		Disabled: m.game == "", OnClick: s.openClassificationEditor,
+		Disabled: m.gameID == "", OnClick: s.openClassificationEditor,
 	})
 	items := []kit.MenuItem{
 		{
@@ -439,11 +439,11 @@ func (s *Shell) folderMenu() *fairy.El {
 }
 
 func (s *Shell) setActiveClassification(id *string) {
-	game := s.mods.game
+	gameID := s.mods.gameID
 	s.background(func(ctx context.Context) {
-		err := s.deps.Mod.SetActiveClassification(ctx, game, id)
+		err := s.deps.Mod.SetActiveClassification(ctx, gameID, id)
 		if err != nil {
-			s.modError(err, "set-active-classification", map[string]any{"game": game})
+			s.modError(err, "set-active-classification", map[string]any{"gameID": gameID})
 		}
 		fairy.Go(func() {
 			if err != nil {

@@ -346,11 +346,11 @@ func TestReconcileAppliesNTEGamePathsMigrationOnce(t *testing.T) {
 	}
 	if _, err := client.db.Exec(`
 INSERT INTO "game_paths"
-("game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order")
+("id", "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order")
 VALUES
-('NTE-old', 'C:/nte', 'NTE', NULL, NULL, 'C:/games/launcher.exe', NULL, 1),
-('NTE-keep', 'C:/nte2', 'NTE', NULL, NULL, 'C:/games/YuanShen/htgame.exe', NULL, 2),
-('GI', 'C:/gi', 'XXMI', NULL, NULL, 'C:/gi/GenshinImpact.exe', NULL, 3)`); err != nil {
+('old', 'NTE-old', 'C:/nte', 'NTE', NULL, NULL, 'C:/games/launcher.exe', NULL, 1),
+('keep', 'NTE-keep', 'C:/nte2', 'NTE', NULL, NULL, 'C:/games/YuanShen/htgame.exe', NULL, 2),
+('gi', 'GI', 'C:/gi', 'XXMI', NULL, NULL, 'C:/gi/GenshinImpact.exe', NULL, 3)`); err != nil {
 		t.Fatalf("seed nte rows: %v", err)
 	}
 

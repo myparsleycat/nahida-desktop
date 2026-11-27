@@ -666,6 +666,13 @@
           "order_value": "{{current}} of {{total}}",
           "order_description": "Use the arrow buttons to change this game's position in the dropdown."
         },
+        "rename-game": {
+          "title": "Rename Game",
+          "name_label": "Game name",
+          "required": "Enter a game name.",
+          "duplicate": "A game with this name already exists.",
+          "failed": "Failed to rename the game."
+        },
         "nte-launch": {
           "title": "Set launcher path",
           "path_label": "Launcher path",

@@ -67,6 +67,7 @@ type BisectSnapshot struct {
 	// OutOfSync is set when renamed files no longer match the session; only cancel and finalize are accepted.
 	OutOfSync      bool         `json:"outOfSync"`
 	Status         BisectStatus `json:"status"`
+	GameID         string       `json:"gameId"`
 	Game           string       `json:"game"`
 	ModRootPath    *string      `json:"modRootPath"`
 	Round          int          `json:"round"`
@@ -80,6 +81,7 @@ type BisectSnapshot struct {
 }
 
 type bisectSession struct {
+	gameID       string
 	game         string
 	modRootPath  string
 	candidates   []string
@@ -126,15 +128,30 @@ func sessionStatus(session *bisectSession) BisectStatus {
 	}
 }
 
-func (t *Service) BisectValidateExcludePath(ctx context.Context, game, inputPath string) (string, error) {
-	config, err := t.requireBisectGame(ctx, game)
+func (t *Service) BisectGameIDByName(ctx context.Context, name string) (string, error) {
+	client, err := t.requireClient()
+	if err != nil {
+		return "", err
+	}
+	row, err := client.GamePaths.GetByGame(ctx, strings.TrimSpace(name))
+	if err != nil {
+		return "", err
+	}
+	if row == nil {
+		return "", bisectGameNotFound(name)
+	}
+	return row.ID, nil
+}
+
+func (t *Service) BisectValidateExcludePath(ctx context.Context, gameID, inputPath string) (string, error) {
+	config, err := t.requireBisectGame(ctx, gameID)
 	if err != nil {
 		return "", err
 	}
 	return resolveBisectExclude(config.ModFolderPath, inputPath)
 }
 
-func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []string) (BisectSnapshot, error) {
+func (t *Service) BisectStart(ctx context.Context, gameID string, excludePaths []string) (BisectSnapshot, error) {
 	t.bisectMu.Lock()
 	defer t.bisectMu.Unlock()
 	if t.bisectRecovering {
@@ -160,7 +177,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		t.broadcastBisect(emptyBisectSnapshot(BisectIdle))
 	}
 
-	config, err := t.requireBisectGame(ctx, game)
+	config, err := t.requireBisectGame(ctx, gameID)
 	if err != nil {
 		return BisectSnapshot{}, err
 	}
@@ -183,7 +200,7 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 	}
 
 	session := &bisectSession{
-		game: game, modRootPath: config.ModFolderPath, candidates: []string{},
+		gameID: config.ID, game: config.Game, modRootPath: config.ModFolderPath, candidates: []string{},
 		currentBatch: []string{}, excludePaths: excludeRelatives, undoStack: []bisectUndo{}, phase: BisectScanning,
 	}
 	t.bisect = session
@@ -226,8 +243,8 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 		}
 	}
 
-	if err := t.writeSessionMarker(ctx, game, config.ModFolderPath, candidates); err != nil {
-		guardErr := t.stopD3dxGuardLocked(game)
+	if err := t.writeSessionMarker(ctx, config.ID, config.ModFolderPath, candidates); err != nil {
+		guardErr := t.stopD3dxGuardLocked(config.ID)
 		t.abortStartLocked()
 		return BisectSnapshot{}, errors.Join(err, guardErr)
 	}
@@ -237,15 +254,15 @@ func (t *Service) BisectStart(ctx context.Context, game string, excludePaths []s
 	if err := disableINIs(batch); err != nil {
 		rollbackErr := restoreINIs(batch)
 		if rollbackErr == nil {
-			t.clearSessionMarker(ctx, game)
+			t.clearSessionMarker(ctx, config.ID)
 		}
-		guardErr := t.stopD3dxGuardLocked(game)
+		guardErr := t.stopD3dxGuardLocked(config.ID)
 		t.abortStartLocked()
 		return BisectSnapshot{}, infra.WithCause(
 			err,
 			infra.AnnotateError(
 				errors.Join(rollbackErr, guardErr),
-				infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"game": game}},
+				infra.Diagnostic{Stage: "rollback", Fields: map[string]any{"gameId": config.ID, "game": config.Game}},
 			),
 		)
 	}
@@ -320,8 +337,8 @@ func (t *Service) BisectRespond(ctx context.Context, version uint64, fixed bool)
 		if err := enableINIs(toRestore); err != nil {
 			return BisectSnapshot{}, t.failLocked(session, err)
 		}
-		t.clearSessionMarker(ctx, session.game)
-		if err := t.stopD3dxGuardLocked(session.game); err != nil {
+		t.clearSessionMarker(ctx, session.gameID)
+		if err := t.stopD3dxGuardLocked(session.gameID); err != nil {
 			t.logError(err, "ModBisect:d3dxFinalRestore")
 		}
 		t.bisect = nil
@@ -401,8 +418,8 @@ func (t *Service) BisectFinalize(ctx context.Context, version uint64, keepDisabl
 			return BisectSnapshot{}, err
 		}
 	}
-	t.clearSessionMarker(ctx, session.game)
-	if err := t.stopD3dxGuardLocked(session.game); err != nil {
+	t.clearSessionMarker(ctx, session.gameID)
+	if err := t.stopD3dxGuardLocked(session.gameID); err != nil {
 		t.logError(err, "ModBisect:d3dxFinalRestore")
 	}
 	t.bisect = nil
@@ -439,7 +456,7 @@ func (e *BisectRecoverConflictError) Error() string {
 
 // BisectRecover restores the INIs an interrupted session left disabled. A disabled INI whose original name is now
 // held by a different file is kept and counted in a *BisectRecoverConflictError.
-func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
+func (t *Service) BisectRecover(ctx context.Context, gameID string) (int, error) {
 	if err := t.beginBisectRecovery(); err != nil {
 		//nolint:staticcheck // Electron contract text.
 		return 0, errors.New(
@@ -447,7 +464,7 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 		)
 	}
 	defer t.endBisectRecovery()
-	config, err := t.requireBisectGame(ctx, game)
+	config, err := t.requireBisectGame(ctx, gameID)
 	if err != nil {
 		return 0, err
 	}
@@ -456,11 +473,11 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 		return 0, err
 	}
 	var marked []string
-	markerGame := ""
+	hasMarker := false
 	for _, marker := range markers {
-		if (marker.game == game || marker.game == config.Game) &&
-			platform.SamePathFold(marker.ModRootPath, config.ModFolderPath) {
-			marked, markerGame = marker.Paths, marker.game
+		if marker.gameID == config.ID && platform.SamePathFold(marker.ModRootPath, config.ModFolderPath) {
+			marked, hasMarker = marker.Paths, true
+			break
 		}
 	}
 	paths, err := bisectRecoveryTargets(ctx, config.ModFolderPath, marked)
@@ -471,8 +488,8 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return restored, err
 	}
-	if markerGame != "" && restored+len(conflicts) == len(paths) {
-		t.clearSessionMarker(ctx, markerGame)
+	if hasMarker && restored+len(conflicts) == len(paths) {
+		t.clearSessionMarker(ctx, config.ID)
 	}
 	if len(conflicts) > 0 {
 		return restored, infra.ReportError(
@@ -481,7 +498,7 @@ func (t *Service) BisectRecover(ctx context.Context, game string) (int, error) {
 			"Tools",
 			infra.Diagnostic{
 				Operation: "ModBisect:recover", Stage: "conflict",
-				Fields: map[string]any{"game": config.Game, "conflicts": firstPaths(conflicts)},
+				Fields: map[string]any{"gameId": config.ID, "game": config.Game, "conflicts": firstPaths(conflicts)},
 			},
 		)
 	}
@@ -505,7 +522,9 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 		return err
 	}
 	games := make([]db.GamePathRow, 0, len(rows))
+	gameNames := make(map[string]string, len(rows))
 	for _, game := range rows {
+		gameNames[game.ID] = game.Game
 		if game.ModFolderPath == "" || game.Importer != nil && *game.Importer == "NTE" {
 			continue
 		}
@@ -536,7 +555,7 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 			}
 			// A conflict is logged once and left for manual recovery; it does not hold back the done key.
 			restored, conflicts := t.recoverINIs(ctx, orphans)
-			t.logRecoverConflicts(game.Game, conflicts)
+			t.logRecoverConflicts(game.ID, game.Game, conflicts)
 			complete = restored+len(conflicts) == len(orphans) && complete
 		}
 		if ctx.Err() != nil {
@@ -567,22 +586,24 @@ func (t *Service) RecoverBisects(ctx context.Context) error {
 		}
 		// A conflict is logged with its paths and does not keep the marker, or every launch would repeat the walk.
 		restored, conflicts := t.recoverINIs(ctx, orphans)
-		t.logRecoverConflicts(marker.game, conflicts)
+		t.logRecoverConflicts(marker.gameID, gameNames[marker.gameID], conflicts)
 		if restored+len(conflicts) == len(orphans) && ctx.Err() == nil {
-			t.clearSessionMarker(ctx, marker.game)
+			t.clearSessionMarker(ctx, marker.gameID)
 		}
 	}
 	return ctx.Err()
 }
 
-func (t *Service) logRecoverConflicts(game string, conflicts []string) {
+func (t *Service) logRecoverConflicts(gameID, game string, conflicts []string) {
 	if len(conflicts) == 0 {
 		return
 	}
 	_ = infra.ReportError(t.log, errors.New("disabled INI kept because the original name is taken"), "Tools",
 		infra.Diagnostic{
 			Operation: "ModBisect:recover", Stage: "conflict",
-			Fields: map[string]any{"game": game, "count": len(conflicts), "conflicts": firstPaths(conflicts)},
+			Fields: map[string]any{
+				"gameId": gameID, "game": game, "count": len(conflicts), "conflicts": firstPaths(conflicts),
+			},
 		})
 }
 
@@ -634,17 +655,21 @@ func (t *Service) endBisectRecovery() {
 	t.bisectMu.Unlock()
 }
 
-func (t *Service) requireBisectGame(ctx context.Context, game string) (db.GamePathRow, error) {
+func bisectGameNotFound(game string) error {
+	return fmt.Errorf("Game not found: %s", game) //nolint:staticcheck // Electron contract text.
+}
+
+func (t *Service) requireBisectGame(ctx context.Context, gameID string) (db.GamePathRow, error) {
 	client, err := t.requireClient()
 	if err != nil {
 		return db.GamePathRow{}, err
 	}
-	row, err := client.GamePaths.GetByGame(ctx, strings.TrimSpace(game))
+	row, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return db.GamePathRow{}, err
 	}
 	if row == nil {
-		return db.GamePathRow{}, fmt.Errorf("Game not found: %s", game) //nolint:staticcheck // Electron contract text.
+		return db.GamePathRow{}, bisectGameNotFound(gameID)
 	}
 	if row.Importer != nil && *row.Importer == "NTE" {
 		//nolint:staticcheck // Electron contract text.
@@ -656,7 +681,7 @@ func (t *Service) requireBisectGame(ctx context.Context, game string) (db.GamePa
 		//nolint:staticcheck // Electron contract text.
 		return db.GamePathRow{}, fmt.Errorf(
 			"Mod folder path is not configured for %s.",
-			game,
+			row.Game,
 		)
 	}
 	return *row, nil
@@ -704,8 +729,8 @@ func (t *Service) cancelBisectLocked() error {
 		session.outOfSync = true
 		return err
 	}
-	t.clearSessionMarker(context.Background(), session.game)
-	if err := t.stopD3dxGuardLocked(session.game); err != nil {
+	t.clearSessionMarker(context.Background(), session.gameID)
+	if err := t.stopD3dxGuardLocked(session.gameID); err != nil {
 		t.logError(err, "ModBisect:d3dxFinalRestore")
 	}
 	t.bisect = nil
@@ -790,7 +815,8 @@ func snapshotFor(session *bisectSession, message *string, status BisectStatus) B
 	root := session.modRootPath
 	return BisectSnapshot{
 		OutOfSync: session.outOfSync,
-		Status:    status, Game: session.game, ModRootPath: &root, Round: session.round, BatchSize: session.batchSize,
+		Status:    status, GameID: session.gameID, Game: session.game,
+		ModRootPath: &root, Round: session.round, BatchSize: session.batchSize,
 		Candidates: slices.Clone(session.candidates), CurrentBatch: slices.Clone(session.currentBatch),
 		ExcludePaths: slices.Clone(session.excludePaths), UndoStackDepth: len(session.undoStack),
 		FinalBadPath: cloneStringPointer(session.finalBadPath), Error: cloneStringPointer(message),

@@ -22,9 +22,9 @@ import (
 
 // downloadTarget is the folder a download was matched to, selected once its game lists it.
 type downloadTarget struct {
-	id    string
-	game  string
-	group mod.FolderGroup
+	id     string
+	gameID string
+	group  mod.FolderGroup
 }
 
 // markDownloadPick records that the user chose a folder for the open download, which a pending or later
@@ -64,7 +64,7 @@ func (s *Shell) resolveDownloadTarget() {
 		if !ok {
 			return
 		}
-		gameFilter = &game.Game
+		gameFilter = &game.ID
 	}
 
 	m.downloadResolved[d.id] = true
@@ -87,12 +87,8 @@ func (s *Shell) resolveDownloadTarget() {
 			}
 			switch {
 			case result != nil:
-				game := result.Game
-				if gameFilter != nil {
-					game = *gameFilter
-				}
-				s.selectGame(game, true)
-				m.downloadTarget = &downloadTarget{id: id, game: game, group: result.Group}
+				s.selectGame(result.GameID, true)
+				m.downloadTarget = &downloadTarget{id: id, gameID: result.GameID, group: result.Group}
 				s.applyDownloadTarget()
 			case gameFilter != nil:
 				s.selectGame(*gameFilter, true)
@@ -128,7 +124,7 @@ func (s *Shell) matchDownloadTarget(
 	}
 	first := results[0]
 	same := lo.EveryBy(results, func(r *mod.DownloadTarget) bool {
-		return r != nil && r.Game == first.Game && platform.SamePathFold(r.Group.Path, first.Group.Path)
+		return r != nil && r.GameID == first.GameID && platform.SamePathFold(r.Group.Path, first.Group.Path)
 	})
 	if !same {
 		return nil, nil
@@ -147,7 +143,7 @@ func (s *Shell) applyDownloadTarget() {
 		m.downloadTarget = nil
 		return
 	}
-	if m.game != target.game ||
+	if m.gameID != target.gameID ||
 		!lo.SomeBy(
 			m.characters,
 			func(g mod.FolderGroup) bool { return platform.SameOrChildPath(g.Path, target.group.Path) },

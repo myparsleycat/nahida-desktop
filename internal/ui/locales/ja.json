@@ -663,6 +663,13 @@
           "order_value": "{{total}} 個中 {{current}} 番目",
           "order_description": "矢印ボタンで、ドロップダウンに表示されるゲームの順番を変更します。"
         },
+        "rename-game": {
+          "title": "ゲーム名を変更",
+          "name_label": "ゲーム名",
+          "required": "ゲーム名を入力してください。",
+          "duplicate": "この名前は別のゲームで使用されています。",
+          "failed": "ゲーム名を変更できませんでした。"
+        },
         "nte-launch": {
           "title": "ランチャーパスを指定",
           "path_label": "ランチャーのパス",

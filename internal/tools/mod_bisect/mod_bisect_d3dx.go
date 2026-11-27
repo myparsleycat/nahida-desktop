@@ -10,13 +10,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"nahida.live/desktop/internal/appdata"
 	"nahida.live/desktop/internal/db"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/watcher"
 )
 
+const d3dxBackupSuffix = ".d3dx_user.ini.bak"
+
 type d3dxGuard struct {
-	game        string
+	gameID      string
 	path        string
 	initial     []byte
 	backupPath  string
@@ -28,23 +33,27 @@ type d3dxGuard struct {
 }
 
 func (t *Service) startD3dxGuardLocked(ctx context.Context, game db.GamePathRow) error {
-	if t.xxmi == nil || game.Importer == nil || strings.TrimSpace(*game.Importer) == "" || t.appData == nil {
+	if t.appData == nil {
 		return nil
 	}
-	importers, err := t.xxmi.GetEnabledImporters(ctx)
+	d3dxPath, err := t.d3dxUserPath(ctx, game)
+	if err != nil || d3dxPath == "" {
+		return err
+	}
+	backupPath, err := t.d3dxBackupPath(game.ID)
 	if err != nil {
 		return err
 	}
-	var d3dxPath string
-	for _, importer := range importers {
-		if importer.Key == *game.Importer {
-			d3dxPath = filepath.Join(importer.ImporterFolder, "d3dx_user.ini")
-			break
+	pending, err := t.pendingD3dxBackupPath(game, backupPath)
+	if err != nil {
+		return err
+	}
+	if pending != "" {
+		if err := t.restoreD3dxBackup(ctx, d3dxPath, pending); err != nil {
+			return err
 		}
 	}
-	if d3dxPath == "" {
-		return nil
-	}
+
 	initial, err := os.ReadFile(d3dxPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -52,16 +61,17 @@ func (t *Service) startD3dxGuardLocked(ctx context.Context, game db.GamePathRow)
 	if err != nil {
 		return err
 	}
-	backupPath := t.d3dxBackupPath(game.Game)
 	if err := os.MkdirAll(filepath.Dir(backupPath), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(backupPath, initial, 0o600); err != nil {
+	if err := platform.WriteFileAtomic(backupPath, initial, 0o600, func(err error) {
+		t.reportCleanup(err, "startD3dxGuardLocked")
+	}); err != nil {
 		return err
 	}
 	guardCtx, cancel := context.WithCancel(context.Background())
 	guard := &d3dxGuard{
-		game: game.Game, path: filepath.Clean(d3dxPath), initial: initial, backupPath: backupPath,
+		gameID: game.ID, path: filepath.Clean(d3dxPath), initial: initial, backupPath: backupPath,
 		cancel: cancel, restoreWake: make(chan struct{}, 1), restoreDone: make(chan struct{}),
 	}
 	go t.runD3dxRestoreWorker(guardCtx, guard)
@@ -144,9 +154,9 @@ func (t *Service) restoreD3dx(ctx context.Context, guard *d3dxGuard) {
 	t.logError(lastErr, "ModBisect:d3dxRestore")
 }
 
-func (t *Service) stopD3dxGuardLocked(game string) error {
+func (t *Service) stopD3dxGuardLocked(gameID string) error {
 	guard := t.d3dx
-	if guard == nil || guard.game != game {
+	if guard == nil || guard.gameID != gameID {
 		return nil
 	}
 	t.d3dx = nil
@@ -157,7 +167,9 @@ func (t *Service) stopD3dxGuardLocked(game string) error {
 	defer guard.restoreMu.Unlock()
 	backup, err := os.ReadFile(guard.backupPath)
 	if err == nil {
-		if writeErr := os.WriteFile(guard.path, backup, 0o600); writeErr != nil {
+		if writeErr := platform.WriteFileAtomic(guard.path, backup, 0o600, func(err error) {
+			t.reportCleanup(err, "stopD3dxGuardLocked")
+		}); writeErr != nil {
 			return writeErr
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -170,23 +182,31 @@ func (t *Service) stopD3dxGuardLocked(game string) error {
 }
 
 func (t *Service) recoverD3dxBackupLocked(ctx context.Context, game db.GamePathRow) error {
-	backupPath := t.d3dxBackupPath(game.Game)
-	if backupPath == "" {
+	if t.appData == nil {
 		return nil
 	}
-	backup, err := os.ReadFile(backupPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	backupPath, err := t.d3dxBackupPath(game.ID)
 	if err != nil {
 		return err
 	}
-	if t.xxmi == nil || game.Importer == nil {
-		return nil
+	pending, err := t.pendingD3dxBackupPath(game, backupPath)
+	if err != nil || pending == "" {
+		return err
+	}
+	d3dxPath, err := t.d3dxUserPath(ctx, game)
+	if err != nil || d3dxPath == "" {
+		return err
+	}
+	return t.restoreD3dxBackup(ctx, d3dxPath, pending)
+}
+
+func (t *Service) d3dxUserPath(ctx context.Context, game db.GamePathRow) (string, error) {
+	if t.xxmi == nil || game.Importer == nil || strings.TrimSpace(*game.Importer) == "" {
+		return "", nil
 	}
 	importers, err := t.xxmi.GetEnabledImporters(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	for _, importer := range importers {
 		if importer.Key != *game.Importer {
@@ -194,25 +214,72 @@ func (t *Service) recoverD3dxBackupLocked(ctx context.Context, game db.GamePathR
 		}
 		path := filepath.Join(importer.ImporterFolder, "d3dx_user.ini")
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			return nil
+			return "", nil
 		} else if err != nil {
-			return err
+			return "", err
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err := os.WriteFile(path, backup, 0o600); err != nil {
-			return err
-		}
-		return os.Remove(backupPath)
+		return path, nil
 	}
-	return nil
+	return "", nil
 }
 
-func (t *Service) d3dxBackupPath(game string) string {
-	if t.appData == nil {
-		return ""
+func (t *Service) restoreD3dxBackup(ctx context.Context, path, backupPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	backup, err := os.ReadFile(backupPath)
+	if err != nil {
+		return err
+	}
+	if err := platform.WriteFileAtomic(path, backup, 0o600, func(err error) {
+		t.reportCleanup(err, "restoreD3dxBackup")
+	}); err != nil {
+		return err
+	}
+	return os.Remove(backupPath)
+}
+
+func (t *Service) pendingD3dxBackupPath(game db.GamePathRow, backupPath string) (string, error) {
+	paths := []string{backupPath}
+	if game.LegacyName != nil {
+		legacyPath, err := t.d3dxLegacyBackupPath(*game.LegacyName)
+		if err != nil {
+			return "", err
+		}
+		if legacyPath != "" {
+			paths = append(paths, legacyPath)
+		}
+	}
+	pending := ""
+	for _, path := range paths {
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("D3DX backup is not a regular file: %q", path)
+		}
+		if pending != "" {
+			return "", fmt.Errorf("both D3DX backups exist: %q and %q", pending, path)
+		}
+		pending = path
+	}
+	return pending, nil
+}
+
+func (t *Service) d3dxBackupPath(gameID string) (string, error) {
+	id, err := uuid.Parse(gameID)
+	if err != nil {
+		return "", fmt.Errorf("invalid game ID %q for D3DX backup: %w", gameID, err)
+	}
+	// A legacy display name can look like a UUID.
+	return t.appData.Resolve(filepath.Join(appdata.ModBisectDir, "by-id", id.String()+d3dxBackupSuffix))
+}
+
+func (t *Service) d3dxLegacyBackupPath(game string) (string, error) {
 	safe := strings.Map(func(r rune) rune {
 		switch r {
 		case '<', '>', ':', '"', '/', '\\', '|', '?', '*', 0:
@@ -224,9 +291,9 @@ func (t *Service) d3dxBackupPath(game string) string {
 	if safe == "" || safe == "." || safe == ".." {
 		safe = fmt.Sprintf("game-%s", sha256Hex([]byte(game))[:12])
 	}
-	path, err := t.appData.Resolve(filepath.Join(appdata.ModBisectDir, safe+".d3dx_user.ini.bak"))
-	if err != nil {
-		return ""
+	filename := safe + d3dxBackupSuffix
+	if !platform.NewFS().IsValidWindowsFilename(filename) || !filepath.IsLocal(filename) {
+		return "", nil
 	}
-	return path
+	return t.appData.Resolve(filepath.Join(appdata.ModBisectDir, filename))
 }

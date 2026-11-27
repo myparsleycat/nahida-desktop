@@ -469,7 +469,7 @@ func (s *Shell) applyPendingFix() {
 	if i < 0 {
 		return
 	}
-	s.selectGame(m.games[i].Game, true)
+	s.selectGame(m.games[i].ID, true)
 	if id, _ := s.modFixer(); id == "zzmi" {
 		switch tool := record.Result.ActionTool; tool {
 		case "hash", "jane", "dialyn":

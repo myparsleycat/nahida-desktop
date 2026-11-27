@@ -37,6 +37,12 @@ const (
 // ErrModFolderLocked marks a toggle blocked by an open mod folder.
 var ErrModFolderLocked = errors.New("MOD_FOLDER_LOCKED")
 
+var (
+	ErrDuplicateGameName = errors.New("DUPLICATE_GAME_NAME")
+	ErrInvalidGameName   = errors.New("INVALID_GAME_NAME")
+	ErrGameNotFound      = errors.New("GAME_NOT_FOUND")
+)
+
 type Settings interface {
 	GetSearchModPreview(context.Context) (bool, error)
 	GetDisabledPrefixStyle(context.Context) (string, error)
@@ -236,6 +242,7 @@ func (m *Mod) requireClient() (*db.Client, error) {
 }
 
 type GameConfig struct {
+	ID                  string  `json:"id"`
 	Game                string  `json:"game"`
 	ModFolderPath       string  `json:"modFolderPath"`
 	Importer            *string `json:"importer"`
@@ -321,7 +328,7 @@ type FolderGroup struct {
 
 func gameConfig(row db.GamePathRow) GameConfig {
 	return GameConfig{
-		Game: row.Game, ModFolderPath: row.ModFolderPath, Importer: row.Importer,
+		ID: row.ID, Game: row.Game, ModFolderPath: row.ModFolderPath, Importer: row.Importer,
 		LinkedModFolderPath: row.LinkedModFolderPath, GameInstallPath: row.GameInstallPath,
 		GameExecutablePath: row.GameExecutablePath, NteLauncherPath: row.NteLauncherPath,
 		Order: row.Order,
@@ -346,12 +353,27 @@ func deriveNteGameInstallPath(modOrLinkedPath string) string {
 	return filepath.Clean(filepath.Join(modOrLinkedPath, "..", "..", "..", "..", ".."))
 }
 
-func (m *Mod) GetGamePath(ctx context.Context, game string) (*string, error) {
+func (m *Mod) GameIDByName(ctx context.Context, name string) (string, error) {
+	client, err := m.requireClient()
+	if err != nil {
+		return "", err
+	}
+	row, err := client.GamePaths.GetByGame(ctx, strings.TrimSpace(name))
+	if err != nil {
+		return "", err
+	}
+	if row == nil {
+		return "", ErrGameNotFound
+	}
+	return row.ID, nil
+}
+
+func (m *Mod) GetGamePath(ctx context.Context, gameID string) (*string, error) {
 	client, err := m.requireClient()
 	if err != nil {
 		return nil, err
 	}
-	row, err := client.GamePaths.GetByGame(ctx, strings.TrimSpace(game))
+	row, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil || row == nil {
 		return nil, err
 	}
@@ -390,6 +412,9 @@ func (m *Mod) SetGamePath(ctx context.Context, game, modFolderPath string) error
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	game = strings.TrimSpace(game)
 	path, err := validDirectory(modFolderPath)
 	if err != nil {
@@ -452,7 +477,7 @@ func (m *Mod) AddGame(
 	}
 	if exists != nil {
 		if exists.Game == game {
-			return errors.New("DUPLICATE_GAME_NAME")
+			return ErrDuplicateGameName
 		}
 		return errors.New("DUPLICATE_MOD_FOLDER_PATH")
 	}
@@ -493,6 +518,9 @@ func (m *Mod) AddGame(
 	})
 	if err != nil {
 		m.rollbackNteDiskChanges(rollbacks)
+		if errors.Is(err, db.ErrDuplicateGameName) {
+			return ErrDuplicateGameName
+		}
 		return err
 	}
 	if bootstrapInstall != nil {
@@ -512,7 +540,11 @@ func (m *Mod) AddGame(
 	return nil
 }
 
-func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) error {
+func (m *Mod) RenameGame(ctx context.Context, gameID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrInvalidGameName
+	}
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -520,9 +552,31 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 	m.gameMu.Lock()
 	defer m.gameMu.Unlock()
 
-	game = strings.TrimSpace(game)
+	err = client.GamePaths.Rename(ctx, gameID, name)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, db.ErrDuplicateGameName):
+		return ErrDuplicateGameName
+	case errors.Is(err, db.ErrGameNotFound):
+		return ErrGameNotFound
+	default:
+		return infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+			Operation: "rename-game", Stage: "save", Fields: map[string]any{"gameId": gameID, "name": name},
+		})
+	}
+}
+
+func (m *Mod) UpdateGame(ctx context.Context, gameID string, updates GameUpdates) error {
+	client, err := m.requireClient()
+	if err != nil {
+		return err
+	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	importerKey, xxmiGame := xxmiImporterKey(updates.Importer)
-	if game == "" || (!xxmiGame && strings.TrimSpace(updates.ModFolderPath) == "") {
+	if gameID == "" || (!xxmiGame && strings.TrimSpace(updates.ModFolderPath) == "") {
 		return fmt.Errorf("%s", "Game and modFolderPath are required")
 	}
 	if xxmiGame {
@@ -537,19 +591,19 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 	if err != nil {
 		return err
 	}
-	existing, err := client.GamePaths.GetByGame(ctx, game)
+	existing, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return err
 	}
 	if existing == nil {
-		return fmt.Errorf("game %s not found", game)
+		return ErrGameNotFound
 	}
-	duplicate, err := client.GamePaths.FindByModFolderPathOtherGame(ctx, game, updates.ModFolderPath)
+	duplicate, err := client.GamePaths.FindByModFolderPathOtherGame(ctx, gameID, updates.ModFolderPath)
 	if err != nil {
 		return err
 	}
 	if duplicate == nil && updates.LinkedModFolderPath != nil {
-		duplicate, err = client.GamePaths.FindByModFolderPathOtherGame(ctx, game, *updates.LinkedModFolderPath)
+		duplicate, err = client.GamePaths.FindByModFolderPathOtherGame(ctx, gameID, *updates.LinkedModFolderPath)
 		if err != nil {
 			return err
 		}
@@ -581,7 +635,7 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 			return cleanupNteModFolder(updates.ModFolderPath, updates.LinkedModFolderPath)
 		})
 	}
-	err = client.GamePaths.Update(ctx, game, db.GamePathUpdates{
+	err = client.GamePaths.Update(ctx, gameID, db.GamePathUpdates{
 		ModFolderPath: updates.ModFolderPath, Importer: cleanOptional(updates.Importer),
 		LinkedModFolderPath: updates.LinkedModFolderPath, GameInstallPath: cleanOptional(updates.GameInstallPath),
 		GameExecutablePath: cleanOptional(updates.GameExecutablePath),
@@ -592,7 +646,7 @@ func (m *Mod) UpdateGame(ctx context.Context, game string, updates GameUpdates) 
 	return err
 }
 
-func (m *Mod) RemoveGame(ctx context.Context, game string) error {
+func (m *Mod) RemoveGame(ctx context.Context, gameID string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -600,8 +654,7 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 	m.gameMu.Lock()
 	defer m.gameMu.Unlock()
 
-	game = strings.TrimSpace(game)
-	existing, err := client.GamePaths.GetByGame(ctx, game)
+	existing, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return err
 	}
@@ -610,7 +663,42 @@ func (m *Mod) RemoveGame(ctx context.Context, game string) error {
 			return err
 		}
 	}
-	return client.GamePaths.Delete(ctx, game)
+	if err := client.GamePaths.Delete(ctx, gameID); err != nil {
+		return err
+	}
+
+	// The game is already removed, so a preference left behind is only logged.
+	if err := m.forgetGamePreferences(ctx, client, gameID); err != nil {
+		_ = infra.ReportError(m.log, err, "Mod", infra.Diagnostic{
+			Severity: infra.DiagnosticWarn, Operation: "remove-game", Stage: "forget-preferences",
+			Fields: map[string]any{"gameId": gameID},
+		})
+	}
+	return nil
+}
+
+func (m *Mod) forgetGamePreferences(ctx context.Context, client *db.Client, gameID string) error {
+	last, err := m.settingValue(ctx, lastGameSettingKey)
+	if err != nil {
+		return err
+	}
+	if last != nil && *last == gameID {
+		if err := client.Settings.Upsert(ctx, lastGameSettingKey, lo.ToPtr("")); err != nil {
+			return err
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	groups, err := m.loadManualSubGroups(ctx)
+	if err != nil {
+		return err
+	}
+	if _, ok := groups[gameID]; !ok {
+		return nil
+	}
+	delete(groups, gameID)
+	return m.saveManualSubGroups(ctx, groups)
 }
 
 // SyncImporterModFolders points every XXMI game at its importer's current Mods folder. A game whose importer
@@ -643,7 +731,7 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 		}
 	}
 
-	changed, conflicts := []string{}, []string{}
+	changed, conflicts := []db.GamePathRow{}, []string{}
 	for _, row := range rows {
 		if cleanOptional(row.Importer) == nil {
 			// Adoption is a convenience, so importers that cannot be read only fail the sync for XXMI games.
@@ -654,13 +742,13 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 			if _, taken := used[strings.ToUpper(key)]; !ok || taken {
 				continue
 			}
-			adopted, err := client.GamePaths.AdoptImporter(ctx, row.Game, row.ModFolderPath, key)
+			adopted, err := client.GamePaths.AdoptImporter(ctx, row.ID, row.ModFolderPath, key)
 			if err != nil {
 				return err
 			}
 			if adopted {
 				used[strings.ToUpper(key)] = struct{}{}
-				changed = append(changed, row.Game)
+				changed = append(changed, row)
 			}
 			continue
 		}
@@ -675,7 +763,7 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 		if !ok || platform.SamePathFold(folder, row.ModFolderPath) {
 			continue
 		}
-		duplicate, err := client.GamePaths.FindByModFolderPathOtherGame(ctx, row.Game, folder)
+		duplicate, err := client.GamePaths.FindByModFolderPathOtherGame(ctx, row.ID, folder)
 		if err != nil {
 			return err
 		}
@@ -684,21 +772,23 @@ func (m *Mod) SyncImporterModFolders(ctx context.Context) error {
 			continue
 		}
 		// A game edited since the listing keeps that edit; the next sync follows its new importer if any.
-		moved, err := client.GamePaths.MoveModFolderPath(ctx, row.Game, row.Importer, row.ModFolderPath, folder)
+		moved, err := client.GamePaths.MoveModFolderPath(ctx, row.ID, row.Importer, row.ModFolderPath, folder)
 		if err != nil {
 			return err
 		}
 		if moved {
-			changed = append(changed, row.Game)
+			changed = append(changed, row)
 		}
 	}
 
-	for _, game := range changed {
-		m.invalidateClassifiedFolders(game)
-	}
 	if len(changed) > 0 {
+		names := make([]string, len(changed))
+		for i, row := range changed {
+			m.invalidateClassifiedFolders(row.ID)
+			names[i] = row.Game
+		}
 		m.InvalidateLibraries()
-		m.log.Info(map[string]any{"games": changed}, "Mod:syncImporterModFolders")
+		m.log.Info(map[string]any{"games": names}, "Mod:syncImporterModFolders")
 	}
 	if len(conflicts) > 0 {
 		return infra.AnnotateError(errors.New("DUPLICATE_MOD_FOLDER_PATH"), infra.Diagnostic{
@@ -721,7 +811,7 @@ func (m *Mod) InvalidateImporterGames(ctx context.Context) error {
 	}
 	for _, row := range rows {
 		if _, ok := xxmiImporterKey(row.Importer); ok {
-			m.invalidateClassifiedFolders(row.Game)
+			m.invalidateClassifiedFolders(row.ID)
 		}
 	}
 	return nil
@@ -810,36 +900,39 @@ func (m *Mod) rollbackNteDiskChanges(rollbacks []func() error) {
 	}
 }
 
-func (m *Mod) ReorderGames(ctx context.Context, games []string) error {
+func (m *Mod) ReorderGames(ctx context.Context, gameIDs []string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
 	}
+	m.gameMu.Lock()
+	defer m.gameMu.Unlock()
+
 	rows, err := client.GamePaths.List(ctx)
 	if err != nil {
 		return err
 	}
-	if len(rows) != len(games) {
+	if len(rows) != len(gameIDs) {
 		return errors.New("INVALID_GAME_ORDER")
 	}
 	want := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		want[row.Game] = struct{}{}
+		want[row.ID] = struct{}{}
 	}
-	seen := make(map[string]struct{}, len(games))
-	for _, game := range games {
-		if _, ok := want[game]; !ok {
+	seen := make(map[string]struct{}, len(gameIDs))
+	for _, gameID := range gameIDs {
+		if _, ok := want[gameID]; !ok {
 			return errors.New("INVALID_GAME_ORDER")
 		}
-		if _, ok := seen[game]; ok {
+		if _, ok := seen[gameID]; ok {
 			return errors.New("INVALID_GAME_ORDER")
 		}
-		seen[game] = struct{}{}
+		seen[gameID] = struct{}{}
 	}
-	return client.GamePaths.Reorder(ctx, games)
+	return client.GamePaths.Reorder(ctx, gameIDs)
 }
 
-func (m *Mod) SetNteLauncherPath(ctx context.Context, game, launcherPath string) error {
+func (m *Mod) SetNteLauncherPath(ctx context.Context, gameID, launcherPath string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
@@ -848,22 +941,22 @@ func (m *Mod) SetNteLauncherPath(ctx context.Context, game, launcherPath string)
 	if err != nil {
 		return infra.WithCause(errors.New("INVALID_LAUNCHER_PATH"), err)
 	}
-	row, err := client.GamePaths.GetByGame(ctx, game)
+	row, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return err
 	}
 	if row == nil {
-		return fmt.Errorf("game %s not found", game)
+		return ErrGameNotFound
 	}
-	return client.GamePaths.SetNteLauncherPath(ctx, game, launcherPath)
+	return client.GamePaths.SetNteLauncherPath(ctx, gameID, launcherPath)
 }
 
-func (m *Mod) StartNteLauncher(ctx context.Context, game string) error {
+func (m *Mod) StartNteLauncher(ctx context.Context, gameID string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
 	}
-	row, err := client.GamePaths.GetByGame(ctx, game)
+	row, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return err
 	}
@@ -879,7 +972,7 @@ func (m *Mod) StartNteLauncher(ctx context.Context, game string) error {
 
 func (m *Mod) GetCharacters(
 	ctx context.Context,
-	game string,
+	gameID string,
 	searchModPreview *bool,
 ) ([]FolderGroup, error) {
 	diagnostics := &infra.DiagnosticBatch{}
@@ -889,12 +982,15 @@ func (m *Mod) GetCharacters(
 	if err != nil {
 		return nil, err
 	}
-	row, err := client.GamePaths.GetByGame(ctx, game)
+	row, err := client.GamePaths.GetByID(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
-	if row == nil || row.ModFolderPath == "" {
-		return nil, fmt.Errorf("no mod folder path set for %s", game)
+	if row == nil {
+		return nil, ErrGameNotFound
+	}
+	if row.ModFolderPath == "" {
+		return nil, fmt.Errorf("no mod folder path set for %s", row.Game)
 	}
 	search, err := m.resolvePreviewSetting(ctx, searchModPreview)
 	if err != nil {
@@ -946,7 +1042,7 @@ func (m *Mod) newGroupListing(
 	reports ...func(error),
 ) groupListing {
 	listing := groupListing{game: game, search: search}
-	classifications, err := client.ModClassifications.ListByGame(ctx, game.Game)
+	classifications, err := client.ModClassifications.ListByGame(ctx, game.ID)
 	if err != nil {
 		reportScanFailure(fmt.Errorf("list classifications for %s: %w", game.Game, err), reports)
 	}
@@ -1052,12 +1148,21 @@ func (m *Mod) GetLastGame(ctx context.Context) (*string, error) {
 	return m.settingValue(ctx, lastGameSettingKey)
 }
 
-func (m *Mod) SetLastGame(ctx context.Context, game string) error {
+func (m *Mod) SetLastGame(ctx context.Context, gameID string) error {
 	client, err := m.requireClient()
 	if err != nil {
 		return err
 	}
-	return client.Settings.Upsert(ctx, lastGameSettingKey, lo.ToPtr(game))
+	if gameID != "" {
+		row, err := client.GamePaths.GetByID(ctx, gameID)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return ErrGameNotFound
+		}
+	}
+	return client.Settings.Upsert(ctx, lastGameSettingKey, &gameID)
 }
 
 func (m *Mod) GetExpandedGroups(ctx context.Context) ([]string, error) {

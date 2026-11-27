@@ -246,7 +246,7 @@ func (s *Shell) settingChanged(key string, value any) {
 	}
 	// The mod service sorts preset lists by this policy when it returns them.
 	if key == setting.KeyGeneralNameSortPolicy {
-		if s.mods.game != "" {
+		if s.mods.gameID != "" {
 			s.loadPresets()
 		}
 		s.loadTogglePresets()

@@ -170,6 +170,8 @@ type Backup struct {
 	// counts from when the startup catch-up is off.
 	startedAt time.Time
 
+	exclusionMu sync.Mutex
+
 	watchMu    sync.Mutex
 	watchRoots []string
 	watch      interface{ Close() error }
@@ -270,19 +272,38 @@ func (b *Backup) GetOverview(ctx context.Context) (Overview, error) {
 }
 
 // SetGameExcluded includes a registered game in the backup or leaves it out.
-func (b *Backup) SetGameExcluded(ctx context.Context, game string, excluded bool) error {
-	current, err := b.excludedGames(ctx)
+func (b *Backup) SetGameExcluded(ctx context.Context, gameID string, excluded bool) error {
+	client, err := b.requireClient()
 	if err != nil {
 		return err
 	}
+	games, err := client.GamePaths.List(ctx)
+	if err != nil {
+		return err
+	}
+	registered := make(map[string]struct{}, len(games))
+	for _, game := range games {
+		registered[game.ID] = struct{}{}
+	}
+	if _, ok := registered[gameID]; !ok {
+		return db.ErrGameNotFound
+	}
+
+	b.exclusionMu.Lock()
+	defer b.exclusionMu.Unlock()
+	current, err := b.excludedGameIDs(ctx)
+	if err != nil {
+		return err
+	}
+	// Entries of removed games are dropped here, as removing a game does not edit this setting.
 	next := make([]string, 0, len(current)+1)
 	for _, item := range current {
-		if item != game {
+		if _, ok := registered[item]; ok && item != gameID {
 			next = append(next, item)
 		}
 	}
 	if excluded {
-		next = append(next, game)
+		next = append(next, gameID)
 	}
 	return b.opts.Settings.Set(ctx, setting.KeyBackupExcludedGames, next)
 }
@@ -366,20 +387,20 @@ func (b *Backup) targets(ctx context.Context, client *db.Client) ([]Target, erro
 	if err != nil {
 		return nil, err
 	}
-	excluded, err := b.excludedGames(ctx)
+	excluded, err := b.excludedGameIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return listTargets(games, custom, excluded)
 }
 
-func (b *Backup) excludedGames(ctx context.Context) ([]string, error) {
+func (b *Backup) excludedGameIDs(ctx context.Context) ([]string, error) {
 	value, err := b.opts.Settings.Get(ctx, setting.KeyBackupExcludedGames)
 	if err != nil {
 		return nil, err
 	}
-	games, _ := value.([]string)
-	return games, nil
+	ids, _ := value.([]string)
+	return ids, nil
 }
 
 func (b *Backup) settingBool(ctx context.Context, key string) bool {

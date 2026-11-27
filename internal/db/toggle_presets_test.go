@@ -25,7 +25,10 @@ func TestModTogglePresetsReplaceModRollsBackCollision(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, game := range []string{"GI", "HSR"} {
-				if err := client.GamePaths.Insert(ctx, GamePathRow{Game: game, ModFolderPath: game}); err != nil {
+				if err := client.GamePaths.Insert(
+					ctx,
+					GamePathRow{ID: game, Game: game, ModFolderPath: game},
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -363,7 +366,7 @@ func newTogglePresetTestClient(t *testing.T) (*Client, string) {
 		t.Fatal(err)
 	}
 	for _, game := range []string{"GI", "HSR"} {
-		if err := client.GamePaths.Insert(ctx, GamePathRow{Game: game, ModFolderPath: game}); err != nil {
+		if err := client.GamePaths.Insert(ctx, GamePathRow{ID: game, Game: game, ModFolderPath: game}); err != nil {
 			t.Fatal(err)
 		}
 	}

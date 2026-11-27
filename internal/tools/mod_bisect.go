@@ -21,12 +21,16 @@ func (t *Tools) BisectGetState() *BisectSnapshot {
 	return t.bisect.BisectGetState()
 }
 
-func (t *Tools) BisectValidateExcludePath(ctx context.Context, game, inputPath string) (string, error) {
-	return t.bisect.BisectValidateExcludePath(ctx, game, inputPath)
+func (t *Tools) BisectGameIDByName(ctx context.Context, name string) (string, error) {
+	return t.bisect.BisectGameIDByName(ctx, name)
 }
 
-func (t *Tools) BisectStart(ctx context.Context, game string, excludePaths []string) (BisectSnapshot, error) {
-	return t.bisect.BisectStart(ctx, game, excludePaths)
+func (t *Tools) BisectValidateExcludePath(ctx context.Context, gameID, inputPath string) (string, error) {
+	return t.bisect.BisectValidateExcludePath(ctx, gameID, inputPath)
+}
+
+func (t *Tools) BisectStart(ctx context.Context, gameID string, excludePaths []string) (BisectSnapshot, error) {
+	return t.bisect.BisectStart(ctx, gameID, excludePaths)
 }
 
 func (t *Tools) BisectRespond(ctx context.Context, version uint64, fixed bool) (BisectSnapshot, error) {
@@ -45,8 +49,8 @@ func (t *Tools) BisectCancel(ctx context.Context) (BisectSnapshot, error) {
 	return t.bisect.BisectCancel(ctx)
 }
 
-func (t *Tools) BisectRecover(ctx context.Context, game string) (int, error) {
-	return t.bisect.BisectRecover(ctx, game)
+func (t *Tools) BisectRecover(ctx context.Context, gameID string) (int, error) {
+	return t.bisect.BisectRecover(ctx, gameID)
 }
 
 // RecoverBisects restores interrupted sessions for every configured non-NTE game.

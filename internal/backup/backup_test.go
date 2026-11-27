@@ -25,6 +25,11 @@ import (
 	"nahida.live/desktop/internal/setting"
 )
 
+const (
+	testGameID        = "76a4de35-9261-4cc5-9f07-b0a753f38932"
+	testGameTargetKey = "game:" + testGameID
+)
+
 func TestIncludedTargets(t *testing.T) {
 	t.Parallel()
 
@@ -40,14 +45,21 @@ func TestIncludedTargets(t *testing.T) {
 
 	game := "GI"
 	targets := []Target{
-		{ID: "game:GI", Kind: TargetKindGame, Game: &game, Label: "GI", Path: mods},
+		{
+			ID:     testGameTargetKey,
+			Kind:   TargetKindGame,
+			GameID: lo.ToPtr(testGameID),
+			Game:   &game,
+			Label:  "GI",
+			Path:   mods,
+		},
 		{ID: "nested", Kind: TargetKindCustom, Label: "Nahida", Path: nested},
 		{ID: "same", Kind: TargetKindCustom, Label: "Mods again", Path: strings.ToUpper(mods)},
 		{ID: "excluded", Kind: TargetKindCustom, Label: "Other", Path: other, Excluded: true},
 		{ID: "missing", Kind: TargetKindCustom, Label: "Gone", Path: filepath.Join(root, "gone"), Missing: true},
 	}
 	included := includedTargets(targets)
-	if len(included) != 1 || included[0].ID != "game:GI" {
+	if len(included) != 1 || included[0].ID != testGameTargetKey {
 		t.Fatalf("included = %+v", included)
 	}
 }
@@ -55,18 +67,19 @@ func TestIncludedTargets(t *testing.T) {
 func TestListTargetsReturnsStatErrors(t *testing.T) {
 	t.Parallel()
 	missing := filepath.Join(t.TempDir(), "missing")
-	targets, err := listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: missing}}, nil, nil)
+	targets, err := listTargets([]db.GamePathRow{{ID: testGameID, Game: "GI", ModFolderPath: missing}}, nil, nil)
 	if err != nil || len(targets) != 1 || !targets[0].Missing {
 		t.Fatalf("missing target = %+v, error = %v", targets, err)
 	}
 
 	path := string([]byte{'b', 'a', 'd', 0, 'p', 'a', 't', 'h'})
-	_, err = listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: path}}, nil, nil)
+	game := db.GamePathRow{ID: testGameID, Game: "GI", ModFolderPath: path}
+	_, err = listTargets([]db.GamePathRow{game}, nil, nil)
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stat error = %v, want a non-missing error", err)
 	}
 
-	targets, err = listTargets([]db.GamePathRow{{Game: "GI", ModFolderPath: path}}, nil, []string{"GI"})
+	targets, err = listTargets([]db.GamePathRow{game}, nil, []string{testGameID})
 	if err != nil || len(targets) != 1 || !targets[0].Excluded {
 		t.Fatalf("excluded target = %+v, error = %v", targets, err)
 	}
@@ -179,8 +192,16 @@ func TestHashFilesReusesTheCache(t *testing.T) {
 func TestManifestDigestIgnoresOrder(t *testing.T) {
 	t.Parallel()
 
-	game := "GI"
-	targets := []Target{{Kind: TargetKindGame, Game: &game, Path: `D:\GI`}, {Kind: TargetKindCustom, Path: `D:\Extra`}}
+	targets := []Target{
+		{
+			ID:     testGameTargetKey,
+			Kind:   TargetKindGame,
+			GameID: lo.ToPtr(testGameID),
+			Game:   lo.ToPtr("GI"),
+			Path:   `D:\GI`,
+		},
+		{Kind: TargetKindCustom, Path: `D:\Extra`},
+	}
 	files := []scannedFile{
 		{target: 0, relPath: "a.ini", sha256: "1"},
 		{target: 1, relPath: "b.ini", sha256: "2"},
@@ -574,7 +595,10 @@ func TestRunKeepsTheBaseOfAFileThatVanishesBeforeHash(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "a.ini")
 	writeFile(t, path, "a")
-	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+	if err := client.GamePaths.Insert(
+		t.Context(),
+		db.GamePathRow{ID: testGameID, Game: "GI", ModFolderPath: root},
+	); err != nil {
 		t.Fatal(err)
 	}
 	remote := &fakeRemote{}
@@ -600,7 +624,7 @@ func TestRunKeepsTheBaseOfAFileThatVanishesBeforeHash(t *testing.T) {
 		scanSkipped(remote, "unreadable") != 1 {
 		t.Fatalf("result=%+v uploaded=%+v deleted=%+v", result, remote.uploaded, remote.deleted)
 	}
-	if remote.files["game:GI"]["a.ini"] == "" {
+	if remote.files[testGameTargetKey]["a.ini"] == "" {
 		t.Fatalf("the unreadable file left the backup: %v", remote.files)
 	}
 	rows, err := client.BackupCommitted.All(t.Context())
@@ -665,11 +689,16 @@ func TestRestoreRemovesItsOutputWhenItFails(t *testing.T) {
 	t.Parallel()
 	client := testClient(t)
 	remote := &fakeRemote{files: map[string]map[string]string{
-		"game:GI": {"a.ini": strings.Repeat("0", 64)},
+		testGameTargetKey: {"a.ini": strings.Repeat("0", 64)},
 	}}
 	backup := testBackup(t, client, remote)
 	destination := filepath.Join(t.TempDir(), "restore")
-	if err := backup.Restore(t.Context(), "snapshot-1", []string{fakeTargetID("game:GI")}, destination); err != nil {
+	if err := backup.Restore(
+		t.Context(),
+		"snapshot-1",
+		[]string{fakeTargetID(testGameTargetKey)},
+		destination,
+	); err != nil {
 		t.Fatal(err)
 	}
 	backup.runs.Wait()
@@ -685,11 +714,16 @@ func TestRestoreWaitsForAFileThatIsStillStoring(t *testing.T) {
 	sum := sha256.Sum256([]byte("x"))
 	remote := &fakeRemote{
 		storing: 2,
-		files:   map[string]map[string]string{"game:GI": {"a.ini": hex.EncodeToString(sum[:])}},
+		files:   map[string]map[string]string{testGameTargetKey: {"a.ini": hex.EncodeToString(sum[:])}},
 	}
 	backup := testBackup(t, client, remote)
 	destination := filepath.Join(t.TempDir(), "restore")
-	if err := backup.Restore(t.Context(), "snapshot-1", []string{fakeTargetID("game:GI")}, destination); err != nil {
+	if err := backup.Restore(
+		t.Context(),
+		"snapshot-1",
+		[]string{fakeTargetID(testGameTargetKey)},
+		destination,
+	); err != nil {
 		t.Fatal(err)
 	}
 	backup.runs.Wait()
@@ -768,14 +802,18 @@ func TestRunPlansCommittedRowsWithoutMetadata(t *testing.T) {
 	}
 }
 
-func TestRunTakesTheBaseFromTheServer(t *testing.T) {
+func TestRunTakesTheLegacyBaseForARenamedGame(t *testing.T) {
 	t.Parallel()
 
 	client := testClient(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.ini"), "a")
 	writeFile(t, filepath.Join(root, "b.ini"), "b")
-	if err := client.GamePaths.Insert(t.Context(), db.GamePathRow{Game: "GI", ModFolderPath: root}); err != nil {
+	game := db.GamePathRow{ID: testGameID, Game: "GI", LegacyName: lo.ToPtr("GI"), ModFolderPath: root}
+	if err := client.GamePaths.Insert(t.Context(), game); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Rename(t.Context(), game.ID, "Renamed"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -807,7 +845,45 @@ func TestRunTakesTheBaseFromTheServer(t *testing.T) {
 		len(remote.deleted) != 1 || remote.deleted[0].RelPath != "gone.ini" {
 		t.Fatalf("sent %+v and removed %+v", remote.uploaded, remote.deleted)
 	}
+	if !slices.Equal(remote.pending.targets, []fakeBackupTarget{{Key: "game:GI", Game: "Renamed", Label: "Renamed"}}) {
+		t.Fatalf("snapshot targets = %+v", remote.pending.targets)
+	}
 	requireCommitted(t, client, backup, remote)
+}
+
+func TestRenameKeepsGameBackupExclusionAndTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	client := testClient(t)
+	backup := testBackup(t, client, &fakeRemote{})
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{
+		ID: testGameID, Game: "GI", ModFolderPath: t.TempDir(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := backup.SetGameExcluded(ctx, testGameID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Rename(ctx, testGameID, "Renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.GamePaths.Insert(ctx, db.GamePathRow{Game: "GI", ModFolderPath: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := testBackup(t, client, &fakeRemote{}).targets(ctx, client)
+	if err != nil || len(targets) != 2 {
+		t.Fatalf("targets = %+v, %v", targets, err)
+	}
+	renamed, reused := targets[0], targets[1]
+	if renamed.ID != testGameTargetKey || lo.FromPtr(renamed.GameID) != testGameID ||
+		lo.FromPtr(renamed.Game) != "Renamed" || renamed.Label != "Renamed" || !renamed.Excluded {
+		t.Fatalf("renamed target = %+v", renamed)
+	}
+	if reused.ID == renamed.ID || reused.Label != "GI" || reused.Excluded {
+		t.Fatalf("target reusing the old display name = %+v", reused)
+	}
 }
 
 func TestRunForgetsATargetLeftOut(t *testing.T) {
@@ -1107,10 +1183,16 @@ type fakeFileMetadata struct {
 
 // fakePending is the snapshot a run is writing.
 type fakePending struct {
-	targets []string
+	targets []fakeBackupTarget
 	upserts []drive.BackupUploadFile
 	deletes []drive.BackupDeletedFile
 	refused map[string]struct{}
+}
+
+type fakeBackupTarget struct {
+	Key   string `json:"key"`
+	Game  string `json:"game"`
+	Label string `json:"label"`
 }
 
 type failedFile struct {
@@ -1154,19 +1236,16 @@ func (f *fakeRemote) BackupJSON(_ context.Context, method, route string, body, o
 		}
 		raw, _ := json.Marshal(body)
 		var request struct {
-			BaseSnapshotID *string `json:"baseSnapshotId"`
-			Targets        []struct {
-				Key string `json:"key"`
-			} `json:"targets"`
+			BaseSnapshotID *string            `json:"baseSnapshotId"`
+			Targets        []fakeBackupTarget `json:"targets"`
 		}
 		_ = json.Unmarshal(raw, &request)
 		if lo.FromPtr(request.BaseSnapshotID) != f.latest {
 			return &drive.BackupAPIError{Status: http.StatusConflict, Code: "base_mismatch", LatestSnapshotID: f.latest}
 		}
-		f.pending = fakePending{}
+		f.pending = fakePending{targets: request.Targets}
 		ids := make([]string, len(request.Targets))
 		for index, target := range request.Targets {
-			f.pending.targets = append(f.pending.targets, target.Key)
 			ids[index] = fakeTargetID(target.Key)
 		}
 		answer = map[string]any{"snapshotId": fmt.Sprintf("snapshot-%d", f.snapshots+1), "targetIds": ids}
@@ -1248,7 +1327,8 @@ func (f *fakeRemote) commit(commit commitBody) map[string]any {
 		return file.TargetID + "\x00" + file.Path
 	}))
 	next := map[string]map[string]string{}
-	for _, key := range f.pending.targets {
+	for _, target := range f.pending.targets {
+		key := target.Key
 		next[key] = maps.Clone(f.files[key])
 		if next[key] == nil {
 			next[key] = map[string]string{}

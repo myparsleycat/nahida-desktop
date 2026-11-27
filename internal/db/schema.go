@@ -1,9 +1,10 @@
 package db
 
-const AppSchemaVersion = 11
+const AppSchemaVersion = 12
 
 const (
 	SchemaKeyAppVersion                  = "app_schema_version"
+	SchemaKeyGameIDs                     = "game_ids"
 	SchemaKeyGamePathsNTELauncher        = "game_paths_nte_launcher_path"
 	SchemaKeyBlenderMCPDefaultSeeded     = "blender_mcp_default_seeded"
 	SchemaKeyXXMILibsSharedDefault       = "xxmi_libs_shared_default"
@@ -111,7 +112,9 @@ var TableSpecs = []TableSpec{
 	{
 		Name: "game_paths",
 		Columns: []ColumnSpec{
-			{Name: "game", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
+			{Name: "game", Type: TypeText, NotNull: true},
+			{Name: "legacy_name", Type: TypeText},
 			{Name: "modFolderPath", Type: TypeText, NotNull: true},
 			{Name: "importer", Type: TypeText},
 			{Name: "linkedModFolderPath", Type: TypeText},
@@ -120,12 +123,13 @@ var TableSpecs = []TableSpec{
 			{Name: "nteLauncherPath", Type: TypeText},
 			{Name: "order", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
 		},
+		Indexes: []IndexSpec{{Name: "game_paths_game_idx", Columns: []string{"game"}, Unique: true}},
 	},
 	{
 		Name: "mod_presets",
 		Columns: []ColumnSpec{
 			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "game", Type: TypeText, NotNull: true},
+			{Name: "game_id", Type: TypeText, NotNull: true, Aliases: []string{"game"}},
 			{Name: "name", Type: TypeText, NotNull: true},
 			{Name: "description", Type: TypeText},
 			{Name: "item_count", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
@@ -134,13 +138,13 @@ var TableSpecs = []TableSpec{
 			{Name: "version", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("1")},
 		},
 		Indexes: []IndexSpec{
-			{Name: "mod_presets_game_name_idx", Columns: []string{"game", "name"}, Unique: true},
+			{Name: "mod_presets_game_name_idx", Columns: []string{"game_id", "name"}, Unique: true},
 		},
 		ForeignKeys: []ForeignKeySpec{
 			{
-				Columns:    []string{"game"},
+				Columns:    []string{"game_id"},
 				RefTable:   "game_paths",
-				RefColumns: []string{"game"},
+				RefColumns: []string{"id"},
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
 			},
@@ -172,7 +176,7 @@ var TableSpecs = []TableSpec{
 		Name: "mod_toggle_presets",
 		Columns: []ColumnSpec{
 			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "game", Type: TypeText, NotNull: true},
+			{Name: "game_id", Type: TypeText, NotNull: true, Aliases: []string{"game"}},
 			{Name: "mod_key", Type: TypeText, NotNull: true},
 			{Name: "mod_name", Type: TypeText, NotNull: true},
 			{Name: "name", Type: TypeText, NotNull: true},
@@ -182,13 +186,13 @@ var TableSpecs = []TableSpec{
 			{Name: "updated_at", Type: TypeText, NotNull: true, DefaultSQL: sqlDefault("''")},
 		},
 		Indexes: []IndexSpec{
-			{Name: "mod_toggle_presets_mod_name_idx", Columns: []string{"game", "mod_key", "name"}, Unique: true},
+			{Name: "mod_toggle_presets_mod_name_idx", Columns: []string{"game_id", "mod_key", "name"}, Unique: true},
 		},
 		ForeignKeys: []ForeignKeySpec{
 			{
-				Columns:    []string{"game"},
+				Columns:    []string{"game_id"},
 				RefTable:   "game_paths",
-				RefColumns: []string{"game"},
+				RefColumns: []string{"id"},
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
 			},
@@ -198,19 +202,19 @@ var TableSpecs = []TableSpec{
 		Name: "mod_classifications",
 		Columns: []ColumnSpec{
 			{Name: "id", Type: TypeText, PrimaryKey: true, NotNull: true},
-			{Name: "game", Type: TypeText, NotNull: true},
+			{Name: "game_id", Type: TypeText, NotNull: true, Aliases: []string{"game"}},
 			{Name: "name", Type: TypeText, NotNull: true},
 			{Name: "item_order", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0")},
 			{Name: "is_active", Type: TypeInteger, NotNull: true, DefaultSQL: sqlDefault("0"), Boolean: true},
 		},
 		Indexes: []IndexSpec{
-			{Name: "mod_classifications_game_name_idx", Columns: []string{"game", "name"}, Unique: true},
+			{Name: "mod_classifications_game_name_idx", Columns: []string{"game_id", "name"}, Unique: true},
 		},
 		ForeignKeys: []ForeignKeySpec{
 			{
-				Columns:    []string{"game"},
+				Columns:    []string{"game_id"},
 				RefTable:   "game_paths",
-				RefColumns: []string{"game"},
+				RefColumns: []string{"id"},
 				OnDelete:   FKCascade,
 				OnUpdate:   FKNoAction,
 			},
@@ -469,7 +473,9 @@ type AppStateRow struct {
 }
 
 type GamePathRow struct {
+	ID                  string
 	Game                string
+	LegacyName          *string
 	ModFolderPath       string
 	Importer            *string
 	LinkedModFolderPath *string
@@ -481,7 +487,7 @@ type GamePathRow struct {
 
 type ModPresetRow struct {
 	ID          string
-	Game        string
+	GameID      string
 	Name        string
 	Description *string
 	ItemCount   int64
@@ -504,7 +510,7 @@ type ModPresetItemRow struct {
 // a mod-relative INI path to variable names and their values.
 type ModTogglePresetRow struct {
 	ID        string
-	Game      string
+	GameID    string
 	ModKey    string
 	ModName   string
 	Name      string
@@ -516,7 +522,7 @@ type ModTogglePresetRow struct {
 
 type ModClassificationRow struct {
 	ID        string
-	Game      string
+	GameID    string
 	Name      string
 	ItemOrder int64
 	IsActive  bool
