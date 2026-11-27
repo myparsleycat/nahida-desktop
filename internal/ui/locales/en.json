@@ -693,6 +693,12 @@
           "confirm": "Disable and start",
           "keep": "Keep enabled and start"
         },
+        "apmi-game-process": {
+          "title": "Select the Azur Promilia client",
+          "description": "The game folder and Windows records did not identify a single executable.",
+          "confirm": "Save and continue",
+          "quickStart": "In APMI settings, set Game process name to the executable your client uses ({{processes}})."
+        },
         "wwmi-resource-tier": {
           "title": "Select resource quality",
           "description": "Wuthering Waves crashes while loading unless this matches the resources it downloaded. Steam and Epic Games installs use HD. For the official launcher, pick the quality you downloaded, usually HD. You can change it later in the importer settings.",
@@ -3276,6 +3282,7 @@
           "skipPlatformGameLauncherDescription": "Starts the game executable instead of the launcher Steam would open first.",
           "gameProcessExe": "Game process name",
           "gameProcessExeDescription": "The process to wait for and inject into. Leave it empty to detect it from the game folder.",
+          "apmiGameProcessExeDescription": "The game executable APMI waits for. Leave it empty to detect the client from the game folder and Windows records.",
           "logLevel": "Log level",
           "logLevelDescription": "How much 3DMigoto writes to its log file. Info and Debug slow the game down.",
           "logLevelDisabled": "Disabled",

@@ -84,7 +84,7 @@ var importerPackages = map[string]importerPackageSpec{
 		assetFormat: "APMI-PACKAGE-v%s.zip", versionFile: filepath.Join("Core", "APMI", "main.ini"),
 		versionPattern:   importerVersionPattern,
 		publicKey:        apmiPublicKey,
-		gameExeNames:     []string{"AzurPromilia.exe"},
+		gameExeNames:     []string{"AzurPromilia.exe", "AzurPromiliaJP.exe"},
 		manualLaunchOnly: true,
 	},
 }

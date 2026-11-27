@@ -690,6 +690,12 @@
           "confirm": "無効化して起動",
           "keep": "有効のまま起動"
         },
+        "apmi-game-process": {
+          "title": "アズールプロミリアのクライアントを選択",
+          "description": "ゲームフォルダーと Windows の記録から実行ファイルを一つに絞り込めませんでした。",
+          "confirm": "保存して続行",
+          "quickStart": "APMI の設定で、ゲームプロセス名に使用中のクライアントの実行ファイル名（{{processes}}）を入力してください。"
+        },
         "wwmi-resource-tier": {
           "title": "リソース品質を選択",
           "description": "鳴潮は、ダウンロード済みのリソースとこの値が異なると読み込み中にクラッシュします。Steam と Epic Games 版は HD を使用します。公式ランチャーでは実際にダウンロードした品質（通常は HD）を選んでください。後からインポーター設定で変更できます。",
@@ -3230,6 +3236,7 @@
           "skipPlatformGameLauncherDescription": "Steam が最初に開くランチャーの代わりに、ゲームの実行ファイルを起動します。",
           "gameProcessExe": "ゲームのプロセス名",
           "gameProcessExeDescription": "待機して注入する対象のプロセスです。空欄の場合はゲームフォルダーから検出します。",
+          "apmiGameProcessExeDescription": "APMI が起動を待つゲーム実行ファイルです。空欄の場合はゲームフォルダーと Windows の記録からクライアントを検出します。",
           "logLevel": "ログレベル",
           "logLevelDescription": "3DMigoto がログファイルに書き込む量です。Info と Debug はゲームの動作が重くなります。",
           "logLevelDisabled": "無効",

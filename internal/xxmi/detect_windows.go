@@ -40,30 +40,12 @@ func (x *XXMI) DetectGameFolders(ctx context.Context, importer string) ([]GameFo
 			paths[path] = struct{}{}
 		}
 	}
-	for _, source := range []struct {
-		hive registry.Key
-		path string
-	}{
-		{registry.CLASSES_ROOT, `Local Settings\Software\Microsoft\Windows\Shell\MuiCache`},
-		{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched`},
-		{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView`},
-	} {
-		key, err := registry.OpenKey(source.hive, source.path, registry.QUERY_VALUE)
-		if err != nil {
-			continue
-		}
-		names, err := key.ReadValueNames(0)
-		_ = key.Close()
-		if err != nil {
-			continue
-		}
-		for _, name := range names {
-			for _, exe := range append(append([]string(nil), spec.gameExeNames...), spec.processNames...) {
-				if index := strings.Index(strings.ToLower(name), strings.ToLower(exe)); index >= 0 {
-					add(name[:index])
-				}
-			}
-		}
+	registered, err := x.registryGameExecutables(ctx, packageProcessNames(spec))
+	if err != nil {
+		return nil, err
+	}
+	for _, executable := range registered {
+		add(filepath.Dir(executable))
 	}
 	appdata := os.Getenv("APPDATA")
 	if appdata != "" {
@@ -121,6 +103,52 @@ func (x *XXMI) DetectGameFolders(ctx context.Context, importer string) ([]GameFo
 	}
 	slices.SortFunc(results, func(a, b GameFolderCandidate) int { return int(b.ModTime - a.ModTime) })
 	return results, nil
+}
+
+func registryGameExecutablePaths(ctx context.Context, executableNames []string) ([]string, error) {
+	var paths []string
+	for _, source := range []struct {
+		hive registry.Key
+		path string
+	}{
+		{registry.CLASSES_ROOT, `Local Settings\Software\Microsoft\Windows\Shell\MuiCache`},
+		{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched`},
+		{registry.CURRENT_USER, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView`},
+	} {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		key, err := registry.OpenKey(source.hive, source.path, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		names, err := key.ReadValueNames(0)
+		_ = key.Close()
+		if err != nil {
+			continue
+		}
+		for _, name := range names {
+			if path := registryGameExecutablePath(name, executableNames); path != "" {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths, ctx.Err()
+}
+
+func registryGameExecutablePath(value string, executableNames []string) string {
+	path := filepath.Clean(strings.TrimSpace(value))
+	if validateLocalFolder("game executable", path, true) != nil {
+		return ""
+	}
+	name := filepath.Base(path)
+	for _, executable := range executableNames {
+		if strings.EqualFold(name, executable) || strings.EqualFold(name, executable+".FriendlyAppName") ||
+			strings.EqualFold(name, executable+".ApplicationCompany") {
+			return filepath.Join(filepath.Dir(path), executable)
+		}
+	}
+	return ""
 }
 
 func (x *XXMI) ValidateGameFolder(ctx context.Context, importer, path string) (GameFolderCandidate, error) {

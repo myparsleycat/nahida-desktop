@@ -47,6 +47,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	runtimeProvider := ""
 	rollbackState := "not-started"
 	gameExe := ""
+	processName := ""
 	defer func() {
 		if returnErr != nil {
 			if x.eventEmit != nil {
@@ -65,6 +66,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 					"importerFolder":  cfg.ImporterFolder,
 					"gameFolder":      cfg.GameFolder,
 					"gameExe":         gameExe,
+					"gameProcess":     processName,
 					"gameLaunch":      cfg.GameLaunch,
 					"injectionMethod": cfg.InjectionMethod,
 					"packageVersion":  cfg.PackageVersion.Pinned,
@@ -115,6 +117,22 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if d3d11ModeNoticeRequired(key, cfg) {
 		return errD3D11ModeNoticeRequired
 	}
+	if key == "APMI" {
+		processes, err := x.processSnapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("snapshot APMI game processes: %w", err)
+		}
+		if slices.ContainsFunc(
+			cfg.gameProcessNames(key),
+			func(name string) bool { return processes[strings.ToLower(name)] },
+		) {
+			return errors.New("XXMI_GAME_RUNNING")
+		}
+		// The game is resolved again after the pre-launch command, which may change what is installed.
+		if _, err := x.resolveAPMIGame(ctx, cfg); err != nil {
+			return err
+		}
+	}
 
 	// Like the reference launcher, the pre-launch command runs before any other launch step, so it can
 	// prepare drives, folders, or mods that the later steps read.
@@ -162,11 +180,6 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return err
 	}
-	if migotoDLLUsed {
-		if err := os.MkdirAll(filepath.Join(cfg.ImporterFolder, "Mods"), 0o700); err != nil {
-			return err
-		}
-	}
 	packageSpec, _ := lookupImporterPackage(key)
 	progress("resolve-game")
 	usesPlatform := cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic"
@@ -183,31 +196,57 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if usesPlatform {
 		findGame = findStoreGameFolder
 	}
-	game, err := findGame(ctx, key, cfg.GameFolder, packageSpec)
-	if err == nil {
-		cfg.GameFolder = game.Path
-		err = ValidateImporterSettings(key, cfg)
-	}
-	switch {
-	case err == nil:
-		gameExe = game.ExePath
-	case cfg.GameLaunch == "Direct":
-		return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
-	default:
-		// Only a direct launch runs the executable from the game folder. A store install with an
-		// unexpected layout, or one that overlaps the importer folder, still launches; it just
-		// skips the steps that edit game files.
-		x.log.Warn(map[string]any{
-			"importer": key, "stage": stage, "gameLaunch": cfg.GameLaunch, "gameFolder": cfg.GameFolder,
-			"error": err.Error(),
-		}, "XXMI.StartGame")
+	if key == "APMI" {
+		target, err := x.resolveAPMIGame(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		gameExe, processName = target.executable, target.processName
 		cfg.GameFolder = ""
+		if gameExe != "" {
+			cfg.GameFolder = filepath.Dir(gameExe)
+			// APMI is started by hand, so a game folder that overlaps the importer folder only skips the
+			// steps that edit game files.
+			if err := ValidateImporterSettings(key, cfg); err != nil {
+				x.log.Warn(map[string]any{
+					"importer": key, "stage": stage, "gameLaunch": cfg.GameLaunch, "gameFolder": cfg.GameFolder,
+					"gameExe": gameExe, "error": err.Error(),
+				}, "XXMI.StartGame")
+				cfg.GameFolder, gameExe = "", ""
+			}
+		}
+	} else {
+		game, err := findGame(ctx, key, cfg.GameFolder, packageSpec)
+		if err == nil {
+			cfg.GameFolder = game.Path
+			err = ValidateImporterSettings(key, cfg)
+		}
+		switch {
+		case err == nil:
+			gameExe = game.ExePath
+		case cfg.GameLaunch == "Direct":
+			return fmt.Errorf("XXMI_GAME_FOLDER_NOT_CONFIGURED: %w", err)
+		default:
+			// Only a direct launch runs the executable from the game folder. A store install with an
+			// unexpected layout, or one that overlaps the importer folder, still launches; it just
+			// skips the steps that edit game files.
+			x.log.Warn(map[string]any{
+				"importer": key, "stage": stage, "gameLaunch": cfg.GameLaunch, "gameFolder": cfg.GameFolder,
+				"error": err.Error(),
+			}, "XXMI.StartGame")
+			cfg.GameFolder = ""
+		}
+		processName = launchProcessName(cfg, packageSpec, gameExe)
 	}
 	parentExe, err := x.efmiParentExe(key, cfg, gameExe)
 	if err != nil {
 		return err
 	}
-	processName := launchProcessName(cfg, packageSpec, gameExe)
+	if migotoDLLUsed {
+		if err := os.MkdirAll(filepath.Join(cfg.ImporterFolder, "Mods"), 0o700); err != nil {
+			return err
+		}
+	}
 	progress("auto-update")
 	if err := x.autoUpdateForLaunch(ctx, key, lease); err != nil {
 		if infra.IsCancellationError(err) {

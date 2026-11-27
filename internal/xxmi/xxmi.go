@@ -183,6 +183,8 @@ type XXMI struct {
 	importerMaintenance func(context.Context) (func([]ImportedImporter) error, error)
 	// findProcess queries running games; tests replace it to stay independent of the host process list.
 	findProcess func(context.Context, string) (int, error)
+	// registryGameExecutables reads Windows shell records for game executables.
+	registryGameExecutables func(context.Context, []string) ([]string, error)
 	// crashEvents reads the Windows crash records of the game since a session started; tests replace it so
 	// the host event log is not read.
 	crashEvents func(ctx context.Context, since time.Time, executables []string) (string, int, error)
@@ -232,6 +234,7 @@ func NewWithOptions(opts Options) *XXMI {
 	}
 	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
+	x.registryGameExecutables = registryGameExecutablePaths
 	x.crashEvents = queryCrashEvents
 	x.killExecutableProcess = killProcessForExecutable
 	x.launchSettings = x

@@ -22,6 +22,7 @@ import (
 	"nahida.live/desktop/internal/selfupdate"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/ui"
+	"nahida.live/desktop/internal/xxmi"
 )
 
 func Run(icon []byte) (runErr error) {
@@ -334,7 +335,12 @@ func (rt *runtime) quickStart(key string, first bool) {
 		rt.window.Focus()
 		// The importer settings that a failed launch usually needs live on the XXMI screen.
 		rt.emit("fn:navi", string(ui.RouteXXMI))
-		dialog.Message(nil, "Nahida Desktop", err.Error(), dialog.MessageError, dialog.ButtonsOK)
+		message := err.Error()
+		if errors.Is(err, xxmi.ErrAPMIGameProcessSelectionRequired) {
+			message = ui.T("page.mod.dialog.apmi-game-process.quickStart",
+				"processes", strings.Join(xxmi.APMIGameProcessNames(), " / "))
+		}
+		dialog.Message(nil, "Nahida Desktop", message, dialog.MessageError, dialog.ButtonsOK)
 		return
 	}
 	if first {

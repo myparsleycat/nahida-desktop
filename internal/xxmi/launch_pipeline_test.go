@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -17,6 +18,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/platform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -48,6 +50,119 @@ func (h *recordingLaunchHelper) ApplyFiles(ctx context.Context, ops []elevated.F
 }
 
 func (*recordingLaunchHelper) HelperImageName() string { return "nahida-elevated-helper-test.exe" }
+
+func TestAPMIManualLaunchUsesJapaneseExecutable(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	root := t.TempDir()
+	cfg, err := DefaultImporterConfig("APMI", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const process = "AzurPromiliaJP.exe"
+	cfg.Enabled = true
+	cfg.Mode, cfg.LegacyRuntime = RuntimeLegacy, "abcdef123456"
+	cfg.GameFolder = filepath.Join(root, "Game Install")
+	ini := filepath.Join(cfg.ImporterFolder, "d3dx.ini")
+	writeTestFile(
+		t,
+		ini,
+		[]byte("[Loader]\ntarget = AzurPromilia.exe\ncustom = keep\n[Rendering]\ncache_shaders = 1\n"),
+	)
+	writeTestFile(t, filepath.Join(cfg.ImporterFolder, "Core", "APMI", "main.ini"), []byte("global $version = 1.23\n"))
+	game := filepath.Join(cfg.GameFolder, process)
+	writeTestFile(t, game, nil)
+
+	helper := &recordingLaunchHelper{}
+	var stagesMu sync.Mutex
+	var stages []string
+	service := NewWithOptions(Options{Elevated: helper, EventEmit: func(name string, data ...any) {
+		if name != "xxmi:launch-progress" || len(data) == 0 {
+			return
+		}
+		if payload, ok := data[0].(map[string]any); ok {
+			if stage, ok := payload["stage"].(string); ok {
+				stagesMu.Lock()
+				stages = append(stages, stage)
+				stagesMu.Unlock()
+			}
+		}
+	}})
+	cacheRoot := useTestAppData(t, service)
+	client := newXXMITestClient(t)
+	service.UseClient(client)
+	useBuiltinLauncher(t, service)
+	service.findProcess = noGameProcess
+	service.processSnapshot = func(context.Context) (map[string]bool, error) { return nil, nil }
+	service.registryGameExecutables = func(context.Context, []string) ([]string, error) { return nil, nil }
+	service.launchSettings = &fakeLaunch{}
+	disabled := "false"
+	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(cacheRoot, "packages", "legacy-3dmigoto", cfg.LegacyRuntime)
+	source := LegacyRuntimeSource{ZipSHA256: "test zip", Files: map[string]string{}}
+	for name, content := range map[string]string{"3DMigoto Loader.exe": "loader", "d3d11.dll": "legacy DLL"} {
+		writeTestFile(t, filepath.Join(legacy, name), []byte(content))
+		source.Files[name] = hashBytes([]byte(content))
+	}
+	data, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(legacy, "source.json"), data)
+	if err := service.SaveImporterConfig(ctx, "APMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.StartGame(ctx, "APMI"); err != nil {
+		t.Fatal(err)
+	}
+	if helper.calls != 1 || helper.spec.StartMethod != "Manual" || helper.spec.ProcessName != process ||
+		!platform.SamePathFold(helper.spec.StartExe, game) {
+		t.Fatalf("launch calls = %d, spec = %+v; want manual launch for %s", helper.calls, helper.spec, game)
+	}
+	updated, err := os.ReadFile(ini)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := parseINI(updated)
+	if target, _ := doc.Option("Loader", "target"); target != process {
+		t.Fatalf("INI target = %q; want %s", target, process)
+	}
+	if custom, _ := doc.Option("Loader", "custom"); custom != "keep" {
+		t.Fatalf("INI custom option = %q; want keep", custom)
+	}
+
+	writeTestFile(t, filepath.Join(cfg.GameFolder, "AzurPromilia.exe"), nil)
+	stagesMu.Lock()
+	stages = nil
+	stagesMu.Unlock()
+	if err := service.StartGame(ctx, "APMI"); !errors.Is(err, ErrAPMIGameProcessSelectionRequired) {
+		t.Fatalf("ambiguous launch error = %v; want client selection", err)
+	}
+	// Answering the question relaunches, so asking it after the pre-launch command would run that command twice.
+	stagesMu.Lock()
+	ranPreLaunch := slices.Contains(stages, "pre-launch")
+	stagesMu.Unlock()
+	if ranPreLaunch {
+		t.Fatal("client selection was required after the pre-launch stage")
+	}
+	for _, name := range []string{"azurpromilia.exe", "azurpromiliajp.exe"} {
+		service.processSnapshot = func(context.Context) (map[string]bool, error) {
+			return map[string]bool{name: true}, nil
+		}
+		if err := service.StartGame(ctx, "APMI"); err == nil || err.Error() != "XXMI_GAME_RUNNING" {
+			t.Fatalf("launch with %s running: %v; want XXMI_GAME_RUNNING", name, err)
+		}
+	}
+	afterRejectedLaunches, err := os.ReadFile(ini)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if helper.calls != 1 || !bytes.Equal(afterRejectedLaunches, updated) {
+		t.Fatalf("rejected launch changed the INI or reached the helper, calls = %d", helper.calls)
+	}
+}
 
 func TestLegacyLaunchPipelineWithTemporaryRuntime(t *testing.T) {
 	for _, restore := range []string{"unused", "restored", "failed"} {

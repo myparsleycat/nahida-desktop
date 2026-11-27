@@ -27,8 +27,10 @@ const (
 	blockerLogging       = "XXMI_LOGGING_ENABLED"
 	blockerShaderCache   = "XXMI_SHADER_CACHE_DISABLED"
 	blockerGameFolder    = "XXMI_GAME_FOLDER_NOT_CONFIGURED"
+	blockerAPMIProcess   = "APMI_GAME_PROCESS_SELECTION_REQUIRED"
 	blockerRuntime       = "XXMI_RUNTIME_CORRUPTED"
 	dialogGameFolder     = "game-folder"
+	dialogAPMIProcess    = "apmi-game-process"
 	dialogRuntimeRepair  = "runtime-repair"
 	dialogResourceTier   = "wwmi-resource-tier"
 	dialogD3D11Mode      = "d3d11-mode"
@@ -81,6 +83,7 @@ type launchGuard struct {
 	keeping      bool
 	runtimeError string
 	gameFolder   string
+	gameProcess  string
 	resourceTier string
 	detected     *[]xxmi.GameFolderCandidate
 	// generation drops a confirmation still running when its dialog was dismissed, so it does not launch.
@@ -137,6 +140,8 @@ func launchDialog(message string) string {
 	switch {
 	case strings.Contains(message, blockerGameFolder):
 		return dialogGameFolder
+	case strings.Contains(message, blockerAPMIProcess):
+		return dialogAPMIProcess
 	case strings.Contains(message, blockerRuntime):
 		return dialogRuntimeRepair
 	case strings.Contains(message, blockerResourceTier):
@@ -276,6 +281,7 @@ func (g *launchGuard) closeDialog() {
 	g.generation++
 	g.confirming, g.keeping = false, false
 	g.importer, g.runtimeError, g.gameFolder = "", "", ""
+	g.gameProcess = ""
 	g.resourceTier = "HD"
 	g.detected = nil
 }
@@ -288,14 +294,14 @@ func (s *Shell) confirmBlocker() {
 	if g.importer == "" || g.confirming {
 		return
 	}
-	importer, dialog, folder, tier := g.importer, g.dialog, g.gameFolder, g.resourceTier
+	importer, dialog, folder, process, tier := g.importer, g.dialog, g.gameFolder, g.gameProcess, g.resourceTier
 	options := g.options
 	g.generation++
 	generation := g.generation
 	g.confirming = true
 	s.background(func(ctx context.Context) {
 		var warnings []string
-		err := s.applyBlockerFix(ctx, importer, dialog, folder, tier, options, &warnings)
+		err := s.applyBlockerFix(ctx, importer, dialog, folder, process, tier, options, &warnings)
 		fairy.Go(func() {
 			if g.generation != generation {
 				return
@@ -316,9 +322,9 @@ func (s *Shell) confirmBlocker() {
 				s.xxmiFail(err, "launch-guard."+dialog, map[string]any{"importer": importer}, "")
 				return
 			}
-			g.importer = ""
+			g.importer, g.gameProcess = "", ""
 			if dialog == dialogResourceTier || dialog == dialogD3D11Mode || dialog == dialogLogging ||
-				dialog == dialogShaderCache {
+				dialog == dialogShaderCache || dialog == dialogAPMIProcess {
 				s.launch(importer, options)
 				return
 			}
@@ -336,7 +342,7 @@ func (s *Shell) confirmBlocker() {
 	})
 }
 
-func (s *Shell) applyBlockerFix(ctx context.Context, importer, dialog, folder, tier string,
+func (s *Shell) applyBlockerFix(ctx context.Context, importer, dialog, folder, process, tier string,
 	options xxmi.LaunchOptions, warnings *[]string,
 ) error {
 	x := s.deps.XXMI
@@ -362,6 +368,14 @@ func (s *Shell) applyBlockerFix(ctx context.Context, importer, dialog, folder, t
 		}
 		return update(func(config *xxmi.ImporterConfig) error {
 			config.GameFolder = folder
+			return nil
+		})
+	case dialogAPMIProcess:
+		if !slices.Contains(xxmi.APMIGameProcessNames(), process) {
+			return xxmi.ErrAPMIGameProcessSelectionRequired
+		}
+		return update(func(config *xxmi.ImporterConfig) error {
+			config.GameProcessExe = process
 			return nil
 		})
 	case dialogWWMIWounded:
@@ -756,6 +770,13 @@ func (s *Shell) blockerDialog(cx *fairy.Cx) {
 			kit.SizeDefault,
 		).
 			AlignSelf(fairy.Start)
+	case dialogAPMIProcess:
+		items := plainItems(xxmi.APMIGameProcessNames()...)
+		for i := range items {
+			items[i].Disabled = g.confirming
+		}
+		body = xxmiButtonGroup(g.gameProcess, "", items, func(value string) { g.gameProcess = value }, kit.SizeDefault).
+			AlignSelf(fairy.Start)
 	}
 
 	var actions []*fairy.El
@@ -785,8 +806,10 @@ func (s *Shell) blockerDialog(cx *fairy.Cx) {
 		actions = append(actions, launchAnyway(T("page.mod.dialog.smooth-motion.ignore"),
 			func(options *xxmi.LaunchOptions) { options.IgnoreSmoothMotion = true }))
 	}
+	confirmDisabled := g.keeping || dialog == dialogGameFolder && strings.TrimSpace(g.gameFolder) == "" ||
+		dialog == dialogAPMIProcess && g.gameProcess == ""
 	actions = append(actions, kit.Button(confirm, s.confirmBlocker, kit.Loading(g.confirming && !g.keeping),
-		kit.Disabled(g.keeping || dialog == dialogGameFolder && strings.TrimSpace(g.gameFolder) == "")))
+		kit.Disabled(confirmDisabled)))
 
 	width := float32(0)
 	if dialog == dialogSmoothMotion || dialog == dialogLaunchBlockers {

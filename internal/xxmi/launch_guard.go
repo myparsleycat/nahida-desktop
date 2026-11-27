@@ -353,13 +353,28 @@ func (x *XXMI) ClearLaunchBlockersWithOptions(ctx context.Context, importer stri
 	if !ok {
 		return errors.New("unknown XXMI importer")
 	}
-	gameExecutable := configuredGameExecutable(cfg.GameFolder, spec.gameExeNames)
-	if importer == "WWMI" && cfg.GameFolder != "" {
+	var gameExecutable string
+	switch {
+	case spec.key == "APMI":
+		target, err := x.resolveAPMIGame(ctx, cfg)
+		if errors.Is(err, ErrAPMIGameProcessSelectionRequired) || infra.IsCancellationError(err) {
+			return err
+		}
+		if err != nil {
+			return x.reportLaunchGuard(err, "clear-launch-blockers", importer, cfg.GameProcessExe)
+		}
+		gameExecutable = target.executable
+		if gameExecutable == "" {
+			gameExecutable = target.processName
+		}
+	case importer == "WWMI" && cfg.GameFolder != "":
 		game, err := x.ValidateGameFolder(ctx, importer, cfg.GameFolder)
 		if err != nil {
 			return x.reportLaunchGuard(err, "clear-launch-blockers", importer, cfg.GameFolder)
 		}
 		gameExecutable = game.ExePath
+	default:
+		gameExecutable = configuredGameExecutable(cfg.GameFolder, spec.gameExeNames)
 	}
 	cfg, _ = withoutReplacedReShadeLibraries(cfg)
 	migotoDLLUsed, err := x.migotoDLLUsed(ctx, cfg)

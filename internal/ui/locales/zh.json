@@ -690,6 +690,12 @@
           "confirm": "禁用并启动",
           "keep": "保持启用并启动"
         },
+        "apmi-game-process": {
+          "title": "选择蓝色星原客户端",
+          "description": "无法根据游戏文件夹和 Windows 记录确定唯一的可执行文件。",
+          "confirm": "保存并继续",
+          "quickStart": "请在 APMI 设置中，将游戏进程名称设为当前客户端的可执行文件名（{{processes}}）。"
+        },
         "wwmi-resource-tier": {
           "title": "选择资源品质",
           "description": "如果此项与已下载的资源不一致，鸣潮会在加载时崩溃。Steam 和 Epic Games 版本使用 HD。使用官方启动器时，请选择实际下载的品质（通常为 HD）。之后可以在导入器设置中更改。",
@@ -3230,6 +3236,7 @@
           "skipPlatformGameLauncherDescription": "启动游戏可执行文件，而不是 Steam 首先打开的启动器。",
           "gameProcessExe": "游戏进程名称",
           "gameProcessExeDescription": "等待并注入的进程。留空时从游戏文件夹中检测。",
+          "apmiGameProcessExeDescription": "APMI 等待启动的游戏可执行文件。留空时会根据游戏文件夹和 Windows 记录检测客户端。",
           "logLevel": "日志级别",
           "logLevelDescription": "3DMigoto 写入日志文件的详细程度。Info 和 Debug 会降低游戏性能。",
           "logLevelDisabled": "禁用",

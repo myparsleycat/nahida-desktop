@@ -104,14 +104,20 @@ func TestBuiltinRunningStateWatchesEveryProcessALaunchCanPick(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	if err := service.client.XXMIImporters.Upsert(t.Context(), "APMI", `{"enabled":true}`); err != nil {
+		t.Fatal(err)
+	}
 
-	for process, want := range map[string]bool{"renamed.exe": true, "endfield.exe": true, "unrelated.exe": false} {
+	for process, want := range map[string]string{
+		"renamed.exe": "EFMI", "endfield.exe": "EFMI", "unrelated.exe": "",
+		"azurpromilia.exe": "APMI", "azurpromiliajp.exe": "APMI",
+	} {
 		service.processSnapshot = func(context.Context) (map[string]bool, error) {
 			return map[string]bool{process: true}, nil
 		}
 		running, err := service.builtinRunningState(t.Context())
-		if err != nil || running["EFMI"] != want {
-			t.Fatalf("%s running = %v, err = %v, want EFMI %t", process, running, err, want)
+		if err != nil || running["EFMI"] != (want == "EFMI") || running["APMI"] != (want == "APMI") {
+			t.Fatalf("%s running = %v, err = %v, want importer %q", process, running, err, want)
 		}
 	}
 }

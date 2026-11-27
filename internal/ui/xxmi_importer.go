@@ -1216,8 +1216,12 @@ func (s *Shell) importerAdvancedTab(ic *importerContext) []*fairy.El {
 				func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { hook.target(c).Wait = on }) }, false).Pad(0)))
 	}
 	if c.GameLaunch != "Direct" {
+		descriptionKey := prefix + "gameProcessExeDescription"
+		if ic.key == "APMI" {
+			descriptionKey = prefix + "apmiGameProcessExeDescription"
+		}
 		commands = append(commands, textRow("xxmi.game-process", T(prefix+"gameProcessExe"),
-			T(prefix+"gameProcessExeDescription"), c.GameProcessExe, func(value string) {
+			T(descriptionKey), c.GameProcessExe, func(value string) {
 				ic.set(func(c *xxmi.ImporterConfig) { c.GameProcessExe = strings.TrimSpace(value) })
 			}))
 	}
