@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -12,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -21,6 +24,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/provenance"
 )
 
 const providerTestPackage = "xxmi-libs-myparsleycat"
@@ -43,6 +47,21 @@ type providerTestRelease struct {
 	companions map[string][]byte
 	// companionDigest is the digest published for every companion; empty publishes the real one.
 	companionDigest string
+	// attestedTag is the tag the attestation of the DLL names; empty names the release's own tag. unattested
+	// publishes no attestation, and unattestedFiles one of the DLL alone, without the d3dx.ini and companions.
+	attestedTag     string
+	unattested      bool
+	unattestedFiles bool
+}
+
+// providerTestAttestation is the bundle the test verifier accepts for a d3d11.dll with data built on tag that
+// attests files with it.
+func providerTestAttestation(data []byte, tag string, files map[string][]byte) json.RawMessage {
+	bundle := hashBytes(data) + " refs/tags/" + tag
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		bundle += " " + name + "=" + hashBytes(files[name])
+	}
+	return json.RawMessage(strconv.Quote(bundle))
 }
 
 func providerTestDigest(data []byte) string {
@@ -73,7 +92,19 @@ func newProviderTestService(
 
 	listed := make([]map[string]any, 0, len(releases))
 	assets := map[string]providerTestRelease{}
+	attestations := map[string][]byte{}
 	for _, release := range releases {
+		if !release.unattested {
+			files := map[string][]byte{}
+			if !release.unattestedFiles {
+				maps.Copy(files, release.companions)
+				if release.ini != nil {
+					files[providerININame] = release.ini
+				}
+			}
+			attestations["sha256:"+hashBytes(release.data)] = []byte(fmt.Sprintf(`{"attestations":[{"bundle":%s}]}`,
+				providerTestAttestation(release.data, cmp.Or(release.attestedTag, release.tag), files)))
+		}
 		entry := map[string]any{"tag_name": release.tag, "assets": []map[string]any{}}
 		if !release.noAsset {
 			listedAssets := []map[string]any{{
@@ -108,7 +139,13 @@ func newProviderTestService(
 	downloads = &atomic.Int32{}
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		status, body := http.StatusOK, []byte(`[]`)
+		_, digest, attestation := strings.Cut(request.URL.Path, "/attestations/")
 		switch {
+		case request.URL.Host == "api.github.com" && attestation:
+			body = attestations[digest]
+			if body == nil {
+				status, body = http.StatusNotFound, []byte(`{"message":"Not Found"}`)
+			}
 		case request.URL.Host == "api.github.com" &&
 			strings.Contains(request.URL.Path, "/myparsleycat/XXMI-Libs-Package-Forked/"):
 			body = releaseList
@@ -139,6 +176,28 @@ func newProviderTestService(
 		// An unconfigured overview looks for an external launcher, which would walk every drive of the host.
 		SearchRoots: func() ([]string, error) { return nil, nil },
 	})
+	service.verifyProvenance = func(_ context.Context, claim provenanceClaim, bundles []json.RawMessage) error {
+		for _, bundle := range bundles {
+			var statement string
+			if err := json.Unmarshal(bundle, &statement); err != nil {
+				return err
+			}
+			fields := strings.Fields(statement)
+			if claim.asset != customDLLName || claim.build.Workflow != ".github/workflows/zip-release.yml" ||
+				len(claim.build.Refs) != 1 || len(fields) < 2 ||
+				fields[0] != hex.EncodeToString(claim.digest) || fields[1] != claim.build.Refs[0] {
+				continue
+			}
+			attested := true
+			for name, digest := range claim.subjects {
+				attested = attested && slices.Contains(fields[2:], name+"="+hex.EncodeToString(digest))
+			}
+			if attested {
+				return nil
+			}
+		}
+		return provenance.ErrUnverified
+	}
 	useTestAppData(t, service)
 	service.UseClient(client)
 	useBuiltinLauncher(t, service)
@@ -402,7 +461,13 @@ func TestProviderInstallRefetchesReleaseListedBeforeItsAssets(t *testing.T) {
 		Status: infra.BackendOnline,
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			body := image
-			if request.URL.Host == "api.github.com" {
+			if request.URL.Host == "api.github.com" && strings.Contains(request.URL.Path, "/attestations/") {
+				body = fmt.Appendf(
+					nil,
+					`{"attestations":[{"bundle":%s}]}`,
+					providerTestAttestation(image, "v0.2.0", nil),
+				)
+			} else if request.URL.Host == "api.github.com" {
 				release := map[string]any{"tag_name": "v0.2.0", "assets": []map[string]any{}}
 				if uploaded {
 					release["assets"] = []map[string]any{{
@@ -869,6 +934,92 @@ func TestCheckUpdatesTracksProviderDLL(t *testing.T) {
 	}
 	if err := service.SkipVersion(ctx, providerTestPackage, "0.2.0"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProviderReleaseRequiresProvenanceFromAttestedRelease(t *testing.T) {
+	ctx := context.Background()
+	images := map[string][]byte{}
+	for _, version := range []string{
+		"1.3.3-nhd.33", "1.3.4-nhd.34", "1.3.4-nhd.35", "1.3.4-nhd.36", "1.3.4-nhd.37-hotfix", "1.3.4-nhd.38",
+		"1.3.4-nhd.39", "1.3.4-nhd.40",
+	} {
+		images[version] = testCustomDLLImage(version)
+	}
+	dxc := testCustomDLLImage("dxc")
+	release := func(version string) providerTestRelease {
+		return providerTestRelease{
+			tag:        "v" + version,
+			data:       images[version],
+			digest:     providerTestDigest(images[version]),
+			companions: map[string][]byte{"dxcompiler.dll": dxc},
+		}
+	}
+	before, unattested, retagged, attested := release("1.3.3-nhd.33"), release("1.3.4-nhd.34"),
+		release("1.3.4-nhd.35"), release("1.3.4-nhd.36")
+	// A version that cannot be ordered against the first attested release is not exempt.
+	unordered := release("1.3.4-nhd.37-hotfix")
+	before.unattested, unattested.unattested, unordered.unattested = true, true, true
+	retagged.attestedTag = "v1.3.4-nhd.34"
+	// Releases before the first one whose attestation covers the companion libraries attest the DLL alone.
+	attested.unattestedFiles = true
+	filesUnattested, filesAttested, refreshed := release("1.3.4-nhd.38"), release("1.3.4-nhd.39"),
+		release("1.3.4-nhd.40")
+	filesUnattested.unattestedFiles, refreshed.unattestedFiles = true, true
+	service, _, _ := newProviderTestService(t, []providerTestRelease{
+		refreshed, filesAttested, filesUnattested, unordered, attested, retagged, unattested, before,
+	})
+
+	// A cache entry that never looked for its companion libraries fetches them in a refresh, which holds them to
+	// the provenance of the cached DLL as a download is.
+	spec, _ := lookupOverlayPackage(providerTestPackage)
+	cached := providerTestCache(t, service, "1.3.4-nhd.40")
+	metadata, err := json.Marshal(providerDLLSource{
+		Version: "1.3.4-nhd.40", Tag: "v1.3.4-nhd.40", SHA256: hashBytes(images["1.3.4-nhd.40"]),
+		Searched: []string{providerININame},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(cached, customDLLName), images["1.3.4-nhd.40"])
+	writeTestFile(t, filepath.Join(cached, providerDLLMetadata), metadata)
+	if err := service.recordProviderHashes(
+		ctx,
+		spec,
+		"1.3.4-nhd.40",
+		hashBytes(images["1.3.4-nhd.40"]),
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	err = service.EnsureLibsProvider(ctx, "myparsleycat", "1.3.4-nhd.40")
+	if !errors.Is(err, provenance.ErrUnverified) {
+		t.Errorf("refresh of unattested companions: err = %v, want unverified", err)
+	}
+	if _, err := os.Stat(filepath.Join(cached, "dxcompiler.dll")); !os.IsNotExist(err) {
+		t.Errorf("refresh cached an unattested companion: stat err = %v", err)
+	}
+
+	for _, test := range []struct {
+		version string
+		ok      bool
+	}{
+		{version: "1.3.4-nhd.34"},
+		{version: "1.3.4-nhd.35"},
+		{version: "1.3.4-nhd.37-hotfix"},
+		{version: "1.3.4-nhd.38"},
+		{version: "1.3.3-nhd.33", ok: true},
+		{version: "1.3.4-nhd.36", ok: true},
+		{version: "1.3.4-nhd.39", ok: true},
+	} {
+		err := service.EnsureLibsProvider(ctx, "myparsleycat", test.version)
+		if test.ok != (err == nil) || err != nil && !errors.Is(err, provenance.ErrUnverified) {
+			t.Errorf("%s: err = %v, want ok = %t", test.version, err, test.ok)
+		}
+		_, statErr := os.Stat(filepath.Join(providerTestCache(t, service, test.version), customDLLName))
+		if test.ok != (statErr == nil) {
+			t.Errorf("%s: cached DLL stat err = %v, want cached = %t", test.version, statErr, test.ok)
+		}
 	}
 }
 

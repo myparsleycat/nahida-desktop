@@ -3,6 +3,7 @@ package xxmi
 import (
 	"cmp"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 )
 
 const (
@@ -77,6 +79,13 @@ type libsProviderSpec struct {
 	// desktopChannelSince is the first provider release whose d3d11.dll reads [Desktop] channel and serves the
 	// named pipe of internal/gamelink; empty when no release does.
 	desktopChannelSince string
+	// attestedSince is the first provider release whose d3d11.dll releaseWorkflow attested when it ran on the
+	// release tag; empty when no release is attested. From it on, the DLL must carry that build provenance.
+	attestedSince string
+	// filesAttestedSince is the first provider release whose attestation of the DLL also covers its d3dx.ini,
+	// dependency manifest and companion libraries; empty when none does.
+	filesAttestedSince string
+	releaseWorkflow    string
 	// legacyCompanions are the libraries a release without a dependency manifest, or with one of a newer schema
 	// than this build reads, may ship for its d3d11.dll to load, as releases did before the manifest.
 	legacyCompanions []string
@@ -160,6 +169,9 @@ var libsProviders = []libsProviderSpec{
 		diagnostics:             true,
 		shaderSamplerSlotsSince: "1.2.2-nhd.13",
 		desktopChannelSince:     "1.2.2-nhd.30",
+		attestedSince:           "1.3.4-nhd.34",
+		filesAttestedSince:      "1.3.4-nhd.37",
+		releaseWorkflow:         ".github/workflows/zip-release.yml",
 		legacyCompanions:        []string{"dxcompiler.dll", "dxil.dll"},
 	},
 }
@@ -1043,6 +1055,9 @@ func (x *XXMI) downloadProviderRelease(
 		return err
 	}
 	files[providerININame], files[providerDependenciesName] = iniHash, manifestHash
+	if err := x.verifyProviderProvenance(ctx, spec, version, release.TagName, hashBytes(data), files); err != nil {
+		return fmt.Errorf("%s %s: %w", spec.overlayPackage, version, err)
+	}
 	metadata, err := json.MarshalIndent(providerDLLSource{
 		Version: version, Tag: release.TagName, SHA256: hashBytes(data), Size: int64(len(data)),
 		FetchedAt: time.Now().UTC().Format(time.RFC3339),
@@ -1390,6 +1405,26 @@ func (x *XXMI) refreshProviderFiles(
 			searched = slices.DeleteFunc(searched, func(name string) bool { return name == providerININame })
 		}
 	}
+	// The files fetched again are held to the provenance of the cached DLL, as a download of the release is.
+	refreshed := map[string]string{}
+	for name, present := range fetched {
+		if present {
+			refreshed[name] = files[name]
+		}
+	}
+	if len(refreshed) > 0 && providerReleaseAttested(spec, version, spec.filesAttestedSince) {
+		if err := x.verifyProviderProvenance(
+			ctx,
+			spec,
+			version,
+			release.TagName,
+			source.SHA256,
+			refreshed,
+		); err != nil {
+			return fmt.Errorf("%s %s: %w", spec.overlayPackage, version, err)
+		}
+	}
+
 	slices.Sort(searched)
 	source.Searched = slices.Compact(searched)
 	metadata, err := json.MarshalIndent(source, "", "  ")
@@ -1705,4 +1740,54 @@ func (x *XXMI) providerDLLBaseVersion(folder string, spec libsProviderSpec) stri
 		return deployed
 	}
 	return x.newestCachedPackageVersion(spec.overlayPackage)
+}
+
+// verifyProviderProvenance checks that the provider's release workflow built the d3d11.dll with the SHA-256 hash
+// dll for the release tagged tag, from spec.attestedSince on, and attested files, by name and hash, with it, from
+// spec.filesAttestedSince on. A file without a hash, which the release does not ship, needs no attestation.
+func (x *XXMI) verifyProviderProvenance(
+	ctx context.Context, spec libsProviderSpec, version, tag, dll string, files map[string]string,
+) error {
+	if !providerReleaseAttested(spec, version, spec.attestedSince) {
+		return nil
+	}
+	digest, err := hex.DecodeString(dll)
+	if err != nil {
+		return fmt.Errorf("invalid %s hash: %w", customDLLName, err)
+	}
+	claim := provenanceClaim{
+		build: provenance.Build{
+			Repository: "https://github.com/" + spec.repo.String(),
+			Workflow:   spec.releaseWorkflow,
+			Refs:       []string{"refs/tags/" + tag},
+		},
+		asset:  customDLLName,
+		digest: digest,
+	}
+	if providerReleaseAttested(spec, version, spec.filesAttestedSince) {
+		claim.subjects = make(map[string][]byte, len(files))
+		for name, hash := range files {
+			if hash == "" {
+				continue
+			}
+			if claim.subjects[name], err = hex.DecodeString(hash); err != nil {
+				return fmt.Errorf("invalid %s hash: %w", name, err)
+			}
+		}
+	}
+
+	bundles, err := x.github.Attestations(ctx, spec.repo, digest)
+	if err != nil {
+		return fmt.Errorf("read attestations: %w", err)
+	}
+	return x.verifyProvenance(ctx, claim, bundles)
+}
+
+// providerReleaseAttested reports whether a provider release must carry the attestation releases carry from since
+// on. Only a release known to predate since is exempt; one whose version cannot be ordered against it is not.
+func providerReleaseAttested(spec libsProviderSpec, version, since string) bool {
+	if since == "" {
+		return false
+	}
+	return !providerVersionAtLeast(spec, since, version) || providerVersionAtLeast(spec, version, since)
 }
