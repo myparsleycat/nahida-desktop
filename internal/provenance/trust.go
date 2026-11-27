@@ -1,4 +1,6 @@
-package selfupdate
+// Package provenance verifies GitHub artifact attestations: Sigstore bundles of SLSA build provenance that a
+// GitHub Actions workflow signed for a release's assets.
+package provenance
 
 import (
 	"bytes"
@@ -33,31 +35,26 @@ const (
 	githubHostedRunner  = "github-hosted"
 	trustRootCacheDays  = 1
 	trustRefreshTimeout = 10 * time.Second
-	// versionSubject is the file the release workflow attests to hold the release version.
-	versionSubject = "nahida-desktop-release-version"
 )
 
-var ErrProvenanceUnverified = errors.New("update build provenance could not be verified")
+var ErrUnverified = errors.New("build provenance could not be verified")
 
-// buildIdentity is the GitHub Actions workflow that must have signed a release's provenance.
-type buildIdentity struct {
-	repository string
-	workflow   string
-	refs       []string
+// Build is the GitHub Actions workflow that must have signed a release's provenance.
+type Build struct {
+	// Repository is the repository URL, such as https://github.com/owner/name.
+	Repository string
+	// Workflow is the workflow file path in the repository.
+	Workflow string
+	// Refs are the git refs the workflow may have run on.
+	Refs []string
 }
 
-var releaseBuild = buildIdentity{
-	repository: "https://github.com/myparsleycat/nahida-desktop",
-	workflow:   ".github/workflows/release.yml",
-	refs:       []string{"refs/heads/main", "refs/heads/v3"},
-}
-
-func (b buildIdentity) certificateIdentity() (verify.CertificateIdentity, error) {
-	refs := make([]string, len(b.refs))
-	for i, ref := range b.refs {
+func (b Build) certificateIdentity() (verify.CertificateIdentity, error) {
+	refs := make([]string, len(b.Refs))
+	for i, ref := range b.Refs {
 		refs[i] = regexp.QuoteMeta(ref)
 	}
-	san := "^" + regexp.QuoteMeta(b.repository+"/"+b.workflow+"@") + "(?:" + strings.Join(refs, "|") + ")$"
+	san := "^" + regexp.QuoteMeta(b.Repository+"/"+b.Workflow+"@") + "(?:" + strings.Join(refs, "|") + ")$"
 	sanMatcher, err := verify.NewSANMatcher("", san)
 	if err != nil {
 		return verify.CertificateIdentity{}, err
@@ -67,26 +64,22 @@ func (b buildIdentity) certificateIdentity() (verify.CertificateIdentity, error)
 		return verify.CertificateIdentity{}, err
 	}
 	return verify.NewCertificateIdentity(sanMatcher, issuerMatcher, certificate.Extensions{
-		SourceRepositoryURI: b.repository,
+		SourceRepositoryURI: b.Repository,
 		RunnerEnvironment:   githubHostedRunner,
 	})
 }
 
-// verifyProvenance checks that bundleJSON is a Sigstore bundle whose SLSA provenance statement lists a subject
-// with the SHA-256 digest and was signed by build, with a Fulcio certificate, a certificate transparency
-// timestamp and a transparency log entry that trusted accepts, and returns that statement.
-func verifyProvenance(
-	trusted root.TrustedMaterial,
-	build buildIdentity,
-	bundleJSON, digest []byte,
-) (*intoto.Statement, error) {
+// Verify checks that bundleJSON is a Sigstore bundle whose SLSA provenance statement lists a subject with the
+// SHA-256 digest and was signed by build, with a Fulcio certificate, a certificate transparency timestamp and a
+// transparency log entry that trusted accepts, and returns that statement.
+func Verify(trusted root.TrustedMaterial, build Build, bundleJSON, digest []byte) (*intoto.Statement, error) {
 	var entity bundle.Bundle
 	if err := entity.UnmarshalJSON(bytes.TrimSpace(bundleJSON)); err != nil {
-		return nil, fmt.Errorf("%w: parse bundle: %w", ErrProvenanceUnverified, err)
+		return nil, fmt.Errorf("%w: parse bundle: %w", ErrUnverified, err)
 	}
 	identity, err := build.certificateIdentity()
 	if err != nil {
-		return nil, fmt.Errorf("%w: build identity: %w", ErrProvenanceUnverified, err)
+		return nil, fmt.Errorf("%w: build identity: %w", ErrUnverified, err)
 	}
 	verifier, err := verify.NewVerifier(trusted,
 		verify.WithSignedCertificateTimestamps(1),
@@ -94,30 +87,38 @@ func verifyProvenance(
 		verify.WithObserverTimestamps(1),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%w: create verifier: %w", ErrProvenanceUnverified, err)
+		return nil, fmt.Errorf("%w: create verifier: %w", ErrUnverified, err)
 	}
 	result, err := verifier.Verify(&entity, verify.NewPolicy(
 		verify.WithArtifactDigest("sha256", digest),
 		verify.WithCertificateIdentity(identity),
 	))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrProvenanceUnverified, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnverified, err)
 	}
 	if result.Statement == nil || result.Statement.GetPredicateType() != slsaProvenanceType {
-		return nil, fmt.Errorf("%w: statement is not SLSA provenance", ErrProvenanceUnverified)
+		return nil, fmt.Errorf("%w: statement is not SLSA provenance", ErrUnverified)
 	}
 	return result.Statement, nil
 }
 
-// requireReleaseSubjects checks that statement attests digest under the executable's asset name together with
-// version, so a build attested for another release or another asset is rejected.
-func requireReleaseSubjects(statement *intoto.Statement, version string, digest []byte) error {
-	if !hasSubject(statement, assetName, digest) {
-		return fmt.Errorf("%w: statement does not attest %s with this digest", ErrProvenanceUnverified, assetName)
+// RequireRelease checks that statement attests digest under the asset name together with a file named
+// versionSubject that holds version, so a build attested for another release or another asset is rejected.
+func RequireRelease(statement *intoto.Statement, asset string, digest []byte, versionSubject, version string) error {
+	if err := RequireSubject(statement, asset, digest); err != nil {
+		return err
 	}
 	versionDigest := sha256.Sum256([]byte(version))
 	if !hasSubject(statement, versionSubject, versionDigest[:]) {
-		return fmt.Errorf("%w: statement does not attest release %s", ErrProvenanceUnverified, version)
+		return fmt.Errorf("%w: statement does not attest release %s", ErrUnverified, version)
+	}
+	return nil
+}
+
+// RequireSubject checks that statement attests digest under the asset name.
+func RequireSubject(statement *intoto.Statement, asset string, digest []byte) error {
+	if !hasSubject(statement, asset, digest) {
+		return fmt.Errorf("%w: statement does not attest %s with this digest", ErrUnverified, asset)
 	}
 	return nil
 }
@@ -135,20 +136,21 @@ func hasSubject(statement *intoto.Statement, name string, digest []byte) bool {
 	return false
 }
 
-// sigstoreTrust loads the Sigstore public-good trusted root through TUF and caches the verified metadata in
-// cacheDir. Loads are serialized because they share the cache.
-type sigstoreTrust struct {
+// Trust loads the Sigstore public-good trusted root through TUF and caches the verified metadata in its cache
+// directory. Loads of one Trust are serialized because they share the cache; separate Trusts on one directory are
+// not.
+type Trust struct {
 	http     *infra.Client
 	cacheDir string
 	log      *infra.Log
 	slot     chan struct{}
 }
 
-func newSigstoreTrust(http *infra.Client, cacheDir string, log *infra.Log) *sigstoreTrust {
-	return &sigstoreTrust{http: http, cacheDir: cacheDir, log: log, slot: make(chan struct{}, 1)}
+func NewTrust(http *infra.Client, cacheDir string, log *infra.Log) *Trust {
+	return &Trust{http: http, cacheDir: cacheDir, log: log, slot: make(chan struct{}, 1)}
 }
 
-func (s *sigstoreTrust) load(ctx context.Context) (*root.TrustedRoot, error) {
+func (s *Trust) Load(ctx context.Context) (*root.TrustedRoot, error) {
 	select {
 	case s.slot <- struct{}{}:
 	case <-ctx.Done():
@@ -184,7 +186,7 @@ func (s *sigstoreTrust) load(ctx context.Context) (*root.TrustedRoot, error) {
 	if !maps.EqualFunc(cache.Latest, latest, bytes.Equal) {
 		next := tufCache{Latest: latest}
 		if err := next.write(s.cacheDir); err != nil {
-			warnSelfUpdate(s.log, fmt.Errorf("write Sigstore trust cache: %w", err), "trust-cache",
+			s.warn(fmt.Errorf("write Sigstore trust cache: %w", err), "trust-cache",
 				map[string]any{"directory": s.cacheDir})
 		}
 	}
@@ -202,7 +204,7 @@ func (s *sigstoreTrust) load(ctx context.Context) (*root.TrustedRoot, error) {
 	return cached, nil
 }
 
-func (s *sigstoreTrust) loadRoot(ctx context.Context, cacheDir string, cacheOnly bool) (*root.TrustedRoot, error) {
+func (s *Trust) loadRoot(ctx context.Context, cacheDir string, cacheOnly bool) (*root.TrustedRoot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -229,6 +231,12 @@ func (s *sigstoreTrust) loadRoot(ctx context.Context, cacheDir string, cacheOnly
 		return nil, fmt.Errorf("read Sigstore trusted root: %w", err)
 	}
 	return trusted, nil
+}
+
+func (s *Trust) warn(err error, stage string, fields map[string]any) {
+	_ = infra.ReportError(s.log, err, "Provenance", infra.Diagnostic{
+		Severity: infra.DiagnosticWarn, Operation: "provenance-trust", Stage: stage, Fields: fields,
+	})
 }
 
 func sigstoreMirrorUnavailable(err error) bool {

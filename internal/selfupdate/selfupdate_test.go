@@ -19,7 +19,12 @@ import (
 
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
+	"nahida.live/desktop/internal/provenance"
 )
+
+type transportFunc func(*http.Request) (*http.Response, error)
+
+func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 // releaseServer answers the GitHub API and release downloads in process, without a network.
 type releaseServer struct {
@@ -63,8 +68,9 @@ func newTestEngine(t *testing.T, version string, transport http.RoundTripper) (*
 		HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: &noRetries,
 	})
 	engine, err := New(Options{
-		Version: version, GitHub: github.New(github.Options{HTTP: client}), HTTP: client, TrustCacheDir: t.TempDir(),
-		Quit: func() { t.Error("unexpected quit") },
+		Version: version, GitHub: github.New(github.Options{HTTP: client}),
+		Provenance: provenance.NewTrust(client, t.TempDir(), nil),
+		Quit:       func() { t.Error("unexpected quit") },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +78,7 @@ func newTestEngine(t *testing.T, version string, transport http.RoundTripper) (*
 	engine.loadTrust = func(context.Context) (root.TrustedMaterial, error) { return nil, nil }
 	engine.verify = func(_ root.TrustedMaterial, bundle []byte, version string, digest []byte) error {
 		if string(bundle) != "attests "+hex.EncodeToString(digest)+" for "+version {
-			return ErrProvenanceUnverified
+			return provenance.ErrUnverified
 		}
 		return nil
 	}
@@ -194,7 +200,7 @@ func TestCheckRejectsUnattestedRelease(t *testing.T) {
 	engine, _ := newTestEngine(t, "3.45.0", server)
 
 	release, err := engine.Check(t.Context(), false)
-	if !errors.Is(err, ErrProvenanceUnverified) || release != nil {
+	if !errors.Is(err, provenance.ErrUnverified) || release != nil {
 		t.Fatalf("release = %+v, err = %v", release, err)
 	}
 	if err := engine.DownloadAndInstall(t.Context(), nil); !errors.Is(err, ErrNoPendingRelease) {
@@ -226,7 +232,7 @@ func TestCheckSkipsDefectiveRelease(t *testing.T) {
 			server.setFile(newer, checksumAsset, test.checksum)
 			server.setFile(newer, bundleAsset, attestation("other build", "3.47.0"))
 			var newerRequested bool
-			transport := trustTestTransport(func(req *http.Request) (*http.Response, error) {
+			transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 				newerRequested = newerRequested || strings.Contains(req.URL.Path, "/download/"+newer+"/")
 				return server.RoundTrip(req)
 			})
@@ -267,7 +273,7 @@ func TestCheckStopsOnTrustLoadFailure(t *testing.T) {
 		server.setFile(tag, bundleAsset, attestation(tag, strings.TrimPrefix(tag, "v")))
 	}
 	var olderRequested bool
-	transport := trustTestTransport(func(req *http.Request) (*http.Response, error) {
+	transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 		olderRequested = olderRequested || strings.Contains(req.URL.Path, "/download/"+older+"/")
 		return server.RoundTrip(req)
 	})
@@ -276,7 +282,7 @@ func TestCheckStopsOnTrustLoadFailure(t *testing.T) {
 	engine.loadTrust = func(context.Context) (root.TrustedMaterial, error) { return nil, trustErr }
 
 	release, err := engine.Check(t.Context(), false)
-	if !errors.Is(err, trustErr) || !errors.Is(err, ErrProvenanceUnverified) || release != nil ||
+	if !errors.Is(err, trustErr) || !errors.Is(err, provenance.ErrUnverified) || release != nil ||
 		engine.pending != nil || olderRequested {
 		t.Fatalf(
 			"release = %+v, err = %v, pending = %+v, older requested = %t",

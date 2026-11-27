@@ -21,6 +21,7 @@ import (
 	"nahida.live/desktop/internal/mod"
 	"nahida.live/desktop/internal/modruntime"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/setting"
 	"nahida.live/desktop/internal/tools"
@@ -32,6 +33,7 @@ type runtime struct {
 	startup         *startupWork
 	proxyRelay      *infra.ProxyRelay
 	appData         *appdata.Store
+	provenance      *provenance.Trust
 	log             *infra.Log
 	store           *infra.Store
 	http            *infra.Client

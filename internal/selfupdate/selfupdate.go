@@ -26,13 +26,16 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 )
 
 // The asset names are the release contract of build/windows/publish-updater.ps1 and .github/workflows/release.yml.
 const (
-	assetName          = "nahida-desktop-windows-amd64.exe"
-	checksumAsset      = "SHA256SUMS"
-	bundleAsset        = "nahida-desktop-windows-amd64.sigstore.json"
+	assetName     = "nahida-desktop-windows-amd64.exe"
+	checksumAsset = "SHA256SUMS"
+	bundleAsset   = "nahida-desktop-windows-amd64.sigstore.json"
+	// versionSubject is the file the release workflow attests to hold the release version.
+	versionSubject     = "nahida-desktop-release-version"
 	stagingPrefix      = "nahida-update-"
 	readyFileName      = "helper.ready"
 	maxChecksumBytes   = 64 << 10
@@ -52,15 +55,19 @@ var (
 
 var releaseRepo = github.Repo{Owner: "myparsleycat", Name: "nahida-desktop"}
 
+var releaseBuild = provenance.Build{
+	Repository: "https://github.com/myparsleycat/nahida-desktop",
+	Workflow:   ".github/workflows/release.yml",
+	Refs:       []string{"refs/heads/main", "refs/heads/v3"},
+}
+
 type Options struct {
 	// Version is the running version; empty uses platform.AppVersion.
 	Version string
 	GitHub  *github.Client
-	// HTTP fetches the Sigstore trust metadata that release provenance is verified against.
-	HTTP *infra.Client
-	// TrustCacheDir holds the verified Sigstore trust metadata between checks.
-	TrustCacheDir string
-	Log           *infra.Log
+	// Provenance loads the Sigstore trust that release provenance is verified against.
+	Provenance *provenance.Trust
+	Log        *infra.Log
 	// Quit starts the application's normal shutdown once the swap helper waits for this process to exit.
 	Quit func()
 	// HelperLog is the file the swap helper appends its progress to; empty writes no helper log.
@@ -110,10 +117,9 @@ func New(opts Options) (*Engine, error) {
 	if opts.Quit == nil {
 		return nil, errors.New("self-update quit is not configured")
 	}
-	if opts.HTTP == nil || strings.TrimSpace(opts.TrustCacheDir) == "" {
+	if opts.Provenance == nil {
 		return nil, errors.New("self-update provenance verification is not configured")
 	}
-	trust := newSigstoreTrust(opts.HTTP, opts.TrustCacheDir, opts.Log)
 	version := strings.TrimSpace(opts.Version)
 	if version == "" {
 		version = platform.AppVersion
@@ -127,14 +133,14 @@ func New(opts Options) (*Engine, error) {
 		executable: currentExecutable,
 		spawn:      spawnHelper,
 		loadTrust: func(ctx context.Context) (root.TrustedMaterial, error) {
-			return trust.load(ctx)
+			return opts.Provenance.Load(ctx)
 		},
 		verify: func(trusted root.TrustedMaterial, bundle []byte, version string, digest []byte) error {
-			statement, err := verifyProvenance(trusted, releaseBuild, bundle, digest)
+			statement, err := provenance.Verify(trusted, releaseBuild, bundle, digest)
 			if err != nil {
 				return err
 			}
-			return requireReleaseSubjects(statement, version, digest)
+			return provenance.RequireRelease(statement, assetName, digest, versionSubject, version)
 		},
 		readyTimeout: helperReadyTimeout,
 	}, nil
@@ -233,7 +239,7 @@ func (e *Engine) checkRelease(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		err = ctxErr
 	} else if err != nil {
-		err = fmt.Errorf("%w: %w", ErrProvenanceUnverified, err)
+		err = fmt.Errorf("%w: %w", provenance.ErrUnverified, err)
 	}
 	if err != nil {
 		return nil, false, infra.AnnotateError(fmt.Errorf("release %s: %w", tag, err), diagnostic)

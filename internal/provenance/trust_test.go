@@ -1,4 +1,4 @@
-package selfupdate
+package provenance
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/theupdateframework/go-tuf/v2/metadata"
 
-	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 )
 
@@ -32,10 +31,10 @@ import (
 // evaluates the certificate at the transparency log's integrated time, so the fixture does not expire.
 const ghZipDigest = "8813a72c899900afaa10e3fec8fbc64b908c89dbfe837e95ed2fa500fc140627"
 
-var ghReleaseBuild = buildIdentity{
-	repository: "https://github.com/cli/cli",
-	workflow:   ".github/workflows/deployment.yml",
-	refs:       []string{"refs/heads/trunk"},
+var ghReleaseBuild = Build{
+	Repository: "https://github.com/cli/cli",
+	Workflow:   ".github/workflows/deployment.yml",
+	Refs:       []string{"refs/heads/trunk"},
 }
 
 func TestVerifyProvenance(t *testing.T) {
@@ -61,7 +60,7 @@ func TestVerifyProvenance(t *testing.T) {
 
 	for _, test := range []struct {
 		name   string
-		build  buildIdentity
+		build  Build
 		bundle []byte
 		digest []byte
 		ok     bool
@@ -70,34 +69,38 @@ func TestVerifyProvenance(t *testing.T) {
 		{name: "unattested digest", build: ghReleaseBuild, bundle: bundle, digest: tampered},
 		{
 			name: "other workflow", bundle: bundle, digest: digest,
-			build: buildIdentity{repository: ghReleaseBuild.repository, workflow: ".github/workflows/other.yml",
-				refs: ghReleaseBuild.refs},
+			build: Build{Repository: ghReleaseBuild.Repository, Workflow: ".github/workflows/other.yml",
+				Refs: ghReleaseBuild.Refs},
 		},
 		{
 			name: "other branch", bundle: bundle, digest: digest,
-			build: buildIdentity{repository: ghReleaseBuild.repository, workflow: ghReleaseBuild.workflow,
-				refs: []string{"refs/heads/main"}},
+			build: Build{Repository: ghReleaseBuild.Repository, Workflow: ghReleaseBuild.Workflow,
+				Refs: []string{"refs/heads/main"}},
 		},
-		{name: "release identity", build: releaseBuild, bundle: bundle, digest: digest},
+		{
+			name: "other repository", bundle: bundle, digest: digest,
+			build: Build{Repository: "https://github.com/cli/go-gh", Workflow: ghReleaseBuild.Workflow,
+				Refs: ghReleaseBuild.Refs},
+		},
 		{name: "not a bundle", build: ghReleaseBuild, bundle: []byte("{}"), digest: digest},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			statement, err := verifyProvenance(trusted, test.build, test.bundle, test.digest)
+			statement, err := Verify(trusted, test.build, test.bundle, test.digest)
 			if test.ok {
 				if err != nil || statement == nil {
 					t.Fatalf("statement = %v, err = %v", statement, err)
 				}
 				return
 			}
-			if !errors.Is(err, ErrProvenanceUnverified) {
-				t.Fatalf("err = %v, want ErrProvenanceUnverified", err)
+			if !errors.Is(err, ErrUnverified) {
+				t.Fatalf("err = %v, want ErrUnverified", err)
 			}
 		})
 	}
 }
 
-func TestRequireReleaseSubjects(t *testing.T) {
+func TestRequireRelease(t *testing.T) {
 	t.Parallel()
 	subject := func(name, content string) *intoto.ResourceDescriptor {
 		digest := sha256.Sum256([]byte(content))
@@ -107,9 +110,9 @@ func TestRequireReleaseSubjects(t *testing.T) {
 		}
 	}
 	release := &intoto.Statement{Subject: []*intoto.ResourceDescriptor{
-		subject(assetName, "app 3.53.0"),
-		subject("nahida-desktop-windows-amd64-installer.exe", "installer 3.53.0"),
-		subject(versionSubject, "3.53.0"),
+		subject("app.exe", "app 3.53.0"),
+		subject("installer.exe", "installer 3.53.0"),
+		subject("release-version", "3.53.0"),
 	}}
 	digestOf := func(content string) []byte {
 		digest := sha256.Sum256([]byte(content))
@@ -129,8 +132,8 @@ func TestRequireReleaseSubjects(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			err := requireReleaseSubjects(release, test.version, test.digest)
-			if test.ok != (err == nil) || err != nil && !errors.Is(err, ErrProvenanceUnverified) {
+			err := RequireRelease(release, "app.exe", test.digest, "release-version", test.version)
+			if test.ok != (err == nil) || err != nil && !errors.Is(err, ErrUnverified) {
 				t.Fatalf("err = %v, want ok = %t", err, test.ok)
 			}
 		})
@@ -203,10 +206,10 @@ func TestLoadTrustPreservesRotatedRootAfterOnlineTimeout(t *testing.T) {
 		client := infra.NewClientWithOptions(infra.ClientOptions{
 			HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: &noRetries,
 		})
-		trust := newSigstoreTrust(client, cacheDir, nil)
+		trust := NewTrust(client, cacheDir, nil)
 
 		start := time.Now()
-		if _, err := trust.load(t.Context()); err != nil {
+		if _, err := trust.Load(t.Context()); err != nil {
 			t.Errorf("load trust from cache: %v", err)
 		}
 		if elapsed := time.Since(start); elapsed > 15*time.Second {
@@ -217,7 +220,7 @@ func TestLoadTrustPreservesRotatedRootAfterOnlineTimeout(t *testing.T) {
 		}
 		restarted = true
 		requests = nil
-		if _, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); err != nil {
+		if _, err := NewTrust(client, cacheDir, nil).Load(t.Context()); err != nil {
 			t.Errorf("load trust after restart: %v", err)
 		}
 		if len(requests) != 1 || requests[0] != "/3.root.json" {
@@ -255,7 +258,7 @@ func TestLoadTrustRejectsStaleSnapshotAfterTimestampUpdate(t *testing.T) {
 	})
 
 	for i, wantStatus := range []int{http.StatusServiceUnavailable, 524} {
-		trusted, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context())
+		trusted, err := NewTrust(client, cacheDir, nil).Load(t.Context())
 		status, ok := errors.AsType[*metadata.ErrDownloadHTTP](err)
 		if trusted != nil || !ok || status.StatusCode != wantStatus {
 			t.Errorf("attempt %d: loaded trust = %t, err = %v, want HTTP %d", i+1, trusted != nil, err, wantStatus)
@@ -266,7 +269,7 @@ func TestLoadTrustRejectsStaleSnapshotAfterTimestampUpdate(t *testing.T) {
 		t.Error("the mirror was never asked for the new snapshot")
 	}
 	offline, snapshotAvailable = false, true
-	if _, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); err != nil {
+	if _, err := NewTrust(client, cacheDir, nil).Load(t.Context()); err != nil {
 		t.Errorf("load trust after mirror recovery: %v", err)
 	}
 }
@@ -300,7 +303,7 @@ func TestLoadTrustRejectsCachedTargetAfterTargetsUpdate(t *testing.T) {
 	})
 
 	for _, phase := range []string{"after targets update", "after restart"} {
-		trusted, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context())
+		trusted, err := NewTrust(client, cacheDir, nil).Load(t.Context())
 		status, ok := errors.AsType[*metadata.ErrDownloadHTTP](err)
 		if trusted != nil || !ok || status.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("%s: loaded trust = %t, err = %v", phase, trusted != nil, err)
@@ -311,7 +314,7 @@ func TestLoadTrustRejectsCachedTargetAfterTargetsUpdate(t *testing.T) {
 		t.Error("the mirror was never asked for the updated trust target")
 	}
 	mirrorOffline, targetAvailable = false, true
-	if _, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); err != nil {
+	if _, err := NewTrust(client, cacheDir, nil).Load(t.Context()); err != nil {
 		t.Errorf("load trust after mirror recovery: %v", err)
 	}
 }
@@ -333,7 +336,7 @@ func TestLoadTrustFallsBackAfterTruncatedResponse(t *testing.T) {
 	client := infra.NewClientWithOptions(infra.ClientOptions{
 		HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: new(int),
 	})
-	if trusted, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); trusted == nil || err != nil {
+	if trusted, err := NewTrust(client, cacheDir, nil).Load(t.Context()); trusted == nil || err != nil {
 		t.Fatalf("load from cache after truncated response: loaded trust = %t, err = %v", trusted != nil, err)
 	}
 }
@@ -353,7 +356,7 @@ func TestReadTUFCacheRecoversFromCorruptJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cache, err := newSigstoreTrust(nil, cacheDir, nil).readTUFCache(t.Context())
+	cache, err := NewTrust(nil, cacheDir, nil).readTUFCache(t.Context())
 	if got := string(cache.Latest[mirror+"/root.json"]); err != nil || got != savedRoot {
 		t.Fatalf("cached root = %q, err = %v, want %q", got, err, savedRoot)
 	}
@@ -379,7 +382,7 @@ func TestLoadTrustFallsBackAfterForbiddenResponse(t *testing.T) {
 		HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: new(int),
 	})
 
-	if trusted, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); trusted == nil || err != nil {
+	if trusted, err := NewTrust(client, cacheDir, nil).Load(t.Context()); trusted == nil || err != nil {
 		t.Errorf("load from cache after forbidden response: loaded trust = %t, err = %v", trusted != nil, err)
 	}
 	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
@@ -387,16 +390,8 @@ func TestLoadTrustFallsBackAfterForbiddenResponse(t *testing.T) {
 	}
 }
 
-func TestCheckPreservesCancellationDuringTrustRefresh(t *testing.T) {
+func TestLoadTrustPreservesRotatedRootAfterCancellation(t *testing.T) {
 	t.Parallel()
-	const tag = "v3.46.0"
-	server := &releaseServer{
-		releases: []github.Release{testRelease(tag, false, assetName, checksumAsset, bundleAsset)},
-		files:    map[string]string{},
-	}
-	server.setFile(tag, checksumAsset, checksumLine("released build", assetName))
-	server.setFile(tag, bundleAsset, attestation("released build", "3.46.0"))
-
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	cacheDir := t.TempDir()
@@ -404,9 +399,6 @@ func TestCheckPreservesCancellationDuringTrustRefresh(t *testing.T) {
 	restarted := false
 	var restartRequests []string
 	transport := trustTestTransport(func(req *http.Request) (*http.Response, error) {
-		if !strings.HasPrefix(req.URL.String(), tuf.DefaultMirror+"/") {
-			return server.RoundTrip(req)
-		}
 		response := httptest.NewRecorder()
 		if restarted {
 			restartRequests = append(restartRequests, req.URL.Path)
@@ -430,21 +422,13 @@ func TestCheckPreservesCancellationDuringTrustRefresh(t *testing.T) {
 	client := infra.NewClientWithOptions(infra.ClientOptions{
 		HTTPClient: &http.Client{Transport: transport}, Status: infra.BackendOnline, RetryLimit: new(int),
 	})
-	engine, err := New(Options{
-		Version: "3.45.0", GitHub: github.New(github.Options{HTTP: client}), HTTP: client, TrustCacheDir: cacheDir,
-		Quit: func() { t.Error("unexpected quit") },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	release, err := engine.Check(ctx, false)
-	if release != nil || !errors.Is(err, context.Canceled) || !infra.IsCancellationError(err) {
-		t.Fatalf("release = %+v, err = %v, want cancellation", release, err)
+	if trusted, err := NewTrust(client, cacheDir, nil).Load(ctx); trusted != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("loaded trust = %t, err = %v, want cancellation", trusted != nil, err)
 	}
 
 	restarted = true
-	if _, err := newSigstoreTrust(client, cacheDir, nil).load(t.Context()); err != nil {
+	if _, err := NewTrust(client, cacheDir, nil).Load(t.Context()); err != nil {
 		t.Fatalf("load trust after restart: %v", err)
 	}
 	if len(restartRequests) != 1 || restartRequests[0] != "/3.root.json" {

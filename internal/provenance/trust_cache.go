@@ -1,4 +1,4 @@
-package selfupdate
+package provenance
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func tufMirrorPath() string {
 	return tuf.URLToPath(tuf.DefaultMirror)
 }
 
-func (s *sigstoreTrust) readTUFCache(ctx context.Context) (tufCache, error) {
+func (s *Trust) readTUFCache(ctx context.Context) (tufCache, error) {
 	path := filepath.Join(s.cacheDir, tufCacheFile)
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -41,7 +41,7 @@ func (s *sigstoreTrust) readTUFCache(ctx context.Context) (tufCache, error) {
 		if err == nil {
 			return cache, nil
 		}
-		warnSelfUpdate(s.log, fmt.Errorf("decode Sigstore trust cache: %w", err), "trust-cache",
+		s.warn(fmt.Errorf("decode Sigstore trust cache: %w", err), "trust-cache",
 			map[string]any{"path": path})
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return tufCache{}, err
@@ -58,7 +58,7 @@ func (c tufCache) write(dir string) error {
 	return platform.WriteFileAtomic(filepath.Join(dir, tufCacheFile), data, 0o600)
 }
 
-func (s *sigstoreTrust) sweepTUFStaging(ctx context.Context) {
+func (s *Trust) sweepTUFStaging(ctx context.Context) {
 	release, err := diskio.AcquireDir(ctx, s.cacheDir)
 	if err != nil {
 		return
@@ -68,7 +68,7 @@ func (s *sigstoreTrust) sweepTUFStaging(ctx context.Context) {
 	entries, err := os.ReadDir(s.cacheDir)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			warnSelfUpdate(s.log, err, "sweep-trust-staging", map[string]any{"directory": s.cacheDir})
+			s.warn(err, "sweep-trust-staging", map[string]any{"directory": s.cacheDir})
 		}
 		return
 	}
@@ -78,7 +78,7 @@ func (s *sigstoreTrust) sweepTUFStaging(ctx context.Context) {
 		}
 		dir := filepath.Join(s.cacheDir, entry.Name())
 		if err := os.RemoveAll(dir); err != nil {
-			warnSelfUpdate(s.log, err, "sweep-trust-staging", map[string]any{"directory": dir})
+			s.warn(err, "sweep-trust-staging", map[string]any{"directory": dir})
 		}
 	}
 }

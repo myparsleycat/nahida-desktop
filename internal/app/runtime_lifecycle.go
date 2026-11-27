@@ -11,6 +11,7 @@ import (
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/nativecompute"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 	"nahida.live/desktop/internal/setting"
 )
 
@@ -75,6 +76,11 @@ func bootRuntime(
 	}
 
 	rt.appData = data
+	trustCache, err := data.Resolve(appdata.SigstoreDir)
+	if err != nil {
+		return paths, err
+	}
+	rt.provenance = provenance.NewTrust(rt.http, trustCache, rt.log)
 	imageCacheDir, err := data.EnsureDir(appdata.ImageCacheDir)
 	if err != nil {
 		// An empty Dir makes the cache fetch every image without storing it.

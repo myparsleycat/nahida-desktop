@@ -114,17 +114,12 @@ func Run(icon []byte) (runErr error) {
 	startElevatedHelper := sync.OnceFunc(rt.startElevatedHelperIfEnabled)
 	rt.window.Configure(rt.setting, rt.log, icon, shell, font, startElevatedHelper, rt.mainWindowClosed)
 	rt.configureGameBananaLogin(icon, font, shell.Dark)
-	trustCache, err := rt.appData.Resolve(appdata.SigstoreDir)
-	if err != nil {
-		return err
-	}
 	engine, err := selfupdate.New(selfupdate.Options{
-		GitHub:        rt.github,
-		HTTP:          rt.http,
-		TrustCacheDir: trustCache,
-		Log:           rt.log,
-		Quit:          rt.quit,
-		HelperLog:     filepath.Join(paths.Logs, "update-helper.log"),
+		GitHub:     rt.github,
+		Provenance: rt.provenance,
+		Log:        rt.log,
+		Quit:       rt.quit,
+		HelperLog:  filepath.Join(paths.Logs, "update-helper.log"),
 	})
 	if err != nil {
 		return err
