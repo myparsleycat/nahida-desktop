@@ -104,11 +104,13 @@ func (x *XXMI) RepairImporterPackage(ctx context.Context, key string) (returnErr
 	if err != nil {
 		return err
 	}
-	if installed := readImporterVersion(cfg.ImporterFolder, spec); installed != nil {
+	// A package from another source than the selected one is replaced by the selected source's release.
+	selected, _ := PackageSource(spec.key, cfg)
+	if installed := selectedInstalledPackage(spec.key, cfg); installed != nil {
 		version = *installed
 	} else if version = normalizeVersion(cfg.PackageVersion.Pinned); version == "" {
 		// The file that names the installed version is part of what is being repaired.
-		releases, err := x.ListReleases(ctx, "importer:"+spec.key)
+		releases, err := x.ListReleases(ctx, ImporterPackageID(spec.key, selected))
 		if err != nil {
 			return err
 		}
@@ -118,12 +120,13 @@ func (x *XXMI) RepairImporterPackage(ctx context.Context, key string) (returnErr
 		version = releases[0].Version
 	}
 
-	// A release installed without a signature was accepted by the user when it was installed, and the record
-	// of that outlives the file that names the installed version. A record that cannot be read accepts
-	// nothing, and a signed release is installed again without one.
+	// A release installed without a signature or provenance was accepted by the user when it was installed, and
+	// the record of that outlives the file that names the installed version. A record that cannot be read
+	// accepts nothing, and a verified release is installed again without one.
 	record, err := readPackageVerification(cfg.ImporterFolder)
-	allowUnsigned := err == nil && record != nil && record.Method != "ecdsa" &&
-		normalizeVersion(record.Version) == normalizeVersion(version)
+	allowUnsigned := err == nil && record != nil && (record.Method == "digest" || record.Method == "none") &&
+		normalizeVersion(record.Version) == normalizeVersion(version) &&
+		cmp.Or(record.Source, spec.id) == selected
 
 	stage = "install-package"
 	return x.InstallImporterPackage(ctx, InstallImporterPackageInput{

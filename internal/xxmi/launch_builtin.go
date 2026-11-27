@@ -180,7 +180,7 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if err := validateInstalledImporterPackage(key, cfg); err != nil {
 		return err
 	}
-	packageSpec, _ := lookupImporterPackage(key)
+	packageSpec, _ := resolveImporterPackage(key, cfg)
 	progress("resolve-game")
 	usesPlatform := cfg.GameLaunch == "Steam" || cfg.GameLaunch == "Epic"
 	var platform platformLaunch
@@ -269,6 +269,10 @@ func (x *XXMI) launchBuiltinGameLocked(
 	if migotoDLLUsed {
 		if _, err := os.Stat(filepath.Join(cfg.ImporterFolder, packageSpec.versionFile)); err != nil {
 			return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: %w", err)
+		}
+		// A package from another source stays installed until an update installs the selected one.
+		if selectedInstalledPackage(key, cfg) == nil {
+			return fmt.Errorf("XXMI_IMPORTER_NOT_INSTALLED: package from %s is not installed", packageSpec.id)
 		}
 	}
 	guards, err := x.launchGuards(ctx)

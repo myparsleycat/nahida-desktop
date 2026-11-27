@@ -3078,10 +3078,18 @@
           "noPackageNotes": "이 버전에 대한 패키지 설명이 없습니다.",
           "overwriteINI": "패키지 설치 시 d3dx.ini 덮어쓰기",
           "currentPin": "선택한 패키지",
+          "packageSource": "패키지 제공자",
+          "packageSourceForced": "DirectX 12 또는 Vulkan으로 렌더링할 수 있는 게임에는 myparsleycat 패키지만 모드를 적용합니다.",
+          "packageSourceMismatch": "설치된 패키지는 다른 제공자의 패키지입니다. 아래 목록에서 설치할 버전을 선택하세요.",
+          "packageSources": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "packageInstalled": "설치됨",
           "installedVerification": "{{version}} 설치 시 검증: {{method}}",
           "verificationECDSA": "ECDSA 서명",
           "verificationDigest": "SHA-256 해시",
+          "verificationProvenance": "GitHub 빌드 출처 증명",
           "verificationNone": "미검증",
           "latest": "최신 버전 따르기",
           "allowUnsigned": "서명 없는 릴리스 허용",

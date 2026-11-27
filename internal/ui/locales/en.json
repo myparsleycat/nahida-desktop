@@ -3124,10 +3124,18 @@
           "noPackageNotes": "No package notes are available for this version.",
           "overwriteINI": "Replace d3dx.ini when installing a package",
           "currentPin": "Selected package",
+          "packageSource": "Package provider",
+          "packageSourceForced": "Only the myparsleycat package applies mods to a game that may render with DirectX 12 or Vulkan.",
+          "packageSourceMismatch": "The installed package is from another provider. Select a version to install from the list below.",
+          "packageSources": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "packageInstalled": "Installed",
           "installedVerification": "Verification when {{version}} was installed: {{method}}",
           "verificationECDSA": "ECDSA signature",
           "verificationDigest": "SHA-256 digest",
+          "verificationProvenance": "GitHub build provenance",
           "verificationNone": "Not verified",
           "latest": "Follow latest",
           "allowUnsigned": "Allow unsigned release",

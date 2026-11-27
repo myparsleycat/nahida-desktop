@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"nahida.live/desktop/internal/db"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 	"nahida.live/desktop/internal/watcher"
 )
 
@@ -276,6 +278,98 @@ func TestInstallBuiltinImporterPreservesModsAndExternalConfig(t *testing.T) {
 	stored, err = service.GetImporterConfig(ctx, "GIMI")
 	if err != nil || stored.ProcessTimeout != 40 {
 		t.Fatalf("settings failure changed the draft: %+v, err = %v", stored, err)
+	}
+}
+
+func TestInstallBuiltinImporterVerifiesProvenance(t *testing.T) {
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	const releaseURL = "https://github.com/myparsleycat/APMI-Package/releases/download/"
+	files := map[string][]byte{}
+	var releases []string
+	for _, version := range []string{"0.3.1", "0.3.2", "0.3.3"} {
+		asset := "APMI-PACKAGE-v" + version + ".zip"
+		zip := writeXXMITestZip(t, map[string]string{
+			"Core/APMI/main.ini": "global $version = 0." + version[2:3] + version[4:] + "\n",
+			"d3dx.ini":           "package ini",
+		})
+		files[releaseURL+"v"+version+"/"+asset] = zip
+		assets := fmt.Sprintf(`{"name":%q,"browser_download_url":%q}`, asset, releaseURL+"v"+version+"/"+asset)
+		if version != "0.3.1" {
+			bundle := "APMI-PACKAGE-v" + version + ".sigstore.json"
+			attested := zip
+			if version == "0.3.2" {
+				attested = []byte("other build")
+			}
+			digest := sha256.Sum256(attested)
+			files[releaseURL+"v"+version+"/"+bundle] = []byte(
+				hex.EncodeToString(digest[:]) + " " + asset + " " + version,
+			)
+			assets += fmt.Sprintf(`,{"name":%q,"browser_download_url":%q}`, bundle, releaseURL+"v"+version+"/"+bundle)
+		}
+		// The signature of a release from before provenance must no longer verify it.
+		releases = append(releases, fmt.Sprintf(`{"tag_name":"v%s","body":"## Signature\n- AAAA","assets":[%s]}`,
+			version, assets))
+	}
+	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, ok := files[request.URL.String()]
+		if request.URL.String() == "https://api.github.com/repos/myparsleycat/APMI-Package/releases" {
+			body, ok = []byte("["+strings.Join(releases, ",")+"]"), true
+		}
+		if !ok {
+			t.Fatalf("unexpected request %s", request.URL)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header),
+			Body: io.NopCloser(bytes.NewReader(body)), Request: request}, nil
+	})}
+	infraClient := infra.NewClientWithOptions(infra.ClientOptions{HTTPClient: httpClient, Status: infra.BackendOnline})
+	download := infra.NewDownload()
+	download.UseClient(infraClient)
+	service := NewWithOptions(Options{HTTP: infraClient, Download: download, Archive: infra.NewArchive()})
+	service.verifyProvenance = func(_ context.Context, claim provenanceClaim, bundles []json.RawMessage) error {
+		if claim.versionSubject != "apmi-package-release-version" || len(bundles) != 1 ||
+			string(bundles[0]) != hex.EncodeToString(claim.digest)+" "+claim.asset+" "+claim.version {
+			return provenance.ErrUnverified
+		}
+		return nil
+	}
+	useTestAppData(t, service)
+	service.UseClient(client)
+	useBuiltinLauncher(t, service)
+	cfg, err := service.GetImporterConfig(ctx, "APMI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ImporterFolder = filepath.Join(t.TempDir(), "APMI")
+	if err := service.SaveImporterConfig(ctx, "APMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err = service.InstallImporterPackage(ctx, InstallImporterPackageInput{Importer: "APMI", Version: "0.3.1"})
+	if err == nil || !strings.Contains(err.Error(), "XXMI_UNSIGNED_RELEASE") {
+		t.Fatalf("release without provenance installed without confirmation: %v", err)
+	}
+	err = service.InstallImporterPackage(ctx, InstallImporterPackageInput{
+		Importer: "APMI", Version: "0.3.2", AllowUnsigned: true,
+	})
+	if !errors.Is(err, provenance.ErrUnverified) {
+		t.Fatalf("release whose provenance attests another build: %v", err)
+	}
+	err = service.InstallImporterPackage(ctx, InstallImporterPackageInput{Importer: "APMI", Version: "0.3.3"})
+	if err != nil {
+		t.Fatalf("release with matching provenance: %v", err)
+	}
+	record, err := service.GetImporterPackageVerification(ctx, "APMI")
+	if err != nil || record == nil ||
+		*record != (PackageVerification{Version: "0.3.3", Method: "provenance", Source: "myparsleycat"}) {
+		t.Fatalf("verification record = %+v, err = %v", record, err)
 	}
 }
 

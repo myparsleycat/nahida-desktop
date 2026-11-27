@@ -80,8 +80,13 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if assetURL == "" {
 		return fmt.Errorf("importer %s asset %s not found", spec.key, assetName)
 	}
-	signature := releaseSignature(release.Body)
-	if signature == "" && !input.AllowUnsigned {
+	var signature, bundleURL string
+	if spec.attestation != nil {
+		bundleURL = releaseAssetURL(*release, fmt.Sprintf(spec.attestation.bundleFormat, version))
+	} else {
+		signature = releaseSignature(release.Body)
+	}
+	if signature == "" && bundleURL == "" && !input.AllowUnsigned {
 		return errors.New("XXMI_UNSIGNED_RELEASE")
 	}
 	setStage("download")
@@ -96,7 +101,7 @@ func (x *XXMI) installBuiltinImporterPackage(
 	zipPath := filepath.Join(workDir, "package.zip")
 	if err := x.downloadPackageFile(
 		ctx,
-		"importer:"+spec.key, version,
+		ImporterPackageID(spec.key, spec.id), version,
 		github.FileRequest{Repo: spec.repo, URL: assetURL, Destination: zipPath},
 	); err != nil {
 		return err
@@ -113,15 +118,36 @@ func (x *XXMI) installBuiltinImporterPackage(
 	if err != nil {
 		return err
 	}
-	verification := PackageVerification{Version: version, Method: "ecdsa"}
-	if signature != "" {
+	verification := PackageVerification{Version: version, Source: spec.id}
+	switch {
+	case bundleURL != "":
+		bundle, err := x.github.FetchFile(ctx, spec.repo, bundleURL, maxAttestationBytes)
+		if err == nil {
+			digest := sha256.Sum256(zipBytes)
+			err = x.verifyProvenance(ctx, provenanceClaim{
+				build: spec.attestation.build, asset: assetName, digest: digest[:],
+				versionSubject: spec.attestation.versionSubject, version: version,
+			}, []json.RawMessage{bundle})
+		}
+		if err != nil {
+			return infra.AnnotateError(err, infra.Diagnostic{
+				Operation: "install-importer-package", Stage: "verify-provenance",
+				Fields: map[string]any{"bundle_url": infra.SanitizeLogURL(bundleURL)},
+			})
+		}
+		verification.Method = "provenance"
+	case signature != "":
 		if err := verifyPackageSignature(spec.publicKey, signature, zipBytes); err != nil {
 			return err
 		}
-	} else {
+		verification.Method = "ecdsa"
+	default:
 		verifiedDigest, err := verifyReleaseDigest(*release, assetName, zipBytes)
 		if err != nil {
 			return err
+		}
+		if !verifiedDigest && !input.AllowUnsigned {
+			return errors.New("XXMI_UNSIGNED_RELEASE")
 		}
 		verification.Method = "none"
 		if verifiedDigest {

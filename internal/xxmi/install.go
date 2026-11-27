@@ -125,7 +125,11 @@ func (x *XXMI) installImporterPackage(
 	}()
 
 	stage = "install-package"
-	return x.installBuiltinImporterPackage(ctx, spec, cfg, input, lease, watch)
+	resolved, ok := resolveImporterPackage(spec.key, cfg)
+	if !ok {
+		return fmt.Errorf("unknown package source %q", cfg.PackageSource)
+	}
+	return x.installBuiltinImporterPackage(ctx, resolved, cfg, input, lease, watch)
 }
 
 func installDiagnosticValue(value string) string {

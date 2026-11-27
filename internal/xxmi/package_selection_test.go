@@ -21,6 +21,7 @@ func TestImporterPackageSelectionRequiresInstalledVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 			cfg.PackageVersion = VersionPin{Pinned: "v1.2.3"}
+			cfg.PackageSource = PackageSources(key)[0]
 			if err := validateInstalledImporterPackage(key, cfg); err == nil {
 				t.Fatal("missing package accepted")
 			}
@@ -33,6 +34,68 @@ func TestImporterPackageSelectionRequiresInstalledVersion(t *testing.T) {
 				t.Fatalf("matching normalized version rejected: %v", err)
 			}
 		})
+	}
+}
+
+func TestImporterPackageSelectionRequiresSelectedSource(t *testing.T) {
+	t.Parallel()
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.PackageVersion = VersionPin{Pinned: "1.2.2"}
+	writeInstalledImporterPackage(t, "WWMI", cfg.ImporterFolder, "1.2.2")
+	if err := validateInstalledImporterPackage("WWMI", cfg); err == nil {
+		t.Fatal("official package without a recorded source accepted for the default source")
+	}
+
+	// The fork's version format names its source when no record does, and the official one reads it as 1.2.21.
+	cfg.PackageVersion = VersionPin{Pinned: "1.2.2.1"}
+	writeInstalledImporterPackage(t, "WWMI", cfg.ImporterFolder, "1.2.2.1")
+	if err := validateInstalledImporterPackage("WWMI", cfg); err != nil {
+		t.Fatalf("fork package without a recorded source rejected: %v", err)
+	}
+
+	record, err := json.Marshal(PackageVerification{Version: "1.2.2.1", Method: "digest", Source: "myparsleycat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, packageVerificationName), record, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInstalledImporterPackage("WWMI", cfg); err != nil {
+		t.Fatalf("recorded default source rejected: %v", err)
+	}
+	cfg.PackageSource = "spectrumqt"
+	if err := validateInstalledImporterPackage("WWMI", cfg); err == nil {
+		t.Fatal("package of the default source accepted for the official source")
+	}
+
+	// A game left to pick its renderer may render with DirectX 12 or Vulkan, which only the fork applies mods to.
+	cfg.SkipD3D11Switch = true
+	if source, forced := PackageSource("WWMI", cfg); source != "myparsleycat" || !forced {
+		t.Fatalf("PackageSource = %q, %v; want myparsleycat, forced", source, forced)
+	}
+	if err := validateInstalledImporterPackage("WWMI", cfg); err != nil {
+		t.Fatalf("forced source rejected: %v", err)
+	}
+
+	// A recorded official package keeps its source although the fork's pattern also reads 1.210, as 1.2.1.0.
+	official, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	official.PackageSource, official.PackageVersion = "spectrumqt", VersionPin{Pinned: "1.2.10"}
+	writeInstalledImporterPackage(t, "WWMI", official.ImporterFolder, "1.2.10")
+	record, err = json.Marshal(PackageVerification{Version: "1.2.10", Method: "ecdsa"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(official.ImporterFolder, packageVerificationName), record, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInstalledImporterPackage("WWMI", official); err != nil {
+		t.Fatalf("recorded official package rejected: %v", err)
 	}
 }
 
@@ -117,8 +180,9 @@ func writeInstalledImporterPackage(t *testing.T, key, folder, version string) {
 	if !ok {
 		t.Fatalf("unknown importer %s", key)
 	}
+	// A fourth component is the revision a package source appends after the official version digits.
 	parts := strings.Split(normalizeVersion(version), ".")
-	if len(parts) != 3 {
+	if len(parts) != 3 && len(parts) != 4 {
 		t.Fatalf("invalid test version %s", version)
 	}
 	path := filepath.Join(folder, spec.versionFile)
@@ -131,7 +195,7 @@ func writeInstalledImporterPackage(t *testing.T, key, folder, version string) {
 	}
 	if err := os.WriteFile(
 		path,
-		[]byte("global "+variable+" = "+parts[0]+"."+parts[1]+parts[2]+"\n"),
+		[]byte("global "+variable+" = "+parts[0]+"."+strings.Join(parts[1:], "")+"\n"),
 		0o600,
 	); err != nil {
 		t.Fatal(err)

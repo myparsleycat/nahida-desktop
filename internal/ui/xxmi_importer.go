@@ -208,6 +208,23 @@ func (ic *importerContext) installedVersion() string {
 	return ""
 }
 
+// installedSource is the package source of installedVersion.
+func (ic *importerContext) installedSource() string {
+	if ic.entry != nil && ic.entry.InstalledVersion != nil && ic.entry.InstalledSource != "" {
+		return ic.entry.InstalledSource
+	}
+	if v := ic.p.verification.value; v != nil {
+		return v.Source
+	}
+	return ""
+}
+
+// installedFromOtherSource reports a package installed from another source than the draft selects.
+func (ic *importerContext) installedFromOtherSource() bool {
+	selected, _ := xxmi.PackageSource(ic.key, ic.c)
+	return ic.installedVersion() != "" && ic.installedSource() != selected
+}
+
 func (ic *importerContext) isInstalledPackage(version string) bool {
 	installed := ic.installedVersion()
 	folder := ic.saved.value.ImporterFolder
@@ -215,7 +232,7 @@ func (ic *importerContext) isInstalledPackage(version string) bool {
 		folder = ic.entry.ImporterFolder
 	}
 	return installed != "" && normalizedFolder(ic.c.ImporterFolder) == normalizedFolder(folder) &&
-		sameVersion(version, installed)
+		sameVersion(version, installed) && !ic.installedFromOtherSource()
 }
 
 func (s *Shell) importerSettingsPage(key string) *fairy.El {
@@ -588,7 +605,16 @@ func (s *Shell) importerGeneralTab(ic *importerContext) []*fairy.El {
 		}
 		launch = append(launch, selectRow("xxmi.renderer", T(prefix+"renderer"), T(prefix+"rendererDescription"),
 			renderer, []kit.Item{{Value: "d3d11", Label: "DirectX 11"}, {Value: "other", Label: other}},
-			func(value string) { ic.set(func(c *xxmi.ImporterConfig) { c.SkipD3D11Switch = value != "d3d11" }) }))
+			func(value string) {
+				ic.set(func(c *xxmi.ImporterConfig) {
+					previous, _ := xxmi.PackageSource(key, *c)
+					c.SkipD3D11Switch = value != "d3d11"
+					// A pin names a release of one source, so a renderer that forces another source drops it.
+					if source, forced := xxmi.PackageSource(key, *c); forced && source != previous {
+						c.PackageSource, c.PackageVersion = source, xxmi.VersionPin{Follow: "latest"}
+					}
+				})
+			}))
 	}
 	launchOptionsDescription := ""
 	if c.WWMI != nil {
@@ -1031,23 +1057,52 @@ func (s *Shell) importerPackageTab(ic *importerContext) []*fairy.El {
 			method = T(prefix + "verificationECDSA")
 		case "digest":
 			method = T(prefix + "verificationDigest")
+		case "provenance":
+			method = T(prefix + "verificationProvenance")
 		}
 		facts.Child(
 			fairy.Text(T(prefix+"installedVerification", "version", v.Version, "method", method)).LineHeight(16),
 		)
 	}
+	var packageRows []*fairy.El
+	packageSource, forced := xxmi.PackageSource(ic.key, c)
+	if sources := xxmi.PackageSources(ic.key); len(sources) > 1 {
+		items := make([]kit.Item, 0, len(sources))
+		for _, id := range sources {
+			items = append(items, kit.Item{Value: id, Label: T(prefix + "packageSources." + id)})
+		}
+		description := ""
+		if forced {
+			description = T(prefix + "packageSourceForced")
+		}
+		packageRows = append(packageRows, selectRow("xxmi.package-source", T(prefix+"packageSource"), description,
+			packageSource, items, func(value string) {
+				if value == packageSource {
+					return
+				}
+				p.allowUnsigned = false
+				// A pin names a release of one source.
+				ic.set(func(c *xxmi.ImporterConfig) {
+					c.PackageSource, c.PackageVersion = value, xxmi.VersionPin{Follow: "latest"}
+				})
+			}, kit.Disabled(forced)).Pad(0))
+	}
+	packageRows = append(packageRows, facts.PadXY(0, 12))
+	if c.PackageVersion.Pinned == "" && ic.installedFromOtherSource() {
+		packageRows = append(packageRows, xxmiAlert(lucide.Info, false, "", T(prefix+"packageSourceMismatch")))
+	}
 	versions := fairy.Col(s.versionOption(c.PackageVersion.Pinned == "", T(prefix+"latest"), nil, func() {
 		p.allowUnsigned = false
 		ic.set(func(c *xxmi.ImporterConfig) { c.PackageVersion = xxmi.VersionPin{Follow: "latest"} })
 	}, nil)).Gap(2).MaxH(288).ScrollY().PadXY(0, 12)
-	for _, release := range s.packageReleases("importer:" + ic.key).value {
+	for _, release := range s.packageReleases(xxmi.ImporterPackageID(ic.key, packageSource)).value {
 		version := release.Version
 		var extras []*fairy.El
 		if ic.isInstalledPackage(version) {
 			extras = append(extras, fairy.Text(T(prefix+"packageInstalled")).FontSize(12).LineHeight(16).
 				Color(t.MutedForeground))
 		}
-		if !release.Signed {
+		if !release.Verifiable() {
 			extras = append(extras, kit.Badge(T(prefix+"unsigned"), kit.Destructive))
 		}
 		details := T(prefix + "packageDetails")
@@ -1064,10 +1119,10 @@ func (s *Shell) importerPackageTab(ic *importerContext) []*fairy.El {
 			p.packageDialog = version
 		}, kit.Ghost, kit.Small, kit.Tooltip(details)).Label(details+" "+version)))
 	}
-	sections = append(sections, settingsGroup(T(prefix+"packageVersion"),
-		facts.PadXY(0, 12), versions,
+	packageRows = append(packageRows, versions,
 		toggleRow(T(prefix+"overwriteINI"), T(prefix+"overwriteINIDescription"), c.OverwriteINI,
-			func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { c.OverwriteINI = on }) }, false)))
+			func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { c.OverwriteINI = on }) }, false))
+	sections = append(sections, settingsGroup(T(prefix+"packageVersion"), packageRows...))
 	return sections
 }
 
@@ -1584,7 +1639,8 @@ func (s *Shell) importerDialogs(cx *fairy.Cx) {
 
 	if version := p.packageDialog; version != "" {
 		var release *xxmi.ReleaseInfo
-		for _, r := range keyed(x.releases, "package:importer:"+key).value {
+		source, _ := xxmi.PackageSource(key, ic.c)
+		for _, r := range keyed(x.releases, "package:"+xxmi.ImporterPackageID(key, source)).value {
 			if r.Version == version {
 				release = &r
 			}
@@ -1607,9 +1663,12 @@ func (s *Shell) importerDialogs(cx *fairy.Cx) {
 			if installed {
 				facts.Child(fairy.Text(T(prefix + "packageInstalled")).LineHeight(16))
 			}
-			if release.Signed {
+			switch {
+			case release.Signed:
 				facts.Child(fairy.Text(T(prefix + "signed")).LineHeight(16))
-			} else {
+			case release.Attested:
+				facts.Child(fairy.Text(T(prefix + "verificationProvenance")).LineHeight(16))
+			default:
 				facts.Child(kit.Badge(T(prefix+"unsigned"), kit.Destructive))
 			}
 			notes := release.Notes
@@ -1618,7 +1677,8 @@ func (s *Shell) importerDialogs(cx *fairy.Cx) {
 			}
 			body.Child(facts).Child(fairy.Col(fairy.Text(notes).FontSize(14).LineHeight(20).
 				Color(t.MutedForeground).Wrap()).MaxH(320).ScrollY())
-			if !installed && !release.Signed {
+			trusted := release.Verifiable()
+			if !installed && !trusted {
 				body.Child(fairy.Row(
 					fairy.Icon(lucide.ShieldAlert).Size(16, 16).Shrink(0),
 					fairy.Text(T(prefix+"allowUnsigned")).Grow(1).Wrap(),
@@ -1627,14 +1687,13 @@ func (s *Shell) importerDialogs(cx *fairy.Cx) {
 				).Gap(8).Align(fairy.Center).Color(t.Destructive))
 			}
 			if !installed {
-				signed := release.Signed
 				actions = append(actions, kit.Button(T(prefix+"install"), func() {
-					if !signed && !p.allowUnsigned {
+					if !trusted && !p.allowUnsigned {
 						return
 					}
 					ic.set(func(c *xxmi.ImporterConfig) { c.PackageVersion = xxmi.VersionPin{Pinned: version} })
-					s.saveImporter(ic, &packageInstall{version: version, allowUnsigned: !signed && p.allowUnsigned})
-				}, kit.Disabled(!signed && !p.allowUnsigned), kit.Loading(p.saving)))
+					s.saveImporter(ic, &packageInstall{version: version, allowUnsigned: !trusted && p.allowUnsigned})
+				}, kit.Disabled(!trusted && !p.allowUnsigned), kit.Loading(p.saving)))
 			}
 		}
 		kit.ShowDialog(cx, kit.DialogProps{

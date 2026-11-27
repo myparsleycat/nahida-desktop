@@ -31,6 +31,9 @@ func TestUpdateDirectionOffersDowngradeOnlyFromStableReleases(t *testing.T) {
 		{name: "older stable release", latest: "1.9.0", installed: "2.0.0-beta.1"},
 		{name: "stable replaces prerelease", latest: "2.0.0", installed: "2.0.0-beta.1", available: true},
 		{name: "not installed", latest: "1.2.3", available: true},
+		{name: "newer revision", latest: "1.2.2.2", installed: "1.2.2.1", available: true},
+		{name: "withdrawn revision", latest: "1.2.2.1", installed: "1.2.2.2", available: true, downgrade: true},
+		{name: "revision of a newer release", latest: "1.2.3.1", installed: "1.2.2.9", available: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -346,6 +349,74 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 		}
 	}
 	t.Fatalf("XXMI libraries status missing: %+v", statuses)
+}
+
+func TestCheckUpdatesOffersSelectedPackageSource(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := New()
+	useTestAppData(t, x)
+	x.UseClient(client)
+	useBuiltinLauncher(t, x)
+	cfg, err := DefaultImporterConfig("WWMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	cfg.Mode = RuntimeLegacy
+	cfg.XXMIVersion = VersionPin{Pinned: "1.7.6"}
+	if err := x.SaveImporterConfig(ctx, "WWMI", cfg); err != nil {
+		t.Fatal(err)
+	}
+	for pkg, latest := range map[string]string{
+		"importer:WWMI": "1.2.2", "importer:WWMI@myparsleycat": "1.2.2.1", "xxmi-libs": "1.7.7",
+	} {
+		if err := client.XXMIPackages.Upsert(ctx, db.XXMIPackageRow{
+			Package: pkg, LatestVersion: &latest, UpdateCheckTime: time.Now().Unix(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status := func() UpdateStatus {
+		t.Helper()
+		statuses, err := x.CheckUpdates(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, status := range statuses {
+			if strings.HasPrefix(status.Package, "importer:") {
+				return status
+			}
+		}
+		t.Fatalf("importer package status missing: %+v", statuses)
+		return UpdateStatus{}
+	}
+
+	// The official package installed before the importer had other sources is replaced by the default source's.
+	writeInstalledImporterPackage(t, "WWMI", cfg.ImporterFolder, "1.2.2")
+	if got := status(); got.Package != "importer:WWMI@myparsleycat" || got.Installed != "" || !got.Available {
+		t.Fatalf("status with the official package installed = %+v", got)
+	}
+
+	writeInstalledImporterPackage(t, "WWMI", cfg.ImporterFolder, "1.2.2.1")
+	record, err := json.Marshal(PackageVerification{Version: "1.2.2.1", Method: "digest", Source: "myparsleycat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ImporterFolder, packageVerificationName), record, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); got.Installed != "1.2.2.1" || got.Available {
+		t.Fatalf("status with the selected package installed = %+v", got)
+	}
 }
 
 func TestCheckUpdatesIncludesLegacyExtraDLLInjector(t *testing.T) {

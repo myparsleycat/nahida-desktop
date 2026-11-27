@@ -305,6 +305,21 @@ func TestStoredSchema1ConfigUpgrades(t *testing.T) {
 	}
 }
 
+func TestDecodeImporterConfigMovesUnsourcedPinToDefaultSource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	cfg, err := decodeImporterConfig("WWMI", root, `{"schemaVersion":2,"packageVersion":{"pinned":"1.2.2"}}`)
+	if err != nil || cfg.PackageSource != "myparsleycat" || cfg.PackageVersion != (VersionPin{Follow: "latest"}) {
+		t.Fatalf("config stored before package sources = %q, %+v, err = %v", cfg.PackageSource, cfg.PackageVersion, err)
+	}
+	cfg, err = decodeImporterConfig(
+		"WWMI", root, `{"schemaVersion":2,"packageSource":"myparsleycat","packageVersion":{"pinned":"1.2.2.1"}}`,
+	)
+	if err != nil || cfg.PackageVersion != (VersionPin{Pinned: "1.2.2.1"}) {
+		t.Fatalf("pin of the stored source = %+v, err = %v", cfg.PackageVersion, err)
+	}
+}
+
 func TestImporterSettingsRejectInvalidLaunchFields(t *testing.T) {
 	t.Parallel()
 	for name, mutate := range map[string]func(*ImporterConfig){

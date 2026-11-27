@@ -33,7 +33,8 @@ const (
 	AgentSkillsDir       = AgentDir + string(filepath.Separator) + "skills"
 	ElevatedDir          = "elevated"
 	WebViewDir           = "webview"
-	// SigstoreDir caches the Sigstore TUF metadata that self-update verifies release provenance against.
+	// SigstoreDir caches the Sigstore TUF metadata that self-update and importer package installs verify release
+	// provenance against.
 	SigstoreDir = "sigstore"
 	// NotificationIcon is the image Windows shows on the app's toast notifications.
 	NotificationIcon = "notification-icon.png"

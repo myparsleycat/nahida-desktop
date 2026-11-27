@@ -3078,10 +3078,18 @@
           "noPackageNotes": "このバージョンのパッケージ説明はありません。",
           "overwriteINI": "パッケージのインストール時に d3dx.ini を上書きする",
           "currentPin": "選択中のパッケージ",
+          "packageSource": "パッケージ提供元",
+          "packageSourceForced": "DirectX 12 または Vulkan で描画する可能性があるゲームでは、myparsleycat のパッケージのみが Mod を適用します。",
+          "packageSourceMismatch": "インストール済みのパッケージは別の提供元のものです。下の一覧からインストールするバージョンを選択してください。",
+          "packageSources": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "packageInstalled": "インストール済み",
           "installedVerification": "{{version}} インストール時の検証: {{method}}",
           "verificationECDSA": "ECDSA 署名",
           "verificationDigest": "SHA-256 ハッシュ",
+          "verificationProvenance": "GitHub ビルド来歴証明",
           "verificationNone": "未検証",
           "latest": "最新版に追従",
           "allowUnsigned": "署名のないリリースを許可",

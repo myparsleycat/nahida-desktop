@@ -269,7 +269,9 @@ func (x *XXMI) ImportExternalLauncher(
 			return nil, err
 		}
 		if input.VersionMode == ImportVersionPinned {
+			// The external launcher installs only the official package.
 			cfg.PackageVersion = VersionPin{Pinned: *installed}
+			cfg.PackageSource = spec.id
 		}
 		wrapper, _ := config["Importers"].(map[string]any)[key].(map[string]any)
 		importer, _ := wrapper["Importer"].(map[string]any)

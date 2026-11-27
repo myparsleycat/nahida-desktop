@@ -34,10 +34,12 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 			continue
 		}
 		var installed *string
+		installedSource := ""
 		if spec, ok := lookupImporterPackage(row.Key); ok {
-			installed = readImporterVersion(cfg.ImporterFolder, spec)
+			installed, installedSource = installedImporterPackage(cfg.ImporterFolder, spec)
 		}
-		pkg, err := client.XXMIPackages.Get(ctx, "importer:"+row.Key)
+		selected, _ := PackageSource(row.Key, cfg)
+		pkg, err := client.XXMIPackages.Get(ctx, ImporterPackageID(row.Key, selected))
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +56,7 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 			}
 			info.UpdateCheckTime = float64(pkg.UpdateCheckTime)
 		}
-		if installed != nil {
+		if installed != nil && installedSource == selected {
 			info.DeployedVersion = *installed
 		}
 		customDLL, err := x.launchesCustomDLL(ctx, cfg)
@@ -62,9 +64,17 @@ func (x *XXMI) builtinEnabledImporters(ctx context.Context) ([]EnabledImporter, 
 			return nil, err
 		}
 		available, _ := updateDirection(info.LatestVersion, info.DeployedVersion, info.SkippedVersion)
-		out = append(out, EnabledImporter{Key: row.Key, Mode: cfg.Mode, ImporterFolder: cfg.ImporterFolder,
-			GameFolder: cfg.GameFolder, InstalledVersion: installed, PackageInfo: info,
-			UpdateAvailable: available, CustomDLL: customDLL})
+		out = append(out, EnabledImporter{
+			Key:              row.Key,
+			Mode:             cfg.Mode,
+			ImporterFolder:   cfg.ImporterFolder,
+			GameFolder:       cfg.GameFolder,
+			InstalledVersion: installed,
+			InstalledSource:  installedSource,
+			PackageInfo:      info,
+			UpdateAvailable:  available,
+			CustomDLL:        customDLL,
+		})
 	}
 	return out, nil
 }

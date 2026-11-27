@@ -81,6 +81,7 @@ func bootRuntime(
 		return paths, err
 	}
 	rt.provenance = provenance.NewTrust(rt.http, trustCache, rt.log)
+	rt.xxmi.UseProvenance(rt.provenance)
 	imageCacheDir, err := data.EnsureDir(appdata.ImageCacheDir)
 	if err != nil {
 		// An empty Dir makes the cache fetch every image without storing it.

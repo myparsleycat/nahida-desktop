@@ -30,6 +30,9 @@ func ValidateImporterSettings(key string, cfg ImporterConfig) error {
 			return fmt.Errorf("invalid %s", name)
 		}
 	}
+	if cfg.PackageSource != "" && !slices.Contains(PackageSources(key), cfg.PackageSource) {
+		return fmt.Errorf("invalid package source %q", cfg.PackageSource)
+	}
 	if cfg.CustomDLL != "" && !isHashID(cfg.CustomDLL) {
 		return fmt.Errorf("invalid custom DLL %q", cfg.CustomDLL)
 	}

@@ -83,7 +83,8 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if !cfg.Enabled {
 			continue
 		}
-		packages["importer:"+row.Key] = struct{}{}
+		source, _ := PackageSource(row.Key, cfg)
+		packages[ImporterPackageID(row.Key, source)] = struct{}{}
 		provider, err := x.deployedLibsProvider(ctx, cfg)
 		if err != nil {
 			return nil, err
@@ -157,12 +158,13 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 		if !cfg.Enabled {
 			continue
 		}
-		pkg := "importer:" + row.Key
+		source, _ := PackageSource(row.Key, cfg)
+		pkg := ImporterPackageID(row.Key, source)
 		status := updateStatus(row.Key, pkg, states[pkg])
-		if spec, ok := lookupImporterPackage(row.Key); ok {
-			if installed := readImporterVersion(cfg.ImporterFolder, spec); installed != nil {
-				status.Installed = *installed
-			}
+		// A package from another source than the selected one reports no version, so the selected source's latest
+		// release is offered in its place.
+		if installed := selectedInstalledPackage(row.Key, cfg); installed != nil {
+			status.Installed = *installed
 		}
 		status.Pinned = cfg.PackageVersion.Pinned != ""
 		status.Available, status.Downgrade = updateDirection(
@@ -373,10 +375,11 @@ func updateDirection(latest, installed, skipped string) (available, downgrade bo
 	if latest == "" || latest == installed || latest == skipped {
 		return false, false
 	}
-	if !semver.IsValid("v"+latest) || !semver.IsValid("v"+installed) {
+	order, ok := compareReleaseVersions(latest, installed)
+	if !ok {
 		return true, false
 	}
-	switch order := semver.Compare("v"+latest, "v"+installed); {
+	switch {
 	case order > 0:
 		return true, false
 	case order < 0 && semver.Prerelease("v"+installed) == "":
@@ -400,11 +403,7 @@ func legacyUsesXXMIInjector(cfg ImporterConfig) bool {
 
 func (x *XXMI) SkipVersion(ctx context.Context, pkg, version string) error {
 	if _, overlay := lookupOverlayPackage(pkg); pkg != "xxmi-libs" && pkg != "gi-fps-unlocker" && !overlay {
-		key, ok := strings.CutPrefix(pkg, "importer:")
-		if !ok {
-			return errors.New("unknown XXMI package")
-		}
-		if _, ok := lookupImporterPackage(key); !ok {
+		if _, ok := parseImporterPackageID(pkg); !ok {
 			return errors.New("unknown XXMI package")
 		}
 	}

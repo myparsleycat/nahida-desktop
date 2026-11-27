@@ -3078,10 +3078,18 @@
           "noPackageNotes": "此版本没有软件包说明。",
           "overwriteINI": "安装软件包时覆盖 d3dx.ini",
           "currentPin": "选定的软件包",
+          "packageSource": "软件包提供者",
+          "packageSourceForced": "对于可能使用 DirectX 12 或 Vulkan 渲染的游戏，只有 myparsleycat 软件包能应用 Mod。",
+          "packageSourceMismatch": "已安装的软件包来自其他提供者。请从下方列表中选择要安装的版本。",
+          "packageSources": {
+            "spectrumqt": "SpectrumQT",
+            "myparsleycat": "myparsleycat"
+          },
           "packageInstalled": "已安装",
           "installedVerification": "安装 {{version}} 时的验证方式：{{method}}",
           "verificationECDSA": "ECDSA 签名",
           "verificationDigest": "SHA-256 摘要",
+          "verificationProvenance": "GitHub 构建来源证明",
           "verificationNone": "未验证",
           "latest": "跟随最新版本",
           "allowUnsigned": "允许未签名的发布",

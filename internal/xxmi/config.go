@@ -132,7 +132,10 @@ type ImporterConfig struct {
 	Enabled        bool        `json:"enabled"`
 	Mode           RuntimeMode `json:"mode"`
 	PackageVersion VersionPin  `json:"packageVersion"`
-	XXMIVersion    VersionPin  `json:"xxmiVersion"`
+	// PackageSource is the package source the importer installs from, one of PackageSources; PackageSource resolves
+	// the one in effect.
+	PackageSource string     `json:"packageSource"`
+	XXMIVersion   VersionPin `json:"xxmiVersion"`
 	// CustomDLL is the cached custom d3d11.dll this importer uses in place of its provider's in unsafe mode.
 	// Without one, an importer that follows the shared provider uses the shared custom DLL.
 	CustomDLL string `json:"customDll"`
@@ -226,6 +229,9 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 		AutoUpdateModRuntimes: true,
 		LaunchCount:           -1,
 	}
+	if len(spec.alternatives) > 0 {
+		cfg.PackageSource, _ = PackageSource(key, cfg)
+	}
 	if spec.useHook {
 		cfg.XXMIDLLInjectMode = "Hook"
 	}
@@ -261,6 +267,20 @@ func decodeImporterConfig(key, root, stored string) (ImporterConfig, error) {
 	defaults := cfg
 	if err := json.Unmarshal([]byte(stored), &cfg); err != nil {
 		return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
+	}
+
+	// A config stored before its importer had other package sources takes the default source, while its pin names
+	// a release of the official source.
+	if spec, _ := lookupImporterPackage(key); len(spec.alternatives) > 0 && cfg.PackageVersion.Pinned != "" {
+		var source struct {
+			PackageSource *string `json:"packageSource"`
+		}
+		if err := json.Unmarshal([]byte(stored), &source); err != nil {
+			return ImporterConfig{}, fmt.Errorf("decode importer %s config: %w", key, err)
+		}
+		if source.PackageSource == nil {
+			cfg.PackageVersion = VersionPin{Follow: "latest"}
+		}
 	}
 	if cfg.SchemaVersion != 1 {
 		return cfg, nil

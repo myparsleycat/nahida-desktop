@@ -19,6 +19,7 @@ import (
 	"nahida.live/desktop/internal/github"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/provenance"
 	"nahida.live/desktop/internal/reshade"
 	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
@@ -75,7 +76,9 @@ type EnabledImporter struct {
 	Running          bool        `json:"running"`
 	UpdateAvailable  bool        `json:"updateAvailable"`
 	InstalledVersion *string     `json:"installedVersion"`
-	PackageInfo      PackageInfo `json:"packageInfo"`
+	// InstalledSource is the package source of InstalledVersion under the built-in launcher.
+	InstalledSource string      `json:"installedSource,omitempty"`
+	PackageInfo     PackageInfo `json:"packageInfo"`
 	// CustomDLL reports that the built-in runtime launches with a user-provided d3d11.dll instead of the signed one.
 	CustomDLL bool `json:"customDll"`
 }
@@ -195,6 +198,11 @@ type XXMI struct {
 	launchSettings launchFixer
 	// installImporter installs an importer package; tests replace it to avoid signed GitHub releases.
 	installImporter func(context.Context, importerPackageSpec, ImporterConfig, InstallImporterPackageInput) error
+	// provenanceTrust is the Sigstore trust importer package provenance is verified against.
+	provenanceTrust *provenance.Trust
+	// verifyProvenance verifies the build provenance of a downloaded file; tests replace it so no Sigstore trust
+	// is loaded.
+	verifyProvenance func(ctx context.Context, claim provenanceClaim, bundles []json.RawMessage) error
 	// prepareImportLibraries prepares a verified cache; tests replace it to avoid signed GitHub releases.
 	prepareImportLibraries func(context.Context, string, string, string) error
 	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
@@ -232,6 +240,7 @@ func NewWithOptions(opts Options) *XXMI {
 	x.installImporter = func(ctx context.Context, spec importerPackageSpec, cfg ImporterConfig, input InstallImporterPackageInput) error {
 		return x.installBuiltinImporterPackage(ctx, spec, cfg, input, nil, nil)
 	}
+	x.verifyProvenance = x.verifyBuildProvenance
 	x.prepareImportLibraries = x.cacheImportLibraries
 	x.findProcess = findProcessPID
 	x.registryGameExecutables = registryGameExecutablePaths

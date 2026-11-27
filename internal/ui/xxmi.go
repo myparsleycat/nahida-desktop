@@ -1126,7 +1126,11 @@ func updateLine(entry xxmi.UpdateStatus) string {
 	if installed == "" {
 		installed = T("page.setting.xxmi.builtin.notInstalled")
 	}
-	line := entry.Package + ": " + installed + " → " + entry.LatestVersion
+	name, source := xxmi.SplitImporterPackageID(entry.Package)
+	if source != "" {
+		name += " (" + T("page.setting.xxmi.builtin.packageSources."+source) + ")"
+	}
+	line := name + ": " + installed + " → " + entry.LatestVersion
 	if entry.Downgrade {
 		line += " (" + T("page.setting.xxmi.builtin.downgrade") + ")"
 	}

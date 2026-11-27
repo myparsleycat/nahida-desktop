@@ -13,6 +13,8 @@ const packageVerificationName = ".nahida-package-verification.json"
 type PackageVerification struct {
 	Version string `json:"version"`
 	Method  string `json:"method"`
+	// Source is the package source the release came from; a record without one is of the official source.
+	Source string `json:"source,omitempty"`
 }
 
 func (x *XXMI) GetImporterPackageVerification(ctx context.Context, key string) (*PackageVerification, error) {
@@ -28,8 +30,11 @@ func (x *XXMI) GetImporterPackageVerification(ctx context.Context, key string) (
 	if err != nil || record == nil {
 		return nil, err
 	}
-	installed := readImporterVersion(cfg.ImporterFolder, spec)
-	if installed == nil || *installed != record.Version {
+	installed, source := installedImporterPackage(cfg.ImporterFolder, spec)
+	if record.Source == "" {
+		record.Source = spec.id
+	}
+	if installed == nil || *installed != record.Version || record.Source != source {
 		return nil, nil
 	}
 	return record, nil
@@ -60,7 +65,9 @@ func readPackageVerification(importerFolder string) (*PackageVerification, error
 	if err := json.Unmarshal(data, &record); err != nil {
 		return nil, fmt.Errorf("decode package verification record: %w", err)
 	}
-	if record.Method != "ecdsa" && record.Method != "digest" && record.Method != "none" {
+	switch record.Method {
+	case "provenance", "ecdsa", "digest", "none":
+	default:
 		return nil, errors.New("invalid package verification method")
 	}
 	return &record, nil
