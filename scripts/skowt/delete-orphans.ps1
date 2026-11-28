@@ -1,5 +1,9 @@
+param(
+  [string]$Manifest = (Join-Path $PSScriptRoot 'work\r2-orphans.json')
+)
+
 $ErrorActionPreference = 'Stop'
-$report = Get-Content (Join-Path $PSScriptRoot 'work\r2-orphans.json') -Raw | ConvertFrom-Json
+$report = Get-Content $Manifest -Raw | ConvertFrom-Json
 $keys = @($report.motion) + @($report.original) + @($report.textures)
 Write-Output "deleting $($keys.Count) unreferenced objects"
 

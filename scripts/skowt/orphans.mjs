@@ -1,8 +1,8 @@
-// Lists the staged uploads that the embedded indexes no longer reference, then writes work/r2-orphans.json for
-// delete-orphans.ps1. Run it after a merge that replaced existing characters, before work/upload is deleted.
+// Lists the staged uploads that the embedded indexes no longer reference, then writes r2-orphans.json next to
+// the staging directory for delete-orphans.ps1. Run it after a merge that replaced existing characters.
 //
-//   bun scripts/skowt/orphans.mjs
-//   pwsh -NoProfile -File scripts/skowt/delete-orphans.ps1
+//   bun scripts/skowt/orphans.mjs [upload-dir]
+//   pwsh -NoProfile -File scripts/skowt/delete-orphans.ps1 [-Manifest <path>]
 
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { gunzipSync } from 'node:zlib';
 
 const ROOT = path.resolve(import.meta.dir);
 const REPO = path.resolve(ROOT, '..', '..');
-const STAGE = path.join(ROOT, 'work', 'upload');
+const STAGE = process.argv[2] ? path.resolve(process.argv[2]) : path.join(ROOT, 'work', 'upload');
 
 const glb = (buf) => {
   const len = buf.readUInt32LE(12);
@@ -80,8 +80,9 @@ for (const name of textures) {
   if (!used.has(name)) report.textures.push(`desktop/character-original/textures/${name}`);
 }
 
-mkdirSync(path.join(ROOT, 'work'), { recursive: true });
-writeFileSync(path.join(ROOT, 'work', 'r2-orphans.json'), JSON.stringify(report, null, 1) + '\n');
+const manifest = path.join(path.dirname(STAGE), 'r2-orphans.json');
+mkdirSync(path.dirname(manifest), { recursive: true });
+writeFileSync(manifest, JSON.stringify(report, null, 1) + '\n');
 console.log(
   `unreferenced: motion ${report.motion.length}, original ${report.original.length}, textures ${report.textures.length}`,
 );

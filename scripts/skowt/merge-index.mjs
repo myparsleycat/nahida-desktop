@@ -1,13 +1,15 @@
 // Merges the delta index rows into the embedded indexes and stages the files to upload.
 //
-//   bun scripts/skowt/merge-index.mjs
+//   bun scripts/skowt/merge-index.mjs [work-dir]
+//
+// work-dir defaults to scripts/skowt/work; scripts/warfarin passes its own.
 
 import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const HANDOFF = path.resolve(import.meta.dir);
 const REPO = path.resolve(HANDOFF, '..', '..');
-const ROOT = path.join(HANDOFF, 'work');
+const ROOT = process.argv[2] ? path.resolve(process.argv[2]) : path.join(HANDOFF, 'work');
 const STAGE = path.join(ROOT, 'upload');
 
 async function loadIndex(file) {

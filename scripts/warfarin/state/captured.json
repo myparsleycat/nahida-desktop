@@ -1,0 +1,150 @@
+{
+ "version": "https://assets.warfarin.wiki/studio/c0727135872664fd4c33eabd73c925dd/",
+ "updated": "2026-11-28T08:36:59.829Z",
+ "characters": {
+  "chr_0002_endminm": {
+   "name": "Endministrator (M)",
+   "model": "5a0cab050f2c0138.bin"
+  },
+  "chr_0003_endminf": {
+   "name": "Endministrator (F)",
+   "model": "4bed4f358686f40e.bin"
+  },
+  "chr_0004_pelica": {
+   "name": "Perlica",
+   "model": "df518f5a273a4b5a.bin"
+  },
+  "chr_0005_chen": {
+   "name": "Chen Qianyu",
+   "model": "bb2c7b515f72e6ed.bin"
+  },
+  "chr_0006_wolfgd": {
+   "name": "Wulfgard",
+   "model": "b12003f90e64b7e8.bin"
+  },
+  "chr_0007_ikut": {
+   "name": "Arclight",
+   "model": "c32a579667c40d4b.bin"
+  },
+  "chr_0009_azrila": {
+   "name": "Ember",
+   "model": "7fa74be1fd8c1faf.bin"
+  },
+  "chr_0011_seraph": {
+   "name": "Xaihi",
+   "model": "4dc23a13625db872.bin"
+  },
+  "chr_0012_avywen": {
+   "name": "Avywenna",
+   "model": "b4b177cbb2bc51b6.bin"
+  },
+  "chr_0013_aglina": {
+   "name": "Gilberta",
+   "model": "8efe9042b8022aea.bin"
+  },
+  "chr_0014_aurora": {
+   "name": "Snowshine",
+   "model": "e69fc3f128ba86a8.bin"
+  },
+  "chr_0015_lifeng": {
+   "name": "Lifeng",
+   "model": "1ea65b111df6280c.bin"
+  },
+  "chr_0016_laevat": {
+   "name": "Laevatain",
+   "model": "bba2e381c1d28ad8.bin"
+  },
+  "chr_0017_yvonne": {
+   "name": "Yvonne",
+   "model": "79176bf62c2751a9.bin"
+  },
+  "chr_0018_dapan": {
+   "name": "Da Pan",
+   "model": "2a463232326a1ba1.bin"
+  },
+  "chr_0019_karin": {
+   "name": "Akekuri",
+   "model": "228f2c4df18264f4.bin"
+  },
+  "chr_0020_meurs": {
+   "name": "Catcher",
+   "model": "931ab2b2fa7aed2e.bin"
+  },
+  "chr_0021_whiten": {
+   "name": "Estella",
+   "model": "0a0d4ac9aa8e0a26.bin"
+  },
+  "chr_0022_bounda": {
+   "name": "Fluorite",
+   "model": "3262cafc9b9c28a3.bin"
+  },
+  "chr_0023_antal": {
+   "name": "Antal",
+   "model": "20c55e0b0e864e7b.bin"
+  },
+  "chr_0024_deepfin": {
+   "name": "Alesh",
+   "model": "b6db4c23c5cb8e43.bin"
+  },
+  "chr_0025_ardelia": {
+   "name": "Ardelia",
+   "model": "5bd8f2a4fba43357.bin"
+  },
+  "chr_0026_lastrite": {
+   "name": "Last Rite",
+   "model": "34c57a0fced98f2b.bin"
+  },
+  "chr_0027_tangtang": {
+   "name": "Tangtang",
+   "model": "4f3e0b49f3646af2.bin"
+  },
+  "chr_0028_wulfa": {
+   "name": "Rossi",
+   "model": "622606522da6979e.bin"
+  },
+  "chr_0029_pograni": {
+   "name": "Pogranichnik",
+   "model": "03532a682ecf5200.bin"
+  },
+  "chr_0030_zhuangfy": {
+   "name": "Zhuang Fangyi",
+   "model": "5ced728d6f37a2f0.bin"
+  },
+  "chr_0031_mifu": {
+   "name": "Mi Fu",
+   "model": "b2ac256331127274.bin"
+  },
+  "chr_0032_lizhiyan": {
+   "name": "Arcane",
+   "model": "27bd22f2e83ba7f6.bin"
+  },
+  "chr_0033_camille": {
+   "name": "Camille",
+   "model": "df7dd1dc241fbc74.bin"
+  },
+  "chr_0034_typhoea": {
+   "name": "Typhoeus",
+   "model": "203b525c9e61b029.bin"
+  },
+  "chr_0035_liino": {
+   "name": "Liino",
+   "model": "742a605b1f0d0b87.bin"
+  },
+  "chr_0036_jsspsi": {
+   "name": "Si",
+   "model": "d64ac8d2e6c0c6f0.bin"
+  },
+  "chr_0037_minghe": {
+   "name": "Argent Flow",
+   "model": "21f459cc2543205e.bin"
+  },
+  "chr_0038_purrche": {
+   "name": "Purrchena",
+   "model": "c7aa34b7902a4acd.bin"
+  },
+  "chr_0040_sweetpie": {
+   "name": "Kay",
+   "model": "7f34595bf5804a3b.bin"
+  }
+ }
+}

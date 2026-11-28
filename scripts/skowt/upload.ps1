@@ -1,10 +1,11 @@
 param(
   [Parameter(Mandatory = $true)][string]$Group,
-  [int]$Throttle = 8
+  [int]$Throttle = 8,
+  [string]$Work = (Join-Path $PSScriptRoot 'work\upload')
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Join-Path $PSScriptRoot "work\upload\$Group"
+$root = Join-Path $Work $Group
 $prefix = "nhd-public/desktop/character-$Group"
 $wrangler = (Get-Command npx).Source
 
