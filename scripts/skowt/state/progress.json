@@ -40,7 +40,7 @@
   "nextRun": {
     "scripts": "live.mjs -> diff.mjs -> prep.mjs, then capture, then mark-captured.mjs",
     "baseline": "captured.json now holds the 2026-11-28 revisions, so diff.mjs reports changed 0 and newData 1",
-    "openGap": "zzmi/promeia is in the character catalog and on skowt, but skowt serves only the model role for it (links has no anim and no toon entry, metadata roles [\"model\"], character:null), so the motion/original capture format cannot represent it; it would need static-model support, and a capture attempt stops at 'no anim link'"
+    "openGap": "zzmi/promeia is in the character catalog and on skowt, but skowt serves only the model role for it (links has no anim and no toon entry, metadata roles [\"model\"], character:null), so the motion/original capture format cannot represent it and a capture attempt stops at 'no anim link'. Skipped by decision on 2026-11-28 and listed in state/skipped.json so diff.mjs no longer reports it."
   },
   "notes": [
     "The viewer block (409 gate reload, unwrap on l=1) disappeared after the browser's cookies and site data were cleared; no bypass was used.",

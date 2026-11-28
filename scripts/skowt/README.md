@@ -71,11 +71,12 @@ bun scripts/skowt/diff.mjs
 bun scripts/skowt/prep.mjs
 ```
 
-기대: `diff.mjs`가 `changed <n>, newData <m>, missing <k>`를 출력하고,
+기대: `diff.mjs`가 `changed <n>, newData <m>, skipped <k>, missing <d>`를 출력하고,
 `prep.mjs`가 대상 수와 게임별 개수를 출력한다.
 
 - `changed`: `state/captured.json`의 rev와 라이브 rev가 다른 캐릭터 (publicId로 결합)
 - `newData`: 카탈로그에 있으나 인덱스에 없는 캐릭터 (이름을 slug로 바꿔 라이브와 결합)
+- `skipped`: 의도적으로 받지 않기로 한 캐릭터 (`state/skipped.json`). `newData`에서 빠진다
 - `missing`: 라이브에서 사라진 캡처 항목. 다시 캡처하지 않는다
 - `catalog without a skowt item`: skowt에 없는 카탈로그 항목(예: `gimi/manekin`). 무시
 
@@ -385,6 +386,7 @@ state/
   diff.json          changed / newData / missing (diff.mjs)
   targets.json       이번 실행 대상 + meta (prep.mjs)
   remaining.json     수신 서버가 /targets 로 제공하는 목록
+  skipped.json       받지 않기로 한 캐릭터와 사유 (커밋 대상)
   progress.json      실행 결과, 업로드 용량, 검증 상태
   recapture.json     모프 누락 재캡처 기록 (2026-11-28)
 scripts/

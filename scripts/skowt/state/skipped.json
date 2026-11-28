@@ -1,0 +1,10 @@
+{
+  "skipped": [
+    {
+      "game": "zzmi",
+      "key": "promeia",
+      "since": "2026-11-28",
+      "reason": "skowt serves only the model role for this asset: links has no anim and no toon entry, and the metadata roles are [\"model\"]. The motion/original format needs animation clips and toon materials, so it would need static-model support first."
+    }
+  ]
+}

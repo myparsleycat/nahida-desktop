@@ -22,6 +22,14 @@ const GAMES = ['gimi', 'srmi', 'zzmi'];
 
 const live = JSON.parse(await readFile(path.join(STATE, 'live.json'), 'utf8'));
 const captured = JSON.parse(await readFile(path.join(STATE, 'captured.json'), 'utf8'));
+// Characters deliberately left without data. They stay out of newData so every run does not report them again.
+let skipped = [];
+try {
+  skipped = JSON.parse(await readFile(path.join(STATE, 'skipped.json'), 'utf8')).skipped ?? [];
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+const skippedKeys = new Set(skipped.map((row) => `${row.game}/${row.key}`));
 const motion = JSON.parse(
   await readFile(path.join(REPO, 'internal/tools/model_viewer/character_motion_index.json'), 'utf8'),
 );
@@ -79,6 +87,7 @@ for (const game of GAMES) {
   for (const character of catalog) {
     const key = character.id;
     if (motion.characters[game]?.[key] && original.characters[game]?.[key]) continue;
+    if (skippedKeys.has(`${game}/${key}`)) continue;
     const item = bySlug.get(`${game}/${key}`);
     // A catalog character with no skowt item is not a capture target, such as the GIMI mannequin.
     if (!item) {
@@ -92,10 +101,10 @@ for (const game of GAMES) {
 changed.sort((a, b) => a.key.localeCompare(b.key));
 newData.sort((a, b) => `${a.g}/${a.key}`.localeCompare(`${b.g}/${b.key}`));
 
-const diff = { changed, missing, newData, duplicates, unmatchedCatalog };
+const diff = { changed, missing, newData, duplicates, unmatchedCatalog, skipped: skipped.map((row) => `${row.game}/${row.key}`) };
 await writeFile(path.join(STATE, 'diff.json'), JSON.stringify(diff, null, 1) + '\n');
 console.log(
-  `changed ${changed.length}, newData ${newData.length}, missing ${missing.length}, duplicate baseline rows ${duplicates.length}`,
+  `changed ${changed.length}, newData ${newData.length}, skipped ${skippedKeys.size}, missing ${missing.length}, duplicate baseline rows ${duplicates.length}`,
 );
 if (newData.length) console.log(`newData: ${newData.map((row) => `${row.g}/${row.key}`).join(', ')}`);
 if (unmatchedCatalog.length) console.log(`catalog without a skowt item: ${unmatchedCatalog.join(', ')}`);
