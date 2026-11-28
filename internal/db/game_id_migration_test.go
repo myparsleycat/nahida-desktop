@@ -211,6 +211,31 @@ JOIN "mod_presets" p ON p."game" = g."game" WHERE p."id" = 'preset'`).Scan(&game
 	assertMigratedGameRelations(t, client, row.ID, 5)
 }
 
+// An older version rebuilds the tables without game IDs but keeps the migration marker a newer one recorded.
+func TestReconcileMigratesGameIDsAfterOlderVersionRebuild(t *testing.T) {
+	t.Parallel()
+	client := seedLegacyGameIDs(t)
+	ctx := t.Context()
+	if err := client.exec(
+		ctx,
+		`INSERT INTO "_schema_state" VALUES ('game_ids', '1', '2026-11-28T05:22:44Z')`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := client.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile legacy tables with a stale marker: %v", err)
+	}
+	row, err := client.GamePaths.GetByGame(ctx, " Case ")
+	if err != nil || row == nil {
+		t.Fatalf("game after reconcile = %+v, %v", row, err)
+	}
+	if _, err := uuid.Parse(row.ID); err != nil {
+		t.Fatalf("game ID %q: %v", row.ID, err)
+	}
+	assertMigratedGameRelations(t, client, row.ID, 5)
+}
+
 func assertMigratedGameRelations(t *testing.T, client *Client, gameID string, want int) {
 	t.Helper()
 	var count int

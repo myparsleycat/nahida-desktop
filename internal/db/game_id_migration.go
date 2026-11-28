@@ -34,18 +34,8 @@ func (c *Client) migrateGameIDs(ctx context.Context) error {
 WHERE "type" = 'table' AND "name" = '_schema_state')`).Scan(&hasSchemaState); err != nil {
 		return fmt.Errorf("find migration state: %w", err)
 	}
-	if hasSchemaState {
-		var complete string
-		err := tx.QueryRowContext(ctx, `SELECT "value" FROM "_schema_state" WHERE "key" = ?`, SchemaKeyGameIDs).
-			Scan(&complete)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("read migration state: %w", err)
-		}
-		if complete == "1" {
-			return nil
-		}
-	}
-
+	// The table's shape decides rather than the SchemaKeyGameIDs marker: a version without game IDs rebuilds the
+	// tables to its own schema and drops the IDs, but leaves the marker a newer version recorded.
 	columns, err := pragmaTableInfoOn(ctx, tx, "game_paths")
 	if err != nil || len(columns) == 0 || migrationHasColumn(columns, "id") {
 		return err
