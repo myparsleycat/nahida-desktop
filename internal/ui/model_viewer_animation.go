@@ -826,8 +826,7 @@ func (v *ModelViewer) statusChips(t kit.Theme, status viewerStatus) *fairy.El {
 }
 
 // animationLane is one track's row of a controller of width: the play button, the clip, a frame scrubber between
-// jumps to the clip's ends, the time and the speed. The motion lane ends with a button that turns the motions off,
-// and the mod's lane leaves that room empty beside it, so the two scrubbers line up.
+// jumps to the clip's ends, the time and the speed.
 func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float32, paired bool) *fairy.El {
 	p, clip := v.playback(track), v.trackClip(track)
 	last := max(len(clip.Frames)-1, 0)
@@ -858,14 +857,6 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 		lane.Child(v.animationTime(t, p, clip))
 	}
 	lane.Child(v.animationSpeedMenu(t, track, p))
-	switch {
-	case track == trackMotion:
-		off := T("page.tools.model_viewer.animation_motion_off")
-		lane.Child(kit.IconButton(lucide.X, v.dismissMotion, kit.Ghost, kit.Small,
-			kit.Tooltip(off)).Label(off))
-	case paired:
-		lane.Child(fairy.Box().Size(28, 28).Shrink(0))
-	}
 	return lane
 }
 

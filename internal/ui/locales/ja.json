@@ -1706,7 +1706,6 @@
         "animation_end": "末尾へ",
         "animation_time": "{{seconds}} 秒",
         "animation_duration": "/ {{total}}",
-        "animation_motion_off": "キャラクターモーションをオフ",
         "animation_move": "コントローラーを移動",
         "menu": {
           "model": "モデル",

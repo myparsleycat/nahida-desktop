@@ -295,12 +295,6 @@ func (v *ModelViewer) setCharacterMotion(enabled bool) {
 	}
 }
 
-// dismissMotion turns the character's motions off in this viewer only.
-func (v *ModelViewer) dismissMotion() {
-	v.motionDismissed = true
-	v.stopMotion()
-}
-
 // syncMotion starts the character's motions for the scene shown when they are wanted, or stops them when they are
 // not or no longer apply. Call it on each build.
 func (v *ModelViewer) syncMotion() {

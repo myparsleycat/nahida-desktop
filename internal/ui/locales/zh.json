@@ -1706,7 +1706,6 @@
         "animation_end": "跳到结尾",
         "animation_time": "{{seconds}} 秒",
         "animation_duration": "/ {{total}}",
-        "animation_motion_off": "关闭角色动作",
         "animation_move": "移动控制器",
         "menu": {
           "model": "模型",

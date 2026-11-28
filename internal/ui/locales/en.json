@@ -1712,7 +1712,6 @@
         "animation_end": "Go to end",
         "animation_time": "{{seconds}} s",
         "animation_duration": "of {{total}}",
-        "animation_motion_off": "Turn off character motion",
         "animation_move": "Move controller",
         "menu": {
           "model": "Model",

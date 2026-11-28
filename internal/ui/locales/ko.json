@@ -1706,7 +1706,6 @@
         "animation_end": "끝으로",
         "animation_time": "{{seconds}}초",
         "animation_duration": "/ {{total}}",
-        "animation_motion_off": "캐릭터 모션 끄기",
         "animation_move": "컨트롤러 이동",
         "menu": {
           "model": "모델",
