@@ -391,6 +391,28 @@ func TestCharacterMotion_MapPalettesOwnSkin(t *testing.T) {
 	}
 }
 
+func TestCharacterMotion_MapPalettesRecoversDistantGroupOutsideDominantSkin(t *testing.T) {
+	m := mirroredTestMotion(t)
+	m.skins = [][]int{{1}, {2}}
+	for i := range m.refs {
+		if m.refs[i].nodes[0] == 2 {
+			m.refs[i].skin = 1
+		}
+	}
+	var palette MotionPalette
+	for _, y := range []float32{-0.01, -0.008, -0.006, -0.004, -0.002, 0, 0.002, 0.004, 0.006, 0.008, 0.01} {
+		addTestVertices(&palette, fullTestWeight(4), [3]float32{-0.3, y, 0})
+	}
+	addTestVertices(&palette, fullTestWeight(5), [3]float32{0.3, -0.005, 0}, [3]float32{0.3, 0.005, 0})
+	got, err := m.MapPalettes(t.Context(), []MotionPalette{palette})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int32{-1, -1, -1, -1, 1, 2}; !slices.Equal(got[0], want) {
+		t.Errorf("MapPalettes() = %v, want %v", got[0], want)
+	}
+}
+
 // A group no reference vertex lies near follows a bone that no skin holds below a skin joint, as a tail whose mesh the
 // source model lacks, but not a node outside the skinned hierarchy.
 func TestCharacterMotion_MapPalettesUnskinnedBone(t *testing.T) {

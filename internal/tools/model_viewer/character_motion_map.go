@@ -77,14 +77,16 @@ type MotionPalette struct {
 // gathered through every skin also hold, per skin, the closeness of the vertices whose nearest reference vertex is
 // that skin's, and how many vertices lie near any reference vertex.
 type motionVotes struct {
-	skin     int
-	scores   []float64
-	norms    []float64
-	coverage []float64
-	centres  [][4]float64
-	kept     []int32
-	skinMass []float64
-	near     int
+	skin            int
+	scores          []float64
+	norms           []float64
+	coverage        []float64
+	centres         [][4]float64
+	kept            []int32
+	skinMass        []float64
+	near            int
+	outsideSkin     []bool
+	outsideCoverage []float64
 }
 
 // motionReferenceWeight is a skeleton node and its share of the bone weights blended at a point.
@@ -101,7 +103,8 @@ type motionReferenceWeight struct {
 // order, and whose groups lie on that skin's bones (see identitySkin), keeps that order, as GIMI mods share the game's
 // palette. A mod palette indexes the bones of one game draw, so any other palette is matched to one skin of the
 // source model (see paletteSkin) and votes again through only that skin's reference vertices, however close another
-// skin's mesh lies, as long hair rests over a dress's back bow.
+// skin's mesh lies, as long hair rests over a dress's back bow. A group far from its chosen skin's best bone can
+// keep its votes from another skin when strongly weighted vertices reach that bone.
 //
 // A group takes the node most similar to it over the mod vertices (see motionCoverageExponent), so a large
 // neighbouring bone that also covers the group's vertices does not outweigh the group's own bone. Within a palette
@@ -217,8 +220,11 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 			for node, score := range v.scores[local*nodes : (local+1)*nodes] {
 				summed[node] += score
 			}
-			// A pool holds one group of each palette, so each palette's coverage is added once.
-			for node, value := range v.coverage {
+			groupCoverage := v.coverage
+			if len(v.outsideSkin) > 0 && v.outsideSkin[local] {
+				groupCoverage = v.outsideCoverage
+			}
+			for node, value := range groupCoverage {
 				coverage[node] += value
 			}
 			norm += v.norms[local]
@@ -239,17 +245,18 @@ func (m *CharacterMotion) MapPalettes(ctx context.Context, palettes []MotionPale
 
 		holds := func(node int) bool {
 			return !slices.ContainsFunc(groups, func(group int) bool {
-				skin := allowed[paletteOf[group]]
-				return skin != nil && !skin[node]
+				i := paletteOf[group]
+				skin, outside := allowed[i], votes[i].outsideSkin
+				return skin != nil && !skin[node] && (len(outside) == 0 || !outside[group-offsets[i]])
 			})
 		}
 		// A pool whose skins share none of its voted nodes keeps its votes rather than falling back to a joint.
 		for _, held := range []bool{true, false} {
 			for node, score := range summed {
-				if score <= 0 || coverage[node] <= 0 || norm <= 0 || held && !holds(node) {
+				similarity := motionGroupSimilarity(score, coverage[node], norm)
+				if similarity <= 0 || held && !holds(node) {
 					continue
 				}
-				similarity := score / (math.Sqrt(norm) * math.Pow(coverage[node], motionCoverageExponent))
 				candidates = append(candidates, candidate{root: root, node: node, similarity: similarity})
 				if similarity > bestSimilarity[root] {
 					bestNode[root], bestSimilarity[root] = int32(node), similarity
@@ -356,9 +363,68 @@ func (m *CharacterMotion) votePalette(
 	}
 
 	if skin := votes.paletteSkin(vertices); skin >= 0 {
-		return m.gatherVotes(grid, palette, vertices, groups, skin)
+		filtered := m.gatherVotes(grid, palette, vertices, groups, skin)
+		m.keepDistantGroupVotes(palette, bones, votes, &filtered)
+		return filtered
 	}
 	return votes
+}
+
+func (m *CharacterMotion) keepDistantGroupVotes(
+	palette MotionPalette,
+	bones []motionBone,
+	all motionVotes,
+	filtered *motionVotes,
+) {
+	nodes := len(bones)
+	joints := m.skins[filtered.skin]
+	limit, margin := m.fromMetres(motionReachLimit), m.fromMetres(motionDisplacedMargin)
+	var strong [][]int32
+	for group, centre := range all.centres {
+		best := all.bestGroupNode(group)
+		if best < 0 || slices.Contains(joints, best) {
+			continue
+		}
+		inside := filtered.bestGroupNode(group)
+		if inside < 0 {
+			inside = m.nearestJoint(joints, centre[0]/centre[3], centre[1]/centre[3], centre[2]/centre[3], nil)
+		}
+		if inside < 0 || !m.displaced(centre, bones, best, inside, margin) {
+			continue
+		}
+		if strong == nil {
+			strong = strongVertices(palette, min(len(palette.Positions)/3, len(palette.Blend)/8), len(all.centres))
+		}
+		if boneReach(&bones[best], palette.Positions, strong[group]) > limit {
+			continue
+		}
+		if filtered.outsideSkin == nil {
+			filtered.outsideSkin = make([]bool, len(all.centres))
+			filtered.outsideCoverage = all.coverage
+		}
+		filtered.outsideSkin[group] = true
+		filtered.norms[group] = all.norms[group]
+		start, end := group*nodes, (group+1)*nodes
+		copy(filtered.scores[start:end], all.scores[start:end])
+	}
+}
+
+func (v *motionVotes) bestGroupNode(group int) int {
+	nodes := len(v.coverage)
+	best, bestSimilarity := -1, 0.0
+	for node, score := range v.scores[group*nodes : (group+1)*nodes] {
+		if similarity := motionGroupSimilarity(score, v.coverage[node], v.norms[group]); similarity > bestSimilarity {
+			best, bestSimilarity = node, similarity
+		}
+	}
+	return best
+}
+
+func motionGroupSimilarity(score, coverage, norm float64) float64 {
+	if score <= 0 || coverage <= 0 || norm <= 0 {
+		return 0
+	}
+	return score / (math.Sqrt(norm) * math.Pow(coverage, motionCoverageExponent))
 }
 
 // identitySkin returns, of the skins whose joint order a palette's votes agree with, the one whose joints its groups
