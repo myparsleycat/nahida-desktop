@@ -89,6 +89,10 @@ type viewerAnimation struct {
 	barDragWidth float32
 	// barView is the viewer's size when the bar was last built. The bar follows a change of it without animating.
 	barView [2]float32
+	// clipPicker is the lane whose clip picker is open, or nil. clipGroup is the tab picked in it, or "" for the
+	// group of the clip playing.
+	clipPicker *viewerTrack
+	clipGroup  string
 	// values are what the current frame sets over the toggles.
 	values map[string]any
 	waves  *modelviewer.ShapeWavePlayback
@@ -716,6 +720,11 @@ func (v *ModelViewer) moveAnimationBar(left, top, width, height float32) {
 // or the viewer resizes.
 func (v *ModelViewer) animationBar(t kit.Theme, tracks []viewerTrack, status viewerStatus) *fairy.El {
 	p, ok := v.animationBarPlace(len(tracks), status)
+	if !ok || !p.lanes {
+		v.closeClipPicker(nil)
+	} else {
+		v.closeClipPicker(tracks)
+	}
 	if !ok {
 		return nil
 	}
@@ -832,7 +841,7 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 	lane := fairy.Row(
 		kit.IconButton(icon, func() { v.setTrackPlaying(track, !p.playing) }, kit.Ghost, kit.Small,
 			kit.Disabled(still)).Label(label),
-		v.animationClipMenu(t, track, clip, paired && full),
+		v.animationClipPicker(t, track, clip, paired && full),
 	).Key("model-viewer.animation-lane." + track.key()).Gap(2).Align(fairy.Center).H(viewerAnimationBarHeight)
 	if full {
 		start := T("page.tools.model_viewer.animation_start")
@@ -858,47 +867,6 @@ func (v *ModelViewer) animationLane(t kit.Theme, track viewerTrack, width float3
 		lane.Child(fairy.Box().Size(28, 28).Shrink(0))
 	}
 	return lane
-}
-
-// animationClipMenu names the clip track shows and, when it has others, opens a menu to pick one. Its icon tells
-// the mod's clips from the character's motions.
-func (v *ModelViewer) animationClipMenu(
-	t kit.Theme,
-	track viewerTrack,
-	clip *modelviewer.ModelViewerAnimationClip,
-	paired bool,
-) *fairy.El {
-	icon := lucide.Clapperboard
-	if track == trackMotion {
-		icon = lucide.PersonStanding
-	}
-	trigger := fairy.Row(
-		fairy.Icon(icon).Size(14, 14).Shrink(0),
-		fairy.Text(clip.Label).FontSize(12).LineHeight(16).Medium().Ellipsis().MinW(0).Grow(1),
-	).Gap(5).Align(fairy.Center).H(28).PadXY(8, 0).MinW(0).MaxW(160).Radius(14)
-	if paired {
-		trigger.W(viewerAnimationClipWidth)
-	}
-	clips := v.trackClips(track)
-	if len(clips) <= 1 {
-		return trigger
-	}
-
-	trigger.Child(fairy.Icon(lucide.ChevronUp).Size(12, 12).Shrink(0).Color(t.MutedForeground)).
-		HoverFill(hoverFill(&t)).Cursor(fairy.CursorPointer).Role(fairy.RoleButton).Focusable().
-		FocusRing(3, t.Ring.Alpha(0.5)).
-		Label(T("page.tools.model_viewer.animation_clip")).Key("model-viewer.animation-clip-trigger." + track.key())
-	items := func() []kit.MenuItem {
-		items := make([]kit.MenuItem, len(clips))
-		for i, entry := range clips {
-			items[i] = kit.MenuItem{
-				Label: entry.Label, Radio: true, Checked: entry.ID == clip.ID,
-				OnClick: func() { v.startTrack(track, entry.ID) },
-			}
-		}
-		return items
-	}
-	return kit.DropdownMenuFunc("model-viewer.animation-clip."+track.key(), trigger, items, kit.MaxHeight(320))
 }
 
 // animationScrubber shows the clip's frames as ticks with the frame shown as a playhead. A press or drag seeks,
