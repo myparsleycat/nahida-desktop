@@ -92,6 +92,11 @@
         "size": 2775505,
         "sha256": "9aa94574c60bdd5b1349331a95f5d36cbc51237c1efa05b66e982586ee510e23"
       },
+      "kay": {
+        "file": "efmi/kay.d740b509472a.glb.gz",
+        "size": 2765396,
+        "sha256": "d740b509472a4a7ea000038a7eeae0fa409cfb0746514a251ef112eefb590516"
+      },
       "laevatain": {
         "file": "efmi/laevatain.bc9e5636cd08.glb.gz",
         "size": 3216472,

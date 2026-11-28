@@ -11,6 +11,8 @@
 // and the index counts of the stock meshes are kept.
 //
 // Usage: node scripts/import-character-toon.mjs <skowt.json> <warfarin.json>
+//
+// With - in place of <skowt.json>, only the Endfield files are replaced and the other games' files are kept.
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -190,16 +192,20 @@ const [skowtSource, warfarinSource] = process.argv.slice(2);
 if (!skowtSource || !warfarinSource) {
   throw new Error('usage: node scripts/import-character-toon.mjs <skowt.json> <warfarin.json>');
 }
-const skowt = JSON.parse(await readFile(skowtSource, 'utf8'));
 const warfarin = JSON.parse(await readFile(warfarinSource, 'utf8'));
 const efmiCatalog = JSON.parse(await readFile(EFMI_CATALOG, 'utf8'));
 
-await rm(OUTPUT, { recursive: true, force: true });
-await mkdir(OUTPUT, { recursive: true });
-await writeFile(path.join(OUTPUT, 'NOTICE.txt'), NOTICE);
-for (const [file, spec] of Object.entries(GAMES)) {
-  const { characters, images } = importSkowt(skowt, file, spec);
-  await writeGame(file, spec.game, characters, images);
+if (skowtSource === '-') {
+  await rm(path.join(OUTPUT, 'efmi'), { recursive: true, force: true });
+} else {
+  const skowt = JSON.parse(await readFile(skowtSource, 'utf8'));
+  await rm(OUTPUT, { recursive: true, force: true });
+  await mkdir(OUTPUT, { recursive: true });
+  await writeFile(path.join(OUTPUT, 'NOTICE.txt'), NOTICE);
+  for (const [file, spec] of Object.entries(GAMES)) {
+    const { characters, images } = importSkowt(skowt, file, spec);
+    await writeGame(file, spec.game, characters, images);
+  }
 }
 const efmi = importWarfarin(warfarin, efmiCatalog);
 await writeGame('efmi', 'EFMI', efmi.characters, efmi.images);

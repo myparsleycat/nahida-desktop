@@ -92,6 +92,11 @@
         "size": 7709160,
         "sha256": "09b2944235c278b03ce9b4108874e6b51b1e55d912a69d09cb7e851049073cb3"
       },
+      "kay": {
+        "file": "efmi/kay.43ee710b70cb.glb.gz",
+        "size": 8920509,
+        "sha256": "43ee710b70cbac1a07ef3581c533876b5faeaee2c5fc98ab24121657d8f7e974"
+      },
       "laevatain": {
         "file": "efmi/laevatain.be37f8f82444.glb.gz",
         "size": 8081287,
@@ -128,9 +133,9 @@
         "sha256": "dbd832469b30cd3b39f2a106ca6cc73f9b2def1ba0b06921e1042cfffc65eede"
       },
       "purrchena": {
-        "file": "efmi/purrchena.336306fa66b5.glb.gz",
-        "size": 5227484,
-        "sha256": "336306fa66b502dde068b4c362076e07ff69e9d8558eb0a95f7df00a162cfac0"
+        "file": "efmi/purrchena.f3f90889ed96.glb.gz",
+        "size": 4925179,
+        "sha256": "f3f90889ed96b7539fb1e6a3206960ffce93cca8cd8ed0feb8f8175e33f20c18"
       },
       "rossi": {
         "file": "efmi/rossi.8a29366ced13.glb.gz",
