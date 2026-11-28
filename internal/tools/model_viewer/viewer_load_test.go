@@ -2,6 +2,7 @@ package modelviewer
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"image"
@@ -144,6 +145,121 @@ format = DXGI_FORMAT_R32_UINT
 			if !ok || source.Section != "BodyA" || source.IB != "BodyAIB" || source.StartIndex != 0 ||
 				source.IndexCount != 3 {
 				t.Fatalf("recovered surface draw source = %#v, found = %t", source, ok)
+			}
+		})
+	}
+}
+
+func TestLoadModViewerUsesVertexBufferCapturedByAnotherOverride(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		capture       string
+		positionExtra string
+		extra         string
+		wantDraws     int
+		missingBlend  bool
+	}{
+		{name: "unique source", wantDraws: 1},
+		{name: "missing blend file", wantDraws: 1, missingBlend: true},
+		{name: "ambiguous family", extra: "[TextureOverride_0123abcd_AlternatePosition]\nvb0 = ResourcePos\n"},
+		{name: "reference capture", capture: "ref vb0", wantDraws: 1},
+		{name: "plain capture", capture: "vb0", wantDraws: 1},
+		{
+			name:          "command list swaps the source",
+			positionExtra: "run = CommandListSwap\n",
+			extra:         "[CommandListSwap]\nif $swap == 1\nvb0 = ResourcePos\nendif\n",
+		},
+		{
+			name:          "command list keeps the source",
+			positionExtra: "run = CommandListSame\n",
+			extra:         "[CommandListSame]\nvb0 = ResourceLegsPosition\n",
+			wantDraws:     1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			capture := cmp.Or(test.capture, "copy vb0 unless_null")
+			dir := t.TempDir()
+			position := make([]byte, 8*40)
+			for vertex := range 8 {
+				binary.LittleEndian.PutUint32(position[vertex*40:], math.Float32bits(float32(vertex+10)))
+			}
+			writeTextureFile(t, dir, "legs.buf", position)
+			writeTextureFile(t, dir, "body-blend.buf", viewerTestBlendWeights(3))
+			if !test.missingBlend {
+				writeTextureFile(t, dir, "legs-blend.buf", viewerTestBlendWeights(7))
+			}
+			fixture := loadViewerFixture(t, dir, `[TextureOverride_VB_8765abcd_Position]
+vb0 = ResourcePos
+vb2 = ResourceBodyBlend
+[TextureOverride_IB_8765abcd_Component1]
+handling = skip
+ib = ResourceBodyIB
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+ib = ResourceLegsIB
+vb0 = ResourceCaptured
+drawindexed = 3, 0, 0
+[TextureOverride_IB_0123abcd_Component1]
+ResourceCaptured = `+capture+`
+handling = skip
+ib = ResourceLegsIB
+[TextureOverride_VB_0123abcd_Position]
+vb0 = ResourceLegsPosition
+vb2 = ResourceLegsBlend
+`+test.positionExtra+`[ResourceCaptured]
+[ResourceLegsPosition]
+filename = legs.buf
+stride = 40
+[ResourceLegsBlend]
+filename = legs-blend.buf
+stride = 32
+[ResourceBodyBlend]
+filename = body-blend.buf
+stride = 32
+[ResourceLegsIB]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+`+test.extra+viewerBodyResources)
+			_, states := EvaluateViewerState(fixture.result, nil, "")
+			var draws int
+			for index, mesh := range fixture.result.Meshes {
+				source, ok := fixture.service.DrawSource(fixture.result.MemorySessionID, mesh.ID)
+				if !ok || source.IB != "LegsIB" || !states[index].Visible {
+					continue
+				}
+				draws++
+				if mesh.Bounds == nil || mesh.Bounds.Min[0] != 10 || mesh.Bounds.Max[0] != 12 {
+					t.Fatalf("captured mesh bounds = %+v, want x = 10..12", mesh.Bounds)
+				}
+				if test.missingBlend {
+					if mesh.BlendURL != "" || mesh.BlendPalette != "" {
+						t.Fatalf("captured mesh has unexpected blend palette %q", mesh.BlendPalette)
+					}
+					continue
+				}
+				if mesh.BlendURL == "" || mesh.BlendPalette != "legs-blend.buf#0" {
+					t.Fatalf("captured mesh blend = (%q, %q), want legs-blend.buf#0", mesh.BlendURL, mesh.BlendPalette)
+				}
+				blend, err := fixture.service.ReadResource(t.Context(), mesh.BlendURL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(blend) != 3*16 {
+					t.Fatalf("captured mesh blend = %v, want three vertices weighted to group 7", blend)
+				}
+				for row := range 3 {
+					if binary.LittleEndian.Uint16(blend[row*16:]) != 7 ||
+						binary.LittleEndian.Uint16(blend[row*16+8:]) != math.MaxUint16 {
+						t.Fatalf(
+							"captured mesh blend row %d = %v, want full weight to group 7",
+							row,
+							blend[row*16:row*16+16],
+						)
+					}
+				}
+			}
+			if draws != test.wantDraws {
+				t.Fatalf("visible captured draws = %d, want %d", draws, test.wantDraws)
 			}
 		})
 	}

@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"cmp"
 	"os"
 	"regexp"
 	"strings"
@@ -10,14 +11,17 @@ import (
 
 const maxModelViewerResourceAliasDepth = 32
 
-var modelViewerUAVSlotRE = regexp.MustCompile(`(?i)^cs-u\d+$`)
+var (
+	modelViewerUAVSlotRE    = regexp.MustCompile(`(?i)^cs-u\d+$`)
+	modelViewerVB0CaptureRE = regexp.MustCompile(`(?i)^(?:(?:copy|ref)\s+)?vb0(?:\s+unless_null)?$`)
+)
 
 type modelViewerResourceAliases struct {
 	descriptors map[string][]string
 	defaultUAV  map[string][]string
 	outputs     map[string][]string
-	// Copies into a texture the INI declares without a file, such as a UAV a
-	// shader blends into; the preview shows the copied source unblended.
+	// Texture copies can supply the default image for a runtime blend. Vertex
+	// captures have one bind-pose source across the preview's toggle states.
 	defaultCopies map[string][]string
 	copies        map[string][]string
 	// Bind-pose inputs of compute outputs a draw binds directly.
@@ -51,6 +55,7 @@ func resolveModelViewerEffectiveResources(
 		output[index].Filename = resolved.Filename
 		output[index].Stride = resolved.Stride
 		output[index].Format = resolved.Format
+		output[index].sourceName = cmp.Or(resolved.sourceName, resolved.Name)
 	}
 	return output
 }
@@ -123,9 +128,18 @@ func collectModelViewerResourceAliases(
 			defaultState[modelViewerNormalizeKey(key)] = modelViewerString(value)
 		}
 	}
+	vertexPositions := make(map[string][]string)
+	vertexCaptures := make(map[string][]string)
+	positionRuns := make(map[string][]string)
 	for _, section := range sections {
 		uav := make(map[string]string)
 		defaultSlots := make(map[string]string)
+		family := ""
+		if strings.EqualFold(section.Header, "TextureOverride") && !isModelViewerPreviewSkippedOverride(section.Name) {
+			family = extractSectionHash(section.Name)
+		}
+		_, positionOverride := trimModelViewerOverrideSuffix(section.Name, "Position")
+		inheritsVB0 := family != ""
 		var stack []modelViewerSymbolicBranchFrame
 		for _, raw := range section.Lines {
 			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
@@ -172,6 +186,17 @@ func collectModelViewerResourceAliases(
 			left = strings.TrimSpace(left)
 			right = strings.TrimSpace(right)
 			plainLeft := strings.ToLower(modelViewerAssignmentTarget(left))
+			if family != "" && positionOverride {
+				switch plainLeft {
+				case "vb0":
+					aliases.add(vertexPositions, family, modelViewerResourceToken(right))
+				case "run":
+					aliases.add(positionRuns, family, right)
+				}
+			}
+			if plainLeft == "vb0" || plainLeft == "run" {
+				inheritsVB0 = false
+			}
 			if strings.HasPrefix(strings.ToLower(right), "copy_desc ") {
 				target := modelViewerResourceToken(plainLeft)
 				source := modelViewerResourceToken(strings.TrimSpace(right[len("copy_desc "):]))
@@ -203,6 +228,11 @@ func collectModelViewerResourceAliases(
 				}
 				continue
 			}
+			if inheritsVB0 && target != "" && !strings.HasPrefix(strings.ToLower(left), "post") &&
+				modelViewerVB0CaptureRE.MatchString(right) {
+				aliases.add(vertexCaptures, target, family)
+				continue
+			}
 			slot := modelViewerUAVReference(right)
 			if target != "" && slot != "" {
 				aliases.add(aliases.outputs, target, uav[slot])
@@ -212,9 +242,62 @@ func collectModelViewerResourceAliases(
 			}
 		}
 	}
+	// Capture overrides inherit vb0 from the position override for the hash
+	// in their section name. The capture and the draw may be in either INI order.
+	// A command list the position override runs can bind another vb0, which
+	// leaves the source ambiguous unless it binds the same resource.
+	if len(positionRuns) > 0 {
+		commandLists := make(map[string]modINISection)
+		for _, section := range sections {
+			if strings.EqualFold(section.Header, "CommandList") {
+				commandLists[modelViewerNormalizeKey(section.Header+section.Name)] = section
+			}
+		}
+		for family, runs := range positionRuns {
+			visited := make(map[string]bool)
+			for _, run := range runs {
+				aliases.addRunVB0(vertexPositions, family, run, commandLists, visited)
+			}
+		}
+	}
+	for target, families := range vertexCaptures {
+		if len(families) == 1 {
+			if positions := vertexPositions[families[0]]; len(positions) == 1 {
+				aliases.add(aliases.copies, target, positions[0])
+			}
+		}
+	}
 	aliases.addEFMIArmatureInputs(sections)
 	aliases.addWWMIShapeKeyApplierInputs(sections)
 	return aliases
+}
+
+// addRunVB0 adds to positions[family] the vb0 bindings of command list run and of the lists it runs.
+func (a modelViewerResourceAliases) addRunVB0(
+	positions map[string][]string,
+	family, run string,
+	commandLists map[string]modINISection,
+	visited map[string]bool,
+) {
+	key := modelViewerNormalizeKey(run)
+	section, ok := commandLists[key]
+	if !ok || visited[key] {
+		return
+	}
+	visited[key] = true
+	for _, raw := range section.Lines {
+		left, right, ok := strings.Cut(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]), "=")
+		if !ok {
+			continue
+		}
+		right = strings.TrimSpace(right)
+		switch strings.ToLower(modelViewerAssignmentTarget(strings.TrimSpace(left))) {
+		case "vb0":
+			a.add(positions, family, modelViewerResourceToken(right))
+		case "run":
+			a.addRunVB0(positions, family, right, commandLists, visited)
+		}
+	}
 }
 
 // addWWMIShapeKeyApplierInputs follows the base positions through the applier,

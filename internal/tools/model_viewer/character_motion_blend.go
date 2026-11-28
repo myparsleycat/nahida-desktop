@@ -25,8 +25,8 @@ type modelViewerBlendSource struct {
 
 // resolveModelViewerBlendSource finds the blend buffer of a draw: one of the resources bound as its blend slot
 // (bound: vb2, or vb4 for a WWMI draw), or the one named after the position buffer (FooPosition and FooBlend, EFMI's
-// _VB0 and _VB2, or WWMI's FooPositionBuffer and FooBlendBuffer). A blend buffer that also covers the other carriers
-// of a merged buffer is read from the carrier's first row.
+// _VB0 and _VB2, or WWMI's FooPositionBuffer and FooBlendBuffer). A copied position buffer can inherit its source's
+// blend buffer. A blend buffer that also covers the other carriers of a merged buffer is read from the carrier's first row.
 func resolveModelViewerBlendSource(
 	modDir string,
 	bound []string,
@@ -47,16 +47,19 @@ func resolveModelViewerBlendSource(
 	if wwmi {
 		parse = parseModelViewerWwmiResourceName
 	}
-	if typed := parse(position.Name); typed != nil && typed.Kind == "position" {
-		for _, resource := range resources {
-			if other := parse(resource.Name); other != nil && other.Kind == "blend" &&
-				modelViewerKeyMatches(other.Key, typed.Key, true) {
-				candidates = append(candidates, resource)
+	for _, name := range []string{position.Name, position.sourceName} {
+		if name == "" {
+			continue
+		}
+		if typed := parse(name); typed != nil && typed.Kind == "position" {
+			for _, resource := range resources {
+				if other := parse(resource.Name); other != nil && other.Kind == "blend" &&
+					modelViewerKeyMatches(other.Key, typed.Key, true) {
+					candidates = append(candidates, resource)
+				}
 			}
 		}
-	}
-	if !wwmi {
-		if name := modelViewerNormalizeKey(position.Name); strings.HasSuffix(name, "vb0") {
+		if name := modelViewerNormalizeKey(name); !wwmi && strings.HasSuffix(name, "vb0") {
 			if blend, ok := resourceMap[strings.TrimSuffix(name, "vb0")+"vb2"]; ok {
 				candidates = append(candidates, blend)
 			}

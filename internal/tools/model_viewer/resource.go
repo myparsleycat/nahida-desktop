@@ -22,11 +22,12 @@ import (
 )
 
 type modelViewerResource struct {
-	Name     string
-	Filename string
-	Stride   int
-	Format   string
-	Values   map[string]string
+	Name       string
+	Filename   string
+	Stride     int
+	Format     string
+	Values     map[string]string
+	sourceName string
 }
 
 type modelViewerBufferGroup struct {
