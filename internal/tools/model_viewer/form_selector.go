@@ -85,10 +85,14 @@ func modelViewerFormsByValue(transport *ModelViewerTransport, variable ModelView
 	if len(formOfValue) != len(forms) {
 		return nil
 	}
+	// A key may cycle through a value twice, which would leave a form out of the variable's values.
+	distinct := make(map[string]bool, len(forms))
 	for _, value := range variable.Values {
-		if _, ok := formOfValue[fmt.Sprint(value.Value)]; !ok {
+		key := fmt.Sprint(value.Value)
+		if _, ok := formOfValue[key]; !ok || distinct[key] {
 			return nil
 		}
+		distinct[key] = true
 	}
 	defaultValue, set := transport.DefaultState[variable.ID]
 	if !set {
