@@ -282,6 +282,7 @@ func (t *Service) loadModViewer(
 	transport.ComputeDeformers = prepared.computeDeformers
 	transport.Forms = prepared.forms
 	transport.INIs = prepared.inis
+	transport.bangOverrides = prepared.bangOverrides
 	configureModelViewerState(
 		&transport,
 		prepared.sections,
@@ -470,6 +471,7 @@ type modelViewerPreparedGeometry struct {
 	computeAnimations                          []modelViewerPreparedAnimationClip
 	bufferRules                                []ModelViewerStateRule
 	drawSources                                map[string]DrawSource
+	bangOverrides                              []modelViewerBangOverride
 	forms                                      []ModelViewerForm
 	inis                                       []ModelViewerINI
 	parseMs, validateMs, referencedMs, buildMs int64
@@ -699,6 +701,11 @@ func (t *Service) prepareModelViewerGeometry(
 		}
 		prepared.shapeKeys = append(prepared.shapeKeys, shapeKeys...)
 		prepared.buildMs += time.Since(stageStartedAt).Milliseconds()
+		overrides, err := collectModelViewerBangOverrides(sections, domains, scopes[unit.primary].form)
+		if err != nil {
+			return nil, fmt.Errorf("scan original Bang overrides in %s: %w", iniPath, err)
+		}
+		prepared.bangOverrides = append(prepared.bangOverrides, overrides...)
 		face := collectModelViewerFaceTextures(folder, sections, resources, domains, meshes, textureBindings)
 		prepared.textures = append(prepared.textures, modelViewerINITextureWork{
 			meshes:   meshes,
@@ -759,6 +766,9 @@ func (p *modelViewerPreparedGeometry) scopeMeshes(
 // forms to choose between.
 func (p *modelViewerPreparedGeometry) dropForms() {
 	p.forms = nil
+	for index := range p.bangOverrides {
+		p.bangOverrides[index].form = ""
+	}
 	for workIndex := range p.textures {
 		work := &p.textures[workIndex]
 		work.form = ""

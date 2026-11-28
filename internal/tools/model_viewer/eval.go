@@ -1,6 +1,7 @@
 package modelviewer
 
 import (
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -21,9 +22,10 @@ type viewerEvalMesh struct {
 }
 
 type viewerEvalState struct {
-	State      map[string]any
-	Meshes     []viewerEvalMesh
-	FaceTexKey string
+	State       map[string]any
+	Meshes      []viewerEvalMesh
+	FaceTexKey  string
+	HiddenBangs map[string]bool
 }
 
 func viewerEvalLookup(state map[string]any, variable string) (any, bool) {
@@ -176,6 +178,14 @@ func evaluateViewerTransportInForm(payload ModelViewerTransport, state map[strin
 			ChoiceKeys:           viewerEvalChoiceKeys(mesh.TextureChoices, resolved),
 		}
 	}
+	for _, override := range payload.bangOverrides {
+		if override.active(resolved, form) {
+			if evaluated.HiddenBangs == nil {
+				evaluated.HiddenBangs = make(map[string]bool)
+			}
+			evaluated.HiddenBangs[override.character] = true
+		}
+	}
 	return evaluated
 }
 
@@ -286,7 +296,8 @@ type viewerBlockingVar struct {
 }
 
 func viewerEvalStatesDiffer(left, right viewerEvalState) bool {
-	if len(left.Meshes) != len(right.Meshes) || left.FaceTexKey != right.FaceTexKey {
+	if len(left.Meshes) != len(right.Meshes) || left.FaceTexKey != right.FaceTexKey ||
+		!maps.Equal(left.HiddenBangs, right.HiddenBangs) {
 		return true
 	}
 	for index := range left.Meshes {
@@ -352,6 +363,9 @@ func buildViewerBlockingVars(payload ModelViewerTransport, testedVar string, sta
 		for _, variant := range face.Variants {
 			addDNF(variant.Conditions)
 		}
+	}
+	for _, override := range payload.bangOverrides {
+		addDNF(override.conditions)
 	}
 	coOccurringLower := map[string]bool{}
 	for name := range coOccurring {

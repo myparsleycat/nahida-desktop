@@ -4,8 +4,38 @@ import (
 	"image"
 	"testing"
 
+	"github.com/myparsleycat/fairy/d3d"
+
 	modelviewer "nahida.live/desktop/internal/tools/model_viewer"
 )
+
+func TestOriginalBangsFollowPresentedReplacement(t *testing.T) {
+	part := &viewerOriginalPart{shown: true, bang: true, mesh: &viewerMesh{}, gpu: viewerMeshGPU{indexCount: 3}}
+	replacement := &viewerMesh{}
+	scene := &viewerScene{meshes: []*viewerMesh{replacement}}
+	original := &viewerOriginal{
+		scene: scene, data: &modelviewer.CharacterOriginal{Character: "odette"},
+		parts: []*viewerOriginalPart{part}, bangs: []*viewerOriginalPart{part}, bangMeshes: []int{0}, bangBlocked: true,
+	}
+	scene.original = original
+	viewer := &ModelViewer{scene: scene}
+	for _, visible := range []bool{false, true, false} {
+		viewer.toggleStates = []modelviewer.ViewerMeshState{{Visible: visible, PositionVariant: -1}}
+		viewer.present()
+		shown := len(original.draws(d3d.Device{}, nil, 0)) > 0
+		if shown == visible {
+			t.Errorf("replacement visible = %t, original drawn = %t", visible, shown)
+		}
+	}
+	viewer.toggleOriginalPart(original, part)
+	viewer.toggleStates[0].Visible = true
+	viewer.present()
+	viewer.toggleStates[0].Visible = false
+	viewer.present()
+	if len(original.draws(d3d.Device{}, nil, 0)) != 0 {
+		t.Error("returning to the original Bang showed it after the user hid it")
+	}
+}
 
 func TestGameTextureCountSkipsOverlayShadows(t *testing.T) {
 	untextured := modelviewer.ViewerMeshState{Visible: true}

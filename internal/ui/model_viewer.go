@@ -532,17 +532,24 @@ func (v *ModelViewer) present() {
 		return
 	}
 	form := v.shownForm()
-	resolved, states := v.resolved, v.toggleStates
-	if len(v.anim.values) > 0 {
-		state := maps.Clone(v.resolved)
-		maps.Copy(state, v.anim.values)
-		resolved, states = modelviewer.EvaluateViewerState(scene.transport, state, form)
-	}
+	resolved, states := v.presentedState(form)
 	v.revision++
 	scene.faceTexture = modelviewer.ViewerFaceTexture(scene.transport, resolved, form)
 	scene.apply(states)
+	if !scene.waiting {
+		v.updateOriginalBangs(scene.original, resolved, states, form)
+	}
 	v.syncNextFrame()
 	v.refreshLoads()
+}
+
+func (v *ModelViewer) presentedState(form string) (map[string]any, []modelviewer.ViewerMeshState) {
+	if len(v.anim.values) == 0 {
+		return v.resolved, v.toggleStates
+	}
+	state := maps.Clone(v.resolved)
+	maps.Copy(state, v.anim.values)
+	return modelviewer.EvaluateViewerState(v.scene.transport, state, form)
 }
 
 // dropCPU frees the arrays of a static mesh once its GPU buffers are made. A tool that picks the surface reads

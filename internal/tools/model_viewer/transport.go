@@ -400,7 +400,8 @@ type ModelViewerTransport struct {
 	INIs  []ModelViewerINI  `json:"inis"`
 	// FaceTextures are the diffuse textures mods put by hash on the face the game draws, which no mesh of the mod
 	// draws with.
-	FaceTextures []ModelViewerFaceTexture `json:"faceTextures,omitempty"`
+	FaceTextures  []ModelViewerFaceTexture `json:"faceTextures,omitempty"`
+	bangOverrides []modelViewerBangOverride
 }
 
 // ModelViewerFaceTexture is the face diffuse one INI replaces: TexKey by default, and Variants under their
@@ -461,5 +462,9 @@ func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tr
 				tracked,
 			)
 		}
+	}
+	for i := range transport.bangOverrides {
+		override := &transport.bangOverrides[i]
+		override.conditions = normalizeModelViewerDNFWithTracked(override.conditions, tracked)
 	}
 }

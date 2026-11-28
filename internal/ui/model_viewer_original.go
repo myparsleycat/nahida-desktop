@@ -40,13 +40,16 @@ type viewerTextureFill [fillSlots]string
 // game, the parts the mod lacks that the user turns on, and the original textures behind the slots the mod leaves
 // empty. It belongs to the UI thread; its GPU resources belong to the device generation it was made on.
 type viewerOriginal struct {
-	scene      *viewerScene
-	character  string
-	data       *modelviewer.CharacterOriginal
-	parts      []*viewerOriginalPart
-	fills      map[int]viewerTextureFill
-	textures   map[string]viewerTextureGPU
-	generation uint64
+	scene       *viewerScene
+	character   string
+	data        *modelviewer.CharacterOriginal
+	parts       []*viewerOriginalPart
+	fills       map[int]viewerTextureFill
+	textures    map[string]viewerTextureGPU
+	generation  uint64
+	bangs       []*viewerOriginalPart
+	bangMeshes  []int
+	bangBlocked bool
 	// faceLight and faceShadow are the keys of the face maps of a shown face part, or "".
 	faceLight, faceShadow string
 	// skinFor is the motion skin holds the parts' bone weights for, and anchors the node turning each part's face
@@ -74,6 +77,7 @@ type viewerOriginalPart struct {
 	head  bool
 	kept  bool
 	shown bool
+	bang  bool
 	label string
 	mesh  *viewerMesh
 	gpu   viewerMeshGPU
@@ -271,10 +275,11 @@ func (v *ModelViewer) loadOriginal(key viewerCharacterKey, c *viewerCharacter, p
 		}
 	}
 	input := viewerOriginalInput{
-		sources:     sources,
-		faces:       map[string]modelviewer.ModelViewerTextureTransport{},
-		profile:     string(scene.transport.MaterialProfile),
-		reconstruct: scene.transport.NormalXYReconstruct,
+		sources:       sources,
+		faces:         map[string]modelviewer.ModelViewerTextureTransport{},
+		profile:       string(scene.transport.MaterialProfile),
+		reconstruct:   scene.transport.NormalXYReconstruct,
+		bangOverrides: c.game == "GIMI" && scene.transport.HasGenshinBangOverrides(c.ID),
 	}
 	if previous != nil && previous.character == key.character {
 		input.data = previous.data
@@ -322,6 +327,11 @@ func (v *ModelViewer) loadOriginal(key viewerCharacterKey, c *viewerCharacter, p
 					v.toggleOriginalPart(o, part)
 				}
 			}
+			if len(o.bangs) != 0 && !scene.waiting {
+				form := v.shownForm()
+				resolved, states := v.presentedState(form)
+				v.updateOriginalBangs(o, resolved, states, form)
+			}
 			refreshGenshinFace(scene)
 			if missing > 0 {
 				v.showOriginalTexturesMissing()
@@ -354,10 +364,11 @@ type viewerOriginalTools interface {
 // viewerOriginalInput is what building the original model reads of the scene: its meshes, the face textures only the
 // original model's face shows, the material profile, and whether normal maps keep only X and Y.
 type viewerOriginalInput struct {
-	sources     []viewerOriginalSource
-	faces       map[string]modelviewer.ModelViewerTextureTransport
-	profile     string
-	reconstruct bool
+	sources       []viewerOriginalSource
+	faces         map[string]modelviewer.ModelViewerTextureTransport
+	profile       string
+	reconstruct   bool
+	bangOverrides bool
 	// data is the character's original model when an earlier build loaded it, or nil.
 	data *modelviewer.CharacterOriginal
 }
@@ -406,6 +417,16 @@ func buildViewerOriginal(
 		character: c.styleKey(), data: data, fills: map[int]viewerTextureFill{},
 		textures: map[string]viewerTextureGPU{},
 	}
+	isBang := func(index int) bool {
+		return data.Game == "GIMI" && index >= 0 && data.Parts[index].Role == modelviewer.OriginalRoleHair &&
+			data.Parts[index].Mesh == "Bang"
+	}
+	for mesh, source := range match.Sources {
+		if isBang(source) {
+			o.bangMeshes = append(o.bangMeshes, mesh)
+		}
+	}
+	dynamicBangs := input.bangOverrides || len(o.bangMeshes) != 0
 	fail := func(err error) (*viewerOriginal, int, error) {
 		_ = fairy.UseDevice(func(fairy.GPU) error {
 			o.release()
@@ -452,13 +473,13 @@ func buildViewerOriginal(
 		}
 	}
 
-	add := func(index int, head, kept bool) {
+	add := func(index int, head, kept, bang bool) {
 		part := data.Parts[index]
 		mesh := originalViewerMesh(part, data.Game)
 		shown := head || kept
 		into := requests
 		var pending map[string]originalTextureRequest
-		if !shown {
+		if !shown || bang {
 			pending = map[string]originalTextureRequest{}
 			into = pending
 		}
@@ -478,19 +499,33 @@ func buildViewerOriginal(
 		if len(pending) == 0 {
 			pending = nil
 		}
-		o.parts = append(o.parts, &viewerOriginalPart{
-			index: index, head: head, kept: kept, shown: shown, label: originalPartLabel(part), mesh: mesh,
+		originalPart := &viewerOriginalPart{
+			index: index, head: head, kept: kept, shown: shown, bang: bang, label: originalPartLabel(part), mesh: mesh,
 			pending: pending,
-		})
+		}
+		o.parts = append(o.parts, originalPart)
+		if bang {
+			o.bangs = append(o.bangs, originalPart)
+			o.bangBlocked = true
+		}
 	}
 	for _, index := range match.HeadParts {
-		add(index, true, false)
+		add(index, true, false, false)
 	}
 	for _, index := range match.KeptParts {
-		add(index, false, true)
+		add(index, false, true, isBang(index))
 	}
 	for _, index := range match.AbsentParts {
-		add(index, false, false)
+		if !isBang(index) || !dynamicBangs {
+			add(index, false, false, false)
+		}
+	}
+	if dynamicBangs {
+		for index := range data.Parts {
+			if isBang(index) && !slices.Contains(match.KeptParts, index) {
+				add(index, false, true, true)
+			}
+		}
 	}
 	// Absent parts load their textures apart, so each pending request carries the flags of every part sharing it.
 	shared := map[string]originalTextureRequest{}
@@ -699,12 +734,42 @@ func loadOriginalTextures(
 	return textures, generations, failed, nil
 }
 
-// toggleOriginalPart shows or hides a part other than a face part, loading the textures only it uses when it shows
-// and they are neither loaded nor loading.
+func (v *ModelViewer) updateOriginalBangs(
+	o *viewerOriginal,
+	state map[string]any,
+	meshes []modelviewer.ViewerMeshState,
+	form string,
+) {
+	if o == nil || len(o.bangs) == 0 {
+		return
+	}
+	blocked := o.scene.transport.OverridesGenshinBangs(o.data.Character, state, form) ||
+		slices.ContainsFunc(o.bangMeshes, func(index int) bool {
+			return index < len(meshes) && meshes[index].Visible
+		})
+	if blocked == o.bangBlocked {
+		return
+	}
+	o.bangBlocked = blocked
+	if !blocked {
+		for _, part := range o.bangs {
+			v.loadOriginalPartTextures(o, part)
+		}
+	}
+}
+
+func (o *viewerOriginal) shows(part *viewerOriginalPart) bool {
+	return part.shown && (!part.bang || !o.bangBlocked)
+}
+
 func (v *ModelViewer) toggleOriginalPart(o *viewerOriginal, part *viewerOriginalPart) {
 	part.shown = !part.shown
 	v.revision++
-	if !part.shown || o.ctx == nil {
+	v.loadOriginalPartTextures(o, part)
+}
+
+func (v *ModelViewer) loadOriginalPartTextures(o *viewerOriginal, part *viewerOriginalPart) {
+	if !o.shows(part) || o.ctx == nil {
 		return
 	}
 	requests := map[string]originalTextureRequest{}
@@ -955,7 +1020,7 @@ func (o *viewerOriginal) draws(dev d3d.Device, skin *viewerMotion, generation ui
 	}
 	var out []originalDraw
 	for i, part := range o.parts {
-		if !part.shown || part.gpu.indexCount == 0 {
+		if !o.shows(part) || part.gpu.indexCount == 0 {
 			continue
 		}
 		draw := originalDraw{mesh: part.mesh, state: part.mesh.state, gpu: part.gpu, anchor: -1}
@@ -1136,7 +1201,7 @@ func (v *ModelViewer) originalMenuItems() []kit.MenuItem {
 	}
 	var parts []kit.MenuItem
 	for _, part := range o.parts {
-		if part.head {
+		if part.head || part.bang && o.bangBlocked {
 			continue
 		}
 		parts = append(parts, kit.MenuItem{

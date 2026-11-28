@@ -46,6 +46,9 @@ func remapModelViewerTransportVariables(transport *ModelViewerTransport, names m
 			remapDNF(face.Variants[variantIndex].Conditions)
 		}
 	}
+	for _, override := range transport.bangOverrides {
+		remapDNF(override.conditions)
+	}
 	for variableIndex := range transport.Variables {
 		variable := &transport.Variables[variableIndex]
 		oldID := variable.ID

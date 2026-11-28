@@ -50,6 +50,7 @@ type modelViewerSymbolicSectionState struct {
 	draws                 []modelViewerDirectDrawRecord
 	explicitDraw          bool
 	nestedSkip            ModelViewerDNF
+	originalOverride      *ModelViewerDNF
 	rabbitFXPending       bool
 	rabbitFXReleased      bool
 	rabbitFXCutoutPending bool
@@ -73,6 +74,15 @@ func scanModelViewerSymbolicRoot(
 	section modINISection,
 	defaults map[string]any,
 ) (*modelViewerSymbolicSectionState, map[string]any, error) {
+	return scanModelViewerSymbolicRootWithOverride(sections, section, defaults, nil)
+}
+
+func scanModelViewerSymbolicRootWithOverride(
+	sections []modINISection,
+	section modINISection,
+	defaults map[string]any,
+	originalOverride *ModelViewerDNF,
+) (*modelViewerSymbolicSectionState, map[string]any, error) {
 	lookup := make(map[string]modINISection)
 	for _, candidate := range sections {
 		lookup[modelViewerNormalizeKey(candidate.Header+candidate.Name)] = candidate
@@ -84,8 +94,9 @@ func scanModelViewerSymbolicRoot(
 		lookup: lookup, variables: variables, sectionName: section.Name, resourcesOnly: true,
 	}
 	state := &modelViewerSymbolicSectionState{
-		buffers:  make(map[string][]modelViewerSymbolicAssignment),
-		textures: make(map[string][]modelViewerSymbolicAssignment),
+		buffers:          make(map[string][]modelViewerSymbolicAssignment),
+		textures:         make(map[string][]modelViewerSymbolicAssignment),
+		originalOverride: originalOverride,
 	}
 	visiting := map[string]bool{modelViewerNormalizeKey(section.Header + section.Name): true}
 	if err := ctx.scan(section.Lines, state, nil, visiting); err != nil {
@@ -275,13 +286,21 @@ func (c *modelViewerSymbolicScanContext) scan(
 		}
 		switch strings.ToLower(key) {
 		case "handling":
-			if len(visiting) > 1 && strings.EqualFold(value, "skip") {
-				state.nestedSkip = modelViewerDNFOr(state.nestedSkip, conditions)
+			if strings.EqualFold(value, "skip") {
+				if len(visiting) > 1 {
+					state.nestedSkip = modelViewerDNFOr(state.nestedSkip, conditions)
+				}
+				if state.originalOverride != nil {
+					*state.originalOverride = modelViewerDNFOr(*state.originalOverride, conditions)
+				}
 			}
 		case "vb0":
 			state.copyBuffer(key, value, conditions, sequence)
 		case "ib", "vb1", "vb2", "vb4":
 			resource := modelViewerTrimResourcePrefix(value)
+			if state.originalOverride != nil && strings.EqualFold(key, "ib") && resource != "" {
+				*state.originalOverride = modelViewerDNFOr(*state.originalOverride, conditions)
+			}
 			if resource != "" && !strings.EqualFold(resource, "null") {
 				state.buffers[strings.ToLower(key)] = append(
 					state.buffers[strings.ToLower(key)],

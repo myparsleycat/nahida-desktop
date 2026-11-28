@@ -174,6 +174,7 @@ func TestMatchCharacterOriginalKeptHair(t *testing.T) {
 	tests := []struct {
 		name   string
 		game   string
+		bangs  bool
 		meshes []OriginalMatchMesh
 		want   []int
 	}{
@@ -189,10 +190,27 @@ func TestMatchCharacterOriginalKeptHair(t *testing.T) {
 			meshes: []OriginalMatchMesh{hooded, join(near(hair, 0.9), near(body, 0.9))},
 		},
 		{name: "one draw for the whole body", game: "GIMI", meshes: []OriginalMatchMesh{hooded}},
+		{
+			name:   "GIMI keeps separate bangs",
+			game:   "GIMI",
+			bangs:  true,
+			meshes: []OriginalMatchMesh{hooded},
+			want:   []int{1},
+		},
+		{
+			name:   "GIMI bangs replaced",
+			game:   "GIMI",
+			bangs:  true,
+			meshes: []OriginalMatchMesh{hooded, {Positions: hair.Positions, UVs: hair.UVs}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			original := &CharacterOriginal{Game: tt.game, Parts: []CharacterOriginalPart{body, hair}}
+			hairPart := hair
+			if tt.bangs {
+				hairPart.Mesh = "Bang"
+			}
+			original := &CharacterOriginal{Game: tt.game, Parts: []CharacterOriginalPart{body, hairPart}}
 			match, err := MatchCharacterOriginal(t.Context(), original, tt.meshes)
 			if err != nil {
 				t.Fatal(err)

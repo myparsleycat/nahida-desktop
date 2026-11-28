@@ -253,9 +253,16 @@ func MatchCharacterOriginal(
 	// A hair mesh counts as left to the game unless a mod mesh is matched to it or mod meshes matched to no part
 	// cover it.
 	drawn, hair := map[string]bool{}, map[string]bool{}
+	// Genshin's Bang mesh has its own draw, while hair materials within Body share the body's buffers.
+	for _, part := range original.Parts {
+		if part.Role == OriginalRoleHair &&
+			(originalSeparateDraws[original.Game] || original.Game == "GIMI" && part.Mesh == "Bang") {
+			hair[part.Mesh] = true
+		}
+	}
 	unmatchedGrid := map[[3]int32][]int32{}
 	var unmatched []float32
-	if originalSeparateDraws[original.Game] {
+	if len(hair) > 0 {
 		for m, source := range match.Sources {
 			if source >= 0 {
 				drawn[original.Parts[source].Mesh] = true
@@ -267,11 +274,6 @@ func MatchCharacterOriginal(
 				cell := motionCell(at[0], at[1], at[2], coverCell)
 				unmatchedGrid[cell] = append(unmatchedGrid[cell], int32(len(unmatched)/3))
 				unmatched = append(unmatched, at...)
-			}
-		}
-		for _, part := range original.Parts {
-			if part.Role == OriginalRoleHair {
-				hair[part.Mesh] = true
 			}
 		}
 	}

@@ -688,6 +688,80 @@ endif
 	}
 }
 
+func TestLoadModViewerResolvesOriginalBangOverrides(t *testing.T) {
+	const body = `
+[Constants]
+global $swapvar = 0
+[KeySwap]
+key = ]
+type = cycle
+$swapvar = 0,1
+[TextureOverrideBody]
+hash = bf1830b6
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+`
+	for _, test := range []struct {
+		name string
+		ini  string
+		want [2]bool
+	}{
+		{
+			name: "skip without replacement",
+			ini:  "[TextureOverrideHair]\nhash = 425d891c\nhandling = skip\n",
+			want: [2]bool{true, true},
+		},
+		{
+			name: "conditional command list",
+			ini: `
+[TextureOverrideHair]
+hash = 425D891C
+match_first_index = 0
+run = CommandListHair
+[CommandListHair]
+if $swapvar == 1
+    ib = null
+endif
+`,
+			want: [2]bool{false, true},
+		},
+		{
+			name: "different original draw",
+			ini:  "[TextureOverrideHair]\nhash = 425d891c\nmatch_first_index = 15600\nhandling = skip\n",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := loadViewerFixture(t, t.TempDir(), body+viewerBodyResources+test.ini)
+			payload := fixture.result
+			if len(payload.Meshes) != 1 {
+				t.Fatalf("loaded %d meshes, want just the body", len(payload.Meshes))
+			}
+			for swap, want := range test.want {
+				resolved, _ := EvaluateViewerState(payload, map[string]any{"swapvar": swap}, "")
+				if got := payload.OverridesGenshinBangs("odette", resolved, ""); got != want {
+					t.Errorf("Swap %d overrides Odette bangs = %t, want %t", swap, got, want)
+				}
+				if payload.OverridesGenshinBangs("nicole", resolved, "") {
+					t.Errorf("Swap %d also overrides Nicole's bangs", swap)
+				}
+			}
+			if test.want[0] != test.want[1] {
+				variable := findViewerVariable(payload, "swapvar")
+				if variable == nil || variable.NoPreview {
+					t.Fatalf("Swap unavailable for preview: %v", variable)
+				}
+				first := evaluateViewerTransport(payload, map[string]any{"swapvar": 0})
+				second := evaluateViewerTransport(payload, map[string]any{"swapvar": 1})
+				if !viewerEvalStatesDiffer(first, second) {
+					t.Error("changing only the original Bang was considered ineffective")
+				}
+			}
+		})
+	}
+}
+
 func TestLoadModViewerResolvesLaterWriteWinsDiffuseByState(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"diffuseA.png", "diffuseB.png", "diffuseC.png", "normalA.png", "normalB.png", "light.png", "material.png"} {

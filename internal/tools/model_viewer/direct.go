@@ -93,6 +93,9 @@ func modelViewerDirectGatingVariables(transport *ModelViewerTransport) map[strin
 			addDNF(variant.Conditions)
 		}
 	}
+	for _, override := range transport.bangOverrides {
+		addDNF(override.conditions)
+	}
 	return output
 }
 
