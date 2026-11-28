@@ -96,9 +96,11 @@ bun scripts/skowt/mark-captured.mjs
 bun --version
 node --version
 npx --no-install wrangler --version
+npx --no-install wrangler whoami
 ```
 
-기대: 세 명령 모두 버전 출력, exit code 0.
+기대: 세 명령 모두 버전 출력, `whoami`가 R2 버킷(`nhd-public`)에 접근 가능한 계정을 출력.
+`whoami`가 실패하면 `npx wrangler login` 으로 인증한 뒤 다시 확인한다.
 실패 시: 중단하고 보고.
 
 ### 2.2 포트
@@ -150,7 +152,7 @@ await eval(await (await fetch('http://127.0.0.1:8788/script')).text())
 이미 받은 파일이 `work/incoming` 에 있으면 자동으로 제외된다.
 재실행 시 예: `{ targets: 12, skipped: 30, first: "..." }`.
 
-`eval` 이 CSP로 막히면 `scripts/capture-page.js` 전체를 같은 `browser.evaluate`에 붙여넣는다.
+`eval` 이 CSP로 막히면 `scripts/skowt/capture-page.js` 전체를 같은 `browser.evaluate`에 붙여넣는다.
 페이지를 새로고침하면 헬퍼가 사라진다. 이 경우 이 단계를 다시 실행한다.
 
 실패 시: 오류 문자열을 기록하고 중단.
@@ -405,3 +407,81 @@ scripts/
   select-recapture.mjs  재캡처 대상 재산출
   progress.mjs       progress.json 재생성
 ```
+
+`capture-page.js`만 브라우저에서 실행되고, 나머지는 저장소 루트에서 실행한다.
+변환 단계는 `scripts/` 루트의 공용 importer를 쓴다
+(`import-character-motion.mjs`, `import-character-original.mjs`, `import-character-toon.mjs`).
+
+---
+
+## 18. 데이터 형식과 디코더
+
+`capture-page.js`를 다시 작성해야 할 때를 위한 기록이다. 브라우저 세션(쿠키)이 있어야 동작한다.
+
+### 18.1 링크 발급
+
+```text
+GET https://den.skowt.cc/viewer/links?a=<assetId>:<role>&g=3,4&l=1&vr=1
+    credentials: include
+→ { ttl, signed, links: { <name>: "exp=…&sig=…" },
+    assets: { <assetId>: { <role>: <name> } },
+    keys: { <name>: <b64url> }, digests: { <name>: <b64url> },
+    mark: <b64url>, locks: { <name>: <u32> }, decoder: <id> }
+```
+
+`l=1` 없이 호출하면 `409 {error:"Conflict", gate:"reload", notice:"Automated access … isn't permitted"}`.
+`assets[assetId]`에 해당 role 키가 없으면 그 자산은 그 role을 제공하지 않는다
+(Promeia는 `model`만 있고 `anim`/`toon`이 없다).
+
+### 18.2 파일과 디코더
+
+```text
+GET https://pack.skowt.cc/v/<name>?<links[name]>       (credentials: include)
+GET https://den.skowt.cc/viewer/decoder/<decoder>      wasm
+```
+
+wasm export는 `m`(memory), `h`(alloc), `o`(open), `s`(free)이다. `open` 호출 전에 메모리에 다음을 채운다.
+
+| 오프셋 | 내용 |
+|---|---|
+| 0 | `keys[name]` (16바이트) |
+| 16 | SHA-256(wasm 바이트) |
+| 5376 | `mark` (16바이트) |
+| 5392 | `digests[name]` (16바이트) |
+| 5408 | `locks[name]` (u32 LE) |
+
+`o(ptr, len)`이 0을 반환하면 성공, 9면 `unwrap` 실패다. 성공하면 오프셋 64부터
+`role, jsonOff, jsonLen, binOff, binLen`(u32 LE)을 읽어 JSON과 bin 청크를 꺼낸다.
+
+### 18.3 role별 내용
+
+- `model`: 이미지가 bin에 포함된 full glTF
+- `anim`: 클립. 노드 extras가 없어서 모프 대상 이름을 직접 붙여야 한다
+- `toon`: 이미지 전용 glTF (Promeia처럼 없는 자산도 있다)
+
+### 18.4 업로드 페이로드
+
+gzip으로 압축한 record stream이다. 각 레코드는 `[u32 nameLen][u32 dataLen][name][data]`.
+
+```text
+motion/<game>/<key>/model.glb    POSITION/JOINTS_n/WEIGHTS_n만 남긴 lite glTF
+motion/<game>/<key>/anim.glb     클립 (모프 대상 이름 포함)
+motion/<game>/<key>/meta.json    roles, animations, heightM …
+original/<game>/<key>/model.glb  full glTF (재질 extras.textures 에 텍스처 경로)
+original/<game>/<key>/toon.glb   toon (있는 경우)
+original/<game>/<key>/meta.json
+```
+
+`split.mjs`가 이 스트림을 `work/batches/{motion,original}/<game>-<key>.bin.gz`로 나눈다.
+
+### 18.5 모프(shape key) 매핑
+
+`anim` 노드의 이름과 원본 메시 이름이 다른 캐릭터가 많다. 노드의 `mesh` 인덱스로 원본 메시를 찾아
+`extras = { targetNames, mesh: <메시 이름> }`을 붙여야 한다. 이름으로 매칭하면 채널이 전부 버려진다.
+
+### 18.6 외부 의존
+
+- `capture-page.js`는 `https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_decoder.module.js`를
+  import 한다. 일부 `model`/`anim`이 `EXT_meshopt_compression`을 쓰기 때문이다
+- 변환은 반드시 `node`로 실행한다. `bun`의 gzip은 바이트가 달라 해시가 어긋난다
+- 업로드는 `wrangler` 인증이 필요하다 (2.1)
