@@ -484,10 +484,13 @@ func (lt *liquidTool) sync() {
 	}
 
 	// A bundle of forms opens on the form being edited, or its first, so the forms drawn over one another do
-	// not hide each other's surfaces.
+	// not hide each other's surfaces. Forms a variable picks never overlap, so the picked one stays while it
+	// shows the form being edited.
+	if _, picked := v.formSelector(); picked && formVisible(savedForm, v.form) {
+		return
+	}
 	if form := lt.formShowing(savedForm); v.form != form {
-		v.form = form
-		v.evaluate()
+		v.setForm(form)
 	}
 }
 
@@ -497,8 +500,7 @@ func (lt *liquidTool) showForm(meshForm string) {
 	if v.scene == nil || meshForm == "" || v.form == "" || formVisible(meshForm, v.form) {
 		return
 	}
-	v.form = lt.formShowing(meshForm)
-	v.evaluate()
+	v.setForm(lt.formShowing(meshForm))
 }
 
 // formShowing is the first form of the viewer that shows meshForm, or all forms when none does.

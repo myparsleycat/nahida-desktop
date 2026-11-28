@@ -303,6 +303,8 @@ func (t *Service) loadModViewer(
 		modelViewerOverlayMenuOnlyVariables(&transport),
 	))
 	transport.Variables = withoutModelViewerOverlayStateVariables(transport.Variables, transport.OverlayMenus)
+	// An overlay menu that keeps the variable picking the forms as its own state leaves the forms to the menu.
+	detectModelViewerFormSelector(&transport)
 	transport.OverlayMenus = append(
 		transport.OverlayMenus,
 		t.serveModelViewerOverlayTextures(ctx, sessionID, buildModelViewerOverlayPanels(

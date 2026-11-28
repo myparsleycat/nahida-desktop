@@ -501,16 +501,73 @@ func (v *ModelViewer) defaultState() map[string]any {
 
 // shownForm is the form the viewer draws: the one highlighted in the open form list, or the selected one.
 func (v *ModelViewer) shownForm() string {
+	if v.preview != nil {
+		if form, ok := v.formOfState(v.preview); ok {
+			return form
+		}
+	}
 	if v.previewForm != nil {
 		return *v.previewForm
 	}
 	return v.form
 }
 
+// formSelector returns the variable whose values pick the forms, when the mod has one.
+func (v *ModelViewer) formSelector() (modelviewer.ModelViewerVariable, bool) {
+	if v.scene == nil || v.scene.transport.FormVariable == "" {
+		return modelviewer.ModelViewerVariable{}, false
+	}
+	id := v.scene.transport.FormVariable
+	at := slices.IndexFunc(v.scene.transport.Variables, func(variable modelviewer.ModelViewerVariable) bool {
+		return variable.ID == id
+	})
+	if at < 0 {
+		return modelviewer.ModelViewerVariable{}, false
+	}
+	return v.scene.transport.Variables[at], true
+}
+
+// formOfState returns the form the form selector variable picks in state.
+func (v *ModelViewer) formOfState(state map[string]any) (string, bool) {
+	selector, ok := v.formSelector()
+	if !ok {
+		return "", false
+	}
+	value, set := state[selector.ID]
+	if !set {
+		value = v.formSelectorDefault(selector)
+	}
+	at := slices.IndexFunc(v.scene.transport.Forms, func(form modelviewer.ModelViewerForm) bool {
+		return fmt.Sprint(form.Value) == fmt.Sprint(value)
+	})
+	if at < 0 {
+		return "", false
+	}
+	return v.scene.transport.Forms[at].ID, true
+}
+
+// formSelectorDefault is the value of selector that picks the form a scene opens on, which the loader checks is
+// one of the forms.
+func (v *ModelViewer) formSelectorDefault(selector modelviewer.ModelViewerVariable) any {
+	if value, set := v.scene.transport.DefaultState[selector.ID]; set {
+		return value
+	}
+	return selector.DefaultValue
+}
+
 // evaluate resolves the toggle state being shown and applies it to the scene.
 func (v *ModelViewer) evaluate() {
 	if v.scene == nil {
 		return
+	}
+	// The selected form follows the form selector variable, whichever path changed the state. A value no form
+	// answers to, such as one a preset kept from an earlier merge, would draw nothing, so it falls back to the
+	// default.
+	if selector, ok := v.formSelector(); ok {
+		if _, picks := v.formOfState(v.state); !picks {
+			v.state = modelviewer.ApplyViewerVariableSelection(v.state, selector, v.formSelectorDefault(selector))
+		}
+		v.form, _ = v.formOfState(v.state)
 	}
 	state := v.state
 	if v.preview != nil {

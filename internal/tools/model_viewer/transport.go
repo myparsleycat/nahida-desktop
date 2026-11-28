@@ -398,7 +398,10 @@ type ModelViewerTransport struct {
 	ComputeDeformers    []ModelViewerComputeDeformerTransport  `json:"computeDeformers"`
 	// Forms includes folder groups and named draw groups within one INI.
 	Forms []ModelViewerForm `json:"forms"`
-	INIs  []ModelViewerINI  `json:"inis"`
+	// FormVariable is the variable whose values each draw one form, as the master INI of a namespace merge
+	// declares. When set, every form holds its Value and the forms follow the variable's values in order.
+	FormVariable string           `json:"formVariable,omitempty"`
+	INIs         []ModelViewerINI `json:"inis"`
 	// FaceTextures are the diffuse textures mods put by hash on the face the game draws, which no mesh of the mod
 	// draws with.
 	FaceTextures  []ModelViewerFaceTexture `json:"faceTextures,omitempty"`
@@ -430,6 +433,8 @@ type ModelViewerForm struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	Group string `json:"group,omitempty"`
+	// Value is the value of the transport's FormVariable that draws this form.
+	Value any `json:"value,omitempty"`
 }
 
 func normalizeModelViewerTransportConditions(transport *ModelViewerTransport, tracked map[string]bool) {

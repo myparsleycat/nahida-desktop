@@ -428,6 +428,90 @@ endif
 	}
 }
 
+// A namespace merge keeps each merged mod in a folder of its own and draws it
+// only at its value of the master INI's swap variable, so that variable picks
+// the form. Forms a variable only partly gates still show together, and so do
+// forms whose swap variable opens on a value that draws none of them.
+func TestLoadModViewerPicksFormsByNamespaceMergeSwap(t *testing.T) {
+	sub := func(slot string, ungated bool) string {
+		ini := `[TextureOverrideBody]
+hash = 12345678
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $\M\Master\swapvar == ` + slot + `
+drawindexed = 3, 0, 0
+endif
+`
+		if ungated {
+			ini += `[TextureOverrideHead]
+hash = 87654321
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+`
+		}
+		return ini + viewerBodyResources
+	}
+	for _, test := range []struct {
+		name    string
+		initial string
+		ungated bool
+		labels  []string
+	}{
+		{name: "every draw gated", initial: "0", labels: []string{"B", "A"}},
+		{name: "one draw ungated", initial: "0", ungated: true},
+		{name: "default draws no form", initial: "2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			files := map[string]string{
+				"Master.ini": `namespace = M\Master
+[Constants]
+global persist $swapvar = ` + test.initial + `
+[KeySwap]
+key = h
+type = cycle
+$swapvar = 0, 1
+`,
+				"Pre_A/A.ini": sub("1", test.ungated),
+				"Pre_B/B.ini": sub("0", false),
+			}
+			for name, content := range files {
+				path := filepath.Join(root, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeViewerGeometry(t, filepath.Join(root, "Pre_A"))
+			writeViewerGeometry(t, filepath.Join(root, "Pre_B"))
+
+			result := loadViewerDir(t, root).result
+			if test.labels == nil {
+				if result.FormVariable != "" || len(result.Forms) != 2 || result.Forms[0].ID != "Pre_A" {
+					t.Fatalf("form variable = %q, forms = %#v", result.FormVariable, result.Forms)
+				}
+				return
+			}
+			variable := findViewerVariable(result, result.FormVariable)
+			if variable == nil || len(result.Forms) != 2 {
+				t.Fatalf("form variable = %q, forms = %#v", result.FormVariable, result.Forms)
+			}
+			for at, want := range []struct{ id, value string }{{"Pre_B", "0"}, {"Pre_A", "1"}} {
+				form := result.Forms[at]
+				if form.ID != want.id || fmt.Sprint(form.Value) != want.value || form.Label != test.labels[at] ||
+					variable.Values[at].Label != test.labels[at] {
+					t.Fatalf("forms = %#v, values = %#v", result.Forms, variable.Values)
+				}
+			}
+		})
+	}
+}
+
 func TestModelViewerUnusedResourceDoesNotConsumeLoadBudget(t *testing.T) {
 	root := t.TempDir()
 	budget, err := newModelViewerLoadBudget(root)

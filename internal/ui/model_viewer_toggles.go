@@ -114,6 +114,13 @@ func (v *ModelViewer) setToggleState(state map[string]any) {
 }
 
 func (v *ModelViewer) setForm(form string) {
+	if selector, ok := v.formSelector(); ok {
+		forms := v.scene.transport.Forms
+		if at := slices.IndexFunc(forms, func(f modelviewer.ModelViewerForm) bool { return f.ID == form }); at >= 0 {
+			v.selectValue(selector, forms[at].Value)
+		}
+		return
+	}
 	v.form, v.previewForm = form, nil
 	v.evaluate()
 	v.refreshIneffective()
@@ -218,8 +225,11 @@ func (v *ModelViewer) resolutionState(suggestion modelviewer.ModelViewerResoluti
 }
 
 // showsVariable reports whether the toggles list variable in the selected form. The variables a clip animates
-// follow its frames instead.
+// follow its frames instead, and the form selector variable is the form list.
 func (v *ModelViewer) showsVariable(variable modelviewer.ModelViewerVariable) bool {
+	if variable.ID == v.scene.transport.FormVariable {
+		return false
+	}
 	if len(variable.Values) == 0 && variable.ControlType != "slider" {
 		return false
 	}
@@ -500,10 +510,15 @@ func viewerNumber(value any) (float64, bool) {
 }
 
 // formSwitcher is the form list over the viewer's top-left corner. The form highlighted in the open list
-// shows without being selected.
+// shows without being selected. Where a variable picks the form, the list sets that variable and has no
+// entry for every form, which would still draw only one.
 func (v *ModelViewer) formSwitcher() *fairy.El {
 	forms := v.scene.transport.Forms
-	items := []kit.Item{{Value: viewerAllFormsOption, Label: T("page.tools.model_viewer.forms.all")}}
+	selector, selects := v.formSelector()
+	var items []kit.Item
+	if !selects {
+		items = append(items, kit.Item{Value: viewerAllFormsOption, Label: T("page.tools.model_viewer.forms.all")})
+	}
 	var groups []string
 	for _, form := range forms {
 		if !slices.Contains(groups, form.Group) {
@@ -532,6 +547,15 @@ func (v *ModelViewer) formSwitcher() *fairy.El {
 	}
 	list := kit.Select("model-viewer.form", selected, items, func(option string) { v.setForm(formOf(option)) },
 		kit.Small, kit.Label(T("page.tools.model_viewer.forms.label")), kit.OnHighlight(func(option string) {
+			if selects {
+				at := slices.IndexFunc(forms, func(form modelviewer.ModelViewerForm) bool { return form.ID == option })
+				if at < 0 {
+					v.clearPreview()
+					return
+				}
+				v.previewValue(selector, forms[at].Value)
+				return
+			}
 			var preview *string
 			if option != "" {
 				form := formOf(option)
@@ -540,6 +564,10 @@ func (v *ModelViewer) formSwitcher() *fairy.El {
 			if (preview == nil) != (v.previewForm == nil) || (preview != nil && *preview != *v.previewForm) {
 				v.previewForm = preview
 				v.evaluate()
+			}
+		}), kit.OnOpenChange(func(open bool) {
+			if !open && selects {
+				v.clearPreview()
 			}
 		}))
 	return fairy.Box(list).Absolute().Top(12).Left(12).MaxW(280)
