@@ -692,11 +692,40 @@ func bindHashImageTextures(
 	sort.SliceStable(leftoverSlots, func(i, j int) bool {
 		return leftoverSlots[i].area > leftoverSlots[j].area
 	})
+
+	// Nothing ties a leftover image to a draw, so the largest is only a guess. The slots that always bind a single
+	// image stay open as candidates for the UV match that runs once the geometry is loaded. A moved component takes
+	// only the file, so a condition on the image would be lost or left on the wrong one.
+	unconditional := func(slot *hashImageSlot) bool {
+		return len(slot.files) == 1 && modelViewerDNFIsTrue(slot.files[0].cond)
+	}
+	var candidates []hashAtlasCandidate
+	for _, slot := range leftoverSlots {
+		if !unconditional(slot) {
+			continue
+		}
+		candidate := hashAtlasCandidate{diffuse: slot.files[0].file}
+		if light := paired[slot]; light != nil && len(light.files) > 0 {
+			candidate.light = light.files[0].file
+		}
+		candidates = append(candidates, candidate)
+	}
 	for index, ibHash := range leftoverIbs {
 		if index >= len(leftoverSlots) {
 			break
 		}
-		applyHashImageSlot(byIb[ibHash], leftoverSlots[index], paired[leftoverSlots[index]])
+		slot := leftoverSlots[index]
+		applyHashImageSlot(byIb[ibHash], slot, paired[slot])
+		guess := slices.IndexFunc(candidates, func(candidate hashAtlasCandidate) bool {
+			return unconditional(slot) && candidate.diffuse == slot.files[0].file
+		})
+		if guess < 0 || len(candidates) < 2 {
+			continue
+		}
+		ordered := slices.Concat(candidates[guess:guess+1], candidates[:guess], candidates[guess+1:])
+		for _, mesh := range byIb[ibHash] {
+			mesh.hashAtlasCandidates = ordered
+		}
 	}
 }
 

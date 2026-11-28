@@ -73,12 +73,6 @@ func refineWwmiDumpAtlases(
 		groups[component+"|"+mesh.textureDefaultFile] = append(groups[component+"|"+mesh.textureDefaultFile], mesh)
 	}
 
-	type atlas struct {
-		hint   *wwmiTextureHint
-		pixels *image.NRGBA
-	}
-	cache := make(map[string]atlas)
-
 	// Renamed atlases did not participate in the initial dump selection. Inspect
 	// them first so already-considered dumps cannot exhaust the decode budget.
 	declared := resources
@@ -87,46 +81,7 @@ func refineWwmiDumpAtlases(
 		return !wwmiDumpTexRE.MatchString(slashPath(resources[i].Filename)) &&
 			wwmiDumpTexRE.MatchString(slashPath(resources[j].Filename))
 	})
-	remaining := int64(maxWwmiAtlasBytes)
-	inspect := func(file string) atlas {
-		if found, ok := cache[file]; ok {
-			return found
-		}
-		if len(cache) >= maxWwmiRecoveryFiles || !strings.EqualFold(filepath.Ext(file), ".dds") {
-			return atlas{}
-		}
-		cache[file] = atlas{}
-		path, err := paths.resourcePath(modDir, modDir, file)
-		if err != nil {
-			return atlas{}
-		}
-		release, err := diskio.Acquire(ctx, path)
-		if err != nil {
-			return atlas{}
-		}
-		defer release()
-		info, err := os.Stat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Size() > remaining/2 || info.Size() > maxHintDecodeBytes {
-			return atlas{}
-		}
-
-		// Linear maps are rejected from the header alone, so they cost no decode budget.
-		if srgb := parseDdsSrgbState(readFilePrefix(path, 148)); srgb != nil && !*srgb {
-			return atlas{}
-		}
-		remaining -= info.Size() * 2
-		hint := inspectWwmiTextureHint(path)
-		if hint == nil || hint.Area > maxHintDecodeArea || !isLikelyWwmiDiffuse(*hint) {
-			return atlas{}
-		}
-		pixels, err := decodeModelViewerDDSHint(path, hint.Bytes)
-		if err != nil {
-			return atlas{}
-		}
-		found := atlas{hint: hint, pixels: pixels}
-		cache[file] = found
-		return found
-	}
+	inspect := newWwmiAtlasInspector(ctx, modDir, paths)
 	for _, key := range slices.Sorted(maps.Keys(groups)) {
 		group := groups[key]
 		if err := ctx.Err(); err != nil {
@@ -165,15 +120,10 @@ func refineWwmiDumpAtlases(
 			if candidate.pixels == nil || candidate.hint.SRGB != current.hint.SRGB {
 				continue
 			}
-
-			// Small shared effects need only the usual UV evidence to yield to an
-			// atlas. Competing atlas sizes need a stronger match, and small ramps
-			// and matcaps must not displace an atlas.
-			resized := candidate.hint.Area != current.hint.Area
-			if resized && candidate.hint.Area < minWwmiResizedAtlasArea {
+			resized, fits := wwmiAtlasResized(current.hint, candidate.hint)
+			if !fits {
 				continue
 			}
-			resized = resized && current.hint.Area >= minWwmiResizedAtlasArea
 			if score, ok := samples.score(candidate.pixels); ok {
 				rivals = append(rivals, wwmiAtlasRival{
 					file: resource.Filename, resource: resource.Name, score: score, resized: resized,
@@ -184,24 +134,7 @@ func refineWwmiDumpAtlases(
 			}
 		}
 		eligibleRivals := func() []wwmiAtlasRival {
-			return lo.Filter(rivals, func(rival wwmiAtlasRival, _ int) bool {
-				if !rival.resized {
-					return rival.score < currentScore*0.65
-				}
-
-				// Unrelated maps score about the same on these seams. When the current map
-				// and another atlas both look unrelated, a single clear outlier is the
-				// component's atlas even though seams in painted hair and cloth are noisy.
-				others := lo.Filter(rivals, func(other wwmiAtlasRival, _ int) bool {
-					return !sameWwmiAtlas(other.file, rival.file)
-				})
-				if len(others) > 0 && !slices.ContainsFunc(others, func(other wwmiAtlasRival) bool {
-					return rival.score >= other.score*0.6
-				}) {
-					return rival.score < currentScore*0.6
-				}
-				return rival.score < currentScore*0.25
-			})
+			return eligibleWwmiAtlasRivals(rivals, currentScore)
 		}
 		if len(eligibleRivals()) == 0 {
 			continue
@@ -246,6 +179,200 @@ func refineWwmiDumpAtlases(
 		}
 	}
 	return ctx.Err()
+}
+
+// refineWwmiHashAtlases moves a component whose texture bindHashImageTextures guessed to the candidate atlas its UV
+// seams match, and takes the guess off when its seams fit no candidate clearly better than the others. A WWMI
+// component is one draw of the game, which binds a single diffuse for all of its parts.
+func refineWwmiHashAtlases(
+	ctx context.Context,
+	modDir string,
+	meshes []modelViewerDirectMesh,
+	paths *modelViewerBufferCache,
+) error {
+	groups := make(map[string][]*modelViewerDirectMesh)
+	candidatesOf := make(map[string][]hashAtlasCandidate)
+	for index := range meshes {
+		mesh := &meshes[index]
+		candidates := mesh.hashAtlasCandidates
+		mesh.hashAtlasCandidates = nil
+		component := wwmiComponentIndex(mesh.component)
+		if component == "" || len(candidates) < 2 || mesh.textureAuthored ||
+			mesh.textureDefaultFile != candidates[0].diffuse {
+			continue
+		}
+		if slices.ContainsFunc(mesh.textureAssignments, func(assignment modelViewerDirectTextureAssignment) bool {
+			return assignment.role == "diffuse" && assignment.file != candidates[0].diffuse
+		}) {
+			continue
+		}
+		key := mesh.ibName + "|" + component + "|" + candidates[0].diffuse
+		groups[key] = append(groups[key], mesh)
+		if candidatesOf[key] == nil {
+			candidatesOf[key] = candidates
+		}
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	inspect := newWwmiAtlasInspector(ctx, modDir, paths)
+	for _, key := range slices.Sorted(maps.Keys(groups)) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		group, candidates := groups[key], candidatesOf[key]
+		current := inspect(candidates[0].diffuse)
+		if current.pixels == nil {
+			continue
+		}
+		samples := collectWwmiAtlasSamples(group)
+		currentScore, valid := samples.score(current.pixels)
+		if !valid {
+			continue
+		}
+
+		var rivals []wwmiAtlasRival
+		for index, candidate := range candidates[1:] {
+			atlas := inspect(candidate.diffuse)
+			if atlas.pixels == nil || atlas.hint.SRGB != current.hint.SRGB {
+				continue
+			}
+			resized, fits := wwmiAtlasResized(current.hint, atlas.hint)
+			if !fits {
+				continue
+			}
+			if score, ok := samples.score(atlas.pixels); ok {
+				rivals = append(rivals, wwmiAtlasRival{
+					file: candidate.diffuse, score: score, resized: resized, declared: index + 1,
+				})
+			}
+		}
+		var best hashAtlasCandidate
+		if eligible := eligibleWwmiAtlasRivals(rivals, currentScore); len(eligible) > 0 {
+			best = candidates[slices.MinFunc(eligible, func(left, right wwmiAtlasRival) int {
+				return cmp.Compare(left.score, right.score)
+			}).declared]
+		} else if len(rivals) == 0 || !slices.ContainsFunc(rivals, func(rival wwmiAtlasRival) bool {
+			return currentScore >= rival.score*0.6
+		}) {
+			continue
+		}
+
+		// A component no candidate fits keeps a texture the mod does not replace. Its slots stay empty so that the
+		// character's original texture can fill them.
+		guessedLight := candidates[0].light
+		for _, mesh := range group {
+			mesh.textureDefaultFile = best.diffuse
+			mesh.textureAssignments = slices.DeleteFunc(
+				mesh.textureAssignments,
+				func(assignment modelViewerDirectTextureAssignment) bool {
+					return assignment.role == "diffuse" && best.diffuse == "" ||
+						assignment.role == "light_map" && !assignment.authored && guessedLight != "" &&
+							assignment.file == guessedLight
+				},
+			)
+			for index := range mesh.textureAssignments {
+				assignment := &mesh.textureAssignments[index]
+				if assignment.role == "diffuse" {
+					assignment.file, assignment.resource = best.diffuse, best.diffuse
+				}
+			}
+			if best.light != "" && !meshHasRole(mesh, "light_map") {
+				mesh.textureAssignments = append(mesh.textureAssignments, modelViewerDirectTextureAssignment{
+					role: "light_map", resource: best.light, file: best.light, conditions: modelViewerDNFTrue(),
+				})
+			}
+		}
+	}
+	return ctx.Err()
+}
+
+type wwmiAtlas struct {
+	hint   *wwmiTextureHint
+	pixels *image.NRGBA
+}
+
+// newWwmiAtlasInspector returns a function that decodes a likely sRGB diffuse DDS of the mod for UV matching, or
+// returns an empty atlas. Its decodes share one byte budget and are cached by file.
+func newWwmiAtlasInspector(
+	ctx context.Context,
+	modDir string,
+	paths *modelViewerBufferCache,
+) func(file string) wwmiAtlas {
+	cache := make(map[string]wwmiAtlas)
+	remaining := int64(maxWwmiAtlasBytes)
+	return func(file string) wwmiAtlas {
+		if found, ok := cache[file]; ok {
+			return found
+		}
+		if len(cache) >= maxWwmiRecoveryFiles || !strings.EqualFold(filepath.Ext(file), ".dds") {
+			return wwmiAtlas{}
+		}
+		cache[file] = wwmiAtlas{}
+		path, err := paths.resourcePath(modDir, modDir, file)
+		if err != nil {
+			return wwmiAtlas{}
+		}
+		release, err := diskio.Acquire(ctx, path)
+		if err != nil {
+			return wwmiAtlas{}
+		}
+		defer release()
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > remaining/2 || info.Size() > maxHintDecodeBytes {
+			return wwmiAtlas{}
+		}
+
+		// Linear maps are rejected from the header alone, so they cost no decode budget.
+		if srgb := parseDdsSrgbState(readFilePrefix(path, 148)); srgb != nil && !*srgb {
+			return wwmiAtlas{}
+		}
+		remaining -= info.Size() * 2
+		hint := inspectWwmiTextureHint(path)
+		if hint == nil || hint.Area > maxHintDecodeArea || !isLikelyWwmiDiffuse(*hint) {
+			return wwmiAtlas{}
+		}
+		pixels, err := decodeModelViewerDDSHint(path, hint.Bytes)
+		if err != nil {
+			return wwmiAtlas{}
+		}
+		found := wwmiAtlas{hint: hint, pixels: pixels}
+		cache[file] = found
+		return found
+	}
+}
+
+// wwmiAtlasResized reports whether candidate differs in size from the current atlas enough to need stronger UV
+// evidence, and whether it may compete at all. Small shared effects need only the usual UV evidence to yield to an
+// atlas, and small ramps and matcaps must not displace one.
+func wwmiAtlasResized(current, candidate *wwmiTextureHint) (resized, fits bool) {
+	resized = candidate.Area != current.Area
+	if resized && candidate.Area < minWwmiResizedAtlasArea {
+		return false, false
+	}
+	return resized && current.Area >= minWwmiResizedAtlasArea, true
+}
+
+func eligibleWwmiAtlasRivals(rivals []wwmiAtlasRival, currentScore float64) []wwmiAtlasRival {
+	return lo.Filter(rivals, func(rival wwmiAtlasRival, _ int) bool {
+		if !rival.resized {
+			return rival.score < currentScore*0.65
+		}
+
+		// Unrelated maps score about the same on these seams. When the current map
+		// and another atlas both look unrelated, a single clear outlier is the
+		// component's atlas even though seams in painted hair and cloth are noisy.
+		others := lo.Filter(rivals, func(other wwmiAtlasRival, _ int) bool {
+			return !sameWwmiAtlas(other.file, rival.file)
+		})
+		if len(others) > 0 && !slices.ContainsFunc(others, func(other wwmiAtlasRival) bool {
+			return rival.score >= other.score*0.6
+		}) {
+			return rival.score < currentScore*0.6
+		}
+		return rival.score < currentScore*0.25
+	})
 }
 
 // sameWwmiAtlas treats files with one dump hash as variants of a single atlas,

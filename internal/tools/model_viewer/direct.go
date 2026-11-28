@@ -42,8 +42,11 @@ type modelViewerDirectMesh struct {
 	slotTextureCandidates  []modelViewerDirectTextureAssignment
 	// textureChoices are the sibling texture sets the user may pick for a mesh the INI leaves without textures.
 	textureChoices []modelViewerDirectTextureChoice
-	indexCount     int
-	drawSource     *DrawSource
+	// hashAtlasCandidates are the hash-replaced texture sets the mesh's draw could use when its INI does not say
+	// which, led by the one bindHashImageTextures gave it. refineWwmiHashAtlases matches them to the mesh's UVs.
+	hashAtlasCandidates []hashAtlasCandidate
+	indexCount          int
+	drawSource          *DrawSource
 }
 
 type modelViewerDirectTextureAssignment struct {
@@ -59,6 +62,10 @@ type modelViewerDirectTextureAssignment struct {
 type modelViewerDirectTextureChoice struct {
 	source      string
 	assignments []modelViewerDirectTextureAssignment
+}
+
+type hashAtlasCandidate struct {
+	diffuse, light string
 }
 
 type modelViewerDirectPositionAssignment struct {

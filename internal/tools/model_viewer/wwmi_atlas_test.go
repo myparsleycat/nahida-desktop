@@ -332,3 +332,133 @@ stride = 16
 		})
 	}
 }
+
+// Components that share one index buffer resource and whose textures the INI replaces only by hash.
+func TestLoadModViewerMatchesHashOnlyAtlasesPerComponent(t *testing.T) {
+	t.Parallel()
+	const (
+		pairs      = 40
+		components = 3
+		side       = 64
+	)
+	dir := t.TempDir()
+
+	// Each component pairs vertices at one position with two UV columns: Component0 fits atlas A, Component1
+	// atlas B, and Component2 only atlas C, which a toggle that is off by default binds.
+	columns := [components][2]float32{{0.125, 0.875}, {0.25, 0.75}, {0.375, 0.625}}
+	vertexCount := components * pairs * 2
+	position := make([]byte, vertexCount*12)
+	vector := make([]byte, vertexCount*8)
+	texcoord := make([]byte, vertexCount*16)
+	var indices []uint32
+	ini := "[Constants]\nglobal $required_wwmi_version = 1\nglobal persist $color = 0\n"
+	for component := range components {
+		first := len(indices)
+		for vertex := range pairs * 2 {
+			index := component*pairs*2 + vertex
+			binary.LittleEndian.PutUint32(position[index*12:], math.Float32bits(float32(component*100+vertex/2)))
+			binary.LittleEndian.PutUint32(position[index*12+4:], math.Float32bits(float32(vertex/2%2)))
+			copy(vector[index*8:], []byte{127, 0, 0, 127, 0, 0, 127, 127})
+			u, v := columns[component][vertex%2], float32(vertex/2)/pairs
+			binary.LittleEndian.PutUint16(texcoord[index*16:], modelViewerFloatToHalfBits(u))
+			binary.LittleEndian.PutUint16(texcoord[index*16+2:], modelViewerFloatToHalfBits(v))
+			indices = append(indices, uint32(index))
+		}
+		indices = append(indices, indices[len(indices)-1])
+		ini += "[TextureOverrideComponent" + modelViewerString(component) + "]\n" +
+			"ib = ResourceIndexBuffer\nvb0 = ResourcePositionBuffer\nvb1 = ResourceVectorBuffer\n" +
+			"vb2 = ResourceTexcoordBuffer\n" +
+			"drawindexed = " + modelViewerString(len(indices)-first) + ", " + modelViewerString(first) + ", 0\n"
+	}
+	ini += `[TextureOverrideTextureA]
+hash = aaaaaaaa
+this = ResourceTextureA
+[TextureOverrideTextureB]
+hash = bbbbbbbb
+this = ResourceTextureB
+[TextureOverrideTextureL]
+hash = cccccccc
+this = ResourceTextureL
+[TextureOverrideTextureC]
+hash = dddddddd
+if $color == 1
+this = ResourceTextureC
+endif
+[ResourceTextureA]
+filename = Textures/aaaaaaaa.dds
+[ResourceTextureB]
+filename = Textures/bbbbbbbb.dds
+[ResourceTextureL]
+filename = Textures/cccccccc.dds
+[ResourceTextureC]
+filename = Textures/dddddddd.dds
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 12
+[ResourceVectorBuffer]
+filename = vec.buf
+stride = 8
+[ResourceTexcoordBuffer]
+filename = tc.buf
+stride = 16
+`
+	for name, data := range map[string][]byte{
+		"pos.buf": position,
+		"vec.buf": vector,
+		"tc.buf":  texcoord,
+		"body.ib": modelViewerUint32Bytes(indices),
+		"mod.ini": []byte(ini),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// An atlas inverts its colour in the columns whose seams it breaks.
+	atlas := func(broken func(x int) bool) []color.NRGBA {
+		pixels := make([]color.NRGBA, side*side)
+		for y := range side {
+			for x := range side {
+				pixel := color.NRGBA{R: uint8(40 + y*3), G: uint8(30 + y*2), B: 70, A: 255}
+				if broken(x) {
+					pixel.R, pixel.G = 255-pixel.R, 255-pixel.G
+				}
+				pixels[y*side+x] = pixel
+			}
+		}
+		return pixels
+	}
+	writeTextureFile(t, dir, "Textures/aaaaaaaa.dds", efmiDX10DDS(side, efmiDXGIBGRA8SRGB, atlas(func(x int) bool {
+		return x >= 32 && x <= 48
+	})))
+	writeTextureFile(t, dir, "Textures/bbbbbbbb.dds", efmiDX10DDS(side, efmiDXGIBGRA8SRGB, atlas(func(x int) bool {
+		return x >= 32 && x <= 40 || x >= 52
+	})))
+	writeTextureFile(t, dir, "Textures/cccccccc.dds", efmiDX10DDS(side, efmiDXGIBGRA8, atlas(func(int) bool {
+		return false
+	})))
+	writeTextureFile(t, dir, "Textures/dddddddd.dds", efmiDX10DDS(side, efmiDXGIBGRA8SRGB, atlas(func(x int) bool {
+		return x >= 44 && x <= 50
+	})))
+
+	fixture := loadViewerDir(t, dir)
+	want := map[string][2]string{
+		"Component0": {"aaaaaaaa.dds", "cccccccc.dds"},
+		"Component1": {"bbbbbbbb.dds", ""},
+		"Component2": {"", ""},
+	}
+	for component, files := range want {
+		meshes := meshesNamed(fixture.result, component)
+		if len(meshes) != 1 {
+			t.Fatalf("%s meshes = %d, want 1", component, len(meshes))
+		}
+		for role, got := range map[int]string{0: texKey(meshes[0]), 1: lightMapKey(meshes[0])} {
+			if files[role] == "" && got != "" || files[role] != "" && !strings.HasSuffix(got, files[role]) {
+				t.Fatalf("%s %s = %q, want %q", component, []string{"diffuse", "light map"}[role], got, files[role])
+			}
+		}
+	}
+}
