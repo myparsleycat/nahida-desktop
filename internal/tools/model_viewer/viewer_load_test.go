@@ -154,10 +154,13 @@ func TestLoadModViewerUsesVertexBufferCapturedByAnotherOverride(t *testing.T) {
 	for _, test := range []struct {
 		name          string
 		capture       string
+		captureFirst  string
 		positionExtra string
 		extra         string
 		wantDraws     int
 		missingBlend  bool
+		// captureInPosition moves the capture to the position override, ahead of its own vb0.
+		captureInPosition bool
 	}{
 		{name: "unique source", wantDraws: 1},
 		{name: "missing blend file", wantDraws: 1, missingBlend: true},
@@ -175,9 +178,25 @@ func TestLoadModViewerUsesVertexBufferCapturedByAnotherOverride(t *testing.T) {
 			extra:         "[CommandListSame]\nvb0 = ResourceLegsPosition\n",
 			wantDraws:     1,
 		},
+		{
+			name:         "capture after a command list without vb0",
+			captureFirst: "run = CommandListTextures\n",
+			extra:        "[CommandListTextures]\nps-t5 = null\n",
+			wantDraws:    1,
+		},
+		{
+			name:         "capture after a command list binding vb0",
+			captureFirst: "run = CommandListBind\n",
+			extra:        "[CommandListBind]\nvb0 = ResourceLegsPosition\n",
+		},
+		{name: "capture in the position override before its vb0", captureInPosition: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			capture := cmp.Or(test.capture, "copy vb0 unless_null")
+			captureLine := "ResourceCaptured = " + cmp.Or(test.capture, "copy vb0 unless_null") + "\n"
+			ibCapture, positionCapture := test.captureFirst+captureLine, ""
+			if test.captureInPosition {
+				ibCapture, positionCapture = "", captureLine
+			}
 			dir := t.TempDir()
 			position := make([]byte, 8*40)
 			for vertex := range 8 {
@@ -200,11 +219,10 @@ ib = ResourceLegsIB
 vb0 = ResourceCaptured
 drawindexed = 3, 0, 0
 [TextureOverride_IB_0123abcd_Component1]
-ResourceCaptured = `+capture+`
-handling = skip
+`+ibCapture+`handling = skip
 ib = ResourceLegsIB
 [TextureOverride_VB_0123abcd_Position]
-vb0 = ResourceLegsPosition
+`+positionCapture+`vb0 = ResourceLegsPosition
 vb2 = ResourceLegsBlend
 `+test.positionExtra+`[ResourceCaptured]
 [ResourceLegsPosition]

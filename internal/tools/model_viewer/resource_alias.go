@@ -131,6 +131,12 @@ func collectModelViewerResourceAliases(
 	vertexPositions := make(map[string][]string)
 	vertexCaptures := make(map[string][]string)
 	positionRuns := make(map[string][]string)
+	commandLists := make(map[string]modINISection)
+	for _, section := range sections {
+		if strings.EqualFold(section.Header, "CommandList") {
+			commandLists[modelViewerNormalizeKey(section.Header+section.Name)] = section
+		}
+	}
 	for _, section := range sections {
 		uav := make(map[string]string)
 		defaultSlots := make(map[string]string)
@@ -139,7 +145,9 @@ func collectModelViewerResourceAliases(
 			family = extractSectionHash(section.Name)
 		}
 		_, positionOverride := trimModelViewerOverrideSuffix(section.Name, "Position")
-		inheritsVB0 := family != ""
+		// The position override matched on the game's vb0, so a capture it makes before binding its own copies
+		// the game's buffer.
+		inheritsVB0 := family != "" && !positionOverride
 		var stack []modelViewerSymbolicBranchFrame
 		for _, raw := range section.Lines {
 			line := strings.TrimSpace(strings.SplitN(raw, ";", 2)[0])
@@ -194,7 +202,7 @@ func collectModelViewerResourceAliases(
 					aliases.add(positionRuns, family, right)
 				}
 			}
-			if plainLeft == "vb0" || plainLeft == "run" {
+			if plainLeft == "vb0" || plainLeft == "run" && !aliases.runKeepsVB0(right, commandLists) {
 				inheritsVB0 = false
 			}
 			if strings.HasPrefix(strings.ToLower(right), "copy_desc ") {
@@ -246,18 +254,10 @@ func collectModelViewerResourceAliases(
 	// in their section name. The capture and the draw may be in either INI order.
 	// A command list the position override runs can bind another vb0, which
 	// leaves the source ambiguous unless it binds the same resource.
-	if len(positionRuns) > 0 {
-		commandLists := make(map[string]modINISection)
-		for _, section := range sections {
-			if strings.EqualFold(section.Header, "CommandList") {
-				commandLists[modelViewerNormalizeKey(section.Header+section.Name)] = section
-			}
-		}
-		for family, runs := range positionRuns {
-			visited := make(map[string]bool)
-			for _, run := range runs {
-				aliases.addRunVB0(vertexPositions, family, run, commandLists, visited)
-			}
+	for family, runs := range positionRuns {
+		visited := make(map[string]bool)
+		for _, run := range runs {
+			aliases.addRunVB0(vertexPositions, family, run, commandLists, visited)
 		}
 	}
 	for target, families := range vertexCaptures {
@@ -270,6 +270,17 @@ func collectModelViewerResourceAliases(
 	aliases.addEFMIArmatureInputs(sections)
 	aliases.addWWMIShapeKeyApplierInputs(sections)
 	return aliases
+}
+
+// runKeepsVB0 reports whether command list run and the lists it runs bind no vb0. Running any other section, such
+// as a custom shader, counts as binding one.
+func (a modelViewerResourceAliases) runKeepsVB0(run string, commandLists map[string]modINISection) bool {
+	if _, ok := commandLists[modelViewerNormalizeKey(run)]; !ok {
+		return false
+	}
+	bound := make(map[string][]string)
+	a.addRunVB0(bound, "vb0", run, commandLists, make(map[string]bool))
+	return len(bound) == 0
 }
 
 // addRunVB0 adds to positions[family] the vb0 bindings of command list run and of the lists it runs.
