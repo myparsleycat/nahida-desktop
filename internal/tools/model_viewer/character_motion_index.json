@@ -185,9 +185,9 @@
     },
     "gimi": {
       "aether": {
-        "file": "gimi/aether.ca7b8b44e2b9.glb.gz",
-        "size": 2309972,
-        "sha256": "ca7b8b44e2b9d2704ad6ab0e52d51868205824c67d7a96dfddd8a7d433937484"
+        "file": "gimi/aether.278dbd2bab03.glb.gz",
+        "size": 2324583,
+        "sha256": "278dbd2bab037180c125375be90cf57cc0b7431fb955d5dc7b9801c3fe6b51f3"
       },
       "aino": {
         "file": "gimi/aino.ec1c8238f498.glb.gz",
@@ -200,9 +200,9 @@
         "sha256": "d1d08ac21f7c93d3f7e60829d508ca65630bc2484947cc17177b71455f9ad868"
       },
       "alhaitham": {
-        "file": "gimi/alhaitham.baf919e5ea76.glb.gz",
-        "size": 4268983,
-        "sha256": "baf919e5ea76f64415d7f9c9c4ba1f0a138dc240b576d7de40cee90d9ddc595a"
+        "file": "gimi/alhaitham.e612821a9b88.glb.gz",
+        "size": 4282092,
+        "sha256": "e612821a9b88e88701976d788b2adebbebd3d27b63aa1c6af72d277136039218"
       },
       "aloy": {
         "file": "gimi/aloy.07fdc4f449fd.glb.gz",
@@ -225,14 +225,14 @@
         "sha256": "539a9f0a314a043e1bd1a04eb9cb1532ae00f317569f8f24bb40d7882229fbf9"
       },
       "arlecchino": {
-        "file": "gimi/arlecchino.6d10d0527df2.glb.gz",
-        "size": 4791255,
-        "sha256": "6d10d0527df26de8ac56c5c2178751aa6fcbfdc4c0ae930711d8e4b4bcf65d30"
+        "file": "gimi/arlecchino.ba61594b9341.glb.gz",
+        "size": 4819019,
+        "sha256": "ba61594b9341682a8161c68d7974ac0ccdfc8945be34df3ba6279b4834153442"
       },
       "baizhu": {
-        "file": "gimi/baizhu.1cb74dba4869.glb.gz",
-        "size": 4291288,
-        "sha256": "1cb74dba48693e974eb321a056909afb7380de3b90c4767d09b05dfb22211ac9"
+        "file": "gimi/baizhu.db2b2aeb2f69.glb.gz",
+        "size": 4304877,
+        "sha256": "db2b2aeb2f69fedfe001d174320086c4aac81c95a39558f87617de41dd0973d0"
       },
       "barbara": {
         "file": "gimi/barbara.cacd41d1216a.glb.gz",
@@ -255,9 +255,9 @@
         "sha256": "94a66e77c630a66f976fcbfae6b13c0c6b00cef5d9dcd5f3eaa25823f05f6434"
       },
       "charlotte": {
-        "file": "gimi/charlotte.6554af7da5e9.glb.gz",
-        "size": 3414474,
-        "sha256": "6554af7da5e99d7e006b52ac1911bf5e71171d6a4ed30021eab8cdb05905f5ce"
+        "file": "gimi/charlotte.9c145f48b688.glb.gz",
+        "size": 3430276,
+        "sha256": "9c145f48b68854577b1a592c0065aade4700a19cf72ee913a21320d5726b6445"
       },
       "chasca": {
         "file": "gimi/chasca.79a19c5a4719.glb.gz",
@@ -265,9 +265,9 @@
         "sha256": "79a19c5a47192fe2fa7669e58445154a58aef35e629b4890b9da3980edf32bab"
       },
       "chevreuse": {
-        "file": "gimi/chevreuse.532119ce477b.glb.gz",
-        "size": 3620171,
-        "sha256": "532119ce477b152c50fadb02c8b83495dd4ec867bfa07edecbceb5cd61cd9671"
+        "file": "gimi/chevreuse.02f0f52080e9.glb.gz",
+        "size": 3648725,
+        "sha256": "02f0f52080e95a77d02c487f55723d58433e4257de1b2cd683e56ee8d5f62f97"
       },
       "chiori": {
         "file": "gimi/chiori.944cd468f915.glb.gz",
@@ -280,9 +280,9 @@
         "sha256": "cb63725d61b24565bdd8b277a3a32f1ca30f4276f9b8ca4d08852e7258317a6d"
       },
       "citlali": {
-        "file": "gimi/citlali.5396d6baa4b9.glb.gz",
-        "size": 6620745,
-        "sha256": "5396d6baa4b9b6cc14bda7507718abe5b2391225804a15eb2953bafdf36cf8a1"
+        "file": "gimi/citlali.b1c76d128a65.glb.gz",
+        "size": 6639861,
+        "sha256": "b1c76d128a659565956542a914f568abdda66046da5f7fb2dc18e72f755b2414"
       },
       "clorinde": {
         "file": "gimi/clorinde.4f02a592c87d.glb.gz",
@@ -295,9 +295,9 @@
         "sha256": "116a049e4c22df5c9ab0f1270cc9e83542fd28d13d63f9043c2c946071e316bc"
       },
       "columbina": {
-        "file": "gimi/columbina.dea2a6e000a5.glb.gz",
-        "size": 7386639,
-        "sha256": "dea2a6e000a55f74fbd7cd6a977c6c03c04ea4843457f74d198b510de49b1cee"
+        "file": "gimi/columbina.2cd3f735aa1d.glb.gz",
+        "size": 7424066,
+        "sha256": "2cd3f735aa1d757db49a9423b33a1352379b95e476c0f8dfa89869b19a625eeb"
       },
       "cyno": {
         "file": "gimi/cyno.4a81cf5450c0.glb.gz",
@@ -310,14 +310,14 @@
         "sha256": "364cce395d4a29a5bec0ff6331a63defeb57757d2f951f37aa5dbd99cfb95bb6"
       },
       "dehya": {
-        "file": "gimi/dehya.0c9a8771f089.glb.gz",
-        "size": 3951790,
-        "sha256": "0c9a8771f089c4d383dcdca70efc350bc05e2f1f5cb3e10ca13447df0ac3de26"
+        "file": "gimi/dehya.82360aa413a2.glb.gz",
+        "size": 3975144,
+        "sha256": "82360aa413a21ffca80f238aeb14b27c7ab05505f14542cc7fb8d278fd802d2a"
       },
       "diluc": {
-        "file": "gimi/diluc.b4ef219f1389.glb.gz",
-        "size": 3767633,
-        "sha256": "b4ef219f1389e783e317c74143dbf80fbbd27f85d7f8540b9b5cc2df29dc46bd"
+        "file": "gimi/diluc.1c0d2cf9703e.glb.gz",
+        "size": 3783164,
+        "sha256": "1c0d2cf9703e2e8cb6df5d1a56c743c31bb94b1fdf2c4e0d4a6bd4591a18c795"
       },
       "diona": {
         "file": "gimi/diona.4e62b4fa7501.glb.gz",
@@ -325,14 +325,14 @@
         "sha256": "4e62b4fa750165736841824218a0b6d73b37368cb4df01b39e3bcea2ba1734ee"
       },
       "dori": {
-        "file": "gimi/dori.13308cc0dbaf.glb.gz",
-        "size": 3073324,
-        "sha256": "13308cc0dbaf61bea65fd600a0287a84e26702afb546b844d3446f0005e9150d"
+        "file": "gimi/dori.547575d8dad3.glb.gz",
+        "size": 3095853,
+        "sha256": "547575d8dad34596bfaea380330cb7130f58725cb8274da73d51454be6be42fd"
       },
       "durin": {
-        "file": "gimi/durin.4d1144d9dc84.glb.gz",
-        "size": 4940069,
-        "sha256": "4d1144d9dc848915ada6c04863ec862346192d48ca9756cb447f54a3f8676f7d"
+        "file": "gimi/durin.a2bb8f8ba5fe.glb.gz",
+        "size": 4979098,
+        "sha256": "a2bb8f8ba5fe963d59611e9988fb7caed72e2fe70e6a38828adbb6228e9dfa5a"
       },
       "emilie": {
         "file": "gimi/emilie.6e1fb96deffe.glb.gz",
@@ -340,9 +340,9 @@
         "sha256": "6e1fb96deffea59c14fb970bee6ebaee3864252405d00f7e19e5ca0aaa63ab4c"
       },
       "escoffier": {
-        "file": "gimi/escoffier.2648b7cfeb96.glb.gz",
-        "size": 5354736,
-        "sha256": "2648b7cfeb9604d6f9865e8f75245af96f270b7e0f1c7728c8d8f6abd230ac16"
+        "file": "gimi/escoffier.97c44406e699.glb.gz",
+        "size": 5386743,
+        "sha256": "97c44406e69992ea95c330b192b98e3cecf505642be94b8ba02ce026a3bc2b74"
       },
       "eula": {
         "file": "gimi/eula.38348c81fe49.glb.gz",
@@ -350,9 +350,9 @@
         "sha256": "38348c81fe495a6e5a34fe5b1d3c6dd68c3a967e4a7143b385b79fd316fed707"
       },
       "faruzan": {
-        "file": "gimi/faruzan.edca5ff01002.glb.gz",
-        "size": 4197308,
-        "sha256": "edca5ff0100208a8fff48f449bc94b740db6cd13f536d3cb6335464c7557d119"
+        "file": "gimi/faruzan.f31ade99dd35.glb.gz",
+        "size": 4212025,
+        "sha256": "f31ade99dd351f5cc14a0f92edf104efcadabd87aa3ae90b3d44d3785a7c9746"
       },
       "fischl": {
         "file": "gimi/fischl.16d181795b17.glb.gz",
@@ -360,19 +360,19 @@
         "sha256": "16d181795b174040820ea54a58eb12f9eb72f681d132f37b10021261f5149b35"
       },
       "flins": {
-        "file": "gimi/flins.c4b046857252.glb.gz",
-        "size": 5694903,
-        "sha256": "c4b046857252059821ac4b67a213ca02824d02866feef6d020b77271b545f0d8"
+        "file": "gimi/flins.0c26b698e4f1.glb.gz",
+        "size": 5724614,
+        "sha256": "0c26b698e4f154cf42eaf0d457f9e2ad63de698f400c61904b6c8e6f0633bb1c"
       },
       "freminet": {
-        "file": "gimi/freminet.c3ec85ae1ea0.glb.gz",
-        "size": 3261571,
-        "sha256": "c3ec85ae1ea0a66e4d6fad2c66f59e3fce3e7f82122139c48766e467a968f6ff"
+        "file": "gimi/freminet.6a8f1f221b59.glb.gz",
+        "size": 3285886,
+        "sha256": "6a8f1f221b597ea9bf7e79caa74d740146d0a89c19cdf86b9791ebb7a4f0cf19"
       },
       "furina": {
-        "file": "gimi/furina.a8868eda3bd6.glb.gz",
-        "size": 4798832,
-        "sha256": "a8868eda3bd66b087e26a12d3e895f905fb9aec9057890d3bb834a355c47ac80"
+        "file": "gimi/furina.2bb4749593cd.glb.gz",
+        "size": 4816346,
+        "sha256": "2bb4749593cddd50cd4c3020f210c1bf21f5d172a1a38cd818ee70e0684bcaf0"
       },
       "gaming": {
         "file": "gimi/gaming.3112be442633.glb.gz",
@@ -390,14 +390,14 @@
         "sha256": "99ab1d907d267498d708c94e3230c7d153fffe767467ad09655319fa92d133c3"
       },
       "hu-tao": {
-        "file": "gimi/hu-tao.463cbd3e8cb1.glb.gz",
-        "size": 4661794,
-        "sha256": "463cbd3e8cb188ea4c55784196be480de8dbe4bf38e3a9aec4ae72e4fcaf00de"
+        "file": "gimi/hu-tao.1731648cc503.glb.gz",
+        "size": 4678295,
+        "sha256": "1731648cc503ff334964bc198edbdb0627abfef963ac60814717dcaea60b53c2"
       },
       "iansan": {
-        "file": "gimi/iansan.6e7c86f44271.glb.gz",
-        "size": 5649087,
-        "sha256": "6e7c86f44271dc2be294179939f5cbcc3bb2c3f158947cb5e696763c2828b306"
+        "file": "gimi/iansan.28c16a341f8f.glb.gz",
+        "size": 5673642,
+        "sha256": "28c16a341f8fb65a0e8993947e31be12f7fd5464e9d6d67594860a0d87d0bd58"
       },
       "ifa": {
         "file": "gimi/ifa.7c66e2368ed5.glb.gz",
@@ -405,9 +405,9 @@
         "sha256": "7c66e2368ed573e2c351bc392b0f9ca6d26205687cee2de06eae2a9e81a05f47"
       },
       "illuga": {
-        "file": "gimi/illuga.911dc53e6c81.glb.gz",
-        "size": 5326935,
-        "sha256": "911dc53e6c81d02eef327d7828df7491a74774ad173d8161524a485ade70dbbe"
+        "file": "gimi/illuga.b846fd4939e1.glb.gz",
+        "size": 5355803,
+        "sha256": "b846fd4939e1ec7c0713c0c624944fa3b1698aac052732932d86c963040f62d9"
       },
       "ineffa": {
         "file": "gimi/ineffa.1da8bdc1140d.glb.gz",
@@ -440,9 +440,9 @@
         "sha256": "ae7ab96b53ca56531059f11dd620215fddb994b63068568ff5731adc25b9a388"
       },
       "kamisato-ayaka": {
-        "file": "gimi/kamisato-ayaka.fdfde3643419.glb.gz",
-        "size": 3441036,
-        "sha256": "fdfde3643419072c62a1abe6baa43b717b2170eeeef374e3170f0159aaa8eb72"
+        "file": "gimi/kamisato-ayaka.1e87b395ac60.glb.gz",
+        "size": 3456288,
+        "sha256": "1e87b395ac60db8d6a11330b8e7ac78ab936676392637fc911953a724b8d7989"
       },
       "kamisato-ayato": {
         "file": "gimi/kamisato-ayato.9599ed49670f.glb.gz",
@@ -450,9 +450,9 @@
         "sha256": "9599ed49670fb7d424b6cb19b2fb369ea8bbda913ada1d76ce68b93e2f7ed487"
       },
       "kaveh": {
-        "file": "gimi/kaveh.a70ea2f6b45d.glb.gz",
-        "size": 4028586,
-        "sha256": "a70ea2f6b45d055cefe86edb7e94681571d1db67bc64c8302214a2e2e252f42d"
+        "file": "gimi/kaveh.b4b573cf6cd7.glb.gz",
+        "size": 4047276,
+        "sha256": "b4b573cf6cd719ae1f2a569348d07975e12323f7318f9d9435a81e1ef6c02ab8"
       },
       "keqing": {
         "file": "gimi/keqing.488916a1c9eb.glb.gz",
@@ -460,9 +460,9 @@
         "sha256": "488916a1c9ebef9dad21ae135bbf9ab64b40d155b36b61a494834344f1b8dada"
       },
       "kinich": {
-        "file": "gimi/kinich.a99d1a140dee.glb.gz",
-        "size": 4201610,
-        "sha256": "a99d1a140dee24bbf75406d8f29576254ec2c38009027bb4d671e8f7c9728766"
+        "file": "gimi/kinich.c738aa3964a5.glb.gz",
+        "size": 4220636,
+        "sha256": "c738aa3964a5678f5e07c898a8cbc952323de2d64237803b66cfdd71594927fc"
       },
       "kirara": {
         "file": "gimi/kirara.1a6597dc2e01.glb.gz",
@@ -475,14 +475,14 @@
         "sha256": "b61813275fa22bf2e739af26fb4214a1235a95498b28e3777633d344ecc20d85"
       },
       "kujou-sara": {
-        "file": "gimi/kujou-sara.970db40abcaa.glb.gz",
-        "size": 3527078,
-        "sha256": "970db40abcaaa0f25214d362aed14db23f387d82688763468d5070f787f918a8"
+        "file": "gimi/kujou-sara.1aaee721be1d.glb.gz",
+        "size": 3548171,
+        "sha256": "1aaee721be1d37ba614b15398de97725200f52748c56bcf03e4829ca3e1618c0"
       },
       "kuki-shinobu": {
-        "file": "gimi/kuki-shinobu.dc6063501ac7.glb.gz",
-        "size": 3301910,
-        "sha256": "dc6063501ac7bbcfe2be13a06a2a71af59293e286ffc112427d8ad70bef6777e"
+        "file": "gimi/kuki-shinobu.69ab3feafe05.glb.gz",
+        "size": 3335559,
+        "sha256": "69ab3feafe05eaa96f1ba668c0d367850e262419803880c64f3fe57b11dc3827"
       },
       "lan-yan": {
         "file": "gimi/lan-yan.416bfd3af37a.glb.gz",
@@ -490,14 +490,14 @@
         "sha256": "416bfd3af37a000d28d8a868ea82505834e963e255a702688e03fac37404a522"
       },
       "lauma": {
-        "file": "gimi/lauma.52ae202f4e7d.glb.gz",
-        "size": 5735568,
-        "sha256": "52ae202f4e7db9560c1004a631d7a19354329937002f00498233f68835a2e57b"
+        "file": "gimi/lauma.14ff3a4b3708.glb.gz",
+        "size": 5760259,
+        "sha256": "14ff3a4b37083b1c0fb2a24a3e8455206c30e2885e5ff0acc054b20057148734"
       },
       "layla": {
-        "file": "gimi/layla.1682878fc33d.glb.gz",
-        "size": 4268284,
-        "sha256": "1682878fc33d20325fe40420c440cc85ffd0df04ffa788a7eb1c6b5f1612cd7b"
+        "file": "gimi/layla.b73e9ed1b385.glb.gz",
+        "size": 4298043,
+        "sha256": "b73e9ed1b385d8bd774614ed1238a126b06f576a54d2300c6b1586a409d7f64a"
       },
       "linnea": {
         "file": "gimi/linnea.9eea3428c67a.glb.gz",
@@ -510,24 +510,24 @@
         "sha256": "7b826e213fb7dd135645044e352032e45b1e62d4cbc7167225550fc5bc8a0f13"
       },
       "lohen": {
-        "file": "gimi/lohen.bc4adb69ff4a.glb.gz",
-        "size": 5858777,
-        "sha256": "bc4adb69ff4ac327a57ef2acb175d196b766e3c1567d2d4334f8958dce1e4549"
+        "file": "gimi/lohen.eb0a0849fa5a.glb.gz",
+        "size": 5903079,
+        "sha256": "eb0a0849fa5ac0740ecfc414f7fd5265012659ab66f2328e61ff908b65744b1b"
       },
       "lumine": {
-        "file": "gimi/lumine.a1f26cb9dad6.glb.gz",
-        "size": 2980630,
-        "sha256": "a1f26cb9dad604e5d5aec9dc7b3e4439c6c6be562ee4ffd41f23ced33ca7b4e8"
+        "file": "gimi/lumine.0a790e11f4bd.glb.gz",
+        "size": 2997607,
+        "sha256": "0a790e11f4bd83b542ada7e2e397049529d1042b947681d4bc5799069f281e5c"
       },
       "lynette": {
-        "file": "gimi/lynette.81d726a04760.glb.gz",
-        "size": 3645780,
-        "sha256": "81d726a0476081c76af1aa0e7b1197dc662154c401e9fcab6907a0a2de7a7517"
+        "file": "gimi/lynette.621b8cd76395.glb.gz",
+        "size": 3672906,
+        "sha256": "621b8cd76395226bd25acc8303f379a3d2cd9b681c87a8d6775335bb604da99d"
       },
       "lyney": {
-        "file": "gimi/lyney.4b63152dca60.glb.gz",
-        "size": 3623789,
-        "sha256": "4b63152dca601603f67ace2272558b44a9c130b56e0ca87ceddfd56b383a2ad9"
+        "file": "gimi/lyney.8b201d87df1c.glb.gz",
+        "size": 3646738,
+        "sha256": "8b201d87df1c8ab35b437dae39a0e38df60a2fed1b1ec9689788a47de2f5ef57"
       },
       "mavuika": {
         "file": "gimi/mavuika.1fc40b10a7de.glb.gz",
@@ -535,14 +535,14 @@
         "sha256": "1fc40b10a7defc03d0442daec6e365294151cc47ed84756f5fc9df7de040782e"
       },
       "mika": {
-        "file": "gimi/mika.8e9de78dfd7d.glb.gz",
-        "size": 3232660,
-        "sha256": "8e9de78dfd7d6c2179e9a9f77c31323486ccbc439ef3c718d04251b7d043da32"
+        "file": "gimi/mika.31b7ae31106e.glb.gz",
+        "size": 3250112,
+        "sha256": "31b7ae31106e55fed7013918ef5fb1136deadded32ebbcec9e949e7aa65009a0"
       },
       "mitya": {
-        "file": "gimi/mitya.b0d0e7107482.glb.gz",
-        "size": 10301781,
-        "sha256": "b0d0e7107482fa18306a4819fd34efa38caee205862957833279715e13261827"
+        "file": "gimi/mitya.fa4a4f206bf2.glb.gz",
+        "size": 10366711,
+        "sha256": "fa4a4f206bf2bc2878fe456ff6ac926a157694823cfc10b28349dbd4a9dc0cb8"
       },
       "mona": {
         "file": "gimi/mona.1ef2f912dc0a.glb.gz",
@@ -550,9 +550,9 @@
         "sha256": "1ef2f912dc0adcb691f61da7c675b99620d149c6a0a7ecd026a234ead998bb00"
       },
       "mualani": {
-        "file": "gimi/mualani.fdb9f861c31b.glb.gz",
-        "size": 4646748,
-        "sha256": "fdb9f861c31bec69f8f4903c3fe028bfb2a22ec1e18ec9ba6472c6e0b8717f7d"
+        "file": "gimi/mualani.53276deab52f.glb.gz",
+        "size": 4670868,
+        "sha256": "53276deab52f857c86dce63124a747eebda1fbc30770cee50b49e13615afe227"
       },
       "nahida": {
         "file": "gimi/nahida.e8466e26d9fc.glb.gz",
@@ -560,14 +560,14 @@
         "sha256": "e8466e26d9fc958e8c5d24fe3f4783127d1b6d59a90d5ae7c182463cf3ddb66c"
       },
       "navia": {
-        "file": "gimi/navia.de19b6f804f5.glb.gz",
-        "size": 4788575,
-        "sha256": "de19b6f804f5484c1f86885645640ca2e0f723de6c1c6d5948390b496e316ed5"
+        "file": "gimi/navia.c00f7d18e1c3.glb.gz",
+        "size": 4813558,
+        "sha256": "c00f7d18e1c3195011942bad6f35c1e17198f04d0fea2e79fce26c0da575f3df"
       },
       "nefer": {
-        "file": "gimi/nefer.19ccfd7fca2a.glb.gz",
-        "size": 5970484,
-        "sha256": "19ccfd7fca2a72edccfaf7951d0a88fb0723ce34ecec754c8a74cd3621bc35c7"
+        "file": "gimi/nefer.4dc178add028.glb.gz",
+        "size": 6004150,
+        "sha256": "4dc178add02810410b48a54fbab1a88c138e5615d97445a873de5f8e8ace07d1"
       },
       "neuvillette": {
         "file": "gimi/neuvillette.a1e8e8f0d925.glb.gz",
@@ -575,9 +575,9 @@
         "sha256": "a1e8e8f0d9254f4b6277483b2456e5963edb896008c39c3295cf3976253c301e"
       },
       "nicole": {
-        "file": "gimi/nicole.d8dab91b9d66.glb.gz",
-        "size": 7944947,
-        "sha256": "d8dab91b9d662f3a80fba4560e7da8436545168cbc6d9362c78b4e7783d28448"
+        "file": "gimi/nicole.fd7c7373174a.glb.gz",
+        "size": 7988502,
+        "sha256": "fd7c7373174a282288e4fb33b34202030b1bf596b0d856b5328efcbec5bcec42"
       },
       "nilou": {
         "file": "gimi/nilou.5e0b5f93f9fa.glb.gz",
@@ -585,9 +585,9 @@
         "sha256": "5e0b5f93f9fa5a2661c373fead5eff011e7fd17a2adbad1567517e803302b598"
       },
       "ningguang": {
-        "file": "gimi/ningguang.24bc9e306831.glb.gz",
-        "size": 3764197,
-        "sha256": "24bc9e306831dfc4ebd76458eaced16e73c734f2323f766465714be996397c51"
+        "file": "gimi/ningguang.2ea00df871f3.glb.gz",
+        "size": 3779655,
+        "sha256": "2ea00df871f34223c680533a99be0eeb00d802b985fc1d99b4c5ef1057d163c3"
       },
       "noelle": {
         "file": "gimi/noelle.3c3ba7962f55.glb.gz",
@@ -630,24 +630,24 @@
         "sha256": "adabcdad68ea350c3ba695a4b6ef9b8e778b87730431b10b325300f5070665c5"
       },
       "sandrone": {
-        "file": "gimi/sandrone.24d85a49e221.glb.gz",
-        "size": 9822545,
-        "sha256": "24d85a49e2213369712fd383f895763176502eed8514da9d90f489c3a746da36"
+        "file": "gimi/sandrone.098fe8de17d4.glb.gz",
+        "size": 9920603,
+        "sha256": "098fe8de17d4fac0cf457c70d5b132faa7c3334ec2aeaa27186d0f984ebae897"
       },
       "sangonomiya-kokomi": {
-        "file": "gimi/sangonomiya-kokomi.9d364808300b.glb.gz",
-        "size": 4129309,
-        "sha256": "9d364808300bb7a724f2c418bc41089bae1ad34a6f5f2beabddaab77979468e7"
+        "file": "gimi/sangonomiya-kokomi.14887eb8830a.glb.gz",
+        "size": 4155582,
+        "sha256": "14887eb8830a71fd06ccd71b4d70856a0f95fb272f639adf4d4af0de5edee085"
       },
       "sayu": {
-        "file": "gimi/sayu.97e96fdd3958.glb.gz",
-        "size": 3345651,
-        "sha256": "97e96fdd3958751d84bb384bb3ad720dfe291ffcd266b3aaf738ff9758bba485"
+        "file": "gimi/sayu.d93624651a2f.glb.gz",
+        "size": 3360689,
+        "sha256": "d93624651a2fca8668eba89dfb6905c6071504019065f9e7d788ad0c045336bf"
       },
       "sethos": {
-        "file": "gimi/sethos.8a79265629cf.glb.gz",
-        "size": 3713489,
-        "sha256": "8a79265629cf33242a1e7316fe759eb125f3bc9e68f1cbe2b6d70979b3fa194c"
+        "file": "gimi/sethos.779b0e68dfb2.glb.gz",
+        "size": 3732444,
+        "sha256": "779b0e68dfb21999b14f770c22fa4a91e7a640697f72b14cb3c2d9d84214c1e1"
       },
       "shenhe": {
         "file": "gimi/shenhe.bc9cc9d64c17.glb.gz",
@@ -660,9 +660,9 @@
         "sha256": "b85855f9274ec14e4eb1d9e7be902404642a90ede9fc1b994ff2b55e01801a1b"
       },
       "sigewinne": {
-        "file": "gimi/sigewinne.268d17767e9c.glb.gz",
-        "size": 3206989,
-        "sha256": "268d17767e9c107574c9f049a5aa62b08f46987baa12c21cb90cefbb70ecf3f8"
+        "file": "gimi/sigewinne.80e4e080b415.glb.gz",
+        "size": 3231643,
+        "sha256": "80e4e080b4150aafee6cfea0cb95b0a5d40dc2cb8957ed2ea3fd1804b86864ac"
       },
       "skirk": {
         "file": "gimi/skirk.4c4e9e7b3c03.glb.gz",
@@ -675,9 +675,9 @@
         "sha256": "018df03cee70aea2a4809fe6d4c69e3a1481a2b2168c89d5b61eda282f34efc9"
       },
       "tartaglia": {
-        "file": "gimi/tartaglia.2d837d2b07ac.glb.gz",
-        "size": 3072154,
-        "sha256": "2d837d2b07ace5f5e456468c71cbfc865f463c2b3c7b179d384f92beb072eaec"
+        "file": "gimi/tartaglia.d8c3b6e05927.glb.gz",
+        "size": 3085401,
+        "sha256": "d8c3b6e05927aba8cfac74add615fa0cb8f703838999a8b4bb3dc378fb18537f"
       },
       "thoma": {
         "file": "gimi/thoma.741b298bc343.glb.gz",
@@ -685,24 +685,24 @@
         "sha256": "741b298bc343fae2f4865d67f1e6bfebe3619a20d5b046d54ad3c79e12db2e47"
       },
       "tighnari": {
-        "file": "gimi/tighnari.6094e79e943c.glb.gz",
-        "size": 3050588,
-        "sha256": "6094e79e943cb7161b8f20ddc63e2c4359dd809738b6e8e875220b64aa52398e"
+        "file": "gimi/tighnari.af410279a7ad.glb.gz",
+        "size": 3060394,
+        "sha256": "af410279a7ad9ed82ab9c6a0836be7341f32010ec6758e8c46bd90bc2ad04f30"
       },
       "valeriy": {
-        "file": "gimi/valeriy.23d535772de8.glb.gz",
-        "size": 6918786,
-        "sha256": "23d535772de8622e0a8bddf33ab98952f9b723bad530719cc6e809d80a6aa30c"
+        "file": "gimi/valeriy.362ba0a7f904.glb.gz",
+        "size": 6951909,
+        "sha256": "362ba0a7f904589673acdd213d1d4f18845e36fec559fd81725280da3819f971"
       },
       "varesa": {
-        "file": "gimi/varesa.ebd7215e7e7f.glb.gz",
-        "size": 5610733,
-        "sha256": "ebd7215e7e7f1451738d49ed6e7780ff9619ff4dcc5fe294eb1c706042f2bba8"
+        "file": "gimi/varesa.294224249a24.glb.gz",
+        "size": 5636305,
+        "sha256": "294224249a24ae7f15353ccad8ee5f9fd429a2285b2d8b4a0313903fee740dc5"
       },
       "varka": {
-        "file": "gimi/varka.4a59437998d2.glb.gz",
-        "size": 8325753,
-        "sha256": "4a59437998d241ce96aed0d02994c283dc67187878d6d59f4e501a3e55491476"
+        "file": "gimi/varka.f91a97904784.glb.gz",
+        "size": 8374444,
+        "sha256": "f91a9790478442f778340a7c336479cf51fef73024f2af0c956c25a0897822cb"
       },
       "venti": {
         "file": "gimi/venti.2f3e10232b93.glb.gz",
@@ -710,9 +710,9 @@
         "sha256": "2f3e10232b935c4441f2848a6fe6fbeadfcf60e6968fd2c7d323a6daeef3e075"
       },
       "vesna": {
-        "file": "gimi/vesna.e2218b118ab6.glb.gz",
-        "size": 7510239,
-        "sha256": "e2218b118ab67858ce9ab0e87b3d1a502ccf2bdd656bf0db1e5ccf2260c931dc"
+        "file": "gimi/vesna.e284c2334729.glb.gz",
+        "size": 7559529,
+        "sha256": "e284c233472977c8fe4cda25d246edefd1ffd196e77b5ede1160e11d78aa5633"
       },
       "vodyanitsa": {
         "file": "gimi/vodyanitsa.1f14c00d26a5.glb.gz",
@@ -740,24 +740,24 @@
         "sha256": "bc6261c479268440598504d5c32a52a7a3d682e3e45ed47198fb1ee2e4a4eb78"
       },
       "xiao": {
-        "file": "gimi/xiao.11b281c28027.glb.gz",
-        "size": 3289711,
-        "sha256": "11b281c28027570030f6bc5cbeb5d537a68740c3ea29b8c6b67cb9b041d29fd4"
+        "file": "gimi/xiao.173407923453.glb.gz",
+        "size": 3298648,
+        "sha256": "173407923453bf7140224f88589ff134caebd67a5b310bf6f393e9e09470f8a8"
       },
       "xilonen": {
-        "file": "gimi/xilonen.24023b9a7d84.glb.gz",
-        "size": 6554627,
-        "sha256": "24023b9a7d841a1fd1d9568ecbb2d32c165517c066b6342800ffbbc3533ca172"
+        "file": "gimi/xilonen.8e0cd984be39.glb.gz",
+        "size": 6578180,
+        "sha256": "8e0cd984be39848fc1d29c71ac25aac50acb38bee9b0e6adf7301dfd3bb97a52"
       },
       "xingqiu": {
-        "file": "gimi/xingqiu.6f7e971cc990.glb.gz",
-        "size": 2546011,
-        "sha256": "6f7e971cc9900d11fe4c858b4a1acb1417763b3a2d98ccddb5ade40fdf69b730"
+        "file": "gimi/xingqiu.dbc8899bf468.glb.gz",
+        "size": 2559708,
+        "sha256": "dbc8899bf468ad7784c5243f191e960a167110684ef1e72d574691eda0a82926"
       },
       "xinyan": {
-        "file": "gimi/xinyan.48728c01d7f9.glb.gz",
-        "size": 2803313,
-        "sha256": "48728c01d7f9dcfdbc060c46191e2d08745f2eb1dac7c48dd49879aa222d73ec"
+        "file": "gimi/xinyan.77dd2f60a46d.glb.gz",
+        "size": 2825780,
+        "sha256": "77dd2f60a46dff3ef93eb6b8471a53db50fbafa81580999a6c7f4757ad23fe4b"
       },
       "yae-miko": {
         "file": "gimi/yae-miko.4c06e2f2ba24.glb.gz",
@@ -765,14 +765,14 @@
         "sha256": "4c06e2f2ba242083247d35b7b3114a852e2c06e31c7c4516b94e09bd15196c9f"
       },
       "yanfei": {
-        "file": "gimi/yanfei.bc297216695a.glb.gz",
-        "size": 3137749,
-        "sha256": "bc297216695a8f2ff5cc370c1bf780ba30008eaceb2becb7ad75a5dee079a188"
+        "file": "gimi/yanfei.460a5f23f6c3.glb.gz",
+        "size": 3152446,
+        "sha256": "460a5f23f6c369282fe788693effb8f26a65832ca649691ab0c987143f3d438e"
       },
       "yaoyao": {
-        "file": "gimi/yaoyao.a490367e0a80.glb.gz",
-        "size": 3438146,
-        "sha256": "a490367e0a800a60ce24b3f8e1d81c9994ae18d083a3449ca041baf027b3cbdd"
+        "file": "gimi/yaoyao.4a2cceff2aa7.glb.gz",
+        "size": 3463193,
+        "sha256": "4a2cceff2aa7e076996a18360b12b00280c3e699710e1c54916f3bb9dcc351be"
       },
       "yelan": {
         "file": "gimi/yelan.61d5041a03f8.glb.gz",
@@ -790,9 +790,9 @@
         "sha256": "a6502ee1b4a3a79f9fbcaf169b1c6e06bb18fcf3275415bcf72cee2603be395d"
       },
       "yun-jin": {
-        "file": "gimi/yun-jin.a8e8c64ece87.glb.gz",
-        "size": 4379538,
-        "sha256": "a8e8c64ece87700b3b6558400d992d1b9a96bf153621469ca01781987b5745a1"
+        "file": "gimi/yun-jin.f94436175065.glb.gz",
+        "size": 4404814,
+        "sha256": "f94436175065503f83ddc07b712cdfabbe2dbfe8cb64cd47d66b7ea7ed59c48d"
       },
       "zhongli": {
         "file": "gimi/zhongli.0664f503ace8.glb.gz",
@@ -800,9 +800,9 @@
         "sha256": "0664f503ace81cec89a43fea28ed321c410198d291b6e2b6649475bb96e2829c"
       },
       "zibai": {
-        "file": "gimi/zibai.d86b69a69cb8.glb.gz",
-        "size": 6090607,
-        "sha256": "d86b69a69cb8aeda8855dd48c0902477c168c27555644c0a7b5ce6e926926ad1"
+        "file": "gimi/zibai.fc2704703771.glb.gz",
+        "size": 6130751,
+        "sha256": "fc2704703771fe2a6972be76cb7b6c4894f4e838b563db7dd3491355eddbaf31"
       }
     },
     "srmi": {
@@ -810,6 +810,11 @@
         "file": "srmi/acheron.2c94acbdccaa.glb.gz",
         "size": 4064996,
         "sha256": "2c94acbdccaa22fbd59a4faa4911f5fd08d0d17b54bc84d9d853e8b1b7d26979"
+      },
+      "aeon-aha": {
+        "file": "srmi/aeon-aha.41c5a2886728.glb.gz",
+        "size": 6147575,
+        "sha256": "41c5a28867288201c59268f593e8a9a76b4b0f65f42f9344eb79f1a99cb9dc67"
       },
       "aglaea": {
         "file": "srmi/aglaea.77a7195bbedd.glb.gz",
@@ -1100,6 +1105,11 @@
         "file": "srmi/natasha.beef439abd3c.glb.gz",
         "size": 2714244,
         "sha256": "beef439abd3ca2b0b58878311286493c60bd36e7ddb79799ca99f3a5b7db4521"
+      },
+      "pearl": {
+        "file": "srmi/pearl.22a45de91f6b.glb.gz",
+        "size": 4862742,
+        "sha256": "22a45de91f6b72bc1722a4b2696b4f47d9c3b1ae72cbcbb2cd31538cee10cbc2"
       },
       "pela": {
         "file": "srmi/pela.4df9d72d6eb5.glb.gz",
@@ -1551,299 +1561,319 @@
     },
     "zzmi": {
       "alice": {
-        "file": "zzmi/alice.ef53e3a0bf75.glb.gz",
-        "size": 11942090,
-        "sha256": "ef53e3a0bf759621d8065492f67502aa5d7348d4e3df717e43a4322bdf66bd19"
+        "file": "zzmi/alice.084050469e80.glb.gz",
+        "size": 13065539,
+        "sha256": "084050469e80a467fad3739ccaa9a631d15993ee8a54ed196296e287f6e42908"
       },
       "anby": {
-        "file": "zzmi/anby.a563104993cb.glb.gz",
-        "size": 4018479,
-        "sha256": "a563104993cb4c808e13d8aa9eb996343df95883fbfcd4581f0c1c2bc47c33b2"
+        "file": "zzmi/anby.9e0924855936.glb.gz",
+        "size": 4739586,
+        "sha256": "9e0924855936394448d0b8e542a69abbf0c108218a2611ed9dac00f171212fd8"
       },
       "anton": {
-        "file": "zzmi/anton.648b7da7dec8.glb.gz",
-        "size": 8078974,
-        "sha256": "648b7da7dec85debbc1f20f9dd74838a9bb7588c49b9098da633c44ca1166172"
+        "file": "zzmi/anton.76f53f66a025.glb.gz",
+        "size": 9152363,
+        "sha256": "76f53f66a0252af27e3a959078f64be6d567841cfbe56644f6efbe50638496d7"
       },
       "aria": {
-        "file": "zzmi/aria.70176d821e93.glb.gz",
-        "size": 12702220,
-        "sha256": "70176d821e935919123d84d8ce824d22e472e15eb92dd531002919305b65de1f"
+        "file": "zzmi/aria.f44a148843ef.glb.gz",
+        "size": 17161720,
+        "sha256": "f44a148843ef721a67e70927060c2b9c472ca6ebe5d85a1be831520a1e6ce604"
       },
       "astra-yao": {
-        "file": "zzmi/astra-yao.182697e3ffe1.glb.gz",
-        "size": 15035247,
-        "sha256": "182697e3ffe12a2c02dfd95003783365beb4deda6a52869cd32144b9a1c7a2b6"
+        "file": "zzmi/astra-yao.a87aac802160.glb.gz",
+        "size": 16573180,
+        "sha256": "a87aac80216010d58244d0ad49812b1e160cb47a9d6ba1d199dd5d831a0f41b6"
       },
       "banyue": {
-        "file": "zzmi/banyue.2d0f6209d594.glb.gz",
-        "size": 12895313,
-        "sha256": "2d0f6209d5943a88f3a8ded39fbd7899771053f4d2ebc9c734b152e77d2516a2"
+        "file": "zzmi/banyue.2b725e1a03c1.glb.gz",
+        "size": 13827212,
+        "sha256": "2b725e1a03c11d90b1c9c2559d26c7d2688b0fd54a0fc30bc5b620fa14f68c50"
+      },
+      "belle": {
+        "file": "zzmi/belle.329fbbf27ab0.glb.gz",
+        "size": 4334024,
+        "sha256": "329fbbf27ab00673619205d67981fef61576233a4b37b515cf9285c605387091"
       },
       "ben": {
-        "file": "zzmi/ben.4d307adcf646.glb.gz",
-        "size": 4380172,
-        "sha256": "4d307adcf646ec43cedfe861d28e3a6923611915f5cac0bc15245a2b2e95214c"
+        "file": "zzmi/ben.46f3e4a6798a.glb.gz",
+        "size": 5125686,
+        "sha256": "46f3e4a6798a0bc360f6c6abcd4fb6752363d058b2946787e976621541529bba"
       },
       "billy": {
-        "file": "zzmi/billy.57bab95ca82a.glb.gz",
-        "size": 3515023,
-        "sha256": "57bab95ca82aa5744f2b072423947e8b650e10badfde17ffa120a5603de9755b"
+        "file": "zzmi/billy.cf5aebd07e17.glb.gz",
+        "size": 4775396,
+        "sha256": "cf5aebd07e17ecb6964f85d29aa185eda483ec303249c5f465925e99663aeb02"
       },
       "burnice": {
-        "file": "zzmi/burnice.f3edc8f4d9c3.glb.gz",
-        "size": 10170855,
-        "sha256": "f3edc8f4d9c3a8736e3f0b5f39bfee1bfe4cfee5cf78c2f689ec1f13ddcaf527"
+        "file": "zzmi/burnice.cc8d15e6f9f1.glb.gz",
+        "size": 11156478,
+        "sha256": "cc8d15e6f9f1fcf3bc4600f10db790e6177ca5bf1dcb4980772997fab38576f0"
       },
       "caesar": {
-        "file": "zzmi/caesar.5b8e698b5e08.glb.gz",
-        "size": 11570569,
-        "sha256": "5b8e698b5e08c00f133660fdd95fec6994f0db513bc5b28deb08bb0f1d1b43a0"
+        "file": "zzmi/caesar.5bd5f7cbfe2f.glb.gz",
+        "size": 13969626,
+        "sha256": "5bd5f7cbfe2f7cd47fdc86fe15d9b42b778f1b2c158f275a4b95a4a96ffe39d9"
       },
       "cissia": {
-        "file": "zzmi/cissia.0903ad1942f4.glb.gz",
-        "size": 19251000,
-        "sha256": "0903ad1942f4161b379488e6deb556fcf60f7e9864440b9b010ab572e8f5dee3"
+        "file": "zzmi/cissia.0c6cbb09d2b6.glb.gz",
+        "size": 20980445,
+        "sha256": "0c6cbb09d2b656594a42a60204b84fd64eee2a3b4b08e74d6208852a5305dcd9"
       },
       "claret": {
-        "file": "zzmi/claret.d43d37007d91.glb.gz",
-        "size": 19407510,
-        "sha256": "d43d37007d91771949ed63a78d79498f36efc5a3a32c5de30f3ef0e4c380f99b"
+        "file": "zzmi/claret.033e52c18dbf.glb.gz",
+        "size": 20947695,
+        "sha256": "033e52c18dbfba422eb3e589d3ee3bbc66a1f8b46598fa371f52aad0697815b9"
       },
       "corin": {
-        "file": "zzmi/corin.d78e29ed17b1.glb.gz",
-        "size": 6390589,
-        "sha256": "d78e29ed17b169317d569e3ed58e798db806dfc68bd4fca970e967acc235848b"
+        "file": "zzmi/corin.919df6e4246f.glb.gz",
+        "size": 8165694,
+        "sha256": "919df6e4246f382667dc62f45c7474c7017bc36220bd653dfe57bb05ae7291fd"
       },
       "dialyn": {
-        "file": "zzmi/dialyn.ecb06cbd3697.glb.gz",
-        "size": 19114091,
-        "sha256": "ecb06cbd36974398ecb08d00cdc9ae00051b8dc53715ae3c51296201439e44ec"
+        "file": "zzmi/dialyn.94262b339413.glb.gz",
+        "size": 20674240,
+        "sha256": "94262b339413757d866bcf4754376f4c35e3bc5b60aa719d0a649b48a67318c8"
       },
       "ellen": {
-        "file": "zzmi/ellen.fd801776e132.glb.gz",
-        "size": 10086555,
-        "sha256": "fd801776e132eda1d39053796b8454348aeb8b1239b83d0b51ab05de369dc401"
+        "file": "zzmi/ellen.4ce9bfb33c02.glb.gz",
+        "size": 10912671,
+        "sha256": "4ce9bfb33c0298ef82609b051133d1b9b0f9f85395bc3a6a4636a2cea1af05ce"
       },
       "evelyn": {
-        "file": "zzmi/evelyn.f19b57cf4342.glb.gz",
-        "size": 18692521,
-        "sha256": "f19b57cf43428301f449ca4a09a5ce0384c085cf789faf8f335b7a8a5b482a14"
+        "file": "zzmi/evelyn.7200d8ae025f.glb.gz",
+        "size": 19799873,
+        "sha256": "7200d8ae025f8651a3ae402b0a2b3a0c3a49caf38e1a7f42a04ee299c7cd5b9f"
       },
       "grace": {
-        "file": "zzmi/grace.58ac91270aab.glb.gz",
-        "size": 8322793,
-        "sha256": "58ac91270aabbc8dacc9560625de36474463ce3643715a292dbc8e996d873f60"
+        "file": "zzmi/grace.766f6b3f4b19.glb.gz",
+        "size": 9374685,
+        "sha256": "766f6b3f4b192b124b9d1f8128579059693ca2d47761a295410bd179b63e3ea0"
       },
       "harumasa": {
-        "file": "zzmi/harumasa.bf706e17ed6a.glb.gz",
-        "size": 12076421,
-        "sha256": "bf706e17ed6ae8e05e4e558b40045d0167d3e02ec9c9c1b0fdf9e685d7866763"
+        "file": "zzmi/harumasa.a175901f47cf.glb.gz",
+        "size": 13339611,
+        "sha256": "a175901f47cf58998bec95041f7ad4c02c72e0f05c911781e750f3b2063978f8"
       },
       "hugo": {
-        "file": "zzmi/hugo.07a8ec43c243.glb.gz",
-        "size": 12673106,
-        "sha256": "07a8ec43c243da82e76891f97f110fff777d448aa3133b2977cb914ec711f02f"
+        "file": "zzmi/hugo.695dc5e0b4ab.glb.gz",
+        "size": 13652495,
+        "sha256": "695dc5e0b4aba948947f3668f1ef5e2c8153758e1333d7dc216804d9d0feeed1"
       },
       "jane": {
-        "file": "zzmi/jane.98d83e992cac.glb.gz",
-        "size": 11234861,
-        "sha256": "98d83e992cacddec258b681d554230dfacc5a68d83b7c8564926db217614eb42"
+        "file": "zzmi/jane.2229dd51ad89.glb.gz",
+        "size": 12054366,
+        "sha256": "2229dd51ad89824c879424cc36926bce9cd48a07763790ba0286c7e99b09a0cc"
       },
       "ju-fufu": {
-        "file": "zzmi/ju-fufu.3870958545ad.glb.gz",
-        "size": 14703301,
-        "sha256": "3870958545ad536828755a1fb0a608bd9598e4182fbf2366ff9a9ae70bd61a71"
+        "file": "zzmi/ju-fufu.310e2336b54a.glb.gz",
+        "size": 15980344,
+        "sha256": "310e2336b54a873d3f276b87184fcce78eb67e7614b08f65e5fc7e13ff9b2bf4"
       },
       "koleda": {
-        "file": "zzmi/koleda.bdd0d2d877d3.glb.gz",
-        "size": 7994102,
-        "sha256": "bdd0d2d877d3e1514291df40070811f0ee051f273164c1af166c7eefc8859f32"
+        "file": "zzmi/koleda.22ce9f7fd250.glb.gz",
+        "size": 10344871,
+        "sha256": "22ce9f7fd2505b8010277706f1184e7b453f60b99240671228fc1ee9a6bf88ae"
       },
       "lighter": {
-        "file": "zzmi/lighter.55b8357c4093.glb.gz",
-        "size": 7388682,
-        "sha256": "55b8357c40935b0440b881fae3b753659bbf4736c7d83d81044dbcaed1f33ce3"
+        "file": "zzmi/lighter.57a6c2ac5196.glb.gz",
+        "size": 7570996,
+        "sha256": "57a6c2ac519670d9a0b7db32733e8673ca9deb2b9ef66695533e2ebd0f8d65ab"
       },
       "lucia": {
-        "file": "zzmi/lucia.7e3a1752e5bc.glb.gz",
-        "size": 15011210,
-        "sha256": "7e3a1752e5bc27f113612100a6b9c98c596129d7b739ffa3c11ab9f2bb410ef5"
+        "file": "zzmi/lucia.2a40921641d0.glb.gz",
+        "size": 17886310,
+        "sha256": "2a40921641d0e8710d3a72cdc091fea707e7a5c0a938be6d96129a9141f67ca8"
       },
       "lucy": {
-        "file": "zzmi/lucy.ef026cebcfae.glb.gz",
-        "size": 11791659,
-        "sha256": "ef026cebcfae9e387614db357fd5f0d510a34153ac1def4d14e5eb03648db4b9"
+        "file": "zzmi/lucy.fbfe1add3903.glb.gz",
+        "size": 12707183,
+        "sha256": "fbfe1add390303fca9864793ba3fe58c741399a93f73439d18b9a47dfc339711"
       },
       "lycaon": {
-        "file": "zzmi/lycaon.7d69d61f6891.glb.gz",
-        "size": 8040751,
-        "sha256": "7d69d61f6891a88ed1a43f33af4ff5d798b76ce2a42a35d3865183d42adc1eec"
+        "file": "zzmi/lycaon.458765cef6b1.glb.gz",
+        "size": 8738289,
+        "sha256": "458765cef6b1f7a5dc86e41a81c4696e8fe17d81fabf252c9087875a102b15aa"
       },
       "manato": {
-        "file": "zzmi/manato.e392c04bd0da.glb.gz",
-        "size": 10238901,
-        "sha256": "e392c04bd0da5c337b12edff60be4b86ba49aa113efb6b6e166fa7cc3a9dd30f"
+        "file": "zzmi/manato.6240dde910e9.glb.gz",
+        "size": 13874916,
+        "sha256": "6240dde910e9ed6aa4a43164e2a044d9459feb5116a033b4ce4901c7dcfc840a"
       },
       "miyabi": {
-        "file": "zzmi/miyabi.0b220d6d3cfa.glb.gz",
-        "size": 6980370,
-        "sha256": "0b220d6d3cfaca692c3cb2ecaaf697d2497bcd1edfdb46afbecfa24997d641be"
+        "file": "zzmi/miyabi.1545ceb6302b.glb.gz",
+        "size": 8130156,
+        "sha256": "1545ceb6302b3a79cccc9613335ff1a8c7b23583aa04821fa5fb88ca7fd56d38"
       },
       "nangong-yu": {
-        "file": "zzmi/nangong-yu.9aca78588c0e.glb.gz",
-        "size": 14244275,
-        "sha256": "9aca78588c0ee9c7848bcab1b82d9c95583fdb03220379cdb2eae7d9d0d45d63"
+        "file": "zzmi/nangong-yu.4134cb27d9df.glb.gz",
+        "size": 16439985,
+        "sha256": "4134cb27d9df55ce9a581511e3b99af8f8c92cb840827a0b8343ba22a34d98c2"
       },
       "nekomata": {
-        "file": "zzmi/nekomata.a20ab74467c7.glb.gz",
-        "size": 4056974,
-        "sha256": "a20ab74467c7d6f69111e798ee1566e3fc9f084c873179a98b9eada29e539161"
+        "file": "zzmi/nekomata.952b74e13b23.glb.gz",
+        "size": 4810173,
+        "sha256": "952b74e13b23d65eae03dd62a16eb66c3da644c6b826bc6359b05f96662a04a1"
       },
       "nicole": {
-        "file": "zzmi/nicole.de18b099ca41.glb.gz",
-        "size": 6260559,
-        "sha256": "de18b099ca4118043e11c69c40f90b06f8930ab41a9b155084d21edefd43b4ea"
+        "file": "zzmi/nicole.f58af0641f0b.glb.gz",
+        "size": 7368540,
+        "sha256": "f58af0641f0b86b7d30953ac84b501b16ed63cb61ed9533042875bca06d8d7ff"
       },
       "norma": {
-        "file": "zzmi/norma.f8e3618eae88.glb.gz",
-        "size": 9781580,
-        "sha256": "f8e3618eae88305f1d4c6822d60eb19543722d1c247d94b8fd523258cf635b20"
+        "file": "zzmi/norma.5af7e05713bd.glb.gz",
+        "size": 10791985,
+        "sha256": "5af7e05713bd34ab711797b5bb988f8b0f5ebcdd947abc2518a9dea8a77c2599"
       },
       "orphie-magus": {
-        "file": "zzmi/orphie-magus.8274e773ecda.glb.gz",
-        "size": 14652284,
-        "sha256": "8274e773ecda19fb09ddc96740d33c2c7c42e06432db13cb3252ef0ec917b020"
+        "file": "zzmi/orphie-magus.7e914fa8431a.glb.gz",
+        "size": 16119613,
+        "sha256": "7e914fa8431a82118dcfb886e4c841a93cee0c3a3b981ebcc051a6bfe4ac32d1"
       },
       "pan-yinhu": {
-        "file": "zzmi/pan-yinhu.c1b2fd04d120.glb.gz",
-        "size": 4733969,
-        "sha256": "c1b2fd04d12045a1d37b31c4de1063e766cc7e5ce04b3c7f275b9a5ba4ed5dd0"
+        "file": "zzmi/pan-yinhu.64b5ed9fe79f.glb.gz",
+        "size": 5853038,
+        "sha256": "64b5ed9fe79f8ce3c04231ec1270bc87d90db877788f45a1fd5edfe587eb04f0"
+      },
+      "phoenix": {
+        "file": "zzmi/phoenix.61d14e69c2c1.glb.gz",
+        "size": 18384566,
+        "sha256": "61d14e69c2c1c5b8c0b64b4cc5216122fffd119a13e0329c56002a46ee26a44d"
       },
       "piper": {
-        "file": "zzmi/piper.ced600c808d6.glb.gz",
-        "size": 12737046,
-        "sha256": "ced600c808d626b7becc458c7dc714964626e889017f9a5d802347053f499527"
+        "file": "zzmi/piper.92f5d0d65479.glb.gz",
+        "size": 14645756,
+        "sha256": "92f5d0d65479ecb3ac0d2fe1f65f22a7557800d0ea8bc4b5c7e38186e56817f4"
       },
       "pulchra": {
-        "file": "zzmi/pulchra.3a9d7f07012f.glb.gz",
-        "size": 10421365,
-        "sha256": "3a9d7f07012f416a2cab92c02b7355e2770a408c835f028ed4a2d619a9ec9099"
+        "file": "zzmi/pulchra.b52fcb709c08.glb.gz",
+        "size": 12449024,
+        "sha256": "b52fcb709c08c4cda82ab62453f804a7b079ca68f3cc20e977604eb9973a9ec1"
       },
       "pyrois": {
-        "file": "zzmi/pyrois.babce67b0f2c.glb.gz",
-        "size": 6550333,
-        "sha256": "babce67b0f2c159ce756fceb4c8d42f1653d2b708e2e12f89d20c9c69d921ca0"
+        "file": "zzmi/pyrois.28e6bd291589.glb.gz",
+        "size": 6557529,
+        "sha256": "28e6bd2915891ffd487167923000a5514219cb2464eeab9b499ddc72bd3afecc"
       },
       "qingyi": {
-        "file": "zzmi/qingyi.e4ba4f232888.glb.gz",
-        "size": 12733878,
-        "sha256": "e4ba4f23288869fb55da2daafded8d95693c5a2a7c58046920d6a3ed3d18af97"
+        "file": "zzmi/qingyi.6e32dc24e9a2.glb.gz",
+        "size": 13814042,
+        "sha256": "6e32dc24e9a229a58b06bb13c7680afcb0abd89908ee927c88214d87f5e1afad"
       },
       "remielle": {
-        "file": "zzmi/remielle.2e9f1f6ea3c0.glb.gz",
-        "size": 21116339,
-        "sha256": "2e9f1f6ea3c0daec909f36763fe48702b75ae98fe6ce00e3b6386fdda4f9b8e1"
+        "file": "zzmi/remielle.c341022cc6b4.glb.gz",
+        "size": 24525539,
+        "sha256": "c341022cc6b478b5bf947ea2c909750009bee24c3c5086d73c3c474b0cd01156"
       },
       "rina": {
-        "file": "zzmi/rina.257a01d44cf8.glb.gz",
-        "size": 16138673,
-        "sha256": "257a01d44cf842ee728a9f112d3faac275fda6f653e821e7d20234ba7cfc77f4"
+        "file": "zzmi/rina.f1ed6448c6ea.glb.gz",
+        "size": 19119429,
+        "sha256": "f1ed6448c6eaa864589948198e93d0305729916cae3329b941995da87f4e637d"
       },
       "roxy": {
-        "file": "zzmi/roxy.4d0e46759d0f.glb.gz",
-        "size": 12365265,
-        "sha256": "4d0e46759d0f1c607dbf6fd2741253172a4ae7896cc445f3a8b9892131316f1e"
+        "file": "zzmi/roxy.162ab7854e01.glb.gz",
+        "size": 15726542,
+        "sha256": "162ab7854e019406e3e4db6b54cfe95dcf7b79da2b565b30867f9c0c15801b63"
       },
       "seed": {
-        "file": "zzmi/seed.8823aa0d5526.glb.gz",
-        "size": 10990088,
-        "sha256": "8823aa0d55264c55587bb75d08b3bfc5be765f97d313843c6f30980fdd452aef"
+        "file": "zzmi/seed.bf62b4c73dad.glb.gz",
+        "size": 12926920,
+        "sha256": "bf62b4c73dad05ca668446f788f95067cc73b17cc30064783300a7b1593de808"
       },
       "seth": {
-        "file": "zzmi/seth.853034a6999e.glb.gz",
-        "size": 12813946,
-        "sha256": "853034a6999e16da55545692115a0011ff2b4dc8ddd52f20264872f3b071651f"
+        "file": "zzmi/seth.bb695b7eae8a.glb.gz",
+        "size": 13737587,
+        "sha256": "bb695b7eae8a657fa6dcc3d68c4a6206e305ea2979aa66a57fff9f72e024d1fc"
+      },
+      "severian": {
+        "file": "zzmi/severian.ca95e7553c8e.glb.gz",
+        "size": 18984867,
+        "sha256": "ca95e7553c8ee525c6e873204fc372fc6f96ae240672ea3f49679d5b12196980"
       },
       "sigrid": {
-        "file": "zzmi/sigrid.2d35bf18db4a.glb.gz",
-        "size": 12100093,
-        "sha256": "2d35bf18db4a79e9af591c18e0c785f94c9361a97d9ce13341f1b79b384bd983"
+        "file": "zzmi/sigrid.708ab1ed14e3.glb.gz",
+        "size": 13404136,
+        "sha256": "708ab1ed14e34bd9871d10b4dc5c2032c733f4affe1a0f54369ee9bcc586b2a7"
       },
       "soldier-0-anby": {
-        "file": "zzmi/soldier-0-anby.d5391b986aa7.glb.gz",
-        "size": 12026217,
-        "sha256": "d5391b986aa79c1a5a17a7493a0d7e554c7368fa799ba72b477a039f000bab89"
+        "file": "zzmi/soldier-0-anby.972b37364165.glb.gz",
+        "size": 13012499,
+        "sha256": "972b3736416576edb8783e3cacfc1ffe769cd186ed168b6972086441f4cac8bd"
       },
       "soldier-11": {
-        "file": "zzmi/soldier-11.7748057dc939.glb.gz",
-        "size": 5276562,
-        "sha256": "7748057dc939254e96720764e05705b9d218ef87351dd5205225f36c8ef2e048"
+        "file": "zzmi/soldier-11.122248612af9.glb.gz",
+        "size": 6184128,
+        "sha256": "122248612af9ac6b335a1995d31ff4dba8e8e53bcf620fddf796ed52edcdfa47"
       },
       "soukaku": {
-        "file": "zzmi/soukaku.3efb6fe43186.glb.gz",
-        "size": 7258375,
-        "sha256": "3efb6fe43186dd7673e05c2faba3dc805169b2a134c32664b31d97988eb6e279"
+        "file": "zzmi/soukaku.3ce8ccefda2a.glb.gz",
+        "size": 9035226,
+        "sha256": "3ce8ccefda2a718d993de5e9e71a94b133df6774f139bcb31e484202f074ee2e"
       },
       "starlight-billy": {
-        "file": "zzmi/starlight-billy.aaab8a019d7c.glb.gz",
-        "size": 10303428,
-        "sha256": "aaab8a019d7ca4de8fb4d45b463bb8b9f5f84c300b5e5d9457150255763d52f4"
+        "file": "zzmi/starlight-billy.8d697dfe3d2b.glb.gz",
+        "size": 11670822,
+        "sha256": "8d697dfe3d2b3b31a3037a0cd07d8247ae7caf1313214de73598723c629d3067"
       },
       "sunna": {
-        "file": "zzmi/sunna.ff9b0fa0dc64.glb.gz",
-        "size": 16094068,
-        "sha256": "ff9b0fa0dc641f0c31e3e2aac7b859e954b381a26163124ebe00d29a55f6173d"
+        "file": "zzmi/sunna.f8585dc5ffeb.glb.gz",
+        "size": 17198708,
+        "sha256": "f8585dc5ffeb093d322dffa626af6acf71a21583c14b136ce6d3ae6f9e7847e7"
       },
       "trigger": {
-        "file": "zzmi/trigger.63678557b8a9.glb.gz",
-        "size": 11120174,
-        "sha256": "63678557b8a9fb356dfe18c4243221c86dfc3934557d49ff8eab4b3f187e2659"
+        "file": "zzmi/trigger.b7bf24b72bca.glb.gz",
+        "size": 12156757,
+        "sha256": "b7bf24b72bca15d0769b8f53750142aca7b2ea7ea536fc5a3d9da5fb20d8a275"
       },
       "velina": {
-        "file": "zzmi/velina.56e77abd979c.glb.gz",
-        "size": 10594093,
-        "sha256": "56e77abd979c8a08e774f63d8a25d7083a6172fd8bb36656bde8586742ab7188"
+        "file": "zzmi/velina.94964a7d1562.glb.gz",
+        "size": 12166921,
+        "sha256": "94964a7d156295ac8eb0ad45c28d0a014cc68f2d0fd64791a4fee5cae9a0c6f8"
       },
       "vivian": {
-        "file": "zzmi/vivian.1a3d68b2bdc0.glb.gz",
-        "size": 16964466,
-        "sha256": "1a3d68b2bdc0f929b84cfb73a720d8ccb4129fc69facc52a77da651d0f0cc392"
+        "file": "zzmi/vivian.506cbbe237d0.glb.gz",
+        "size": 19421402,
+        "sha256": "506cbbe237d0972bbbcb607975289ae461817ddb09e5066f1bcc7565adf9a7cb"
+      },
+      "wise": {
+        "file": "zzmi/wise.fe4df086e9c7.glb.gz",
+        "size": 3145145,
+        "sha256": "fe4df086e9c7ec712e67483f90c08e108bebd68e9d9220fbe66acb8866cd82db"
       },
       "yanagi": {
-        "file": "zzmi/yanagi.7dbb17198bc0.glb.gz",
-        "size": 8424123,
-        "sha256": "7dbb17198bc08abbfe7dca2036283a2bc88fbd251530fe4196bd8a93f9a69ce4"
+        "file": "zzmi/yanagi.de5d191ed085.glb.gz",
+        "size": 10182560,
+        "sha256": "de5d191ed0852cbcc24f152d495d2b69bb895c64b318c4d8e763808e6e26a593"
       },
       "ye-shunguang": {
-        "file": "zzmi/ye-shunguang.481d7e2d1367.glb.gz",
-        "size": 24951794,
-        "sha256": "481d7e2d1367ea869165b5574277424255428c80da09264d72d0c115628cdec4"
+        "file": "zzmi/ye-shunguang.bd608fd06264.glb.gz",
+        "size": 25004154,
+        "sha256": "bd608fd06264397b74c933c51cb26c56b5a1655cd0e5d3bb0f21dd7cd6f65b0a"
       },
       "yidhari": {
-        "file": "zzmi/yidhari.df075a687a64.glb.gz",
-        "size": 17100909,
-        "sha256": "df075a687a64fab8a59ec393522734ad10e16caccc8b7c873dba955f6d350501"
+        "file": "zzmi/yidhari.f4196a006c07.glb.gz",
+        "size": 18851749,
+        "sha256": "f4196a006c07551742490b0d9e969c67da7bf8f51b8388b07c136f5f8a64ba57"
       },
       "yixuan": {
-        "file": "zzmi/yixuan.eaa5fb1dd988.glb.gz",
-        "size": 13535234,
-        "sha256": "eaa5fb1dd988ec1c7d138584adfcef2de36254ffaef8c2837fe76336ff3fd3a5"
+        "file": "zzmi/yixuan.cf7f943bc273.glb.gz",
+        "size": 15574333,
+        "sha256": "cf7f943bc27379472f3134b42904088a91f4ba4d497da6ccf50ea447d984fc9b"
       },
       "yuzuha": {
-        "file": "zzmi/yuzuha.e13293abf8d6.glb.gz",
-        "size": 13050488,
-        "sha256": "e13293abf8d60e71548e55bd46c80c1036c923ea3d4ff3ed53dca29e9cc8781c"
+        "file": "zzmi/yuzuha.06d2f42cd85a.glb.gz",
+        "size": 14473176,
+        "sha256": "06d2f42cd85a455ea19963775b507d1a58affd6492f0c72be97a483e44fd91c4"
       },
       "zhao": {
-        "file": "zzmi/zhao.1e0134d41832.glb.gz",
-        "size": 15832274,
-        "sha256": "1e0134d418320068a96e1e2938119d8a22116720dd50ebeda4c85f51aaf37e2f"
+        "file": "zzmi/zhao.c9783892c4f8.glb.gz",
+        "size": 17280079,
+        "sha256": "c9783892c4f8bcc7515bbec782f384205e2f0ff9fab520e77d8e03715a148327"
       },
       "zhu-yuan": {
-        "file": "zzmi/zhu-yuan.63076df1cd08.glb.gz",
-        "size": 9458064,
-        "sha256": "63076df1cd08a3ea898ba317757d1cd38940b4daed6c87570bf1a29df9b8ad73"
+        "file": "zzmi/zhu-yuan.db0af27a544b.glb.gz",
+        "size": 11373493,
+        "sha256": "db0af27a544bde05394604dbe9e845c286cf64c33f58b9069e4f7de4bacc016b"
       }
     }
   }
