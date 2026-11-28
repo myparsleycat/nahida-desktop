@@ -115,6 +115,7 @@ func dedupeModelViewerMeshes(
 		key := strings.Join([]string{
 			mesh.Form,
 			fmt.Sprint(mesh.Conditions),
+			mesh.BlendPalette,
 			modelViewerMeshTextureKey(mesh),
 			strings.ToLower(source.INIPath),
 			strings.ToLower(source.IBPath),
@@ -138,9 +139,8 @@ func dedupeModelViewerMeshes(
 	}
 }
 
-// foldModelViewerFrameMeshes folds the meshes of one draw that are frames of an animation clip and draw the same
-// triangles with the same texture coordinates and colours into the first of them. The frames become its position
-// variants, which carry their own positions, normals and tangents.
+// foldModelViewerFrameMeshes folds frames of one draw with matching topology, UVs, colours, blend data and palette.
+// Each frame keeps its own positions, normals and tangents in a position variant.
 func foldModelViewerFrameMeshes(
 	transport *ModelViewerTransport,
 	payloads []modelViewerMeshPayload,
@@ -176,6 +176,7 @@ func foldModelViewerFrameMeshes(
 		key := strings.Join([]string{
 			mesh.Form,
 			strings.ToLower(mesh.Component),
+			mesh.BlendPalette,
 			modelViewerOptionalKey(mesh.HighlightMapKey),
 			modelViewerOptionalKey(mesh.RampMapKey),
 			strings.ToLower(source.INIPath),
@@ -379,8 +380,7 @@ func modelViewerOptionalKey(value *string) string {
 	return *value
 }
 
-// modelViewerFrameTopologyEqual reports whether two frames draw the same triangles over the same texture
-// coordinates and colours, so they can share every buffer but positions, normals and tangents.
+// modelViewerFrameTopologyEqual reports whether two frames can share the index, UV, colour and blend buffers.
 func modelViewerFrameTopologyEqual(left, right modelViewerMeshPayload) bool {
 	return len(left.Positions) == len(right.Positions) &&
 		len(left.Normals) == len(right.Normals) &&
@@ -389,7 +389,8 @@ func modelViewerFrameTopologyEqual(left, right modelViewerMeshPayload) bool {
 		slices.Equal(left.SourceIndices, right.SourceIndices) &&
 		slices.Equal(left.UVs, right.UVs) &&
 		slices.Equal(left.UVs1, right.UVs1) &&
-		slices.Equal(left.Colors, right.Colors)
+		slices.Equal(left.Colors, right.Colors) &&
+		slices.Equal(left.Blend, right.Blend)
 }
 
 func modelViewerPayloadsEqual(left, right modelViewerMeshPayload) bool {

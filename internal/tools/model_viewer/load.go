@@ -288,6 +288,7 @@ func (t *Service) loadModViewer(
 		prepared.shapeKeys,
 		prepared.variableNames,
 		prepared.computeAnimations,
+		prepared.bufferRules,
 		options.includeAllStateVariables,
 	)
 	transport.OverlayMenus = t.serveModelViewerOverlayTextures(ctx, sessionID, buildModelViewerOverlayMenus(
@@ -467,6 +468,7 @@ type modelViewerPreparedGeometry struct {
 	textures                                   []modelViewerINITextureWork
 	computeDeformers                           []ModelViewerComputeDeformerTransport
 	computeAnimations                          []modelViewerPreparedAnimationClip
+	bufferRules                                []ModelViewerStateRule
 	drawSources                                map[string]DrawSource
 	forms                                      []ModelViewerForm
 	inis                                       []ModelViewerINI
@@ -604,7 +606,7 @@ func (t *Service) prepareModelViewerGeometry(
 		iniPath := iniPaths[unit.primary]
 		sections := built[unitIndex].scoped.sections
 		stageStartedAt = time.Now()
-		meshes, textureBindings, resources, shapeKeys, buildErr := buildModelViewerDirectMeshesPrepared(
+		meshes, textureBindings, resources, shapeKeys, bufferRules, buildErr := buildModelViewerDirectMeshesPrepared(
 			iniPath,
 			folder,
 			"",
@@ -617,6 +619,7 @@ func (t *Service) prepareModelViewerGeometry(
 		if buildErr != nil {
 			return nil, buildErr
 		}
+		prepared.bufferRules = append(prepared.bufferRules, bufferRules...)
 		validMeshes := meshes[:0]
 		for _, mesh := range meshes {
 			recovery := recoveries[mesh.geometry]

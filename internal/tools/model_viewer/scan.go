@@ -1,7 +1,9 @@
 package modelviewer
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -306,14 +309,10 @@ type modelViewerMeshBuildTiming struct {
 
 func completeModelViewerDrawBufferState(
 	state modelViewerDirectBufferState,
-	sectionName, layoutName string,
+	sectionName, component string,
 	hashPositions, hashTexcoords, componentPositions, componentTexcoords map[string]string,
-	global modelViewerDirectBufferState,
 ) modelViewerDirectBufferState {
-	if state.ib == "" {
-		state.ib = global.ib
-	}
-	if state.vb0 != "" && state.vb1 != "" && (layoutName != "wwmi" || state.vb2 != "") {
+	if state.vb0 != "" && state.vb1 != "" {
 		return state
 	}
 	hash := extractSectionHash(sectionName)
@@ -327,19 +326,41 @@ func completeModelViewerDrawBufferState(
 		state.vb1 = hashTexcoords[hash]
 	}
 	if state.vb0 == "" || state.vb1 == "" {
-		component := modelViewerComponentFromIB(state.ib)
 		if state.vb0 == "" {
-			state.vb0 = lookupModelViewerComponentValue(componentPositions, component)
+			state.vb0 = lookupModelViewerComponentValue(componentPositions, component, nil)
 		}
 		if state.vb1 == "" {
-			state.vb1 = lookupModelViewerComponentValue(componentTexcoords, component)
+			state.vb1 = lookupModelViewerComponentValue(componentTexcoords, component, nil)
 		}
 	}
-	if (state.vb0 == "" || state.vb1 == "" || layoutName == "wwmi" && state.vb2 == "") && global.vb0 != "" &&
-		global.vb1 != "" {
+	return state
+}
+
+func applyModelViewerGlobalVertexBuffers(
+	state, global modelViewerDirectBufferState,
+	layoutName string,
+) modelViewerDirectBufferState {
+	if global.vb0 == "" || global.vb1 == "" {
+		return state
+	}
+	if layoutName == "wwmi" {
+		if state.vb0 == "" || state.vb1 == "" || state.vb2 == "" {
+			state.vb0, state.vb1, state.vb2 = global.vb0, global.vb1, global.vb2
+		}
+		return state
+	}
+	if state.vb0 != "" && state.vb1 != "" {
+		return state
+	}
+	if state.vb0 == "" {
 		state.vb0 = global.vb0
-		state.vb1 = global.vb1
+	}
+	if state.vb2 == "" && global.vb2 != "" &&
+		modelViewerNormalizeKey(state.vb0) == modelViewerNormalizeKey(global.vb0) {
 		state.vb2 = global.vb2
+	}
+	if state.vb1 == "" {
+		state.vb1 = global.vb1
 	}
 	return state
 }
@@ -370,7 +391,10 @@ func completeModelViewerResolvedDraws(
 	hashPositions, hashTexcoords, componentPositions, componentTexcoords map[string]string,
 	global modelViewerDirectBufferState,
 	fallback []modelViewerSymbolicAssignment,
+	commandBuffers map[string]map[string][]modelViewerSymbolicAssignment,
 	conditionVariables map[string]any,
+	resources map[string]modelViewerResource,
+	bufferConditions *modelViewerBufferConditions,
 ) []modelViewerResolvedDraw {
 	output := make([]modelViewerResolvedDraw, 0, len(records))
 	for _, record := range records {
@@ -378,25 +402,58 @@ func completeModelViewerResolvedDraws(
 		if conditions == nil {
 			conditions = modelViewerConditionsToDNF(record.draw.Conditions, conditionVariables)
 		}
-		state := completeModelViewerDrawBufferState(
-			record.state,
+		state := record.state
+		state.ib = cmp.Or(state.ib, global.ib)
+		ib := resources[modelViewerNormalizeKey(state.ib)]
+		component := modelViewerComponentFromIB(cmp.Or(ib.Name, state.ib))
+		state = completeModelViewerDrawBufferState(
+			state,
 			record.sectionName,
-			layoutName,
+			component,
 			hashPositions,
 			hashTexcoords,
 			componentPositions,
 			componentTexcoords,
-			global,
 		)
 		variants := []modelViewerSymbolicBufferVariant{{state: state, conditions: conditions}}
-		if layoutName != "wwmi" {
-			variants = applyModelViewerFallbackVertexBuffers(state, conditions, fallback)
+		// A draw may keep one IB while its vertex buffers change, so the INI conditions select the frame.
+		if layoutName != "wwmi" && state.ib != "" {
+			if record.state.vb0 == "" {
+				variants = bindModelViewerBufferVariants(
+					variants,
+					"vb0",
+					lookupModelViewerComponentValue(commandBuffers["vb0"], component, componentPositions),
+					bufferConditions.and,
+				)
+			}
+			if record.state.vb1 == "" {
+				variants = bindModelViewerBufferVariants(
+					variants,
+					"vb1",
+					lookupModelViewerComponentValue(commandBuffers["vb1"], component, componentTexcoords),
+					bufferConditions.and,
+				)
+			}
+			if record.state.vb2 == "" {
+				variants = bindModelViewerBufferVariants(
+					variants, "vb2", lookupModelViewerComponentValue(commandBuffers["vb2"], component, nil),
+					bufferConditions.and,
+				)
+			}
 		}
 		for _, variant := range variants {
-			output = append(
-				output,
-				modelViewerResolvedDraw{record: record, state: variant.state, conditions: variant.conditions},
-			)
+			variant.state = applyModelViewerGlobalVertexBuffers(variant.state, global, layoutName)
+			resolved := []modelViewerSymbolicBufferVariant{variant}
+			if layoutName != "wwmi" && variant.state.vb0 == "" {
+				resolved = applyModelViewerFallbackVertexBuffers(
+					variant.state, variant.conditions, fallback, bufferConditions.and,
+				)
+			}
+			for _, bound := range resolved {
+				output = append(output, modelViewerResolvedDraw{
+					record: record, state: bound.state, conditions: bound.conditions,
+				})
+			}
 		}
 	}
 	return output
@@ -442,7 +499,16 @@ func buildModelViewerDirectScannedMeshesAt(
 		collectModelViewerResources(sections),
 		cache,
 	)
-	return buildModelViewerDirectScannedMeshesPrepared(iniPath, modDir, sections, variables, resources, cache, timing)
+	meshes, _, err := buildModelViewerDirectScannedMeshesPrepared(
+		iniPath,
+		modDir,
+		sections,
+		variables,
+		resources,
+		cache,
+		timing,
+	)
+	return meshes, err
 }
 
 func buildModelViewerDirectScannedMeshesPrepared(
@@ -452,21 +518,21 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	resources []modelViewerResource,
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
-) ([]modelViewerDirectMesh, error) {
+) ([]modelViewerDirectMesh, []ModelViewerStateRule, error) {
 	stageStartedAt := time.Now()
 	records, fallbackVB0, err := collectModelViewerSymbolicDrawRecords(sections, variables)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if timing != nil {
 		timing.ScanMs += time.Since(stageStartedAt).Milliseconds()
 		timing.Records += len(records)
 	}
 	if len(records) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if len(records) > maxModelViewerDraws {
-		return nil, infra.ContractError(
+		return nil, nil, infra.ContractError(
 			fmt.Sprintf("Mod has too many draws (%d; limit %d).", len(records), maxModelViewerDraws),
 		)
 	}
@@ -482,11 +548,22 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	conditionVariables := modelViewerDirectConditionVariables(sections, variables)
 	hashPositions, hashTexcoords := collectHashVertexBuffers(sections)
 	componentPositions, componentTexcoords := collectModelViewerComponentBuffers(sections, resourceMap)
+	var commandBuffers map[string]map[string][]modelViewerSymbolicAssignment
+	var bufferConditions modelViewerBufferConditions
 	streamOutputs := collectModelViewerStreamOutputs(modDir, sections, resourceMap, cache)
 	mergedSkinStarts := collectModelViewerMergedSkinStarts(modDir, filepath.Dir(iniPath), sections)
 	var packedResources map[string]int
 	var inlineResources map[string]modelViewerInlineObjectLayout
 	if layoutName != "wwmi" {
+		commandBuffers, err = collectModelViewerComponentCommandBuffers(
+			sections,
+			variables,
+			resourceMap,
+			&bufferConditions,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 		packedResources = collectModelViewerPackedObjectResources(modDir, filepath.Dir(iniPath), sections)
 		inlineResources = collectModelViewerInlineObjectResources(modDir, filepath.Dir(iniPath), sections)
 	}
@@ -499,7 +576,10 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		componentTexcoords,
 		globalBuffers,
 		fallbackVB0,
+		commandBuffers,
 		conditionVariables,
+		resourceMap,
+		&bufferConditions,
 	)
 	if timing != nil {
 		timing.SetupMs += time.Since(stageStartedAt).Milliseconds()
@@ -508,6 +588,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	type geometryIndexKey struct {
 		sectionName string
 		commandForm string
+		blend       string
 		source      modelViewerDrawGeometryKey
 	}
 	geometryIndexes := make(map[geometryIndexKey]int)
@@ -520,7 +601,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	}
 	for drawIndex, draw := range draws {
 		if err := cache.ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if drawIndex > 0 {
 			cache.release(releaseAfter[drawIndex-1]...)
@@ -582,6 +663,9 @@ func buildModelViewerDirectScannedMeshesPrepared(
 			commandForm: record.commandForm,
 			source:      sourceKey,
 		}
+		if source.kind == modelViewerDrawVertexMihoyo {
+			geometryKey.blend = draw.state.vb2
+		}
 		if existingIndex, exists := geometryIndexes[geometryKey]; exists {
 			mesh := &output[existingIndex]
 			mesh.conditions = modelViewerDNFOr(mesh.conditions, draw.conditions)
@@ -602,7 +686,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		indices, readErr, decodeErr := cache.indexBuffer(ibPath, ib.Format)
 		if readErr != nil {
 			if infra.IsCancellationError(readErr) {
-				return nil, readErr
+				return nil, nil, readErr
 			}
 			if !errors.Is(readErr, fs.ErrNotExist) {
 				cache.diagnostics.Add(fmt.Errorf("read index buffer %s (%s): %w", ib.Name, ibPath, readErr))
@@ -640,7 +724,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		}
 		buffers, loaded, loadErr := loadModelViewerDrawVertexBuffers(modDir, source, cache)
 		if loadErr != nil {
-			return nil, loadErr
+			return nil, nil, loadErr
 		}
 		if !loaded {
 			continue
@@ -678,14 +762,14 @@ func buildModelViewerDirectScannedMeshesPrepared(
 				timing.GeometryMs += time.Since(stageStartedAt).Milliseconds()
 			}
 			if geometryErr != nil {
-				return nil, geometryErr
+				return nil, nil, geometryErr
 			}
 			if geometry == nil {
 				continue
 			}
 			geometry.surfaceFiles, geometryErr = cache.surfaceSourceFiles(modDir, ibPath, ib.Format, position.Filename)
 			if geometryErr != nil {
-				return nil, geometryErr
+				return nil, nil, geometryErr
 			}
 			if geometry.surfaceFiles != nil {
 				maps.Copy(geometry.surfaceFiles, source.streamFiles)
@@ -777,7 +861,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 		conditionVariables,
 		cache,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if timing != nil {
 		timing.OverridesMs += time.Since(stageStartedAt).Milliseconds()
@@ -816,7 +900,7 @@ func buildModelViewerDirectScannedMeshesPrepared(
 	if timing != nil {
 		timing.NormalizeMs += time.Since(stageStartedAt).Milliseconds()
 	}
-	return output, nil
+	return output, bufferConditions.rules, nil
 }
 
 // modelViewerDrawBufferLastUses lists, for each draw, the buffer files no later draw binds, so the build can
@@ -1259,6 +1343,113 @@ func collectModelViewerComponentBuffers(
 	return componentPositions, componentTexcoords
 }
 
+func collectModelViewerComponentCommandBuffers(
+	sections []modINISection,
+	variables map[string]any,
+	resources map[string]modelViewerResource,
+	bufferConditions *modelViewerBufferConditions,
+) (map[string]map[string][]modelViewerSymbolicAssignment, error) {
+	buffers := make(map[string]map[string][]modelViewerSymbolicAssignment)
+	directTexcoords := make(map[string]bool)
+	for _, suffix := range []string{"Texcoord", "Blend", "Position"} {
+		for _, section := range sections {
+			component, ok := trimModelViewerOverrideSuffix(section.Name, suffix)
+			if !ok || component == "" || !strings.EqualFold(section.Header, "TextureOverride") ||
+				isModelViewerPreviewSkippedOverride(section.Name) {
+				continue
+			}
+			key := modelViewerNormalizeKey(component)
+			if suffix == "Texcoord" && modelViewerSectionValue(section, "vb1") != "" {
+				directTexcoords[key] = true
+			}
+			if modelViewerSectionValue(section, "run") == "" {
+				continue
+			}
+			state, conditionVariables, err := scanModelViewerSymbolicRoot(sections, section, variables)
+			if err != nil {
+				return nil, err
+			}
+			if len(state.bufferAssignments("ib")) > 0 {
+				continue
+			}
+			for _, slot := range []string{"vb0", "vb1", "vb2"} {
+				if len(buffers[slot][key]) > 0 {
+					continue
+				}
+				assignments := state.bufferAssignments(slot)
+				if slot == "vb1" && suffix != "Texcoord" {
+					if directTexcoords[key] {
+						continue
+					}
+					assignments = lo.Filter(assignments, func(assignment modelViewerSymbolicAssignment, _ int) bool {
+						return resources[modelViewerNormalizeKey(assignment.resource)].Stride != 32
+					})
+				}
+				if len(assignments) == 0 {
+					continue
+				}
+				var covered ModelViewerDNF
+				for _, assignment := range assignments {
+					covered = append(covered, assignment.conditions...)
+				}
+				covered = normalizeModelViewerDNFWithDomains(covered, conditionVariables)
+				if unbound := bufferConditions.unbound(covered); len(unbound) != 0 {
+					assignments = append(slices.Clone(assignments), modelViewerSymbolicAssignment{conditions: unbound})
+				}
+				if buffers[slot] == nil {
+					buffers[slot] = make(map[string][]modelViewerSymbolicAssignment)
+				}
+				buffers[slot][key] = assignments
+			}
+		}
+	}
+	return buffers, nil
+}
+
+type modelViewerBufferConditions struct {
+	rules  []ModelViewerStateRule
+	guards map[string]bool
+}
+
+func (c *modelViewerBufferConditions) and(left, right ModelViewerDNF) ModelViewerDNF {
+	if conditions, exact := modelViewerExactDNFAnd(left, right); exact {
+		return conditions
+	}
+	return ModelViewerDNF{{c.guard(left, "1"), c.guard(right, "1")}}
+}
+
+func (c *modelViewerBufferConditions) unbound(covered ModelViewerDNF) ModelViewerDNF {
+	unbound := modelViewerDNFTrue()
+	for _, group := range covered {
+		var exact bool
+		unbound, exact = modelViewerExactDNFAnd(unbound, modelViewerDNFNot(ModelViewerDNF{group}))
+		if !exact || len(unbound) > maxModelViewerDNFGroups {
+			return ModelViewerDNF{{c.guard(covered, "0")}}
+		}
+		if len(unbound) == 0 {
+			break
+		}
+	}
+	return unbound
+}
+
+// guard defers evaluation of an expression whose expansion would exceed the DNF limit.
+func (c *modelViewerBufferConditions) guard(conditions ModelViewerDNF, value string) ModelViewerDNFClause {
+	key := sha256.Sum256([]byte(modelViewerSymbolicDNFKey(conditions)))
+	name := fmt.Sprintf("commandbufferguard%x", key)
+	if !c.guards[name] {
+		if c.guards == nil {
+			c.guards = make(map[string]bool)
+		}
+		c.guards[name] = true
+		c.rules = append(c.rules,
+			ModelViewerStateRule{Var: name, Value: "0", Conditions: modelViewerDNFTrue()},
+			ModelViewerStateRule{Var: name, Value: "1", Conditions: cloneModelViewerDNF(conditions)},
+		)
+	}
+	return ModelViewerDNFClause{Var: name, Value: value}
+}
+
 func trimModelViewerOverrideSuffix(name, suffix string) (string, bool) {
 	if len(name) < len(suffix) || !strings.EqualFold(name[len(name)-len(suffix):], suffix) {
 		return "", false
@@ -1279,24 +1470,27 @@ func modelViewerComponentFromIB(ibResource string) string {
 	return value
 }
 
-// lookupModelViewerComponentValue mirrors Electron's lookupCompValue: exact
-// component first, then the component with trailing letters stripped, then the
-// component with a trailing CamelCase word stripped.
-func lookupModelViewerComponentValue(mapping map[string]string, component string) string {
-	if value, ok := mapping[modelViewerNormalizeKey(component)]; ok {
-		return value
+// A direct binding at a closer component name already supplied the slot.
+func lookupModelViewerComponentValue[T any](mapping map[string]T, component string, direct map[string]string) T {
+	var zero T
+	if len(mapping) == 0 {
+		return zero
 	}
-	strippedLetters := modelViewerComponentTrailingLettersRE.ReplaceAllString(component, "")
-	if strippedLetters != "" && strippedLetters != component {
-		if value, ok := mapping[modelViewerNormalizeKey(strippedLetters)]; ok {
+	for _, candidate := range []string{
+		component,
+		modelViewerComponentTrailingLettersRE.ReplaceAllString(component, ""),
+		modelViewerComponentTrailingWordRE.ReplaceAllString(component, ""),
+	} {
+		if candidate == "" {
+			continue
+		}
+		key := modelViewerNormalizeKey(candidate)
+		if value, ok := mapping[key]; ok {
 			return value
 		}
-	}
-	strippedWord := modelViewerComponentTrailingWordRE.ReplaceAllString(component, "")
-	if strippedWord != "" && strippedWord != component {
-		if value, ok := mapping[modelViewerNormalizeKey(strippedWord)]; ok {
-			return value
+		if _, ok := direct[key]; ok {
+			return zero
 		}
 	}
-	return ""
+	return zero
 }

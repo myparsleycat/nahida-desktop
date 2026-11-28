@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -17,6 +18,574 @@ import (
 
 	"nahida.live/desktop/internal/infra"
 )
+
+func TestLoadModViewerBindsComponentCommandBuffersByFrame(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	ini := `[Constants]
+global $frame = 0
+global $fps = 60
+[Present]
+$frame = (time * $fps) // 1
+
+[TextureOverrideTorsoPartBlend]
+run = CommandListTorsoPosition
+[TextureOverrideTorsoPartTexcoord]
+run = CommandListTorsoTexcoord
+[TextureOverrideTorsoPartB]
+run = CommandListTorsoIndex
+drawindexed = 3, 0, 0
+[TextureOverrideLimbPartBlend]
+run = CommandListLimbPosition
+[TextureOverrideLimbPartTexcoord]
+vb1 = ResourceLimbPartTexcoord
+[TextureOverrideLimbPartC]
+ib = ResourceLimbPartCIB.0
+drawindexed = 3, 0, 0
+[TextureOverrideOtherBlend]
+vb0 = ResourceOtherPosition.0
+vb1 = ResourceOtherTexcoord
+
+[CommandListTorsoPosition]
+if $frame == 0
+vb0 = ResourceTorsoPartPosition.0
+else
+vb0 = ResourceTorsoPartPosition.1
+endif
+[CommandListTorsoTexcoord]
+if $frame == 0
+vb1 = ResourceTorsoPartTexcoord.0
+else
+vb1 = ResourceTorsoPartTexcoord.1
+endif
+[CommandListTorsoIndex]
+if $frame == 0
+ib = ResourceTorsoPartBIB.0
+else if $frame == 1
+ib = ResourceTorsoPartBIB.1
+endif
+[CommandListLimbPosition]
+if $frame == 0
+vb0 = ResourceLimbPartPosition.8
+vb2 = ResourceWeightsA
+else
+vb0 = ResourceLimbPartPosition.0
+vb2 = ResourceWeightsB
+endif
+`
+
+	for name, x := range map[string]float32{
+		"TorsoPartPosition.0": 10, "TorsoPartPosition.1": 20,
+		"LimbPartPosition.8": 30, "LimbPartPosition.0": 40, "OtherPosition.0": 50,
+	} {
+		data := make([]byte, 3*40)
+		for vertex := range 3 {
+			binary.LittleEndian.PutUint32(data[vertex*40:], math.Float32bits(x+float32(vertex)))
+			binary.LittleEndian.PutUint32(data[vertex*40+4:], math.Float32bits(float32(vertex/2)))
+		}
+		writeTextureFile(t, dir, name+".buf", data)
+		ini += fmt.Sprintf("\n[Resource%s]\nfilename = %s.buf\nstride = 40\n", name, name)
+	}
+	for name, u := range map[string]float32{
+		"TorsoPartTexcoord.0": 0.125, "TorsoPartTexcoord.1": 0.25,
+		"LimbPartTexcoord": 0.5, "OtherTexcoord": 0.75,
+	} {
+		data := make([]byte, 3*20)
+		for vertex := range 3 {
+			uv := u + float32(vertex)/16
+			binary.LittleEndian.PutUint32(data[vertex*20+4:], math.Float32bits(uv))
+			binary.LittleEndian.PutUint32(data[vertex*20+8:], math.Float32bits(uv))
+		}
+		writeTextureFile(t, dir, name+".buf", data)
+		ini += fmt.Sprintf("\n[Resource%s]\nfilename = %s.buf\nstride = 20\n", name, name)
+	}
+	for name, indices := range map[string][]uint32{
+		"TorsoPartBIB.0": {0, 1, 2}, "TorsoPartBIB.1": {1, 2, 0}, "LimbPartCIB.0": {0, 1, 2},
+	} {
+		writeTextureFile(t, dir, name+".ib", modelViewerUint32Bytes(indices))
+		ini += fmt.Sprintf("\n[Resource%s]\nfilename = %s.ib\nformat = DXGI_FORMAT_R32_UINT\n", name, name)
+	}
+	for name, group := range map[string]uint32{"WeightsA": 7, "WeightsB": 9} {
+		data := make([]byte, 3*32)
+		for vertex := range 3 {
+			binary.LittleEndian.PutUint32(data[vertex*32:], math.Float32bits(1))
+			binary.LittleEndian.PutUint32(data[vertex*32+16:], group)
+		}
+		writeTextureFile(t, dir, name+".buf", data)
+		ini += fmt.Sprintf("\n[Resource%s]\nfilename = %s.buf\nstride = 32\n", name, name)
+	}
+
+	writeTextureFile(t, dir, "mod.ini", []byte(ini))
+	fixture := loadViewerDir(t, dir)
+	type selectedMesh struct {
+		x, u       float32
+		firstIndex uint32
+		boneGroup  uint16
+	}
+	if len(fixture.result.Animations) != 1 || len(fixture.result.Animations[0].Frames) != 2 {
+		t.Fatalf("animations = %+v, want a two-frame clip", fixture.result.Animations)
+	}
+	for frame, wanted := range []map[string]selectedMesh{
+		{"TorsoPartB": {10, 0.125, 0, 0}, "LimbPartC": {30, 0.5, 0, 7}},
+		{"TorsoPartB": {20, 0.25, 1, 0}, "LimbPartC": {40, 0.5, 0, 9}},
+	} {
+		evaluated := evaluateViewerTransport(fixture.result, fixture.result.Animations[0].Frames[frame].Values)
+		seen := make(map[string]selectedMesh)
+		for index, state := range evaluated.Meshes {
+			if !state.Visible {
+				continue
+			}
+			mesh := fixture.result.Meshes[index]
+			if _, duplicate := seen[mesh.Component]; duplicate {
+				t.Fatalf("frame %d draws a second %s mesh", frame, mesh.Component)
+			}
+			geometry := readViewerMesh(t, fixture.protocol, mesh.GeometryURL)
+			var boneGroup uint16
+			if mesh.BlendURL != "" {
+				data := readModelViewerProtocolBytes(t, fixture.protocol, mesh.BlendURL)
+				boneGroup = binary.LittleEndian.Uint16(data)
+			}
+			seen[mesh.Component] = selectedMesh{geometry.Positions[0], geometry.UVs[0], geometry.Indices[0], boneGroup}
+		}
+		if !maps.Equal(seen, wanted) {
+			t.Fatalf("frame %d draws %+v, want %+v", frame, seen, wanted)
+		}
+	}
+}
+
+func TestLoadModViewerKeepsDrawWithoutConditionalBlend(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	writeTextureFile(t, dir, "weights.buf", viewerTestBlendWeights(9))
+	writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $extra = 0
+[KeyExtra]
+type = cycle
+$extra = 0, 1
+[TextureOverrideBodyBlend]
+run = CommandListBlend
+[CommandListBlend]
+if $extra == 1
+vb2 = ResourceWeights
+endif
+[TextureOverrideBodyA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceWeights]
+filename = weights.buf
+stride = 32
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	for extra, wantGroup := range []uint16{0, 9} {
+		states := evaluateViewerTransport(fixture.result, map[string]any{"extra": float64(extra)})
+		visible := 0
+		var group uint16
+		for index, state := range states.Meshes {
+			if !state.Visible {
+				continue
+			}
+			visible++
+			if url := fixture.result.Meshes[index].BlendURL; url != "" {
+				data := readModelViewerProtocolBytes(t, fixture.protocol, url)
+				group = binary.LittleEndian.Uint16(data)
+			}
+		}
+		if visible != 1 || group != wantGroup {
+			t.Errorf(
+				"extra=%d: %d visible meshes, bone group %d; want 1 mesh, group %d",
+				extra,
+				visible,
+				group,
+				wantGroup,
+			)
+		}
+	}
+}
+
+func TestLoadModViewerPrefersExactComponentTexcoord(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	for name, u := range map[string]float32{"arm-tc.buf": 0.125, "robot-tc.buf": 0.625} {
+		data := make([]byte, 8*20)
+		for row := range 8 {
+			uv := u + float32(row)/32
+			binary.LittleEndian.PutUint32(data[row*20+4:], math.Float32bits(uv))
+			binary.LittleEndian.PutUint32(data[row*20+8:], math.Float32bits(uv))
+		}
+		writeTextureFile(t, dir, name, data)
+	}
+	writeTextureFile(t, dir, "mod.ini", []byte(`[TextureOverrideRobotArmPosition]
+vb0 = ResourcePos
+[TextureOverrideRobotArmTexcoord]
+vb1 = ResourceArmTex
+[TextureOverrideRobotArmA]
+ib = ResourceRobotArmAIB
+drawindexed = 3, 0, 0
+[TextureOverrideRobotTexcoord]
+run = CommandListRobotTex
+[CommandListRobotTex]
+vb1 = ResourceRobotTex
+[ResourceArmTex]
+filename = arm-tc.buf
+stride = 20
+[ResourceRobotTex]
+filename = robot-tc.buf
+stride = 20
+[ResourceRobotArmAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("got %d meshes, want one arm mesh", len(fixture.result.Meshes))
+	}
+	geometry := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[0].GeometryURL)
+	if got := geometry.UVs[0]; got != 0.125 {
+		t.Fatalf("arm U = %v, want 0.125 from its own override", got)
+	}
+}
+
+func viewerTestBlendWeights(group uint32) []byte {
+	data := make([]byte, 8*32)
+	for row := range 8 {
+		binary.LittleEndian.PutUint32(data[row*32:], math.Float32bits(1))
+		binary.LittleEndian.PutUint32(data[row*32+16:], group)
+	}
+	return data
+}
+
+func TestLoadModViewerKeepsComplexBufferConditionsExclusive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	writeTextureFile(t, dir, "weights.buf", viewerTestBlendWeights(9))
+	var ini strings.Builder
+	ini.WriteString("[Constants]\n")
+	for index := range 16 {
+		fmt.Fprintf(&ini, "global $switch%d = 0\n", index)
+	}
+	for index := range 16 {
+		fmt.Fprintf(&ini, "[KeySwitch%d]\ntype = cycle\n$switch%d = 0, 1\n", index, index)
+	}
+	ini.WriteString(`
+[TextureOverrideBodyBlend]
+run = CommandListWeights
+[CommandListWeights]
+if `)
+	var conditions []string
+	for index := range 8 {
+		conditions = append(conditions, fmt.Sprintf("($switch%d == 1 && $switch%d == 1)", 2*index, 2*index+1))
+	}
+	ini.WriteString(strings.Join(conditions, " || "))
+	ini.WriteString(`
+vb2 = ResourceWeights
+endif
+[TextureOverrideBodyA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceWeights]
+filename = weights.buf
+stride = 32
+` + viewerBodyResources)
+	writeTextureFile(t, dir, "mod.ini", []byte(ini.String()))
+	fixture := loadViewerDir(t, dir)
+	state := map[string]any{}
+	for _, on := range []bool{false, true, false} {
+		value := float64(0)
+		if on {
+			value = 1
+		}
+		state["switch0"], state["switch1"] = value, value
+		states := evaluateViewerTransport(fixture.result, state)
+		state = states.State
+		visible := 0
+		var palette string
+		for i, mesh := range states.Meshes {
+			if mesh.Visible {
+				visible++
+				palette = fixture.result.Meshes[i].BlendPalette
+			}
+		}
+		wantPalette := ""
+		if on {
+			wantPalette = "weights.buf#0"
+		}
+		if visible != 1 || palette != wantPalette {
+			t.Errorf(
+				"first pair enabled=%t: %d visible meshes, palette %q, want 1 mesh with palette %q",
+				on,
+				visible,
+				palette,
+				wantPalette,
+			)
+		}
+	}
+}
+
+func TestLoadModViewerKeepsFrameBlendPalettes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	writeTextureFile(t, dir, "weights-a.buf", viewerTestBlendWeights(9))
+	writeTextureFile(t, dir, "weights-b.buf", viewerTestBlendWeights(9))
+	writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $frame = 0
+global $fps = 60
+[Present]
+$frame = (time * $fps) // 1
+[TextureOverrideBodyBlend]
+run = CommandListWeights
+[CommandListWeights]
+if $frame == 0
+vb2 = ResourceWeightsA
+else if $frame == 1
+vb2 = ResourceWeightsB
+endif
+[TextureOverrideBodyA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceWeightsA]
+filename = weights-a.buf
+stride = 32
+[ResourceWeightsB]
+filename = weights-b.buf
+stride = 32
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.Animations) != 1 || len(fixture.result.Animations[0].Frames) != 2 {
+		t.Fatalf("unexpected animations %v", fixture.result.Animations)
+	}
+	for index, want := range []string{"weights-a.buf#0", "weights-b.buf#0"} {
+		states := evaluateViewerTransport(fixture.result, fixture.result.Animations[0].Frames[index].Values)
+		var palettes []string
+		for k, mesh := range states.Meshes {
+			if mesh.Visible {
+				palettes = append(palettes, fixture.result.Meshes[k].BlendPalette)
+			}
+		}
+		if len(palettes) != 1 || palettes[0] != want {
+			t.Errorf("frame %d: palettes %q, want %s", index, palettes, want)
+		}
+	}
+}
+
+func TestLoadModViewerKeepsDrawTexcoordWithCommandPosition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	otherPos := make([]byte, 8*40)
+	for row := range 8 {
+		binary.LittleEndian.PutUint32(otherPos[row*40:], math.Float32bits(100+float32(row)))
+	}
+	writeTextureFile(t, dir, "other-pos.buf", otherPos)
+	for name, u := range map[string]float32{"arm-tc.buf": 0.125, "other-tc.buf": 0.625} {
+		data := make([]byte, 8*20)
+		for row := range 8 {
+			uv := u + float32(row)/32
+			binary.LittleEndian.PutUint32(data[row*20+4:], math.Float32bits(uv))
+			binary.LittleEndian.PutUint32(data[row*20+8:], math.Float32bits(uv))
+		}
+		writeTextureFile(t, dir, name, data)
+	}
+	writeTextureFile(t, dir, "mod.ini", []byte(`[Constants]
+global $style = 0
+[KeyStyle]
+type = cycle
+$style = 0, 1
+[TextureOverrideArmBlend]
+run = CommandListArmPosition
+[CommandListArmPosition]
+if $style == 1
+vb0 = ResourcePos
+endif
+[TextureOverrideArmA]
+ib = ResourceArmAIB
+vb1 = ResourceArmTex
+drawindexed = 3, 0, 0
+[CommandListOtherBuffers]
+vb0 = ResourceOtherPos
+vb1 = ResourceOtherTex
+[ResourceOtherPos]
+filename = other-pos.buf
+stride = 40
+[ResourceArmTex]
+filename = arm-tc.buf
+stride = 20
+[ResourceOtherTex]
+filename = other-tc.buf
+stride = 20
+[ResourceArmAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	states := evaluateViewerTransport(fixture.result, map[string]any{"style": float64(1)})
+	var values [][2]float32
+	for i, mesh := range states.Meshes {
+		if mesh.Visible {
+			geometry := readViewerMesh(t, fixture.protocol, fixture.result.Meshes[i].GeometryURL)
+			values = append(values, [2]float32{geometry.Positions[0], geometry.UVs[0]})
+		}
+	}
+	if len(values) != 1 || values[0] != [2]float32{0, 0.125} {
+		t.Fatalf("(position x, UV u) = %v, want (0, 0.125) from the arm buffers", values)
+	}
+}
+
+func TestLoadModViewerKeepsDrawConditionWhenJoiningBufferConditions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	writeTextureFile(t, dir, "weights.buf", viewerTestBlendWeights(9))
+	var ini strings.Builder
+	ini.WriteString("[Constants]\nglobal $kind = 0\n")
+	for index := range 14 {
+		fmt.Fprintf(&ini, "global $switch%d = 0\n", index)
+	}
+	for index := range 14 {
+		fmt.Fprintf(&ini, "[KeySwitch%d]\ntype = cycle\n$switch%d = 0, 1\n", index, index)
+	}
+	ini.WriteString(`
+[KeyKind]
+type = cycle
+$kind = 0, 1, 2
+[TextureOverrideBodyBlend]
+run = CommandListWeights
+[CommandListWeights]
+if `)
+	var conditions []string
+	for index := range 7 {
+		conditions = append(conditions, fmt.Sprintf("($switch%d == 1 && $switch%d == 1)", 2*index, 2*index+1))
+	}
+	ini.WriteString(strings.Join(conditions, " || "))
+	ini.WriteString(`
+vb2 = ResourceWeights
+endif
+[TextureOverrideBodyA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $kind == 0 || $kind == 1
+drawindexed = 3, 0, 0
+endif
+[ResourceWeights]
+filename = weights.buf
+stride = 32
+` + viewerBodyResources)
+	writeTextureFile(t, dir, "mod.ini", []byte(ini.String()))
+	fixture := loadViewerDir(t, dir)
+	for _, scenario := range []struct{ kind, on, want int }{{0, 0, 1}, {0, 1, 1}, {2, 0, 0}, {2, 1, 0}} {
+		state := map[string]any{
+			"kind":    float64(scenario.kind),
+			"switch0": float64(scenario.on),
+			"switch1": float64(scenario.on),
+		}
+		states := evaluateViewerTransport(fixture.result, state)
+		visible := 0
+		for _, mesh := range states.Meshes {
+			if mesh.Visible {
+				visible++
+			}
+		}
+		if visible != scenario.want {
+			t.Errorf("kind=%d switch pair=%d: visible %d, want %d", scenario.kind, scenario.on, visible, scenario.want)
+		}
+	}
+}
+
+func TestLoadModViewerMatchesCommandBuffersThroughCanonicalIBName(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"ArmorAIB", "armoraib"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeViewerGeometry(t, dir)
+			writeTextureFile(t, dir, "weights.buf", viewerTestBlendWeights(9))
+			ini := fmt.Sprintf(`[Constants]
+global $option = 0
+[KeyOption]
+type = cycle
+$option = 0, 1
+[TextureOverrideArmorBlend]
+run = CommandListWeights
+[CommandListWeights]
+if $option == 1
+vb2 = ResourceWeights
+endif
+[TextureOverrideArmorA]
+ib = Resource%s
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourceArmorAIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceWeights]
+filename = weights.buf
+stride = 32
+`, name)
+			writeTextureFile(t, dir, "mod.ini", []byte(ini+viewerBodyResources))
+			fixture := loadViewerDir(t, dir)
+			states := evaluateViewerTransport(fixture.result, map[string]any{"option": float64(1)})
+			var palettes []string
+			for index, mesh := range states.Meshes {
+				if mesh.Visible {
+					palettes = append(palettes, fixture.result.Meshes[index].BlendPalette)
+				}
+			}
+			if len(palettes) != 1 || palettes[0] != "weights.buf#0" {
+				t.Fatalf("visible palettes %q, want [weights.buf#0]", palettes)
+			}
+		})
+	}
+}
+
+func TestLoadModViewerKeepsGlobalBlendForSharedPosition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeViewerGeometry(t, dir)
+	writeTextureFile(t, dir, "weights.buf", viewerTestBlendWeights(9))
+	writeTextureFile(t, dir, "mod.ini", []byte(`[TextureOverrideSharedBuffers]
+run = CommandListSharedBuffers
+[CommandListSharedBuffers]
+vb0 = ResourcePos
+vb1 = ResourceTc
+vb2 = ResourceWeights
+[TextureOverrideBodyA]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+drawindexed = 3, 0, 0
+[ResourceWeights]
+filename = weights.buf
+stride = 32
+`+viewerBodyResources))
+	fixture := loadViewerDir(t, dir)
+	if len(fixture.result.Meshes) != 1 {
+		t.Fatalf("mesh count %d, want 1", len(fixture.result.Meshes))
+	}
+	mesh := fixture.result.Meshes[0]
+	if mesh.BlendPalette != "weights.buf#0" || mesh.BlendURL == "" {
+		t.Fatalf("blend palette=%q, URL=%q, want the shared weights", mesh.BlendPalette, mesh.BlendURL)
+	}
+}
 
 func TestModelViewerRabbitFXCutoutFollowsDraws(t *testing.T) {
 	sections := parseModINI(`[TextureOverrideParts]
@@ -298,13 +867,22 @@ filename = BodyA.ib
 	cache := newModelViewerBufferCache(context.Background())
 	defer cache.releaseAll()
 
-	scanned, err := buildModelViewerDirectScannedMeshesPrepared(
+	scanned, _, err := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath, dir, sections, collectModelViewerDefaultVariables(sections), resources, cache, nil,
 	)
 	if err != nil || len(scanned) != 0 {
 		t.Fatalf("fixture must take the legacy build: scanned=%d err=%v", len(scanned), err)
 	}
-	meshes, _, _, _, err := buildModelViewerDirectMeshesPrepared(iniPath, dir, "", sections, resources, nil, cache, nil)
+	meshes, _, _, _, _, err := buildModelViewerDirectMeshesPrepared(
+		iniPath,
+		dir,
+		"",
+		sections,
+		resources,
+		nil,
+		cache,
+		nil,
+	)
 	if err != nil || len(meshes) != 2 {
 		t.Fatalf("meshes=%d err=%v", len(meshes), err)
 	}
@@ -1164,7 +1742,7 @@ format = DXGI_FORMAT_R32_UINT`
 	sections := parseModINI(iniText)
 	resources := resolveModelViewerEffectiveResourcesAt(dir, dir, sections, collectModelViewerResources(sections), nil)
 	cache := newModelViewerBufferCache(context.Background())
-	meshes, err := buildModelViewerDirectScannedMeshesPrepared(
+	meshes, _, err := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath, dir, sections, collectModelViewerDefaultVariables(sections), resources, cache, nil,
 	)
 	if err != nil {

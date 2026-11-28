@@ -33,6 +33,7 @@ func configureModelViewerState(
 	allShapeKeys []modelViewerShapeKey,
 	variableNames map[string]modelViewerVariableName,
 	computeAnimations []modelViewerPreparedAnimationClip,
+	bufferRules []ModelViewerStateRule,
 	includeAllVariables bool,
 ) {
 	defaults := collectModelViewerDefaultVariables(allSections)
@@ -57,10 +58,17 @@ func configureModelViewerState(
 	for _, rule := range stateRules {
 		tracked[modelViewerNormalizeKey(rule.Var)] = true
 	}
+	for _, rule := range bufferRules {
+		tracked[modelViewerNormalizeKey(rule.Var)] = true
+	}
 	for _, clip := range animations {
 		for _, id := range clip.VariableIDs {
 			tracked[modelViewerNormalizeKey(id)] = true
 		}
+	}
+	for _, rule := range bufferRules {
+		rule.Conditions = normalizeModelViewerDNFWithTracked(rule.Conditions, tracked)
+		stateRules = append(stateRules, rule)
 	}
 	normalizeModelViewerTransportConditions(transport, tracked)
 	gating := modelViewerDirectGatingVariables(transport)

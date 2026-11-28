@@ -719,13 +719,13 @@ endif`)
 	}
 
 	regular := newTransport()
-	configureModelViewerState(&regular, sections, nil, nil, nil, false)
+	configureModelViewerState(&regular, sections, nil, nil, nil, nil, false)
 	if len(regular.Variables) != 2 || regular.Variables[0].NoPreview || regular.Variables[1].NoPreview {
 		t.Fatalf("regular variables = %#v, want outfit and mood with preview", regular.Variables)
 	}
 
 	grid := newTransport()
-	configureModelViewerState(&grid, sections, nil, nil, nil, true)
+	configureModelViewerState(&grid, sections, nil, nil, nil, nil, true)
 	outfit := slices.IndexFunc(
 		grid.Variables,
 		func(variable ModelViewerVariable) bool { return variable.ID == "outfit" },

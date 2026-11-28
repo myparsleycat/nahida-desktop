@@ -561,33 +561,7 @@ func (c *modelViewerSymbolicScanContext) snapshotRecords(
 ) []modelViewerDirectDrawRecord {
 	states := []modelViewerSymbolicBufferVariant{{conditions: cloneModelViewerDNF(drawConditions)}}
 	for _, slot := range []string{"ib", "vb0", "vb1", "vb2"} {
-		assignments := state.bufferAssignments(slot)
-		if len(assignments) == 0 {
-			continue
-		}
-		var next []modelViewerSymbolicBufferVariant
-		for _, current := range states {
-			for _, assignment := range assignments {
-				conditions := modelViewerDNFAnd(current.conditions, assignment.conditions)
-				if len(conditions) == 0 {
-					continue
-				}
-				variant := current
-				variant.conditions = conditions
-				switch slot {
-				case "ib":
-					variant.state.ib = assignment.resource
-				case "vb0":
-					variant.state.vb0 = assignment.resource
-				case "vb1":
-					variant.state.vb1 = assignment.resource
-				case "vb2":
-					variant.state.vb2 = assignment.resource
-				}
-				next = append(next, variant)
-			}
-		}
-		states = next
+		states = bindModelViewerBufferVariants(states, slot, state.bufferAssignments(slot), modelViewerDNFAnd)
 	}
 	var textures, slotTextures []modelViewerDirectTextureAssignment
 	for _, assignment := range modelViewerSymbolicTextureHistory(state, drawConditions) {
@@ -694,6 +668,43 @@ type modelViewerSymbolicBufferVariant struct {
 	conditions ModelViewerDNF
 }
 
+func bindModelViewerBufferVariants(
+	variants []modelViewerSymbolicBufferVariant,
+	slot string,
+	assignments []modelViewerSymbolicAssignment,
+	conjoin func(ModelViewerDNF, ModelViewerDNF) ModelViewerDNF,
+) []modelViewerSymbolicBufferVariant {
+	if len(assignments) == 0 {
+		return variants
+	}
+	var next []modelViewerSymbolicBufferVariant
+	for _, variant := range variants {
+		for _, assignment := range assignments {
+			conditions := conjoin(variant.conditions, assignment.conditions)
+			if len(conditions) == 0 {
+				continue
+			}
+			bound := variant
+			bound.conditions = conditions
+			// An empty resource keeps the slot in states with no applicable override.
+			if assignment.resource != "" {
+				switch slot {
+				case "ib":
+					bound.state.ib = assignment.resource
+				case "vb0":
+					bound.state.vb0 = assignment.resource
+				case "vb1":
+					bound.state.vb1 = assignment.resource
+				case "vb2":
+					bound.state.vb2 = assignment.resource
+				}
+			}
+			next = append(next, bound)
+		}
+	}
+	return next
+}
+
 func (c *modelViewerSymbolicScanContext) implicitRecords(
 	state *modelViewerSymbolicSectionState,
 	conditions ModelViewerDNF,
@@ -731,6 +742,7 @@ func applyModelViewerFallbackVertexBuffers(
 	state modelViewerDirectBufferState,
 	conditions ModelViewerDNF,
 	fallback []modelViewerSymbolicAssignment,
+	conjoin func(ModelViewerDNF, ModelViewerDNF) ModelViewerDNF,
 ) []modelViewerSymbolicBufferVariant {
 	base := modelViewerSymbolicBufferVariant{state: state, conditions: conditions}
 	if state.vb0 != "" || state.ib == "" || len(fallback) == 0 {
@@ -752,7 +764,7 @@ func applyModelViewerFallbackVertexBuffers(
 	}
 	var expanded []modelViewerSymbolicBufferVariant
 	for _, hit := range hits {
-		nextConditions := modelViewerDNFAnd(conditions, hit.conditions)
+		nextConditions := conjoin(conditions, hit.conditions)
 		if len(nextConditions) == 0 {
 			continue
 		}

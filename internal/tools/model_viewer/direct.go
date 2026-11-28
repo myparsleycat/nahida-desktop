@@ -127,7 +127,10 @@ func buildModelViewerDirectMeshesAt(
 		collectModelViewerResources(sections),
 		cache,
 	)
-	return buildModelViewerDirectMeshesPrepared(iniPath, modDir, assetPath, sections, resources, nil, cache, timing)
+	meshes, bindings, resources, shapes, _, err := buildModelViewerDirectMeshesPrepared(
+		iniPath, modDir, assetPath, sections, resources, nil, cache, timing,
+	)
+	return meshes, bindings, resources, shapes, err
 }
 
 func buildModelViewerDirectMeshesPrepared(
@@ -137,7 +140,7 @@ func buildModelViewerDirectMeshesPrepared(
 	domains map[string]any,
 	cache *modelViewerBufferCache,
 	timing *modelViewerMeshBuildTiming,
-) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, error) {
+) ([]modelViewerDirectMesh, []modelViewerTextureBinding, []modelViewerResource, []modelViewerShapeKey, []ModelViewerStateRule, error) {
 	variables := collectModelViewerDefaultVariables(sections)
 	// Domains go in as defaults: condition parsing extends them with the unit's
 	// own bindings instead of replacing them.
@@ -147,7 +150,7 @@ func buildModelViewerDirectMeshesPrepared(
 		return detectModelViewerLayout(sections, resources) == "wwmi" && !isModelViewerEFMI(sections)
 	})
 	textures := collectModelViewerTextureBindings(sections, variables, wwmiSlots)
-	scanned, scanErr := buildModelViewerDirectScannedMeshesPrepared(
+	scanned, bufferRules, scanErr := buildModelViewerDirectScannedMeshesPrepared(
 		iniPath,
 		modDir,
 		sections,
@@ -157,10 +160,10 @@ func buildModelViewerDirectMeshesPrepared(
 		timing,
 	)
 	if scanErr != nil {
-		return nil, nil, nil, nil, scanErr
+		return nil, nil, nil, nil, nil, scanErr
 	}
 	if len(scanned) > 0 {
-		return scanned, textures, resources, collectModelViewerShapeKeys(sections, resources, modDir), nil
+		return scanned, textures, resources, collectModelViewerShapeKeys(sections, resources, modDir), bufferRules, nil
 	}
 	output, legacyErr := buildModelViewerLegacyMeshes(modelViewerLegacyBuild{
 		iniPath:   iniPath,
@@ -174,9 +177,9 @@ func buildModelViewerDirectMeshesPrepared(
 		timing:    timing,
 	})
 	if legacyErr != nil {
-		return nil, nil, nil, nil, legacyErr
+		return nil, nil, nil, nil, nil, legacyErr
 	}
-	return output, textures, resources, collectModelViewerShapeKeys(sections, resources, modDir), nil
+	return output, textures, resources, collectModelViewerShapeKeys(sections, resources, modDir), nil, nil
 }
 
 // modelViewerLegacyBuild carries the shared inputs of the legacy mesh build.
