@@ -1,0 +1,51 @@
+{
+  "updated": "2026-11-28T08:30:00.000Z",
+  "delta": {
+    "total": 122,
+    "done": 122,
+    "remaining": 0,
+    "targetsByGame": { "gimi": 57, "srmi": 2, "zzmi": 63 },
+    "doneByGame": { "gimi": 57, "srmi": 2, "zzmi": 63 },
+    "remainingByGame": {}
+  },
+  "passes": [
+    {
+      "label": "first",
+      "range": "remaining 80 of the 122 delta",
+      "motion": { "files": 81, "bytes": 542134811 },
+      "original": { "files": 1658, "bytes": 252468899 }
+    },
+    {
+      "label": "recapture",
+      "range": "42 outstanding + 16 that lost shape keys in the first pass",
+      "motion": { "files": 59, "bytes": 750608739 },
+      "original": { "files": 1339, "bytes": 382396770 }
+    }
+  ],
+  "indexes": {
+    "motionRows": 373,
+    "originalRows": 373
+  },
+  "checks": {
+    "build": "pass",
+    "test": "pass",
+    "lint": "pass",
+    "r2Index": "sha256 match",
+    "r2Model": "sha256 match",
+    "r2OriginalModel": "sha256 match",
+    "r2Texture": "sha256 match",
+    "morphCoverage": "58/58 recaptured characters keep every shape key channel",
+    "appVerified": true
+  },
+  "nextRun": {
+    "scripts": "live.mjs -> diff.mjs -> prep.mjs, then capture, then mark-captured.mjs",
+    "baseline": "captured.json now holds the 2026-11-28 revisions, so diff.mjs reports changed 0 and newData 1",
+    "openGap": "zzmi/promeia is in the character catalog and on skowt but has no motion or original row; skowt marks it character:null, so a filter on that flag hides it"
+  },
+  "notes": [
+    "The viewer block (409 gate reload, unwrap on l=1) disappeared after the browser's cookies and site data were cleared; no bypass was used.",
+    "Files uploaded by the first pass and by the recapture use content-hashed names. On 2026-11-28 the 32 superseded model objects (16 motion, 16 original) were deleted from R2; every texture they referenced is still used by a current model, so no texture was removed.",
+    "The 64 characters of the delta that never showed the shape key bug were not recaptured.",
+    "The scratch directories .tmp/skowt-capture and .tmp/skowt-handoff/work were deleted after the run; the runbook regenerates work/ when it runs."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "reason": "mesh and node names differ (SeparateMesh_..._Model_ prefix), so liteAnim matched shape keys by node name and dropped them",
+  "fix": "resolve the mesh through the node's mesh index and label the morph with the mesh name",
+  "keys": [
+    "srmi/aeon-aha",
+    "zzmi/anby",
+    "zzmi/anton",
+    "zzmi/ben",
+    "zzmi/billy",
+    "zzmi/burnice",
+    "zzmi/caesar",
+    "zzmi/cissia",
+    "zzmi/claret",
+    "zzmi/corin",
+    "zzmi/dialyn",
+    "zzmi/ellen",
+    "zzmi/evelyn",
+    "zzmi/grace",
+    "zzmi/harumasa",
+    "zzmi/hugo"
+  ]
+}

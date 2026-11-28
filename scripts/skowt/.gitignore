@@ -1,0 +1,5 @@
+work/
+state/live.json
+state/diff.json
+state/targets.json
+state/remaining.json
