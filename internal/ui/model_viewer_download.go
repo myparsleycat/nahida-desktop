@@ -189,25 +189,26 @@ func downloadChip(t kit.Theme, p viewerDownloadProgress) *fairy.El {
 		icon, label = lucide.Database, T("page.tools.model_viewer.menu.original_data")
 	}
 
-	const ring = viewerStatusRingSize
-	progress := kit.Spinner(ring).Color(t.MutedForeground)
-	chip := fairy.Row().Key("model-viewer.download."+strconv.Itoa(int(p.task))).W(p.width()).Shrink(0).
-		Gap(viewerStatusChipGap).Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0)
-	if !p.downloading {
-		return chip.Child(fairy.Box(progress.Absolute().Inset(0), fairy.Icon(icon).Size(10, 10)).Size(ring, ring).
-			Center().Shrink(0)).Label(label).Tooltip(label)
-	}
-
 	value := 1.0
 	if p.total > 0 {
 		value = float64(p.done) / float64(p.total)
 	}
-	if p.done < p.total {
-		progress = kit.ProgressCircle(value, ring, kit.Label(label)).Color(t.Primary)
+
+	const ring = viewerStatusRingSize
+	var indicator *fairy.El
+	if p.downloading && p.done < p.total {
+		indicator = kit.ProgressCircle(value, ring, kit.Icon(icon), kit.Label(label)).Color(t.Primary)
+	} else {
+		indicator = kit.IconSpinner(icon, ring, kit.Label(label))
+	}
+
+	chip := fairy.Row(indicator).Key("model-viewer.download."+strconv.Itoa(int(p.task))).W(p.width()).Shrink(0).
+		Gap(viewerStatusChipGap).Align(fairy.Center).H(viewerStatusChipHeight).PadXY(viewerStatusChipPadX, 0)
+	if !p.downloading {
+		return chip.Tooltip(label)
 	}
 	return chip.Child(
-		fairy.Box(progress.Absolute().Inset(0), fairy.Icon(icon).Size(10, 10)).Size(ring, ring).Center().Shrink(0),
-		fairy.Box(viewerStatusText(strconv.Itoa(int(value*100))+"%").Color(t.MutedForeground)).
+		fairy.Box(viewerStatusText(strconv.Itoa(int(value*100)) + "%").Color(t.MutedForeground)).
 			W(viewerStatusPercentWidth).Align(fairy.End),
 	).Tooltip(label + "\n" + formatSize(p.done) + " / " + formatSize(p.total))
 }
