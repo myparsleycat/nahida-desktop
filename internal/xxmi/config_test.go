@@ -348,7 +348,7 @@ func TestImporterSettingsRejectInvalidLaunchFields(t *testing.T) {
 	}
 }
 
-func TestManualOnlyImporterRejectsOtherGameLaunches(t *testing.T) {
+func TestLimitedImporterRejectsOtherGameLaunches(t *testing.T) {
 	t.Parallel()
 	cfg, err := DefaultImporterConfig("APMI", t.TempDir())
 	if err != nil {
@@ -356,6 +356,18 @@ func TestManualOnlyImporterRejectsOtherGameLaunches(t *testing.T) {
 	}
 	if cfg.GameLaunch != "Manual" {
 		t.Fatalf("APMI default game launch = %q", cfg.GameLaunch)
+	}
+	cfg.GameLaunch = "Nexon"
+	if err := ValidateImporterSettings("APMI", cfg); err != nil {
+		t.Fatalf("APMI rejected the Nexon game launch: %v", err)
+	}
+	gimi, err := DefaultImporterConfig("GIMI", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gimi.GameLaunch = "Nexon"
+	if err := ValidateImporterSettings("GIMI", gimi); err == nil {
+		t.Fatal("GIMI accepted the Nexon game launch")
 	}
 	for _, launch := range []string{"Direct", "Steam", "Epic", "Custom"} {
 		cfg.GameLaunch = launch

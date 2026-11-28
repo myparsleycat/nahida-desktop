@@ -404,3 +404,69 @@ func TestEpicBypassLaunchNeedsNoImporterFiles(t *testing.T) {
 		t.Fatalf("importer folder entries = %v, %v", entries, err)
 	}
 }
+
+func TestNexonLaunchOpensGameManagerRequest(t *testing.T) {
+	ctx := t.Context()
+	root := t.TempDir()
+	cfg, err := DefaultImporterConfig("APMI", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled, cfg.GameLaunch, cfg.XXMIDLLInjectMode = true, "Nexon", "Bypass"
+	cfg.GameFolder = filepath.Join(root, "Azur Promilia")
+
+	// Nexon Game Manager starts AzurPromilia.exe whatever process the user named.
+	cfg.GameProcessExe = "AzurPromiliaJP.exe"
+	if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.GameFolder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"AzurPromilia.exe", "AzurPromiliaJP.exe"} {
+		if err := os.WriteFile(filepath.Join(cfg.GameFolder, name), []byte("test game"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	helper := &readyLaunchHelper{}
+	var opened []string
+	service := NewWithOptions(Options{Elevated: helper})
+	useTestAppData(t, service)
+	client := newXXMITestClient(t)
+	service.UseClient(client)
+	disabled := "false"
+	if err := client.Settings.Upsert(ctx, "xxmi_auto_update", &disabled); err != nil {
+		t.Fatal(err)
+	}
+	service.findProcess = noGameProcess
+	service.processSnapshot = func(context.Context) (map[string]bool, error) { return nil, nil }
+	service.registryGameExecutables = func(context.Context, []string) ([]string, error) { return nil, nil }
+	service.launchSettings = &fakeLaunch{}
+	service.openLaunchURI = func(uri string) error {
+		opened = append(opened, uri)
+		return nil
+	}
+
+	// Without the ngm: handler the launch stops before the helper is asked for anything.
+	service.nexonInstalled = func() bool { return false }
+	err = service.launchBuiltinGameLocked(ctx, "APMI", cfg, LaunchOptions{}, nil)
+	if !errors.Is(err, errPlatformNotFound) || helper.calls != 0 || len(opened) != 0 {
+		t.Fatalf("launch without Nexon Game Manager: %v; helper calls %d, opened %v", err, helper.calls, opened)
+	}
+
+	service.nexonInstalled = func() bool { return true }
+	if err := service.launchBuiltinGameLocked(ctx, "APMI", cfg, LaunchOptions{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := "ngm://launch/ -mode:pluglaunch -game:2887"; !slices.Equal(opened, []string{want}) {
+		t.Fatalf("opened %v; want %s", opened, want)
+	}
+	spec := helper.spec
+	if helper.calls != 1 || spec.StartExe != "" || spec.StartArgs != nil || spec.ProcessName != "AzurPromilia.exe" {
+		t.Fatalf("helper calls = %d, spec = %+v", helper.calls, spec)
+	}
+	if err := inject.ValidateLaunchSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+}

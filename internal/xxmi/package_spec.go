@@ -40,8 +40,12 @@ type importerPackageSpec struct {
 	gameExeNames  []string
 	processNames  []string
 	useHook       bool
-	// manualLaunchOnly limits GameLaunch to "Manual" for a game this app cannot start yet.
-	manualLaunchOnly bool
+	// gameLaunches limits GameLaunch to these values, the first being the default; empty allows allGameLaunches.
+	gameLaunches []string
+	// nexonGameID is the game number Nexon Game Manager starts for a "Nexon" launch, and nexonExeName the image it
+	// starts for that number.
+	nexonGameID  string
+	nexonExeName string
 }
 
 var (
@@ -139,8 +143,10 @@ var importerPackages = map[string]importerPackageSpec{
 				versionSubject: "apmi-package-release-version",
 			},
 		},
-		gameExeNames:     []string{"AzurPromilia.exe", "AzurPromiliaJP.exe"},
-		manualLaunchOnly: true,
+		gameExeNames: []string{"AzurPromilia.exe", "AzurPromiliaJP.exe"},
+		gameLaunches: []string{"Manual", "Nexon"},
+		nexonGameID:  "2887",
+		nexonExeName: "AzurPromilia.exe",
 	},
 }
 
@@ -305,8 +311,8 @@ func selectedInstalledPackage(key string, cfg ImporterConfig) *string {
 
 // GameLaunches returns the GameLaunch values the importer accepts.
 func GameLaunches(key string) []string {
-	if spec, ok := lookupImporterPackage(key); ok && spec.manualLaunchOnly {
-		return []string{"Manual"}
+	if spec, ok := lookupImporterPackage(key); ok && len(spec.gameLaunches) > 0 {
+		return slices.Clone(spec.gameLaunches)
 	}
 	return allGameLaunches
 }

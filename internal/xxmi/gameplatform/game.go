@@ -1,5 +1,5 @@
 // Package gameplatform locates games installed through Steam and the Epic Games Launcher
-// and builds the requests that start them through those clients.
+// and builds the requests that start games through those clients and Nexon Game Manager.
 package gameplatform
 
 import (

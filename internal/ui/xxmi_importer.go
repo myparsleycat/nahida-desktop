@@ -1270,7 +1270,7 @@ func (s *Shell) importerAdvancedTab(ic *importerContext) []*fairy.El {
 			toggleRow(T(prefix+"waitForCommand"), "", hook.value.Wait,
 				func(on bool) { ic.set(func(c *xxmi.ImporterConfig) { hook.target(c).Wait = on }) }, false).Pad(0)))
 	}
-	if c.GameLaunch != "Direct" {
+	if c.GameLaunch != "Direct" && c.GameLaunch != "Nexon" {
 		descriptionKey := prefix + "gameProcessExeDescription"
 		if ic.key == "APMI" {
 			descriptionKey = prefix + "apmiGameProcessExeDescription"

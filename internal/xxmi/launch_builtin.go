@@ -19,6 +19,7 @@ import (
 	"nahida.live/desktop/internal/elevated"
 	"nahida.live/desktop/internal/infra"
 	"nahida.live/desktop/internal/platform"
+	"nahida.live/desktop/internal/xxmi/gameplatform"
 	"nahida.live/desktop/internal/xxmi/inject"
 )
 
@@ -192,12 +193,19 @@ func (x *XXMI) launchBuiltinGameLocked(
 		}
 		platform, cfg.GameFolder = resolved, resolved.installDir
 	}
+	if cfg.GameLaunch == "Nexon" && !x.nexonInstalled() {
+		return fmt.Errorf("%w: Nexon Game Manager is not installed", errPlatformNotFound)
+	}
 	findGame := validateGameFolder
 	if usesPlatform {
 		findGame = findStoreGameFolder
 	}
 	if key == "APMI" {
-		target, err := x.resolveAPMIGame(ctx, cfg)
+		lookup := cfg
+		if cfg.GameLaunch == "Nexon" {
+			lookup.GameProcessExe = packageSpec.nexonExeName
+		}
+		target, err := x.resolveAPMIGame(ctx, lookup)
 		if err != nil {
 			return err
 		}
@@ -205,8 +213,8 @@ func (x *XXMI) launchBuiltinGameLocked(
 		cfg.GameFolder = ""
 		if gameExe != "" {
 			cfg.GameFolder = filepath.Dir(gameExe)
-			// APMI is started by hand, so a game folder that overlaps the importer folder only skips the
-			// steps that edit game files.
+			// Neither a manual nor a Nexon launch runs the executable from the game folder, so a game folder
+			// that overlaps the importer folder only skips the steps that edit game files.
 			if err := ValidateImporterSettings(key, cfg); err != nil {
 				x.log.Warn(map[string]any{
 					"importer": key, "stage": stage, "gameLaunch": cfg.GameLaunch, "gameFolder": cfg.GameFolder,
@@ -572,10 +580,13 @@ func (x *XXMI) launchBuiltinGameLocked(
 	}
 	progress("inject-launch")
 	var result inject.LaunchResult
-	if cfg.GameLaunch == "Epic" {
+	switch cfg.GameLaunch {
+	case "Epic":
 		uri := platform.epicApp.LaunchURI(platformCommandLine(key, cfg, gameExe))
 		result, err = x.launchWithURI(ctx, launchSpec, uri)
-	} else {
+	case "Nexon":
+		result, err = x.launchWithURI(ctx, launchSpec, gameplatform.NexonLaunchURI(packageSpec.nexonGameID))
+	default:
 		result, err = x.elevated.LaunchXXMI(ctx, launchSpec)
 	}
 	if err != nil {
@@ -785,6 +796,9 @@ func (x *XXMI) builtinLaunchSpec(
 	switch cfg.GameLaunch {
 	case "Custom":
 		spec.CustomLaunchCmd = cfg.CustomLaunch.Command
+	case "Nexon":
+		// launchWithURI asks Nexon Game Manager for the game, so the helper starts nothing itself.
+		spec.StartExe, spec.StartArgs = "", nil
 	case "Manual":
 		// The helper starts nothing and waits for the user to launch the game.
 		spec.StartMethod = "Manual"

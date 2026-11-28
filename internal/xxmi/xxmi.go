@@ -207,10 +207,11 @@ type XXMI struct {
 	prepareImportLibraries func(context.Context, string, string, string) error
 	// renameUserData moves imported user data; tests replace it to simulate folders on different volumes.
 	renameUserData func(from, to string) error
-	// findSteam, epicManifest, runPlatformClient, and openLaunchURI reach the store clients; tests
-	// replace them with fixtures so no installed client is read or started.
+	// findSteam, epicManifest, nexonInstalled, runPlatformClient, and openLaunchURI reach the store clients;
+	// tests replace them with fixtures so no installed client is read or started.
 	findSteam         func() (gameplatform.Steam, bool)
 	epicManifest      func() string
+	nexonInstalled    func() bool
 	runPlatformClient func(exe string, args ...string) error
 	openLaunchURI     func(uri string) error
 	// gryphlinkFolders lists installed GRYPHLINK launcher folders from the registry and known paths; tests
@@ -250,6 +251,7 @@ func NewWithOptions(opts Options) *XXMI {
 	x.renameUserData = os.Rename
 	x.findSteam = gameplatform.FindSteam
 	x.epicManifest = gameplatform.EpicManifestPath
+	x.nexonInstalled = gameplatform.NexonInstalled
 	x.runPlatformClient = startPlatformClient
 	x.openLaunchURI = openShellURI
 	x.gryphlinkFolders = installedGryphlinkFolders

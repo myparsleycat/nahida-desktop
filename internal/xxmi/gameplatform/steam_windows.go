@@ -47,3 +47,13 @@ func FindSteam() (Steam, bool) {
 func EpicManifestPath() string {
 	return filepath.Join(os.Getenv("PROGRAMDATA"), "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat")
 }
+
+// NexonInstalled reports whether a program handles the ngm: requests that Nexon Game Manager registers.
+func NexonInstalled() bool {
+	key, err := registry.OpenKey(registry.CLASSES_ROOT, `ngm\shell\open\command`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	_ = key.Close()
+	return true
+}

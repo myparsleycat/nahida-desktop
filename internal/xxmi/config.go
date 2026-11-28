@@ -145,8 +145,8 @@ type ImporterConfig struct {
 	DeployedSignatures map[string]string `json:"deployedSignatures,omitempty"`
 	ImporterFolder     string            `json:"importerFolder"`
 	GameFolder         string            `json:"gameFolder"`
-	// GameLaunch selects what starts the game: "Direct", "Steam", "Epic", "Custom", or "Manual". GameLaunches lists
-	// the values an importer accepts.
+	// GameLaunch selects what starts the game: "Direct", "Steam", "Epic", "Nexon", "Custom", or "Manual". GameLaunches
+	// lists the values an importer accepts.
 	GameLaunch string `json:"gameLaunch"`
 	// GameProcessExe overrides the image name of the game process; empty resolves it from the game folder.
 	GameProcessExe                 string `json:"gameProcessExe"`
@@ -235,8 +235,8 @@ func DefaultImporterConfig(key, root string) (ImporterConfig, error) {
 	if spec.useHook {
 		cfg.XXMIDLLInjectMode = "Hook"
 	}
-	if spec.manualLaunchOnly {
-		cfg.GameLaunch = "Manual"
+	if len(spec.gameLaunches) > 0 {
+		cfg.GameLaunch = spec.gameLaunches[0]
 	}
 	switch spec.key {
 	case "GIMI":
