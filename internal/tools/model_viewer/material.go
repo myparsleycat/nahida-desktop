@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -31,6 +32,10 @@ import (
 const (
 	maxModelViewerTextureInputPixels  = int64(64 * 1024 * 1024)
 	maxModelViewerTextureOutputPixels = int64(2048 * 2048)
+)
+
+var modelViewerSlotResourceRE = regexp.MustCompile(
+	`(?i)^(?:(?:copy|ref|res)[ \t]+)?resource(?:\\([\w.\\-]+)\\)?([\pL\pN_.-]+)$`,
 )
 
 type modelViewerTextureBinding struct {
@@ -70,10 +75,7 @@ func collectModelViewerTextureBindings(
 	variables map[string]any,
 	wwmiSlots func() bool,
 ) []modelViewerTextureBinding {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
+	lookup := modelViewerAssignmentSectionLookup(sections)
 	var bindings []modelViewerTextureBinding
 	for _, section := range sections {
 		if !strings.EqualFold(section.Header, "TextureOverride") {
@@ -257,6 +259,26 @@ func modelViewerPsSlotNumber(key string) (int, bool) {
 	return slot, true
 }
 
+func modelViewerSlotResourceReference(key, value string) (namespace, name string) {
+	if _, ok := modelViewerPsSlotNumber(key); !ok {
+		return "", ""
+	}
+	match := modelViewerSlotResourceRE.FindStringSubmatch(value)
+	if match == nil {
+		return "", ""
+	}
+	return match[1], match[2]
+}
+
+func modelViewerUndefinedLocalSlotResource(key, value string, lookup map[string]modINISection) bool {
+	namespace, name := modelViewerSlotResourceReference(key, value)
+	if namespace != "" || name == "" {
+		return false
+	}
+	_, declared := lookup[modelViewerForeignSectionKey("Resource", name)]
+	return !declared
+}
+
 func resolveModelViewerAssignments(
 	section modINISection,
 	targets []string,
@@ -342,7 +364,7 @@ func resolveModelViewerAssignments(
 			}
 		}
 		normalized := modelViewerNormalizeKey(key)
-		if wanted[normalized] {
+		if wanted[normalized] && !modelViewerUndefinedLocalSlotResource(normalized, value, lookup) {
 			assignments[normalized] = value
 		}
 	}

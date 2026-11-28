@@ -63,6 +63,57 @@ filename = EffectDiffuse.png
 	}
 }
 
+func TestLoadModViewerKeepsDiffuseBeforeUndefinedSlotResource(t *testing.T) {
+	dir := t.TempDir()
+	colors := []string{"Blue.png", "Black.png", "White.png"}
+	for index, name := range colors {
+		writeTextureFile(t, dir, name, encodeColorPNG(2+index, 2))
+	}
+	writeTextureFile(t, dir, "Decoy.png", encodeColorPNG(5, 2))
+	fixture := loadViewerFixture(t, dir, `[Constants]
+global persist $color = 0
+[KeyColor]
+key = k
+type = cycle
+$color = 0,1,2
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+run = CommandListBodyColor
+ps-t1 = ResourceBodyDiffuse
+drawindexed = 3, 0, 0
+[CommandListBodyColor]
+if $color == 0
+ps-t1 = ResourceBodyDiffuse.0
+else if $color == 1
+ps-t1 = ResourceBodyDiffuse.1
+else
+ps-t1 = ResourceBodyDiffuse.2
+endif
+[ResourceBodyDiffuse.0]
+filename = Blue.png
+[ResourceBodyDiffuse.1]
+filename = Black.png
+[ResourceBodyDiffuse.2]
+filename = White.png
+[ResourceBody.Diffuse]
+filename = Decoy.png
+`+viewerBodyResources)
+
+	for value, name := range colors {
+		_, meshes := EvaluateViewerState(fixture.result, map[string]any{"color": value}, "")
+		if len(meshes) != 1 || !meshes[0].Visible || !strings.HasSuffix(meshes[0].TexKey, name) {
+			t.Errorf("color %d meshes = %+v, want %s", value, meshes, name)
+		}
+	}
+	if !slices.ContainsFunc(fixture.result.Variables, func(variable ModelViewerVariable) bool {
+		return variable.ID == "color" && !variable.NoPreview
+	}) {
+		t.Error("color toggle has no preview")
+	}
+}
+
 func TestLoadModViewerGIMINormalFirstLightMaps(t *testing.T) {
 	for _, withLightMap := range []bool{true, false} {
 		t.Run(fmt.Sprintf("light map=%t", withLightMap), func(t *testing.T) {

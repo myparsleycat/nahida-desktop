@@ -415,6 +415,8 @@ else
 ps-t0 = ResourceSecond
 endif
 drawindexed = 3, 0, 0
+[ResourceFirst]
+[ResourceSecond]
 `)
 	records, _, err := collectModelViewerSymbolicDrawRecords(sections, collectModelViewerDefaultVariables(sections))
 	if err != nil {

@@ -84,10 +84,7 @@ func scanModelViewerSymbolicRootWithOverride(
 	defaults map[string]any,
 	originalOverride *ModelViewerDNF,
 ) (*modelViewerSymbolicSectionState, map[string]any, error) {
-	lookup := make(map[string]modINISection)
-	for _, candidate := range sections {
-		lookup[modelViewerNormalizeKey(candidate.Header+candidate.Name)] = candidate
-	}
+	lookup := modelViewerAssignmentSectionLookup(sections)
 	variables := modelViewerDirectConditionVariables(sections, defaults)
 
 	// These callers inspect resource histories, so draw snapshots would be discarded.
@@ -110,10 +107,7 @@ func collectModelViewerSymbolicDrawRecords(
 	sections []modINISection,
 	defaults map[string]any,
 ) ([]modelViewerDirectDrawRecord, []modelViewerSymbolicAssignment, error) {
-	lookup := make(map[string]modINISection)
-	for _, section := range sections {
-		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
-	}
+	lookup := modelViewerAssignmentSectionLookup(sections)
 	ctx := &modelViewerSymbolicScanContext{
 		lookup:    lookup,
 		variables: modelViewerDirectConditionVariables(sections, defaults),
@@ -332,6 +326,9 @@ func (c *modelViewerSymbolicScanContext) scan(
 		default:
 			if strings.HasPrefix(strings.ToLower(key), "resource") || modelViewerUAVSlotRE.MatchString(key) {
 				state.copyBuffer(key, value, conditions, sequence)
+			}
+			if modelViewerUndefinedLocalSlotResource(key, value, c.lookup) {
+				continue
 			}
 			resource := modelViewerTrimTextureValue(value)
 			if resource == "" {

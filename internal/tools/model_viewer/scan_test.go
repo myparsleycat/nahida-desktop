@@ -1541,6 +1541,7 @@ run = CommandListTedom
 	for index := range 13 {
 		fmt.Fprintf(&ini, "if $choice%d == 1\ndrawindexed = 3, 0, 0\nendif\n", index)
 	}
+	ini.WriteString("[ResourceDiffuseA]\n[ResourceDiffuseB]\n")
 	records, err := collectModelViewerDirectDrawRecords(
 		parseModINI(ini.String()),
 		collectModelViewerDefaultVariables(parseModINI(ini.String())),
@@ -1560,6 +1561,10 @@ global persist $swapvarColor = 0
 [KeyColor]
 type = cycle
 $swapvarColor = 0,1,2,3
+[ResourceBase]
+[ResourceRed]
+[ResourceBlack]
+[ResourceGold]
 [CommandListRunSlotFix]
 `)
 	for _, slot := range []string{"ps-t9", "ps-t3"} {

@@ -282,6 +282,8 @@ ResourceShaped = ref cs-u5
 		"Draw/draw.ini": `namespace = LibDraw
 [CommandListBody]
 run = CommandList\LibMat\Skin
+ps-t0 = ref Resource\LibMat\MissingDiffuse
+ps-t1 = ref Resource\libmat\LightMap.0
 if $\LibConst\outfit >= 2
 drawindexed = 3, 0, 0
 endif
@@ -292,7 +294,7 @@ endif
 filename = skin.png
 [ResourceTan]
 filename = tan.png
-[ResourceLight]
+[ResourceLightMap.0]
 filename = light.png
 [CommandListSkin]
 if $\LibConst\tan == 1
@@ -303,7 +305,6 @@ endif
 run = CommandListSetTex
 [CommandListSetTex]
 ps-t0 = ResourceD
-ps-t1 = ResourceLight
 `,
 		"const.ini": `namespace = LibConst
 [Constants]
@@ -343,9 +344,12 @@ $tan = 0, 1
 		t.Fatalf("mesh does not follow $\\LibConst\\outfit: %#v", result.Meshes[0].Conditions)
 	}
 	for tan, want := range map[string]string{"0": "skin.png", "1": "tan.png"} {
-		texture := evaluateViewerTransport(result, map[string]any{"const::tan": tan}).Meshes[0].TexKey
-		if !strings.Contains(texture, want) {
-			t.Fatalf("texture at tan %s = %q, variants = %#v", tan, texture, result.Meshes[0].TextureVariants)
+		mesh := evaluateViewerTransport(result, map[string]any{"const::tan": tan}).Meshes[0]
+		if !strings.Contains(mesh.TexKey, want) {
+			t.Fatalf("texture at tan %s = %q, variants = %#v", tan, mesh.TexKey, result.Meshes[0].TextureVariants)
+		}
+		if !strings.HasSuffix(mesh.LightMapKey, "light.png") {
+			t.Fatalf("light map at tan %s = %q", tan, mesh.LightMapKey)
 		}
 	}
 

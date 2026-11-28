@@ -311,12 +311,24 @@ func importModelViewerForeignSections(
 	// sections, so the length is read on every iteration.
 	for sectionIndex := 0; sectionIndex < len(merged); sectionIndex++ { //nolint:intrange // merged grows in the loop
 		source := merged[sectionIndex].Lines
-		if !modelViewerForeignSectionRE.MatchString(strings.Join(source, "\n")) {
+		if !strings.Contains(strings.Join(source, "\n"), `\`) {
 			continue
 		}
-		lines := make([]string, len(source))
-		for lineIndex, line := range source {
-			lines[lineIndex] = modelViewerForeignSectionRE.ReplaceAllStringFunc(line, func(token string) string {
+		lines := make([]string, 0, len(source))
+		for _, line := range source {
+			key, value, _ := strings.Cut(line, "=")
+			namespace, name := modelViewerSlotResourceReference(strings.TrimSpace(key), strings.TrimSpace(value))
+			if target, known := unitByNamespace[strings.ToLower(namespace)]; known {
+				localName, ok := name, true
+				if target != current {
+					localName, ok = importSection(target, "Resource", name)
+				}
+				if ok {
+					lines = append(lines, strings.Replace(line, `\`+namespace+`\`+name, localName, 1))
+				}
+				continue
+			}
+			lines = append(lines, modelViewerForeignSectionRE.ReplaceAllStringFunc(line, func(token string) string {
 				match := modelViewerForeignSectionRE.FindStringSubmatch(token)
 				target, ok := unitByNamespace[strings.ToLower(match[2])]
 				if !ok {
@@ -330,7 +342,7 @@ func importModelViewerForeignSections(
 					return token
 				}
 				return match[1] + localName
-			})
+			}))
 		}
 		setModelViewerSectionLines(&merged[sectionIndex], lines)
 	}
@@ -344,6 +356,17 @@ func modelViewerImportableHeader(header string) bool {
 
 func modelViewerForeignSectionKey(header, name string) string {
 	return strings.ToLower(header) + "\x00" + strings.ToLower(name)
+}
+
+func modelViewerAssignmentSectionLookup(sections []modINISection) map[string]modINISection {
+	lookup := make(map[string]modINISection, len(sections))
+	for _, section := range sections {
+		lookup[modelViewerNormalizeKey(section.Header+section.Name)] = section
+		if strings.EqualFold(section.Header, "Resource") {
+			lookup[modelViewerForeignSectionKey(section.Header, section.Name)] = section
+		}
+	}
+	return lookup
 }
 
 // modelViewerForeignSectionPrefix names an imported section after its unit,

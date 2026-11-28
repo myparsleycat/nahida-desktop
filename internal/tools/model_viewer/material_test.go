@@ -25,9 +25,12 @@ func TestModelViewerTextureBindingAndPreparation(t *testing.T) {
 	sections := parseModINI(`[TextureOverrideBody]
 ib = ResourceBodyIB
 ps-t0 = ResourceBodyDiffuse
+ps-t0 = ref ResourceUndefinedDiffuse
 
 [ResourceBodyDiffuse]
-filename = body.png`)
+filename = body.png
+[ResourceUndefined.Diffuse]
+filename = decoy.png`)
 	bindings := collectModelViewerTextureBindings(sections, nil, noWwmiSlots)
 	if len(bindings) != 1 || bindings[0].IBResourceName != "BodyIB" ||
 		bindings[0].DiffuseResourceName != "BodyDiffuse" {
