@@ -19,6 +19,7 @@ const (
 	modelViewerCutoutMapRole       = "cutout_map"
 	modelViewerHighlightMapRole    = "highlight_map"
 	modelViewerRampMapRole         = "ramp_map"
+	modelViewerFaceSDFRole         = "face_sdf"
 )
 
 // A leading $ would make this a mod variable rather than the bound vertex shader.

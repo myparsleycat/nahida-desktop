@@ -25,12 +25,16 @@ const (
 	fillNormal
 	fillLight
 	fillMaterial
+	fillFaceSDF
+	fillHighlight
+	fillRamp
 	fillSlots
 )
 
 var fillRoles = [fillSlots]string{
 	modelviewer.OriginalTextureDiffuse, modelviewer.OriginalTextureNormal,
 	modelviewer.OriginalTextureLight, modelviewer.OriginalTextureMaterial,
+	modelviewer.OriginalTextureFaceSDF, modelviewer.OriginalTextureHighlight, modelviewer.OriginalTextureRamp,
 }
 
 // viewerTextureFill holds the keys of the original textures a mesh takes in the slots its mod leaves empty.
@@ -262,11 +266,15 @@ func (v *ModelViewer) loadOriginal(key viewerCharacterKey, c *viewerCharacter, p
 		if !mesh.unloaded && !mesh.cpuDropped && mesh.positions != nil {
 			sources[i].positions, sources[i].uvs = mesh.positions, mesh.uvs
 		}
-		keys := []*string{info.TexKey, info.NormalMapKey, info.LightMapKey, info.MaterialMapKey}
+		keys := [fillSlots]*string{
+			info.TexKey, info.NormalMapKey, info.LightMapKey, info.MaterialMapKey,
+			info.FaceSDFMapKey, info.HighlightMapKey, info.RampMapKey,
+		}
 		// A part that offers texture choices takes fills where its game textures leave a slot empty, whichever
 		// choice it shows now; fillState draws a chosen texture over the fill.
 		if game, ok := scene.gameTextures(i); ok {
-			keys = []*string{game.TexKey, game.NormalMapKey, game.LightMapKey, game.MaterialMapKey}
+			keys[fillDiffuse], keys[fillNormal], keys[fillLight], keys[fillMaterial] =
+				game.TexKey, game.NormalMapKey, game.LightMapKey, game.MaterialMapKey
 		}
 		for slot, own := range keys {
 			// A Blender scene names images whose pixels may not have arrived; a mod's missing texture failed to load.
@@ -437,6 +445,9 @@ func buildViewerOriginal(
 	// requests are the textures loaded now; a hidden part keeps those only it uses in its own pending requests.
 	requests := map[string]originalTextureRequest{}
 	request := func(into map[string]originalTextureRequest, part, role int) string {
+		if role == fillRamp && efmiStockMaterials()[data.Parts[part].Material].NoRamp {
+			return ""
+		}
 		texture, ok := data.Texture(part, fillRoles[role])
 		if !ok {
 			return ""
@@ -511,6 +522,13 @@ func buildViewerOriginal(
 	}
 	for _, index := range match.HeadParts {
 		add(index, true, false, false)
+	}
+	if slices.ContainsFunc(match.HeadParts, func(index int) bool {
+		return data.Parts[index].Role == modelviewer.OriginalRoleFace
+	}) {
+		for _, index := range match.OverlayParts {
+			add(index, true, false, false)
+		}
 	}
 	for _, index := range match.KeptParts {
 		add(index, false, true, isBang(index))
@@ -622,7 +640,7 @@ func viewerFaceOnlyTextures(transport *modelviewer.ModelViewerTransport) map[str
 	for _, mesh := range transport.Meshes {
 		for _, key := range []*string{
 			mesh.TexKey, mesh.NormalMapKey, mesh.LightMapKey, mesh.MaterialMapKey, mesh.CutoutMapKey,
-			mesh.HighlightMapKey, mesh.RampMapKey,
+			mesh.HighlightMapKey, mesh.RampMapKey, mesh.FaceSDFMapKey,
 		} {
 			if key != nil {
 				delete(faces, *key)
@@ -898,6 +916,12 @@ func stateKey(state *modelviewer.ViewerMeshState, slot int) *string {
 		return &state.LightMapKey
 	case fillMaterial:
 		return &state.MaterialMapKey
+	case fillFaceSDF:
+		return &state.FaceSDFMapKey
+	case fillHighlight:
+		return &state.HighlightMapKey
+	case fillRamp:
+		return &state.RampMapKey
 	}
 	return &state.TexKey
 }
@@ -955,8 +979,12 @@ func originalViewerMesh(part modelviewer.CharacterOriginalPart, game string) *vi
 		mesh.toonEye = true
 	}
 	mesh.layer = part.Layer
-	if game == "EFMI" && modelviewer.IsHeadRole(part.Role) {
-		mesh.efmiHead, mesh.efmiFace = true, part.Role == modelviewer.OriginalRoleFace
+	if game == "EFMI" {
+		efmiOriginalMaterial(mesh, part)
+		mesh.efmiHead, mesh.efmiFace = modelviewer.IsHeadRole(part.Role), part.Role == modelviewer.OriginalRoleFace
+		if mesh.efmiFace {
+			mesh.measureEFMIFace()
+		}
 	}
 	return mesh
 }
@@ -975,6 +1003,9 @@ func shadeWithFace(parts []*viewerOriginalPart, data *modelviewer.CharacterOrigi
 	}
 	forward := meanNormal(normals)
 	for _, mesh := range faces {
+		if mesh.efmiRight.dot(mesh.efmiRight) != 0 {
+			continue
+		}
 		mesh.faceForward = forward
 	}
 }

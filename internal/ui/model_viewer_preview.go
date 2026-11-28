@@ -542,7 +542,7 @@ func visiblePreviewTransport(
 		}
 		for _, key := range []*string{
 			mesh.TexKey, mesh.NormalMapKey, mesh.LightMapKey, mesh.MaterialMapKey, mesh.CutoutMapKey,
-			mesh.HighlightMapKey, mesh.RampMapKey,
+			mesh.HighlightMapKey, mesh.RampMapKey, mesh.FaceSDFMapKey,
 		} {
 			if key != nil {
 				used[*key] = true
@@ -576,6 +576,9 @@ func modelPreviewDrawOptions(scene *viewerScene, settings modelPreviewSettings) 
 		camera.distance *= math.Tan(camera.lens()/2) / math.Tan(toonFieldOfView/2)
 		camera.fov = toonFieldOfView
 		opts.toon = &viewerToonDraw{profile: toon, style: parseToonStyle(settings.ToonStyles, toon)}
+		if toon == efmiProfile {
+			opts.toon.efmi = efmiPreset("")
+		}
 		opts.minimum, opts.maximum, _ = viewerBounds(scene.transport.Meshes, opts.world)
 	}
 	opts.camera = camera

@@ -280,11 +280,13 @@ type viewerMesh struct {
 	toonDress bool
 	// efmiHead marks an EFMI mesh in the head zone, which a flat face style lights as a face, and efmiFace the
 	// head meshes taken for the face.
-	efmiHead, efmiFace bool
+	efmiHead, efmiFace, efmiSkin bool
+	efmiRight                    vec3
+	efmiOverlay                  *efmiOverlay
+	efmiMaterial                 efmiStockMaterial
 	// normalMapUnused marks a normal map slot that holds other shading data, such as a ZZMI face's SDF.
 	normalMapUnused bool
-	// overlayShadow marks one of EFMI's overlay shadows, which the game multiplies over the face through a mask
-	// and stencil that mods do not carry; it draws only while game textures are highlighted.
+	// overlayShadow selects EFMI's separate stencil-masked multiply pass.
 	overlayShadow bool
 	// eyeShadow marks Star Rail's eye shadow, which StarRailNPRShader multiplies over the eyes in a flat colour.
 	eyeShadow bool
@@ -350,6 +352,10 @@ func (m *viewerMesh) fill(decoded *viewerMesh) {
 	m.tangentUsable, m.hasTangents, m.hasColors, m.hasUV1 = decoded.tangentUsable, decoded.hasTangents,
 		decoded.hasColors, decoded.hasUV1
 	m.faceForward, m.shapes = decoded.faceForward, decoded.shapes
+	m.efmiRight = vec3{}
+	if m.efmiFace {
+		m.measureEFMIFace()
+	}
 	m.current, m.geometryKey = decoded.current, decoded.geometryKey
 	m.computed, m.dirty, m.extraDirty, m.swapped = false, false, false, false
 	m.clearNext()

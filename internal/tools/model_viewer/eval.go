@@ -201,12 +201,15 @@ func viewerEvalChoiceKeys(choices []ModelViewerTextureChoice, resolved map[strin
 
 // ViewerMeshState is how one mesh of a transport draws in a viewer state.
 type ViewerMeshState struct {
-	Visible        bool
-	TexKey         string
-	NormalMapKey   string
-	LightMapKey    string
-	MaterialMapKey string
-	CutoutMapKey   string
+	Visible         bool
+	TexKey          string
+	NormalMapKey    string
+	LightMapKey     string
+	MaterialMapKey  string
+	CutoutMapKey    string
+	FaceSDFMapKey   string
+	HighlightMapKey string
+	RampMapKey      string
 	// PositionVariant indexes the mesh's PositionVariants, or is -1 for its base positions.
 	PositionVariant int
 	// ShapeWeights holds a weight per entry of the mesh's ShapeTargets.
@@ -234,6 +237,9 @@ func EvaluateViewerState(
 			LightMapKey:     mesh.LightMapKey,
 			MaterialMapKey:  mesh.MaterialMapKey,
 			CutoutMapKey:    mesh.CutoutMapKey,
+			FaceSDFMapKey:   viewerEvalResolveTexture(nil, payload.Meshes[index].FaceSDFMapKey, nil),
+			HighlightMapKey: viewerEvalResolveTexture(nil, payload.Meshes[index].HighlightMapKey, nil),
+			RampMapKey:      viewerEvalResolveTexture(nil, payload.Meshes[index].RampMapKey, nil),
 			PositionVariant: variant,
 			ShapeWeights:    viewerShapeWeights(payload.Meshes[index].ShapeTargets, evaluated.State),
 		}

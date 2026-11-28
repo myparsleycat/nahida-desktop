@@ -953,7 +953,15 @@ func (v *ModelViewer) drawOptions(background [4]float32) viewerDrawOptions {
 	if v.toonActive() {
 		style := v.toonStyle()
 		opts.toon = &viewerToonDraw{profile: v.toonProfile(), style: style, textures: v.toonTextures(style)}
-		if c := v.toonCharacter(); c != nil && c.materials != nil {
+		c := v.toonCharacter()
+		if opts.toon.profile == efmiProfile {
+			id := ""
+			if c != nil {
+				id = c.ID
+			}
+			opts.toon.efmi = efmiPreset(id)
+		}
+		if c != nil && c.materials != nil {
 			opts.toon.materials = c.materials
 			opts.toon.characterUse, opts.toon.characterScale = characterMaterialUse(opts.toon.profile,
 				style.characterShading, style.Shading)

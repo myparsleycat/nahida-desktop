@@ -1719,7 +1719,7 @@
           "toon_outlines": "Outlines",
           "toon_self_shadow": "Self Shadow",
           "toon_light_follows_camera": "Light Follows Camera",
-          "toon_flat_face": "Flat Face Shading",
+          "toon_flat_face": "Face SDF Shading",
           "toon_shading": "Shading",
           "toon_shading_reset": "Reset Shading",
           "toon_character": "Style for {{name}}",

@@ -178,6 +178,7 @@ func foldModelViewerFrameMeshes(
 			strings.ToLower(mesh.Component),
 			mesh.BlendPalette,
 			modelViewerOptionalKey(mesh.HighlightMapKey),
+			modelViewerOptionalKey(mesh.FaceSDFMapKey),
 			modelViewerOptionalKey(mesh.RampMapKey),
 			strings.ToLower(source.INIPath),
 			strings.ToLower(source.Section),
@@ -360,6 +361,7 @@ func modelViewerMeshTextureKey(mesh ModelViewerMeshTransport) string {
 		key.WriteByte(0)
 	}
 	key.WriteString(modelViewerOptionalKey(mesh.HighlightMapKey))
+	key.WriteString(modelViewerOptionalKey(mesh.FaceSDFMapKey))
 	key.WriteString(modelViewerOptionalKey(mesh.RampMapKey))
 	for _, choice := range mesh.TextureChoices {
 		key.WriteString(choice.Source)

@@ -1713,7 +1713,7 @@
           "toon_outlines": "アウトライン",
           "toon_self_shadow": "セルフシャドウ",
           "toon_light_follows_camera": "ライトをカメラに追従",
-          "toon_flat_face": "顔のフラットシェーディング",
+          "toon_flat_face": "顔のSDFシェーディング",
           "toon_shading": "シェーディング",
           "toon_shading_reset": "シェーディングをリセット",
           "toon_character": "{{name}}のスタイル",

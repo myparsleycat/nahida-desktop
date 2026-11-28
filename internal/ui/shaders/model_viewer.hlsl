@@ -27,6 +27,11 @@ cbuffer Frame : register(b0) {
     float4 toonShadow;  // x: 1 while receiving the shadow map, y: depth bias, z: normal bias, w: map size
     float4 toonParams[3]; // the profile's shading values, laid out as viewerToonParams in model_viewer_toon.go
     float4 toonState;     // x: 2.414 tan(fov / 2), y: GIMI daytime, z: GIMI face light map, w: GIMI face shadow
+    float4 efmiLight;       // rgb: key light, w: rim light count
+    float4 efmiSkinLight;   // rgb: skin key light, w: ambient
+    float4 efmiShadowTint;
+    float4 efmiSkinShadowTint;
+    float4 efmiRimLights[12];
     float4 viewport;    // xy: size in the viewer's pixels, which an export renders at a multiple of
 };
 
@@ -37,6 +42,8 @@ cbuffer Mesh : register(b1) {
     uint normalMode;
     uint characterUse;  // CHARACTER_* bits, 0 without the character's material values
     float morphWeight;  // share of the next animation frame's geometry the vertices move towards
+    float4 efmiFaceRight;
+    float4 efmiCutout; // cutoff, atlas tile XY, UV1 flag
     float4 characterScale; // x: scale of the character's specular values
 };
 
@@ -86,6 +93,10 @@ static const uint FLAG_SKINNED = 33554432;
 static const uint FLAG_MULTIPLY = 67108864;
 // The mesh is drawn at the tint's alpha.
 static const uint FLAG_TRANSLUCENT = 134217728;
+static const uint FLAG_EFMI_SDF = 1u << 28;
+static const uint FLAG_EFMI_OVERLAY = 1u << 29;
+static const uint FLAG_EFMI_SKIN = 1u << 30;
+static const uint FLAG_EFMI_STOCK_CUTOUT = 1u << 31;
 
 // The body shape editor's brush cursor: a circle around centre spanned by u and v, in model space.
 cbuffer Ring : register(b2) {
@@ -178,6 +189,9 @@ struct SkinBone {
 };
 StructuredBuffer<uint4> skinBlend : register(t14);
 StructuredBuffer<SkinBone> skinBones : register(t15);
+Texture2D<float4> efmiSDFMap : register(t16);
+Texture2D<float> efmiSceneDepth : register(t17);
+
 SamplerState linearWrap : register(s0);
 SamplerState linearClamp : register(s1);
 SamplerComparisonState shadowCompare : register(s2);
@@ -279,10 +293,39 @@ VSOut vs_main(VSIn i, uint id : SV_VertexID) {
     return o;
 }
 
-// The depth of the shadow map, seen from the key light.
-float4 vs_shadow(VSIn i, uint id : SV_VertexID) : SV_Position {
+struct DepthOut {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+    float2 uv1 : TEXCOORD2;
+};
+
+DepthOut depthVertex(VSIn i, uint id, float4x4 projection) {
     i = skin(morph(i), id);
-    return mul(shadowViewProj, mul(world, float4(i.pos, 1)));
+    DepthOut o;
+    o.pos = mul(projection, mul(world, float4(i.pos, 1)));
+    o.uv = textureUV(i.uv);
+    o.uv1 = textureUV(i.uv1);
+    return o;
+}
+
+DepthOut vs_shadow(VSIn i, uint id : SV_VertexID) {
+    return depthVertex(i, id, shadowViewProj);
+}
+
+DepthOut vs_efmi_depth(VSIn i, uint id : SV_VertexID) {
+    return depthVertex(i, id, viewProj);
+}
+
+bool cutout(float2 uv, float2 uv1) {
+    if ((flags & FLAG_CUTOUT) == 0) return false;
+    if ((flags & FLAG_EFMI_STOCK_CUTOUT) == 0) return cutoutMap.Sample(linearWrap, uv).r < 0.5;
+    float2 sourceUV = textureUV(efmiCutout.w != 0 ? uv1 : uv);
+    float2 tile = (efmiCutout.yz * 512 + lerp(0.5, 511.5, frac(sourceUV))) / float2(4096, 3072);
+    return cutoutMap.SampleLevel(linearClamp, tile, 0).r < efmiCutout.x;
+}
+
+void ps_efmi_depth(DepthOut i) {
+    if (cutout(i.uv, i.uv1)) discard;
 }
 
 float3 srgbToLinear(float3 c) {
@@ -456,6 +499,41 @@ float shadowOcclusion(float4 coord, float2 pixel) {
         shadow += shadowMap.SampleCmpLevelZero(shadowCompare, uv + float2(cos(theta), sin(theta)) * r * radius, depth);
     }
     return shadow * 0.2;
+}
+
+void efmiShadowKernel(float offset, out float3 weight, out float3 tap) {
+    float edge = 0.5 * (offset + 0.5) * (offset + 0.5);
+    float left = min(offset, 0);
+    float right = max(offset, 0);
+    float3 a = float3(edge - offset, 1 - offset, 2 - offset - left * left);
+    float3 b = float3(2 + offset - right * right, 1 + offset, edge);
+    weight = float3(a.x + a.y, a.z + b.x, b.y + b.z);
+    tap = float3(a.y, b.x, b.z) / weight + float3(-2.5, -0.5, 1.5);
+    weight *= 0.16;
+}
+
+float efmiShadow(float3 position, float3 normal) {
+    if (toonShadow.x < 0.5) return 1;
+    float bias = 1 - clamp(-dot(normal, toonLight.xyz), 0, 0.9);
+    position += (toonLight.xyz * toonShadow.y + normal * toonShadow.z) * bias;
+    float4 clip = mul(shadowViewProj, float4(position, 1));
+    float2 uv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
+    float z = clip.z / clip.w;
+    if (any(uv <= 0) || any(uv >= 1) || z >= 1) return 1;
+
+    float2 texel = uv * toonShadow.w;
+    float2 center = floor(texel + 0.5);
+    float3 wx, wy, ux, uy;
+    efmiShadowKernel(texel.x - center.x, wx, ux);
+    efmiShadowKernel(texel.y - center.y, wy, uy);
+    float visibility = 0;
+    [unroll] for (uint y = 0; y < 3; y++) {
+        [unroll] for (uint x = 0; x < 3; x++) {
+            float2 sampleUV = (center + float2(ux[x], uy[y])) / toonShadow.w;
+            visibility += wx[x] * wy[y] * shadowMap.SampleCmpLevelZero(shadowCompare, sampleUV, max(z, 0));
+        }
+    }
+    return saturate(visibility);
 }
 
 float genshinMaterialRow(float id) {
@@ -918,114 +996,181 @@ float3 wwmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
     return lerp(color * shadowColor, color, shadowArea) + specular;
 }
 
-// EFMI's toon values the menu does not show.
-static const float EFMI_SHADOW_SATURATION = 1;
-static const float EFMI_AMBIENT = 0.8;
-static const float EFMI_LIGHT_STRENGTH = 0.9;
-static const float EFMI_RIM_WIDTH = 0.3;
-static const float3 EFMI_SHADOW_TINT = float3(0.878, 0.93, 1.122);
-static const float3 EFMI_SKIN_SHADOW_TINT = float3(1.187, 0.927, 0.813);
-// The game pushes the face's hull back so it cannot poke through the nose and lips: Warfarin reads _OutlineOffsetZ
-// 0.236 and scales it by 0.1 in view space.
 static const float EFMI_FACE_OUTLINE_DEPTH_OFFSET = 0.0236;
 
 float efmiLuma(float3 color) { return dot(color, float3(0.212673, 0.715152, 0.072175)); }
 
-// The ramp's colour from a _DiffRampMap of the mod or the character's stock ramps, and its coverage as a step. The
-// stock _RD ramps fade their alpha over most of N.L, which shades like Lambert, so the step keeps the toon terminator.
-float4 efmiRamp(float cosine) {
-    float position = clamp(cosine, -1, 1) * 0.5 + 0.5;
-    float coverage = smoothstep(0.5 - EFMI_SOFTNESS - 0.001, 0.5 + EFMI_SOFTNESS + 0.001, position);
+float4 efmiRamp(float cosine, bool hair) {
+    float x = clamp(cosine, -1, 1);
+    float u = x * 0.5 + 0.5;
     if ((flags & FLAG_RAMP_MAP) != 0) {
-        float3 color = rampMap.SampleLevel(linearClamp, float2(clamp(position, 0.002, 0.998), 0.5), 0).rgb;
-        return float4(color, coverage);
+        return rampMap.SampleLevel(linearClamp, float2(clamp(u, 0.002, 0.998), 0.5), 0);
     }
-    return float4(1, 1, 1, coverage);
+    if (hair) {
+        float y = saturate((x - 0.25) / 0.75);
+        return float4(1, 1, 1, y * y * (3 - 2 * y));
+    }
+    return float4(1, 1, 1, smoothstep(0.5 - EFMI_SOFTNESS - 0.001, 0.5 + EFMI_SOFTNESS + 0.001, u));
 }
 
-// The ramp's colour tints the terminator but keeps the luminance.
 float3 efmiRampTint(float3 color, float3 ramp) {
     float chroma = max(ramp.r, max(ramp.g, ramp.b)) - min(ramp.r, min(ramp.g, ramp.b));
     float3 tinted = color * lerp(1, ramp, chroma);
     return tinted * clamp(efmiLuma(color) / max(efmiLuma(tinted), 0.001), 0, 1.5);
 }
 
-// The deep and shadow tones of an albedo.
 void efmiTones(float3 albedo, out float3 shadowTone, out float3 deepTone) {
-    shadowTone = lerp(efmiLuma(albedo), albedo, EFMI_SHADOW_SATURATION);
-    shadowTone = max(shadowTone, 0) * EFMI_SHADOW_BRIGHTNESS * 0.96 * EFMI_AMBIENT;
+    shadowTone = albedo * EFMI_SHADOW_BRIGHTNESS * 0.96 * efmiSkinLight.w;
     deepTone = 0.65 * shadowTone;
     float deepLuma = efmiLuma(deepTone);
     deepTone = deepLuma + 1.2 * (deepTone - deepLuma);
 }
 
-// The lit colour's saturation boost above mid grey, then the rim on the light's side of the screen.
-float3 efmiFinish(float3 color, float3 albedo, float3 n, float3 l, float3 cameraBack, float viewCosine, float rim) {
-    float luma = efmiLuma(color);
-    float vivid = clamp(luma - 0.5, 0, 0.5);
-    color = luma + (color - luma) * (vivid * vivid + 1);
-
-    float3 screenLight = l - cameraBack * dot(l, cameraBack);
-    float screenLength = length(screenLight);
-    float rimSide = screenLength > 0.00001 ? saturate(dot(n, screenLight / screenLength)) : 0;
-    float grazing = 1 - abs(viewCosine);
-    float rimBand = smoothstep(0, 1, (grazing - (0.8 - 0.6 * EFMI_RIM_WIDTH)) / (0.1 + 0.2 * EFMI_RIM_WIDTH));
-    return color + rimBand * rimSide * albedo * 0.96 * EFMI_RIM_STRENGTH * rim;
+float3 efmiIrradiance(float3 n, float lit, bool skin) {
+    float3 light = skin ? efmiSkinLight.rgb : efmiLight.rgb;
+    float3 shadowTint = skin ? efmiSkinShadowTint.rgb : efmiShadowTint.rgb;
+    float sky = skin ? 0.725 : saturate(n.y + 0.15) * 1.5 + 0.5;
+    float3 main = light * EFMI_BRIGHTNESS;
+    return lerp(shadowTint, 1, lit) * sky * 0.2877 * light + lerp(efmiLuma(main), main, lit);
 }
 
-// efmiToon is the HGRP character shading as Warfarin Studio reconstructed it: a ramp lookup over N.L, a darker tone
-// for surfaces also facing away from the camera, and a light map packed like _MetallicGlossMap (R metallic,
-// G specular, B shadow mask, A smoothness). A flat face takes its light from the face mask instead of N.L.
-float3 efmiToon(VSOut i, float3 n, float3 v, float3 albedo) {
+float efmiSceneRim(float3 worldPos, float3 normal, float width) {
+    float4 clip = mul(viewProj, float4(worldPos, 1));
+    if (clip.w <= 0) return 0;
+    float2 uv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
+    float2 direction = mul((float3x3)view, normal).xy;
+    direction *= rsqrt(max(dot(direction, direction), 1e-8));
+    uint w, h;
+    efmiSceneDepth.GetDimensions(w, h);
+    if (w == 0 || h == 0) return 0;
+    direction.x *= (float)h / w;
+    uv += direction * float2(1, -1) * width * 0.006;
+    int2 pixel = clamp(int2(uv * float2(w, h)), int2(0, 0), int2(w - 1, h - 1));
+    float depth = efmiSceneDepth.Load(int3(pixel, 0));
+    float denominator = depth + proj[2][2];
+    float behind = proj[2][3] / denominator;
+    return smoothstep(0, 1, (behind - clip.w - 0.1) * 10);
+}
+
+float3 efmiFinish(float3 color, float3 albedo, float3 n, float3 v, float3 worldPos,
+                  float3 rimNormal, float faceRim, float faceMask) {
+    if ((flags & (FLAG_RAMP_MAP | FLAG_HAIR | FLAG_EYE)) != 0) {
+        float luma = efmiLuma(color);
+        float vivid = clamp(luma - 0.5, 0, 0.5);
+        color = luma + (color - luma) * (vivid * vivid + 1);
+    }
+    if ((flags & FLAG_EYE) != 0 || EFMI_RIM_STRENGTH == 0) return color;
+    float3 cameraBack = view[2].xyz;
+    float grazing = 1 - abs(dot(n, v));
+
+    [loop] for (uint i = 0; i < (uint)efmiLight.w; i++) {
+        float4 position = efmiRimLights[i * 4];
+        float4 light = efmiRimLights[i * 4 + 1];
+        float4 direction = efmiRimLights[i * 4 + 2];
+        float4 cone = efmiRimLights[i * 4 + 3];
+        float3 toLight = position.xyz - worldPos;
+        float distanceSquared = max(dot(toLight, toLight), 1e-8);
+        toLight *= rsqrt(distanceSquared);
+        float t = distanceSquared * position.w * position.w;
+        float attenuation = light.w < 0 ? pow(saturate(1 - t * t), 2) / (distanceSquared + 1)
+                                         : pow(saturate(1 - t), light.w);
+        if (cone.y > 0) attenuation *= pow(saturate((dot(toLight, -direction.xyz) - cone.x) * cone.y), 2);
+        if (attenuation <= 0.0001) continue;
+
+        float3 screen = toLight - cameraBack * dot(toLight, cameraBack);
+        float lengthSquared = dot(screen, screen);
+        float side = lengthSquared > 1e-10 ? saturate(dot(n, screen * rsqrt(lengthSquared))) : 0;
+        float width = direction.w;
+        float band = smoothstep(0.8 - 0.6 * width, 0.9 - 0.4 * width, grazing);
+        if ((flags & FLAG_EFMI_SKIN) != 0) {
+            band = lerp(band, faceMask, saturate(10 * width - 3)) * faceRim;
+        } else if ((flags & FLAG_HAIR) != 0) {
+            band = efmiSceneRim(worldPos, n, width);
+        }
+        float facing = saturate(dot(rimNormal, toLight) + 1);
+        color += attenuation * band * light.rgb * side * facing *
+                 lerp(0.5, albedo * 0.96, cone.z) * EFMI_RIM_STRENGTH;
+    }
+    return color;
+}
+
+float efmiFaceLighting(float3 light, float2 uv, float3 forward, float3 right) {
+    float2 local = float2(dot(light, right), dot(light, forward));
+    local /= max(length(local), 0.0001);
+    if ((flags & FLAG_EFMI_SDF) == 0) return local.y;
+    float2 mirrored = float2(local.x < 0 ? uv.x : 1 - uv.x, uv.y);
+    float2 sdf = efmiSDFMap.Sample(linearClamp, mirrored).rg;
+    float threshold = clamp(0.5 - 0.5 * local.y, 0.001, 0.999);
+    float covered = smoothstep(max(2 * threshold - 1, 0), min(2 * threshold, 1), 0.5 * (sdf.r + sdf.g));
+    return 2 * covered - 1 + max(local.y, 0);
+}
+
+float3 efmiToon(VSOut i, float3 n, float3 geometryNormal, float3 v, float3 albedo, float diffuseAlpha) {
     float3 l = toonLight.xyz;
     float3 cameraBack = view[2].xyz;
+    bool face = (flags & FLAG_FACE) != 0;
+    bool skin = (flags & FLAG_EFMI_SKIN) != 0;
+    bool hair = (flags & FLAG_HAIR) != 0;
+    bool eye = (flags & FLAG_EYE) != 0;
     float4 packedMap = (flags & FLAG_LIGHT_MAP) != 0 ? lightMap.Sample(linearWrap, i.uv) : float4(0, 1, 1, 0.5);
-    float face = (flags & FLAG_FACE) != 0 ? 1 : 0;
-    float faceMaskEnabled = (flags & FLAG_MATERIAL_MAP) != 0 ? 1 : 0;
-    float occlusion = toonOcclusion(i);
-
-    // _SDFMask.G keeps N.L where the SDF does not reach, such as the jaw edge.
-    float4 faceMask = float4(1, 0, 1, 0);
-    if (face > 0.5 && faceMaskEnabled > 0.5) faceMask = materialMap.Sample(linearWrap, i.uv);
-    float flatLight = face * (1 - faceMask.g);
-    float4 ramp = efmiRamp(dot(n, l) + EFMI_RANGE_BIAS);
-    float rampCoverage = lerp(ramp.a, 1, flatLight);
-    float lit = lerp(min(rampCoverage, min(packedMap.b, occlusion)), 1, flatLight);
-    float cameraFacing = efmiRamp(dot(n, cameraBack)).a * packedMap.b * occlusion;
+    float occlusion = eye ? 1 : efmiShadow(i.worldPos, geometryNormal);
+    float surfaceCosine = dot(n, l) + EFMI_RANGE_BIAS;
+    float cameraFacing = efmiRamp(dot(n, cameraBack), hair).a * packedMap.b * occlusion;
+    float viewCosine = saturate(dot(n, v));
+    float faceRim = 0;
+    float faceRimMask = 0;
+    float maskCoverage = skin ? diffuseAlpha : packedMap.b;
+    float3 litTone = albedo;
+    float3 right = 0;
+    float edge = 1;
+    if (face) {
+        float3 forward = normalize(mul((float3x3)world, faceForward.xyz));
+        right = normalize(mul((float3x3)world, efmiFaceRight.xyz));
+        float4 mask = (flags & FLAG_MATERIAL_MAP) != 0 ? materialMap.Sample(linearWrap, i.uv) : float4(1, 0, 1, 0);
+        edge = mask.g;
+        surfaceCosine = lerp(efmiFaceLighting(l, i.uv, forward, right), surfaceCosine, edge);
+        float2 cameraHead = float2(dot(cameraBack, right), dot(cameraBack, forward));
+        float facing = cameraHead.y / max(length(cameraHead), 0.0001);
+        occlusion = lerp(1, occlusion, max(mask.b * smoothstep(0, 1, 1.5 - 2 * facing), edge));
+        cameraFacing = diffuseAlpha * lerp(1, occlusion, edge);
+        float edgeTint = mask.r * lerp(0.7, 0.3, mask.b) * lerp(saturate(facing + 0.5), 1, edge);
+        litTone *= lerp(1, float3(0.637, 0.376, 0.296), saturate(0.85 * (1 - viewCosine) * edgeTint));
+        faceRim = smoothstep(0.9, 1, abs(facing));
+        faceRimMask = mask.a;
+    } else if (skin) {
+        cameraFacing = diffuseAlpha * occlusion;
+    }
+    float4 ramp = efmiRamp(surfaceCosine, hair);
+    float lit = min(ramp.a, min(maskCoverage, occlusion));
 
     float3 shadowTone, deepTone;
     efmiTones(albedo, shadowTone, deepTone);
-    float3 surface = lerp(deepTone, shadowTone, saturate(rampCoverage + cameraFacing + face));
-    float viewCosine = saturate(dot(n, v));
-    float faceRim = face * faceMaskEnabled * faceMask.r * lerp(0.7, 0.3, faceMask.b);
-    float3 litTone = albedo * lerp(1, float3(0.637, 0.376, 0.296), saturate(0.85 * (1 - viewCosine) * faceRim));
-    surface = efmiRampTint(lerp(surface, litTone * 0.96, lit), lerp(ramp.rgb, 1, flatLight));
-
-    float sky = lerp(saturate(n.y + 0.15) * 1.5 + 0.5, 0.725, face);
-    float3 shadowTint = lerp(EFMI_SHADOW_TINT, EFMI_SKIN_SHADOW_TINT, face);
-    float3 irradiance = lerp(shadowTint, 1, lit) * sky * 0.2877 * EFMI_LIGHT_STRENGTH;
-    irradiance += EFMI_LIGHT_STRENGTH * EFMI_BRIGHTNESS;
+    float3 surface = lerp(deepTone, shadowTone, saturate(ramp.a + cameraFacing));
+    surface = efmiRampTint(lerp(surface, litTone * 0.96, lit), ramp.rgb);
+    float3 irradiance = efmiIrradiance(n, lit, skin);
     float3 toon = surface * irradiance;
-    if (face > 0.5 && (flags & FLAG_HIGHLIGHT_MAP) != 0) {
-        float3 right = mul((float3x3)world, float3(1, 0, 0));
-        float2 highlightUV = i.uv + float2(dot(v, normalize(right)) * 0.03, 0);
-        toon += highlightMap.Sample(linearWrap, highlightUV).rgb * irradiance * lerp(EFMI_AMBIENT, 1, lit) *
-                (0.5 + 0.5 * lit);
+    float3 highlightLight = irradiance * lerp(efmiSkinLight.w, 1, lit) * (0.5 + 0.5 * lit);
+    if (face && (flags & FLAG_HIGHLIGHT_MAP) != 0) {
+        float2 highlightUV = i.uv + float2(-dot(v, right) * 0.03, 0);
+        toon += highlightMap.Sample(linearWrap, highlightUV).rgb * highlightLight;
     }
 
-    float roughness = 1 - packedMap.a;
-    float alpha = max(roughness * roughness, 0.007812);
-    float alphaSquared = alpha * alpha;
-    float3 specularHalf = normalize(l + 2 * normalize(float3(cameraBack.x, l.y, cameraBack.z)) + 3 * v);
-    float halfCosine = dot(n, specularHalf);
-    float distribution = halfCosine * halfCosine * (alphaSquared - 1) + 1;
-    distribution *= distribution;
-    distribution = distribution != alphaSquared ? alphaSquared / distribution : 1;
-    float specularTerm = clamp(distribution * 0.5 / (2 * viewCosine + alpha + 0.0001) - 0.000061, 0, 20);
-    float3 reflectance = lerp(0.04 * packedMap.g, albedo, packedMap.r);
-    toon += irradiance * (0.5 + 0.5 * lit) * lerp(EFMI_AMBIENT, 1, lit) * specularTerm * reflectance *
-            EFMI_SPECULAR * (1 - flatLight);
-    return efmiFinish(toon, albedo, n, l, cameraBack, viewCosine, 1 - flatLight);
+    if (!eye) {
+        float roughness = 1 - packedMap.a;
+        float alpha = max(roughness * roughness, 0.007812);
+        float alphaSquared = alpha * alpha;
+        float3 specularHalf = normalize(l + 2 * normalize(float3(cameraBack.x, l.y, cameraBack.z)) + 3 * v);
+        float halfCosine = dot(n, specularHalf);
+        float distribution = halfCosine * halfCosine * (alphaSquared - 1) + 1;
+        distribution *= distribution;
+        distribution = distribution != alphaSquared ? alphaSquared / distribution : 1;
+        float3 reflectance = lerp(0.04 * packedMap.g * edge, albedo, packedMap.r);
+        float specular = clamp(distribution * 0.5 / (2 * viewCosine + alpha + 0.0001) - 0.000061, 0, 20);
+        toon += highlightLight * specular * reflectance * EFMI_SPECULAR;
+    }
+    float3 radial = i.worldPos - mul(world, float4(0, 0, 0, 1)).xyz;
+    radial.y = 0.000061;
+    return efmiFinish(toon, albedo, n, v, i.worldPos, skin ? n : normalize(radial), faceRim, faceRimMask);
 }
 
 float4 decodeDiffuse(float2 uv) {
@@ -1036,7 +1181,11 @@ float4 decodeDiffuse(float2 uv) {
 }
 
 float4 ps_main(VSOut i, bool front : SV_IsFrontFace) : SV_Target {
-    if ((flags & FLAG_CUTOUT) != 0 && cutoutMap.Sample(linearWrap, i.uv).r < 0.5) discard;
+    if (cutout(i.uv, i.uv1)) discard;
+    if ((flags & FLAG_EFMI_OVERLAY) != 0) {
+        float mask = (flags & FLAG_DIFFUSE) != 0 ? diffuseMap.Sample(linearWrap, textureUV(i.uv)).g : 1;
+        return float4(linearToSrgb(lerp(1, srgbToLinear(tint.rgb), tint.a * mask)), 1);
+    }
     if ((flags & FLAG_MULTIPLY) != 0) return float4(tint.rgb, 1);
 
     float4 albedo = 1;
@@ -1075,7 +1224,7 @@ float4 ps_main(VSOut i, bool front : SV_IsFrontFace) : SV_Target {
         if (mode == TOON_SRMI) toon = srmiToon(i, n, v, albedo.rgb);
         else if (mode == TOON_ZZMI) toon = zzmiToon(i, n, v, albedo.rgb);
         else if (mode == TOON_WWMI) toon = wwmiToon(i, geometryNormal, v, albedo.rgb);
-        else if (mode == TOON_EFMI) toon = efmiToon(i, n, v, albedo.rgb);
+        else if (mode == TOON_EFMI) toon = efmiToon(i, n, geometryNormal, v, albedo.rgb, emissionMask);
         else toon = gimiToon(i, n, v, albedo.rgb, (flags & FLAG_COVERAGE) != 0 ? albedo.a : emissionMask);
         return float4(linearToSrgb(toon) * albedo.a, albedo.a);
     }
@@ -1125,6 +1274,7 @@ struct OutlineOut {
     float3 normal : NORMAL;  // the hull's smoothed normal, for the profiles that light it
     float3 worldPos : POSITION1;
     nointerpolation float material : TEXCOORD3; // ZZMI: the vertex colour's blue, which holds a face's material ID
+    float2 uv1 : TEXCOORD4;
 };
 
 // The hull's smoothed normal in view space, or the view axis where it has none.
@@ -1142,6 +1292,7 @@ OutlineOut outlineBase(VSIn i, float4 viewPos) {
     o.normal = mul((float3x3)world, i.outline);
     o.worldPos = mul(world, float4(i.pos, 1)).xyz;
     o.uv = textureUV(i.uv);
+    o.uv1 = textureUV(i.uv1);
     return o;
 }
 
@@ -1204,24 +1355,22 @@ OutlineOut efmiOutline(VSIn i) {
 // the rim.
 float3 efmiOutlineColor(OutlineOut i, float3 albedo) {
     albedo *= EFMI_OUTLINE_BRIGHTNESS;
-    float face = (flags & FLAG_FACE) != 0 ? 1 : 0;
+    bool skin = (flags & FLAG_EFMI_SKIN) != 0;
+    bool hair = (flags & FLAG_HAIR) != 0;
     float3 n = dot(i.normal, i.normal) > 1e-10 ? normalize(i.normal) : float3(0, 0, 1);
-    float3 l = toonLight.xyz;
     float3 v = normalize(eye.xyz - i.worldPos);
-    float3 cameraBack = view[2].xyz;
-
-    float4 ramp = efmiRamp(dot(n, l) + EFMI_RANGE_BIAS);
-    float facing = saturate((dot(n, cameraBack) - 0.25) * 1.333333);
-    float deep = saturate(ramp.a + facing * facing * (3 - 2 * facing) + face);
+    float4 ramp = efmiRamp(dot(n, toonLight.xyz) + EFMI_RANGE_BIAS, hair);
+    float occlusion = efmiShadow(i.worldPos, n);
+    float lit = min(ramp.a, occlusion);
+    float facing = smoothstep(0.25, 1, dot(n, view[2].xyz));
+    float deep = saturate(ramp.a + (skin ? 1 : facing) * occlusion);
     float3 shadowTone, deepTone;
     efmiTones(albedo, shadowTone, deepTone);
-    float3 surface = efmiRampTint(lerp(lerp(deepTone, shadowTone, deep), albedo * 0.96, ramp.a), ramp.rgb);
-
-    float sky = lerp(saturate(n.y + 0.15) * 1.5 + 0.5, 0.725, face);
-    float3 shadowTint = lerp(EFMI_SHADOW_TINT, EFMI_SKIN_SHADOW_TINT, face);
-    float3 irradiance = lerp(shadowTint, 1, ramp.a) * sky * 0.2877 * EFMI_LIGHT_STRENGTH;
-    float3 color = surface * (irradiance + EFMI_LIGHT_STRENGTH * EFMI_BRIGHTNESS);
-    return efmiFinish(color, albedo, n, l, cameraBack, dot(n, v), 1 - face);
+    float3 surface = efmiRampTint(lerp(lerp(deepTone, shadowTone, deep), albedo * 0.96, lit), ramp.rgb);
+    float3 radial = i.worldPos - mul(world, float4(0, 0, 0, 1)).xyz;
+    radial.y = 0.000061;
+    return efmiFinish(surface * efmiIrradiance(n, lit, skin), albedo, n, v,
+                      i.worldPos, skin ? n : normalize(radial), 0, 0);
 }
 
 static const float3 OUTLINE_ADJUST_DEPTHS = float3(0.001, 2.0, 6.0);
@@ -1292,7 +1441,10 @@ float4 ps_outline(OutlineOut i) : SV_Target {
         if ((flags & FLAG_DIFFUSE_SRGB) != 0) albedo = srgbToLinear(albedo);
     }
     uint mode = toonMode();
-    if (mode == TOON_EFMI) return float4(linearToSrgb(efmiOutlineColor(i, albedo)), 1);
+    if (mode == TOON_EFMI) {
+        if (cutout(i.uv, i.uv1)) discard;
+        return float4(linearToSrgb(efmiOutlineColor(i, albedo)), 1);
+    }
     // The character's outline colours follow the material ID the surface reads: the light map's, its neutral value
     // when the mesh has no light map, or a ZZMI face's vertex colour.
     bool characterOutline = (characterUse & CHARACTER_OUTLINE) != 0;

@@ -13,6 +13,9 @@ const (
 	OriginalTextureMaterial   = "material"
 	OriginalTextureFaceLight  = "face-light"
 	OriginalTextureFaceShadow = "face-shadow"
+	OriginalTextureFaceSDF    = "face-sdf"
+	OriginalTextureHighlight  = "highlight"
+	OriginalTextureRamp       = "ramp"
 )
 
 // originalTextureSlots names, per game and role, the source shader slots that hold the texture mods bind for that
@@ -24,7 +27,14 @@ var originalTextureSlots = map[string]map[string]string{
 		OriginalTextureDiffuse: "_MainTex", OriginalTextureNormal: "_LightTex",
 		OriginalTextureLight: "_OtherDataTex", OriginalTextureMaterial: "_OtherDataTex2",
 	},
-	"EFMI": {OriginalTextureDiffuse: "Qy3l", OriginalTextureNormal: "Qzd7"},
+	"EFMI": {
+		OriginalTextureDiffuse:   "Qy3l",
+		OriginalTextureNormal:    "Qzd7",
+		OriginalTextureMaterial:  "Q3kk",
+		OriginalTextureFaceSDF:   "Qmtx",
+		OriginalTextureHighlight: "Q0g0",
+		OriginalTextureRamp:      "Qlc8",
+	},
 	"WWMI": {OriginalTextureDiffuse: "MainTex", OriginalTextureNormal: "Normal_Roughness_Metallic"},
 }
 
@@ -137,6 +147,8 @@ type OriginalMatchMesh struct {
 
 // OriginalMatch tells how a mod relates to its character's original model.
 type OriginalMatch struct {
+	// OverlayParts are the EFMI shadow cards, only reused with the stock face.
+	OverlayParts []int
 	// HeadParts are the face group parts the mod does not replace, which the game draws itself.
 	HeadParts []int
 	// KeptParts are the parts of hair meshes that no mod mesh draws in place of, which the game keeps drawing.
@@ -297,6 +309,9 @@ func MatchCharacterOriginal(
 			return OriginalMatch{}, err
 		}
 		if part.Role == OriginalRoleOverlay {
+			if original.Game == "EFMI" {
+				match.OverlayParts = append(match.OverlayParts, p)
+			}
 			continue
 		}
 		if IsHeadRole(part.Role) {

@@ -72,6 +72,8 @@ func TestLoadModViewerRecoversEFMISlotMaps(t *testing.T) {
 	writeTextureFile(t, dir, "Textures/N1.dds", efmiSolidDDS(32, efmiTestNormalMap))
 	writeTextureFile(t, dir, "Textures/N2.dds", efmiSolidDDS(32, efmiTestNormalMap))
 	writeTextureFile(t, dir, "Textures/HighLightMap.dds", efmiSolidDDS(32, efmiTestLightMap))
+	writeTextureFile(t, dir, "Textures/Face_SDF.dds", efmiSolidDDS(32, efmiTestGrayMask))
+	writeTextureFile(t, dir, "Textures/Face_SDFMask.dds", efmiSolidDDS(32, efmiTestGrayMask))
 	if err := os.WriteFile(filepath.Join(dir, "mod.ini"), []byte(`[Constants]
 global persist $T = 1
 [KeySwapT]
@@ -84,6 +86,8 @@ ib = ref Resource_Component3_IB
 vb0 = ref Resource_Component3_VB0
 vb1 = ref Resource_Component3_VB1
 vb2 = ref Resource_Component3_VB2
+ps-t9 = Resource_Face_SDF
+ps-t10 = Resource_Face_SDFMask
 ps-t11 = Resource_HighLightMap
 ps-t13 = Resource_D
 ps-t14 = Resource_L
@@ -102,6 +106,10 @@ filename = Textures/N1.dds
 filename = Textures/N2.dds
 [Resource_HighLightMap]
 filename = Textures/HighLightMap.dds
+[Resource_Face_SDF]
+filename = Textures/Face_SDF.dds
+[Resource_Face_SDFMask]
+filename = Textures/Face_SDFMask.dds
 `+efmiComponent3Resources), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +121,14 @@ filename = Textures/HighLightMap.dds
 	mesh := result.Meshes[0]
 	if !strings.Contains(lightMapKey(mesh), "L.dds") {
 		t.Fatalf("light map = %q", lightMapKey(mesh))
+	}
+	_, states := EvaluateViewerState(result, nil, "")
+	if got := states[0]; !strings.Contains(got.FaceSDFMapKey, "Face_SDF.dds") ||
+		!strings.Contains(got.MaterialMapKey, "Face_SDFMask.dds") {
+		t.Fatalf("face maps = %q, %q", got.FaceSDFMapKey, got.MaterialMapKey)
+	}
+	if got := states[0].RampMapKey; got != "" {
+		t.Fatalf("missing ramp key = %q, want empty for the stock ramp fallback", got)
 	}
 	for value, want := range map[string]string{"0": "N1.dds", "1": "N2.dds"} {
 		got := viewerEvalResolveTexture(mesh.NormalMapVariants, mesh.NormalMapKey, map[string]any{"T": value})

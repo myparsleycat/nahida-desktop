@@ -1713,7 +1713,7 @@
           "toon_outlines": "描边",
           "toon_self_shadow": "自阴影",
           "toon_light_follows_camera": "灯光跟随相机",
-          "toon_flat_face": "面部平面着色",
+          "toon_flat_face": "面部 SDF 着色",
           "toon_shading": "着色",
           "toon_shading_reset": "重置着色",
           "toon_character": "{{name}}的风格",

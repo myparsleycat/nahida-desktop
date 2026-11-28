@@ -57,6 +57,9 @@ var (
 	efmiNamedNormalMapRE = regexp.MustCompile(`(?i)normal`)
 	efmiNamedLightMapRE  = regexp.MustCompile(`(?i)light\s*map`)
 	efmiNamedRampMapRE   = regexp.MustCompile(`(?i)ramp`)
+	efmiNamedSDFMaskRE   = regexp.MustCompile(`(?i)sdf[ _-]*mask|face[^/\\]*_cm_m\b`)
+	efmiNamedSDFRE       = regexp.MustCompile(`(?i)face[^/\\]*sdf\b|\bsdf(?:map)?\b`)
+	efmiNamedHighlightRE = regexp.MustCompile(`(?i)face[^/\\]*(?:_hl_m|high[ _-]*light)\b`)
 )
 
 // attachEFMIMaterialMaps recovers the light and normal maps that unlabeled EFMI
@@ -86,10 +89,11 @@ func attachEFMIMaterialMaps(meshes []modelViewerDirectMesh, resources []modelVie
 					return false
 				}
 				role := classify(assignment.resource, assignment.file)
-				return role == efmiFaceMaskRole || role == efmiFaceHighlightRole
+				return role == efmiFaceMaskRole || role == efmiFaceHighlightRole || role == modelViewerFaceSDFRole
 			},
 		)
 		attachEFMISlotMaps(mesh, classify)
+		attachEFMIFaceMaps(mesh, classify)
 		attachEFMIRampMap(mesh, classify)
 		attachEFMIDumpMaps(mesh, resources, modDir, classify)
 	}
@@ -142,8 +146,25 @@ func attachEFMISlotMaps(mesh *modelViewerDirectMesh, classify func(resource, fil
 	}
 }
 
-// A ramp sits at no fixed distance from the diffuse: mods bind it at ps-t11 or ps-t12.
-// The viewer draws one ramp per mesh, so a variant guard around the binding is dropped.
+func attachEFMIFaceMaps(mesh *modelViewerDirectMesh, classify func(resource, file string) string) {
+	for _, candidate := range mesh.slotTextureCandidates {
+		if candidate.file == "" || meshBindsDiffuseFile(mesh, candidate.file) {
+			continue
+		}
+		role := classify(candidate.resource, candidate.file)
+		switch role {
+		case modelViewerFaceSDFRole, efmiFaceHighlightRole:
+			candidate.conditions = modelViewerDNFTrue()
+		case efmiFaceMaskRole:
+		default:
+			continue
+		}
+		candidate.role = role
+		mesh.textureAssignments = mergeModelViewerTextureAssignment(mesh.textureAssignments, candidate)
+	}
+}
+
+// The ramp sits at no fixed distance from the diffuse, and the viewer draws one per mesh.
 func attachEFMIRampMap(mesh *modelViewerDirectMesh, classify func(resource, file string) string) {
 	for _, candidate := range mesh.slotTextureCandidates {
 		if candidate.file == "" || classify(candidate.resource, candidate.file) != modelViewerRampMapRole {
@@ -228,6 +249,12 @@ func classifyEFMIMaterialMap(resource, file, modDir string) string {
 		return classifyEFMIRampMap(file, modDir)
 	}
 	switch {
+	case efmiNamedSDFMaskRE.MatchString(label):
+		return efmiFaceMaskRole
+	case efmiNamedSDFRE.MatchString(label):
+		return modelViewerFaceSDFRole
+	case efmiNamedHighlightRE.MatchString(label):
+		return efmiFaceHighlightRole
 	case efmiNonMaterialMapRE.MatchString(label):
 		return ""
 	case efmiNamedNormalMapRE.MatchString(label):

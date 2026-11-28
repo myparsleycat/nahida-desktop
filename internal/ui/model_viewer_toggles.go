@@ -546,8 +546,7 @@ func (v *ModelViewer) formSwitcher() *fairy.El {
 }
 
 // gameTextureCount counts the visible meshes the mod binds no diffuse texture to and the original model does not
-// fill. The game draws them with its own textures, which the viewer cannot read. Overlay shadows are left out: the
-// viewer never draws them.
+// fill. EFMI shadow cards use their own overlay materials.
 func (v *ModelViewer) gameTextureCount() int {
 	var original *viewerOriginal
 	var meshes []*viewerMesh

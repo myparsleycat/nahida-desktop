@@ -86,7 +86,7 @@ type toonFlags struct {
 // Ramp, FaceType and AssetDir, and only EFMI FlatFace.
 type viewerToonStyle struct {
 	toonFlags
-	// FlatFace lights EFMI's head meshes from the face mask instead of N.L.
+	// FlatFace enables EFMI's head-relative SDF lighting. The stored key predates SDF support.
 	FlatFace bool   `json:"flatFace"`
 	Ramp     string `json:"ramp"`
 	// FaceType is "auto", which takes the body type from the ramp name, or one of genshinFaceTypes.
@@ -143,8 +143,7 @@ func colorToonParam(key string, slot int, def [3]float64) toonParam {
 // GIMI: HoyoToon's defaults, except the light area, with which frontal light would shade limbs the game keeps lit;
 // shadow brightness and specular strength come from kaze-mio's Nahida material, and the outline colour was measured
 // against lit skin in game. SRMI: StarRailNPRShader's black outline reads too harsh, and neither its tint nor the
-// shadow tint is measured. EFMI: Warfarin's brightness default of 2 clips less because its materials carry tints
-// that mods lack, and 1.5 approximates its output for the same textures.
+// shadow tint is measured.
 var viewerToonParams = map[string][]toonParam{
 	gimiProfile: {
 		scalarToonParam("lightArea", 0, 0.5, 0.2, 0.8, 0.01),
@@ -184,12 +183,12 @@ var viewerToonParams = map[string][]toonParam{
 		colorToonParam("outlineColor", 8, [3]float64{0.765, 0.765, 0.765}),
 	},
 	efmiProfile: {
-		scalarToonParam("brightness", 0, 1.5, 0.5, 3, 0.05),
+		scalarToonParam("brightness", 0, 2, 0.5, 3, 0.05),
 		scalarToonParam("shadowBrightness", 1, 0.5, 0, 1, 0.01),
 		scalarToonParam("shadowSoftness", 2, 0.02, 0, 0.3, 0.005),
 		scalarToonParam("lightArea", 3, 0.4, -0.5, 1, 0.01),
 		scalarToonParam("specular", 4, 1, 0, 3, 0.05),
-		scalarToonParam("rimStrength", 5, 0.5, 0, 2, 0.05),
+		scalarToonParam("rimStrength", 5, 1, 0, 2, 0.05),
 		scalarToonParam("outlineWidth", 6, 0.25, 0, 1, 0.01),
 		scalarToonParam("outlineBrightness", 7, 0.5, 0, 1, 0.01),
 	},
@@ -654,6 +653,10 @@ func markEFMIHeads(entries []*viewerMesh) {
 			continue
 		}
 		narrow = append(narrow, mesh)
+		if texturePresent(mesh.info.FaceSDFMapKey) && heightOf(b.Min[2]) >= efmiBoundFaceMinHeight {
+			bound = append(bound, mesh)
+			continue
+		}
 		if texturePresent(mesh.info.LightMapKey) || len(mesh.info.LightMapVariants) > 0 {
 			continue
 		}
@@ -676,6 +679,7 @@ func markEFMIHeads(entries []*viewerMesh) {
 		for _, mesh := range faces {
 			headFloor = max(headFloor, mesh.info.Bounds.Min[2])
 			mesh.efmiFace = true
+			mesh.measureEFMIFace()
 		}
 		headFloor -= efmiHeadBelowFace
 	}
@@ -691,7 +695,12 @@ func markEFMIHeads(entries []*viewerMesh) {
 			len(mesh.info.TextureChoices) == 0 &&
 			(indices <= efmiEyeShadowMaxIndices ||
 				(indices <= efmiHairShadowMaxIndices && height >= efmiHairShadowMinHeight))
+		if mesh.overlayShadow {
+			mesh.efmiOverlay = inferredEFMIOverlay(indices)
+		}
 		mesh.toonEye = !mesh.overlayShadow && height <= efmiIrisMaxHeight
+		mesh.toonHair = !mesh.efmiFace && !mesh.overlayShadow && !mesh.toonEye &&
+			(texturePresent(mesh.info.LightMapKey) || texturePresent(mesh.info.RampMapKey) || b.Max[2] >= top-0.02)
 	}
 }
 
@@ -714,9 +723,13 @@ func markViewerMeshes(scene *viewerScene) {
 // toonLightDirection aims the key light as the game aims its menu light: from the camera, turned 10 degrees
 // and kept at least 32 degrees above the horizon.
 func toonLightDirection(forward vec3) vec3 {
+	return toonLightAngles(forward, 10, 32)
+}
+
+func toonLightAngles(forward vec3, turn, elevation float64) vec3 {
 	const degree = math.Pi / 180
-	yaw := math.Atan2(-forward[0], forward[2]) + 10*degree
-	pitch := max(32*degree, math.Asin(min(max(-forward[1], -1), 1)))
+	yaw := math.Atan2(-forward[0], forward[2]) + turn*degree
+	pitch := max(elevation*degree, math.Asin(min(max(-forward[1], -1), 1)))
 	return vec3{math.Sin(yaw) * math.Cos(pitch), math.Sin(pitch), -math.Cos(yaw) * math.Cos(pitch)}
 }
 

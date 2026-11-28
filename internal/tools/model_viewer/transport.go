@@ -159,6 +159,7 @@ type ModelViewerMeshTransport struct {
 	CutoutMapVariants   []ModelViewerTextureVariant  `json:"cutoutMapVariants"`
 	TextureChoices      []ModelViewerTextureChoice   `json:"textureChoices,omitempty"`
 	HighlightMapKey     *string                      `json:"highlightMapKey,omitempty"`
+	FaceSDFMapKey       *string                      `json:"faceSdfMapKey,omitempty"`
 	RampMapKey          *string                      `json:"rampMapKey,omitempty"`
 	ShapeTargets        []ModelViewerShapeTarget     `json:"shapeTargets"`
 	PositionVariants    []ModelViewerPositionVariant `json:"positionVariants"`

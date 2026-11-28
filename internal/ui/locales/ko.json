@@ -1713,7 +1713,7 @@
           "toon_outlines": "외곽선",
           "toon_self_shadow": "자체 그림자",
           "toon_light_follows_camera": "조명 카메라 추종",
-          "toon_flat_face": "얼굴 평면 음영",
+          "toon_flat_face": "얼굴 SDF 셰이딩",
           "toon_shading": "셰이딩",
           "toon_shading_reset": "셰이딩 초기화",
           "toon_character": "{{name}} 스타일",

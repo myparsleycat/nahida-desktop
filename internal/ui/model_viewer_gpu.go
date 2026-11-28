@@ -19,7 +19,7 @@ import (
 var modelViewerHLSL []byte
 
 type viewerShaders struct {
-	vs, ps, outlineVS, outlinePS, shadowVS, ringVS, ringPS, overlayVS, overlayPS []byte
+	vs, ps, outlineVS, outlinePS, shadowVS, rimVS, efmiDepthPS, ringVS, ringPS, overlayVS, overlayPS []byte
 }
 
 // warmViewerRenderer compiles the viewer's shaders and computes its environment lighting while a model loads. The
@@ -43,6 +43,8 @@ var viewerShaderCode = sync.OnceValues(func() (viewerShaders, error) {
 		{&code.outlineVS, "vs_outline", "vs_5_0"},
 		{&code.outlinePS, "ps_outline", "ps_5_0"},
 		{&code.shadowVS, "vs_shadow", "vs_5_0"},
+		{&code.rimVS, "vs_efmi_depth", "vs_5_0"},
+		{&code.efmiDepthPS, "ps_efmi_depth", "ps_5_0"},
 		{&code.ringVS, "vs_ring", "vs_5_0"},
 		{&code.ringPS, "ps_ring", "ps_5_0"},
 		{&code.overlayVS, "vs_overlay", "vs_5_0"},
@@ -148,60 +150,69 @@ func newViewerMeshGPU(dev d3d.Device, upload viewerMeshUpload) (viewerMeshGPU, e
 }
 
 type viewerFrameConstants struct {
-	viewProj       [16]float32
-	world          [16]float32
-	eye            [4]float32
-	keyLight       [4]float32
-	fillLight      [4]float32
-	skyLight       [4]float32
-	groundLight    [4]float32
-	shading        [4]float32
-	surface        [4]float32
-	envSH          [9][4]float32
-	envLevels      [pmremLevels][4]float32
-	view           [16]float32
-	proj           [16]float32
-	shadowViewProj [16]float32
-	toonLight      [4]float32
-	toonShadow     [4]float32
-	toonParams     [3][4]float32
-	toonState      [4]float32
-	viewport       [4]float32
+	viewProj                           [16]float32
+	world                              [16]float32
+	eye                                [4]float32
+	keyLight                           [4]float32
+	fillLight                          [4]float32
+	skyLight                           [4]float32
+	groundLight                        [4]float32
+	shading                            [4]float32
+	surface                            [4]float32
+	envSH                              [9][4]float32
+	envLevels                          [pmremLevels][4]float32
+	view                               [16]float32
+	proj                               [16]float32
+	shadowViewProj                     [16]float32
+	toonLight                          [4]float32
+	toonShadow                         [4]float32
+	toonParams                         [3][4]float32
+	toonState                          [4]float32
+	efmiLight, efmiSkinLight           [4]float32
+	efmiShadowTint, efmiSkinShadowTint [4]float32
+	efmiRimLights                      [12][4]float32
+	viewport                           [4]float32
 }
 
 type viewerMeshConstants struct {
-	tint         [4]float32
-	faceForward  [4]float32
-	flags        uint32
-	normalMode   uint32
-	characterUse uint32
-	morphWeight  float32
+	tint          [4]float32
+	faceForward   [4]float32
+	flags         uint32
+	normalMode    uint32
+	characterUse  uint32
+	morphWeight   float32
+	efmiFaceRight [4]float32
+	efmiCutout    [4]float32
 	// characterScale.x scales the character's specular values.
 	characterScale [4]float32
 }
 
 // Shader flags the renderer adds per mesh, matching FLAG_* in model_viewer.hlsl.
 const (
-	viewerFlagVertexTangent = 256
-	viewerFlagFace          = 512
-	viewerFlagVertexColor   = 1024
-	viewerFlagEmission      = 2048
-	viewerFlagLightMap      = 4096
-	viewerFlagOverlayColor  = 8192
-	viewerFlagHair          = 1 << 14
-	viewerFlagEye           = 1 << 15
-	viewerFlagUV1           = 1 << 16
-	viewerFlagMaterialMap   = 1 << 17
-	viewerFlagDataMap       = 1 << 18
-	viewerFlagHighlightMap  = 1 << 19
-	viewerFlagRampMap       = 1 << 20
-	viewerFlagLightBC4      = 1 << 21
-	viewerFlagLightSigned   = 1 << 22
-	viewerFlagPackedMask    = 1 << 23
-	viewerFlagOutlineMask   = 1 << 24
-	viewerFlagSkinned       = 1 << 25
-	viewerFlagMultiply      = 1 << 26
-	viewerFlagTranslucent   = 1 << 27
+	viewerFlagVertexTangent   = 256
+	viewerFlagFace            = 512
+	viewerFlagVertexColor     = 1024
+	viewerFlagEmission        = 2048
+	viewerFlagLightMap        = 4096
+	viewerFlagOverlayColor    = 8192
+	viewerFlagHair            = 1 << 14
+	viewerFlagEye             = 1 << 15
+	viewerFlagUV1             = 1 << 16
+	viewerFlagMaterialMap     = 1 << 17
+	viewerFlagDataMap         = 1 << 18
+	viewerFlagHighlightMap    = 1 << 19
+	viewerFlagRampMap         = 1 << 20
+	viewerFlagLightBC4        = 1 << 21
+	viewerFlagLightSigned     = 1 << 22
+	viewerFlagPackedMask      = 1 << 23
+	viewerFlagOutlineMask     = 1 << 24
+	viewerFlagSkinned         = 1 << 25
+	viewerFlagMultiply        = 1 << 26
+	viewerFlagTranslucent     = 1 << 27
+	viewerFlagEFMISDF         = 1 << 28
+	viewerFlagEFMIOverlay     = 1 << 29
+	viewerFlagEFMISkin        = 1 << 30
+	viewerFlagEFMIStockCutout = 1 << 31
 )
 
 // viewerShadowMapSize is the React viewer's key light shadow map size.
@@ -216,6 +227,7 @@ type viewerToonDraw struct {
 	materials      *characterToonMaterials
 	characterUse   uint32
 	characterScale float32
+	efmi           efmiLighting
 }
 
 // viewerDrawOptions are the view settings a draw takes from the screen.
@@ -275,16 +287,18 @@ type viewerRenderer struct {
 	generation uint64
 	err        error
 
-	vs        d3d.VertexShader
-	ps        d3d.PixelShader
-	outlineVS d3d.VertexShader
-	outlinePS d3d.PixelShader
-	shadowVS  d3d.VertexShader
-	ringVS    d3d.VertexShader
-	ringPS    d3d.PixelShader
-	ringCB    d3d.Buffer
-	overlayVS d3d.VertexShader
-	overlayPS d3d.PixelShader
+	vs          d3d.VertexShader
+	ps          d3d.PixelShader
+	outlineVS   d3d.VertexShader
+	outlinePS   d3d.PixelShader
+	shadowVS    d3d.VertexShader
+	rimVS       d3d.VertexShader
+	efmiDepthPS d3d.PixelShader
+	ringVS      d3d.VertexShader
+	ringPS      d3d.PixelShader
+	ringCB      d3d.Buffer
+	overlayVS   d3d.VertexShader
+	overlayPS   d3d.PixelShader
 	// overlayLayout and overlayVB draw viewerOverlayVertex lists; overlayVB grows to the largest list.
 	overlayLayout d3d.InputLayout
 	overlayVB     d3d.Buffer
@@ -311,29 +325,40 @@ type viewerRenderer struct {
 	// shadowKey, shadowCasters and shadowBuffers are what the shadow map was last drawn with; a draw that matches
 	// them and uploads no vertices keeps the map. A released buffer's address can be reused by a new one, so the
 	// casters are compared by index as well as by buffer. The scratch slices hold the next draw's casters.
-	shadowKey     viewerShadowKey
-	shadowCasters []int
-	shadowBuffers []d3d.Buffer
-	casterScratch []int
-	bufferScratch []d3d.Buffer
-	shadowDrawn   bool
-	depthOn       d3d.DepthStencilState
-	depthRead     d3d.DepthStencilState
-	blend         d3d.BlendState
+	shadowKey                             viewerShadowKey
+	shadowCasters                         []int
+	shadowBuffers                         []d3d.Buffer
+	casterScratch                         []int
+	bufferScratch                         []d3d.Buffer
+	shadowDrawn                           bool
+	depthOn                               d3d.DepthStencilState
+	depthRead                             d3d.DepthStencilState
+	efmiDepthStencil                      d3d.DepthStencilState
+	efmiOverlayDepth                      [2]d3d.DepthStencilState
+	efmiPreDepth                          d3d.DepthStencilState
+	efmiOverlayRaster, efmiPreDepthRaster d3d.RasterizerState
+	efmiMasks                             map[string]d3d.ShaderResourceView
+	efmiCutouts                           d3d.ShaderResourceView
+	efmiDepth                             viewerDepthTexture
+	shadowSize                            uint32
+	blend                                 d3d.BlendState
 	// multiply multiplies the target's colour by the pixel's and keeps its alpha.
 	multiply d3d.BlendState
 
-	width, height int
-	singleSample  bool
-	samples       uint32
-	color         d3d.Texture2D
-	colorRTV      d3d.RenderTargetView
-	depth         d3d.Texture2D
-	dsv           d3d.DepthStencilView
+	width, height         int
+	singleSample, stencil bool
+	samples               uint32
+	color                 d3d.Texture2D
+	colorRTV              d3d.RenderTargetView
+	depth                 d3d.Texture2D
+	dsv                   d3d.DepthStencilView
 }
 
 func (r *viewerRenderer) release() {
 	r.releaseTargets()
+	for _, mask := range r.efmiMasks {
+		mask.Release()
+	}
 	for _, release := range []func(){
 		r.vs.Release, r.ps.Release, r.outlineVS.Release, r.outlinePS.Release, r.shadowVS.Release, r.ringVS.Release,
 		r.ringPS.Release, r.ringCB.Release, r.overlayVS.Release, r.overlayPS.Release, r.overlayLayout.Release,
@@ -341,6 +366,9 @@ func (r *viewerRenderer) release() {
 		r.frameCB.Release, r.meshCB.Release, r.characterCB.Release, r.sampler.Release, r.clamp.Release, r.dfg.Release, r.raster.Release,
 		r.culled.Release, r.frontCulled.Release, r.compare.Release, r.depthOn.Release, r.depthRead.Release,
 		r.blend.Release, r.multiply.Release, r.shadowSRV.Release, r.shadowDSV.Release, r.shadow.Release,
+		r.rimVS.Release, r.efmiDepthPS.Release, r.efmiDepthStencil.Release, r.efmiOverlayDepth[0].Release,
+		r.efmiCutouts.Release,
+		r.efmiOverlayDepth[1].Release, r.efmiPreDepth.Release, r.efmiOverlayRaster.Release, r.efmiPreDepthRaster.Release,
 	} {
 		release()
 	}
@@ -351,6 +379,7 @@ func (r *viewerRenderer) release() {
 }
 
 func (r *viewerRenderer) releaseTargets() {
+	r.efmiDepth.release()
 	r.dsv.Release()
 	r.depth.Release()
 	r.colorRTV.Release()
@@ -391,6 +420,12 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 		return err
 	}
 	if r.shadowVS, err = dev.CreateVertexShader(code.shadowVS); err != nil {
+		return err
+	}
+	if r.rimVS, err = dev.CreateVertexShader(code.rimVS); err != nil {
+		return err
+	}
+	if r.efmiDepthPS, err = dev.CreatePixelShader(code.efmiDepthPS); err != nil {
 		return err
 	}
 	if r.ringVS, err = dev.CreateVertexShader(code.ringVS); err != nil {
@@ -545,6 +580,9 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 	}); err != nil {
 		return err
 	}
+	if err := r.initEFMIDepthStates(dev); err != nil {
+		return err
+	}
 	blend := d3d.BlendDesc{}
 	blend.RenderTarget[0] = d3d.RenderTargetBlendDesc{
 		BlendEnable: 1, SrcBlend: d3d.BLEND_ONE, DestBlend: d3d.BLEND_INV_SRC_ALPHA, BlendOp: d3d.BLEND_OP_ADD,
@@ -565,13 +603,18 @@ func (r *viewerRenderer) create(dev d3d.Device) error {
 }
 
 // targets makes the multisampled colour and depth buffers for a frame size.
-func (r *viewerRenderer) targets(dev d3d.Device, width, height int, singleSample bool) error {
-	if r.width == width && r.height == height && r.singleSample == singleSample && r.dsv.P != nil {
+func (r *viewerRenderer) targets(dev d3d.Device, width, height int, singleSample, stencil bool) error {
+	if r.width == width && r.height == height && r.singleSample == singleSample && r.stencil == stencil &&
+		r.dsv.P != nil {
 		return nil
 	}
 	r.releaseTargets()
 	r.samples = 1
 	r.singleSample = singleSample
+	depthFormat := uint32(d3d.FORMAT_D32_FLOAT)
+	if stencil {
+		depthFormat = d3d.FORMAT_D24_UNORM_S8_UINT
+	}
 	counts := []uint32{4, 2}
 	if singleSample {
 		counts = nil
@@ -579,7 +622,7 @@ func (r *viewerRenderer) targets(dev d3d.Device, width, height int, singleSample
 	// 8x would double the targets' memory at large sizes for little visible gain.
 	for _, count := range counts {
 		if dev.MultisampleQualityLevels(d3d.FORMAT_B8G8R8A8_UNORM, count) > 0 &&
-			dev.MultisampleQualityLevels(d3d.FORMAT_D32_FLOAT, count) > 0 {
+			dev.MultisampleQualityLevels(depthFormat, count) > 0 {
 			r.samples = count
 			break
 		}
@@ -600,18 +643,18 @@ func (r *viewerRenderer) targets(dev d3d.Device, width, height int, singleSample
 			return err
 		}
 	}
-	desc.Format, desc.BindFlags = d3d.FORMAT_D32_FLOAT, d3d.BIND_DEPTH_STENCIL
+	desc.Format, desc.BindFlags = depthFormat, d3d.BIND_DEPTH_STENCIL
 	if r.depth, err = dev.CreateTexture2D(&desc, nil); err != nil {
 		return err
 	}
-	dsvDesc := d3d.DSVDesc{Format: d3d.FORMAT_D32_FLOAT, ViewDimension: d3d.DSV_DIMENSION_TEXTURE2D}
+	dsvDesc := d3d.DSVDesc{Format: depthFormat, ViewDimension: d3d.DSV_DIMENSION_TEXTURE2D}
 	if r.samples > 1 {
 		dsvDesc.ViewDimension = d3d.DSV_DIMENSION_TEXTURE2DMS
 	}
 	if r.dsv, err = dev.CreateDepthStencilView(r.depth, &dsvDesc); err != nil {
 		return err
 	}
-	r.width, r.height = width, height
+	r.width, r.height, r.stencil = width, height, stencil
 	return nil
 }
 
@@ -622,7 +665,13 @@ func (r *viewerRenderer) draw(f fairy.SurfaceFrame, scene *viewerScene, opts vie
 	if err := r.init(g); err != nil {
 		return err
 	}
-	if err := r.targets(g.Device, f.Width, f.Height, opts.singleSample); err != nil {
+	efmi := opts.toon != nil && opts.toon.profile == efmiProfile
+	if efmi {
+		if err := r.initEFMITextures(g.Device); err != nil {
+			return err
+		}
+	}
+	if err := r.targets(g.Device, f.Width, f.Height, opts.singleSample, efmi); err != nil {
 		r.releaseTargets()
 		return err
 	}
@@ -633,7 +682,11 @@ func (r *viewerRenderer) draw(f fairy.SurfaceFrame, scene *viewerScene, opts vie
 		rtv = r.colorRTV
 	}
 	ctx.ClearRenderTargetView(rtv, opts.background)
-	ctx.ClearDepthStencilView(r.dsv, d3d.CLEAR_DEPTH, 1, 0)
+	clear := uint32(d3d.CLEAR_DEPTH)
+	if efmi {
+		clear |= d3d.CLEAR_STENCIL
+	}
+	ctx.ClearDepthStencilView(r.dsv, clear, 1, 0)
 	if scene != nil && scene.gpu != nil && scene.gpu.generation == f.Generation {
 		if err := r.drawScene(ctx, rtv, f, scene, opts); err != nil {
 			return err
@@ -663,17 +716,19 @@ func (r *viewerRenderer) releaseShadow() {
 }
 
 // shadowTargets makes the key light's depth map on first use.
-func (r *viewerRenderer) shadowTargets(dev d3d.Device) (err error) {
-	if r.shadowSRV.P != nil {
+func (r *viewerRenderer) shadowTargets(dev d3d.Device, size uint32) (err error) {
+	if r.shadowSRV.P != nil && r.shadowSize == size {
 		return nil
 	}
+	r.releaseShadow()
+	r.shadowSize = size
 	defer func() {
 		if err != nil {
 			r.releaseShadow()
 		}
 	}()
 	if r.shadow, err = dev.CreateTexture2D(&d3d.Texture2DDesc{
-		Width: viewerShadowMapSize, Height: viewerShadowMapSize, MipLevels: 1, ArraySize: 1,
+		Width: size, Height: size, MipLevels: 1, ArraySize: 1,
 		Format: d3d.FORMAT_R32_TYPELESS, SampleDesc: d3d.SampleDesc{Count: 1},
 		BindFlags: d3d.BIND_DEPTH_STENCIL | d3d.BIND_SHADER_RESOURCE,
 	}, nil); err != nil {
@@ -697,6 +752,13 @@ func toonFrame(frame *viewerFrameConstants, toon *viewerToonDraw, opts viewerDra
 	if style.LightFollowsCamera {
 		light = toonLightDirection(opts.camera.forward())
 	}
+	if toon.profile == efmiProfile {
+		forward := vec3{0, 0, -1}
+		if style.LightFollowsCamera {
+			forward = opts.camera.forward()
+		}
+		light = toonLightAngles(forward, toon.efmi.Yaw, toon.efmi.Pitch)
+	}
 	frame.toonLight = [4]float32{
 		float32(light[0]), float32(light[1]), float32(light[2]), viewerToonProfiles[toon.profile].mode,
 	}
@@ -706,6 +768,9 @@ func toonFrame(frame *viewerFrameConstants, toon *viewerToonDraw, opts viewerDra
 	}
 	if !style.SelfShadow {
 		return false
+	}
+	if toon.profile == efmiProfile {
+		return true
 	}
 
 	// The shadow camera fits the bounding sphere of the model's box, as the React viewer's
@@ -793,8 +858,9 @@ func (r *viewerRenderer) drawScene(
 		frame.envLevels[i] = [4]float32{float32(bands[0]), float32(bands[1]), float32(bands[2])}
 	}
 	shadowed := opts.toon != nil && toonFrame(&frame, opts.toon, opts)
-	if err := d3d.WriteData(ctx, r.frameCB, []viewerFrameConstants{frame}); err != nil {
-		return err
+	efmi := opts.toon != nil && opts.toon.profile == efmiProfile
+	if efmi {
+		opts.toon.efmi.frame(&frame, scene, opts)
 	}
 
 	gpu := scene.gpu
@@ -831,7 +897,36 @@ func (r *viewerRenderer) drawScene(
 			return err
 		}
 	}
-	if shadowed {
+	var efmiGeometry []originalDraw
+	if efmi && (shadowed || frame.efmiLight[3] > 0) {
+		efmiGeometry = efmiDepthGeometry(scene, skin, originals)
+		if shadowed {
+			frame.toonShadow[0] = 0
+			shadowed = fitEFMIShadow(&frame, efmiGeometry, opts)
+		}
+	}
+	if err := d3d.WriteData(ctx, r.frameCB, []viewerFrameConstants{frame}); err != nil {
+		return err
+	}
+	ctx.PSSetSamplers(0, r.sampler, r.clamp, r.compare)
+	if shadowed && efmi {
+		if err := r.shadowTargets(f.GPU().Device, efmiShadowSize); err != nil {
+			return err
+		}
+		ctx.PSSetShaderResources(9, d3d.ShaderResourceView{})
+		if err := r.drawEFMIDepth(
+			ctx,
+			scene,
+			efmiGeometry,
+			opts,
+			true,
+			r.shadowDSV,
+			efmiShadowSize,
+			efmiShadowSize,
+		); err != nil {
+			return err
+		}
+	} else if shadowed {
 		if err := r.drawShadowMap(ctx, f.GPU().Device, scene, opts, skin, originals, &frame); err != nil {
 			return err
 		}
@@ -839,9 +934,32 @@ func (r *viewerRenderer) drawScene(
 		r.releaseShadow()
 	}
 
+	ctx.PSSetShaderResources(17, d3d.ShaderResourceView{})
+	hasRimDepth := efmi && frame.efmiLight[3] > 0 && slices.ContainsFunc(efmiGeometry, func(draw originalDraw) bool {
+		return draw.mesh.toonHair
+	})
+	if hasRimDepth {
+		if err := r.efmiDepth.ensure(f.GPU().Device, uint32(f.Width), uint32(f.Height)); err != nil {
+			return err
+		}
+		if err := r.drawEFMIDepth(
+			ctx,
+			scene,
+			efmiGeometry,
+			opts,
+			false,
+			r.efmiDepth.dsv,
+			uint32(f.Width),
+			uint32(f.Height),
+		); err != nil {
+			return err
+		}
+	}
 	ctx.OMSetRenderTargets([]d3d.RenderTargetView{rtv}, r.dsv)
+	if hasRimDepth {
+		ctx.PSSetShaderResources(17, r.efmiDepth.srv)
+	}
 	ctx.RSSetViewports(d3d.Viewport{Width: float32(f.Width), Height: float32(f.Height), MaxDepth: 1})
-	ctx.PSSetSamplers(0, r.sampler, r.clamp, r.compare)
 	ctx.VSSetSamplers(0, r.sampler)
 	ctx.PSSetShaderResources(3, r.dfg)
 	if opts.toon != nil {
@@ -876,6 +994,7 @@ func (r *viewerRenderer) drawScene(
 			if opts.toon == nil || !opts.toon.style.Outlines {
 				continue
 			}
+			ctx.OMSetDepthStencilState(r.depthOn, 0)
 			ctx.VSSetShader(r.outlineVS)
 			ctx.PSSetShader(r.outlinePS)
 			ctx.RSSetState(r.frontCulled)
@@ -898,8 +1017,7 @@ func (r *viewerRenderer) drawScene(
 			blend d3d.ShaderResourceView,
 			anchor int32,
 		) error {
-			// EFMI draws no hull around eyes and overlay shadows.
-			if pass == "outline" && opts.toon.profile == efmiProfile && (mesh.toonEye || mesh.overlayShadow) {
+			if mesh.overlayShadow || pass == "outline" && efmi && mesh.toonEye {
 				return nil
 			}
 			material := meshMaterial(mesh, state, textures, opts)
@@ -907,6 +1025,14 @@ func (r *viewerRenderer) drawScene(
 			blended := flags&(viewerFlagCoverage|viewerFlagMultiply|viewerFlagTranslucent) != 0
 			if blended != (pass == "blended") {
 				return nil
+			}
+			if efmi {
+				if pass == "opaque" {
+					ctx.OMSetDepthStencilState(r.efmiDepthStencil, efmiStencil(mesh))
+				}
+				if mask := r.efmiCutout(mesh, &material.constants); mask.P != nil {
+					material.views[2] = mask
+				}
 			}
 			if pass == "blended" {
 				if flags&viewerFlagMultiply != 0 {
@@ -919,6 +1045,17 @@ func (r *viewerRenderer) drawScene(
 				material.constants.flags |= viewerFlagSkinned
 				if material.constants.flags&viewerFlagFace != 0 {
 					forward := opts.skin.turnBy(anchor, mesh.faceForward)
+					if efmi {
+						right := opts.skin.turnBy(anchor, vec3{
+							float64(material.constants.efmiFaceRight[0]), float64(material.constants.efmiFaceRight[1]),
+							float64(material.constants.efmiFaceRight[2]),
+						})
+						material.constants.efmiFaceRight = efmiVector(right, 0)
+						forward = opts.skin.turnBy(anchor, vec3{
+							float64(material.constants.faceForward[0]), float64(material.constants.faceForward[1]),
+							float64(material.constants.faceForward[2]),
+						})
+					}
 					row := material.constants.faceForward[3]
 					material.constants.faceForward = [4]float32{
 						float32(forward[0]), float32(forward[1]), float32(forward[2]), row,
@@ -944,6 +1081,9 @@ func (r *viewerRenderer) drawScene(
 				ctx.PSSetShaderResources(10, cmpView(material.views[5], white), cmpView(material.views[6], white),
 					cmpView(material.views[7], white))
 				ctx.VSSetShaderResources(13, cmpView(material.outlineMask, white))
+				if efmi {
+					ctx.PSSetShaderResources(16, material.efmiSDF)
+				}
 			} else {
 				ctx.PSSetShaderResources(4, material.views[3])
 				ctx.PSSetShaderResources(10, material.views[5])
@@ -972,6 +1112,11 @@ func (r *viewerRenderer) drawScene(
 		}
 		if pass == "blended" {
 			ctx.OMSetBlendState(r.blend, [4]float32{}, 0xffffffff)
+		}
+	}
+	if efmi {
+		if err := r.drawEFMIOverlays(ctx, scene, opts, skin, originals); err != nil {
+			return err
 		}
 	}
 	if opts.overlay != nil {
@@ -1079,7 +1224,7 @@ func (r *viewerRenderer) drawShadowMap(
 	originals []originalDraw,
 	frame *viewerFrameConstants,
 ) error {
-	if err := r.shadowTargets(dev); err != nil {
+	if err := r.shadowTargets(dev, viewerShadowMapSize); err != nil {
 		return err
 	}
 	gpu := scene.gpu
@@ -1202,6 +1347,7 @@ type viewerMeshMaterial struct {
 	views     [8]d3d.ShaderResourceView
 	// outlineMask is EFMI's outline width mask, read by the hull's vertex shader.
 	outlineMask d3d.ShaderResourceView
+	efmiSDF     d3d.ShaderResourceView
 }
 
 // meshMaterial picks the textures and shader flags state selects for mesh, looking them up with textures.
@@ -1275,12 +1421,6 @@ func meshMaterial(
 
 	profile := opts.toon.profile
 	mode := viewerToonProfiles[profile].mode
-	optional := func(key *string) string {
-		if key == nil {
-			return ""
-		}
-		return *key
-	}
 	for _, flag := range []struct {
 		on   bool
 		flag uint32
@@ -1337,8 +1477,10 @@ func meshMaterial(
 
 	face := mesh.toonFace
 	if mode == toonModeEFMI {
-		// A flat face lights the head meshes that bind no light map of their own from the face mask instead of N.L.
-		face = opts.toon.style.FlatFace && mesh.efmiHead && c.flags&viewerFlagLightMap == 0
+		face = opts.toon.style.FlatFace && (mesh.efmiFace || state.FaceSDFMapKey != "") && !mesh.toonEye
+		if face || mesh.efmiSkin {
+			c.flags |= viewerFlagEFMISkin
+		}
 	}
 	if face {
 		c.flags |= viewerFlagFace
@@ -1347,6 +1489,10 @@ func meshMaterial(
 			float32(mesh.faceForward[1]),
 			float32(mesh.faceForward[2]),
 			3,
+		}
+		if mode == toonModeEFMI {
+			forward, right := mesh.efmiFaceAxes()
+			c.faceForward, c.efmiFaceRight = efmiVector(forward, 0), efmiVector(right, 0)
 		}
 		if opts.toon.textures.faceRowSet {
 			c.faceForward[3] = float32(opts.toon.textures.faceRow)
@@ -1387,16 +1533,23 @@ func meshMaterial(
 			flag uint32
 		}{
 			{state.MaterialMapKey, 5, viewerFlagMaterialMap},
-			{optional(mesh.info.HighlightMapKey), 7, viewerFlagHighlightMap},
-			{optional(mesh.info.RampMapKey), 4, viewerFlagRampMap},
+			{state.HighlightMapKey, 7, viewerFlagHighlightMap},
+			{state.RampMapKey, 4, viewerFlagRampMap},
 		} {
 			if texture, ok := lookup(slot.key); ok {
 				m.views[slot.view] = texture.view
 				c.flags |= slot.flag
 			}
 		}
+		if sdf, ok := lookup(state.FaceSDFMapKey); face && ok {
+			m.efmiSDF = sdf.view
+			c.flags |= viewerFlagEFMISDF
+		}
 		// The character's stock ramp stands in for a _DiffRampMap the mod does not bind.
-		if ramp := opts.toon.textures.characterRamp(mesh); c.flags&viewerFlagRampMap == 0 && ramp.P != nil {
+		if ramp := opts.toon.textures.characterRamp(
+			mesh,
+		); !mesh.efmiMaterial.NoRamp && c.flags&viewerFlagRampMap == 0 &&
+			ramp.P != nil {
 			m.views[4] = ramp
 			c.flags |= viewerFlagRampMap
 		}

@@ -19,8 +19,9 @@ func TestCharacterMaterialMatchesShaderConstants(t *testing.T) {
 	if slots, _ := strconv.Atoi(string(match[1])); slots != characterMaterialSlots {
 		t.Errorf("shader holds %d character slots, Go %d", slots, characterMaterialSlots)
 	}
-	if size := unsafe.Sizeof(viewerMeshConstants{}); size != 64 {
-		t.Errorf("Mesh constants are %d bytes, want the shader's 64", size)
+	const meshRegisters = 6
+	if size := unsafe.Sizeof(viewerMeshConstants{}); size != meshRegisters*16 {
+		t.Errorf("Mesh constants are %d bytes, want %d HLSL registers", size, meshRegisters)
 	}
 }
 

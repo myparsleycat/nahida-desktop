@@ -1006,6 +1006,8 @@ func applyModelViewerTextureAssignments(
 				item.CutoutMapKey = lo.ToPtr(key)
 			case modelViewerHighlightMapRole:
 				item.HighlightMapKey = lo.ToPtr(key)
+			case modelViewerFaceSDFRole:
+				item.FaceSDFMapKey = lo.ToPtr(key)
 			case modelViewerRampMapRole:
 				item.RampMapKey = lo.ToPtr(key)
 			}
