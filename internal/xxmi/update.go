@@ -243,6 +243,34 @@ func (x *XXMI) CheckUpdates(ctx context.Context, force bool) ([]UpdateStatus, er
 			statuses = append(statuses, fps)
 		}
 	}
+
+	// A downgrade is offered to leave a withdrawn release. A deployed prerelease is still published, but its
+	// version may carry no prerelease suffix, as SpectrumQT tags them, so only the release list tells.
+	// Importers share packages, so each installed release is looked up once.
+	prereleases := make(map[[2]string]bool)
+	for i := range statuses {
+		status := &statuses[i]
+		if !status.Downgrade {
+			continue
+		}
+		key := [2]string{status.Package, status.Installed}
+		prerelease, known := prereleases[key]
+		if !known {
+			var err error
+			prerelease, err = x.publishedPrerelease(ctx, status.Package, status.Installed)
+			if err != nil {
+				_ = infra.ReportError(x.log, err, "XXMI.CheckUpdates", infra.Diagnostic{
+					Severity: infra.DiagnosticWarn, Operation: "check-updates", Stage: "prerelease-lookup",
+					Fields: map[string]any{"package": status.Package, "installed": status.Installed},
+				})
+			}
+			prereleases[key] = prerelease
+		}
+		if prerelease {
+			status.Available, status.Downgrade = false, false
+		}
+	}
+
 	slices.SortFunc(statuses, func(a, b UpdateStatus) int {
 		if order := cmp.Compare(a.Importer, b.Importer); order != 0 {
 			return order

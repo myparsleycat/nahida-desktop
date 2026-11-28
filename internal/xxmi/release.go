@@ -79,24 +79,47 @@ func (x *XXMI) ListReleases(ctx context.Context, pkg string) ([]ReleaseInfo, err
 	return releases, nil
 }
 
-func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]ReleaseInfo, error) {
-	var repo github.Repo
-	var importer *importerPackageSpec
+// packageRepo returns the repository a package is released from, and the importer package it is, if any.
+func packageRepo(pkg string) (github.Repo, *importerPackageSpec, error) {
 	switch pkg {
 	case "xxmi-libs":
-		repo = libsRepo
+		return libsRepo, nil, nil
 	case "gi-fps-unlocker":
-		repo = github.Repo{Owner: "SpectrumQT", Name: "GI-FPS-Unlocker-Package"}
-	default:
-		if provider, ok := lookupOverlayPackage(pkg); ok {
-			repo = provider.repo
-			break
-		}
-		spec, ok := parseImporterPackageID(pkg)
-		if !ok {
-			return nil, fmt.Errorf("unknown XXMI package %q", pkg)
-		}
-		repo, importer = spec.repo, &spec
+		return github.Repo{Owner: "SpectrumQT", Name: "GI-FPS-Unlocker-Package"}, nil, nil
+	}
+	if provider, ok := lookupOverlayPackage(pkg); ok {
+		return provider.repo, nil, nil
+	}
+	spec, ok := parseImporterPackageID(pkg)
+	if !ok {
+		return github.Repo{}, nil, fmt.Errorf("unknown XXMI package %q", pkg)
+	}
+	return spec.repo, &spec, nil
+}
+
+// publishedPrerelease reports whether GitHub lists version of pkg as a prerelease. The release list leaves
+// prereleases out unless they are enabled, so a deployed one otherwise reads as a stable release above latest.
+func (x *XXMI) publishedPrerelease(ctx context.Context, pkg, version string) (bool, error) {
+	if version == "" {
+		return false, nil
+	}
+	repo, _, err := packageRepo(pkg)
+	if err != nil {
+		return false, err
+	}
+	releases, err := x.github.CachedReleases(infra.WithGitHubStaleFallback(ctx), repo, false)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(releases, func(release github.Release) bool {
+		return release.Prerelease && normalizeVersion(release.TagName) == version
+	}), nil
+}
+
+func (x *XXMI) listReleases(ctx context.Context, pkg string, refresh bool) ([]ReleaseInfo, error) {
+	repo, importer, err := packageRepo(pkg)
+	if err != nil {
+		return nil, err
 	}
 	releases, err := x.github.CachedReleases(ctx, repo, refresh)
 	if err != nil {

@@ -351,6 +351,91 @@ func TestCheckUpdatesDoesNotReportLegacyRuntimeAsInstalledLibraries(t *testing.T
 	t.Fatalf("XXMI libraries status missing: %+v", statuses)
 }
 
+func TestCheckUpdatesDoesNotOfferDowngradeFromPublishedPrerelease(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, libsReleases string
+		wantDowngrade      bool
+	}{
+		{
+			name:         "deployed prerelease",
+			libsReleases: `[{"tag_name":"v1.3.4","prerelease":true},{"tag_name":"v1.3.3"}]`,
+		},
+		{name: "withdrawn release", libsReleases: `[{"tag_name":"v1.3.3"}]`, wantDowngrade: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			client, err := db.New(filepath.Join(t.TempDir(), "data.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = client.Close() })
+			if err := client.Reconcile(ctx); err != nil {
+				t.Fatal(err)
+			}
+			httpClient := infra.NewClientWithOptions(infra.ClientOptions{
+				HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					body := `[{"tag_name":"v1.2.3"}]`
+					if strings.Contains(request.URL.Path, "XXMI-Libs-Package") {
+						body = tc.libsReleases
+					}
+					return &http.Response{
+						StatusCode: http.StatusOK, Header: make(http.Header), Request: request,
+						Body: io.NopCloser(strings.NewReader(body)),
+					}, nil
+				})},
+			})
+			rate := infra.NewGitHubRateCoordinator()
+			rate.UseAppState(client.AppState)
+			x := NewWithOptions(Options{GitHub: github.New(github.Options{HTTP: httpClient, Rate: rate})})
+			useTestAppData(t, x)
+			x.UseClient(client)
+			useBuiltinLauncher(t, x)
+
+			// The signed provider makes the importer follow the SpectrumQT releases, as a user-provided DLL does.
+			cfg, err := DefaultImporterConfig("GIMI", t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Enabled, cfg.Mode, cfg.LibsProvider = true, RuntimeXXMI, signedLibsProvider
+			if err := x.SaveImporterConfig(ctx, "GIMI", cfg); err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := json.Marshal(runtimeManifest{Mode: RuntimeXXMI, Source: "xxmi-libs@1.3.4"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(cfg.ImporterFolder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(
+				filepath.Join(cfg.ImporterFolder, runtimeManifestName),
+				manifest,
+				0o600,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			statuses, err := x.CheckUpdates(ctx, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, status := range statuses {
+				if status.Package != "xxmi-libs" {
+					continue
+				}
+				if status.LatestVersion != "1.3.3" || status.Installed != "1.3.4" ||
+					status.Downgrade != tc.wantDowngrade || status.Available != tc.wantDowngrade {
+					t.Fatalf("XXMI libraries status = %+v, want downgrade %v", status, tc.wantDowngrade)
+				}
+				return
+			}
+			t.Fatalf("XXMI libraries status missing: %+v", statuses)
+		})
+	}
+}
+
 func TestCheckUpdatesOffersSelectedPackageSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
